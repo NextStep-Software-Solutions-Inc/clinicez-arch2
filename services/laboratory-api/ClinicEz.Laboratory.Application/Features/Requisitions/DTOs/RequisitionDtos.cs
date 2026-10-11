@@ -81,6 +81,27 @@ public record LabRequisitionDto
     public string? FastingInstructions { get; init; }
     public string Urgency { get; init; } = "Routine";
     public string Status { get; init; } = "PendingAccession";
+
+    /// <summary>Order lifecycle stage (Routed, Claimed, AwaitingPayment, Paid, SpecimenCollected, InProcess, ResultFinalized, Rejected, Cancelled).</summary>
+    public string Stage { get; init; } = "Routed";
+    public string? StageReason { get; init; }
+    public string PaymentPolicy { get; init; } = "None";
+    public decimal? QuotedAmount { get; init; }
+    public string Currency { get; init; } = "PHP";
+    /// <summary>True while a prepaid order is unpaid: specimen collection and processing are blocked (HTTP 409 <c>payment_required</c>).</summary>
+    public bool PaymentRequired { get; init; }
+    public bool Paid { get; init; }
+    public DateTime? PaidAtUtc { get; init; }
+    public string? ReceiptNumber { get; init; }
+    public Guid? InvoiceId { get; init; }
+    /// <summary>None, Voided or Refunded: billing reversed the payment after the order was accepted.</summary>
+    public string PaymentCorrection { get; init; } = "None";
+    public DateTime? PaymentCorrectedAtUtc { get; init; }
+    /// <summary>None, Accepted or Rejected: the ordering doctor's verdict on the result, once the clinic sent it.</summary>
+    public string DoctorReviewOutcome { get; init; } = "None";
+    public DateTime? DoctorReviewedAtUtc { get; init; }
+    public string? DoctorReviewedByName { get; init; }
+    public string? DoctorReviewRemarks { get; init; }
     public DateTime CreatedAt { get; init; }
     public List<SpecimenDto> Specimens { get; init; } = new();
     public List<AnalyteResultDto> AnalyteResults { get; init; } = new();

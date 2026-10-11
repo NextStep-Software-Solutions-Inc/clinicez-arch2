@@ -1,4 +1,5 @@
 import { api, ApiError } from './apiClient';
+import type { SyncWireStatus } from './wireEnums';
 
 // ── Base types mirroring PatientApp.Application.Common.DTOs.PatientDtos ──────
 
@@ -114,7 +115,7 @@ export interface SyncItemResult {
     operation: string;
     clientId?: string | null;
     serverId?: string | null;
-    status: string;
+    status: SyncWireStatus;
     conflictDetail?: string | null;
 }
 

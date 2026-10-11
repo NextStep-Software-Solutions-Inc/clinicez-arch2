@@ -18,7 +18,7 @@ public record RecordPanicDispatchCommand(
     Guid RequisitionId,
     string DispatchedByMedTechName,
     string NotifiedDoctorName,
-    string NotificationMethod = "Telephone",
+    NotificationMethod NotificationMethod = NotificationMethod.Telephone,
     bool ReadbackConfirmed = true,
     string? ReadbackNotes = null
 ) : IRequest<CriticalPanicDispatchLogDto>;
@@ -62,11 +62,10 @@ public class RecordPanicDispatchCommandHandler : IRequestHandler<RecordPanicDisp
             ? string.Join(" | ", criticalFindings)
             : "Critical threshold alert flagged by clinical evaluation.";
 
-        Enum.TryParse<NotificationMethod>(request.NotificationMethod, true, out var method);
-
         var log = new CriticalPanicDispatchLog
         {
             TenantId = requisition.TenantId,
+            LaboratoryId = requisition.LaboratoryId,
             RequisitionId = requisition.Id,
             AccessionNumber = requisition.AccessionNumber,
             PatientId = requisition.PatientId,
@@ -77,23 +76,26 @@ public class RecordPanicDispatchCommandHandler : IRequestHandler<RecordPanicDisp
             DispatchedAt = DateTime.UtcNow,
             DispatchedByMedTechName = request.DispatchedByMedTechName,
             NotifiedDoctorName = request.NotifiedDoctorName,
-            NotificationMethod = method != 0 ? method : NotificationMethod.Telephone,
+            NotificationMethod = request.NotificationMethod,
             ReadbackConfirmed = request.ReadbackConfirmed,
             ReadbackNotes = request.ReadbackNotes,
             AcknowledgedAt = request.ReadbackConfirmed ? DateTime.UtcNow : null
         };
 
         await _panicLogRepository.AddAsync(log, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Broadcast STAT panic event across RabbitMQ to Clinic EMR
+        // STAT panic alert for the ordering clinic EMR. Queued in the outbox BEFORE the save so the dispatch log and
+        // the message commit atomically (the log id exists once the log is tracked).
         var panicEvent = new LabPanicResultAlertEvent
         {
             AlertId = log.Id,
-            RequisitionId = requisition.Id,
+            RequisitionId = requisition.CorrelationId ?? requisition.ExternalRequisitionId ?? requisition.Id,
+            LaboratoryTenantId = requisition.TenantId,
+            LaboratoryFacilityId = requisition.LaboratoryId.ToString(),
             AccessionNumber = requisition.AccessionNumber,
             PatientId = requisition.PatientId,
             PatientName = requisition.PatientName,
+            OrderingTenantId = requisition.OrderingTenantId,
             OrderingFacilityId = requisition.OrderingFacilityId,
             OrderingFacilityName = requisition.OrderingFacilityName,
             OrderingDoctorName = requisition.OrderingDoctorName,
@@ -113,7 +115,8 @@ public class RecordPanicDispatchCommandHandler : IRequestHandler<RecordPanicDisp
                 }).ToList()
         };
 
-        await _panicPublisher.PublishPanicAlertAsync(panicEvent, cancellationToken);
+        _panicPublisher.EnqueuePanicAlert(panicEvent);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CriticalPanicDispatchLogDto
         {

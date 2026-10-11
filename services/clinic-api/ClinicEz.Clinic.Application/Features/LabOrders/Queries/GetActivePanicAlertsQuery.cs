@@ -30,6 +30,6 @@ public class GetActivePanicAlertsQueryHandler : IRequestHandler<GetActivePanicAl
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        return orders.Select(CreateClinicLabOrderCommandHandler.MapToDto).ToList();
+        return orders.Select(o => CreateClinicLabOrderCommandHandler.MapToDto(o)).ToList();
     }
 }

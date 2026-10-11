@@ -40,6 +40,9 @@ public static class ClinicPermissions
     public const string LabOrdersRead = "laborders:read";
     public const string LabOrdersWrite = "laborders:write";
 
+    // Doctor review of unverified (external or patient-uploaded) lab results
+    public const string LabResultsReview = "labresults:review";
+
     // Reports & End-of-Day Remittance
     public const string ReportsRead = "reports:read";
 
@@ -117,6 +120,7 @@ public static class ClinicPermissions
         ProceduresWrite,
         LabOrdersRead,
         LabOrdersWrite,
+        LabResultsReview,
         ReportsRead,
         SettingsRead,
         SettingsManage,

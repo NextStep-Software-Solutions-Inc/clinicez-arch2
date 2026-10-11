@@ -88,7 +88,6 @@ public sealed class AuthController : ControllerBase
     private bool TryGetStaffId(out Guid staffId)
     {
         staffId = Guid.Empty;
-        if (User.HasClaim(FacilityAuthSchemes.InternalClaim, "true")) return false;
         return Guid.TryParse(User.FindFirst(PharmacyClaimTypes.Subject)?.Value, out staffId);
     }
 

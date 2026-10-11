@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import ThemedText from '@ui/ThemedText';
-import { useNavigation } from '@react-navigation/native';
+import StatusChip from '@ui/StatusChip';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { pharmacyService, PrescriptionOrderDto } from '../../services/pharmacyService';
+import { describeDispenseBlock, describePaymentChip, describeStatusChip } from '../../utils/prescriptionPresentation';
 
 const SAMPLE_FALLBACK: PrescriptionOrderDto[] = [
   {
@@ -25,6 +27,14 @@ const SAMPLE_FALLBACK: PrescriptionOrderDto[] = [
     status: 'Pending',
     issuedAt: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
     totalAmount: 255.00,
+    paymentPolicy: 'None',
+    paymentStatus: 'NotRequired',
+    quotedAmount: null,
+    paidAt: null,
+    statusReason: null,
+    pharmacyName: 'St. Jude Community Pharmacy',
+    dispenseBlockedReason: 'acceptance_required',
+    patientLinked: true,
     items: [
       {
         id: 'i1',
@@ -59,9 +69,17 @@ const SAMPLE_FALLBACK: PrescriptionOrderDto[] = [
     patientAge: 55,
     patientGender: 'Male',
     clinicalDiagnosis: 'Cardiovascular Risk / Hyperlipidemia',
-    status: 'Pending',
+    status: 'Accepted',
     issuedAt: new Date(Date.now() - 75 * 60 * 1000).toISOString(),
     totalAmount: 360.00,
+    paymentPolicy: 'Prepaid',
+    paymentStatus: 'AwaitingPayment',
+    quotedAmount: 360.00,
+    paidAt: null,
+    statusReason: null,
+    pharmacyName: 'St. Jude Community Pharmacy',
+    dispenseBlockedReason: 'payment_required',
+    patientLinked: true,
     items: [
       {
         id: 'i2',
@@ -102,6 +120,14 @@ const SAMPLE_FALLBACK: PrescriptionOrderDto[] = [
     dispensingPharmacistName: 'Karen Reyes, RPh',
     dispensingPharmacistPrc: 'PRC-0089123',
     totalAmount: 392.00,
+    paymentPolicy: 'Prepaid',
+    paymentStatus: 'Paid',
+    quotedAmount: 392.00,
+    paidAt: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+    statusReason: null,
+    pharmacyName: 'St. Jude Community Pharmacy',
+    dispenseBlockedReason: null,
+    patientLinked: true,
     items: [
       {
         id: 'i3',
@@ -125,7 +151,7 @@ const SAMPLE_FALLBACK: PrescriptionOrderDto[] = [
 ];
 
 export default function PrescriptionsScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
   const [orders, setOrders] = useState<PrescriptionOrderDto[]>(SAMPLE_FALLBACK);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -145,9 +171,11 @@ export default function PrescriptionsScreen() {
     }
   }, [activeTab, search]);
 
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders();
+    }, [fetchOrders])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -229,7 +257,10 @@ export default function PrescriptionsScreen() {
           <View style={styles.list}>
             {filteredOrders.map((order) => {
               const itemsSummary = order.items.map((i) => `${i.genericName} ${i.dosage} (Qty: ${i.quantityPrescribed})`).join(' • ');
+              const isOpenOrder = !['Dispensed', 'Rejected', 'Cancelled'].includes(order.status);
               const isPending = order.status === 'Pending';
+              const paymentChip = describePaymentChip(order.paymentStatus);
+              const blockHint = isPending ? null : describeDispenseBlock(order.dispenseBlockedReason);
 
               return (
                 <View key={order.id} style={styles.card}>
@@ -238,14 +269,10 @@ export default function PrescriptionsScreen() {
                       <ThemedText style={styles.rxBadge}>{order.prescriptionNumber}</ThemedText>
                       <ThemedText style={styles.facilityText}>{order.orderingFacilityName || 'Clinic EZ Partner'}</ThemedText>
                     </View>
-                    <ThemedText
-                      style={[
-                        styles.statusBadge,
-                        isPending ? styles.pendingBadge : styles.dispensedBadge,
-                      ]}
-                    >
-                      {order.status}
-                    </ThemedText>
+                    <View style={styles.chipRow}>
+                      <StatusChip {...describeStatusChip(order.status)} />
+                      {paymentChip ? <StatusChip {...paymentChip} /> : null}
+                    </View>
                   </View>
 
                   <View style={styles.patientRow}>
@@ -263,25 +290,34 @@ export default function PrescriptionsScreen() {
                     <ThemedText style={styles.itemsText}>{itemsSummary}</ThemedText>
                   </View>
 
+                  {order.statusReason ? (
+                    <ThemedText style={styles.reasonText}>Reason: {order.statusReason}</ThemedText>
+                  ) : null}
+
                   <View style={styles.cardFooter}>
                     <ThemedText style={styles.doctorText}>
                       Rx by {order.orderingDoctorName} • PRC: {order.doctorPrcLicense || 'Verified'}
                     </ThemedText>
 
-                    {isPending ? (
-                      <Pressable
-                        style={styles.dispenseActionBtn}
-                        onPress={() => navigation.navigate('Dispense', { orderId: order.id })}
-                      >
-                        <ThemedText style={styles.dispenseActionText}>Dispense (FEFO)</ThemedText>
-                      </Pressable>
-                    ) : (
+                    {isOpenOrder ? (
+                      <View style={styles.actionColumn}>
+                        <Pressable
+                          style={[styles.dispenseActionBtn, blockHint !== null && styles.dispenseActionBtnBlocked]}
+                          onPress={() => navigation.navigate('Dispense', { orderId: order.id })}
+                        >
+                          <ThemedText style={styles.dispenseActionText}>
+                            {isPending ? 'Review order' : blockHint ? 'View order' : 'Dispense (FEFO)'}
+                          </ThemedText>
+                        </Pressable>
+                        {blockHint ? <ThemedText style={styles.blockHintText}>{blockHint}</ThemedText> : null}
+                      </View>
+                    ) : order.status === 'Dispensed' ? (
                       <View style={styles.dispensedInfoRow}>
                         <ThemedText style={styles.dispensedByText}>
                           ✓ Dispensed by {order.dispensingPharmacistName || 'Pharmacist'}
                         </ThemedText>
                       </View>
-                    )}
+                    ) : null}
                   </View>
                 </View>
               );
@@ -436,20 +472,15 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontWeight: '500',
   },
-  statusBadge: {
-    fontSize: 11,
-    fontWeight: '700',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  pendingBadge: {
-    backgroundColor: '#FEF3C7',
-    color: '#B45309',
-  },
-  dispensedBadge: {
-    backgroundColor: '#D1FAE5',
-    color: '#065F46',
+  reasonText: {
+    fontSize: 12,
+    color: '#991B1B',
+    fontStyle: 'italic',
   },
   patientRow: {
     flexDirection: 'row',
@@ -498,11 +529,23 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     flex: 1,
   },
+  actionColumn: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
   dispenseActionBtn: {
     backgroundColor: '#0D9488',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
+  },
+  dispenseActionBtnBlocked: {
+    backgroundColor: '#9CA3AF',
+  },
+  blockHintText: {
+    fontSize: 11,
+    color: '#B45309',
+    fontWeight: '600',
   },
   dispenseActionText: {
     color: '#FFFFFF',

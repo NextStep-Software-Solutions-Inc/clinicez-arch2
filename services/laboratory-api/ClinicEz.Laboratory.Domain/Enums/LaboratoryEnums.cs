@@ -87,3 +87,56 @@ public enum NotificationMethod
     SMS,
     InPerson
 }
+
+/// <summary>
+/// When a laboratory expects payment for an order. <see cref="Prepaid"/> blocks specimen collection and processing until
+/// the cashier confirms payment, <see cref="Postpaid"/> bills the order but never blocks the work, <see cref="None"/>
+/// skips billing altogether.
+/// </summary>
+public enum PaymentPolicy
+{
+    Prepaid,
+    Postpaid,
+    None
+}
+
+/// <summary>A correction billing applied to the invoice behind an order after the fact.</summary>
+public enum PaymentCorrection
+{
+    None,
+
+    /// <summary>The invoice was voided; nothing had been paid.</summary>
+    Voided,
+
+    /// <summary>The payment was reversed at the cashier.</summary>
+    Refunded
+}
+
+/// <summary>The ordering doctor's verdict on a result, sent back by the clinic (<c>lab.result.reviewed</c>).</summary>
+public enum DoctorReviewOutcome
+{
+    None,
+
+    /// <summary>The doctor accepted the result.</summary>
+    Accepted,
+
+    /// <summary>The doctor rejected the result.</summary>
+    Rejected
+}
+
+/// <summary>
+/// Lifecycle of an order inside this laboratory. Names mirror the shared <c>LabOrderStage</c> wire contract, which
+/// the Domain layer cannot reference; the Application layer maps between the two by name.
+/// </summary>
+public enum RequisitionStage
+{
+    Routed,
+    Claimed,
+    AwaitingPayment,
+    Paid,
+    SpecimenCollected,
+    InProcess,
+    ResultFinalized,
+    Rejected,
+    Cancelled
+}

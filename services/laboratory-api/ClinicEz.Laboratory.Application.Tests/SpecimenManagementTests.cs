@@ -60,7 +60,7 @@ public class SpecimenManagementTests
         var result1 = await handler.Handle(new RejectSpecimenCommand(
             req.Id,
             specId1,
-            ReasonCode: "Hemolyzed",
+            ReasonCode: SpecimenRejectionReason.Hemolyzed,
             Notes: "Severe hemolysis grade 3+. Optical interference on CBC analyzer.",
             PhlebotomistName: "Jane MedTech",
             CorrectiveAction: "Recall patient for redraw."
@@ -76,7 +76,7 @@ public class SpecimenManagementTests
         var result2 = await handler.Handle(new RejectSpecimenCommand(
             req.Id,
             specId2,
-            ReasonCode: "Clotted",
+            ReasonCode: SpecimenRejectionReason.Clotted,
             Notes: "Microclot detected during aspiration.",
             PhlebotomistName: "Jane MedTech"
         ), CancellationToken.None);
@@ -122,7 +122,7 @@ public class SpecimenManagementTests
             specId,
             RackId: "RACK-CHEM-A",
             RackPosition: "B04",
-            Temperature: "Refrigerated_2_8C"
+            Temperature: StorageTemperature.Refrigerated_2_8C
         ), CancellationToken.None);
 
         var storedSpec = result.Specimens.First(s => s.Id == specId);

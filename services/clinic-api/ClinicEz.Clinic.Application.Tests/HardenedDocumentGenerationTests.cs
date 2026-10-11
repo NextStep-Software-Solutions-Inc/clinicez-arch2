@@ -126,9 +126,8 @@ public class HardenedDocumentGenerationTests
                 new("Lipid Profile (TC, HDL, LDL, Triglycerides)", "Clinical Chemistry", "Serum SST tube"),
                 new("Routine Urinalysis", "Clinical Microscopy", "Clean-catch midstream morning specimen")
             },
-            PublicUploadToken: "tok-dropzone-99214",
-            PublicUploadUrl: "/api/v1/public/lab-upload/tok-dropzone-99214",
-            QrPayload: "CLINICEZ:REQ:ORD-20261004-0042:tok-dropzone-99214"
+            PublicUploadUrl: "https://clinic.example.test/upload/lab/tok-dropzone-99214",
+            QrPayload: "CLINICEZ:REQ:ORD-20261004-0042"
         );
 
         var pdfBytes = _pdfService.GenerateLabRequisitionSlipPdf(slipDto, settings);
@@ -238,7 +237,7 @@ public class HardenedDocumentGenerationTests
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
 
-        var handler = new IssueMedicalCertificateCommandHandler(medCertRepo, uow, clinicContext);
+        var handler = Phase3TestKit.MedCert(medCertRepo, uow, clinicContext, db);
 
         var patientId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();

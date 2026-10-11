@@ -113,6 +113,6 @@ public class GetPrescriptionsQueueQueryHandler : IRequestHandler<GetPrescription
                 d.Notes
             )).ToList(),
             o.BranchId
-        )).ToList();
+        ).WithWorkflow(o)).ToList();
     }
 }

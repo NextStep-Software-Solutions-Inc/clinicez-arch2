@@ -1,4 +1,5 @@
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interoperability;
 using MediatR;
 using ClinicEz.Patient.Application.Common.DTOs;
 using ClinicEz.Patient.Domain.Interfaces;
@@ -42,12 +43,12 @@ public sealed class GetAppointmentsQueryHandler
             clinicsDict.TryGetValue(appt.ClinicId, out var clinic);
             var provider = clinic?.HealthcareProviders.FirstOrDefault(p => p.Id == appt.ProviderId);
 
-            ClinicAppointmentDto? clinicDto = null;
+            ClinicAppointmentSnapshotDto? clinicDto = null;
             if (!string.IsNullOrWhiteSpace(appt.RawJson))
             {
                 try
                 {
-                    clinicDto = System.Text.Json.JsonSerializer.Deserialize<ClinicAppointmentDto>(
+                    clinicDto = System.Text.Json.JsonSerializer.Deserialize<ClinicAppointmentSnapshotDto>(
                         appt.RawJson,
                         new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 }

@@ -62,6 +62,29 @@ public sealed class PatientsController : ControllerBase
         return CreatedAtAction(nameof(GetPatientById), new { id = result.Id }, ApiResponse<ClinicPatientDto>.Success(result, "Patient registered successfully."));
     }
 
+    /// <summary>Reads a patient's shared record from a scanned share token, or from a ClinicEZ ID plus one-time code. Answered asynchronously: poll the returned id.</summary>
+    [HttpPost("share/redeem")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientShareRedeemAccepted>>> RedeemShare(
+        [FromBody] RedeemPatientShareRequest request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(
+            new RedeemPatientShareCommand(
+                request.ShareToken, request.Purpose, request.AddToQueue, request.ChiefComplaint, request.ClinicEzId, request.Code), ct);
+        return Accepted(ApiResponse<PatientShareRedeemAccepted>.Success(result, "Share request sent. Waiting for the patient record."));
+    }
+
+    [HttpGet("share/{correlationId:guid}")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<ShareImportStatusDto>>> GetShareStatus(
+        Guid correlationId,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetShareImportStatusQuery(correlationId), ct);
+        return Ok(ApiResponse<ShareImportStatusDto>.Success(result));
+    }
+
     [HttpPut("{id:guid}")]
     [HasPermission(ClinicPermissions.PatientsWrite)]
     public async Task<ActionResult<ApiResponse<ClinicPatientDto>>> UpdatePatient(

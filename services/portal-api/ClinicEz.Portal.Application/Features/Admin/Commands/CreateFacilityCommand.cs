@@ -1,19 +1,30 @@
-using ClinicEz.Portal.Domain.Entities;
-using MediatR;
+using ClinicEz.Portal.Application.Common;
+using ClinicEz.Portal.Application.Features.Admin.Queries;
+using ClinicEz.Portal.Application.Features.Admin.Services;
+using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Features.Hub;
+using ClinicEz.Portal.Application.Features.Integrations;
+using ClinicEz.Portal.Application.Features.Licensing;
+using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Common;
-using MassTransit;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
-using ClinicEz.Shared.Licensing;
-using Microsoft.Extensions.Configuration;
-using ClinicEz.Portal.Application.Features.Admin.Queries;
-
 namespace ClinicEz.Portal.Application.Features.Admin.Commands;
 
+/// <summary>
+/// Creates a facility. The licence tier is never supplied by the caller: it follows the workspace's own
+/// subscription plan. On-premise facilities (<see cref="DeploymentMode"/>) need an https
+/// <see cref="ConsoleBaseUrl"/> and are onboarded to the hub as part of creation.
+/// </summary>
 public record CreateFacilityCommand(
     string TenantId,
     FacilityType FacilityType,
@@ -31,41 +42,68 @@ public record CreateFacilityCommand(
     string? StreetAddress = null,
     string? ContactNumber = null,
     string? ContactEmail = null,
-    string? PlanTier = null,
     Guid? BranchId = null,
-    string? Slug = null
-) : IRequest<bool>;
+    string? Slug = null,
+    FacilityDeploymentMode DeploymentMode = FacilityDeploymentMode.SharedCloud,
+    string? ConsoleBaseUrl = null
+) : IRequest<CreateFacilityResult>;
+
+/// <summary>
+/// Outcome of <see cref="CreateFacilityCommand"/>. <see cref="HubCredentials"/> are returned once, only for an
+/// on-premise facility; <see cref="HubOnboardingPending"/> means the facility exists but the hub could not be
+/// reached, so the owner must request credentials again from the facility's hub-credentials endpoint.
+/// </summary>
+public record CreateFacilityResult(
+    bool Success,
+    HubEdgeCredentials? HubCredentials = null,
+    bool HubOnboardingPending = false);
 
 public class CreateFacilityCommandHandler(
     IApplicationDbContext context,
-    IPublishEndpoint publishEndpoint,
-    ITenantFeatureGuard tenantFeatureGuard,
-    IFacilityLicenseSigner licenseSigner,
-    IConfiguration configuration
-) : IRequestHandler<CreateFacilityCommand, bool>
+    IEntitlementGuard entitlementGuard,
+    IEntitlementService entitlementService,
+    IFacilityAllocationService allocations,
+    ILicenseIssuer licenseIssuer,
+    IFacilityProvisioningPublisher provisioningPublisher,
+    IWebhookDispatcher webhookDispatcher,
+    IHubOnboardingService hubOnboarding,
+    IConfiguration configuration,
+    ILogger<CreateFacilityCommandHandler> logger
+) : IRequestHandler<CreateFacilityCommand, CreateFacilityResult>
 {
-    public CreateFacilityCommandHandler(
-        IApplicationDbContext context,
-        IPublishEndpoint publishEndpoint,
-        ITenantFeatureGuard tenantFeatureGuard,
-        IFacilityLicenseSigner licenseSigner)
-        : this(context, publishEndpoint, tenantFeatureGuard, licenseSigner, new ConfigurationBuilder().Build())
+    /// <summary>A facility joins only a branch of its own workspace, and a branch holds at most one facility of each type.</summary>
+    private async Task ValidateBranchAsync(Guid tenantId, Guid? branchId, FacilityType facilityType, CancellationToken cancellationToken)
     {
+        if (branchId is not { } branch) return;
+
+        var branchBelongs = await context.Branches.AnyAsync(b => b.Id == branch && b.TenantId == tenantId, cancellationToken);
+        if (!branchBelongs)
+        {
+            throw new InvalidOperationException("The selected branch does not belong to this workspace.");
+        }
+
+        var typeTaken = await context.Facilities.AnyAsync(f => f.BranchId == branch && f.FacilityType == facilityType, cancellationToken);
+        if (typeTaken)
+        {
+            throw new CodedConflictException(
+                ConflictCodes.BranchFacilityTypeTaken,
+                $"This branch already has a {facilityType.ToString().ToLowerInvariant()}.");
+        }
     }
 
-    public async Task<bool> Handle(CreateFacilityCommand request, CancellationToken cancellationToken)
+    public async Task<CreateFacilityResult> Handle(CreateFacilityCommand request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(request.TenantId) || string.IsNullOrEmpty(request.Name)) return false;
+        if (string.IsNullOrEmpty(request.TenantId) || string.IsNullOrEmpty(request.Name)) return new CreateFacilityResult(false);
 
-        var tenant = await context.Tenants.FirstOrDefaultAsync(t => 
-            t.Id.ToString() == request.TenantId || t.TenantSlug == request.TenantId, 
+        var tenant = await context.Tenants.FirstOrDefaultAsync(t =>
+            t.Id.ToString() == request.TenantId || t.TenantSlug == request.TenantId,
             cancellationToken);
 
-        if (tenant == null) return false;
+        if (tenant == null) return new CreateFacilityResult(false);
 
         var trimmedName = request.Name.Trim();
-        var nameExists = await context.Facilities.AnyAsync(f => 
-            f.TenantId == tenant.Id && !f.IsDeleted && f.Name.ToLower() == trimmedName.ToLower(), 
+        var nameExists = await context.Facilities.AnyAsync(f =>
+            f.TenantId == tenant.Id && !f.IsDeleted && f.Name.ToLower() == trimmedName.ToLower(),
             cancellationToken);
 
         if (nameExists)
@@ -74,16 +112,16 @@ public class CreateFacilityCommandHandler(
         }
 
         var candidateSlug = !string.IsNullOrWhiteSpace(request.Slug)
-            ? ClinicEz.Portal.Application.Features.Admin.Queries.GetFacilitiesQueryHandler.GenerateFacilitySlug(request.Slug)
-            : ClinicEz.Portal.Application.Features.Admin.Queries.GetFacilitiesQueryHandler.GenerateFacilitySlug(trimmedName);
+            ? GetFacilitiesQueryHandler.GenerateFacilitySlug(request.Slug)
+            : GetFacilitiesQueryHandler.GenerateFacilitySlug(trimmedName);
 
         if (candidateSlug.Length < 2 || candidateSlug.Length > 63)
         {
             throw new InvalidOperationException("Facility slug must be between 2 and 63 characters.");
         }
 
-        var slugExists = await context.Facilities.AnyAsync(f => 
-            !f.IsDeleted && f.Slug.ToLower() == candidateSlug.ToLower(), 
+        var slugExists = await context.Facilities.AnyAsync(f =>
+            !f.IsDeleted && f.Slug.ToLower() == candidateSlug.ToLower(),
             cancellationToken);
 
         if (slugExists)
@@ -91,35 +129,18 @@ public class CreateFacilityCommandHandler(
             throw new InvalidOperationException($"The facility slug '{candidateSlug}' is already taken. Please choose another unique subdomain slug.");
         }
 
+        await ValidateBranchAsync(tenant.Id, request.BranchId, request.FacilityType, cancellationToken);
+
         // Verify workspace plan allocations and limits before provisioning
-        await tenantFeatureGuard.EnsureCanCreateFacilityAsync(tenant.Id.ToString(), request.FacilityType, cancellationToken);
+        await entitlementGuard.EnsureCanCreateFacilityAsync(tenant.Id, request.FacilityType, cancellationToken);
+        if (request.DeploymentMode == FacilityDeploymentMode.OnPremise)
+        {
+            await entitlementGuard.EnsureFeatureAsync(tenant.Id, EntitlementKeys.FeatureOnPrem, cancellationToken);
+        }
 
         // Provision resource ID
         var resourceId = Guid.NewGuid();
-
-        // Determine plan tier and cryptographic limits
-        var planTier = !string.IsNullOrWhiteSpace(request.PlanTier) ? request.PlanTier : "Community";
-        var limits = PlanTierDefaults.GetLimitsForTier(planTier);
-        var features = PlanTierDefaults.GetFeaturesForTier(planTier);
-        var licenseExpiresAt = DateTime.UtcNow.AddYears(1);
-
-        // Mint cryptographically signed license payload
-        var licensePayload = new FacilityLicensePayload
-        {
-            FacilityId = resourceId,
-            TenantId = tenant.Id.ToString(),
-            TenantSlug = tenant.TenantSlug,
-            FacilityName = trimmedName,
-            FacilityType = request.FacilityType.ToString(),
-            PlanTier = planTier,
-            Limits = limits,
-            EnabledFeatures = features,
-            IssuedAtUtc = DateTime.UtcNow,
-            ExpiresAtUtc = licenseExpiresAt,
-            OwnerEmail = string.IsNullOrWhiteSpace(request.ContactEmail) ? null : request.ContactEmail.Trim()
-        };
-
-        var licenseToken = licenseSigner.SignLicense(licensePayload);
+        var onPremise = request.DeploymentMode == FacilityDeploymentMode.OnPremise;
 
         // Create tracking record
         var facility = new Facility
@@ -131,10 +152,8 @@ public class CreateFacilityCommandHandler(
             Slug = candidateSlug,
             FacilityType = request.FacilityType,
             Status = FacilityStatus.Provisioning,
-            LicenseToken = licenseToken,
-            PlanTier = planTier,
-            MaxStaffLimit = limits.MaxStaff,
-            LicenseExpiresAt = licenseExpiresAt,
+            DeploymentMode = request.DeploymentMode,
+            ConsoleBaseUrl = onPremise ? ConsoleBaseUrlRule.Normalize(request.ConsoleBaseUrl!) : null,
             Classification = request.Classification,
             LicenseToOperate = request.LicenseToOperate,
             PhilHealthAccreditationNumber = request.PhilHealthAccreditationNumber,
@@ -149,15 +168,28 @@ public class CreateFacilityCommandHandler(
             ContactNumber = request.ContactNumber,
             ContactEmail = request.ContactEmail
         };
+
+        // The license is derived from the workspace's entitlements and this facility's share of the pool, never from the request.
+        var snapshot = await entitlementService.ResolveAsync(tenant.Id, cancellationToken);
+        var shares = await allocations.ComputeSharesAsync(tenant.Id, snapshot, resourceId, cancellationToken);
+        var license = licenseIssuer.Issue(tenant, facility, snapshot, shares[resourceId]);
+        var limits = license.Payload.Limits;
+        var licenseExpiresAt = license.Payload.ExpiresAtUtc!.Value;
+        var planTier = snapshot.PlanSlug;
+
+        facility.LicenseToken = license.Token;
+        facility.PlanTier = planTier;
+        facility.MaxStaffLimit = limits.MaxStaff;
+        facility.LicenseExpiresAt = licenseExpiresAt;
         context.Facilities.Add(facility);
 
         // Increment telemetry counts
         tenant.FacilitiesCount += 1;
 
-        var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, request.FacilityType, FacilityStatus.Active, resourceId, candidateSlug, tenant.TenantSlug);
+        var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, request.FacilityType, FacilityStatus.Active, resourceId, candidateSlug, tenant.TenantSlug, facility.ConsoleBaseUrl);
 
-        // Publish the event using MassTransit (which automatically registers in the Outbox transaction)
-        await publishEndpoint.Publish(new FacilityCreatedEvent
+        // Staged in the outbox before SaveChanges so the facility and its licence messages commit atomically.
+        await provisioningPublisher.StageProvisionedAsync(tenant, new FacilityCreatedEvent
         {
             TenantId = tenant.Id.ToString(),
             TenantSlug = tenant.TenantSlug,
@@ -165,14 +197,42 @@ public class CreateFacilityCommandHandler(
             ResourceId = resourceId,
             Name = trimmedName,
             Slug = candidateSlug,
-            LicenseToken = licenseToken,
+            LicenseToken = license.Token,
             Limits = limits,
             PlanTier = planTier,
             LicenseExpiresAt = licenseExpiresAt,
             ConsoleUrl = consoleUrl
         }, cancellationToken);
 
+        // Customers' webhook endpoints learn about the facility, never about its licence.
+        await webhookDispatcher.StageAsync(
+            tenant.Id,
+            tenant.TenantSlug,
+            IntegrationCatalog.EventFacilityCreated,
+            new
+            {
+                facilityId = resourceId,
+                name = trimmedName,
+                slug = candidateSlug,
+                facilityType = request.FacilityType.ToString(),
+                planTier
+            },
+            cancellationToken);
+
         await context.SaveChangesAsync(cancellationToken);
-        return true;
+
+        if (!onPremise) return new CreateFacilityResult(true);
+
+        try
+        {
+            var credentials = await hubOnboarding.OnboardAsync(facility, tenant, cancellationToken);
+            return new CreateFacilityResult(true, credentials);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException)
+        {
+            // The facility is already committed. Credentials can be requested again, so don't fail the creation.
+            logger.LogWarning(ex, "Hub onboarding of facility {FacilityId} is pending: {Reason}", facility.Id, ex.Message);
+            return new CreateFacilityResult(true, HubOnboardingPending: true);
+        }
     }
 }

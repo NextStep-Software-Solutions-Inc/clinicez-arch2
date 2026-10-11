@@ -8,7 +8,23 @@ namespace ClinicEz.Pharmacy.Domain.Services;
 
 public sealed partial class UpscSecurityService : IUpscSecurityService
 {
+    /// <summary>A shorter secret is rejected: the code is an HMAC and is only as strong as its key.</summary>
+    public const int MinSecretKeyLength = 32;
+
     private static readonly Regex UpscPattern = GenerateUpscRegex();
+
+    private readonly byte[] _secretKey;
+
+    public UpscSecurityService(string secretKey)
+    {
+        if (string.IsNullOrWhiteSpace(secretKey) || secretKey.Trim().Length < MinSecretKeyLength)
+        {
+            throw new ArgumentException(
+                $"The UPSC secret key is required and must be at least {MinSecretKeyLength} characters.", nameof(secretKey));
+        }
+
+        _secretKey = Encoding.UTF8.GetBytes(secretKey.Trim());
+    }
 
     public string GenerateUpsc(
         string hciAccreditationNumber,
@@ -17,8 +33,7 @@ public sealed partial class UpscSecurityService : IUpscSecurityService
         string doctorPrcLicense,
         string drugCode,
         int quantity,
-        DateTime issueDate,
-        string secretKey = "ClinicEzPhilHealthGamotSecretKey")
+        DateTime issueDate)
     {
         var cleanAccre = NormalizeAlphanumeric(hciAccreditationNumber, "00000");
         var cleanPin = NormalizePin(patientPin);
@@ -28,8 +43,7 @@ public sealed partial class UpscSecurityService : IUpscSecurityService
         var datePart = issueDate.ToString("yyyyMMdd");
 
         var payload = $"{cleanAccre}:{cleanPin}:{cleanRxNo}:{cleanPrc}:{cleanDrug}:{quantity}:{datePart}";
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(string.IsNullOrEmpty(secretKey) ? "ClinicEzPhilHealthGamotSecretKey" : secretKey));
-        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
+        var hash = HMACSHA256.HashData(_secretKey, Encoding.UTF8.GetBytes(payload));
         var token = Convert.ToHexString(hash)[..6];
 
         var body = $"UPSC-{cleanAccre}-{datePart}-{token}";
@@ -46,8 +60,7 @@ public sealed partial class UpscSecurityService : IUpscSecurityService
         string doctorPrcLicense,
         string drugCode,
         int quantity,
-        DateTime issueDate,
-        string secretKey = "ClinicEzPhilHealthGamotSecretKey")
+        DateTime issueDate)
     {
         if (string.IsNullOrWhiteSpace(upsc))
             return false;
@@ -62,8 +75,7 @@ public sealed partial class UpscSecurityService : IUpscSecurityService
             doctorPrcLicense,
             drugCode,
             quantity,
-            issueDate,
-            secretKey);
+            issueDate);
 
         return string.Equals(upsc.Trim(), expectedUpsc, StringComparison.OrdinalIgnoreCase);
     }

@@ -58,8 +58,10 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<string>("EnteredByMedTechName")
                         .HasColumnType("text");
 
-                    b.Property<int>("Flag")
-                        .HasColumnType("integer");
+                    b.Property<string>("Flag")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Interpretation")
                         .HasColumnType("text");
@@ -143,8 +145,13 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("NotificationMethod")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("LaboratoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NotificationMethod")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("NotifiedDoctorName")
                         .IsRequired()
@@ -359,6 +366,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<string>("ContactNumber")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("CorrelationId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -366,10 +376,32 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DoctorReviewOutcome")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DoctorReviewRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DoctorReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DoctorReviewedByName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DoctorReviewedByPrc")
                         .HasColumnType("text");
 
                     b.Property<Guid?>("ExternalRequisitionId")
@@ -377,6 +409,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.Property<string>("FastingInstructions")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("InvoiceId")
+                        .HasColumnType("uuid");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
@@ -393,11 +428,19 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.Property<string>("OrderingFacilityId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("OrderingFacilityName")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("OrderingTenantId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("PatientAge")
                         .HasColumnType("integer");
@@ -414,11 +457,53 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<DateTime?>("PaymentCorrectedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PaymentCorrection")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PaymentPolicy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("PhilHealthPin")
                         .HasColumnType("text");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("QuoteLinesJson")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("QuotedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("ReceiptNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("RefundedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("StageChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StageReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -435,14 +520,23 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasKey("Id");
+                    b.Property<string>("VisitKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
-                    b.HasIndex("AccessionNumber")
-                        .IsUnique();
+                    b.HasKey("Id");
 
                     b.HasIndex("BranchId");
 
                     b.HasIndex("ExternalRequisitionId");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("LaboratoryId", "AccessionNumber")
+                        .IsUnique();
+
+                    b.HasIndex("LaboratoryId", "OrderingTenantId", "OrderingFacilityId", "ExternalRequisitionId")
+                        .IsUnique();
 
                     b.ToTable("LabRequisitions", "laboratory_dashboard");
                 });
@@ -452,6 +546,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ContactNumbers")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -465,6 +562,12 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
+
+                    b.Property<string>("EmailAndWeb")
+                        .HasColumnType("text");
+
+                    b.Property<int>("EntitlementVersion")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
@@ -490,6 +593,17 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.Property<int>("MaxStaffLimit")
                         .HasColumnType("integer");
+
+                    b.Property<string>("PaymentPolicy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PhilHealthAccreditationNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhysicalAddress")
+                        .HasColumnType("text");
 
                     b.Property<string>("PlanTier")
                         .IsRequired()
@@ -580,8 +694,10 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<string>("PtrNumber")
                         .HasColumnType("text");
 
-                    b.Property<int>("Role")
-                        .HasColumnType("integer");
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Specialty")
                         .HasColumnType("text");
@@ -631,6 +747,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid>("LaboratoryId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -641,6 +760,11 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasColumnType("numeric(18,2)");
 
                     b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -696,8 +820,13 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("Level")
-                        .HasColumnType("integer");
+                    b.Property<Guid>("LaboratoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Level")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("LotNumber")
                         .IsRequired()
@@ -765,6 +894,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid>("LaboratoryId")
+                        .HasColumnType("uuid");
+
                     b.Property<double>("MeasuredValue")
                         .HasColumnType("double precision");
 
@@ -782,8 +914,10 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -828,8 +962,10 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<string>("CollectedByPhlebotomistName")
                         .HasColumnType("text");
 
-                    b.Property<int>("ContainerType")
-                        .HasColumnType("integer");
+                    b.Property<string>("ContainerType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("CorrectiveAction")
                         .HasColumnType("text");
@@ -879,21 +1015,29 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<string>("RejectionNotes")
                         .HasColumnType("text");
 
-                    b.Property<int>("RejectionReason")
-                        .HasColumnType("integer");
+                    b.Property<string>("RejectionReason")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("SpecimenType")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
-                    b.Property<int>("StorageStatus")
-                        .HasColumnType("integer");
+                    b.Property<string>("StorageStatus")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
-                    b.Property<int>("StorageTemperature")
-                        .HasColumnType("integer");
+                    b.Property<string>("StorageTemperature")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<DateTime?>("StoredAt")
                         .HasColumnType("timestamp with time zone");
@@ -906,180 +1050,105 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Barcode")
+                    b.HasIndex("LabRequisitionId", "Barcode")
                         .IsUnique();
-
-                    b.HasIndex("LabRequisitionId");
 
                     b.ToTable("Specimens", "laboratory_dashboard");
                 });
 
-            modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.InboxState", b =>
+            modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropInboxMessage", b =>
                 {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime?>("Consumed")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ConsumerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("Delivered")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ExpirationTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long?>("LastSequenceNumber")
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid>("LockId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid>("MessageId")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<int>("ReceiveCount")
+                    b.Property<DateTime>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("MessageId");
+
+                    b.HasIndex("ProcessedAtUtc");
+
+                    b.ToTable("interop_inbox", "laboratory_dashboard");
+                });
+
+            modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropOutboxMessage", b =>
+                {
+                    b.Property<Guid>("MessageId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime>("Received")
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("bytea");
+                    b.Property<DateTime?>("DeadLetteredAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("Id");
+                    b.Property<DateTime?>("DispatchedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
-                    b.HasIndex("Delivered");
+                    b.Property<string>("EnvelopeJson")
+                        .IsRequired()
+                        .HasColumnType("text");
 
-                    b.ToTable("InboxState", "laboratory_dashboard");
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("MessageId");
+
+                    b.HasIndex("CorrelationId");
+
+                    b.HasIndex("DispatchedAtUtc", "DeadLetteredAtUtc", "NextAttemptAtUtc");
+
+                    b.ToTable("interop_outbox", "laboratory_dashboard");
                 });
 
-            modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>
+            modelBuilder.Entity("ClinicEz.Shared.Workspace.WorkspaceProfileRecord", b =>
                 {
-                    b.Property<long>("SequenceNumber")
-                        .ValueGeneratedOnAdd()
+                    b.Property<string>("TenantId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProfileJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TenantSlug")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
                         .HasColumnType("bigint");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("SequenceNumber"));
+                    b.HasKey("TenantId");
 
-                    b.Property<string>("Body")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.HasIndex("TenantSlug");
 
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<Guid?>("ConversationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CorrelationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("DestinationAddress")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime?>("EnqueueTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ExpirationTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FaultAddress")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("Headers")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("InboxConsumerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("InboxMessageId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("InitiatorId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("MessageId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("MessageType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("OutboxId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Properties")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("RequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ResponseAddress")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime>("SentTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("SourceAddress")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.HasKey("SequenceNumber");
-
-                    b.HasIndex("EnqueueTime");
-
-                    b.HasIndex("ExpirationTime");
-
-                    b.HasIndex("OutboxId", "SequenceNumber")
-                        .IsUnique();
-
-                    b.HasIndex("InboxMessageId", "InboxConsumerId", "SequenceNumber")
-                        .IsUnique();
-
-                    b.ToTable("OutboxMessage", "laboratory_dashboard");
-                });
-
-            modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxState", b =>
-                {
-                    b.Property<Guid>("OutboxId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("Created")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("Delivered")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long?>("LastSequenceNumber")
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid>("LockId")
-                        .HasColumnType("uuid");
-
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("bytea");
-
-                    b.HasKey("OutboxId");
-
-                    b.HasIndex("Created");
-
-                    b.ToTable("OutboxState", "laboratory_dashboard");
+                    b.ToTable("workspace_profiles", "laboratory_dashboard");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.AnalyteResult", b =>
@@ -1127,18 +1196,6 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasForeignKey("LabRequisitionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>
-                {
-                    b.HasOne("MassTransit.EntityFrameworkCoreIntegration.OutboxState", null)
-                        .WithMany()
-                        .HasForeignKey("OutboxId");
-
-                    b.HasOne("MassTransit.EntityFrameworkCoreIntegration.InboxState", null)
-                        .WithMany()
-                        .HasForeignKey("InboxMessageId", "InboxConsumerId")
-                        .HasPrincipalKey("MessageId", "ConsumerId");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.LabRequisition", b =>

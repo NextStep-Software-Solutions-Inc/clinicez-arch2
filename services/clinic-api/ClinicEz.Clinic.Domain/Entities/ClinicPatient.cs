@@ -1,5 +1,6 @@
 using System;
 using ClinicEz.Clinic.Domain.Common;
+using ClinicEz.Shared.Interoperability;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
@@ -53,6 +54,14 @@ public sealed class ClinicPatient : BaseEntity
     /// Optional linkage to cloud Patient App ID if patient has synchronized
     /// </summary>
     public Guid? SyncPatientId { get; set; }
+
+    /// <summary>Human-friendly global ClinicEZ id the patient app shows; the key a share import matches on first.</summary>
+    public string? ClinicEzId { get; set; }
+
+    /// <summary>The patient's latest consent grant to this clinic (scan-to-fetch): which scopes were shared and until when.</summary>
+    public Guid? ShareGrantId { get; set; }
+    public SharingScopes ShareGrantScopes { get; set; }
+    public DateTime? ShareGrantExpiresAt { get; set; }
 
     /// <summary>
     /// Tenant-specific custom properties stored as JSON (e.g., student_id, college, year_level, employee_id).

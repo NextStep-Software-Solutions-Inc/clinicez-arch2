@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Laboratory.Application.Common;
 using ClinicEz.Laboratory.Application.Common.Interfaces;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
 using ClinicEz.Laboratory.Domain.Entities;
@@ -36,15 +37,18 @@ public class IngestAnalyzerFeedCommandHandler : IRequestHandler<IngestAnalyzerFe
     private readonly IRepository<LabRequisition> _requisitionRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAnalyzerFeedService _feedService;
+    private readonly ILabOrderLifecycle _lifecycle;
 
     public IngestAnalyzerFeedCommandHandler(
         IRepository<LabRequisition> requisitionRepository,
         IUnitOfWork unitOfWork,
-        IAnalyzerFeedService feedService)
+        IAnalyzerFeedService feedService,
+        ILabOrderLifecycle lifecycle)
     {
         _requisitionRepository = requisitionRepository;
         _unitOfWork = unitOfWork;
         _feedService = feedService;
+        _lifecycle = lifecycle;
     }
 
     public async Task<IngestAnalyzerFeedResultDto> Handle(IngestAnalyzerFeedCommand request, CancellationToken cancellationToken)
@@ -69,6 +73,9 @@ public class IngestAnalyzerFeedCommandHandler : IRequestHandler<IngestAnalyzerFe
         {
             throw new KeyNotFoundException($"Requisition with Accession/Barcode '{packet.AccessionNumber}' not found for analyzer ingestion.");
         }
+
+        // A prepaid order cannot be processed until the cashier has confirmed payment.
+        OrderWorkGate.EnsureCanWork(requisition);
 
         var entryTime = DateTime.UtcNow;
         var medTech = !string.IsNullOrWhiteSpace(request.MedTechName) ? request.MedTechName : $"Analyzer Automated Feed ({packet.AnalyzerId})";
@@ -153,6 +160,7 @@ public class IngestAnalyzerFeedCommandHandler : IRequestHandler<IngestAnalyzerFe
         }
 
         _requisitionRepository.Update(requisition);
+        await _lifecycle.TransitionAsync(requisition, RequisitionStage.InProcess, null, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new IngestAnalyzerFeedResultDto

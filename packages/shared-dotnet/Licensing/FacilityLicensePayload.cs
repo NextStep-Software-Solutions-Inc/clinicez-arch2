@@ -51,4 +51,27 @@ public record FacilityLicensePayload
 
     [JsonPropertyName("issuer")]
     public string Issuer { get; init; } = "ClinicEz-Authority";
+
+    /// <summary>Workspace entitlement version this license was derived from; a facility ignores licenses older than the one it holds.</summary>
+    [JsonPropertyName("entitlementVersion")]
+    public int EntitlementVersion { get; init; }
+
+    /// <summary>Workspace subscription status when issued (Trialing, Active, PastDue, Cancelled, Expired).</summary>
+    [JsonPropertyName("workspaceStatus")]
+    public string? WorkspaceStatus { get; init; }
+
+    /// <summary>After <see cref="ExpiresAtUtc"/> the facility keeps working read-only until this moment.</summary>
+    [JsonPropertyName("readOnlyGraceUntil")]
+    public DateTime? ReadOnlyGraceUntil { get; init; }
+
+    [JsonPropertyName("graceDays")]
+    public int GraceDays { get; init; } = 14;
+
+    /// <summary>Physical branch the facility belongs to, when it has one.</summary>
+    [JsonPropertyName("branchId")]
+    public Guid? BranchId { get; init; }
+
+    /// <summary>Resource pool the limits were carved from (the workspace).</summary>
+    [JsonPropertyName("poolId")]
+    public Guid? PoolId { get; init; }
 }

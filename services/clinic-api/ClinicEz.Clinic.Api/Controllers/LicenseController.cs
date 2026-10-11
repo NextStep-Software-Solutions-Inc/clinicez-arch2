@@ -333,6 +333,12 @@ public sealed class LicenseController : ControllerBase
 
         var targetClinicName = payload?.FacilityName ?? facilityLookup?.Name ?? "Clinic Facility";
 
+        // The workspace lookup is served from these local rows, so remember the slugs the facility is activated under.
+        var facilitySlug = !string.IsNullOrWhiteSpace(facilitySlugHeader) && !Guid.TryParse(facilitySlugHeader, out _)
+            ? facilitySlugHeader.ToLowerInvariant()
+            : facilityLookup?.FacilitySlug;
+        var tenantSlug = payload?.TenantSlug;
+
         if (settings == null)
         {
             settings = new ClinicSettings
@@ -340,11 +346,14 @@ public sealed class LicenseController : ControllerBase
                 Id = Guid.NewGuid(),
                 TenantId = targetTenantId,
                 ClinicId = targetClinicId,
+                TenantSlug = tenantSlug,
+                FacilitySlug = facilitySlug,
                 ClinicName = targetClinicName,
                 LicenseToken = request.LicenseToken.Trim(),
                 PlanTier = payload?.PlanTier ?? "Community",
                 MaxStaffLimit = payload?.Limits?.MaxStaff ?? 5,
                 LicenseExpiresAt = payload?.ExpiresAtUtc,
+                EntitlementVersion = payload?.EntitlementVersion ?? 0,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "LicenseActivation"
             };
@@ -355,10 +364,13 @@ public sealed class LicenseController : ControllerBase
             settings.LicenseToken = request.LicenseToken.Trim();
             settings.ClinicId = targetClinicId;
             settings.TenantId = targetTenantId;
+            settings.TenantSlug = tenantSlug ?? settings.TenantSlug;
+            settings.FacilitySlug = facilitySlug ?? settings.FacilitySlug;
             settings.ClinicName = targetClinicName;
             settings.PlanTier = payload?.PlanTier ?? "Community";
             settings.MaxStaffLimit = payload?.Limits?.MaxStaff ?? 5;
             settings.LicenseExpiresAt = payload?.ExpiresAtUtc;
+            settings.EntitlementVersion = payload?.EntitlementVersion ?? 0;
         }
 
         await _unitOfWork.SaveChangesAsync(ct);

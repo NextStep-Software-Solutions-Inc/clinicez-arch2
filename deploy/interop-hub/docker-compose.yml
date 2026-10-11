@@ -1,0 +1,54 @@
+# docker-compose.yml
+# Deploy compose for the Interop Hub (cloud mode) on Server (Dev environment).
+#
+# All secrets are injected via .env written at deploy time by GitHub Actions (see .env.example).
+# No host ports exposed; routed via npm-default (NPM) and connected to data-network (PostgreSQL).
+#
+# ASPNETCORE_ENVIRONMENT defaults to Production on purpose: the hub's Development environment seeds well-known
+# development clients (dev-*), which must never exist on a server.
+
+name: interop-hub
+
+services:
+  interop-hub:
+    image: ${IMAGE_NAME:-interop-hub}:${IMAGE_TAG:-dev}
+    container_name: ${CONTAINER_NAME:-interop-hub}
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    expose:
+      - "8080"
+    networks:
+      - data-network
+      - npm-default
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING:?CONNECTION_STRING must be set}
+      - DbSchema=${DB_SCHEMA:-interop_hub}
+      - Hub__Mode=Cloud
+      - Hub__Database__AutoMigrate=${HUB_AUTO_MIGRATE:-true}
+      # Optional AES-256-GCM encryption of stored envelopes: base64 of 32 random bytes. Empty stores plain JSON.
+      - Hub__PayloadEncryptionKey=${HUB_PAYLOAD_ENCRYPTION_KEY:-}
+      # Declarative bootstrap: the cloud cell and the first ControlPlane client (portal-api). The portal then
+      # creates every other cell and client through the hub admin API. The secret must be at least 24 characters.
+      - Hub__Bootstrap__Cells__0__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Cells__0__Name=ClinicEZ Cloud
+      - Hub__Bootstrap__Cells__0__Kind=Cloud
+      - Hub__Bootstrap__Clients__0__ClientId=${HUB_PORTAL_CLIENT_ID:-portal-api}
+      - Hub__Bootstrap__Clients__0__Secret=${HUB_PORTAL_CLIENT_SECRET:?HUB_PORTAL_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__0__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Clients__0__Service=portal
+      - Hub__Bootstrap__Clients__0__Kind=ControlPlane
+      # Public half (ECDSA P-256, PEM or base64 of PEM) of the portal's Messaging__SigningKey. Required. Every other client's
+      # public key is registered through the hub admin API together with the client.
+      - Hub__Bootstrap__Clients__0__PublicKey=${PORTAL_HUB_SIGNING_PUBLIC_KEY:-${PORTAL_HUB_PUBLIC_KEY:-${HUB_PORTAL_PUBLIC_KEY:?PORTAL_HUB_SIGNING_PUBLIC_KEY must be set}}}
+      # Verify envelope signatures on POST /v1/messages (default true outside Development). Only set false for a temporary
+      # migration of clients that cannot sign yet.
+      - Hub__Signing__Required=${HUB_SIGNING_REQUIRED:-true}
+    restart: unless-stopped
+
+networks:
+  data-network:
+    external: true
+  npm-default:
+    external: true

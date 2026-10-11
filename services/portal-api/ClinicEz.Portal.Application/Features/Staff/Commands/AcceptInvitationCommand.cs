@@ -1,5 +1,6 @@
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -32,32 +33,45 @@ public class AcceptInvitationCommandValidator : AbstractValidator<AcceptInvitati
     }
 }
 
-public class AcceptInvitationCommandHandler(IApplicationDbContext context) : IRequestHandler<AcceptInvitationCommand, AcceptInvitationResultDto>
+/// <summary>
+/// Accepting an invitation makes the user a member of the inviting workspace. It never grants ownership, and a
+/// user can join any number of workspaces.
+/// </summary>
+public class AcceptInvitationCommandHandler(
+    IApplicationDbContext context,
+    IClerkMetadataSync clerkMetadata,
+    TimeProvider timeProvider) : IRequestHandler<AcceptInvitationCommand, AcceptInvitationResultDto>
 {
     public async Task<AcceptInvitationResultDto> Handle(AcceptInvitationCommand request, CancellationToken cancellationToken)
     {
-        var member = await context.StaffMembers
-            .Include(s => s.Tenant)
-            .FirstOrDefaultAsync(s => s.InvitationToken == request.Token, cancellationToken)
+        var member = await context.WorkspaceMembers
+            .Include(m => m.Tenant)
+            .FirstOrDefaultAsync(m => m.InvitationToken == request.Token, cancellationToken)
             ?? throw new KeyNotFoundException("Invitation was not found or is invalid.");
 
+        var profile = await context.StaffMembers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.WorkspaceMemberId == member.Id, cancellationToken);
+
+        var result = new AcceptInvitationResultDto(
+            member.Tenant.TenantSlug,
+            member.Tenant.Name,
+            StaffMemberMapping.RoleName(member, profile),
+            member.FullName);
+
         // If the user already accepted this invitation previously
-        if (member.Status.Equals("Active", StringComparison.OrdinalIgnoreCase) && member.UserId == request.ClerkUserId)
+        if (member.Status == MemberStatus.Active && member.UserId == request.ClerkUserId)
         {
-            return new AcceptInvitationResultDto(
-                member.Tenant.TenantSlug,
-                member.Tenant.Name,
-                member.Role,
-                member.FullName
-            );
+            return result;
         }
 
-        if (!member.Status.Equals("PendingInvitation", StringComparison.OrdinalIgnoreCase))
+        if (member.Status != MemberStatus.Invited)
         {
             throw new InvalidOperationException("This invitation is no longer active or has already been used.");
         }
 
-        if (member.InvitationExpiresAt.HasValue && member.InvitationExpiresAt.Value < DateTime.UtcNow)
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        if (member.InvitationExpiresAt.HasValue && member.InvitationExpiresAt.Value < now)
         {
             throw new InvalidOperationException("This invitation has expired. Please ask your clinic administrator to resend the invitation.");
         }
@@ -75,18 +89,23 @@ public class AcceptInvitationCommandHandler(IApplicationDbContext context) : IRe
             throw new InvalidOperationException("Your email domain is not permitted to join this workspace. Contact the workspace administrator.");
         }
 
-        // Link the authenticated user to the internal staff record
+        var alreadyMember = await context.WorkspaceMembers.AnyAsync(
+            m => m.TenantId == member.TenantId && m.UserId == request.ClerkUserId && m.Id != member.Id,
+            cancellationToken);
+        if (alreadyMember)
+        {
+            throw new InvalidOperationException("This account is already a member of this workspace.");
+        }
+
+        // Link the authenticated user to the invited membership. The role stays exactly as it was invited
+        // (never Owner); the single owner is the person who created the workspace.
         member.UserId = request.ClerkUserId;
-        member.Status = "Active";
-        member.JoinedAt = DateTime.UtcNow;
+        member.Status = MemberStatus.Active;
+        member.JoinedAt = now;
 
         await context.SaveChangesAsync(cancellationToken);
+        await clerkMetadata.SyncAsync(request.ClerkUserId, cancellationToken);
 
-        return new AcceptInvitationResultDto(
-            member.Tenant.TenantSlug,
-            member.Tenant.Name,
-            member.Role,
-            member.FullName
-        );
+        return result;
     }
 }

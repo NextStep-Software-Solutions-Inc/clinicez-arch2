@@ -17,6 +17,8 @@ export const bookingDrafts = sqliteTable('booking_drafts', {
     reason: text('reason'),
     notes: text('notes'),
     shareFieldsJson: text('share_fields_json').notNull().default('[]'),
+    /** JSON array of record-section scope names (PascalCase, never Demographics) sent with the booking */
+    shareSectionsJson: text('share_sections_json').notNull().default('[]'),
     attachedFileIdsJson: text('attached_file_ids_json').notNull().default('[]'),
     status: text('status', { enum: ['draft', 'ready'] }).notNull().default('draft'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),

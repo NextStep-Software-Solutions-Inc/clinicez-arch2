@@ -129,7 +129,7 @@ public class QualityControlTests
             TenantId: "tenant-test",
             LotNumber: "LOT-GLUC-01",
             ControlName: "Liquichek Chemistry Level 2",
-            Level: "Level2_Normal",
+            Level: ControlLevel.Level2_Normal,
             AnalyteCode: "FBS",
             InstrumentName: "Cobas c311",
             TargetMean: 95.0,

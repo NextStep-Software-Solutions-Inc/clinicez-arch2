@@ -3,11 +3,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Features.Admin.Queries;
+using ClinicEz.Portal.Application.Features.Admin.Services;
+using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Features.Licensing;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Common;
-using ClinicEz.Shared.Licensing;
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -22,7 +23,10 @@ public interface IFacilityProvisioningReconciliationJob
 
 public class FacilityProvisioningReconciliationJob(
     IApplicationDbContext dbContext,
-    IPublishEndpoint publishEndpoint,
+    IFacilityProvisioningPublisher provisioningPublisher,
+    IEntitlementService entitlements,
+    IFacilityAllocationService allocations,
+    ILicenseIssuer licenseIssuer,
     IConfiguration configuration,
     IHostEnvironment environment,
     ILogger<FacilityProvisioningReconciliationJob> logger
@@ -47,16 +51,26 @@ public class FacilityProvisioningReconciliationJob(
                 var tenant = await dbContext.Tenants.FirstOrDefaultAsync(t => t.Id == facility.TenantId, cancellationToken);
                 if (tenant == null) continue;
 
-                var planTier = facility.PlanTier ?? "Community";
-                var limits = PlanTierDefaults.GetLimitsForTier(planTier);
-                var expiresAt = facility.LicenseExpiresAt ?? DateTime.UtcNow.AddYears(1);
+                // The licence is re-derived from the workspace's current entitlements so a re-sent message never carries stale limits.
+                var snapshot = await entitlements.ResolveAsync(tenant.Id, cancellationToken);
+                var shares = await allocations.ComputeSharesAsync(tenant.Id, snapshot, null, cancellationToken);
+                var license = licenseIssuer.Issue(tenant, facility, snapshot, shares[facility.Id]);
+                var limits = license.Payload.Limits;
+                var planTier = snapshot.PlanSlug;
+                var expiresAt = license.Payload.ExpiresAtUtc!.Value;
+
+                facility.LicenseToken = license.Token;
+                facility.PlanTier = planTier;
+                facility.MaxStaffLimit = limits.MaxStaff;
+                facility.LicenseExpiresAt = expiresAt;
+
                 var slug = !string.IsNullOrWhiteSpace(facility.Slug)
                     ? facility.Slug
                     : GetFacilitiesQueryHandler.GenerateFacilitySlug(facility.Name);
                 var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, facility.FacilityType, facility.Status, facility.Id, slug, tenant.TenantSlug, facility.ConsoleBaseUrl);
 
-                // Re-publish provisioning event to fan out across microservices
-                await publishEndpoint.Publish(new FacilityCreatedEvent
+                // Re-issue the licence over the hub (staged in the outbox; committed by the SaveChanges below)
+                await provisioningPublisher.StageProvisionedAsync(tenant, new FacilityCreatedEvent
                 {
                     TenantId = tenant.Id.ToString(),
                     TenantSlug = tenant.TenantSlug,
@@ -64,7 +78,7 @@ public class FacilityProvisioningReconciliationJob(
                     ResourceId = facility.Id,
                     Name = facility.Name,
                     Slug = slug,
-                    LicenseToken = facility.LicenseToken,
+                    LicenseToken = license.Token,
                     Limits = limits,
                     PlanTier = planTier,
                     LicenseExpiresAt = expiresAt,

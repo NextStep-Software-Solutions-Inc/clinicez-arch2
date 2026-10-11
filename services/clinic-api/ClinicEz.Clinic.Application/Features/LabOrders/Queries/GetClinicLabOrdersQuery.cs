@@ -22,13 +22,16 @@ public record GetClinicLabOrdersQuery(
 public class GetClinicLabOrdersQueryHandler : IRequestHandler<GetClinicLabOrdersQuery, List<ClinicLabOrderDto>>
 {
     private readonly IRepository<ClinicLabOrder> _orderRepo;
+    private readonly IRepository<ClinicLabResult> _resultRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetClinicLabOrdersQueryHandler(
         IRepository<ClinicLabOrder> orderRepo,
+        IRepository<ClinicLabResult> resultRepo,
         IClinicContext clinicContext)
     {
         _orderRepo = orderRepo;
+        _resultRepo = resultRepo;
         _clinicContext = clinicContext;
     }
 
@@ -59,6 +62,14 @@ public class GetClinicLabOrdersQueryHandler : IRequestHandler<GetClinicLabOrders
             .OrderByDescending(o => o.OrderDate)
             .ToListAsync(cancellationToken);
 
-        return orders.Select(CreateClinicLabOrderCommandHandler.MapToDto).ToList();
+        var orderIds = orders.Select(o => o.Id).ToList();
+        var results = (await _resultRepo.Query(r => orderIds.Contains(r.LabOrderId))
+                .AsNoTracking()
+                .OrderBy(r => r.SubmittedAt)
+                .ToListAsync(cancellationToken))
+            .ToLookup(r => r.LabOrderId);
+
+        return orders.Select(o => CreateClinicLabOrderCommandHandler.MapToDto(o, results[o.Id])).ToList();
     }
 }
+

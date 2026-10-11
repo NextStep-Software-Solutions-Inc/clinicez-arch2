@@ -53,10 +53,9 @@ public class PharmacyAuthServiceTests
 
     private static async Task<Fixture> CreateAsync(string? ownerEmail = OwnerEmail, bool withSettings = true)
     {
-        var (db, _, _) = PharmacyTestDbHelper.CreateTestContext();
-
         var pharmacyId = Guid.NewGuid();
         var tenantId = Guid.NewGuid().ToString();
+        var db = PharmacyTestDbHelper.CreateContext($"Pharmacy_AuthDb_{Guid.NewGuid()}", new TestPharmacyScope(tenantId, pharmacyId));
         var license = SignLicense(pharmacyId, tenantId, ownerEmail, "Olivia Owner");
 
         if (withSettings)
@@ -351,7 +350,7 @@ public class PharmacyAuthServiceTests
         var login = await f.Service.LoginAsync(new LoginRequest(null, "carla@pharmacy.test", "Temp-Pass-12345", null));
         login.Ok.Should().BeTrue(login.Message);
         login.Tokens!.User.MustChangePassword.Should().BeTrue();
-        login.Tokens.User.Permissions.Should().BeEquivalentTo(new[] { "prescriptions:read", "gamot:read" });
+        login.Tokens.User.Permissions.Should().BeEquivalentTo(new[] { "prescriptions:read", "prescriptions:claim", "gamot:read" });
 
         var changed = await f.Service.ChangePasswordAsync(cashier.Id, new ChangePasswordRequest("Temp-Pass-12345", "Brand-New-Pass-99"), null);
         changed.Ok.Should().BeTrue(changed.Message);

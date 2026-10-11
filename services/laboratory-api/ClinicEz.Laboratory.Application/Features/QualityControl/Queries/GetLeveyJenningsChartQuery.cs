@@ -5,13 +5,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
 using ClinicEz.Laboratory.Domain.Entities;
+using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Laboratory.Application.Features.QualityControl.Queries;
 
-public record GetLeveyJenningsChartQuery(Guid? LotId = null, string? AnalyteCode = null, string? Level = null) : IRequest<LeveyJenningsChartDto?>;
+public record GetLeveyJenningsChartQuery(Guid? LotId = null, string? AnalyteCode = null, ControlLevel? Level = null) : IRequest<LeveyJenningsChartDto?>;
 
 public class GetLeveyJenningsChartQueryHandler : IRequestHandler<GetLeveyJenningsChartQuery, LeveyJenningsChartDto?>
 {
@@ -36,9 +37,9 @@ public class GetLeveyJenningsChartQueryHandler : IRequestHandler<GetLeveyJenning
             var code = request.AnalyteCode.Trim().ToUpperInvariant();
             query = query.Where(l => l.AnalyteCode == code);
 
-            if (!string.IsNullOrWhiteSpace(request.Level) && Enum.TryParse<Domain.Enums.ControlLevel>(request.Level, true, out var lvl))
+            if (request.Level is { } level)
             {
-                query = query.Where(l => l.Level == lvl);
+                query = query.Where(l => l.Level == level);
             }
 
             lot = await query.OrderByDescending(l => l.CreatedAt).FirstOrDefaultAsync(cancellationToken);

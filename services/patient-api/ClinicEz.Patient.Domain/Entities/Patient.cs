@@ -8,6 +8,9 @@ public sealed class Patient : BaseEntity, ISyncable
     public Guid ClientId { get; set; }
     public string? ClerkUserId { get; set; }
 
+    /// <summary>Human-friendly global id (e.g. CE-7K2M-9QX4) that facilities use to recognise the patient. Generated on creation, never reused.</summary>
+    public string ClinicEzId { get; set; } = string.Empty;
+
     // A1 — Personal Demographics
     public string FirstName { get; set; } = string.Empty;
     public string? MiddleName { get; set; }

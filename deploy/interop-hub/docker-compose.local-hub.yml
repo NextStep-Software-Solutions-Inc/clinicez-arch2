@@ -1,0 +1,68 @@
+# docker-compose.local-hub.yml
+# Local (edge) hub for ONE on-premise site: same image as the cloud hub, Hub__Mode=Local.
+# Run manually on the site server (docker compose -f docker-compose.local-hub.yml --env-file .env up -d).
+#
+# The local hub only ever dials out: it forwards its outbound queue to the cloud hub, long-polls the cell inbox and
+# syncs the directory snapshot over HTTPS. Facility services on the LAN talk to this hub at http://interop-hub-local:8080.
+# See services/interop-hub/README.md ("Edge sites").
+#
+# Declare the site's own service clients and facilities below (increase the indexes for more). They mirror what the portal
+# registered at the cloud hub for this cell; the facility list is refreshed from the cloud snapshot once the site is online.
+
+name: interop-hub-local
+
+services:
+  hub-db:
+    image: postgres:16
+    container_name: interop-hub-local-db
+    environment:
+      - POSTGRES_DB=${LOCAL_DB_NAME:-CLINICEZ_INTEROP_HUB_LOCAL_DB}
+      - POSTGRES_USER=${LOCAL_DB_USER:-interop_hub}
+      - POSTGRES_PASSWORD=${LOCAL_DB_PASSWORD:?LOCAL_DB_PASSWORD must be set}
+    volumes:
+      - interop-hub-local-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  interop-hub-local:
+    image: ${IMAGE_NAME:-interop-hub}:${IMAGE_TAG:-dev}
+    container_name: interop-hub-local
+    depends_on:
+      - hub-db
+    ports:
+      - "${LOCAL_HUB_PORT:-8080}:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=hub-db;Database=${LOCAL_DB_NAME:-CLINICEZ_INTEROP_HUB_LOCAL_DB};Username=${LOCAL_DB_USER:-interop_hub};Password=${LOCAL_DB_PASSWORD}
+      - DbSchema=${DB_SCHEMA:-interop_hub}
+      - Hub__Mode=Local
+      - Hub__Database__AutoMigrate=true
+      - Hub__LocalCellId=${LOCAL_CELL_ID:?LOCAL_CELL_ID must be set}
+      # UPSTREAM_ENABLED=false runs the hub air-gapped (same-cell traffic only; the three values below are then not needed).
+      # With the default (true) the hub refuses to start when any of them is empty.
+      - Hub__Upstream__Enabled=${UPSTREAM_ENABLED:-true}
+      - Hub__Upstream__Url=${UPSTREAM_HUB_URL:-}
+      - Hub__Upstream__ClientId=${UPSTREAM_CLIENT_ID:-}
+      - Hub__Upstream__ClientSecret=${UPSTREAM_CLIENT_SECRET:-}
+      # P-256 private key (PEM or base64 of PEM) the portal issued with the edge client: the local hub re-signs forwarded
+      # envelopes with it. Required unless air-gapped (UPSTREAM_ENABLED=false).
+      - Hub__Upstream__SigningKey=${EDGE_HUB_SIGNING_KEY:-}
+      - Hub__Signing__Required=${HUB_SIGNING_REQUIRED:-true}
+      - Hub__Bootstrap__Cells__0__CellId=${LOCAL_CELL_ID}
+      - Hub__Bootstrap__Cells__0__Name=${LOCAL_CELL_NAME:-Edge site}
+      - Hub__Bootstrap__Cells__0__Kind=Edge
+      - Hub__Bootstrap__Cells__0__TenantId=${LOCAL_TENANT_ID:?LOCAL_TENANT_ID must be set}
+      - Hub__Bootstrap__Clients__0__ClientId=${LOCAL_CLINIC_CLIENT_ID:-site-clinic}
+      - Hub__Bootstrap__Clients__0__Secret=${LOCAL_CLINIC_CLIENT_SECRET:?LOCAL_CLINIC_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__0__CellId=${LOCAL_CELL_ID}
+      - Hub__Bootstrap__Clients__0__Service=clinic
+      - Hub__Bootstrap__Clients__0__Kind=EdgeCell
+      - Hub__Bootstrap__Clients__0__PublicKey=${LOCAL_CLINIC_PUBLIC_KEY:?LOCAL_CLINIC_PUBLIC_KEY must be set}
+      - Hub__Bootstrap__Facilities__0__TenantId=${LOCAL_TENANT_ID}
+      - Hub__Bootstrap__Facilities__0__FacilityId=${LOCAL_CLINIC_FACILITY_ID:?LOCAL_CLINIC_FACILITY_ID must be set}
+      - Hub__Bootstrap__Facilities__0__FacilityType=Clinic
+      - Hub__Bootstrap__Facilities__0__CellId=${LOCAL_CELL_ID}
+      - Hub__Bootstrap__Facilities__0__DisplayName=${LOCAL_CLINIC_NAME:-Clinic}
+    restart: unless-stopped
+
+volumes:
+  interop-hub-local-data:

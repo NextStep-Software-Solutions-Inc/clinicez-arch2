@@ -81,18 +81,18 @@ public sealed class LabAuthService : ILabAuthService
     public async Task<AuthStatusDto> GetStatusAsync(string? workspace, CancellationToken ct = default)
     {
         var resolved = await _workspaces.ResolveAsync(workspace, ct);
-        if (resolved is null) return new AuthStatusDto(false, "WorkspaceNotFound", false, null);
+        if (resolved is null) return new AuthStatusDto(false, null, false, null);
 
         var validation = _license.Validate(resolved.Settings.LicenseToken, resolved.LaboratoryId, resolved.TenantId);
-        var status = validation.IsMissing ? "ActivationRequired"
-            : validation.IsTampered ? "Tampered"
-            : validation.IsExpired ? "Expired"
-            : "Active";
+        var status = validation.IsMissing ? LabLicenseStatus.ActivationRequired
+            : validation.IsTampered ? LabLicenseStatus.Tampered
+            : validation.IsExpired ? LabLicenseStatus.Expired
+            : LabLicenseStatus.Active;
 
         var hasCredentials = await _db.LabStaffMembers.IgnoreQueryFilters()
             .AnyAsync(s => s.LaboratoryId == resolved.LaboratoryId && !s.IsDeleted && s.PasswordHash != null, ct);
 
-        return new AuthStatusDto(true, status, status != "ActivationRequired" && status != "Tampered" && !hasCredentials, resolved.Settings.LaboratoryName);
+        return new AuthStatusDto(true, status, status != LabLicenseStatus.ActivationRequired && status != LabLicenseStatus.Tampered && !hasCredentials, resolved.Settings.LaboratoryName);
     }
 
     public async Task<AuthOutcome> LoginAsync(LoginRequest request, CancellationToken ct = default)

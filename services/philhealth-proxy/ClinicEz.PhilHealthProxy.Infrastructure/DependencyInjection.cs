@@ -1,3 +1,4 @@
+using ClinicEz.Shared.Security;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,7 +13,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services,
         IConfiguration configuration,
-        IHostEnvironment? env = null)
+        IHostEnvironment env)
     {
         // Pure Stateless Zero-DB Micro-Gateway:
         // Register in-memory cache for 1-hour statutory credentials caching
@@ -21,7 +22,8 @@ public static class DependencyInjection
         // Resilient HTTP Client connecting to Portal API for branch accreditation credentials
         var portalBaseUrl = (configuration["PortalApi:BaseUrl"]
             ?? configuration["PORTAL_API_BASE_URL"]
-            ?? "http://localhost:5000").TrimEnd('/');
+            ?? throw new InvalidOperationException("PortalApi:BaseUrl is not configured (environment variable PortalApi__BaseUrl)."))
+            .TrimEnd('/');
 
         if (portalBaseUrl.EndsWith("/api/v1", StringComparison.OrdinalIgnoreCase))
         {
@@ -55,8 +57,8 @@ public static class DependencyInjection
         services.AddSingleton<IKonsultaMasterlistParser, KonsultaMasterlistParser>();
         services.AddSingleton<ISoapSandboxService, SoapSandboxService>();
 
-        services.AddDataProtection()
-            .SetApplicationName("ClinicEz.PhilHealthProxy");
+        // The Data Protection provider protects tenant credentials in memory during local caching.
+        services.AddDataProtection().SetApplicationName("ClinicEz.PhilHealthProxy");
 
         return services;
     }

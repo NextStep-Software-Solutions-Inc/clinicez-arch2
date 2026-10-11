@@ -1,9 +1,11 @@
 import axios from "axios";
 import { ensureApiPrefix } from "@shared/safe";
 
+export const apiBaseUrl = ensureApiPrefix(process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1");
+
 // Create the Axios instance
 export const apiClient = axios.create({
-  baseURL: ensureApiPrefix(process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1"),
+  baseURL: apiBaseUrl,
   headers: {
     "Content-Type": "application/json",
   },

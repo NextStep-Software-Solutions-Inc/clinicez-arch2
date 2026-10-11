@@ -136,6 +136,6 @@ public class GetPrescriptionDetailsQueryHandler : IRequestHandler<GetPrescriptio
                 d.Notes
             )).ToList(),
             order.BranchId
-        );
+        ).WithWorkflow(order);
     }
 }

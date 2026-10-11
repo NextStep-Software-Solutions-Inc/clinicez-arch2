@@ -1,0 +1,59 @@
+resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/javascript image/svg+xml;
+    gzip_min_length 1024;
+
+    # Result attachments go through /api/, so allow uploads.
+    client_max_body_size 30m;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok";
+    }
+
+    # Runtime configuration written at container start; never cached so a changed setting takes effect on reload.
+    location = /config.json {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-store" always;
+        default_type application/json;
+    }
+
+    # The laboratory's API. Same origin as the app, so there is no CORS and no hardcoded hostname anywhere.
+    # The upstream is resolved per request (variable + resolver) so this container can start before the API does.
+    location /api/ {
+        set $laboratory_api ${LABORATORY_API_UPSTREAM};
+        proxy_pass $laboratory_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-store" always;
+    }
+
+    # Content-hashed build output can be cached forever.
+    location ~ ^/(_expo|assets)/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # Single-page app: unknown paths fall back to index.html; the shell itself must always be revalidated.
+    location / {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri /index.html;
+    }
+}

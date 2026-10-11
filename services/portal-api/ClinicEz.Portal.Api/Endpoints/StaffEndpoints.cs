@@ -2,6 +2,8 @@ using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Staff.Commands;
 using ClinicEz.Portal.Application.Features.Staff.Queries;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Portal.Application.Features.Entitlements;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -40,8 +42,8 @@ public class StaffEndpoints : IEndpoint
 
             // Verify access: caller must be workspace owner or an active staff member
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isStaffMember = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == "Active");
+            var isStaffMember = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isStaffMember)
             {
@@ -90,8 +92,8 @@ public class StaffEndpoints : IEndpoint
 
             // Inviting staff is restricted to Workspace Owner or Admins
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin)
             {
@@ -103,7 +105,7 @@ public class StaffEndpoints : IEndpoint
                 var createdMember = await sender.Send(command);
                 return Results.Ok(createdMember);
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException ex) when (ex is not EntitlementException)
             {
                 return Results.BadRequest(new { Message = ex.Message });
             }
@@ -140,8 +142,8 @@ public class StaffEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin)
             {
@@ -155,7 +157,7 @@ public class StaffEndpoints : IEndpoint
                     ? Results.Ok(new { Success = true, Message = "Staff member / invitation revoked successfully." }) 
                     : Results.BadRequest(new { Message = "Failed to revoke staff member." });
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException ex) when (ex is not EntitlementException)
             {
                 return Results.BadRequest(new { Message = ex.Message });
             }
@@ -220,7 +222,7 @@ public class StaffEndpoints : IEndpoint
             {
                 return Results.NotFound(new { Message = ex.Message });
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException ex) when (ex is not EntitlementException)
             {
                 return Results.BadRequest(new { Message = ex.Message });
             }
@@ -257,8 +259,8 @@ public class StaffEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin)
             {
@@ -274,7 +276,7 @@ public class StaffEndpoints : IEndpoint
             {
                 return Results.NotFound(new { Message = ex.Message });
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException ex) when (ex is not EntitlementException)
             {
                 return Results.BadRequest(new { Message = ex.Message });
             }

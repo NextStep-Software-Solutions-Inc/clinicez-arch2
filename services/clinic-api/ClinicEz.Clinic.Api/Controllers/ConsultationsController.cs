@@ -85,7 +85,9 @@ public sealed class ConsultationsController : ControllerBase
             id,
             request?.PrcLicenseNumber,
             request?.PtrNumber,
-            request?.S2LicenseNumber);
+            request?.S2LicenseNumber,
+            request?.TargetPharmacyFacilityId,
+            request?.TargetPharmacyTenantId);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ConsultationEncounterDto>.Success(result, "Consultation signed and locked successfully."));
@@ -103,4 +105,6 @@ public sealed record UpdateConsultationRequest(
 public sealed record SignConsultationRequest(
     string? PrcLicenseNumber,
     string? PtrNumber,
-    string? S2LicenseNumber);
+    string? S2LicenseNumber,
+    string? TargetPharmacyFacilityId = null,
+    string? TargetPharmacyTenantId = null);

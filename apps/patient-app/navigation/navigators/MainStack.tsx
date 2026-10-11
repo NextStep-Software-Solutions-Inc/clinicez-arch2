@@ -59,6 +59,22 @@ import ClinicalAssessmentsScreen from '../screens/profile/ClinicalAssessments.sc
 import PhysicalExamScreen from '../screens/profile/PhysicalExam.screen';
 import NcdQuestionnaireScreen from '../screens/profile/NcdQuestionnaire.screen';
 
+// Sharing
+import ShareRecordsScreen from '../screens/sharing/ShareRecords.screen';
+import AccessGrantsScreen from '../screens/sharing/AccessGrants.screen';
+import AccessLogScreen from '../screens/sharing/AccessLog.screen';
+import ShareCodeScreen from '../screens/sharing/ShareCode.screen';
+import MyDevicesScreen from '../screens/settings/MyDevices.screen';
+
+// Document inbox
+import DocumentsScreen from '../screens/documents/Documents.screen';
+import LabRequestDetailScreen from '../screens/documents/LabRequestDetail.screen';
+import UploadLabResultScreen from '../screens/documents/UploadLabResult.screen';
+import PrescriptionDetailScreen from '../screens/documents/PrescriptionDetail.screen';
+import ExternalDispenseScreen from '../screens/documents/ExternalDispense.screen';
+import LabResultDetailScreen from '../screens/documents/LabResultDetail.screen';
+import MedicalCertificateDetailScreen from '../screens/documents/MedicalCertificateDetail.screen';
+
 const MainStack = createNativeStackNavigator({
   screenOptions: {
     headerStyle: {
@@ -307,6 +323,57 @@ const MainStack = createNativeStackNavigator({
     NcdQuestionnaireScreen: createNativeStackScreen({
       screen: NcdQuestionnaireScreen,
       options: { title: 'NCD Questionnaire', headerLargeTitleEnabled: true },
+    }),
+    // ── Sharing ───────────────────────────────────────────────────────────────
+    ShareRecordsScreen: createNativeStackScreen({
+      screen: ShareRecordsScreen,
+      options: { title: 'Share my records', headerLargeTitleEnabled: true },
+    }),
+    ShareCodeScreen: createNativeStackScreen({
+      screen: ShareCodeScreen,
+      options: { title: 'Share with a code' },
+    }),
+    AccessGrantsScreen: createNativeStackScreen({
+      screen: AccessGrantsScreen,
+      options: { title: 'Who has access', headerLargeTitleEnabled: true },
+    }),
+    AccessLogScreen: createNativeStackScreen({
+      screen: AccessLogScreen,
+      options: { title: 'Access activity' },
+    }),
+    // ── Devices ───────────────────────────────────────────────────────────────
+    MyDevicesScreen: createNativeStackScreen({
+      screen: MyDevicesScreen,
+      options: { title: 'My devices' },
+    }),
+    // ── Document inbox ────────────────────────────────────────────────────────
+    DocumentsScreen: createNativeStackScreen({
+      screen: DocumentsScreen,
+      options: { title: 'Documents', headerLargeTitleEnabled: true },
+    }),
+    LabRequestDetailScreen: createNativeStackScreen({
+      screen: LabRequestDetailScreen,
+      options: { title: 'Lab request' },
+    }),
+    UploadLabResultScreen: createNativeStackScreen({
+      screen: UploadLabResultScreen,
+      options: { title: 'Upload result' },
+    }),
+    PrescriptionDetailScreen: createNativeStackScreen({
+      screen: PrescriptionDetailScreen,
+      options: { title: 'Prescription' },
+    }),
+    ExternalDispenseScreen: createNativeStackScreen({
+      screen: ExternalDispenseScreen,
+      options: { title: 'Dispensed elsewhere' },
+    }),
+    LabResultDetailScreen: createNativeStackScreen({
+      screen: LabResultDetailScreen,
+      options: { title: 'Lab result' },
+    }),
+    MedicalCertificateDetailScreen: createNativeStackScreen({
+      screen: MedicalCertificateDetailScreen,
+      options: { title: 'Medical certificate' },
     }),
   },
 });

@@ -24,6 +24,7 @@ import {
 } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
+import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
@@ -1332,6 +1333,7 @@ export default function ConsultationsScreen() {
                         {meta}
                       </ThemedText>
                     ) : null}
+                    <LabOrderStageChip order={order} />
                   </View>
                   <Button
                     title="PDF report"

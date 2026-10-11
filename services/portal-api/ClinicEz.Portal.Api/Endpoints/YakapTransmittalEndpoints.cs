@@ -33,8 +33,8 @@ public class YakapTransmittalEndpoints : IEndpoint
         if (branch == null) return (false, null);
 
         var isOwner = branch.Tenant.OwnerId == clerkUserId;
-        var isStaff = !isOwner && await context.StaffMembers.AnyAsync(s =>
-            s.TenantId == branch.TenantId && s.UserId == clerkUserId && s.Status == "Active");
+        var isStaff = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+            s.TenantId == branch.TenantId && s.UserId == clerkUserId && s.Status == MemberStatus.Active);
 
         if (!isOwner && !isStaff) return (false, null);
 

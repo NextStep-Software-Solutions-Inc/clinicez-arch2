@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Laboratory.Application.Common;
 using ClinicEz.Laboratory.Application.Common.Interfaces;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interoperability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -30,21 +32,33 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDiagnosticReportPublisher _reportPublisher;
     private readonly IDiagnosticReportPdfGenerator _pdfGenerator;
+    private readonly ILabPrintoutConfigProvider _printoutConfig;
+    private readonly ILabOrderLifecycle _lifecycle;
 
     public VerifyAndSignReportCommandHandler(
         IRepository<LabRequisition> requisitionRepository,
         IUnitOfWork unitOfWork,
         IDiagnosticReportPublisher reportPublisher,
-        IDiagnosticReportPdfGenerator pdfGenerator)
+        IDiagnosticReportPdfGenerator pdfGenerator,
+        ILabPrintoutConfigProvider printoutConfig,
+        ILabOrderLifecycle lifecycle)
     {
         _requisitionRepository = requisitionRepository;
         _unitOfWork = unitOfWork;
         _reportPublisher = reportPublisher;
         _pdfGenerator = pdfGenerator;
+        _printoutConfig = printoutConfig;
+        _lifecycle = lifecycle;
     }
 
     public async Task<LabRequisitionDto> Handle(VerifyAndSignReportCommand request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.PathologistName) || string.IsNullOrWhiteSpace(request.PathologistPrcLicense) ||
+            string.IsNullOrWhiteSpace(request.MedicalTechnologistName) || string.IsNullOrWhiteSpace(request.MedicalTechnologistPrcLicense))
+        {
+            throw new BadRequestException("The pathologist and the medical technologist must each be named with their PRC license number to release a report.");
+        }
+
         var requisition = await _requisitionRepository.Query()
             .Include(r => r.Specimens)
             .Include(r => r.AnalyteResults)
@@ -55,6 +69,9 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
         {
             throw new KeyNotFoundException($"Requisition with ID {request.RequisitionId} not found.");
         }
+
+        // A prepaid order cannot be released until the cashier has confirmed payment.
+        OrderWorkGate.EnsureCanWork(requisition);
 
         var releaseTime = DateTime.UtcNow;
         var isCritical = requisition.AnalyteResults.Any(a => a.Flag == AnalyteFlag.Critical);
@@ -93,23 +110,27 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
         // Auto-generate standard PDF if not provided
         if (string.IsNullOrWhiteSpace(requisition.DiagnosticReport.SignedPdfBase64))
         {
-            var pdfBytes = _pdfGenerator.GeneratePdf(requisition);
+            var letterhead = await _printoutConfig.GetAsync(requisition, cancellationToken);
+            var pdfBytes = _pdfGenerator.GeneratePdf(requisition, letterhead);
             requisition.DiagnosticReport.SignedPdfBase64 = Convert.ToBase64String(pdfBytes);
         }
 
         requisition.Status = RequisitionStatus.Verified;
         _requisitionRepository.Update(requisition);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Broadcast finalized report over RabbitMQ to clinic EMR & patient app
+        // Finalized report for the ordering clinic EMR & patient app. Queued in the outbox BEFORE the save so the
+        // status change and the message commit atomically (the report id exists once the report is tracked).
         var reportEvent = new DiagnosticReportFinalizedEvent
         {
             ReportId = requisition.DiagnosticReport.Id,
-            RequisitionId = requisition.ExternalRequisitionId ?? requisition.Id,
+            RequisitionId = requisition.CorrelationId ?? requisition.ExternalRequisitionId ?? requisition.Id,
             AccessionNumber = requisition.AccessionNumber,
             LaboratoryFacilityId = requisition.LaboratoryId.ToString(),
             LaboratoryTenantId = requisition.TenantId,
-            LaboratoryName = "ClinicEz Diagnostic Laboratory",
+            LaboratoryName = await _lifecycle.GetLaboratoryNameAsync(requisition, cancellationToken),
+            OrderingTenantId = requisition.OrderingTenantId,
+            OrderingFacilityId = requisition.OrderingFacilityId,
+            PatientId = requisition.HasClinicEzPatient ? requisition.PatientId : null,
             PathologistName = request.PathologistName,
             PathologistPrcLicense = request.PathologistPrcLicense,
             MedicalTechnologistName = request.MedicalTechnologistName,
@@ -131,7 +152,9 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
             }).ToList()
         };
 
-        await _reportPublisher.PublishReportFinalizedAsync(reportEvent, cancellationToken);
+        _reportPublisher.EnqueueReportFinalized(reportEvent);
+        await _lifecycle.TransitionAsync(requisition, RequisitionStage.ResultFinalized, null, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Requisitions.Queries.GetWorklistQueryHandler.MapToDto(requisition);
     }

@@ -4,17 +4,19 @@ namespace ClinicEz.Patient.Domain.Entities;
 /// A clinic registered in the PatientApp catalogue.
 /// Patients discover clinics through public search or via their Organization memberships.
 /// Patients join a Clinic directly (no invite code required — only consent).
-/// The clinic's <c>BaseUrl</c> is the registered endpoint for all Clinic Dashboard API calls.
+/// The clinic is never called directly: every exchange with it travels as an interop hub envelope
+/// addressed to (<c>TenantId</c>, <c>Id</c>).
 /// </summary>
 public sealed class Clinic
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
+    /// <summary>Owning workspace, learned from the portal directory feed. Required to address the clinic on the hub.</summary>
+    public string? TenantId { get; set; }
     public string? Description { get; set; }
     public string? Address { get; set; }
     public bool IsPublic { get; set; } = true;
     public bool SupportsAppointments { get; set; } = true;
-    public string BaseUrl { get; set; } = string.Empty;
     public string? LogoUrl { get; set; }
     public string? CoverImageUrl { get; set; }
     public string? PrivacyPolicyUrl { get; set; }

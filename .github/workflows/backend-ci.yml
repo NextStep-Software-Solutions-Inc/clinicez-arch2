@@ -10,6 +10,7 @@ on:
       - 'packages/shared-dotnet/**'
       - 'CLINICEZ.sln'
       - 'Directory.Build.props'
+      - 'scripts/check-no-broker.ps1'
       - '.github/workflows/backend-ci.yml'
   pull_request:
     branches:
@@ -20,6 +21,7 @@ on:
       - 'packages/shared-dotnet/**'
       - 'CLINICEZ.sln'
       - 'Directory.Build.props'
+      - 'scripts/check-no-broker.ps1'
       - '.github/workflows/backend-ci.yml'
   workflow_dispatch:
 
@@ -36,6 +38,10 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '10.0.x'
+
+    - name: Guard against message brokers (Interop Hub only)
+      shell: pwsh
+      run: ./scripts/check-no-broker.ps1
 
     - name: Restore dependencies
       run: dotnet restore CLINICEZ.sln

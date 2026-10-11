@@ -55,8 +55,8 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       } else if (res) {
         setLicense(res);
       }
-    } catch (e: any) {
-      setError(e?.message || 'Failed to check laboratory facility license status.');
+    } catch (e: unknown) {
+      setError((e instanceof Error && e.message) || 'Failed to check laboratory facility license status.');
     } finally {
       setIsLoading(false);
     }
@@ -85,8 +85,8 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         setTokenInput('');
         setModalVisible(false);
       }
-    } catch (e: any) {
-      setSubmitError(e?.message || 'Error occurred while applying license.');
+    } catch (e: unknown) {
+      setSubmitError((e instanceof Error && e.message) || 'Error occurred while applying license.');
     } finally {
       setSubmitting(false);
     }

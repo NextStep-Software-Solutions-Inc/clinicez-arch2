@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ClinicEz.Laboratory.Application.Features.Requisitions.Commands;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
 using ClinicEz.Laboratory.Application.Features.Requisitions.Queries;
+using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -27,14 +28,15 @@ public sealed class RequisitionsController : ControllerBase
     [HttpGet]
     [HasPermission(LabPermissions.RequisitionsRead)]
     public async Task<ActionResult<ApiResponse<List<LabRequisitionDto>>>> GetWorklist(
-        [FromQuery] string? status,
+        [FromQuery] RequisitionStatus? status,
         [FromQuery] string? searchTerm,
         [FromQuery] string? branchId = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 50,
+        [FromQuery] RequisitionStage? stage = null,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetWorklistQuery(status, searchTerm, branchId, pageNumber, pageSize), ct);
+        var result = await _sender.Send(new GetWorklistQuery(status, searchTerm, branchId, pageNumber, pageSize, stage), ct);
         return Ok(ApiResponse<List<LabRequisitionDto>>.Success(result));
     }
 
@@ -121,6 +123,48 @@ public sealed class RequisitionsController : ControllerBase
         var result = await _sender.Send(new GetRackInventoryQuery(rackId), ct);
         return Ok(ApiResponse<List<RackInventoryItemDto>>.Success(result));
     }
+
+    /// <summary>Redeems a patient's QR claim slip for this laboratory; the order then arrives on the worklist.</summary>
+    [HttpPost("claim")]
+    [HasPermission(LabPermissions.RequisitionsManage)]
+    public async Task<ActionResult<ApiResponse<ClaimLabOrderResult>>> Claim(
+        [FromBody] ClaimRequisitionRequest request,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new ClaimLabOrderCommand(request.Token), ct);
+        return Ok(ApiResponse<ClaimLabOrderResult>.Success(result));
+    }
+
+    [HttpPost("{id:guid}/reject")]
+    [HasPermission(LabPermissions.RequisitionsManage)]
+    public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> Reject(
+        [FromRoute] Guid id,
+        [FromBody] RejectRequisitionRequest request,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new RejectLabOrderCommand(id, request.Reason), ct);
+        return Ok(ApiResponse<LabRequisitionDto>.Success(result));
+    }
+
+    [HttpPost("{id:guid}/payment/refresh")]
+    [HasPermission(LabPermissions.RequisitionsManage)]
+    public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> RefreshPayment(
+        [FromRoute] Guid id,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new RefreshPaymentStatusCommand(id), ct);
+        return Ok(ApiResponse<LabRequisitionDto>.Success(result));
+    }
+}
+
+public record ClaimRequisitionRequest
+{
+    public required string Token { get; init; }
+}
+
+public record RejectRequisitionRequest
+{
+    public required string Reason { get; init; }
 }
 
 public record AccessionSpecimenRequest
@@ -131,7 +175,7 @@ public record AccessionSpecimenRequest
 
 public record RejectSpecimenRequest
 {
-    public required string ReasonCode { get; init; }
+    public required SpecimenRejectionReason ReasonCode { get; init; }
     public string? Notes { get; init; }
     public string? PhlebotomistName { get; init; }
     public string? CorrectiveAction { get; init; }
@@ -141,5 +185,5 @@ public record StoreSpecimenRequest
 {
     public required string RackId { get; init; }
     public required string RackPosition { get; init; }
-    public string? Temperature { get; init; }
+    public StorageTemperature? Temperature { get; init; }
 }

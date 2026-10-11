@@ -1,36 +1,53 @@
+import { z } from 'zod';
 import { api } from './apiClient';
+import { notificationCategorySchema, notificationTypeSchema, type NotificationWireCategory } from './wireEnums';
 
-// ── Types (camelCase from backend) ────────────────────────────────────────────
+// ── Schemas (camelCase properties, PascalCase enum values) ────────────────────
 
-export interface RemoteNotification {
-    id: string;
-    /** e.g. "appointmentReminder" | "clinicAnnouncement" | "medicationReminder" | "labResult" | "newMessage" | "system" | "syncConflict" */
-    type: string;
-    /** e.g. "appointments" | "reminders" | "clinic" | "messages" | "system" */
-    category: string;
-    title: string;
-    body: string;
-    isRead: boolean;
-    readAt: string | null;
-    expiresAt: string | null;
-    sourceId: string | null;
+export const remoteNotificationSchema = z.object({
+    id: z.string(),
+    type: notificationTypeSchema,
+    category: notificationCategorySchema,
+    title: z.string(),
+    body: z.string(),
+    isRead: z.boolean(),
+    readAt: z.string().nullable(),
+    expiresAt: z.string().nullable(),
+    sourceId: z.string().nullable(),
     /** JSON-encoded extra data */
-    payload: string | null;
-    createdAt: string;
-}
+    payload: z.string().nullable(),
+    createdAt: z.string(),
+});
+export type RemoteNotification = z.infer<typeof remoteNotificationSchema>;
 
-export interface NotificationListResult {
-    items: RemoteNotification[];
-    unreadCount: number;
-    totalCount: number;
-}
+/**
+ * Notification as delivered by `GET /patients/{id}/sync/changes`: same as the notifications
+ * endpoint but `category`, `expiresAt` and `sourceId` may be absent. Document notifications carry
+ * `payload` JSON `{ kind, documentId }`.
+ */
+export const syncNotificationSchema = remoteNotificationSchema.extend({
+    category: notificationCategorySchema.optional(),
+    expiresAt: z.string().nullable().optional(),
+    sourceId: z.string().nullable().optional(),
+});
+export type SyncNotificationDto = z.infer<typeof syncNotificationSchema>;
 
-export interface RemoteNotificationPreference {
-    id: string;
-    category: string;
-    pushEnabled: boolean;
-    inAppEnabled: boolean;
-}
+export const notificationListResultSchema = z.object({
+    items: z.array(remoteNotificationSchema),
+    unreadCount: z.number(),
+    totalCount: z.number(),
+});
+export type NotificationListResult = z.infer<typeof notificationListResultSchema>;
+
+export const remoteNotificationPreferenceSchema = z.object({
+    id: z.string(),
+    category: notificationCategorySchema,
+    pushEnabled: z.boolean(),
+    inAppEnabled: z.boolean(),
+});
+export type RemoteNotificationPreference = z.infer<typeof remoteNotificationPreferenceSchema>;
+
+export const remoteNotificationPreferenceListSchema = z.array(remoteNotificationPreferenceSchema);
 
 // ── Notifications API ─────────────────────────────────────────────────────────
 
@@ -43,10 +60,8 @@ export async function fetchNotificationsFromBackend(
     if (opts.unreadOnly) params.set('unreadOnly', 'true');
     if (opts.skip) params.set('skip', String(opts.skip));
     params.set('take', String(opts.take ?? 100));
-    return api.get<NotificationListResult>(
-        getToken,
-        `/patients/${patientId}/notifications?${params}`,
-    );
+    const data = await api.get<unknown>(getToken, `/patients/${patientId}/notifications?${params}`);
+    return notificationListResultSchema.parse(data);
 }
 
 export async function markNotificationReadOnBackend(
@@ -73,40 +88,21 @@ export async function fetchNotificationPreferencesFromBackend(
     getToken: () => Promise<string | null>,
     patientId: string,
 ): Promise<RemoteNotificationPreference[]> {
-    return api.get<RemoteNotificationPreference[]>(
-        getToken,
-        `/patients/${patientId}/notification-preferences`,
-    );
+    const data = await api.get<unknown>(getToken, `/patients/${patientId}/notification-preferences`);
+    return remoteNotificationPreferenceListSchema.parse(data);
 }
 
 export async function upsertNotificationPreferenceOnBackend(
     getToken: () => Promise<string | null>,
     patientId: string,
-    category: string,
+    category: NotificationWireCategory,
     pushEnabled: boolean,
     inAppEnabled: boolean,
 ): Promise<RemoteNotificationPreference> {
-    return api.put<RemoteNotificationPreference>(
+    const data = await api.put<unknown>(
         getToken,
         `/patients/${patientId}/notification-preferences/${category}`,
         { pushEnabled, inAppEnabled },
     );
-}
-
-// ── Device Sessions API ───────────────────────────────────────────────────────
-
-export async function registerDeviceSessionOnBackend(
-    getToken: () => Promise<string | null>,
-    patientId: string,
-    deviceId: string,
-    platform: string,
-    pushToken: string,
-    appVersion?: string,
-    osVersion?: string,
-): Promise<void> {
-    return api.post<void>(
-        getToken,
-        `/patients/${patientId}/device-sessions`,
-        { deviceId, platform, pushToken, appVersion, osVersion }
-    );
+    return remoteNotificationPreferenceSchema.parse(data);
 }

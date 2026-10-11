@@ -13,11 +13,12 @@ using Microsoft.EntityFrameworkCore;
 namespace ClinicEz.Laboratory.Application.Features.Requisitions.Queries;
 
 public record GetWorklistQuery(
-    string? Status = null,
+    RequisitionStatus? Status = null,
     string? SearchTerm = null,
     string? BranchId = null,
     int PageNumber = 1,
-    int PageSize = 50
+    int PageSize = 50,
+    RequisitionStage? Stage = null
 ) : IRequest<List<LabRequisitionDto>>;
 
 public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<LabRequisitionDto>>
@@ -37,9 +38,14 @@ public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<La
             .Include(r => r.DiagnosticReport)
             .AsNoTracking();
 
-        if (!string.IsNullOrWhiteSpace(request.Status) && Enum.TryParse<RequisitionStatus>(request.Status, true, out var parsedStatus))
+        if (request.Status is { } status)
         {
-            query = query.Where(r => r.Status == parsedStatus);
+            query = query.Where(r => r.Status == status);
+        }
+
+        if (request.Stage is { } stage)
+        {
+            query = query.Where(r => r.Stage == stage);
         }
 
         if (!string.IsNullOrWhiteSpace(request.BranchId))
@@ -87,6 +93,22 @@ public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<La
             FastingInstructions = r.FastingInstructions,
             Urgency = r.Urgency,
             Status = r.Status.ToString(),
+            Stage = r.Stage.ToString(),
+            StageReason = r.StageReason,
+            PaymentPolicy = r.PaymentPolicy.ToString(),
+            QuotedAmount = r.QuotedAmount,
+            Currency = r.Currency,
+            PaymentRequired = r.IsPaymentBlocking,
+            Paid = r.PaidAtUtc != null,
+            PaidAtUtc = r.PaidAtUtc,
+            ReceiptNumber = r.ReceiptNumber,
+            InvoiceId = r.InvoiceId,
+            PaymentCorrection = r.PaymentCorrection.ToString(),
+            PaymentCorrectedAtUtc = r.PaymentCorrectedAtUtc,
+            DoctorReviewOutcome = r.DoctorReviewOutcome.ToString(),
+            DoctorReviewedAtUtc = r.DoctorReviewedAtUtc,
+            DoctorReviewedByName = r.DoctorReviewedByName,
+            DoctorReviewRemarks = r.DoctorReviewRemarks,
             CreatedAt = r.CreatedAt,
             Specimens = r.Specimens.Select(s => new SpecimenDto
             {

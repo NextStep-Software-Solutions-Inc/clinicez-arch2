@@ -3,11 +3,15 @@
 import * as React from "react"
 import { useParams } from "next/navigation"
 import {
+  IconArrowsExchange,
   IconBuilding,
+  IconCrown,
   IconDashboard,
+  IconGauge,
   IconHospital,
   IconInnerShadowTop,
   IconPill,
+  IconReportMoney,
   IconSettings,
   IconTestPipe,
   IconCreditCard,
@@ -18,6 +22,7 @@ import {
 
 import { NavMain } from "@/components/dashboard/nav-main"
 import { NavUser } from "@/components/dashboard/nav-user"
+import { WorkspaceSwitcher } from "@/components/dashboard/WorkspaceSwitcher"
 import {
   Sidebar,
   SidebarContent,
@@ -98,12 +103,32 @@ export function AppSidebar({
         url: `/dashboard/team`,
         icon: IconUsers,
       },
+      {
+        title: "Network",
+        url: `/dashboard/network`,
+        icon: IconArrowsExchange,
+      },
+      {
+        title: "Finance",
+        url: `/dashboard/finance`,
+        icon: IconReportMoney,
+      },
     ],
     navSecondary: [
       {
         title: "Settings",
         url: `/dashboard/settings`,
         icon: IconSettings,
+      },
+      {
+        title: "Plan & Usage",
+        url: `/dashboard/plan`,
+        icon: IconGauge,
+      },
+      {
+        title: "Ownership",
+        url: `/dashboard/ownership`,
+        icon: IconCrown,
       },
       {
         title: "Billing",
@@ -134,6 +159,7 @@ export function AppSidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <WorkspaceSwitcher currentSlug={tenant} />
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />

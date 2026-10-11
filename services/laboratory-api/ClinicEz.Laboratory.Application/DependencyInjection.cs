@@ -1,4 +1,6 @@
 using ClinicEz.Laboratory.Application.Behaviors;
+using ClinicEz.Laboratory.Application.Common.Interfaces;
+using ClinicEz.Laboratory.Application.Interop;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +14,9 @@ public static class DependencyInjection
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         services.AddScoped<ISieveProcessor, SieveProcessor>();
+
+        services.AddScoped<ILabOrderLifecycle, LabOrderLifecycle>();
+        services.AddScoped<ILabOrderBilling, LabOrderBilling>();
 
         services.AddMediatR(config =>
             config.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));

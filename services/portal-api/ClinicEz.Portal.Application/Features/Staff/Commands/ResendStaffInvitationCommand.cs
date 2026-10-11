@@ -1,5 +1,7 @@
+using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Features.Staff.Queries;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +26,10 @@ public class ResendStaffInvitationCommandValidator : AbstractValidator<ResendSta
     }
 }
 
-public class ResendStaffInvitationCommandHandler(IApplicationDbContext context) : IRequestHandler<ResendStaffInvitationCommand, StaffMemberDto>
+public class ResendStaffInvitationCommandHandler(
+    IApplicationDbContext context,
+    IStaffInvitationNotifier invitationNotifier,
+    TimeProvider timeProvider) : IRequestHandler<ResendStaffInvitationCommand, StaffMemberDto>
 {
     public async Task<StaffMemberDto> Handle(ResendStaffInvitationCommand request, CancellationToken cancellationToken)
     {
@@ -32,36 +37,29 @@ public class ResendStaffInvitationCommandHandler(IApplicationDbContext context) 
             .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower() || t.Id.ToString() == request.TenantSlug, cancellationToken)
             ?? throw new KeyNotFoundException($"Workspace '{request.TenantSlug}' not found.");
 
-        var member = await context.StaffMembers
-            .Include(s => s.Facility)
-            .FirstOrDefaultAsync(s => s.Id == request.StaffMemberId && s.TenantId == tenant.Id, cancellationToken)
+        var member = await context.WorkspaceMembers
+            .FirstOrDefaultAsync(m => m.Id == request.StaffMemberId && m.TenantId == tenant.Id, cancellationToken)
             ?? throw new KeyNotFoundException("Staff member was not found in this workspace.");
 
-        if (member.Status.Equals("Active", StringComparison.OrdinalIgnoreCase))
+        if (member.Status == MemberStatus.Active)
         {
             throw new InvalidOperationException("This team member is already an active member of this workspace.");
         }
 
+        var profile = await context.StaffMembers
+            .Include(s => s.Facility)
+            .FirstOrDefaultAsync(s => s.WorkspaceMemberId == member.Id, cancellationToken);
+
         // Generate a new secure cryptographic token and reset expiry for 7 days
         member.InvitationToken = Guid.NewGuid().ToString("N");
-        member.InvitationExpiresAt = DateTime.UtcNow.AddDays(7);
-        member.Status = "PendingInvitation";
+        member.InvitationExpiresAt = timeProvider.GetUtcNow().UtcDateTime.AddDays(7);
+        member.Status = MemberStatus.Invited;
+
+        // Commits atomically with the new token; delivery happens later and is retried.
+        invitationNotifier.RequestInvitation(tenant, member, StaffMemberMapping.RoleName(member, profile), profile?.Facility?.Name);
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return new StaffMemberDto(
-            member.Id,
-            member.UserId,
-            member.Email,
-            member.FullName,
-            member.Role,
-            member.Status,
-            member.FacilityId,
-            member.Facility?.Name,
-            member.JoinedAt,
-            member.CreatedAt,
-            member.InvitationToken,
-            member.InvitationExpiresAt
-        );
+        return StaffMemberMapping.ToDto(member, profile, profile?.Facility?.Name);
     }
 }

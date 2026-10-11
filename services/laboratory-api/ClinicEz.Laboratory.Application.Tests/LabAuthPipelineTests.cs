@@ -12,13 +12,18 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Laboratory.Api.Authorization;
 using ClinicEz.Laboratory.Api.Controllers;
+using ClinicEz.Laboratory.Api.Middlewares;
+using ClinicEz.Laboratory.Application.Common.Exceptions;
 using ClinicEz.Laboratory.Application.Common.Interfaces;
+using ClinicEz.Laboratory.Application.Features.Requisitions.Commands;
 using ClinicEz.Laboratory.Domain.Constants;
 using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
 using ClinicEz.Laboratory.Infrastructure.Auth;
 using ClinicEz.Laboratory.Infrastructure.Context;
+using ClinicEz.Shared.Interop.Transport;
 using ClinicEz.Shared.LocalAuth;
+using ClinicEz.Shared.Middlewares;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -42,7 +47,6 @@ namespace ClinicEz.Laboratory.Application.Tests;
 /// </summary>
 public class LabAuthPipelineTests
 {
-    private const string InternalKey = "internal-service-secret-key";
     private static readonly Guid LabId = Guid.Parse("11111111-aaaa-aaaa-aaaa-111111111111");
 
     private sealed class TestApp : IAsyncDisposable
@@ -90,8 +94,7 @@ public class LabAuthPipelineTests
         {
             ["Jwt:SigningKey"] = signingKey ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
             ["Jwt:Audience"] = audience,
-            ["Jwt:Issuer"] = audience,
-            ["Internal:ApiKey"] = InternalKey
+            ["Jwt:Issuer"] = audience
         });
 
         var accessCache = Substitute.For<IStaffAccessCache>();
@@ -105,8 +108,12 @@ public class LabAuthPipelineTests
         builder.Services.AddSingleton(Substitute.For<IAnalyzerFeedService>());
         builder.Services.AddSingleton(Substitute.For<ILabAuthService>());
         builder.Services.AddControllers().AddApplicationPart(typeof(HasPermissionAttribute).Assembly);
+        builder.Services.AddExceptionHandler<LabExceptionHandler>();
+        builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+        builder.Services.AddProblemDetails();
 
         var app = builder.Build();
+        app.UseExceptionHandler();
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseMiddleware<LabScopeMiddleware>();
@@ -165,7 +172,7 @@ public class LabAuthPipelineTests
         await using var app = await StartAsync();
         var auth = app.App.Services.GetRequiredService<ILabAuthService>();
         auth.GetStatusAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(new AuthStatusDto(true, "Active", false, "Test Laboratory"));
+            .Returns(new AuthStatusDto(true, LabLicenseStatus.Active, false, "Test Laboratory"));
 
         (await StatusAsync(app, Get("/health"))).Should().Be(HttpStatusCode.OK);
         var status = await app.Client.SendAsync(Get("/api/v1/auth/status"));
@@ -242,15 +249,6 @@ public class LabAuthPipelineTests
         (await StatusAsync(app, Get("/secure", unknown))).Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    [Fact]
-    public async Task InternalKey_AuthenticatesServices_AndWrongKeyIsRejected()
-    {
-        await using var app = await StartAsync();
-
-        (await StatusAsync(app, Get("/secure", null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey)))).Should().Be(HttpStatusCode.OK);
-        (await StatusAsync(app, Get("/secure", null, (FacilityAuthSchemes.InternalKeyHeader, "wrong-key")))).Should().Be(HttpStatusCode.Unauthorized);
-    }
-
     // ── tenant / facility / permissions come from the token only ────────────────────
 
     [Fact]
@@ -302,23 +300,6 @@ public class LabAuthPipelineTests
         var token = app.Session(new[] { LabPermissions.ResultsRead }, extra: new Claim(LabClaimTypes.Permission, LabPermissions.AnalyzersFeed));
 
         (await StatusAsync(app, Request(HttpMethod.Post, "/api/v1/analyzers/simulate", token))).Should().Be(HttpStatusCode.Forbidden);
-    }
-
-    [Fact]
-    public async Task InternalService_GetsMinimalPermissions_AndTrustsTenantHeader()
-    {
-        await using var app = await StartAsync();
-
-        var who = await app.Client.SendAsync(Get("/whoami", null,
-            (FacilityAuthSchemes.InternalKeyHeader, InternalKey), ("X-Tenant-Id", "tenant-from-portal")));
-        var json = await who.Content.ReadAsStringAsync();
-        json.Should().Contain("tenant-from-portal").And.Contain("\"canVerify\":false");
-
-        // Internal callers may read requisitions but cannot write results or manage staff.
-        (await StatusAsync(app, Get("/api/v1/requisitions", null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey)))).Should().Be(HttpStatusCode.OK);
-        (await StatusAsync(app, Request(HttpMethod.Post, "/api/v1/analyzers/simulate", null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey))))
-            .Should().Be(HttpStatusCode.Forbidden);
-        (await StatusAsync(app, Get("/api/v1/staff", null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey)))).Should().Be(HttpStatusCode.Forbidden);
     }
 
     // ── permission enforcement ──────────────────────────────────────────────────────
@@ -412,5 +393,87 @@ public class LabAuthPipelineTests
         {
             typeof(AuthController).GetMethod(name)!.GetCustomAttributes<AllowAnonymousAttribute>(true).Should().BeEmpty(name);
         }
+    }
+
+    // ── payment gate / claim endpoints ──────────────────────────────────────────────
+
+    private static HttpRequestMessage JsonPost(string url, string bearer, string json)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
+        return request;
+    }
+
+    [Fact]
+    public async Task ClaimRejectAndPaymentRefresh_RequireTheRequisitionsManagePermission()
+    {
+        await using var app = await StartAsync();
+        var phlebotomist = app.Session(LabRolePermissions.For(LabStaffRole.Phlebotomist));
+        var clerk = app.Session(LabRolePermissions.For(LabStaffRole.LabClerk));
+        var pathologist = app.Session(LabRolePermissions.For(LabStaffRole.Pathologist));
+        var id = Guid.NewGuid();
+        const string claimBody = "{\"token\":\"abc123\"}";
+        const string rejectBody = "{\"reason\":\"Test not offered\"}";
+
+        foreach (var denied in new[] { phlebotomist, pathologist })
+        {
+            (await StatusAsync(app, JsonPost("/api/v1/requisitions/claim", denied, claimBody))).Should().Be(HttpStatusCode.Forbidden);
+            (await StatusAsync(app, JsonPost($"/api/v1/requisitions/{id}/reject", denied, rejectBody))).Should().Be(HttpStatusCode.Forbidden);
+            (await StatusAsync(app, JsonPost($"/api/v1/requisitions/{id}/payment/refresh", denied, "{}"))).Should().Be(HttpStatusCode.Forbidden);
+        }
+
+        (await StatusAsync(app, JsonPost("/api/v1/requisitions/claim", clerk, claimBody))).Should().Be(HttpStatusCode.OK);
+        (await StatusAsync(app, JsonPost($"/api/v1/requisitions/{id}/reject", clerk, rejectBody))).Should().Be(HttpStatusCode.OK);
+        (await StatusAsync(app, JsonPost($"/api/v1/requisitions/{id}/payment/refresh", clerk, "{}"))).Should().Be(HttpStatusCode.OK);
+
+        var sender = app.App.Services.GetRequiredService<ISender>();
+        await sender.Received(1).Send(Arg.Is<ClaimLabOrderCommand>(c => c.Token == "abc123"), Arg.Any<CancellationToken>());
+        await sender.Received(1).Send(Arg.Is<RejectLabOrderCommand>(c => c.RequisitionId == id && c.Reason == "Test not offered"), Arg.Any<CancellationToken>());
+        await sender.Received(1).Send(Arg.Is<RefreshPaymentStatusCommand>(c => c.RequisitionId == id), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UnpaidPrepaidOrder_IsAnHttp409_WithThePaymentRequiredCode()
+    {
+        await using var app = await StartAsync();
+        var tech = app.Session(LabRolePermissions.For(LabStaffRole.MedicalTechnologist));
+        var id = Guid.NewGuid();
+        app.App.Services.GetRequiredService<ISender>()
+            .Send(Arg.Any<AccessionSpecimenCommand>(), Arg.Any<CancellationToken>())
+            .Returns<Task<ClinicEz.Laboratory.Application.Features.Requisitions.DTOs.LabRequisitionDto>>(_ => throw new PaymentRequiredException(id));
+
+        var response = await app.Client.SendAsync(JsonPost($"/api/v1/requisitions/{id}/accession", tech, "{}"));
+        var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        body.GetProperty("succeeded").GetBoolean().Should().BeFalse();
+        body.GetProperty("errors")[0].GetProperty("code").GetString().Should().Be("payment_required");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, 404, LabExceptionHandler.ClaimNotFound)]
+    [InlineData(HttpStatusCode.Conflict, 409, LabExceptionHandler.ClaimAlreadyRedeemed)]
+    [InlineData(HttpStatusCode.Gone, 410, LabExceptionHandler.ClaimExpired)]
+    [InlineData(HttpStatusCode.Forbidden, 403, LabExceptionHandler.ClaimForbidden)]
+    [InlineData(HttpStatusCode.UnprocessableEntity, 422, LabExceptionHandler.ClaimWrongFacilityType)]
+    [InlineData(HttpStatusCode.BadGateway, 502, LabExceptionHandler.ClaimUnavailable)]
+    public async Task ClaimFailures_MapToFriendlyFixedMessages_NeverTheRawHubMessage(HttpStatusCode hubStatus, int expectedStatus, string expectedCode)
+    {
+        await using var app = await StartAsync();
+        var clerk = app.Session(LabRolePermissions.For(LabStaffRole.LabClerk));
+        app.App.Services.GetRequiredService<ISender>()
+            .Send(Arg.Any<ClaimLabOrderCommand>(), Arg.Any<CancellationToken>())
+            .Returns<Task<ClaimLabOrderResult>>(_ => throw new HubClaimException(hubStatus, "Hub claim call failed: internal-hub-detail"));
+
+        var response = await app.Client.SendAsync(JsonPost("/api/v1/requisitions/claim", clerk, "{\"token\":\"abc123\"}"));
+        var json = await response.Content.ReadAsStringAsync();
+        var body = System.Text.Json.JsonDocument.Parse(json).RootElement;
+
+        ((int)response.StatusCode).Should().Be(expectedStatus);
+        body.GetProperty("errors")[0].GetProperty("code").GetString().Should().Be(expectedCode);
+        json.Should().NotContain("internal-hub-detail");
     }
 }

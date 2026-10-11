@@ -14,7 +14,7 @@ namespace ClinicEz.Laboratory.Application.Features.Requisitions.Commands;
 public record RejectSpecimenCommand(
     Guid RequisitionId,
     Guid SpecimenId,
-    string ReasonCode,
+    SpecimenRejectionReason ReasonCode,
     string? Notes,
     string? PhlebotomistName,
     string? CorrectiveAction = null
@@ -52,11 +52,9 @@ public class RejectSpecimenCommandHandler : IRequestHandler<RejectSpecimenComman
             throw new KeyNotFoundException($"Specimen with ID {request.SpecimenId} not found in requisition {requisition.AccessionNumber}.");
         }
 
-        Enum.TryParse<SpecimenRejectionReason>(request.ReasonCode, true, out var reason);
-        if (reason == SpecimenRejectionReason.None)
-        {
-            reason = SpecimenRejectionReason.InsufficientVolume_QNS;
-        }
+        var reason = request.ReasonCode == SpecimenRejectionReason.None
+            ? SpecimenRejectionReason.InsufficientVolume_QNS
+            : request.ReasonCode;
 
         specimen.Status = SpecimenStatus.Rejected;
         specimen.RejectionReason = reason;

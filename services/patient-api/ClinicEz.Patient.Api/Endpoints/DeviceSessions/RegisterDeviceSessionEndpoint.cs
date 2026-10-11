@@ -33,12 +33,12 @@ public sealed class RegisterDeviceSessionEndpoint : IEndpoint
                     $"/api/v1/patients/{patientId}/sessions/{result.SessionId}",
                     ApiResponse<RegisterDeviceSessionResponse>.Success(
                         result,
-                        "Device session registered. Any previous session has been revoked."));
+                        "Device session registered."));
             })
             .WithTags("Device Sessions")
             .WithName("RegisterDeviceSession")
-            .WithSummary("Register the current device as the single active session for a patient")
-            .WithDescription("Registers the device identity, push notification token, and Clerk session for a patient. Revokes any existing active sessions.")
+            .WithSummary("Register the current device as an active session for a patient")
+            .WithDescription("Registers the device identity, push notification token, and Clerk session for a patient. A patient can have several active devices; registering a device that is already active refreshes its existing session and never revokes other devices.")
             .Produces<ApiResponse<RegisterDeviceSessionResponse>>(StatusCodes.Status201Created)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .ProducesValidationProblem()

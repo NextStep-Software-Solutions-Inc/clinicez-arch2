@@ -1,6 +1,8 @@
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using ClinicEz.Shared.Licensing;
+using Microsoft.Extensions.Hosting;
 
 namespace ClinicEz.Shared.Documents.Security;
 
@@ -13,12 +15,26 @@ public interface IDocumentSecurityService
 
 public class DocumentSecurityService : IDocumentSecurityService
 {
-    private static readonly byte[] DefaultSecret = Encoding.UTF8.GetBytes("ClinicEz-Standard-Healthcare-Security-Key-2026!#@%");
+    public const string SigningKeySetting = "Documents:SigningKey";
+    public const string SigningKeyEnvironmentVariable = "DOCUMENT_SIGNING_KEY";
+
     private readonly byte[] _secretKey;
 
-    public DocumentSecurityService(string? signingKey = null)
+    /// <summary>
+    /// HMAC key for document digests (<c>Documents:SigningKey</c> / <c>DOCUMENT_SIGNING_KEY</c>, a long random secret). There is
+    /// no built-in key: outside Development a missing key throws; in Development (see <see cref="Licensing.LicenseKeyMaterial"/>)
+    /// a per-machine key derived from the development authority key is used.
+    /// </summary>
+    public DocumentSecurityService(string? signingKey = null, IHostEnvironment? environment = null)
     {
-        _secretKey = string.IsNullOrWhiteSpace(signingKey) ? DefaultSecret : Encoding.UTF8.GetBytes(signingKey);
+        if (!string.IsNullOrWhiteSpace(signingKey))
+            _secretKey = Encoding.UTF8.GetBytes(signingKey);
+        else if (LicenseKeyMaterial.IsDevelopment(environment))
+            _secretKey = LicenseKeyMaterial.DevelopmentDocumentSecret();
+        else
+            throw new InvalidOperationException(
+                $"The document signing key is not configured. Set {SigningKeySetting} (environment variable {SigningKeyEnvironmentVariable}) to a long random secret. " +
+                "There is no built-in key outside Development.");
     }
 
     public string ComputeDocumentDigest(string tenantId, string docType, string docNumber, Guid? patientId, string? doctorOrStaffPrc, DateTime issuedAt)

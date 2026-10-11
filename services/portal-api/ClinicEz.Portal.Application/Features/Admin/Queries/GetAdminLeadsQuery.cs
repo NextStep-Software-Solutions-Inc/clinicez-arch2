@@ -1,5 +1,7 @@
 using MediatR;
+using ClinicEz.Portal.Application.Features.Billing;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -27,21 +29,27 @@ public class GetAdminLeadsQueryHandler(IApplicationDbContext context) : IRequest
 {
     public async Task<List<AdminLeadResponseDto>> Handle(GetAdminLeadsQuery request, CancellationToken cancellationToken)
     {
-        var leads = await context.Tenants
-            .Where(t => t.SubscriptionStatus != "ACTIVE")
+        var tenants = await context.Tenants
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
+        var subscriptions = await context.Subscriptions
+            .AsNoTracking()
+            .Include(s => s.Plan)
+            .ToDictionaryAsync(s => s.TenantId, cancellationToken);
 
-        return leads.Select(t => new AdminLeadResponseDto(
-            t.Id,
-            t.Name,
-            t.TenantSlug,
-            t.TenantType,
-            $"{t.FirstName} {t.LastName}".Trim(),
-            t.Email,
-            t.CreatedAt,
-            t.SubscriptionStatus,
-            t.SubscriptionPlanId ?? "None"
-        )).ToList();
+        return tenants
+            .Select(t => (Tenant: t, Subscription: subscriptions.GetValueOrDefault(t.Id)))
+            .Where(x => x.Subscription is null || x.Subscription.Status != SubscriptionStatus.Active)
+            .Select(x => new AdminLeadResponseDto(
+                x.Tenant.Id,
+                x.Tenant.Name,
+                x.Tenant.TenantSlug,
+                x.Tenant.TenantType,
+                $"{x.Tenant.FirstName} {x.Tenant.LastName}".Trim(),
+                x.Tenant.Email,
+                x.Tenant.CreatedAt,
+                SubscriptionWire.Status(x.Subscription?.Status ?? SubscriptionStatus.Trialing),
+                x.Subscription?.Plan.Slug ?? SubscriptionWire.NoPlan
+            )).ToList();
     }
 }

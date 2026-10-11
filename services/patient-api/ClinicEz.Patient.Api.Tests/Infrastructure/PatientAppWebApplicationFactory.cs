@@ -8,14 +8,13 @@ using Microsoft.Extensions.DependencyInjection;
 using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
-using Testcontainers.Redis;
 
 [assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
 
 namespace ClinicEz.Patient.Api.Tests.Infrastructure;
 
 /// <summary>
-/// Integration test factory. Starts isolated PostgreSQL and Redis containers via
+/// Integration test factory. Starts an isolated PostgreSQL container via
 /// Testcontainers, applies EF Core migrations, and replaces Clerk JWT auth with
 /// <see cref="TestJwtAuthHandler"/> so protected endpoints can be called without
 /// real tokens. Hangfire job enqueueing is replaced with a no-op.
@@ -24,7 +23,6 @@ public sealed class PatientAppWebApplicationFactory
     : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private PostgreSqlContainer? _postgres;
-    private RedisContainer? _redis;
 
     public async Task InitializeAsync()
     {
@@ -34,15 +32,11 @@ public sealed class PatientAppWebApplicationFactory
             .WithPassword("patientapp_test_secret")
             .Build();
 
-        _redis = new RedisBuilder("redis:7-alpine").Build();
-
         await _postgres.StartAsync();
-        await _redis.StartAsync();
 
         // Inject container connection strings and stub secrets via environment variables
         // to guarantee they override the appsettings.json file-based sources.
         Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", _postgres.GetConnectionString() + ";SSL Mode=Disable;Trust Server Certificate=true");
-        Environment.SetEnvironmentVariable("ConnectionStrings__Redis", _redis.GetConnectionString());
         Environment.SetEnvironmentVariable("Clerk__Authority", "https://test.clerk.accounts.dev");
         Environment.SetEnvironmentVariable("Clerk__Audience", "test");
         Environment.SetEnvironmentVariable("Encryption__Enabled", "false");
@@ -53,6 +47,10 @@ public sealed class PatientAppWebApplicationFactory
         Environment.SetEnvironmentVariable("R2__AccessKeyId", "test-key");
         Environment.SetEnvironmentVariable("R2__SecretAccessKey", "test-secret");
         Environment.SetEnvironmentVariable("R2__PublicUrl", "https://test.r2.dev");
+        Environment.SetEnvironmentVariable("Messaging__Transport", "InProcess");
+        Environment.SetEnvironmentVariable("Messaging__Enabled", "false");
+        Environment.SetEnvironmentVariable("Sharing__SigningKey", "api-tests-signing-key-api-tests-signing-key");
+        Environment.SetEnvironmentVariable("Cors__AllowedOrigins__0", "https://app.test");
 
         // Trigger host build then run migrations against the test container
         await using var scope = Services.CreateAsyncScope();
@@ -64,11 +62,9 @@ public sealed class PatientAppWebApplicationFactory
     {
         Dispose();  // stop the test server first, then stop containers
         if (_postgres != null) await _postgres.DisposeAsync();
-        if (_redis != null) await _redis.DisposeAsync();
 
         // Clear injected environment variables
         Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", null);
-        Environment.SetEnvironmentVariable("ConnectionStrings__Redis", null);
         Environment.SetEnvironmentVariable("Clerk__Authority", null);
         Environment.SetEnvironmentVariable("Clerk__Audience", null);
         Environment.SetEnvironmentVariable("Encryption__Enabled", null);
@@ -79,6 +75,10 @@ public sealed class PatientAppWebApplicationFactory
         Environment.SetEnvironmentVariable("R2__AccessKeyId", null);
         Environment.SetEnvironmentVariable("R2__SecretAccessKey", null);
         Environment.SetEnvironmentVariable("R2__PublicUrl", null);
+        Environment.SetEnvironmentVariable("Messaging__Transport", null);
+        Environment.SetEnvironmentVariable("Messaging__Enabled", null);
+        Environment.SetEnvironmentVariable("Sharing__SigningKey", null);
+        Environment.SetEnvironmentVariable("Cors__AllowedOrigins__0", null);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -104,14 +104,6 @@ public sealed class PatientAppWebApplicationFactory
             var existing = services.SingleOrDefault(d => d.ServiceType == typeof(IBackgroundJobEnqueuer));
             if (existing is not null) services.Remove(existing);
             services.AddScoped<IBackgroundJobEnqueuer, NoOpJobEnqueuer>();
-
-            // Remove ClinicPingBackgroundService so it doesn't query database during startup/migrations
-            var clinicPingService = services.FirstOrDefault(d => d.ImplementationType == typeof(ClinicEz.Patient.Infrastructure.Services.Workers.ClinicPingBackgroundService));
-            if (clinicPingService is not null) services.Remove(clinicPingService);
-
-            // Remove MassTransit hosted service so tests don't fail on missing RabbitMQ broker
-            var massTransitHostedService = services.FirstOrDefault(d => d.ImplementationType?.Name == "MassTransitHostedService");
-            if (massTransitHostedService is not null) services.Remove(massTransitHostedService);
 
             // Remove Hangfire server hosted service so it doesn't poll background tables during tests
             var hangfireServer = services.FirstOrDefault(d => d.ImplementationType?.Name == "BackgroundJobServerHostedService");

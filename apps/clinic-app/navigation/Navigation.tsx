@@ -15,6 +15,8 @@ import BillingScreen from './screens/Billing.screen';
 import YakapScreen from './screens/Yakap.screen';
 import SettingsScreen from './screens/Settings.screen';
 import ProfileScreen from './screens/Profile.screen';
+import ResultReviewScreen from './screens/ResultReview.screen';
+import ShareImportScreen from './screens/ShareImport.screen';
 
 /**
  * Bottom tab bar for phones only. Workstation widths use the sidebar instead.
@@ -91,6 +93,24 @@ const Tab = createBottomTabNavigator({
         title: 'Billing',
         tabBarLabel: 'Billing',
         tabBarIcon: tabIcon('billing'),
+      },
+    },
+    ResultReview: {
+      screen: ResultReviewScreen,
+      linking: 'result-review',
+      options: {
+        title: 'Result review',
+        tabBarLabel: 'Results',
+        tabBarIcon: tabIcon('lab'),
+      },
+    },
+    ShareImport: {
+      screen: ShareImportScreen,
+      linking: 'scan-patient',
+      options: {
+        title: 'Scan patient QR',
+        tabBarLabel: 'Scan QR',
+        tabBarIcon: tabIcon('scan'),
       },
     },
     Yakap: {

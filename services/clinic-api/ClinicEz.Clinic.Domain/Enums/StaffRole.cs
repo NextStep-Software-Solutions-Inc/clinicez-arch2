@@ -1,8 +1,9 @@
 using System.Text.Json.Serialization;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Domain.Enums;
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum StaffRole
 {
     Doctor = 1,

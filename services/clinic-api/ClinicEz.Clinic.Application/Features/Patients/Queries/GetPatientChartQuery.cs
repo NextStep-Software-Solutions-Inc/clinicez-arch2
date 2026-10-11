@@ -173,7 +173,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             p.Complications
         )).ToList();
 
-        var labOrderDtos = labOrders.Select(CreateClinicLabOrderCommandHandler.MapToDto).ToList();
+        var labOrderDtos = labOrders.Select(o => CreateClinicLabOrderCommandHandler.MapToDto(o)).ToList();
 
         var invoiceDtos = invoices.Select(i => new InvoiceDto(
             i.Id,

@@ -1,8 +1,10 @@
+using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Features.Staff.Commands;
 using ClinicEz.Portal.Application.Features.Staff.Queries;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
+using ClinicEz.Portal.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using System;
@@ -15,20 +17,16 @@ namespace ClinicEz.Portal.Tests.Staff;
 public class StaffManagementTests : IDisposable
 {
     private readonly ApplicationDbContext _context;
-    private readonly Mock<ITenantFeatureGuard> _guardMock;
+    private readonly Mock<IEntitlementGuard> _guardMock;
+    private readonly Mock<IClerkMetadataSync> _clerkMock = new();
     private readonly Guid _tenantId = Guid.NewGuid();
     private const string TenantSlug = "metro-clinic";
 
     public StaffManagementTests()
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
-            .Options;
+        _context = TestSupport.NewContext();
+        _guardMock = new Mock<IEntitlementGuard>();
 
-        _context = new ApplicationDbContext(options);
-        _guardMock = new Mock<ITenantFeatureGuard>();
-
-        // Seed tenant
         _context.Tenants.Add(new Tenant
         {
             Id = _tenantId,
@@ -38,8 +36,6 @@ public class StaffManagementTests : IDisposable
             Email = "owner@metro.ph",
             FirstName = "Maria",
             LastName = "Santos",
-            SubscriptionStatus = "TRIALING",
-            SubscriptionPlanId = "starter",
             StaffAccountsCount = 1,
             CreatedAt = DateTime.UtcNow
         });
@@ -52,46 +48,79 @@ public class StaffManagementTests : IDisposable
         _context.Dispose();
     }
 
-    [Fact]
-    public async Task GetTenantStaff_AutoBackfillsOwner_WhenNoStaffRecordsExist()
-    {
-        var handler = new GetTenantStaffQueryHandler(_context);
-        var query = new GetTenantStaffQuery(TenantSlug);
+    private InviteStaffMemberCommandHandler InviteHandler() =>
+        new(_context, _guardMock.Object, TestSupport.InvitationNotifier(_context), TimeProvider.System);
 
-        var result = await handler.Handle(query, CancellationToken.None);
+    private WorkspaceMember SeedMember(
+        string email,
+        string name,
+        WorkspaceMemberRole role,
+        MemberStatus status,
+        string? token = null,
+        DateTime? tokenExpiry = null,
+        string? userId = null)
+    {
+        var member = new WorkspaceMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            UserId = userId,
+            Email = email,
+            FullName = name,
+            Role = role,
+            Status = status,
+            InvitationToken = token,
+            InvitationExpiresAt = tokenExpiry,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "owner_clerk_123"
+        };
+        _context.WorkspaceMembers.Add(member);
+        _context.SaveChanges();
+        return member;
+    }
+
+    [Fact]
+    public async Task GetTenantStaff_ListsMembers_AndQuotaFromPlanMemberLimit()
+    {
+        TestSupport.Entitlements(_context);
+        SeedMember("owner@metro.ph", "Maria Santos", WorkspaceMemberRole.Owner, MemberStatus.Active, userId: "owner_clerk_123");
+        var handler = new GetTenantStaffQueryHandler(_context, TestSupport.Entitlements(_context));
+
+        var result = await handler.Handle(new GetTenantStaffQuery(TenantSlug), CancellationToken.None);
 
         Assert.NotNull(result);
-        Assert.Single(result.Members);
-        Assert.Equal("Owner", result.Members[0].Role);
-        Assert.Equal("owner@metro.ph", result.Members[0].Email);
+        var owner = Assert.Single(result.Members);
+        Assert.Equal("Owner", owner.Role);
+        Assert.Equal("owner@metro.ph", owner.Email);
         Assert.Equal(1, result.Quota.CurrentCount);
-        Assert.Equal(3, result.Quota.MaxAllowed);
+        Assert.Equal(5, result.Quota.MaxAllowed);
         Assert.False(result.Quota.IsQuotaReached);
     }
 
     [Fact]
     public async Task InviteStaffMember_ValidRequest_CreatesPendingInvitation()
     {
-        var handler = new InviteStaffMemberCommandHandler(_context, _guardMock.Object);
         var command = new InviteStaffMemberCommand(TenantSlug, "biller@metro.ph", "Bob Biller", "Biller");
 
-        var result = await handler.Handle(command, CancellationToken.None);
+        var result = await InviteHandler().Handle(command, CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal("biller@metro.ph", result.Email);
-        Assert.Equal("Biller", result.Role);
+        Assert.Equal("Billing", result.Role);
         Assert.Equal("PendingInvitation", result.Status);
 
-        _guardMock.Verify(g => g.EnsureCanCreateStaffAsync(_tenantId.ToString(), It.IsAny<CancellationToken>()), Times.Once);
+        _guardMock.Verify(g => g.EnsureCanAddMemberAsync(_tenantId, It.IsAny<CancellationToken>()), Times.Once);
 
-        var memberInDb = await _context.StaffMembers.FirstOrDefaultAsync(s => s.Email == "biller@metro.ph");
+        var memberInDb = await _context.WorkspaceMembers.FirstOrDefaultAsync(s => s.Email == "biller@metro.ph");
         Assert.NotNull(memberInDb);
+        Assert.Equal(WorkspaceMemberRole.Billing, memberInDb.Role);
+        Assert.Equal(MemberStatus.Invited, memberInDb.Status);
         Assert.NotNull(memberInDb.InvitationToken);
         Assert.True(memberInDb.InvitationExpiresAt > DateTime.UtcNow);
     }
 
     [Fact]
-    public async Task InviteStaffMember_FacilityClinicalRole_CreatesPendingInvitationWithFacility()
+    public async Task InviteStaffMember_FacilityClinicalRole_CreatesPendingInvitationWithJobProfile()
     {
         var facility = new Facility
         {
@@ -104,33 +133,29 @@ public class StaffManagementTests : IDisposable
         _context.Facilities.Add(facility);
         await _context.SaveChangesAsync();
 
-        var handler = new InviteStaffMemberCommandHandler(_context, _guardMock.Object);
-        var command = new InviteStaffMemberCommand(
-            TenantSlug,
-            "medtech@metro.ph",
-            "Mark Bautista, RMT",
-            "Medical Technologist",
-            facility.Id
-        );
+        var command = new InviteStaffMemberCommand(TenantSlug, "medtech@metro.ph", "Mark Bautista, RMT", "Medical Technologist", facility.Id);
 
-        var result = await handler.Handle(command, CancellationToken.None);
+        var result = await InviteHandler().Handle(command, CancellationToken.None);
 
-        Assert.NotNull(result);
         Assert.Equal("medtech@metro.ph", result.Email);
         Assert.Equal("Medical Technologist", result.Role);
         Assert.Equal(facility.Id, result.FacilityId);
         Assert.Equal("BGC Laboratory Branch", result.FacilityName);
         Assert.Equal("PendingInvitation", result.Status);
+
+        var member = await _context.WorkspaceMembers.SingleAsync(m => m.Email == "medtech@metro.ph");
+        Assert.Equal(WorkspaceMemberRole.Member, member.Role);
+        var profile = await _context.StaffMembers.SingleAsync(p => p.WorkspaceMemberId == member.Id);
+        Assert.Equal(facility.Id, profile.FacilityId);
+        Assert.Equal("Medical Technologist", profile.Role);
     }
 
     [Fact]
     public async Task InviteStaffMember_DuplicateEmail_ThrowsInvalidOperationException()
     {
-        // First invite
-        var handler = new InviteStaffMemberCommandHandler(_context, _guardMock.Object);
+        var handler = InviteHandler();
         await handler.Handle(new InviteStaffMemberCommand(TenantSlug, "admin2@metro.ph", "Alice Admin", "Admin"), CancellationToken.None);
 
-        // Duplicate invite
         var duplicateCommand = new InviteStaffMemberCommand(TenantSlug, "admin2@metro.ph", "Alice Admin 2", "Admin");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -140,63 +165,38 @@ public class StaffManagementTests : IDisposable
     }
 
     [Fact]
-    public async Task InviteStaffMember_WhenQuotaReached_GuardsAndThrows()
+    public async Task InviteStaffMember_WhenMemberLimitReached_GuardsAndThrows()
     {
-        _guardMock.Setup(g => g.EnsureCanCreateStaffAsync(_tenantId.ToString(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("Feature Limit Reached: Your current plan only allows up to 3 staff members."));
+        _guardMock.Setup(g => g.EnsureCanAddMemberAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new EntitlementException("Your current plan only allows up to 3 members.", EntitlementGuard.LimitReachedCode));
 
-        var handler = new InviteStaffMemberCommandHandler(_context, _guardMock.Object);
         var command = new InviteStaffMemberCommand(TenantSlug, "viewer@metro.ph", "Vic Viewer", "Viewer");
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            handler.Handle(command, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<EntitlementException>(() => InviteHandler().Handle(command, CancellationToken.None));
 
-        Assert.Contains("Feature Limit Reached", ex.Message);
+        Assert.Equal(EntitlementGuard.LimitReachedCode, ex.Code);
+        Assert.Empty(_context.WorkspaceMembers);
     }
 
     [Fact]
-    public async Task RevokeStaffMember_ValidMember_RemovesSuccessfully()
+    public async Task RevokeStaffMember_ValidMember_RemovesSuccessfully_AndSyncsClerk()
     {
-        var staff = new StaffMember
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            Email = "finance@metro.ph",
-            FullName = "Finance Officer",
-            Role = "Biller",
-            Status = "Active",
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = "owner_clerk_123"
-        };
-        _context.StaffMembers.Add(staff);
-        await _context.SaveChangesAsync();
+        var member = SeedMember("finance@metro.ph", "Finance Officer", WorkspaceMemberRole.Billing, MemberStatus.Active, userId: "clerk_fin");
 
-        var handler = new RevokeStaffMemberCommandHandler(_context);
-        var result = await handler.Handle(new RevokeStaffMemberCommand(TenantSlug, staff.Id), CancellationToken.None);
+        var handler = new RevokeStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var result = await handler.Handle(new RevokeStaffMemberCommand(TenantSlug, member.Id), CancellationToken.None);
 
         Assert.True(result);
-        var inDb = await _context.StaffMembers.FirstOrDefaultAsync(s => s.Id == staff.Id);
-        Assert.Null(inDb);
+        Assert.Null(await _context.WorkspaceMembers.FirstOrDefaultAsync(s => s.Id == member.Id));
+        _clerkMock.Verify(c => c.SyncAsync("clerk_fin", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task RevokeStaffMember_CannotRevokeOwner_ThrowsInvalidOperationException()
     {
-        var owner = new StaffMember
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            Email = "owner@metro.ph",
-            FullName = "Maria Santos",
-            Role = "Owner",
-            Status = "Active",
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = "owner_clerk_123"
-        };
-        _context.StaffMembers.Add(owner);
-        await _context.SaveChangesAsync();
+        var owner = SeedMember("owner@metro.ph", "Maria Santos", WorkspaceMemberRole.Owner, MemberStatus.Active, userId: "owner_clerk_123");
 
-        var handler = new RevokeStaffMemberCommandHandler(_context);
+        var handler = new RevokeStaffMemberCommandHandler(_context, _clerkMock.Object);
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.Handle(new RevokeStaffMemberCommand(TenantSlug, owner.Id), CancellationToken.None));
 
@@ -207,21 +207,7 @@ public class StaffManagementTests : IDisposable
     public async Task GetInvitationDetails_ValidToken_ReturnsMetadata()
     {
         var token = Guid.NewGuid().ToString("N");
-        var member = new StaffMember
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            Email = "candidate@metro.ph",
-            FullName = "Clara Finance",
-            Role = "Biller",
-            Status = "PendingInvitation",
-            InvitationToken = token,
-            InvitationExpiresAt = DateTime.UtcNow.AddDays(7),
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = "owner_clerk_123"
-        };
-        _context.StaffMembers.Add(member);
-        await _context.SaveChangesAsync();
+        SeedMember("candidate@metro.ph", "Clara Finance", WorkspaceMemberRole.Billing, MemberStatus.Invited, token, DateTime.UtcNow.AddDays(7));
 
         var handler = new GetInvitationDetailsQueryHandler(_context);
         var result = await handler.Handle(new GetInvitationDetailsQuery(token), CancellationToken.None);
@@ -230,66 +216,41 @@ public class StaffManagementTests : IDisposable
         Assert.Equal("Metro Clinic", result.TenantName);
         Assert.Equal("candidate@metro.ph", result.InviteeEmail);
         Assert.Equal("Clara Finance", result.InviteeFullName);
-        Assert.Equal("Biller", result.Role);
+        Assert.Equal("Billing", result.Role);
         Assert.False(result.IsExpired);
         Assert.False(result.IsAlreadyAccepted);
     }
 
     [Fact]
-    public async Task AcceptInvitation_ValidToken_LinksClerkUserIdAndActivates()
+    public async Task AcceptInvitation_ValidToken_LinksClerkUserIdAndActivates_WithoutGrantingOwnership()
     {
         var token = Guid.NewGuid().ToString("N");
-        var member = new StaffMember
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            Email = "admin.clara@metro.ph",
-            FullName = "Clara Admin",
-            Role = "Admin",
-            Status = "PendingInvitation",
-            InvitationToken = token,
-            InvitationExpiresAt = DateTime.UtcNow.AddDays(7),
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = "owner_clerk_123"
-        };
-        _context.StaffMembers.Add(member);
-        await _context.SaveChangesAsync();
+        var member = SeedMember("admin.clara@metro.ph", "Clara Admin", WorkspaceMemberRole.Admin, MemberStatus.Invited, token, DateTime.UtcNow.AddDays(7));
 
-        var handler = new AcceptInvitationCommandHandler(_context);
+        var handler = new AcceptInvitationCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
         var result = await handler.Handle(new AcceptInvitationCommand(token, "clerk_user_clara_999", "admin.clara@metro.ph"), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal(TenantSlug, result.TenantSlug);
         Assert.Equal("Admin", result.Role);
 
-        var memberInDb = await _context.StaffMembers.FindAsync(member.Id);
+        var memberInDb = await _context.WorkspaceMembers.FindAsync(member.Id);
         Assert.NotNull(memberInDb);
-        Assert.Equal("Active", memberInDb.Status);
+        Assert.Equal(MemberStatus.Active, memberInDb.Status);
         Assert.Equal("clerk_user_clara_999", memberInDb.UserId);
         Assert.NotNull(memberInDb.JoinedAt);
+
+        Assert.Equal("owner_clerk_123", (await _context.Tenants.SingleAsync()).OwnerId);
+        _clerkMock.Verify(c => c.SyncAsync("clerk_user_clara_999", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task AcceptInvitation_ExpiredToken_ThrowsInvalidOperationException()
     {
         var token = Guid.NewGuid().ToString("N");
-        var member = new StaffMember
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            Email = "expired@metro.ph",
-            FullName = "Viewer Expired",
-            Role = "Viewer",
-            Status = "PendingInvitation",
-            InvitationToken = token,
-            InvitationExpiresAt = DateTime.UtcNow.AddDays(-2), // Expired 2 days ago
-            CreatedAt = DateTime.UtcNow.AddDays(-9),
-            CreatedBy = "owner_clerk_123"
-        };
-        _context.StaffMembers.Add(member);
-        await _context.SaveChangesAsync();
+        SeedMember("expired@metro.ph", "Viewer Expired", WorkspaceMemberRole.Member, MemberStatus.Invited, token, DateTime.UtcNow.AddDays(-2));
 
-        var handler = new AcceptInvitationCommandHandler(_context);
+        var handler = new AcceptInvitationCommandHandler(_context, _clerkMock.Object, TimeProvider.System);
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.Handle(new AcceptInvitationCommand(token, "clerk_user_any"), CancellationToken.None));
 
@@ -300,24 +261,9 @@ public class StaffManagementTests : IDisposable
     public async Task ResendStaffInvitation_PendingMember_GeneratesFreshTokenAndExtendsExpiry()
     {
         var originalToken = "original_token_123";
-        var originalExpiry = DateTime.UtcNow.AddDays(-1); // was expired
-        var member = new StaffMember
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            Email = "biller.renew@metro.ph",
-            FullName = "Biller Renew",
-            Role = "Biller",
-            Status = "PendingInvitation",
-            InvitationToken = originalToken,
-            InvitationExpiresAt = originalExpiry,
-            CreatedAt = DateTime.UtcNow.AddDays(-8),
-            CreatedBy = "owner_clerk_123"
-        };
-        _context.StaffMembers.Add(member);
-        await _context.SaveChangesAsync();
+        var member = SeedMember("biller.renew@metro.ph", "Biller Renew", WorkspaceMemberRole.Billing, MemberStatus.Invited, originalToken, DateTime.UtcNow.AddDays(-1));
 
-        var handler = new ResendStaffInvitationCommandHandler(_context);
+        var handler = new ResendStaffInvitationCommandHandler(_context, TestSupport.InvitationNotifier(_context), TimeProvider.System);
         var result = await handler.Handle(new ResendStaffInvitationCommand(TenantSlug, member.Id), CancellationToken.None);
 
         Assert.NotNull(result);
@@ -325,7 +271,7 @@ public class StaffManagementTests : IDisposable
         Assert.NotNull(result.InvitationExpiresAt);
         Assert.True(result.InvitationExpiresAt > DateTime.UtcNow.AddDays(6));
 
-        var inDb = await _context.StaffMembers.FindAsync(member.Id);
+        var inDb = await _context.WorkspaceMembers.FindAsync(member.Id);
         Assert.NotNull(inDb);
         Assert.Equal(result.InvitationToken, inDb.InvitationToken);
         Assert.True(inDb.InvitationExpiresAt > DateTime.UtcNow);

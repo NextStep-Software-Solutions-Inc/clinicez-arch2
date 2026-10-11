@@ -11,17 +11,29 @@ import {
 } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import { useFacilityLicense } from '../../components/FacilityActivationGate';
+import { useAuth, usePermission } from '../../components/AuthGate';
+import { useConnection } from '../../components/ConnectionGate';
+import { PERMISSIONS } from '../../constants/permissions';
 import {
   pharmacyService,
+  PaymentPolicy,
   PharmacyStaffMember,
   PharmacyStaffRole,
 } from '../../services/pharmacyService';
 
+const PAYMENT_POLICIES: readonly PaymentPolicy[] = ['Prepaid', 'Postpaid', 'None'];
+
 export default function SettingsScreen() {
   const { license, openActivationModal, refreshLicense } = useFacilityLicense();
+  const { user, signOut } = useAuth();
+  const { serverLabel, changeServer } = useConnection();
+  const canManagePolicy = usePermission(PERMISSIONS.staffManage);
   const [staff, setStaff] = useState<PharmacyStaffMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [paymentPolicy, setPaymentPolicy] = useState<PaymentPolicy | null>(null);
+  const [policySaving, setPolicySaving] = useState(false);
+  const [policyError, setPolicyError] = useState<string | null>(null);
 
   // Staff creation modal state
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
@@ -75,11 +87,35 @@ export default function SettingsScreen() {
     loadStaff().finally(() => setLoading(false));
   }, [loadStaff]);
 
+  const loadSettings = useCallback(async () => {
+    const [settings] = await pharmacyService.getSettings();
+    if (settings) {
+      setPaymentPolicy(settings.paymentPolicy);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([loadStaff(), refreshLicense()]);
+    await Promise.all([loadStaff(), loadSettings(), refreshLicense()]);
     setRefreshing(false);
-  }, [loadStaff, refreshLicense]);
+  }, [loadStaff, loadSettings, refreshLicense]);
+
+  const handleChangePolicy = async (next: PaymentPolicy) => {
+    if (next === paymentPolicy) return;
+    setPolicySaving(true);
+    setPolicyError(null);
+    const [updated, err] = await pharmacyService.updatePaymentPolicy(next);
+    setPolicySaving(false);
+    if (err || !updated) {
+      setPolicyError(err?.message || 'Failed to update the payment policy.');
+      return;
+    }
+    setPaymentPolicy(updated.paymentPolicy);
+  };
 
   const handleAddStaff = async () => {
     if (!newFirstName.trim() || !newLastName.trim()) {
@@ -187,6 +223,69 @@ export default function SettingsScreen() {
             <ThemedText style={styles.value}>{new Date(license.expiresAtUtc).toLocaleDateString()}</ThemedText>
           </View>
         )}
+      </View>
+
+      {/* Payment Policy Card */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <ThemedText style={styles.cardTitle}>Payment Policy</ThemedText>
+        </View>
+        <ThemedText style={styles.policyHint}>
+          Prepaid blocks dispensing until the cashier records payment. Postpaid and None allow dispensing once accepted.
+        </ThemedText>
+        <View style={styles.policyOptionsRow}>
+          {PAYMENT_POLICIES.map((policy) => (
+            <Pressable
+              key={policy}
+              style={[
+                styles.roleSelectChip,
+                paymentPolicy === policy && styles.roleSelectChipActive,
+                (!canManagePolicy || policySaving) && { opacity: 0.6 },
+              ]}
+              onPress={() => handleChangePolicy(policy)}
+              disabled={!canManagePolicy || policySaving || paymentPolicy === null}
+            >
+              <ThemedText
+                style={[styles.roleSelectChipText, paymentPolicy === policy && styles.roleSelectChipTextActive]}
+              >
+                {policy}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+        {!canManagePolicy ? (
+          <ThemedText style={styles.policyHint}>Only the chief pharmacist can change the payment policy.</ThemedText>
+        ) : null}
+        {policyError ? <ThemedText style={styles.policyError}>{policyError}</ThemedText> : null}
+      </View>
+
+      {serverLabel && changeServer ? (
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <ThemedText style={styles.cardTitle}>Server</ThemedText>
+            <Pressable style={styles.licenseActionBtn} onPress={changeServer}>
+              <ThemedText style={styles.licenseActionBtnText}>Change server</ThemedText>
+            </Pressable>
+          </View>
+          <View style={styles.row}>
+            <ThemedText style={styles.label}>Connected to</ThemedText>
+            <ThemedText style={styles.value}>{serverLabel}</ThemedText>
+          </View>
+        </View>
+      ) : null}
+
+      {/* Account Card */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <ThemedText style={styles.cardTitle}>Signed-in Staff</ThemedText>
+          <Pressable style={styles.deactivateBtn} onPress={signOut}>
+            <ThemedText style={styles.deactivateBtnText}>Sign out</ThemedText>
+          </Pressable>
+        </View>
+        <View style={styles.row}>
+          <ThemedText style={styles.label}>{user?.name ?? 'Unknown'}</ThemedText>
+          <ThemedText style={styles.value}>{user?.roleName ?? user?.role ?? ''}</ThemedText>
+        </View>
       </View>
 
       {/* Staff & Healthcare Providers Roster Card */}
@@ -300,7 +399,7 @@ export default function SettingsScreen() {
                       [
                         'ChiefPharmacist',
                         'StaffPharmacist',
-                        'PharmacyTechnician',
+                        'PharmacyAssistant',
                         'Cashier',
                         'InventoryClerk',
                       ] as const
@@ -323,8 +422,8 @@ export default function SettingsScreen() {
                             ? 'Chief RPh'
                             : r === 'StaffPharmacist'
                             ? 'Staff RPh'
-                            : r === 'PharmacyTechnician'
-                            ? 'Tech'
+                            : r === 'PharmacyAssistant'
+                            ? 'Assistant'
                             : r}
                         </ThemedText>
                       </Pressable>
@@ -657,5 +756,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  policyOptionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  policyHint: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  policyError: {
+    fontSize: 12,
+    color: '#991B1B',
+    fontWeight: '600',
   },
 });

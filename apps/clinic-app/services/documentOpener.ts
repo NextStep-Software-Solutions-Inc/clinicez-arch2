@@ -8,7 +8,7 @@ import { getApiBaseUrl } from './runtimeConfig';
  * Authorization header. So the file is fetched with the session token and shown through a short-lived blob URL.
  * URLs that do not belong to the clinic API are opened as-is.
  */
-export async function openDocument(url: string): Promise<boolean> {
+export async function openDocument(url: string, _contentType?: string): Promise<boolean> {
   if (typeof window === 'undefined') return false;
 
   const base = getApiBaseUrl();

@@ -24,7 +24,8 @@ public sealed record ClinicAppointmentWebhookDto(
     string? ClinicalAssessment = null,
     string? DoctorPlan = null,
     string? PrescriptionsSummary = null,
-    string? PrescriptionPublicVerificationUrl = null);
+    string? PrescriptionPublicVerificationUrl = null,
+    Guid? DraftId = null);
 
 public sealed record ClinicPushAppointmentsPayload(
     Guid ClinicId,

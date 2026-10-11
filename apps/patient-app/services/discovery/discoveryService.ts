@@ -1,6 +1,5 @@
 import { and, count, desc, eq, inArray, not } from 'drizzle-orm';
 import NetInfo from '@react-native-community/netinfo';
-import { joinApiUrl } from '@shared/safe';
 import { db } from '@db/index';
 import { bookingDrafts } from '@db/schema/bookingDrafts';
 import { clinicMemberships } from '@db/schema/clinicMemberships';
@@ -28,6 +27,12 @@ import {
 } from '../api/discoveryApi';
 import { createBookingDraft as apiCreateDraft, submitBookingDraft as apiSubmitDraft } from '../api/bookingApi';
 import { ApiError } from '../api/apiClient';
+import { localMembershipStatus } from './membershipStatus';
+import {
+    parseShareSections,
+    serializeShareSections,
+    type BookingShareSection,
+} from '../sharing/bookingSections';
 
 import {
     AppointmentLineupItem,
@@ -127,11 +132,7 @@ function now(): Date {
 }
 
 function parseMembershipStatus(status?: string | null): 'pending' | 'active' | undefined {
-    if (!status) return undefined;
-    const lower = status.toLowerCase();
-    if (lower === 'active') return 'active';
-    if (lower === 'pending') return 'pending';
-    return undefined;
+    return status === 'active' || status === 'pending' ? status : undefined;
 }
 
 function getId(prefix: string, index: number): string {
@@ -215,7 +216,6 @@ function buildOrganizationSeed() {
             coverImageUrl: `https://picsum.photos/seed/clinic-cover-${index}/400/180`,
             isPublic,
             supportsAppointments,
-            baseUrl: `https://${slug}.Clinic EZ.local`,
             inviteCode: isPublic ? null : `CLN-${String(index + 1).padStart(4, '0')}`,
             privacyPolicyUrl: `https://Clinic EZ.app/privacy/${slug}`,
             termsAndConditionsUrl: `https://Clinic EZ.app/terms/${slug}`,
@@ -706,7 +706,7 @@ async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgS
                 id: getMembershipId('org-membership', patientId, org.id),
                 patientId,
                 organizationId: org.id,
-                status: parseMembershipStatus(org.membershipStatus) ?? 'pending',
+                status: localMembershipStatus(org.membershipStatus) ?? 'pending',
                 roleId: 'member',
                 roleName: 'Member',
                 consentPrivacyPolicy: true,
@@ -720,7 +720,7 @@ async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgS
             await db.insert(organizationMemberships).values(membershipRow).onConflictDoUpdate({
                 target: organizationMemberships.id,
                 set: {
-                    status: parseMembershipStatus(org.membershipStatus) ?? 'pending',
+                    status: localMembershipStatus(org.membershipStatus) ?? 'pending',
                     updatedAt: now(),
                     syncedAt: now(),
                 },
@@ -802,7 +802,6 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
             coverImageUrl: clinic.coverImageUrl,
             isPublic: clinic.isPublic,
             supportsAppointments: clinic.supportsAppointments,
-            baseUrl: 'https://Clinic EZ.app',
             privacyPolicyUrl: 'https://Clinic EZ.app/privacy',
             termsAndConditionsUrl: 'https://Clinic EZ.app/terms',
             specialtiesJson: clinic.specialtiesJson,
@@ -820,7 +819,7 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
                 id: getMembershipId('clinic-membership', patientId, clinic.id),
                 patientId,
                 clinicId: clinic.id,
-                status: parseMembershipStatus(clinic.membershipStatus) ?? 'pending',
+                status: localMembershipStatus(clinic.membershipStatus) ?? 'pending',
                 consentPrivacyPolicy: true,
                 consentTermsAndConditions: true,
                 consentDataSharing: true,
@@ -832,7 +831,7 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
             await db.insert(clinicMemberships).values(membershipRow).onConflictDoUpdate({
                 target: clinicMemberships.id,
                 set: {
-                    status: parseMembershipStatus(clinic.membershipStatus) ?? 'pending',
+                    status: localMembershipStatus(clinic.membershipStatus) ?? 'pending',
                     updatedAt: now(),
                     syncedAt: now(),
                 },
@@ -1257,6 +1256,7 @@ export async function getBookingDraft(patientId: string, clinicId: string): Prom
         reason: row.reason ?? null,
         notes: row.notes ?? null,
         shareFields: parseJsonArray<ShareableFieldKey>(String(row.shareFieldsJson ?? '[]'), []),
+        shareSections: parseShareSections(row.shareSectionsJson),
         attachedFileIds: parseJsonArray<string>(String(row.attachedFileIdsJson ?? '[]'), []),
         status: (row.status as 'draft' | 'ready') ?? 'draft',
     };
@@ -1288,6 +1288,7 @@ export async function saveBookingDraft(
         reason: input.reason,
         notes: input.notes ?? null,
         shareFieldsJson: serializeShareFields(input.shareFields),
+        shareSectionsJson: serializeShareSections(input.shareSections),
         attachedFileIdsJson: JSON.stringify(input.attachedFileIds ?? []),
         status: input.preferredDate && input.preferredTime && input.reason ? ('ready' as const) : ('draft' as const),
         createdAt: existing.length > 0 ? existing[0].createdAt : timestamp,
@@ -1306,6 +1307,7 @@ export async function saveBookingDraft(
         reason: row.reason,
         notes: row.notes,
         shareFields: input.shareFields,
+        shareSections: parseShareSections(row.shareSectionsJson),
         attachedFileIds: input.attachedFileIds || [],
         status: row.status,
     };
@@ -1338,6 +1340,7 @@ export async function listBookingDrafts(patientId: string): Promise<BookingDraft
         reason: row.reason ?? null,
         notes: row.notes ?? null,
         shareFields: parseJsonArray<ShareableFieldKey>(String(row.shareFieldsJson ?? '[]'), []),
+        shareSections: parseShareSections(row.shareSectionsJson),
         attachedFileIds: parseJsonArray<string>(String(row.attachedFileIdsJson ?? '[]'), []),
         status: (row.status as 'draft' | 'ready') ?? 'draft',
     }));
@@ -1456,6 +1459,7 @@ export async function createBookingDraftOnline(
         reason?: string | null;
         notes?: string | null;
         shareFieldsJson: string;
+        shareSections?: BookingShareSection[];
         attachedFileIdsJson?: string;
     },
 ): Promise<string> {
@@ -1471,44 +1475,6 @@ export async function submitBookingDraftOnline(
     draftId: string,
 ): Promise<string | null> {
     return apiSubmitDraft(getToken, patientId, draftId);
-}
-
-/**
- * Streams an in-memory decrypted external file to the clinic's isolated intake endpoint.
- * The clinic immediately re-encrypts the payload under its Clinic Master Key (CMK) and persists it.
- */
-export async function uploadSharedFileToClinic(
-    patientId: string,
-    clinicBaseUrl: string | undefined,
-    fileId: string,
-    fileName: string,
-    fileUri: string,
-    mimeType?: string,
-    recordType: string = 'LabResult',
-): Promise<boolean> {
-    try {
-        const rawBaseUrl = clinicBaseUrl || process.env.EXPO_PUBLIC_CLINIC_API_URL || 'http://localhost:5245';
-        const targetUrl = joinApiUrl(rawBaseUrl, '/records/intake/patient-shared-file');
-        const formData = new FormData();
-        formData.append('PatientId', patientId);
-        formData.append('FileId', fileId);
-        formData.append('RecordType', recordType);
-        formData.append('Title', fileName);
-        formData.append('File', {
-            uri: fileUri,
-            name: fileName,
-            type: mimeType || 'application/pdf',
-        } as any);
-
-        const response = await fetch(targetUrl, {
-            method: 'POST',
-            body: formData,
-        });
-        return response.ok;
-    } catch (err) {
-        console.warn('[uploadSharedFileToClinic] Failed to stream shared file to clinic intake:', err);
-        return false;
-    }
 }
 
 export async function getClinicDetailOnline(
@@ -1535,10 +1501,10 @@ export async function getClinicDetailOnline(
         specialties: parseJsonArray<string>(remote.specialtiesJson, []),
         featuredScore: remote.featuredScore ?? 0,
         activeMemberCount: remote.activeMemberCount ?? 0,
-        isJoined: remote.membershipStatus?.toString().toLowerCase() === 'active',
-        isVisible: remote.isPublic || remote.membershipStatus?.toString().toLowerCase() === 'active' || (remote.membershipStatus !== null && remote.membershipStatus !== undefined),
+        isJoined: remote.membershipStatus === 'Active',
+        isVisible: remote.isPublic || Boolean(remote.membershipStatus),
         unlockedByOrganizationIds: [],
-        membershipStatus: remote.membershipStatus ? String(remote.membershipStatus).toLowerCase() as any : undefined,
+        membershipStatus: localMembershipStatus(remote.membershipStatus),
         linkedOrganizations: (remote.linkedOrganizations ?? []).map((org) => ({
             id: org.id,
             slug: org.slug,

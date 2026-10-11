@@ -17,12 +17,27 @@ public sealed class AnalyzersController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IAnalyzerFeedService _feedService;
+    private readonly bool _simulatorEnabled;
 
-    public AnalyzersController(ISender sender, IAnalyzerFeedService feedService)
+    public AnalyzersController(
+        ISender sender,
+        IAnalyzerFeedService feedService,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         _sender = sender;
         _feedService = feedService;
+        // The simulator fabricates instrument traffic: on only in Development unless explicitly enabled by configuration.
+        _simulatorEnabled = configuration.GetValue<bool?>("Analyzer:SimulatorEnabled") ?? environment.IsDevelopment();
     }
+
+    [HttpGet("capabilities")]
+    [HasPermission(LabPermissions.AnalyzersFeed)]
+    public ActionResult<ApiResponse<AnalyzerCapabilitiesResponse>> GetCapabilities() =>
+        Ok(ApiResponse<AnalyzerCapabilitiesResponse>.Success(new AnalyzerCapabilitiesResponse
+        {
+            SimulatorEnabled = _simulatorEnabled
+        }));
 
     [HttpPost("feed")]
     [HasPermission(LabPermissions.AnalyzersFeed)]
@@ -45,6 +60,11 @@ public sealed class AnalyzersController : ControllerBase
     public ActionResult<ApiResponse<SimulateAnalyzerResponse>> SimulatePayload(
         [FromBody] SimulateAnalyzerRequest request)
     {
+        if (!_simulatorEnabled)
+        {
+            return NotFound(ApiResponse<SimulateAnalyzerResponse>.Fail("The analyzer simulator is not enabled."));
+        }
+
         var payload = _feedService.GenerateSimulationPayload(
             request.AnalyzerModel ?? "Mindray BC-5150",
             request.AccessionNumber,
@@ -66,6 +86,11 @@ public record IngestFeedRequest
     public required string RawPayload { get; init; }
     public string? ProtocolHint { get; init; }
     public string? MedTechName { get; init; }
+}
+
+public record AnalyzerCapabilitiesResponse
+{
+    public required bool SimulatorEnabled { get; init; }
 }
 
 public record SimulateAnalyzerRequest

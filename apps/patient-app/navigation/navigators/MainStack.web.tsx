@@ -53,6 +53,18 @@ import VaccinationsAdministeredScreen from '../screens/profile/VaccinationsAdmin
 import ClinicalAssessmentsScreen from '../screens/profile/ClinicalAssessments.screen';
 import PhysicalExamScreen from '../screens/profile/PhysicalExam.screen';
 import NcdQuestionnaireScreen from '../screens/profile/NcdQuestionnaire.screen';
+import ShareRecordsScreen from '../screens/sharing/ShareRecords.screen';
+import AccessGrantsScreen from '../screens/sharing/AccessGrants.screen';
+import AccessLogScreen from '../screens/sharing/AccessLog.screen';
+import ShareCodeScreen from '../screens/sharing/ShareCode.screen';
+import MyDevicesScreen from '../screens/settings/MyDevices.screen';
+import DocumentsScreen from '../screens/documents/Documents.screen';
+import LabRequestDetailScreen from '../screens/documents/LabRequestDetail.screen';
+import UploadLabResultScreen from '../screens/documents/UploadLabResult.screen';
+import PrescriptionDetailScreen from '../screens/documents/PrescriptionDetail.screen';
+import ExternalDispenseScreen from '../screens/documents/ExternalDispense.screen';
+import LabResultDetailScreen from '../screens/documents/LabResultDetail.screen';
+import MedicalCertificateDetailScreen from '../screens/documents/MedicalCertificateDetail.screen';
 
 /**
  * Web Main stack.
@@ -112,6 +124,18 @@ const SCREENS: [name: string, component: ComponentType<any>, title: string][] = 
   ['ClinicalAssessmentsScreen', ClinicalAssessmentsScreen, 'Clinical Assessments'],
   ['PhysicalExamScreen', PhysicalExamScreen, 'Physical Exam'],
   ['NcdQuestionnaireScreen', NcdQuestionnaireScreen, 'NCD Questionnaire'],
+  ['ShareRecordsScreen', ShareRecordsScreen, 'Share my records'],
+  ['ShareCodeScreen', ShareCodeScreen, 'Share with a code'],
+  ['AccessGrantsScreen', AccessGrantsScreen, 'Who has access'],
+  ['AccessLogScreen', AccessLogScreen, 'Access activity'],
+  ['MyDevicesScreen', MyDevicesScreen, 'My devices'],
+  ['DocumentsScreen', DocumentsScreen, 'Documents'],
+  ['LabRequestDetailScreen', LabRequestDetailScreen, 'Lab request'],
+  ['UploadLabResultScreen', UploadLabResultScreen, 'Upload result'],
+  ['PrescriptionDetailScreen', PrescriptionDetailScreen, 'Prescription'],
+  ['ExternalDispenseScreen', ExternalDispenseScreen, 'Dispensed elsewhere'],
+  ['LabResultDetailScreen', LabResultDetailScreen, 'Lab result'],
+  ['MedicalCertificateDetailScreen', MedicalCertificateDetailScreen, 'Medical certificate'],
 ];
 
 const screens: Record<string, any> = {

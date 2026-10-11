@@ -5,6 +5,7 @@ using ClinicEz.Laboratory.Application;
 using ClinicEz.Laboratory.Infrastructure;
 using ClinicEz.Laboratory.Infrastructure.Auth;
 using ClinicEz.Shared.LocalAuth;
+using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.Middlewares;
 using Hangfire;
 using Microsoft.AspNetCore.RateLimiting;
@@ -13,6 +14,8 @@ var builder = WebApplication.CreateBuilder(args);
 var env = builder.Environment;
 builder.Configuration.AddJsonFile("appsettings.json", false, true);
 builder.Configuration.AddJsonFile($"appsettings.{env.EnvironmentName}.json", true, true);
+// CreateBuilder put the environment variables before the files added here, so the files would override them; re-add them last.
+builder.Configuration.AddEnvironmentVariables();
 builder.Configuration.AddUserSecrets(typeof(Program).Assembly, true);
 
 // 1. Add services from our other layers
@@ -61,6 +64,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseInternalServiceGuard(); // internal-key principal is default-denied except on permission-guarded endpoints
 app.UseMiddleware<LabScopeMiddleware>();
+app.UseReadOnlyGrace(); // expired subscription: GET only inside the grace window, nothing after it
 app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [new HangfireDashboardAuthFilter(app.Configuration)] }); // Basic Auth; denied when no password is configured
 
 // 5. Tell the app to use controllers

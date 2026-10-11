@@ -1,10 +1,14 @@
 using ClinicEz.Portal.Api.Abstractions;
+using ClinicEz.Portal.Application.Features.Billing;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using System;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace ClinicEz.Portal.Api.Endpoints;
 
@@ -15,6 +19,7 @@ public sealed class LookupTenantEndpoint : IEndpoint
         app.MapGet("/tenants/lookup/{slug}", async (
             string slug,
             IApplicationDbContext context,
+            TimeProvider timeProvider,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(slug))
@@ -45,7 +50,7 @@ public sealed class LookupTenantEndpoint : IEndpoint
                         FacilitySlug = facility.Slug,
                         Name = facility.Name,
                         TenantType = facility.Tenant.TenantType,
-                        Status = facility.Tenant.SubscriptionStatus
+                        Status = await StatusOfAsync(context, facility.Tenant.Id, timeProvider, ct)
                     });
                 }
 
@@ -59,12 +64,19 @@ public sealed class LookupTenantEndpoint : IEndpoint
                 TenantSlug = tenant.TenantSlug,
                 Name = tenant.Name,
                 TenantType = tenant.TenantType,
-                Status = tenant.SubscriptionStatus
+                Status = await StatusOfAsync(context, tenant.Id, timeProvider, ct)
             });
         })
         .WithName("LookupTenant")
         .WithDescription("Checks whether a tenant workspace slug exists.")
         .WithTags("Tenants")
         .AllowAnonymous();
+    }
+
+    private static async Task<string> StatusOfAsync(IApplicationDbContext context, Guid tenantId, TimeProvider timeProvider, CancellationToken ct)
+    {
+        var subscription = await context.Subscriptions.AsNoTracking().FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
+        var status = subscription?.EffectiveStatus(timeProvider.GetUtcNow().UtcDateTime) ?? SubscriptionStatus.Trialing;
+        return SubscriptionWire.Status(status);
     }
 }

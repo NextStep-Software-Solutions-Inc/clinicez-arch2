@@ -22,7 +22,7 @@ export interface PrescriptionItemResponseDto {
   allocatedBatchExpiry?: string;
   unitPrice: number;
   subtotal: number;
-  status: string;
+  status: ItemDispenseStatus;
   isDangerousDrug: boolean;
   remarks?: string;
   availableBatches: BatchAllocationRecommendationDto[];
@@ -38,6 +38,26 @@ export interface DispenseAuditRecordDto {
   batchDeductionsJson: string;
   notes?: string;
 }
+
+export type PrescriptionOrderStatus =
+  | 'Pending'
+  | 'Accepted'
+  | 'PartiallyAccepted'
+  | 'Rejected'
+  | 'InPreparation'
+  | 'ReadyForPickup'
+  | 'Dispensed'
+  | 'Cancelled';
+
+export type PaymentPolicy = 'Prepaid' | 'Postpaid' | 'None';
+
+export type ItemDispenseStatus = 'Pending' | 'Dispensed' | 'OutOfStock' | 'Substituted' | 'Rejected';
+
+export type BatchStatus = 'Active' | 'Depleted' | 'Expired' | 'Quarantined';
+
+export type PaymentStatus = 'NotRequired' | 'AwaitingPayment' | 'Paid' | 'Voided' | 'Refunded';
+
+export type DispenseBlockedReason = 'acceptance_required' | 'payment_required';
 
 export interface PrescriptionOrderDto {
   id: string;
@@ -59,12 +79,20 @@ export interface PrescriptionOrderDto {
   patientAllergies?: string;
   clinicalDiagnosis?: string;
   specialInstructions?: string;
-  status: 'Pending' | 'InPreparation' | 'ReadyForPickup' | 'Dispensed' | 'Cancelled' | string;
+  status: PrescriptionOrderStatus;
   issuedAt: string;
   dispensedAt?: string;
   dispensingPharmacistName?: string;
   dispensingPharmacistPrc?: string;
   totalAmount: number;
+  paymentPolicy: PaymentPolicy;
+  paymentStatus: PaymentStatus;
+  quotedAmount: number | null;
+  paidAt: string | null;
+  statusReason: string | null;
+  pharmacyName: string;
+  dispenseBlockedReason: DispenseBlockedReason | null;
+  patientLinked: boolean;
   items: PrescriptionItemResponseDto[];
   dispenseRecords: DispenseAuditRecordDto[];
 }
@@ -76,7 +104,7 @@ export interface InventoryBatchDto {
   quantityReceived: number;
   quantityRemaining: number;
   receivedDate: string;
-  status: string;
+  status: BatchStatus;
 }
 
 export interface PharmacyInventoryItemDto {
@@ -103,6 +131,28 @@ export interface DispensePayload {
   notes?: string;
 }
 
+export interface PartialAcceptPayload {
+  acceptedItemIds: string[];
+  reason: string;
+}
+
+export interface RejectPayload {
+  reason: string;
+}
+
+export interface PrescriptionClaimResultDto {
+  claimId: string;
+  prescriptionId: string;
+  issuerTenantId: string;
+  issuerFacilityId: string;
+  type: string;
+}
+
+export interface PharmacySettingsDto {
+  pharmacyName: string;
+  paymentPolicy: PaymentPolicy;
+}
+
 export const pharmacyService = {
   async getPrescriptions(status?: string, search?: string) {
     const params = new URLSearchParams();
@@ -118,6 +168,36 @@ export const pharmacyService = {
 
   async dispensePrescription(prescriptionId: string, payload: DispensePayload) {
     return pharmacyApiClient.post<PrescriptionOrderDto>(`/prescriptions/${prescriptionId}/dispense`, payload);
+  },
+
+  async acceptPrescription(prescriptionId: string) {
+    return pharmacyApiClient.post<PrescriptionOrderDto>(`/prescriptions/${prescriptionId}/accept`, {});
+  },
+
+  async partiallyAcceptPrescription(prescriptionId: string, payload: PartialAcceptPayload) {
+    return pharmacyApiClient.post<PrescriptionOrderDto>(`/prescriptions/${prescriptionId}/partial-accept`, payload);
+  },
+
+  async rejectPrescription(prescriptionId: string, payload: RejectPayload) {
+    return pharmacyApiClient.post<PrescriptionOrderDto>(`/prescriptions/${prescriptionId}/reject`, payload);
+  },
+
+  async claimPrescription(token: string) {
+    return pharmacyApiClient.post<PrescriptionClaimResultDto>('/prescriptions/claim', { token });
+  },
+
+  async getPrescriptionByPrescriptionId(prescriptionId: string) {
+    return pharmacyApiClient.get<PrescriptionOrderDto>(
+      `/prescriptions/by-prescription/${encodeURIComponent(prescriptionId)}`
+    );
+  },
+
+  async getSettings() {
+    return pharmacyApiClient.get<PharmacySettingsDto>('/settings');
+  },
+
+  async updatePaymentPolicy(paymentPolicy: PaymentPolicy) {
+    return pharmacyApiClient.put<PharmacySettingsDto>('/settings/payment-policy', { paymentPolicy });
   },
 
   async getInventory(search?: string, lowStockOnly?: boolean) {
@@ -169,7 +249,7 @@ export const pharmacyService = {
 export type PharmacyStaffRole =
   | 'ChiefPharmacist'
   | 'StaffPharmacist'
-  | 'PharmacyTechnician'
+  | 'PharmacyAssistant'
   | 'Cashier'
   | 'InventoryClerk';
 

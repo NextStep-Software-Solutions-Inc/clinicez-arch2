@@ -4,9 +4,10 @@ using ClinicEz.Laboratory.Domain.Enums;
 
 namespace ClinicEz.Laboratory.Domain.Entities;
 
-public sealed class QcRun : BaseEntity
+public sealed class QcRun : BaseEntity, ILabScopedEntity
 {
     public required string TenantId { get; set; }
+    public Guid LaboratoryId { get; set; }
     public Guid QcLotId { get; set; }
     public required string AnalyteCode { get; set; }
     public double MeasuredValue { get; set; }

@@ -50,6 +50,10 @@ public sealed class ConsultationEncounter : BaseEntity
     // E-Prescription Interoperability & External Verification
     public string? PrescriptionNumber { get; set; }
     public string? RxPublicVerificationToken { get; set; }
+
+    /// <summary>Hub claim capability printed as the prescription QR so any ClinicEZ pharmacy can dispense it.</summary>
+    public string? RxClaimToken { get; set; }
+    public DateTime? RxClaimExpiresAt { get; set; }
     public ClinicEz.Clinic.Domain.Enums.PrescriptionDispenseStatus RxDispenseStatus { get; set; } = ClinicEz.Clinic.Domain.Enums.PrescriptionDispenseStatus.Issued;
     public string? RxDispensedPharmacyName { get; set; }
     public string? RxDispensedPharmacistName { get; set; }
@@ -58,6 +62,16 @@ public sealed class ConsultationEncounter : BaseEntity
     public string? RxDispensedReceiptUrl { get; set; }
     public DateTime? RxDispensedAt { get; set; }
     public string? RxNotes { get; set; }
+
+    /// <summary>Stage owned by the pharmacy; mirrored here from <c>rx.status.changed</c>.</summary>
+    public ClinicEz.Shared.Interoperability.RxStage RxStage { get; set; } = ClinicEz.Shared.Interoperability.RxStage.Issued;
+    public string? RxStageReason { get; set; }
+    public decimal? RxQuotedAmount { get; set; }
+    /// <summary>When the pharmacy said the stage changed (its clock); a status message older than this is stale and ignored.</summary>
+    public DateTime? RxStageReportedAt { get; set; }
+    public string? RxPharmacyTenantId { get; set; }
+    public string? RxPharmacyFacilityId { get; set; }
+    public string? RxPharmacyName { get; set; }
 
     // Navigations
     public ICollection<EncounterDiagnosis> Diagnoses { get; set; } = new List<EncounterDiagnosis>();

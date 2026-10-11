@@ -16,9 +16,9 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static object CreatePatientPayload(string? clerkId = null) => new
+    private static object CreatePatientPayload() => new
     {
-        ClerkUserId = clerkId ?? $"clerk_{Guid.NewGuid():N}",
+        ClerkUserId = TestJwtAuthHandler.TestClerkUserId,
         FirstName = "Juan",
         MiddleName = (string?)null,
         LastName = "Dela Cruz",
@@ -28,9 +28,9 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
         Nationality = "Filipino",
     };
 
-    private async Task<Guid> CreateTestPatientAsync(string? clerkId = null)
+    private async Task<Guid> CreateTestPatientAsync()
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/patients", CreatePatientPayload(clerkId));
+        var response = await _client.PostAsJsonAsync("/api/v1/patients", CreatePatientPayload());
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var body = await response.Content.ReadFromJsonAsync<ApiResponse<Guid>>();
@@ -55,13 +55,11 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
     [DockerAvailableFact]
     public async Task CreatePatient_WhenDuplicateClerkId_ReturnsIdempotentSuccess()
     {
-        var clerkId = $"clerk_dup_{Guid.NewGuid():N}";
-
         // First creation succeeds
-        var firstId = await CreateTestPatientAsync(clerkId);
+        var firstId = await CreateTestPatientAsync();
 
         // Second creation with same Clerk ID must return existing patient ID (idempotent)
-        var response = await _client.PostAsJsonAsync("/api/v1/patients", CreatePatientPayload(clerkId));
+        var response = await _client.PostAsJsonAsync("/api/v1/patients", CreatePatientPayload());
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var body = await response.Content.ReadFromJsonAsync<ApiResponse<Guid>>();
@@ -86,13 +84,13 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
     }
 
     [DockerAvailableFact]
-    public async Task GetPatientProfile_WhenPatientDoesNotExist_Returns404()
+    public async Task GetPatientProfile_WhenPatientIsNotTheCallers_Returns403()
     {
-        var nonExistentId = Guid.NewGuid();
+        var unknownOrForeignId = Guid.NewGuid();
 
-        var response = await _client.GetAsync($"/api/v1/patients/{nonExistentId}");
+        var response = await _client.GetAsync($"/api/v1/patients/{unknownOrForeignId}");
 
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         var body = await response.Content.ReadFromJsonAsync<ApiResponse<object>>();
         body!.Succeeded.Should().BeFalse();
@@ -101,10 +99,9 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
     [DockerAvailableFact]
     public async Task GetPatientByClerkId_WhenPatientExists_Returns200()
     {
-        var clerkId = $"clerk_gcbi_{Guid.NewGuid():N}";
-        await CreateTestPatientAsync(clerkId);
+        await CreateTestPatientAsync();
 
-        var response = await _client.GetAsync($"/api/v1/patients/by-clerk/{clerkId}");
+        var response = await _client.GetAsync($"/api/v1/patients/by-clerk/{TestJwtAuthHandler.TestClerkUserId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 

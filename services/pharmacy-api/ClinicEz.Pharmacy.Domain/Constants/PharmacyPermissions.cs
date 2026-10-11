@@ -14,6 +14,10 @@ public static class PharmacyPermissions
 
     public const string PrescriptionsRead = "prescriptions:read";
     public const string PrescriptionsDispense = "prescriptions:dispense";
+    /// <summary>Accept, partially accept or reject a received prescription.</summary>
+    public const string PrescriptionsReview = "prescriptions:review";
+    /// <summary>Redeem a patient's prescription QR so it is delivered into this pharmacy's queue.</summary>
+    public const string PrescriptionsClaim = "prescriptions:claim";
 
     public const string GamotRead = "gamot:read";
     public const string GamotValidate = "gamot:validate";
@@ -24,19 +28,6 @@ public static class PharmacyPermissions
     public const string StaffRead = "staff:read";
     public const string StaffManage = "staff:manage";
 
-    /// <summary>
-    /// Permission set granted to trusted internal services (authenticated by the shared internal key), e.g. clinic-api
-    /// server-side proxying GAMOT operations. Deliberately limited to GAMOT: never staff, auth, inventory or prescriptions.
-    /// </summary>
-    public static readonly IReadOnlyList<string> InternalService = new List<string>
-    {
-        GamotRead,
-        GamotValidate,
-        GamotGenerate,
-        GamotDispense,
-        GamotReverse
-    }.AsReadOnly();
-
     public static readonly IReadOnlyList<string> All = new List<string>
     {
         InventoryRead,
@@ -44,6 +35,8 @@ public static class PharmacyPermissions
         InventoryManage,
         PrescriptionsRead,
         PrescriptionsDispense,
+        PrescriptionsReview,
+        PrescriptionsClaim,
         GamotRead,
         GamotValidate,
         GamotGenerate,
@@ -68,6 +61,8 @@ public static class PharmacyRolePermissions
             {
                 PharmacyPermissions.PrescriptionsRead,
                 PharmacyPermissions.PrescriptionsDispense,
+                PharmacyPermissions.PrescriptionsReview,
+                PharmacyPermissions.PrescriptionsClaim,
                 PharmacyPermissions.InventoryRead,
                 PharmacyPermissions.InventoryReceive,
                 PharmacyPermissions.GamotRead,
@@ -78,19 +73,22 @@ public static class PharmacyRolePermissions
                 PharmacyPermissions.StaffRead
             },
 
-            // Prepares and verifies; cannot dispense or reverse.
+            // Prepares and verifies (reviews and claims prescriptions); cannot dispense or reverse.
             [PharmacyStaffRole.PharmacyAssistant] = new[]
             {
                 PharmacyPermissions.PrescriptionsRead,
+                PharmacyPermissions.PrescriptionsReview,
+                PharmacyPermissions.PrescriptionsClaim,
                 PharmacyPermissions.InventoryRead,
                 PharmacyPermissions.GamotRead,
                 PharmacyPermissions.GamotValidate
             },
 
-            // Front counter: looks up prescriptions and GAMOT balances only.
+            // Front counter: looks up and claims prescriptions, and reads GAMOT balances only.
             [PharmacyStaffRole.Cashier] = new[]
             {
                 PharmacyPermissions.PrescriptionsRead,
+                PharmacyPermissions.PrescriptionsClaim,
                 PharmacyPermissions.GamotRead
             },
 

@@ -11,5 +11,6 @@
       "@services/*": ["services/*"],
       "@screens/*": ["navigation/screens/*"]
     }
-  }
+  },
+  "exclude": ["node_modules", "dist", ".expo", "tests"]
 }

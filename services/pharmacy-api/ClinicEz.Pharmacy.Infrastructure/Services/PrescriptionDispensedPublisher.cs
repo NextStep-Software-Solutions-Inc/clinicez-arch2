@@ -1,45 +1,64 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Text.Json;
 using ClinicEz.Pharmacy.Application.Common.Interfaces;
+using ClinicEz.Pharmacy.Domain.Entities;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
-using MassTransit;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Pharmacy.Infrastructure.Services;
 
 public class PrescriptionDispensedPublisher : IPrescriptionDispensedPublisher
 {
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IInteropPublisher _publisher;
     private readonly ILogger<PrescriptionDispensedPublisher> _logger;
 
-    public PrescriptionDispensedPublisher(IPublishEndpoint publishEndpoint, ILogger<PrescriptionDispensedPublisher> logger)
+    public PrescriptionDispensedPublisher(IInteropPublisher publisher, ILogger<PrescriptionDispensedPublisher> logger)
     {
-        _publishEndpoint = publishEndpoint;
+        _publisher = publisher;
         _logger = logger;
     }
 
-    public async Task PublishPrescriptionDispensedAsync(PrescriptionDispensedEvent dispensedEvent, CancellationToken cancellationToken = default)
+    public void Enqueue(PrescriptionOrder order, PrescriptionDispensedEvent dispensedEvent)
     {
-        try
-        {
-            _logger.LogInformation(
-                "[PrescriptionDispensedPublisher] Broadcasting PrescriptionDispensedEvent for Prescription {PrescriptionNo} (Pharmacist {PharmacistName}) to RabbitMQ",
-                dispensedEvent.PrescriptionNumber, dispensedEvent.DispensingPharmacistName);
+        var to = OrderAddressing.OrderingClinic(order);
+        var from = OrderAddressing.Pharmacy(order);
+        var correlationId = OrderAddressing.Correlation(order);
 
-            await _publishEndpoint.Publish(dispensedEvent, cancellationToken);
+        _logger.LogInformation(
+            "[PrescriptionDispensedPublisher] Queueing rx.dispensed for Prescription {PrescriptionNo} (Pharmacist {PharmacistName}) to {Recipient}",
+            dispensedEvent.PrescriptionNumber, dispensedEvent.DispensingPharmacistName, to.Address);
 
-            _logger.LogInformation(
-                "[PrescriptionDispensedPublisher] Successfully published PrescriptionDispensedEvent for Prescription {PrescriptionNo}",
-                dispensedEvent.PrescriptionNumber);
-        }
-        catch (Exception ex)
+        var payload = dispensedEvent with
         {
-            _logger.LogError(
-                ex,
-                "[PrescriptionDispensedPublisher] Failed to publish PrescriptionDispensedEvent for Prescription {PrescriptionNo}. Event will remain in outbox or local database.",
-                dispensedEvent.PrescriptionNumber);
-            // Non-blocking in offline / disconnected mode
+            OrderingTenantId = order.OrderingTenantId,
+            OrderingFacilityId = order.OrderingFacilityId,
+            PatientId = OrderAddressing.PatientId(order)
+        };
+
+        _publisher.Enqueue(InteropTypes.RxDispensed, from, to, correlationId, payload);
+
+        if (OrderAddressing.Patient(order) is { } patient)
+        {
+            _publisher.Enqueue(
+                InteropTypes.PatientDocumentIssued,
+                from,
+                patient,
+                correlationId,
+                new PatientDocumentIssuedPayload
+                {
+                    DocumentId = payload.DispenseId,
+                    Kind = PatientDocumentKind.DispenseReceipt,
+                    PatientId = order.PatientId,
+                    IssuerTenantId = order.TenantId,
+                    IssuerFacilityId = order.PharmacyId,
+                    IssuerFacilityType = FacilityType.Pharmacy,
+                    IssuerName = order.PharmacyName,
+                    Title = $"Dispensed prescription {order.PrescriptionNumber}",
+                    IssuedAtUtc = payload.DispensedAt,
+                    Status = "Dispensed",
+                    Body = JsonSerializer.SerializeToElement(payload, InteropJson.Options)
+                });
         }
     }
 }

@@ -23,6 +23,7 @@ export const PERMISSIONS = {
   proceduresWrite: 'procedures:write',
   labOrdersRead: 'laborders:read',
   labOrdersWrite: 'laborders:write',
+  labResultsReview: 'labresults:review',
   reportsRead: 'reports:read',
   patientsRead: 'patients:read',
   patientsWrite: 'patients:write',

@@ -1,5 +1,6 @@
 using MediatR;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Common;
 using ClinicEz.Shared.Common;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -35,7 +36,7 @@ public class ProcessTenantWorkspaceWebhookCommandHandler(IApplicationDbContext c
         if (parts.Length == 0) return false;
 
         var typeString = parts[0];
-        if (!Enum.TryParse<FacilityType>(typeString, true, out var facilityType))
+        if (!StrictEnum.TryParse<FacilityType>(typeString, out var facilityType))
         {
             Console.WriteLine($"[Webhook] Failed to parse facility type from event: {payload.EventType}");
             return false;

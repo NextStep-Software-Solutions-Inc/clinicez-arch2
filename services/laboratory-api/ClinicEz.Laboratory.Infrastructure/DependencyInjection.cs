@@ -1,13 +1,18 @@
 using ClinicEz.Laboratory.Domain.Interfaces;
+using ClinicEz.Laboratory.Application.Common;
 using ClinicEz.Laboratory.Application.Common.Interfaces;
+using ClinicEz.Shared.Workspace;
 using ClinicEz.Laboratory.Infrastructure.Persistence;
 using ClinicEz.Laboratory.Infrastructure.Persistence.Repositories;
 using ClinicEz.Laboratory.Infrastructure.Services;
 using ClinicEz.Shared.Documents;
 using Hangfire;
 using Hangfire.PostgreSql;
-using MassTransit;
-using ClinicEz.Laboratory.Infrastructure.Consumers;
+using ClinicEz.Laboratory.Application.Interop;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Facility;
+using ClinicEz.Shared.Interoperability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,6 +63,8 @@ public static class DependencyInjection
         services.AddScoped<IDiagnosticReportPublisher, DiagnosticReportPublisher>();
         services.AddScoped<IAnalyzerFeedService, AnalyzerFeedService>();
         services.AddScoped<IDiagnosticReportPdfGenerator, DiagnosticReportPdfGenerator>();
+        services.AddWorkspaceProfile<ApplicationDbContext>();
+        services.AddScoped<ILabPrintoutConfigProvider, LabPrintoutConfigProvider>();
         services.AddScoped<IPanicAlertPublisher, PanicAlertPublisher>();
 
         // Add Hangfire
@@ -68,28 +75,19 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
-		services.AddMassTransit(x =>
-		{
-			x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("laboratory", false));
-			x.AddConsumer<FacilityCreatedConsumer>();
-			x.AddConsumer<LabRequisitionIssuedConsumer>();
-			x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
-			{
-				o.UsePostgres();
-				o.UseBusOutbox();
-			});
+        // Entitlement renewals from the portal and the liveness heartbeat, both on LabSettings
+        services.AddFacilityEntitlements<LabLicenseStore>();
+        services.AddFacilityHeartbeat<LabLicenseStore>();
 
-			x.UsingRabbitMq((context, cfg) =>
-			{
-				cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
-				{
-					h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
-					h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
-				});
-
-				cfg.ConfigureEndpoints(context);
-			});
-		});
+        // Interop hub messaging (replaces the message broker): transactional outbox/inbox + typed handlers.
+        services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
+            .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
+            .HandleWorkspaceProfileUpdated()
+            .Handle<LabRequisitionIssuedEvent, LabOrderIssuedHandler>(InteropTypes.LabOrderIssued)
+            .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
+            .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
+            .Handle<LabResultReviewedPayload, LabResultReviewedHandler>(InteropTypes.LabResultReviewed)
+            .HandleEntitlementsChanged());
 
 
         if (env != null && env.IsDevelopment())

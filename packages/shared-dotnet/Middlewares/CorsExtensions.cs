@@ -13,21 +13,18 @@ public static class CorsExtensions
 
     /// <summary>
     /// Registers unified CORS policies for ClinicEz microservices.
-    /// In Development environments (or when Cors:AllowAnyOrigin is true), all origins are permitted with credentials.
-    /// In Production, the configured Facility:BaseDomain (and its subdomains), Cors:AllowedDomains, *.vercel.app previews,
-    /// localhost and any origins defined in Cors:AllowedOrigins are permitted.
+    /// In the Development environment all origins are permitted with credentials.
+    /// Anywhere else only the configured Facility:BaseDomain and Cors:AllowedDomains (each with its subdomains) and the origins
+    /// (wildcard patterns allowed) in Cors:AllowedOrigins are permitted, and the host **fails to start** (see
+    /// <see cref="CorsConfigurationGuard"/>) when none of them is configured or Cors:AllowAnyOrigin is true.
     /// </summary>
     public static IServiceCollection AddClinicEzCors(
         this IServiceCollection services,
         IConfiguration configuration,
-        IWebHostEnvironment environment)
+        IHostEnvironment environment)
     {
-        var isDevelopment = environment.IsDevelopment() ||
-                            environment.EnvironmentName.Contains("Dev", StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(configuration["Environment"], "Development", StringComparison.OrdinalIgnoreCase) ||
-                            configuration.GetValue<bool>("Cors:AllowAnyOrigin") ||
-                            string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Development", StringComparison.OrdinalIgnoreCase) ||
-                            Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")?.Contains("Dev", StringComparison.OrdinalIgnoreCase) == true;
+        CorsConfigurationGuard.EnsureConfigured(configuration, environment);
+        var isDevelopment = environment.IsDevelopment();
 
         services.AddCors(options =>
         {
@@ -131,18 +128,7 @@ public static class CorsExtensions
             }
         }
 
-        if (host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-            host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase) ||
-            host.EndsWith(".lvh.me", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
+        // Nothing else is trusted outside Development: no preview-host, localhost or wildcard-suffix allowances.
         return false;
     }
 
@@ -164,5 +150,38 @@ public static class CorsExtensions
 
             return false;
         });
+    }
+}
+
+/// <summary>
+/// Start-up guard for cross-origin access, run by <see cref="CorsExtensions.AddClinicEzCors"/>. Outside Development a service
+/// must be told which origins to trust (<c>Facility:BaseDomain</c>, <c>Cors:AllowedDomains</c> and/or <c>Cors:AllowedOrigins</c>);
+/// there is no allow-everything fallback and <c>Cors:AllowAnyOrigin</c> is a Development-only switch.
+/// Services that do not use <c>AddClinicEzCors</c> can call <see cref="EnsureConfigured"/> directly.
+/// </summary>
+public static class CorsConfigurationGuard
+{
+    public static void EnsureConfigured(IConfiguration configuration, IHostEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(environment);
+        if (environment.IsDevelopment()) return;
+
+        if (configuration.GetValue<bool>("Cors:AllowAnyOrigin"))
+        {
+            throw new InvalidOperationException(
+                "Cors:AllowAnyOrigin is only allowed in Development. Configure Facility:BaseDomain (env Facility__BaseDomain), " +
+                "Cors:AllowedDomains (env Cors__AllowedDomains) and/or Cors:AllowedOrigins (env Cors__AllowedOrigins) instead.");
+        }
+
+        var configured = !string.IsNullOrWhiteSpace(configuration["Facility:BaseDomain"])
+                         || configuration.GetStringList("Cors:AllowedOrigins").Any(o => !string.IsNullOrWhiteSpace(o))
+                         || configuration.GetStringList("Cors:AllowedDomains").Any(d => !string.IsNullOrWhiteSpace(d));
+        if (!configured)
+        {
+            throw new InvalidOperationException(
+                "CORS is not configured: set Facility:BaseDomain (env Facility__BaseDomain), Cors:AllowedDomains (env Cors__AllowedDomains) " +
+                "or Cors:AllowedOrigins (env Cors__AllowedOrigins). There is no allow-any-origin default outside Development.");
+        }
     }
 }

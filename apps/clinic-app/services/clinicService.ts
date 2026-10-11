@@ -374,6 +374,31 @@ export interface ClinicLabOrderItem {
   status: LabOrderStatus;
 }
 
+/** Interoperable lab-order lifecycle (richer than the legacy `LabOrderStatus`). Serialized as a string. */
+export type LabOrderStage =
+  | 'Issued'
+  | 'Routed'
+  | 'Claimed'
+  | 'AwaitingPayment'
+  | 'Paid'
+  | 'SpecimenCollected'
+  | 'InProcess'
+  | 'ResultFinalized'
+  | 'ExternalSubmitted'
+  | 'Reviewed'
+  | 'Rejected'
+  | 'Cancelled';
+
+export type LabResultSource = 'ClinicEzLab' | 'ExternalLab' | 'PatientUploaded';
+export type LabResultVerificationState = 'Verified' | 'Unverified' | 'Rejected';
+
+/** Compact result summary attached to a lab order. `source` / `verificationState` are strings from the API. */
+export interface ClinicLabOrderResultSummary {
+  id: string;
+  source: string;
+  verificationState: string;
+}
+
 export interface ClinicLabOrderRecord {
   id: string;
   tenantId: string;
@@ -387,16 +412,24 @@ export interface ClinicLabOrderRecord {
   orderDate: string;
   orderedAt?: string;
   status: LabOrderStatus;
+  /** Interop lifecycle stage; absent on servers that predate the interop hub. */
+  stage?: LabOrderStage;
+  stageReason?: string | null;
+  quotedAmount?: number | null;
+  quotedCurrency?: string | null;
+  paymentRequired?: boolean;
+  laboratoryName?: string | null;
+  claimToken?: string | null;
+  results?: ClinicLabOrderResultSummary[];
   clinicalDiagnosis?: string;
   notes?: string;
   items: ClinicLabOrderItem[];
   testName?: string;
   specimenType?: string;
-  publicUploadToken?: string;
-  publicUploadUrl?: string;
+  /** Absolute URL of the public upload page for external labs (null when none). */
+  publicUploadUrl?: string | null;
   externalLabName?: string;
   externalReportUrl?: string;
-  externalReportFileBase64?: string;
   externalReportType?: string;
   uploadedBy?: string;
   observationsJson?: string;
@@ -411,6 +444,80 @@ export interface ClinicLabOrderRecord {
   panicAcknowledgedAt?: string;
   panicAcknowledgedBy?: string;
   isPanicAcknowledged?: boolean;
+}
+
+/**
+ * Redeem a patient's share: a scanned QR / pasted token, or (leave `shareToken` out) the patient's ClinicEZ ID plus the
+ * one-time code they read out.
+ */
+export interface RedeemShareTokenRequest {
+  shareToken?: string;
+  clinicEzId?: string;
+  code?: string;
+  purpose?: string;
+  addToQueue?: boolean;
+  chiefComplaint?: string;
+}
+
+export interface RedeemShareTokenResult {
+  correlationId: string;
+}
+
+export type ShareImportState = 'Pending' | 'Imported' | 'Denied' | 'Failed';
+
+/** Why the patient plane refused a redeem; only present on `Denied`. */
+export type ShareDenialCode = 'Invalid' | 'Expired' | 'Exhausted' | 'PatientUnknown' | 'RateLimited' | 'Revoked';
+
+export interface ShareImportStatusDto {
+  correlationId: string;
+  status: ShareImportState;
+  denialReason?: string | null;
+  denialCode?: ShareDenialCode | null;
+  /** Clinic patient id (use to open the patient). */
+  patientId?: string | null;
+  patientName?: string | null;
+  clinicEzId?: string | null;
+  /** SharingScopes flag names, e.g. 'Demographics', 'LabResults'. */
+  scopes: string[];
+  expiresAtUtc?: string | null;
+  itemsImported: number;
+  /** Which use of the share this was (1-based), when the patient plane reports it. */
+  redemptionNumber?: number | null;
+  maxRedemptions?: number | null;
+  /** True when this clinic had already redeemed the same grant and the chart was refreshed. */
+  isRefresh: boolean;
+  queueItemId?: string | null;
+  queueNumber?: string | null;
+  requestedAtUtc: string;
+  completedAtUtc?: string | null;
+}
+
+export type LabResultReviewScope = 'mine' | 'all';
+
+export interface LabResultReviewItem {
+  id: string;
+  labOrderId: string;
+  orderNumber: string;
+  patientId: string;
+  patientName: string;
+  orderedByDoctorName?: string | null;
+  testNames: string[];
+  source: LabResultSource;
+  verificationState: LabResultVerificationState;
+  externalLabName?: string | null;
+  fileName?: string | null;
+  contentType?: string | null;
+  fileSizeBytes?: number | null;
+  submittedAtUtc: string;
+  verifiedByName?: string | null;
+  verifiedAtUtc?: string | null;
+  remarks?: string | null;
+  hasPanicAlert: boolean;
+}
+
+export interface ReviewLabResultRequest {
+  accepted: boolean;
+  remarks?: string;
 }
 
 export type CdsAlertSeverity = 'Information' | 'Moderate' | 'Major' | 'Critical';
@@ -1167,6 +1274,29 @@ export const clinicService = {
     return clinicApiUrl(`/lab-orders/${orderId}/slip-pdf`);
   },
 
+  // Interop: patient share-token import (scan-to-fetch)
+  async redeemShareToken(payload: RedeemShareTokenRequest) {
+    return clinicApiClient.post<RedeemShareTokenResult>('/patients/share/redeem', payload);
+  },
+
+  async getShareImportStatus(correlationId: string) {
+    return clinicApiClient.get<ShareImportStatusDto>(`/patients/share/${encodeURIComponent(correlationId)}`);
+  },
+
+  // Interop: doctor lab-result review inbox
+  async getLabResultReviewQueue(state: LabResultVerificationState, scope: LabResultReviewScope) {
+    const params = new URLSearchParams({ state, scope });
+    return clinicApiClient.get<LabResultReviewItem[]>(`/lab-results/review?${params.toString()}`);
+  },
+
+  async reviewLabResult(resultId: string, payload: ReviewLabResultRequest) {
+    return clinicApiClient.post<LabResultReviewItem>(`/lab-results/${encodeURIComponent(resultId)}/review`, payload);
+  },
+
+  getLabResultFileUrl(resultId: string) {
+    return clinicApiUrl(`/lab-results/${encodeURIComponent(resultId)}/file`);
+  },
+
   // Clinical Decision Support (CDS) Safety Engine
   async evaluateCds(payload: {
     patientId?: string;
@@ -1640,7 +1770,6 @@ export interface LabOrderSlipData {
   clinicalDiagnosis?: string;
   fastingInstructions?: string;
   items: { testName: string; category: string; instructions?: string }[];
-  publicUploadToken: string;
   publicUploadUrl: string;
   qrPayload: string;
 }
@@ -1696,6 +1825,18 @@ export interface PrescriptionSlipData {
   dispensedReceiptUrl?: string;
   dispensedAt?: string;
   dispenseNotes?: string;
+  /** Where the prescription stands at the pharmacy, as last reported by it. */
+  pharmacyStatus?: RxPharmacyStatus | null;
+}
+
+export type RxStage = 'Issued' | 'Accepted' | 'PartiallyAccepted' | 'Rejected' | 'Dispensed' | 'ExternalDispensed';
+
+export interface RxPharmacyStatus {
+  stage: RxStage;
+  reason?: string | null;
+  quotedAmount?: number | null;
+  pharmacyName?: string | null;
+  reportedAt?: string | null;
 }
 
 export interface RecordExternalDispensePayload {

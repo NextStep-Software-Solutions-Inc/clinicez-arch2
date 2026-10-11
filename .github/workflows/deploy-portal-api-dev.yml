@@ -7,6 +7,7 @@ on:
     paths:
       - 'services/portal-api/**'
       - 'deploy/portal-api/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-portal-api-dev.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
     paths:
       - 'services/portal-api/**'
       - 'deploy/portal-api/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-portal-api-dev.yml'
   workflow_dispatch:
@@ -122,16 +124,63 @@ jobs:
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
         CONTAINER_NAME: ${{ env.CONTAINER_NAME }}
-        RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+        HUB_URL: ${{ vars.HUB_URL || vars.MESSAGING_HUB_URL || secrets.HUB_URL || secrets.MESSAGING_HUB_URL }}
+        PORTAL_HUB_CLIENT_ID: ${{ secrets.PORTAL_HUB_CLIENT_ID || secrets.PORTAL_MESSAGING_CLIENT_ID }}
+        PORTAL_HUB_CLIENT_SECRET: ${{ secrets.PORTAL_HUB_CLIENT_SECRET || secrets.PORTAL_MESSAGING_CLIENT_SECRET }}
+        PORTAL_HUB_SIGNING_KEY: ${{ secrets.PORTAL_HUB_SIGNING_KEY || secrets.PORTAL_MESSAGING_SIGNING_KEY }}
+        FACILITY_LICENSE_PRIVATE_KEY: ${{ secrets.FACILITY_LICENSE_PRIVATE_KEY }}
+        FACILITY_LICENSE_PUBLIC_KEY: ${{ vars.FACILITY_LICENSE_PUBLIC_KEY || secrets.FACILITY_LICENSE_PUBLIC_KEY }}
+        FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS: ${{ vars.FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS || secrets.FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS }}
+        DATA_PROTECTION_CERT_BASE64: ${{ secrets.PORTAL_DATA_PROTECTION_CERT_BASE64 }}
+        DATA_PROTECTION_CERT_PASSWORD: ${{ secrets.PORTAL_DATA_PROTECTION_CERT_PASSWORD }}
+        DATA_NETWORK: ${{ vars.DATA_NETWORK || 'data-network' }}
+        NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
         HANGFIRE_DASHBOARD_PASSWORD: ${{ secrets.PORTALAPP_HANGFIRE_PASSWORD || secrets.PORTAL_HANGFIRE_PASSWORD || secrets.HANGFIRE_PASSWORD }}
-        INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
         BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
+        CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+        CORS_ALLOWED_DOMAINS: ${{ vars.CORS_ALLOWED_DOMAINS }}
+        HUB_PUBLIC_URL: ${{ vars.HUB_PUBLIC_URL || secrets.HUB_PUBLIC_URL }}
+        SMTP_HOST: ${{ vars.SMTP_HOST || secrets.SMTP_HOST }}
+        SMTP_PORT: ${{ vars.SMTP_PORT }}
+        SMTP_SECURITY: ${{ vars.SMTP_SECURITY }}
+        SMTP_USER: ${{ secrets.SMTP_USER }}
+        SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        SMTP_FROM_EMAIL: ${{ vars.SMTP_FROM_EMAIL || secrets.SMTP_FROM_EMAIL }}
+        SMTP_FROM_NAME: ${{ vars.SMTP_FROM_NAME }}
+        NOTIFICATIONS_CONTACT_INBOX: ${{ vars.NOTIFICATIONS_CONTACT_INBOX || secrets.NOTIFICATIONS_CONTACT_INBOX }}
+        FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL }}
+        CLERK_AUTHORITY: ${{ vars.PORTAL_CLERK_AUTHORITY || secrets.PORTAL_CLERK_AUTHORITY || 'https://amazing-mosquito-75.clerk.accounts.dev' }}
+        CLERK_AUTHORIZED_PARTIES: ${{ vars.CLERK_AUTHORIZED_PARTIES }}
+        HUB_CLOUD_CELL_ID: ${{ vars.HUB_CLOUD_CELL_ID }}
+        SMTP_REPLY_TO: ${{ vars.SMTP_REPLY_TO }}
+        SERVICES_CLINIC_API_URL: ${{ vars.SERVICES_CLINIC_API_URL }}
+        WORKSPACE_MAX_OWNED_PER_USER: ${{ vars.WORKSPACE_MAX_OWNED_PER_USER }}
+        LAB_UPLOAD_MAX_FILE_BYTES: ${{ vars.LAB_UPLOAD_MAX_FILE_BYTES }}
+        LAB_UPLOAD_RATE_LIMIT_PERMITS: ${{ vars.LAB_UPLOAD_RATE_LIMIT_PERMITS }}
+        LAB_UPLOAD_RATE_LIMIT_WINDOW_MINUTES: ${{ vars.LAB_UPLOAD_RATE_LIMIT_WINDOW_MINUTES }}
+        LICENSING_TTL_DAYS: ${{ vars.LICENSING_TTL_DAYS }}
+        LICENSING_GRACE_DAYS: ${{ vars.LICENSING_GRACE_DAYS }}
+        LICENSING_RENEW_BEFORE_DAYS: ${{ vars.LICENSING_RENEW_BEFORE_DAYS }}
+        BILLING_DEFAULT_PLAN_SLUG: ${{ vars.BILLING_DEFAULT_PLAN_SLUG }}
+        BILLING_TRIAL_DAYS: ${{ vars.BILLING_TRIAL_DAYS }}
       run: |
+        . scripts/ci/prepare-key-env.sh
+        prepare_key_env private PORTAL_HUB_SIGNING_KEY
+        prepare_key_env private FACILITY_LICENSE_PRIVATE_KEY
+        prepare_key_env public FACILITY_LICENSE_PUBLIC_KEY
+        prepare_key_env optional-public FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS
+        prepare_key_env optional-blob DATA_PROTECTION_CERT_BASE64
         if [ -z "$BASE_DOMAIN" ]; then
           echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
           exit 1
         fi
-        for var in ASPNETCORE_ENVIRONMENT ENVIRONMENT_LABEL CONNECTION_STRING CLERK_SECRET_KEY XENDIT_SECRET_KEY XENDIT_CALLBACK_TOKEN IMAGE_NAME IMAGE_TAG CONTAINER_NAME RABBITMQ_PASSWORD HANGFIRE_DASHBOARD_PASSWORD INTERNAL_API_KEY BASE_DOMAIN; do
+        for var in HUB_URL PORTAL_HUB_CLIENT_ID PORTAL_HUB_CLIENT_SECRET CLERK_AUTHORITY HUB_PUBLIC_URL SMTP_HOST SMTP_FROM_EMAIL CONNECTION_STRING CLERK_SECRET_KEY XENDIT_SECRET_KEY XENDIT_CALLBACK_TOKEN; do
+          if [ -z "$(printenv $var)" ]; then
+            echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+        done
+        for var in ASPNETCORE_ENVIRONMENT ENVIRONMENT_LABEL CONNECTION_STRING CLERK_SECRET_KEY XENDIT_SECRET_KEY XENDIT_CALLBACK_TOKEN IMAGE_NAME IMAGE_TAG CONTAINER_NAME DATA_NETWORK NPM_NETWORK HANGFIRE_DASHBOARD_PASSWORD BASE_DOMAIN HUB_URL PORTAL_HUB_CLIENT_ID PORTAL_HUB_CLIENT_SECRET HUB_PUBLIC_URL SMTP_HOST SMTP_PORT SMTP_SECURITY SMTP_USER SMTP_PASSWORD SMTP_FROM_EMAIL SMTP_FROM_NAME NOTIFICATIONS_CONTACT_INBOX FRONTEND_BASE_URL CLERK_AUTHORITY CLERK_AUTHORIZED_PARTIES HUB_CLOUD_CELL_ID SMTP_REPLY_TO SERVICES_CLINIC_API_URL WORKSPACE_MAX_OWNED_PER_USER LAB_UPLOAD_MAX_FILE_BYTES LAB_UPLOAD_RATE_LIMIT_PERMITS LAB_UPLOAD_RATE_LIMIT_WINDOW_MINUTES LICENSING_TTL_DAYS LICENSING_GRACE_DAYS LICENSING_RENEW_BEFORE_DAYS BILLING_DEFAULT_PLAN_SLUG BILLING_TRIAL_DAYS PORTAL_HUB_SIGNING_KEY FACILITY_LICENSE_PRIVATE_KEY FACILITY_LICENSE_PUBLIC_KEY FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS DATA_PROTECTION_CERT_BASE64 DATA_PROTECTION_CERT_PASSWORD CORS_ALLOWED_ORIGINS CORS_ALLOWED_DOMAINS; do
           echo "$var=$(printenv $var)" >> deploy/portal-api/.env
         done
 
@@ -182,8 +231,10 @@ jobs:
           cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
 
           echo "==> Ensuring networks exist..."
-          docker network inspect npm-default >/dev/null 2>&1 || docker network create npm-default
-          docker network inspect data-network >/dev/null 2>&1 || docker network create data-network
+          DATA_NET=$(grep -E '^DATA_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+          PROXY_NET=$(grep -E '^NPM_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+          docker network inspect "${PROXY_NET:-npm-default}" >/dev/null 2>&1 || docker network create "${PROXY_NET:-npm-default}"
+          docker network inspect "${DATA_NET:-data-network}" >/dev/null 2>&1 || docker network create "${DATA_NET:-data-network}"
 
           echo "==> Loading Docker image..."
           docker load < portal-api.tar.gz

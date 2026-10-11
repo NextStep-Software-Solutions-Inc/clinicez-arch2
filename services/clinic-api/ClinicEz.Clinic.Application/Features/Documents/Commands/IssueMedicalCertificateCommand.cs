@@ -5,8 +5,11 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Documents.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Documents.Security;
+using ClinicEz.Shared.Interoperability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Clinic.Application.Features.Documents.Commands;
 
@@ -32,15 +35,76 @@ public sealed class IssueMedicalCertificateCommandHandler : IRequestHandler<Issu
     private readonly IRepository<MedicalCertificate> _medCertRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IClinicIdentityProvider _clinicIdentity;
+    private readonly IPatientDocumentPublisher _documents;
+    private readonly IDocumentSecurityService _security;
+    private readonly IConfiguration _configuration;
 
     public IssueMedicalCertificateCommandHandler(
         IRepository<MedicalCertificate> medCertRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IClinicIdentityProvider clinicIdentity,
+        IPatientDocumentPublisher documents,
+        IDocumentSecurityService security,
+        IConfiguration configuration)
     {
         _medCertRepo = medCertRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _clinicIdentity = clinicIdentity;
+        _documents = documents;
+        _security = security;
+        _configuration = configuration;
+    }
+
+    /// <summary>
+    /// Queues the certificate for the patient's account in the interop outbox (committed with the certificate). The
+    /// verification link is the one printed as the QR code on the certificate PDF.
+    /// </summary>
+    private async Task PublishPatientDocumentAsync(MedicalCertificate cert, CancellationToken ct)
+    {
+        var clinic = await _clinicIdentity.GetAsync(ct);
+        if (clinic == null) return;
+
+        var issuedAt = cert.SignedAt ?? cert.CreatedAt;
+        var digest = _security.ComputeDocumentDigest(
+            cert.TenantId, "MED-CERT", cert.CertificateNumber, cert.PatientId, cert.PrcLicenseNumber, issuedAt);
+        var verifyUrl = _security.GenerateVerificationUrl(
+            VerificationUrlResolver.Resolve(_configuration), "med-cert", cert.CertificateNumber, digest);
+
+        await _documents.PublishAsync(new PatientDocumentDraft(
+            cert.ClinicId,
+            cert.PatientId,
+            cert.Id,
+            PatientDocumentKind.MedicalCertificate,
+            $"Medical certificate {cert.CertificateNumber}",
+            issuedAt,
+            Status: "Issued",
+            VerificationToken: cert.CertificateNumber,
+            VerificationUrl: verifyUrl,
+            Body: new MedicalCertificateIssuedPayload
+            {
+                CertificateId = cert.Id,
+                CertificateNumber = cert.CertificateNumber,
+                PatientId = cert.PatientId,
+                PatientName = cert.PatientName,
+                IssuerTenantId = clinic.TenantId,
+                IssuerFacilityId = clinic.ClinicId.ToString(),
+                IssuerName = clinic.Name,
+                DoctorName = cert.DoctorName,
+                DoctorPrcLicense = cert.PrcLicenseNumber,
+                DoctorPtrNumber = cert.PtrNumber,
+                Purpose = cert.Purpose,
+                Diagnosis = cert.Diagnosis,
+                Remarks = cert.Remarks,
+                RestDays = cert.RecommendedRestDays,
+                ValidFrom = cert.RestStartDate?.ToDateTime(TimeOnly.MinValue),
+                ValidTo = cert.RestEndDate?.ToDateTime(TimeOnly.MinValue),
+                IssuedAtUtc = issuedAt,
+                VerificationToken = cert.CertificateNumber,
+                VerificationUrl = verifyUrl
+            }), ct);
     }
 
     public async Task<MedicalCertificateDto> Handle(IssueMedicalCertificateCommand request, CancellationToken ct)
@@ -98,6 +162,7 @@ public sealed class IssueMedicalCertificateCommandHandler : IRequestHandler<Issu
             try
             {
                 await _medCertRepo.AddAsync(cert, ct);
+                await PublishPatientDocumentAsync(cert, ct);
                 await _unitOfWork.SaveChangesAsync(ct);
 
                 return new MedicalCertificateDto(

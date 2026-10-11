@@ -1,4 +1,5 @@
 using System;
+using ClinicEz.Shared.Interoperability;
 
 namespace ClinicEz.Shared.Common;
 
@@ -40,6 +41,11 @@ public record AppointmentBookedEvent
 
     // Patient Attached Files (External Documents)
     public List<BookedAttachmentItem> AttachedFiles { get; init; } = [];
+
+    // Record sections the patient chose to send with this booking (beyond the demographic fields above). Only these
+    // categories appear in SharedItems; SharedScopes is what the patient's booking grant covers (Demographics + sections).
+    public SharingScopes SharedScopes { get; init; }
+    public List<ShareItemDto> SharedItems { get; init; } = [];
 }
 
 public record BookedAttachmentItem

@@ -1,7 +1,9 @@
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
-using MassTransit;
+using ClinicEz.Portal.Tests.Support;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using System;
@@ -17,16 +19,14 @@ public class WorkspaceBrandingTests : IDisposable
     private const string Slug = "metro-clinic";
     private static readonly WorkspaceActor Actor = new("clerk_owner_111", "Juan Dela Cruz", "Owner");
 
-    private readonly Mock<IPublishEndpoint> _publisher = new();
+    private readonly IWorkspaceProfilePublisher _publisher;
     private readonly ApplicationDbContext _context;
     private readonly Guid _tenantId = Guid.NewGuid();
 
     public WorkspaceBrandingTests()
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        _context = new ApplicationDbContext(options);
+        _context = TestSupport.NewContext();
+        _publisher = TestSupport.ProfilePublisher(_context);
         _context.Tenants.Add(new Tenant
         {
             Id = _tenantId,
@@ -50,7 +50,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task Update_PersistsBranding_NormalizesColor_BumpsVersion_AndAudits()
     {
-        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object);
+        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher);
 
         var result = await handler.Handle(Cmd(), CancellationToken.None);
 
@@ -69,7 +69,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task Update_Unchanged_DoesNotBumpVersionOrAudit()
     {
-        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object);
+        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher);
         await handler.Handle(Cmd(), CancellationToken.None);
 
         await handler.Handle(Cmd(), CancellationToken.None);
@@ -81,7 +81,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task Update_BlankValues_ClearOverrides()
     {
-        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object);
+        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher);
         await handler.Handle(Cmd(), CancellationToken.None);
 
         var result = await handler.Handle(Cmd(name: " ", logo: "", color: null), CancellationToken.None);
@@ -95,7 +95,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task Get_ReturnsBrandingSection()
     {
-        await new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object).Handle(Cmd(), CancellationToken.None);
+        await new UpdateWorkspaceBrandingCommandHandler(_context, _publisher).Handle(Cmd(), CancellationToken.None);
 
         var dto = await new GetWorkspaceSettingsQueryHandler(_context)
             .Handle(new GetWorkspaceSettingsQuery(Slug), CancellationToken.None);
@@ -106,7 +106,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_BumpsProfileVersion()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher);
         await handler.Handle(new UpdateWorkspaceGeneralCommand(Slug, Actor, "Metro Renamed", null, "owner@metro.ph", null,
             "Asia/Manila", "en-PH", "MMM d, yyyy", "PHP"), CancellationToken.None);
 
@@ -115,31 +115,67 @@ public class WorkspaceBrandingTests : IDisposable
 
     // ---------- propagation event ----------
 
-    [Fact]
-    public async Task Update_PublishesProfileUpdatedEvent_OnlyWhenSomethingChanged()
+    private async Task<Facility> AddFacilityAsync(FacilityStatus status = FacilityStatus.Active, FacilityType type = FacilityType.Clinic)
     {
-        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object);
+        var facility = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = $"Facility {Guid.NewGuid():N}",
+            FacilityType = type,
+            Status = status
+        };
+        _context.Facilities.Add(facility);
+        await _context.SaveChangesAsync();
+        return facility;
+    }
+
+    [Fact]
+    public async Task Update_PublishesProfileUpdatedToEachFacility_OnlyWhenSomethingChanged()
+    {
+        var clinic = await AddFacilityAsync();
+        var lab = await AddFacilityAsync(type: FacilityType.Laboratory);
+        var pharmacy = await AddFacilityAsync(type: FacilityType.Pharmacy);
+        var organization = await AddFacilityAsync(type: FacilityType.Organization);
+        await AddFacilityAsync(FacilityStatus.Failed, FacilityType.Pharmacy);
+        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher);
 
         await handler.Handle(Cmd(), CancellationToken.None);
         await handler.Handle(Cmd(), CancellationToken.None); // identical => no change => no event
 
-        _publisher.Verify(p => p.Publish(
-            It.Is<ClinicEz.Shared.Common.WorkspaceProfileUpdatedEvent>(e =>
-                e.TenantSlug == Slug && e.TenantId == _tenantId.ToString() && e.Version == 2),
-            It.IsAny<CancellationToken>()), Times.Once);
-        _publisher.VerifyNoOtherCalls();
+        var messages = TestSupport.Outbox(_context, InteropTypes.WorkspaceProfileUpdated);
+        Assert.Equal(4, messages.Count);
+        Assert.All(messages, m => Assert.Equal(PartyKind.Facility, m.To.Kind));
+        Assert.Equivalent(
+            new[] { clinic.Id.ToString(), lab.Id.ToString(), pharmacy.Id.ToString(), organization.Id.ToString() },
+            messages.Select(m => m.To.FacilityId));
+        Assert.Equivalent(
+            new[] { FacilityType.Clinic, FacilityType.Laboratory, FacilityType.Pharmacy, FacilityType.Organization },
+            messages.Select(m => m.To.FacilityType!.Value));
+        Assert.All(messages, m =>
+        {
+            var payload = m.GetPayload<ClinicEz.Shared.Common.WorkspaceProfileUpdatedEvent>();
+            Assert.Equal(Slug, payload.TenantSlug);
+            Assert.Equal(_tenantId.ToString(), payload.TenantId);
+            Assert.Equal(2, payload.Version);
+            Assert.NotNull(payload.Profile);
+            Assert.Equal(payload.Version, payload.Profile.Version);
+            Assert.Equal(Slug, payload.Profile.TenantSlug);
+            Assert.Equal("Metro Health", payload.Profile.DisplayName);
+            Assert.Equal("#0284C7", payload.Profile.AccentColorHex);
+        });
     }
 
     [Fact]
     public async Task UpdateGeneral_PublishesProfileUpdatedEvent()
     {
-        await new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object).Handle(
+        await AddFacilityAsync();
+
+        await new UpdateWorkspaceGeneralCommandHandler(_context, _publisher).Handle(
             new UpdateWorkspaceGeneralCommand(Slug, Actor, "Metro Renamed", null, "owner@metro.ph", null,
                 "Asia/Manila", "en-PH", "MMM d, yyyy", "PHP"), CancellationToken.None);
 
-        _publisher.Verify(p => p.Publish(
-            It.IsAny<ClinicEz.Shared.Common.WorkspaceProfileUpdatedEvent>(),
-            It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Single(TestSupport.Outbox(_context, InteropTypes.WorkspaceProfileUpdated));
     }
 
     [Fact]
@@ -170,7 +206,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task Profile_AfterBranding_UsesOverridesAndNewVersion_AndExposesNoContactDetails()
     {
-        await new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object).Handle(Cmd(), CancellationToken.None);
+        await new UpdateWorkspaceBrandingCommandHandler(_context, _publisher).Handle(Cmd(), CancellationToken.None);
 
         var profile = await new GetWorkspaceProfileQueryHandler(_context)
             .Handle(new GetWorkspaceProfileQuery(Slug), CancellationToken.None);
@@ -179,7 +215,7 @@ public class WorkspaceBrandingTests : IDisposable
         Assert.Equal("#0284C7", profile.AccentColorHex);
         Assert.Equal(2, profile.Version);
 
-        var exposed = typeof(WorkspaceProfileDto).GetProperties().Select(p => p.Name).ToArray();
+        var exposed = typeof(ClinicEz.Shared.Workspace.WorkspaceProfile).GetProperties().Select(p => p.Name).ToArray();
         Assert.DoesNotContain("Email", exposed);
         Assert.DoesNotContain("PhoneNumber", exposed);
         Assert.DoesNotContain("RepresentativeName", exposed);

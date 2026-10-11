@@ -106,6 +106,22 @@ export const linking: LinkingOptions<RootParamList> = {
           ClinicalAssessmentsScreen: 'profile/clinical-assessments',
           PhysicalExamScreen: 'profile/physical-exam',
           NcdQuestionnaireScreen: 'profile/ncd-questionnaire',
+
+          // Sharing
+          ShareRecordsScreen: 'share',
+          ShareCodeScreen: 'share/code',
+          AccessGrantsScreen: 'share/grants',
+          AccessLogScreen: 'share/log',
+          MyDevicesScreen: 'settings/devices',
+
+          // Document inbox
+          DocumentsScreen: 'documents',
+          LabRequestDetailScreen: 'documents/lab-requests/:id',
+          UploadLabResultScreen: 'documents/lab-requests/:id/upload',
+          PrescriptionDetailScreen: 'documents/prescriptions/:id',
+          ExternalDispenseScreen: 'documents/prescriptions/:id/dispense',
+          LabResultDetailScreen: 'documents/results/:id',
+          MedicalCertificateDetailScreen: 'documents/certificates/:id',
         },
       },
     },

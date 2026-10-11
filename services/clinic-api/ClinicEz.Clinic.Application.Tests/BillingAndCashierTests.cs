@@ -38,7 +38,13 @@ public class BillingAndCashierTests
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
 
-        var handler = new CreateInvoiceCommandHandler(invoiceRepo, unitOfWork, _clinicContext);
+        var handler = new CreateInvoiceCommandHandler(
+            invoiceRepo,
+            TestDbHelper.CreateRepository<ClinicPatient>(db, sieve),
+            TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve),
+            unitOfWork,
+            _clinicContext,
+            Substitute.For<ClinicEz.Clinic.Application.Common.Interfaces.IBillingRequestPublisher>());
 
         var command = new CreateInvoiceCommand(
             PatientId: Guid.NewGuid(),
@@ -159,7 +165,17 @@ public class BillingAndCashierTests
         var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
         var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
 
-        var handler = new CreateClinicLabOrderCommandHandler(orderRepo, patientRepo, unitOfWork, _clinicContext);
+        var handler = new CreateClinicLabOrderCommandHandler(
+            orderRepo,
+            patientRepo,
+            TestDbHelper.CreateRepository<StaffMember>(db, sieve),
+            unitOfWork,
+            _clinicContext,
+            Substitute.For<ClinicEz.Clinic.Application.Common.Interfaces.IClinicIdentityProvider>(),
+            Substitute.For<ClinicEz.Clinic.Application.Common.Interfaces.ILabRequisitionPublisher>(),
+            Phase3TestKit.Grants(db),
+            Phase3TestKit.Claims(),
+            Phase3TestKit.Documents(db));
         var command = new CreateClinicLabOrderCommand(
             PatientId: Guid.NewGuid(),
             PatientName: "Pedro Penduko",

@@ -5,6 +5,7 @@ using ClinicEz.Clinic.Api.Authorization;
 using ClinicEz.Clinic.Application;
 using ClinicEz.Clinic.Infrastructure;
 using ClinicEz.Clinic.Infrastructure.Auth;
+using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Middlewares;
 using Hangfire;
@@ -15,6 +16,8 @@ var builder = WebApplication.CreateBuilder(args);
 var env = builder.Environment;
 builder.Configuration.AddJsonFile("appsettings.json", false, true);
 builder.Configuration.AddJsonFile($"appsettings.{env.EnvironmentName}.json", true, true);
+// CreateBuilder put the environment variables before the files added here, so the files would override them; re-add them last.
+builder.Configuration.AddEnvironmentVariables();
 builder.Configuration.AddUserSecrets(typeof(Program).Assembly, true);
 
 // 1. Add services from our other layers
@@ -70,6 +73,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseInternalServiceGuard(); // internal-key principal is default-denied except on permission-guarded endpoints
 app.UseMiddleware<ClinicScopeMiddleware>();
+app.UseReadOnlyGrace(); // expired subscription: read-only in the grace window, blocked after it (staff sessions only)
 app.UseMiddleware<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyMiddleware>();
 app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [new HangfireDashboardAuthFilter(app.Configuration)] }); // Basic Auth; denied when no password is configured
 

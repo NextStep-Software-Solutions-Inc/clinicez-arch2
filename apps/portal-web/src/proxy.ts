@@ -9,6 +9,9 @@ const isProtectedRoute = createRouteMatcher([
     '/admin(.*)'
 ]);
 
+// Anonymous pages (external labs / pharmacies upload through a link): no tenant resolution, no sign-in.
+const isPublicRoute = createRouteMatcher(['/upload(.*)']);
+
 // Generic reserved labels; service subdomains (clinic, lab, ...) are added from configuration
 // (NEXT_PUBLIC_SERVICE_SUBDOMAINS) so they are never treated as tenant slugs.
 const RESERVED_SUBDOMAINS = new Set([
@@ -50,6 +53,10 @@ async function checkSlugExists(slug: string, apiBaseUrl: string): Promise<boolea
 }
 
 export default clerkMiddleware(async (auth, req) => {
+    if (isPublicRoute(req)) {
+        return NextResponse.next();
+    }
+
     const hostname = (req.headers.get('host') || '').toLowerCase();
     const url = req.nextUrl.clone();
     const pathname = url.pathname;

@@ -1,6 +1,8 @@
 using ClinicEz.Shared.Exceptions;
 using MediatR;
+using ClinicEz.Patient.Application.Features.Sharing;
 using ClinicEz.Patient.Domain.Entities;
+using ClinicEz.Patient.Domain.Enums;
 using ClinicEz.Patient.Domain.Interfaces;
 
 namespace ClinicEz.Patient.Application.Features.BookingDrafts.Commands.CreateBookingDraft;
@@ -33,6 +35,7 @@ public sealed class CreateBookingDraftCommandHandler : IRequestHandler<CreateBoo
             Reason = request.Reason,
             Notes = request.Notes,
             ShareFieldsJson = request.ShareFieldsJson,
+            ShareSections = ParseSections(request.ShareSections),
             AttachedFileIdsJson = request.AttachedFileIdsJson,
         };
 
@@ -40,4 +43,7 @@ public sealed class CreateBookingDraftCommandHandler : IRequestHandler<CreateBoo
         await _uow.SaveChangesAsync(cancellationToken);
         return draft.Id;
     }
+
+    private static AccessScopes ParseSections(IReadOnlyList<string>? sections) =>
+        sections is { Count: > 0 } && SharingScopeMap.TryParse(sections, out var scopes) ? (AccessScopes)(int)scopes : AccessScopes.None;
 }

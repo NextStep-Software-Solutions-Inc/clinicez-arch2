@@ -1,11 +1,15 @@
 using Clerk.BackendAPI;
 using FluentValidation;
-using ClinicEz.Portal.Domain.Interfaces;
+using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Portal.Application.Features.Tenants.Commands.CreateTenant;
 
 namespace ClinicEz.Portal.Application.Features.Tenants.Commands.RegisterTenant;
 
@@ -33,40 +37,30 @@ public class RegisterTenantCommandValidator : AbstractValidator<RegisterTenantCo
     }
 }
 
-public class RegisterTenantCommandHandler : IRequestHandler<RegisterTenantCommand, string>
+public class RegisterTenantCommandHandler(
+    ClerkBackendApi clerkApiClient,
+    IApplicationDbContext context,
+    ISubscriptionService subscriptions,
+    IClerkMetadataSync clerkMetadata,
+    TimeProvider timeProvider) : IRequestHandler<RegisterTenantCommand, string>
 {
-    private readonly ClerkBackendApi _clerkApiClient;
-    private readonly IUnitOfWork _unitOfWork;
-
-    public RegisterTenantCommandHandler(ClerkBackendApi clerkApiClient, IUnitOfWork unitOfWork)
-    {
-        _clerkApiClient = clerkApiClient;
-        _unitOfWork = unitOfWork;
-    }
-
     public async Task<string> Handle(RegisterTenantCommand request, CancellationToken cancellationToken)
     {
         // Pre-check: Ensure slug is not already taken
-        var existingSlug = await _unitOfWork.TenantRepository.FindAsync(
-            t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower(), 
-            cancellationToken);
-
-        if (existingSlug != null)
+        var slug = request.TenantSlug.ToLowerInvariant();
+        if (await context.Tenants.AnyAsync(t => t.TenantSlug.ToLower() == slug, cancellationToken))
         {
             throw new ValidationException("Workplace URL slug is already taken. Please choose another.");
         }
 
         // Pre-check: Ensure email is not already registered in DB
-        var existingEmail = await _unitOfWork.TenantRepository.FindAsync(
-            t => t.Email.ToLower() == request.Email.ToLower(), 
-            cancellationToken);
-
-        if (existingEmail != null)
+        var email = request.Email.ToLower();
+        if (await context.Tenants.AnyAsync(t => t.Email.ToLower() == email, cancellationToken))
         {
             throw new ValidationException("An account with this email address already exists.");
         }
 
-        // 1. Create User in Clerk
+        // 1. Create User in Clerk. A brand-new account owns nothing yet, so the one-workspace rule cannot be hit here.
         var req = new Clerk.BackendAPI.Models.Operations.CreateUserRequestBody
         {
             EmailAddress = new List<string> { request.Email },
@@ -74,27 +68,31 @@ public class RegisterTenantCommandHandler : IRequestHandler<RegisterTenantComman
             FirstName = request.FirstName,
             LastName = request.LastName
         };
-        var clerkUserRes = await _clerkApiClient.Users.CreateAsync(req);
+        var clerkUserRes = await clerkApiClient.Users.CreateAsync(req);
         string clerkUserId = clerkUserRes?.User?.Id ?? throw new Exception("Failed to create Clerk User.");
 
-        // 2. Provision Tenant in Database
-        var newTenant = new ClinicEz.Portal.Domain.Entities.Tenant
+        // 2. Provision Tenant (and its Owner membership) in Database
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var newTenant = new Tenant
         {
+            Id = Guid.NewGuid(),
             OwnerId = clerkUserId,
             Name = request.Name,
-            TenantSlug = request.TenantSlug.ToLowerInvariant(),
+            TenantSlug = slug,
             TenantType = string.IsNullOrWhiteSpace(request.TenantType) ? "Workplace" : request.TenantType,
             FirstName = request.FirstName,
             LastName = request.LastName,
             Email = request.Email,
-            SubscriptionStatus = "TRIALING",
-            SubscriptionPlanId = "starter",
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = now,
             CreatedBy = clerkUserId
         };
 
-        await _unitOfWork.TenantRepository.AddAsync(newTenant);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        context.Tenants.Add(newTenant);
+        context.WorkspaceMembers.Add(OwnerMembership.For(newTenant, now));
+        await context.SaveChangesAsync(cancellationToken);
+
+        await subscriptions.StartTrialAsync(newTenant.Id, cancellationToken);
+        await clerkMetadata.SyncAsync(clerkUserId, cancellationToken);
 
         return clerkUserId;
     }

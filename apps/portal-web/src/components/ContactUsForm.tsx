@@ -1,6 +1,6 @@
 "use client"
 
-import { sendContactUsMessage } from "@/actions/contact-us.action"
+import { sendContactUsMessage } from "@/services/contact.service"
 import ActionButton from "@/components/ActionButton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form"

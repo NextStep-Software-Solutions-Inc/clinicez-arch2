@@ -13,7 +13,8 @@ public sealed record PatientSummaryDto(
     string? EducationLevel,
     string? Mobile, string? AltPhone, string? Email, string? MessengerHandle,
     string? AvatarUrl,
-    bool ConsentToShareInfo);
+    bool ConsentToShareInfo,
+    string ClinicEzId);
 
 // ── Contact sub-entities ──────────────────────────────────────────────────
 

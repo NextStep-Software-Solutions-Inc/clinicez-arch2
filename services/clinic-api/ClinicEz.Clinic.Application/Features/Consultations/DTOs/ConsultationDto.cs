@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 
 namespace ClinicEz.Clinic.Application.Features.Consultations.DTOs;
 
@@ -50,4 +51,5 @@ public sealed record ConsultationEncounterDto(
     string? PhilHealthOtherComplaint = null,
     string? PhilHealthPainSite = null,
     string? PhilHealthCaseNo = null,
-    string? PhilHealthSoapTransNo = null);
+    string? PhilHealthSoapTransNo = null,
+    RxPharmacyStatusDto? RxStatus = null);

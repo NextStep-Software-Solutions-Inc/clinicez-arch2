@@ -75,7 +75,6 @@ public sealed record ClinicDetailDto(
     string? Address,
     bool IsPublic,
     bool SupportsAppointments,
-    string BaseUrl,
     string? LogoUrl,
     string? CoverImageUrl,
     string? PrivacyPolicyUrl,

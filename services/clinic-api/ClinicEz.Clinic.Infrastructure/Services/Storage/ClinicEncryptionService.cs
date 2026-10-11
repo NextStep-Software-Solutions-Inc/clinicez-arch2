@@ -6,21 +6,16 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
-using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Clinic.Infrastructure.Services.Storage;
 
 public sealed class ClinicEncryptionService : IClinicEncryptionService
 {
-    private static readonly byte[] FallbackMasterSecret = Encoding.UTF8.GetBytes("ClinicEz-Clinic-Records-MasterSecret-Key-2026-Encrypted#@!");
-    private readonly byte[] _masterSecret;
+    private readonly ClinicEncryptionKeyRing _keyRing;
 
-    public ClinicEncryptionService(IConfiguration? configuration = null)
+    public ClinicEncryptionService(ClinicEncryptionKeyRing keyRing)
     {
-        var configuredSecret = configuration?["ClinicEncryption:MasterSecret"];
-        _masterSecret = !string.IsNullOrWhiteSpace(configuredSecret)
-            ? Encoding.UTF8.GetBytes(configuredSecret)
-            : FallbackMasterSecret;
+        _keyRing = keyRing ?? throw new ArgumentNullException(nameof(keyRing));
     }
 
     public async Task<ClinicEncryptedPayload> EncryptAsync(
@@ -62,7 +57,8 @@ public sealed class ClinicEncryptionService : IClinicEncryptionService
         var encryptedHash = Convert.ToHexString(SHA256.HashData(ciphertext)).ToLowerInvariant();
 
         // 5. Derive Clinic Master Key (CMK) and wrap the DEK
-        var cmk = DeriveClinicMasterKey(tenantId, clinicId);
+        var (keyId, masterSecret) = _keyRing.Current;
+        var cmk = DeriveClinicMasterKey(masterSecret, tenantId, clinicId);
         var wrapIv = RandomNumberGenerator.GetBytes(12);
         var wrappedDekCiphertext = new byte[dek.Length];
         var wrapTag = new byte[16];
@@ -79,6 +75,7 @@ public sealed class ClinicEncryptionService : IClinicEncryptionService
         var wrappedKeyPayload = new WrappedKeyModel
         {
             Alg = "AES-256-GCM",
+            Kid = keyId,
             Iv = Convert.ToBase64String(wrapIv),
             Tag = Convert.ToBase64String(wrapTag),
             CipherText = Convert.ToBase64String(wrappedDekCiphertext)
@@ -159,37 +156,44 @@ public sealed class ClinicEncryptionService : IClinicEncryptionService
         var wrapTag = Convert.FromBase64String(model.Tag);
         var wrappedDekCiphertext = Convert.FromBase64String(model.CipherText);
 
-        var cmk = DeriveClinicMasterKey(tenantId, clinicId);
-        var dek = new byte[wrappedDekCiphertext.Length];
+        CryptographicException? failure = null;
+        foreach (var masterSecret in _keyRing.CandidatesFor(model.Kid))
+        {
+            var cmk = DeriveClinicMasterKey(masterSecret, tenantId, clinicId);
+            var dek = new byte[wrappedDekCiphertext.Length];
 
-        try
-        {
-            using var aesGcmCmk = new AesGcm(cmk, 16);
-            aesGcmCmk.Decrypt(wrapIv, wrappedDekCiphertext, wrapTag, dek);
-            return dek;
+            try
+            {
+                using var aesGcmCmk = new AesGcm(cmk, 16);
+                aesGcmCmk.Decrypt(wrapIv, wrappedDekCiphertext, wrapTag, dek);
+                return dek;
+            }
+            catch (CryptographicException ex)
+            {
+                failure = ex;
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(cmk);
+            }
         }
-        catch (CryptographicException ex)
-        {
-            throw new CryptographicException("Failed to decrypt DEK. Ensure tenant/clinic key matches.", ex);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(cmk);
-        }
+
+        throw new CryptographicException("Failed to decrypt DEK. Ensure tenant/clinic key matches and the secret that wrapped it is still configured (ClinicEncryption:MasterSecret or ClinicEncryption:PreviousMasterSecrets).", failure);
     }
 
-    private byte[] DeriveClinicMasterKey(string tenantId, Guid clinicId)
+    private static byte[] DeriveClinicMasterKey(byte[] masterSecret, string tenantId, Guid clinicId)
     {
         var salt = Encoding.UTF8.GetBytes(tenantId.Trim().ToLowerInvariant());
         var info = Encoding.UTF8.GetBytes($"{clinicId:N}:ClinicEz:ClinicEncryption:v1");
 
         // HKDF-SHA256 (RFC 5869)
-        return HKDF.DeriveKey(HashAlgorithmName.SHA256, _masterSecret, 32, salt, info);
+        return HKDF.DeriveKey(HashAlgorithmName.SHA256, masterSecret, 32, salt, info);
     }
 
     private sealed class WrappedKeyModel
     {
         public string Alg { get; set; } = "AES-256-GCM";
+        public string? Kid { get; set; }
         public string Iv { get; set; } = string.Empty;
         public string Tag { get; set; } = string.Empty;
         public string CipherText { get; set; } = string.Empty;

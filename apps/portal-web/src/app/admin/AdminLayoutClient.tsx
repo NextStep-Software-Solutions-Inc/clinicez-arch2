@@ -16,7 +16,8 @@ import {
   IconLock,
   IconSun,
   IconMoon,
-  IconMenu2
+  IconMenu2,
+  IconAdjustments
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 
@@ -187,6 +188,12 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       href: "/admin/users",
       icon: IconUsers,
       permission: "manage:admins"
+    },
+    {
+      title: "Platform Settings",
+      href: "/admin/settings",
+      icon: IconAdjustments,
+      permission: "view:tenants"
     }
   ].filter(item => hasPermission(item.permission));
 

@@ -1,34 +1,30 @@
 using ClinicEz.Shared.Exceptions;
 using MediatR;
 using ClinicEz.Patient.Application.Common.DTOs;
-using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Interfaces;
 
 namespace ClinicEz.Patient.Application.Features.DeviceSessions.Commands.RegisterDeviceSession;
 
+/// <summary>
+/// Registers (or refreshes) the calling device. Sessions are per device: registering a
+/// second device never revokes the first, and re-registering a known device updates its
+/// existing session instead of creating a new one.
+/// </summary>
 public sealed class RegisterDeviceSessionCommandHandler
     : IRequestHandler<RegisterDeviceSessionCommand, RegisterDeviceSessionResponse>
 {
     private readonly IPatientRepository _patientRepository;
     private readonly IDeviceSessionRepository _deviceSessionRepository;
-    private readonly ISessionService _sessionService;
-    private readonly ISyncNotificationService _notificationService;
     private readonly IUnitOfWork _unitOfWork;
-
-    private static readonly TimeSpan SessionTtl = TimeSpan.FromDays(30);
 
     public RegisterDeviceSessionCommandHandler(
         IPatientRepository patientRepository,
         IDeviceSessionRepository deviceSessionRepository,
-        ISessionService sessionService,
-        ISyncNotificationService notificationService,
         IUnitOfWork unitOfWork)
     {
         _patientRepository = patientRepository;
         _deviceSessionRepository = deviceSessionRepository;
-        _sessionService = sessionService;
-        _notificationService = notificationService;
         _unitOfWork = unitOfWork;
     }
 
@@ -39,43 +35,31 @@ public sealed class RegisterDeviceSessionCommandHandler
         _ = await _patientRepository.GetByIdAsync(request.PatientId, cancellationToken)
             ?? throw new NotFoundException($"Patient '{request.PatientId}' was not found.");
 
-        // Notify old device before revoking so it can cleanly handle forced logout
-        var activeSession = await _deviceSessionRepository.GetActiveByPatientIdAsync(request.PatientId, cancellationToken);
-        if (activeSession is not null && activeSession.DeviceId != request.DeviceId)
+        var now = DateTime.UtcNow;
+        var session = await _deviceSessionRepository.GetActiveByDeviceAsync(
+            request.PatientId, request.DeviceId, cancellationToken);
+
+        if (session is null)
         {
-            await _notificationService.NotifySessionRevokedAsync(
-                request.PatientId,
-                "A new device has signed in to your account. This session has been revoked.",
-                cancellationToken);
+            session = new DeviceSession
+            {
+                PatientId = request.PatientId,
+                DeviceId = request.DeviceId,
+            };
+            await _deviceSessionRepository.AddAsync(session, cancellationToken);
         }
 
-        // Revoke all existing sessions (single-device enforcement)
-        await _deviceSessionRepository.RevokeAllForPatientAsync(
-            request.PatientId, request.ClerkSessionId, cancellationToken);
+        session.DeviceLabel = request.DeviceLabel;
+        session.ClerkSessionId = request.ClerkSessionId;
+        session.PushToken = request.PushToken;
+        session.LastActiveAt = now;
 
-        var redisKey = $"patientapp:session:{request.PatientId}";
-
-        var session = new DeviceSession
-        {
-            PatientId = request.PatientId,
-            DeviceId = request.DeviceId,
-            DeviceLabel = request.DeviceLabel,
-            ClerkSessionId = request.ClerkSessionId,
-            RedisKey = redisKey,
-            PushToken = request.PushToken,
-            LastActiveAt = DateTime.UtcNow,
-            IsRevoked = false,
-        };
-
-        await _deviceSessionRepository.AddAsync(session, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Register in Redis for fast validation on every subsequent request
-        await _sessionService.SetSessionAsync(
-            request.PatientId, request.DeviceId, request.DeviceLabel,
-            request.ClerkSessionId, SessionTtl, cancellationToken);
-
-        return new RegisterDeviceSessionResponse(session.Id, session.DeviceId, session.DeviceLabel, DateTime.UtcNow);
+        return new RegisterDeviceSessionResponse(
+            session.Id,
+            session.DeviceId,
+            session.DeviceLabel,
+            session.CreatedAt);
     }
 }
-

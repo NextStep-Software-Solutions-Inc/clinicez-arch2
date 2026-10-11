@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 using ClinicEz.Shared.Interfaces;
-using MassTransit;
+using ClinicEz.Shared.Interop.Persistence;
 using Microsoft.EntityFrameworkCore;
 using ClinicEz.Patient.Domain.Common;
 using ClinicEz.Patient.Domain.Entities;
@@ -9,7 +9,7 @@ namespace ClinicEz.Patient.Infrastructure.Persistence;
 
 using Patient = ClinicEz.Patient.Domain.Entities.Patient;
 
-public sealed class ApplicationDbContext : DbContext
+public sealed class ApplicationDbContext : DbContext, IInteropDbContext
 {
     private readonly ICurrentUserService? _currentUserService;
 
@@ -61,6 +61,19 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<PatientPhysicalExamProfile> PatientPhysicalExamProfiles => Set<PatientPhysicalExamProfile>();
     public DbSet<PatientNcdQuestionnaire> PatientNcdQuestionnaires => Set<PatientNcdQuestionnaire>();
 
+    // ── Documents issued to the patient by facilities ───────────────────────
+    public DbSet<LabRequestSlip> LabRequestSlips => Set<LabRequestSlip>();
+    public DbSet<PrescriptionDocument> PrescriptionDocuments => Set<PrescriptionDocument>();
+    public DbSet<LabResultReport> LabResultReports => Set<LabResultReport>();
+    public DbSet<MedicalCertificate> MedicalCertificates => Set<MedicalCertificate>();
+
+    // ── Patient-controlled sharing ──────────────────────────────────────────
+    public DbSet<PatientAccessGrant> PatientAccessGrants => Set<PatientAccessGrant>();
+    public DbSet<PatientAccessLog> PatientAccessLogs => Set<PatientAccessLog>();
+    public DbSet<ShareTokenUse> ShareTokenUses => Set<ShareTokenUse>();
+    public DbSet<ShareCode> ShareCodes => Set<ShareCode>();
+    public DbSet<ShareCodeFailure> ShareCodeFailures => Set<ShareCodeFailure>();
+
     // ── Files & Appointments ────────────────────────────────────────────────
     public DbSet<FileFolder> FileFolders => Set<FileFolder>();
     public DbSet<FileRecord> FileRecords => Set<FileRecord>();
@@ -85,6 +98,15 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
+
+    // ── Interop hub outbox / inbox ──────────────────────────────────────────
+    public DbSet<InteropOutboxMessage> InteropOutbox => Set<InteropOutboxMessage>();
+    public DbSet<InteropInboxMessage> InteropInbox => Set<InteropInboxMessage>();
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<Enum>().HaveConversion<string>().HaveMaxLength(64);
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -116,9 +138,7 @@ public sealed class ApplicationDbContext : DbContext
             modelBuilder.Entity(entityType.ClrType).HasQueryFilter(filter);
         }
 
-        modelBuilder.AddInboxStateEntity();
-        modelBuilder.AddOutboxStateEntity();
-        modelBuilder.AddOutboxMessageEntity();
+        modelBuilder.ApplyInteropModel();
 
         base.OnModelCreating(modelBuilder);
     }
@@ -135,6 +155,8 @@ public sealed class ApplicationDbContext : DbContext
                 case EntityState.Added:
                     entry.Entity.CreatedAt = utcNow;
                     entry.Entity.CreatedBy = actor;
+                    if (entry.Entity is Patient { ClinicEzId.Length: 0 } patient)
+                        patient.ClinicEzId = ClinicEzIdGenerator.Generate();
                     break;
                 case EntityState.Modified:
                     entry.Entity.UpdatedAt = utcNow;

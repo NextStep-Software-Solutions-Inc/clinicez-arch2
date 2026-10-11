@@ -1,45 +1,75 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Text.Json;
 using ClinicEz.Laboratory.Application.Common.Interfaces;
+using ClinicEz.Laboratory.Application.Interop;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
-using MassTransit;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Laboratory.Infrastructure.Services;
 
 public class DiagnosticReportPublisher : IDiagnosticReportPublisher
 {
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IInteropPublisher _publisher;
     private readonly ILogger<DiagnosticReportPublisher> _logger;
 
-    public DiagnosticReportPublisher(IPublishEndpoint publishEndpoint, ILogger<DiagnosticReportPublisher> logger)
+    public DiagnosticReportPublisher(IInteropPublisher publisher, ILogger<DiagnosticReportPublisher> logger)
     {
-        _publishEndpoint = publishEndpoint;
+        _publisher = publisher;
         _logger = logger;
     }
 
-    public async Task PublishReportFinalizedAsync(DiagnosticReportFinalizedEvent reportEvent, CancellationToken cancellationToken = default)
+    public void EnqueueReportFinalized(DiagnosticReportFinalizedEvent reportEvent)
     {
-        try
-        {
-            _logger.LogInformation(
-                "[DiagnosticReportPublisher] Broadcasting DiagnosticReportFinalizedEvent for Accession {AccessionNumber} (Requisition {RequisitionId}, Pathologist {PathologistName}) to RabbitMQ",
-                reportEvent.AccessionNumber, reportEvent.RequisitionId, reportEvent.PathologistName);
+        _logger.LogInformation(
+            "[DiagnosticReportPublisher] Queueing {Type} for Accession {AccessionNumber} (Requisition {RequisitionId}, Pathologist {PathologistName}) to the ordering clinic",
+            InteropTypes.LabResultFinalized, reportEvent.AccessionNumber, reportEvent.RequisitionId, reportEvent.PathologistName);
 
-            await _publishEndpoint.Publish(reportEvent, cancellationToken);
+        var from = LabInteropParties.Laboratory(reportEvent.LaboratoryTenantId, reportEvent.LaboratoryFacilityId);
 
-            _logger.LogInformation(
-                "[DiagnosticReportPublisher] Successfully published report finalized event for Accession {AccessionNumber}",
-                reportEvent.AccessionNumber);
-        }
-        catch (Exception ex)
+        _publisher.Enqueue(
+            InteropTypes.LabResultFinalized,
+            from,
+            LabInteropParties.OrderingClinic(reportEvent.OrderingTenantId, reportEvent.OrderingFacilityId),
+            reportEvent.RequisitionId,
+            reportEvent);
+
+        EnqueuePatientDocument(reportEvent, from);
+    }
+
+    /// <summary>The patient keeps a copy of every result issued to them; an unknown patient has no mailbox, so nothing is sent.</summary>
+    private void EnqueuePatientDocument(DiagnosticReportFinalizedEvent reportEvent, Party from)
+    {
+        if (reportEvent.PatientId is not { } patientId || patientId == Guid.Empty)
         {
-            _logger.LogError(
-                ex,
-                "[DiagnosticReportPublisher] Failed to publish DiagnosticReportFinalizedEvent for Accession {AccessionNumber}. Event will remain in local database.",
-                reportEvent.AccessionNumber);
-            // Non-blocking in offline / disconnected mode
+            _logger.LogDebug(
+                "[DiagnosticReportPublisher] Report {ReportId} has no ClinicEZ patient; no {Type} queued.",
+                reportEvent.ReportId, InteropTypes.PatientDocumentIssued);
+            return;
         }
+
+        var document = new PatientDocumentIssuedPayload
+        {
+            DocumentId = reportEvent.ReportId,
+            Kind = PatientDocumentKind.LabResult,
+            PatientId = patientId,
+            IssuerTenantId = reportEvent.LaboratoryTenantId,
+            IssuerFacilityId = reportEvent.LaboratoryFacilityId,
+            IssuerFacilityType = FacilityType.Laboratory,
+            IssuerName = reportEvent.LaboratoryName,
+            Title = $"Laboratory result {reportEvent.AccessionNumber}",
+            IssuedAtUtc = reportEvent.ReleasedAt,
+            Status = "Final",
+            Source = ResultSource.ClinicEzLab,
+            Verification = VerificationState.Verified,
+            Body = JsonSerializer.SerializeToElement(reportEvent, InteropJson.Options)
+        };
+
+        _publisher.Enqueue(
+            InteropTypes.PatientDocumentIssued,
+            from,
+            Party.ForPatient(patientId.ToString()),
+            reportEvent.RequisitionId,
+            document);
     }
 }

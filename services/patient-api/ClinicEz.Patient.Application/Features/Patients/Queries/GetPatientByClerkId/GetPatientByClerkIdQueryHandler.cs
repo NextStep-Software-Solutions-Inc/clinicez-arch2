@@ -23,6 +23,7 @@ public sealed class GetPatientByClerkIdQueryHandler : IRequestHandler<GetPatient
             patient.EducationLevel?.ToString(),
             patient.Mobile, patient.AltPhone, patient.Email, patient.MessengerHandle,
             patient.AvatarUrl,
-            patient.ConsentToShareInfo);
+            patient.ConsentToShareInfo,
+            patient.ClinicEzId);
     }
 }

@@ -9,6 +9,12 @@ export interface BillingPlan {
   features: string[]
   highlighted: boolean
   requiresCheckout: boolean
+  /** Ordering of the plan ladder; a higher rank is a higher tier. */
+  rank: number
+  /** Limit key (`limit.*`) to ceiling; a negative value means unlimited. */
+  limits: Record<string, number>
+  /** Keys (`feature.*`) of the features the plan includes. */
+  enabledFeatures: string[]
 }
 
 export interface PaymentReceipt {
@@ -107,8 +113,8 @@ export const billingService = {
     const data = res.data
     return {
       ...data,
-      name: data.name || (data as any).clinicName || "",
-      clinicName: data.name || (data as any).clinicName || "",
+      name: data.name || data.clinicName || "",
+      clinicName: data.name || data.clinicName || "",
     }
   },
   cancelSubscription: async (tenantId: string): Promise<boolean> => {

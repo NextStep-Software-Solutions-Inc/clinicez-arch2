@@ -2,32 +2,30 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ClinicEz.Shared.Security;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 
 namespace ClinicEz.Shared.Licensing;
 
+/// <summary>
+/// Signs facility licenses with the authority's ECDSA P-256 private key. Only the portal holds that key. There is no
+/// built-in key: see <see cref="LicenseKeyMaterial"/> for how it is configured and the Development behaviour.
+/// </summary>
 public class FacilityLicenseSigner : IFacilityLicenseSigner
 {
-    public const string DefaultAuthorityPrivateKeyPem = """
------BEGIN EC PRIVATE KEY-----
-MHcCAQEEIPNxFZsufhhG5VYYBM/uyvekBtWQ35AofCq5hvK/1WSHoAoGCCqGSM49
-AwEHoUQDQgAElcH86gKVZB50A39lXdF4ic1xIUmYKWkfi0XuuzOnWSELSo2NW474
-YcOHecbnhfLn+hHQeQmfFyGoOqkXUSbudQ==
------END EC PRIVATE KEY-----
-""";
-
     private readonly string _privateKeyPem;
 
-    public FacilityLicenseSigner(IConfiguration? configuration = null)
+    public FacilityLicenseSigner(IConfiguration? configuration = null, IHostEnvironment? environment = null)
     {
-        _privateKeyPem = configuration?["FacilityLicense:PrivateKeyPem"]
-            ?? Environment.GetEnvironmentVariable("FACILITY_LICENSE_PRIVATE_KEY")
-            ?? DefaultAuthorityPrivateKeyPem;
+        _privateKeyPem = LicenseKeyMaterial.ResolvePrivateKey(configuration, environment);
+        using var probe = PemKey.ImportEcdsa(_privateKeyPem, LicenseKeyMaterial.PrivateKeySetting);
     }
 
     public FacilityLicenseSigner(string privateKeyPem)
     {
-        _privateKeyPem = privateKeyPem;
+        _privateKeyPem = PemKey.Normalize(privateKeyPem, "private key")
+            ?? throw new ArgumentException("A private key is required.", nameof(privateKeyPem));
     }
 
     public string SignLicense(FacilityLicensePayload payload)

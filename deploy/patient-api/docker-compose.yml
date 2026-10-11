@@ -2,8 +2,8 @@
 # Deploy compose for Patient API on Server (Dev environment).
 #
 # - PostgreSQL: external (managed PostgreSQL or internal postgres)
-# - Redis:      external (managed Redis or internal redis)
 # - API:        this file manages only the patient-api container
+# (patient-api does not use Redis or any other cache service.)
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
 # No host ports exposed; routed via npm-default (NPM) and connected to data-network.
@@ -25,8 +25,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
-      - ConnectionStrings__Redis=${REDIS_CONNECTION_STRING}
-      - Clerk__Authority=${CLERK_AUTHORITY:-https://amazing-mosquito-75.clerk.accounts.dev}
+      - Clerk__Authority=${CLERK_AUTHORITY:?CLERK_AUTHORITY must be set}
       - Clerk__Audience=${CLERK_AUDIENCE:-}
       - Clerk__WebhookSecret=${CLERK_WEBHOOK_SECRET}
       - R2__AccountId=${R2_ACCOUNT_ID}
@@ -34,16 +33,34 @@ services:
       - R2__AccessKeyId=${R2_ACCESS_KEY_ID}
       - R2__SecretAccessKey=${R2_SECRET_ACCESS_KEY}
       - R2__PublicUrl=${R2_PUBLIC_URL}
+      # Hangfire dashboard password: no default; empty means the dashboard is denied.
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Firebase__ServiceAccountJson=${FIREBASE_SERVICE_ACCOUNT_JSON}
-      - RabbitMq__Host=${RABBITMQ_HOST:-rabbitmq}
-      - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbit_admin_node}
-      - RabbitMq__Password=${RABBITMQ_PASSWORD}
+      # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
+      - Messaging__Transport=Hub
+      - Messaging__Service=patient
+      - Messaging__HubUrl=${HUB_URL:?HUB_URL must be set}
+      - Messaging__ClientId=${PATIENT_HUB_CLIENT_ID:?PATIENT_HUB_CLIENT_ID must be set}
+      - Messaging__ClientSecret=${PATIENT_HUB_CLIENT_SECRET:?PATIENT_HUB_CLIENT_SECRET must be set}
+      # Envelope signing (ECDSA P-256 private key, PEM or base64 of PEM; scripts/generate-signing-key.sh). Its public half must be
+      # the key registered at the hub for this client. One key pair per client; never shared.
+      - Messaging__SigningKey=${PATIENT_HUB_SIGNING_KEY:?PATIENT_HUB_SIGNING_KEY must be set}
+
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
+      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
+      - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
+      # Payload encryption key (base64 of 32 random bytes). Required outside Development (encryption is on there and there is no
+      # built-in fallback key); ignored in Development.
+      - Encryption__Base64Key=${PATIENT_ENCRYPTION_KEY:?PATIENT_ENCRYPTION_KEY must be set (base64 of 32 random bytes)}
+      # Signs the share tokens patients hand to facilities (at least 32 characters; the service refuses to start without it).
+      - Sharing__SigningKey=${SHARING_SIGNING_KEY:?SHARING_SIGNING_KEY must be set (at least 32 characters)}
     restart: unless-stopped
 
 networks:
   data-network:
     external: true
+    name: ${DATA_NETWORK:-data-network}
   npm-default:
     external: true
+    name: ${NPM_NETWORK:-npm-default}

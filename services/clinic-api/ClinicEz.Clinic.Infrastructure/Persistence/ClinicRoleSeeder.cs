@@ -63,6 +63,7 @@ public static class ClinicRoleSeeder
                     ClinicPermissions.ProceduresWrite,
                     ClinicPermissions.LabOrdersRead,
                     ClinicPermissions.LabOrdersWrite,
+                    ClinicPermissions.LabResultsReview,
                     ClinicPermissions.ServicesRead
                 },
                 CreatedAt = DateTime.UtcNow,

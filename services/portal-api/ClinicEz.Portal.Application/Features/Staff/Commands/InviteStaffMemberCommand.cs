@@ -1,3 +1,5 @@
+using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Features.Staff.Queries;
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Application.Interfaces;
@@ -24,6 +26,7 @@ public class InviteStaffMemberCommandValidator : AbstractValidator<InviteStaffMe
 {
     private static readonly string[] AllowedRoles = [
         "Admin", 
+        "Billing",
         "Biller", 
         "Viewer",
         "Facility Administrator", 
@@ -46,7 +49,9 @@ public class InviteStaffMemberCommandValidator : AbstractValidator<InviteStaffMe
 
 public class InviteStaffMemberCommandHandler(
     IApplicationDbContext context,
-    ITenantFeatureGuard tenantFeatureGuard
+    IEntitlementGuard entitlementGuard,
+    IStaffInvitationNotifier invitationNotifier,
+    TimeProvider timeProvider
 ) : IRequestHandler<InviteStaffMemberCommand, StaffMemberDto>
 {
     public async Task<StaffMemberDto> Handle(InviteStaffMemberCommand request, CancellationToken cancellationToken)
@@ -55,8 +60,8 @@ public class InviteStaffMemberCommandHandler(
             .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower() || t.Id.ToString() == request.TenantSlug, cancellationToken)
             ?? throw new KeyNotFoundException($"Workspace '{request.TenantSlug}' not found.");
 
-        // Guard plan seat quotas & 14-day trial evaluation window
-        await tenantFeatureGuard.EnsureCanCreateStaffAsync(tenant.Id.ToString(), cancellationToken);
+        // Guard the plan's member limit and the subscription state
+        await entitlementGuard.EnsureCanAddMemberAsync(tenant.Id, cancellationToken);
 
         var emailLower = request.Email.Trim().ToLowerInvariant();
 
@@ -70,10 +75,10 @@ public class InviteStaffMemberCommandHandler(
             throw new InvalidOperationException(
                 $"Invitations are limited to these email domains: {string.Join(", ", InviteDomains.Parse(allowedDomains))}.");
         }
-        var existing = await context.StaffMembers
-            .FirstOrDefaultAsync(s => s.TenantId == tenant.Id && s.Email.ToLower() == emailLower, cancellationToken);
+        var existing = await context.WorkspaceMembers
+            .AnyAsync(m => m.TenantId == tenant.Id && m.Email.ToLower() == emailLower, cancellationToken);
 
-        if (existing != null)
+        if (existing)
         {
             throw new InvalidOperationException($"A team member with email '{request.Email}' already exists or has an active invitation in this workspace.");
         }
@@ -90,41 +95,46 @@ public class InviteStaffMemberCommandHandler(
             facilityName = facility.Name;
         }
 
-        var newMember = new StaffMember
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var newMember = new WorkspaceMember
         {
             Id = Guid.NewGuid(),
             TenantId = tenant.Id,
             Email = emailLower,
             FullName = request.FullName.Trim(),
-            Role = request.Role,
-            Status = "PendingInvitation",
-            FacilityId = request.FacilityId,
+            Role = StaffMemberMapping.WorkspaceRoleFor(request.Role),
+            Status = MemberStatus.Invited,
             InvitationToken = Guid.NewGuid().ToString("N"),
-            InvitationExpiresAt = DateTime.UtcNow.AddDays(7),
-            CreatedAt = DateTime.UtcNow,
+            InvitationExpiresAt = now.AddDays(7),
+            CreatedAt = now,
             CreatedBy = tenant.OwnerId
         };
+        context.WorkspaceMembers.Add(newMember);
 
-        context.StaffMembers.Add(newMember);
+        StaffMember? profile = null;
+        if (StaffMemberMapping.NeedsProfile(request.Role, request.FacilityId))
+        {
+            profile = new StaffMember
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenant.Id,
+                WorkspaceMemberId = newMember.Id,
+                FacilityId = request.FacilityId,
+                Role = request.Role,
+                CreatedAt = now,
+                CreatedBy = tenant.OwnerId
+            };
+            context.StaffMembers.Add(profile);
+        }
 
-        var currentStaffCount = await context.StaffMembers.CountAsync(s => s.TenantId == tenant.Id, cancellationToken);
-        tenant.StaffAccountsCount = currentStaffCount + 1;
+        var currentMemberCount = await context.WorkspaceMembers.CountAsync(m => m.TenantId == tenant.Id, cancellationToken);
+        tenant.StaffAccountsCount = currentMemberCount + 1;
+
+        // The email request commits atomically with the invitation; delivery happens later and is retried.
+        invitationNotifier.RequestInvitation(tenant, newMember, StaffMemberMapping.RoleName(newMember, profile), facilityName);
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return new StaffMemberDto(
-            newMember.Id,
-            newMember.UserId,
-            newMember.Email,
-            newMember.FullName,
-            newMember.Role,
-            newMember.Status,
-            newMember.FacilityId,
-            facilityName,
-            newMember.JoinedAt,
-            newMember.CreatedAt,
-            newMember.InvitationToken,
-            newMember.InvitationExpiresAt
-        );
+        return StaffMemberMapping.ToDto(newMember, profile, facilityName);
     }
 }

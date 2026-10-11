@@ -39,20 +39,23 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
     private readonly IRepository<Appointment> _appointmentRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
-    private readonly IPatientWebhookNotifier _webhookNotifier;
+    private readonly IClinicIdentityProvider _clinicIdentity;
+    private readonly IPatientAppointmentPublisher _appointmentPublisher;
 
     public CheckInPatientCommandHandler(
         IRepository<QueueItem> queueRepository,
         IRepository<Appointment> appointmentRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IPatientWebhookNotifier webhookNotifier)
+        IClinicIdentityProvider clinicIdentity,
+        IPatientAppointmentPublisher appointmentPublisher)
     {
         _queueRepository = queueRepository;
         _appointmentRepository = appointmentRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
-        _webhookNotifier = webhookNotifier;
+        _clinicIdentity = clinicIdentity;
+        _appointmentPublisher = appointmentPublisher;
     }
 
     public async Task<QueueItemDto> Handle(CheckInPatientCommand request, CancellationToken cancellationToken)
@@ -106,39 +109,45 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         };
 
         await _queueRepository.AddAsync(queueItem, cancellationToken);
+
+        // Notify the patient app through the interop outbox, committed together with the check-in. A clinic that has
+        // not been provisioned yet has no identity to announce, so there is nothing to notify.
+        var clinic = await _clinicIdentity.GetAsync(cancellationToken);
+        if (clinic != null)
+        {
+            var apptId = appointment?.Id ?? queueItem.Id;
+            var scheduledAtStr = (appointment?.ScheduledAt ?? DateTime.UtcNow).ToString("O");
+            var pushPayload = new ClinicPushAppointmentsPayload(
+                _clinicContext.ClinicId,
+                request.PatientId,
+                new List<ClinicAppointmentWebhookDto>
+                {
+                    new(
+                        apptId.ToString(),
+                        _clinicContext.ClinicId.ToString(),
+                        clinic.Name,
+                        new ClinicProviderSnapshotDto(
+                            (request.DoctorId ?? Guid.Empty).ToString(),
+                            request.DoctorName ?? appointment?.DoctorName ?? "Attending Physician",
+                            null,
+                            null
+                        ),
+                        appointment?.ServiceType ?? "Consultation",
+                        scheduledAtStr,
+                        appointment?.DurationMinutes ?? 30,
+                        AppointmentStatus.CheckedIn.ToString(),
+                        $"Checked in at {queueItem.CheckInTime:HH:mm} (Queue {queueItem.QueueNumber})",
+                        appointment?.DoctorName ?? "Consultation",
+                        queueItem.ChiefComplaint,
+                        DraftId: appointment?.DraftId
+                    )
+                }
+            );
+
+            await _appointmentPublisher.PublishAppointmentUpdatedAsync(pushPayload, cancellationToken);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // Outbound notification pushing back to patient-api webhook for patient app synchronization
-        var apptId = appointment?.Id ?? queueItem.Id;
-        var scheduledAtStr = (appointment?.ScheduledAt ?? DateTime.UtcNow).ToString("O");
-        var pushPayload = new ClinicPushAppointmentsPayload(
-            _clinicContext.ClinicId,
-            request.PatientId,
-            new List<ClinicAppointmentWebhookDto>
-            {
-                new(
-                    apptId.ToString(),
-                    _clinicContext.ClinicId.ToString(),
-                    "Clinic Operational Facility",
-                    new ClinicProviderSnapshotDto(
-                        (request.DoctorId ?? Guid.Empty).ToString(),
-                        request.DoctorName ?? appointment?.DoctorName ?? "Attending Physician",
-                        null,
-                        null
-                    ),
-                    appointment?.ServiceType ?? "Consultation",
-                    scheduledAtStr,
-                    appointment?.DurationMinutes ?? 30,
-                    AppointmentStatus.CheckedIn.ToString(),
-                    $"Checked in at {queueItem.CheckInTime:HH:mm} (Queue {queueItem.QueueNumber})",
-                    appointment?.DoctorName ?? "Consultation",
-                    queueItem.ChiefComplaint
-                )
-            }
-        );
-
-        // Dispatch webhook in background / async
-        _ = _webhookNotifier.PushAppointmentUpdateAsync(pushPayload, CancellationToken.None);
 
         return new QueueItemDto(
             queueItem.Id,

@@ -1,147 +1,20 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Alert, Modal, ActivityIndicator } from 'react-native';
 import ThemedText from '@ui/ThemedText';
-import { laboratoryService, QcLotItem, QcRunItem, LeveyJenningsChartData, LeveyJenningsPoint } from '../../services/laboratoryService';
-
-const SAMPLE_LOTS: QcLotItem[] = [
-  {
-    id: 'lot-hgb-norm-01',
-    tenantId: 'default',
-    lotNumber: 'HEM-2026-N1',
-    controlName: 'Hematology Tri-Level Control',
-    level: 'Level2_Normal',
-    analyteCode: 'HGB',
-    instrumentName: 'Mindray BC-5150',
-    targetMean: 14.00,
-    targetStandardDeviation: 0.40,
-    manufacturerExpirationDate: '2026-12-31T00:00:00Z',
-    openVialDate: '2026-09-15T00:00:00Z',
-    openVialStabilityDays: 30,
-    openVialExpirationDate: '2026-10-15T00:00:00Z',
-    isExpired: false,
-    daysRemaining: 15,
-    isActive: true,
-  },
-  {
-    id: 'lot-hgb-low-01',
-    tenantId: 'default',
-    lotNumber: 'HEM-2026-L1',
-    controlName: 'Hematology Tri-Level Control',
-    level: 'Level1_Low',
-    analyteCode: 'HGB',
-    instrumentName: 'Mindray BC-5150',
-    targetMean: 8.50,
-    targetStandardDeviation: 0.30,
-    manufacturerExpirationDate: '2026-12-31T00:00:00Z',
-    openVialDate: '2026-09-15T00:00:00Z',
-    openVialStabilityDays: 30,
-    openVialExpirationDate: '2026-10-15T00:00:00Z',
-    isExpired: false,
-    daysRemaining: 15,
-    isActive: true,
-  },
-  {
-    id: 'lot-hgb-high-01',
-    tenantId: 'default',
-    lotNumber: 'HEM-2026-H1',
-    controlName: 'Hematology Tri-Level Control',
-    level: 'Level3_High',
-    analyteCode: 'HGB',
-    instrumentName: 'Mindray BC-5150',
-    targetMean: 18.20,
-    targetStandardDeviation: 0.50,
-    manufacturerExpirationDate: '2026-12-31T00:00:00Z',
-    openVialDate: '2026-09-01T00:00:00Z',
-    openVialStabilityDays: 30,
-    openVialExpirationDate: '2026-10-01T00:00:00Z',
-    isExpired: false,
-    daysRemaining: 1,
-    isActive: true,
-  },
-  {
-    id: 'lot-glu-norm-01',
-    tenantId: 'default',
-    lotNumber: 'CHEM-2026-N2',
-    controlName: 'Clinical Chemistry Multichem',
-    level: 'Level2_Normal',
-    analyteCode: 'GLU',
-    instrumentName: 'Cobas c311 Chemistry Analyzer',
-    targetMean: 95.00,
-    targetStandardDeviation: 3.50,
-    manufacturerExpirationDate: '2026-11-30T00:00:00Z',
-    openVialDate: '2026-09-20T00:00:00Z',
-    openVialStabilityDays: 21,
-    openVialExpirationDate: '2026-10-11T00:00:00Z',
-    isExpired: false,
-    daysRemaining: 11,
-    isActive: true,
-  },
-  {
-    id: 'lot-crea-norm-01',
-    tenantId: 'default',
-    lotNumber: 'CHEM-2026-C1',
-    controlName: 'Clinical Chemistry Multichem',
-    level: 'Level2_Normal',
-    analyteCode: 'CREA',
-    instrumentName: 'Cobas c311 Chemistry Analyzer',
-    targetMean: 1.05,
-    targetStandardDeviation: 0.05,
-    manufacturerExpirationDate: '2026-10-20T00:00:00Z',
-    openVialDate: '2026-08-20T00:00:00Z',
-    openVialStabilityDays: 21,
-    openVialExpirationDate: '2026-09-10T00:00:00Z',
-    isExpired: true,
-    daysRemaining: -20,
-    isActive: true,
-  },
-  {
-    id: 'lot-wbc-norm-01',
-    tenantId: 'default',
-    lotNumber: 'HEM-2026-W1',
-    controlName: 'Hematology Tri-Level Control',
-    level: 'Level2_Normal',
-    analyteCode: 'WBC',
-    instrumentName: 'Mindray BC-5150',
-    targetMean: 7.20,
-    targetStandardDeviation: 0.35,
-    manufacturerExpirationDate: '2026-12-31T00:00:00Z',
-    openVialDate: '2026-09-22T00:00:00Z',
-    openVialStabilityDays: 30,
-    openVialExpirationDate: '2026-10-22T00:00:00Z',
-    isExpired: false,
-    daysRemaining: 22,
-    isActive: true,
-  }
-];
-
-const SAMPLE_RUNS: Record<string, LeveyJenningsPoint[]> = {
-  'lot-hgb-norm-01': [
-    { runId: 'run-01', runAt: '2026-09-20 07:15', measuredValue: 13.95, zScore: -0.125, status: 'Passed' },
-    { runId: 'run-02', runAt: '2026-09-21 07:20', measuredValue: 14.10, zScore: 0.25, status: 'Passed' },
-    { runId: 'run-03', runAt: '2026-09-22 07:10', measuredValue: 14.05, zScore: 0.125, status: 'Passed' },
-    { runId: 'run-04', runAt: '2026-09-23 07:30', measuredValue: 14.30, zScore: 0.75, status: 'Passed' },
-    { runId: 'run-05', runAt: '2026-09-24 07:15', measuredValue: 14.45, zScore: 1.125, status: 'Passed' },
-    { runId: 'run-06', runAt: '2026-09-25 07:25', measuredValue: 14.75, zScore: 1.875, status: 'Passed' },
-    { runId: 'run-07', runAt: '2026-09-26 07:15', measuredValue: 14.85, zScore: 2.125, status: 'Warning', violationRules: '1_2s' },
-    { runId: 'run-08', runAt: '2026-09-27 07:40', measuredValue: 14.20, zScore: 0.50, status: 'Passed' },
-    { runId: 'run-09', runAt: '2026-09-28 07:10', measuredValue: 13.90, zScore: -0.25, status: 'Passed' },
-    { runId: 'run-10', runAt: '2026-09-29 07:30', measuredValue: 13.80, zScore: -0.50, status: 'Passed' },
-    { runId: 'run-11', runAt: '2026-09-30 07:15', measuredValue: 15.35, zScore: 3.375, status: 'Rejected', violationRules: '1_3s' },
-  ]
-};
+import { laboratoryService, QcLotItem, QcRunItem, ControlLevel, LeveyJenningsChartData, LeveyJenningsPoint } from '../../services/laboratoryService';
 
 const ANALYTES = ['HGB', 'WBC', 'PLT', 'GLU', 'CREA', 'K'];
-const LEVELS = [
+const LEVELS: { label: string; value: ControlLevel }[] = [
   { label: 'Normal (Level 2)', value: 'Level2_Normal' },
   { label: 'Low (Level 1)', value: 'Level1_Low' },
   { label: 'High (Level 3)', value: 'Level3_High' },
 ];
 
 export default function QualityControlScreen() {
-  const [lots, setLots] = useState<QcLotItem[]>(SAMPLE_LOTS);
+  const [lots, setLots] = useState<QcLotItem[]>([]);
   const [selectedAnalyte, setSelectedAnalyte] = useState<string>('HGB');
-  const [selectedLevel, setSelectedLevel] = useState<string>('Level2_Normal');
-  const [selectedLot, setSelectedLot] = useState<QcLotItem>(SAMPLE_LOTS[0]);
+  const [selectedLevel, setSelectedLevel] = useState<ControlLevel>('Level2_Normal');
+  const [selectedLot, setSelectedLot] = useState<QcLotItem | null>(null);
   const [chartData, setChartData] = useState<LeveyJenningsChartData | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<LeveyJenningsPoint | null>(null);
 
@@ -152,74 +25,29 @@ export default function QualityControlScreen() {
 
   // Log Run Form State
   const [runMeasuredValue, setRunMeasuredValue] = useState('');
-  const [runMedTechName, setRunMedTechName] = useState('Carlos Mendoza, RMT');
+  const [runMedTechName, setRunMedTechName] = useState('');
   const [runNotes, setRunNotes] = useState('');
 
   // New Lot Form State
   const [newLotNumber, setNewLotNumber] = useState('');
-  const [newControlName, setNewControlName] = useState('Tri-Level Immunoassay Control');
-  const [newLevel, setNewLevel] = useState('Level2_Normal');
-  const [newAnalyteCode, setNewAnalyteCode] = useState('TROP_I');
-  const [newInstrument, setNewInstrument] = useState('Abbott Architect i1000SR');
-  const [newTargetMean, setNewTargetMean] = useState('0.05');
-  const [newTargetSD, setNewTargetSD] = useState('0.005');
-  const [newMfgExp, setNewMfgExp] = useState('2026-12-31');
-  const [newOpenVialStabilityDays, setNewOpenVialStabilityDays] = useState('30');
+  const [newControlName, setNewControlName] = useState('');
+  const [newLevel, setNewLevel] = useState<ControlLevel>('Level2_Normal');
+  const [newAnalyteCode, setNewAnalyteCode] = useState('');
+  const [newInstrument, setNewInstrument] = useState('');
+  const [newTargetMean, setNewTargetMean] = useState('');
+  const [newTargetSD, setNewTargetSD] = useState('');
+  const [newMfgExp, setNewMfgExp] = useState('');
+  const [newOpenVialStabilityDays, setNewOpenVialStabilityDays] = useState('');
 
   // Load Lots & Chart
   useEffect(() => {
     loadData();
   }, [selectedAnalyte, selectedLevel]);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [backendLots] = await laboratoryService.getQcLots(selectedAnalyte, false);
-      let activeLotsList = SAMPLE_LOTS;
-      if (backendLots && backendLots.length > 0) {
-        // Merge or use backend lots
-        activeLotsList = [...backendLots, ...SAMPLE_LOTS.filter(s => !backendLots.some(b => b.id === s.id))];
-        setLots(activeLotsList);
-      }
-
-      // Pick matching lot for selected analyte & level
-      const matchingLot = activeLotsList.find(l => l.analyteCode === selectedAnalyte && l.level === selectedLevel)
-        || activeLotsList.find(l => l.analyteCode === selectedAnalyte)
-        || activeLotsList[0];
-
-      if (matchingLot) {
-        setSelectedLot(matchingLot);
-        // Try fetching chart from API
-        const [chart] = await laboratoryService.getLeveyJenningsChart(matchingLot.id);
-        if (chart && chart.points && chart.points.length > 0) {
-          setChartData(chart);
-          setSelectedPoint(chart.points[chart.points.length - 1]);
-        } else {
-          // Build chart from sample/fallback data
-          buildLocalChartData(matchingLot);
-        }
-      }
-    } catch {
-      // Fallback to sample data
-      const matchingLot = SAMPLE_LOTS.find(l => l.analyteCode === selectedAnalyte && l.level === selectedLevel) || SAMPLE_LOTS[0];
-      setSelectedLot(matchingLot);
-      buildLocalChartData(matchingLot);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const buildLocalChartData = (lot: QcLotItem) => {
-    const points = SAMPLE_RUNS[lot.id] || [
-      { runId: 'run-1', runAt: '2026-09-28 07:00', measuredValue: lot.targetMean - (lot.targetStandardDeviation * 0.2), zScore: -0.2, status: 'Passed' },
-      { runId: 'run-2', runAt: '2026-09-29 07:15', measuredValue: lot.targetMean + (lot.targetStandardDeviation * 0.5), zScore: 0.5, status: 'Passed' },
-      { runId: 'run-3', runAt: '2026-09-30 07:10', measuredValue: lot.targetMean + (lot.targetStandardDeviation * 0.1), zScore: 0.1, status: 'Passed' },
-    ];
-
+  const buildEmptyChart = (lot: QcLotItem): LeveyJenningsChartData => {
     const mean = lot.targetMean;
     const sd = lot.targetStandardDeviation;
-
-    const fallbackChart: LeveyJenningsChartData = {
+    return {
       lotId: lot.id,
       lotNumber: lot.lotNumber,
       controlName: lot.controlName,
@@ -233,30 +61,50 @@ export default function QualityControlScreen() {
       minus1SD: Number((mean - sd).toFixed(4)),
       minus2SD: Number((mean - 2 * sd).toFixed(4)),
       minus3SD: Number((mean - 3 * sd).toFixed(4)),
-      points,
+      points: [],
     };
+  };
 
-    setChartData(fallbackChart);
-    setSelectedPoint(points[points.length - 1]);
+  const loadChart = async (lot: QcLotItem) => {
+    const [chart] = await laboratoryService.getLeveyJenningsChart(lot.id);
+    if (chart) {
+      setChartData(chart);
+      setSelectedPoint(chart.points.length > 0 ? chart.points[chart.points.length - 1] : null);
+    } else {
+      setChartData(buildEmptyChart(lot));
+      setSelectedPoint(null);
+    }
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [backendLots] = await laboratoryService.getQcLots(undefined, false);
+      const allLots = backendLots ?? [];
+      setLots(allLots);
+
+      // Pick matching lot for selected analyte & level
+      const matchingLot = allLots.find(l => l.analyteCode === selectedAnalyte && l.level === selectedLevel)
+        ?? allLots.find(l => l.analyteCode === selectedAnalyte)
+        ?? null;
+      setSelectedLot(matchingLot);
+      if (matchingLot) {
+        await loadChart(matchingLot);
+      } else {
+        setChartData(null);
+        setSelectedPoint(null);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSelectLotDirectly = async (lot: QcLotItem) => {
     setSelectedLot(lot);
     setSelectedAnalyte(lot.analyteCode);
     setSelectedLevel(lot.level);
-    try {
-      const [chart] = await laboratoryService.getLeveyJenningsChart(lot.id);
-      if (chart && chart.points && chart.points.length > 0) {
-        setChartData(chart);
-        setSelectedPoint(chart.points[chart.points.length - 1]);
-      } else {
-        buildLocalChartData(lot);
-      }
-    } catch {
-      buildLocalChartData(lot);
-    }
+    await loadChart(lot);
   };
-
   // Real-time Z-Score calculation preview in Modal
   const calculatedZScorePreview = useMemo(() => {
     const val = parseFloat(runMeasuredValue);
@@ -266,9 +114,17 @@ export default function QualityControlScreen() {
   }, [runMeasuredValue, selectedLot]);
 
   const handleRecordQcRun = async () => {
+    if (!selectedLot) {
+      Alert.alert('No QC Lot', 'Register a QC lot for this analyte and level before logging a run.');
+      return;
+    }
     const val = parseFloat(runMeasuredValue);
     if (isNaN(val)) {
       Alert.alert('Validation Error', 'Please enter a valid numeric measured value.');
+      return;
+    }
+    if (!runMedTechName.trim()) {
+      Alert.alert('Validation Error', 'Enter the name of the medical technologist performing the run.');
       return;
     }
 
@@ -276,67 +132,40 @@ export default function QualityControlScreen() {
       const [res, err] = await laboratoryService.recordQcRun({
         qcLotId: selectedLot.id,
         measuredValue: val,
-        medTechName: runMedTechName,
+        medTechName: runMedTechName.trim(),
         notes: runNotes,
       });
 
-      if (err) {
-        // Evaluate locally if backend offline or test mode
-        const z = (val - selectedLot.targetMean) / selectedLot.targetStandardDeviation;
-        let status = 'Passed';
-        let violationRules = '';
-        if (Math.abs(z) >= 3.0) {
-          status = 'Rejected';
-          violationRules = '1_3s';
-        } else if (Math.abs(z) >= 2.0) {
-          status = 'Warning';
-          violationRules = '1_2s';
-        }
-
-        const newPoint: LeveyJenningsPoint = {
-          runId: `run-${Date.now()}`,
-          runAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-          measuredValue: val,
-          zScore: Number(z.toFixed(3)),
-          status,
-          violationRules: violationRules || undefined,
-        };
-
-        setChartData(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            points: [...prev.points, newPoint],
-          };
-        });
-        setSelectedPoint(newPoint);
-
-        Alert.alert(
-          status === 'Passed' ? 'QC Run Accepted' : status === 'Warning' ? 'QC Warning Flagged' : 'QC Run REJECTED',
-          `Z-Score: ${z.toFixed(2)}. ${violationRules ? `Violation: Rule ${violationRules}.` : 'Control within allowable ±2SD range.'}`
-        );
-      } else if (res) {
-        Alert.alert('QC Run Logged', `Recorded successfully with status: ${res.status}. Z-score: ${res.zScore.toFixed(2)}.`);
-        await loadData();
+      if (err || !res) {
+        Alert.alert('QC Run Not Recorded', err?.message ?? 'The QC run could not be recorded. Try again.');
+        return;
       }
 
+      Alert.alert('QC Run Logged', `Recorded successfully with status: ${res.status}. Z-score: ${res.zScore.toFixed(2)}.`);
       setLogRunModalVisible(false);
       setRunMeasuredValue('');
       setRunNotes('');
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to record QC run.');
+      await loadData();
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to record QC run.');
     }
   };
 
   const handleCreateNewLot = async () => {
-    if (!newLotNumber.trim()) {
-      Alert.alert('Validation Error', 'Please enter a valid lot number.');
-      return;
-    }
     const mean = parseFloat(newTargetMean);
     const sd = parseFloat(newTargetSD);
+    const stabilityDays = parseInt(newOpenVialStabilityDays, 10);
+    const mfgExpiry = new Date(newMfgExp);
+    if (!newLotNumber.trim() || !newControlName.trim() || !newAnalyteCode.trim() || !newInstrument.trim()) {
+      Alert.alert('Validation Error', 'Lot number, control product, analyte code and instrument are required.');
+      return;
+    }
     if (isNaN(mean) || isNaN(sd) || sd <= 0) {
       Alert.alert('Validation Error', 'Target Mean and Standard Deviation must be positive numbers.');
+      return;
+    }
+    if (isNaN(mfgExpiry.getTime()) || isNaN(stabilityDays) || stabilityDays <= 0) {
+      Alert.alert('Validation Error', 'Enter a valid manufacturer expiration date (YYYY-MM-DD) and open-vial stability in days.');
       return;
     }
 
@@ -349,81 +178,29 @@ export default function QualityControlScreen() {
         instrumentName: newInstrument.trim(),
         targetMean: mean,
         targetStandardDeviation: sd,
-        manufacturerExpirationDate: new Date(newMfgExp).toISOString(),
+        manufacturerExpirationDate: mfgExpiry.toISOString(),
         openVialDate: new Date().toISOString(),
-        openVialStabilityDays: parseInt(newOpenVialStabilityDays, 10) || 30,
+        openVialStabilityDays: stabilityDays,
       });
 
-      if (err) {
-        // Fallback local addition
-        const createdLot: QcLotItem = {
-          id: `lot-${Date.now()}`,
-          tenantId: 'default',
-          lotNumber: newLotNumber.trim(),
-          controlName: newControlName.trim(),
-          level: newLevel,
-          analyteCode: newAnalyteCode.trim().toUpperCase(),
-          instrumentName: newInstrument.trim(),
-          targetMean: mean,
-          targetStandardDeviation: sd,
-          manufacturerExpirationDate: new Date(newMfgExp).toISOString(),
-          openVialDate: new Date().toISOString(),
-          openVialStabilityDays: parseInt(newOpenVialStabilityDays, 10) || 30,
-          openVialExpirationDate: new Date(Date.now() + 30 * 86400000).toISOString(),
-          isExpired: false,
-          daysRemaining: parseInt(newOpenVialStabilityDays, 10) || 30,
-          isActive: true,
-        };
-        setLots(prev => [createdLot, ...prev]);
-        setSelectedLot(createdLot);
-        setSelectedAnalyte(createdLot.analyteCode);
-        setSelectedLevel(createdLot.level);
-        buildLocalChartData(createdLot);
-      } else if (res) {
-        setLots(prev => [res, ...prev]);
-        setSelectedLot(res);
-        setSelectedAnalyte(res.analyteCode);
-        setSelectedLevel(res.level);
-        await loadData();
+      if (err || !res) {
+        Alert.alert('Lot Not Registered', err?.message ?? 'The QC lot could not be registered. Try again.');
+        return;
       }
 
-      Alert.alert('Success', `Lot ${newLotNumber} registered successfully with 30-day open-vial tracking.`);
+      setLots(prev => [res, ...prev]);
+      setSelectedLot(res);
+      setSelectedAnalyte(res.analyteCode);
+      setSelectedLevel(res.level);
+      await loadData();
+
+      Alert.alert('Success', `Lot ${newLotNumber.trim()} registered successfully.`);
       setNewLotModalVisible(false);
       setNewLotNumber('');
-    } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to create lot.');
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to create lot.');
     }
   };
-
-  const handleSimulateControlBatch = () => {
-    if (!selectedLot) return;
-    const base = selectedLot.targetMean;
-    const sd = selectedLot.targetStandardDeviation;
-
-    // Simulate 5 runs ending with a Westgard 2_2s or 1_3s pattern
-    const simulated: LeveyJenningsPoint[] = [
-      { runId: 'sim-1', runAt: 'Day 1 07:00', measuredValue: Number((base + 0.1 * sd).toFixed(3)), zScore: 0.1, status: 'Passed' },
-      { runId: 'sim-2', runAt: 'Day 2 07:15', measuredValue: Number((base - 0.4 * sd).toFixed(3)), zScore: -0.4, status: 'Passed' },
-      { runId: 'sim-3', runAt: 'Day 3 07:10', measuredValue: Number((base + 1.2 * sd).toFixed(3)), zScore: 1.2, status: 'Passed' },
-      { runId: 'sim-4', runAt: 'Day 4 07:20', measuredValue: Number((base + 2.15 * sd).toFixed(3)), zScore: 2.15, status: 'Warning', violationRules: '1_2s' },
-      { runId: 'sim-5', runAt: 'Day 5 07:30', measuredValue: Number((base + 2.30 * sd).toFixed(3)), zScore: 2.30, status: 'Rejected', violationRules: '2_2s' },
-    ];
-
-    setChartData(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        points: [...prev.points, ...simulated],
-      };
-    });
-    setSelectedPoint(simulated[simulated.length - 1]);
-
-    Alert.alert(
-      'QC Batch Simulation Completed',
-      'Generated 5 consecutive runs demonstrating Westgard 1-2s warning transitioning to 2-2s systematic error rejection.'
-    );
-  };
-
   // KPI Calculations
   const activeLotsCount = lots.length;
   const expiringLotsCount = lots.filter(l => (l.daysRemaining !== undefined && l.daysRemaining <= 7) || l.isExpired).length;
@@ -441,9 +218,7 @@ export default function QualityControlScreen() {
           </ThemedText>
         </View>
         <View style={styles.headerActions}>
-          <Pressable style={styles.simulateBtn} onPress={handleSimulateControlBatch}>
-            <ThemedText style={styles.simulateBtnText}>Simulate Batch</ThemedText>
-          </Pressable>
+
           <Pressable style={styles.newLotBtn} onPress={() => setNewLotModalVisible(true)}>
             <ThemedText style={styles.newLotBtnText}>+ New Lot</ThemedText>
           </Pressable>
@@ -458,13 +233,13 @@ export default function QualityControlScreen() {
         <View style={styles.kpiCard}>
           <ThemedText style={styles.kpiLabel}>Active QC Lots</ThemedText>
           <ThemedText style={styles.kpiValue}>{activeLotsCount}</ThemedText>
-          <ThemedText style={styles.kpiSub}>Across 5 Lab Sections</ThemedText>
+          <ThemedText style={styles.kpiSub}>Registered control lots</ThemedText>
         </View>
 
         <View style={[styles.kpiCard, currentStatus === 'Rejected' ? styles.kpiCardDanger : currentStatus === 'Warning' ? styles.kpiCardWarning : styles.kpiCardSuccess]}>
           <ThemedText style={styles.kpiLabel}>Run Status ({selectedAnalyte})</ThemedText>
           <ThemedText style={[styles.kpiValue, currentStatus === 'Rejected' ? styles.textDanger : currentStatus === 'Warning' ? styles.textWarning : styles.textSuccess]}>
-            {currentStatus === 'Rejected' ? 'OUT OF CONTROL' : currentStatus === 'Warning' ? 'WARNING (1-2s)' : 'IN CONTROL'}
+            {!lastPoint ? 'NO RUNS' : currentStatus === 'Rejected' ? 'OUT OF CONTROL' : currentStatus === 'Warning' ? 'WARNING (1-2s)' : 'IN CONTROL'}
           </ThemedText>
           <ThemedText style={styles.kpiSub}>
             {lastPoint ? `Last Z-Score: ${lastPoint.zScore > 0 ? '+' : ''}${lastPoint.zScore.toFixed(2)} SD` : 'No runs recorded'}
@@ -481,8 +256,8 @@ export default function QualityControlScreen() {
 
         <View style={styles.kpiCard}>
           <ThemedText style={styles.kpiLabel}>Active Control Lot</ThemedText>
-          <ThemedText style={styles.kpiValueSmall} numberOfLines={1}>{selectedLot.lotNumber}</ThemedText>
-          <ThemedText style={styles.kpiSub}>{selectedLot.instrumentName}</ThemedText>
+          <ThemedText style={styles.kpiValueSmall} numberOfLines={1}>{selectedLot?.lotNumber ?? 'No lot'}</ThemedText>
+          <ThemedText style={styles.kpiSub}>{selectedLot?.instrumentName ?? 'Register a lot for this analyte'}</ThemedText>
         </View>
       </View>
 
@@ -533,7 +308,9 @@ export default function QualityControlScreen() {
               Levey-Jennings Quality Control Chart: {selectedAnalyte} ({selectedLevel.replace('Level', 'L').replace('_', ' ')})
             </ThemedText>
             <ThemedText style={styles.chartSubtitle}>
-              Target Mean (μ) = {selectedLot.targetMean.toFixed(2)} • 1SD (σ) = {selectedLot.targetStandardDeviation.toFixed(2)} • Lot #{selectedLot.lotNumber}
+              {selectedLot
+                ? `Target Mean (μ) = ${selectedLot.targetMean.toFixed(2)} • 1SD (σ) = ${selectedLot.targetStandardDeviation.toFixed(2)} • Lot #${selectedLot.lotNumber}`
+                : 'No QC lot registered for this analyte and level.'}
             </ThemedText>
           </View>
 
@@ -743,11 +520,14 @@ export default function QualityControlScreen() {
         </View>
 
         <View style={styles.lotCardsGrid}>
+          {!loading && lots.length === 0 && (
+            <ThemedText style={styles.noDataText}>No QC lots registered yet. Use Register Lot to add one.</ThemedText>
+          )}
           {lots.map(lot => {
-            const isSelected = selectedLot.id === lot.id;
-            const daysLeft = lot.daysRemaining ?? 30;
-            const isCriticalExpiry = daysLeft <= 3 || lot.isExpired;
-            const isWarningExpiry = daysLeft <= 7 && !isCriticalExpiry;
+            const isSelected = selectedLot?.id === lot.id;
+            const daysLeft = lot.daysRemaining;
+            const isCriticalExpiry = (daysLeft !== undefined && daysLeft <= 3) || lot.isExpired;
+            const isWarningExpiry = daysLeft !== undefined && daysLeft <= 7 && !isCriticalExpiry;
 
             return (
               <Pressable
@@ -766,7 +546,7 @@ export default function QualityControlScreen() {
                   </View>
                   <View style={[styles.stabilityBadge, isCriticalExpiry ? styles.badgeDanger : isWarningExpiry ? styles.badgeWarning : styles.badgeSuccess]}>
                     <ThemedText style={[styles.stabilityBadgeText, isCriticalExpiry ? styles.badgeDangerText : isWarningExpiry ? styles.badgeWarningText : styles.badgeSuccessText]}>
-                      {lot.isExpired ? 'EXPIRED' : `${daysLeft}d left`}
+                      {lot.isExpired ? 'EXPIRED' : daysLeft !== undefined ? `${daysLeft}d left` : 'Active'}
                     </ThemedText>
                   </View>
                 </View>
@@ -822,14 +602,14 @@ export default function QualityControlScreen() {
               <View style={styles.modalRow}>
                 <ThemedText style={styles.modalFieldLabel}>Analyte & Control Lot:</ThemedText>
                 <ThemedText style={styles.modalStaticVal}>
-                  {selectedLot.analyteCode} ({selectedLot.level.replace('Level', 'L')}) — Lot #{selectedLot.lotNumber}
+                  {selectedLot?.analyteCode} ({selectedLot?.level.replace('Level', 'L')}) — Lot #{selectedLot?.lotNumber}
                 </ThemedText>
               </View>
 
               <View style={styles.modalRow}>
                 <ThemedText style={styles.modalFieldLabel}>Target Mean ± SD:</ThemedText>
                 <ThemedText style={styles.modalStaticVal}>
-                  {selectedLot.targetMean} ± {selectedLot.targetStandardDeviation}
+                  {selectedLot?.targetMean} ± {selectedLot?.targetStandardDeviation}
                 </ThemedText>
               </View>
 
@@ -837,7 +617,7 @@ export default function QualityControlScreen() {
                 <ThemedText style={styles.inputLabel}>Measured Control Value *</ThemedText>
                 <TextInput
                   style={styles.textInput}
-                  placeholder={`e.g. ${selectedLot.targetMean}`}
+                  placeholder={selectedLot ? `e.g. ${selectedLot.targetMean}` : undefined}
                   keyboardType="numeric"
                   value={runMeasuredValue}
                   onChangeText={setRunMeasuredValue}
@@ -859,6 +639,7 @@ export default function QualityControlScreen() {
                 <ThemedText style={styles.inputLabel}>Medical Technologist (RMT) *</ThemedText>
                 <TextInput
                   style={styles.textInput}
+                  placeholder="Name, credentials"
                   value={runMedTechName}
                   onChangeText={setRunMedTechName}
                 />
@@ -915,6 +696,7 @@ export default function QualityControlScreen() {
                   <ThemedText style={styles.inputLabel}>Control Product Name</ThemedText>
                   <TextInput
                     style={styles.textInput}
+                    placeholder="e.g. manufacturer control product"
                     value={newControlName}
                     onChangeText={setNewControlName}
                   />
@@ -925,17 +707,27 @@ export default function QualityControlScreen() {
                     <ThemedText style={styles.inputLabel}>Analyte Code</ThemedText>
                     <TextInput
                       style={styles.textInput}
+                      placeholder="e.g. HGB"
                       value={newAnalyteCode}
                       onChangeText={setNewAnalyteCode}
                     />
                   </View>
                   <View style={{ flex: 1, marginLeft: 8 }}>
                     <ThemedText style={styles.inputLabel}>Control Level</ThemedText>
-                    <TextInput
-                      style={styles.textInput}
-                      value={newLevel}
-                      onChangeText={setNewLevel}
-                    />
+                    <View style={styles.levelButtonsRow}>
+                      {LEVELS.map(lvl => {
+                        const active = newLevel === lvl.value;
+                        return (
+                          <Pressable
+                            key={lvl.value}
+                            style={[styles.levelBtn, active && styles.levelBtnActive]}
+                            onPress={() => setNewLevel(lvl.value)}
+                          >
+                            <ThemedText style={[styles.levelBtnText, active && styles.levelBtnTextActive]}>{lvl.label}</ThemedText>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
                 </View>
 
@@ -943,6 +735,7 @@ export default function QualityControlScreen() {
                   <ThemedText style={styles.inputLabel}>Analyzer / Instrument Name</ThemedText>
                   <TextInput
                     style={styles.textInput}
+                    placeholder="e.g. analyzer model"
                     value={newInstrument}
                     onChangeText={setNewInstrument}
                   />
@@ -974,6 +767,7 @@ export default function QualityControlScreen() {
                     <ThemedText style={styles.inputLabel}>Mfg Expiration Date</ThemedText>
                     <TextInput
                       style={styles.textInput}
+                      placeholder="YYYY-MM-DD"
                       value={newMfgExp}
                       onChangeText={setNewMfgExp}
                     />
@@ -983,6 +777,7 @@ export default function QualityControlScreen() {
                     <TextInput
                       style={styles.textInput}
                       keyboardType="numeric"
+                      placeholder="e.g. 30"
                       value={newOpenVialStabilityDays}
                       onChangeText={setNewOpenVialStabilityDays}
                     />
@@ -1035,19 +830,6 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     gap: 10,
-  },
-  simulateBtn: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-  },
-  simulateBtnText: {
-    color: '#4F46E5',
-    fontSize: 13,
-    fontWeight: '700',
   },
   newLotBtn: {
     backgroundColor: '#F1F5F9',

@@ -4,7 +4,7 @@ using ClinicEz.Laboratory.Domain.Common;
 namespace ClinicEz.Laboratory.Domain.Entities;
 
 /// <summary>Rotating, hashed refresh token for facility-local laboratory sessions.</summary>
-public sealed class LabRefreshToken : BaseEntity
+public sealed class LabRefreshToken : BaseEntity, ILabScopedEntity
 {
     public Guid StaffMemberId { get; set; }
     public LabStaffMember? StaffMember { get; set; }

@@ -1,74 +1,74 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
-using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interoperability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 
+/// <summary>Clinic staff attach a result they received from an outside laboratory. It enters the chart Unverified, like any other external result.</summary>
 public record AttachExternalLabResultCommand(
     Guid OrderId,
     string? ExternalLabName,
     string DocumentType, // Photo, PDF
-    string? DocumentUrl,
     string? FileBase64,
     string? Notes,
-    string UploadedBy = "ClinicStaff"
+    string? ContentType = null,
+    string? FileName = null
 ) : IRequest<ClinicLabOrderDto>;
 
 public class AttachExternalLabResultCommandHandler : IRequestHandler<AttachExternalLabResultCommand, ClinicLabOrderDto>
 {
     private readonly IRepository<ClinicLabOrder> _orderRepo;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IRepository<ClinicLabResult> _resultRepo;
+    private readonly IClinicContext _clinicContext;
+    private readonly ILabResultIntake _intake;
 
     public AttachExternalLabResultCommandHandler(
         IRepository<ClinicLabOrder> orderRepo,
-        IUnitOfWork unitOfWork)
+        IRepository<ClinicLabResult> resultRepo,
+        IClinicContext clinicContext,
+        ILabResultIntake intake)
     {
         _orderRepo = orderRepo;
-        _unitOfWork = unitOfWork;
+        _resultRepo = resultRepo;
+        _clinicContext = clinicContext;
+        _intake = intake;
     }
 
     public async Task<ClinicLabOrderDto> Handle(AttachExternalLabResultCommand request, CancellationToken cancellationToken)
     {
-        var order = await _orderRepo.Query(o => o.Id == request.OrderId)
-            .Include(o => o.Items)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (order == null)
+        var exists = await _orderRepo.Query(o => o.Id == request.OrderId).AnyAsync(cancellationToken);
+        if (!exists)
         {
             throw new NotFoundException($"Clinic lab order with ID '{request.OrderId}' was not found.");
         }
 
-        order.ExternalLabName = request.ExternalLabName?.Trim() ?? "Independent External Laboratory";
-        order.ExternalReportType = string.IsNullOrWhiteSpace(request.DocumentType) ? "PDF" : request.DocumentType.Trim();
-        order.ExternalReportUrl = request.DocumentUrl?.Trim();
-        order.ExternalReportFileBase64 = request.FileBase64?.Trim();
-        order.UploadedBy = request.UploadedBy;
-        order.Status = LabOrderStatus.CompletedWithExternalReport;
-        order.ReportReleasedAt = DateTime.UtcNow;
+        var (content, contentType) = LabResultUploadFiles.Decode(request.FileBase64, request.ContentType, request.DocumentType);
+        await _intake.SubmitAsync(new LabResultSubmission(
+            _clinicContext.ClinicId,
+            request.OrderId,
+            ResultSource.ExternalLab,
+            content,
+            request.FileName,
+            contentType,
+            request.ExternalLabName ?? "Independent External Laboratory",
+            request.Notes), cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(request.Notes))
-        {
-            order.Notes = string.IsNullOrWhiteSpace(order.Notes)
-                ? request.Notes.Trim()
-                : $"{order.Notes} • External Note: {request.Notes.Trim()}";
-        }
+        var order = await _orderRepo.Query(o => o.Id == request.OrderId)
+            .Include(o => o.Items)
+            .AsNoTracking()
+            .FirstAsync(cancellationToken);
+        var results = await _resultRepo.Query(r => r.LabOrderId == request.OrderId)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
-        foreach (var item in order.Items)
-        {
-            item.Status = LabOrderStatus.CompletedWithExternalReport;
-        }
-
-        _orderRepo.Update(order);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return CreateClinicLabOrderCommandHandler.MapToDto(order);
+        return CreateClinicLabOrderCommandHandler.MapToDto(order, results);
     }
 }

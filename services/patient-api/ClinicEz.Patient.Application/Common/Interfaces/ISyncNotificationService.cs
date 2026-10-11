@@ -7,7 +7,7 @@ namespace ClinicEz.Patient.Application.Common.Interfaces;
 /// </summary>
 public interface ISyncNotificationService
 {
-    /// <summary>Notifies a patient's connected device that a sync batch has finished processing.</summary>
+    /// <summary>Notifies every connected device of a patient that a sync batch has finished processing.</summary>
     Task NotifySyncCompletedAsync(
         Guid patientId,
         int applied,
@@ -15,11 +15,13 @@ public interface ISyncNotificationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Forces all connected SignalR clients for a patient to log out.
-    /// Used when a new device session is registered or a session is explicitly revoked.
+    /// Tells a patient's connected clients that a session was revoked so they can sign out.
+    /// When <paramref name="deviceId"/> is given only that device is notified; otherwise
+    /// every connected device of the patient is.
     /// </summary>
     Task NotifySessionRevokedAsync(
         Guid patientId,
         string reason,
+        string? deviceId = null,
         CancellationToken cancellationToken = default);
 }

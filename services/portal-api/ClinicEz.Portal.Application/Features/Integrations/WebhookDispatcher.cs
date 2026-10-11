@@ -1,5 +1,6 @@
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Shared.Common;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -26,13 +27,49 @@ public interface IWebhookDispatcher
         object data,
         Guid? onlyEndpointId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Like <see cref="EnqueueAsync"/> but only adds the deliveries to the context; the caller's own
+    /// <c>SaveChanges</c> commits them together with the change that caused the event, so an event can
+    /// never be lost (or fired for a change that was rolled back).
+    /// </summary>
+    Task<int> StageAsync(
+        Guid tenantId,
+        string tenantSlug,
+        string eventType,
+        object data,
+        CancellationToken cancellationToken);
 }
 
 public class WebhookDispatcher(IApplicationDbContext context) : IWebhookDispatcher
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new StrictJsonStringEnumConverter() }
+    };
 
     public async Task<int> EnqueueAsync(
+        Guid tenantId,
+        string tenantSlug,
+        string eventType,
+        object data,
+        Guid? onlyEndpointId,
+        CancellationToken cancellationToken)
+    {
+        var queued = await StageAsync(tenantId, tenantSlug, eventType, data, onlyEndpointId, cancellationToken);
+        if (queued > 0) await context.SaveChangesAsync(cancellationToken);
+        return queued;
+    }
+
+    public Task<int> StageAsync(
+        Guid tenantId,
+        string tenantSlug,
+        string eventType,
+        object data,
+        CancellationToken cancellationToken) =>
+        StageAsync(tenantId, tenantSlug, eventType, data, null, cancellationToken);
+
+    private async Task<int> StageAsync(
         Guid tenantId,
         string tenantSlug,
         string eventType,
@@ -74,7 +111,6 @@ public class WebhookDispatcher(IApplicationDbContext context) : IWebhookDispatch
             });
         }
 
-        await context.SaveChangesAsync(cancellationToken);
         return endpoints.Count;
     }
 }

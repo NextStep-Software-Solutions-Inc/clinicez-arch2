@@ -5,6 +5,9 @@ namespace ClinicEz.Portal.Domain.Entities;
 
 public class Tenant : BaseEntity
 {
+    /// <summary>Name of the unique index enforcing one owned (non-purged) workspace per user.</summary>
+    public const string UniqueOwnerIndexName = "UX_Tenants_OwnerId_Active";
+
     public string OwnerId { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string TenantSlug { get; set; } = string.Empty;
@@ -17,12 +20,6 @@ public class Tenant : BaseEntity
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
-
-    // Xendit Billing & Subscription State
-    public string XenditCustomerId { get; set; } = string.Empty;
-    public string SubscriptionId { get; set; } = string.Empty;
-    public string SubscriptionStatus { get; set; } = "TRIALING";
-    public string SubscriptionPlanId { get; set; } = "starter";
 
     // Contact & Address Details (Xendit Mapping)
     public string? PhoneNumber { get; set; }

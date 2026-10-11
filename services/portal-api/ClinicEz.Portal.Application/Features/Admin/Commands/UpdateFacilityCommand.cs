@@ -1,3 +1,4 @@
+using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using FluentValidation;
@@ -27,7 +28,7 @@ public class UpdateFacilityCommandValidator : AbstractValidator<UpdateFacilityCo
     }
 }
 
-public class UpdateFacilityCommandHandler(IApplicationDbContext context) : IRequestHandler<UpdateFacilityCommand, bool>
+public class UpdateFacilityCommandHandler(IApplicationDbContext context, IHubOnboardingService hubOnboarding) : IRequestHandler<UpdateFacilityCommand, bool>
 {
     public async Task<bool> Handle(UpdateFacilityCommand request, CancellationToken cancellationToken)
     {
@@ -80,6 +81,12 @@ public class UpdateFacilityCommandHandler(IApplicationDbContext context) : IRequ
 
         facility.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(cancellationToken);
+
+        if (!FacilityCells.IsRoutable(facility))
+        {
+            await hubOnboarding.RevokeForFacilityAsync(facility, cancellationToken);
+        }
+
         return true;
     }
 }

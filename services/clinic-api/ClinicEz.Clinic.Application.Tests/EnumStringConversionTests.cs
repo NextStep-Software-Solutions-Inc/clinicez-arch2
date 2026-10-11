@@ -1,12 +1,19 @@
 using System;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Api;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Infrastructure.Persistence;
+using ClinicEz.Shared.Common;
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests;
@@ -30,32 +37,73 @@ public class EnumStringConversionTests
     }
 
     [Fact]
-    public void ModelBuilder_EnforcesStringConversion_OnAllEnumProperties()
+    public void Model_PersistsEveryEnumProperty_AsString()
     {
-        // Arrange
         using var context = CreateDbContext();
-        var model = context.Model;
 
-        // Act & Assert
-        var staffRoleProp = model.FindEntityType(typeof(StaffMember))?.FindProperty(nameof(StaffMember.Role));
-        staffRoleProp.Should().NotBeNull();
-        staffRoleProp!.GetValueConverter().Should().NotBeNull();
-        staffRoleProp.GetValueConverter()!.ProviderClrType.Should().Be(typeof(string));
+        StringEnumModel.FindNonStringEnumProperties(context.Model).Should().BeEmpty("every enum must be persisted as its string name");
 
-        var appointmentStatusProp = model.FindEntityType(typeof(Appointment))?.FindProperty(nameof(Appointment.Status));
-        appointmentStatusProp.Should().NotBeNull();
-        appointmentStatusProp!.GetValueConverter().Should().NotBeNull();
-        appointmentStatusProp.GetValueConverter()!.ProviderClrType.Should().Be(typeof(string));
+        var enumPropertyCount = context.Model.GetEntityTypes()
+            .SelectMany(e => e.GetProperties())
+            .Count(p => (Nullable.GetUnderlyingType(p.ClrType) ?? p.ClrType).IsEnum);
+        enumPropertyCount.Should().BeGreaterThan(20, "the guard must actually be looking at the clinic's enum columns");
+    }
 
-        var queuePriorityProp = model.FindEntityType(typeof(QueueItem))?.FindProperty(nameof(QueueItem.Priority));
-        queuePriorityProp.Should().NotBeNull();
-        queuePriorityProp!.GetValueConverter().Should().NotBeNull();
-        queuePriorityProp.GetValueConverter()!.ProviderClrType.Should().Be(typeof(string));
+    [Fact]
+    public void Model_NullableEnumAndFlagsColumns_AreStrings()
+    {
+        using var context = CreateDbContext();
 
-        var queueStatusProp = model.FindEntityType(typeof(QueueItem))?.FindProperty(nameof(QueueItem.Status));
-        queueStatusProp.Should().NotBeNull();
-        queueStatusProp!.GetValueConverter().Should().NotBeNull();
-        queueStatusProp.GetValueConverter()!.ProviderClrType.Should().Be(typeof(string));
+        var nullableEnums = context.Model.GetEntityTypes()
+            .SelectMany(e => e.GetProperties())
+            .Where(p => Nullable.GetUnderlyingType(p.ClrType)?.IsEnum == true)
+            .ToList();
+        nullableEnums.Should().OnlyContain(p => p.GetProviderClrType() == typeof(string));
+
+        var scopes = context.Model.FindEntityType(typeof(ShareImport))!.FindProperty(nameof(ShareImport.Scopes))!;
+        scopes.GetProviderClrType().Should().Be(typeof(string));
+        scopes.GetMaxLength().Should().Be(200);
+
+        var grantScopes = context.Model.FindEntityType(typeof(ClinicPatient))!.FindProperty(nameof(ClinicPatient.ShareGrantScopes))!;
+        grantScopes.GetProviderClrType().Should().Be(typeof(string));
+        grantScopes.GetMaxLength().Should().Be(200);
+    }
+
+    [Fact]
+    public void ApiJsonPipeline_SerializesEnumsAsStrings()
+    {
+        var options = ApiJsonOptions();
+
+        var json = JsonSerializer.Serialize(new EnumPayload(QueueStatus.Triaged, null, StaffRole.Doctor), options);
+
+        json.Should().Contain("\"status\":\"Triaged\"");
+        json.Should().Contain("\"priority\":null");
+        json.Should().Contain("\"role\":\"Doctor\"");
+        JsonSerializer.Deserialize<EnumPayload>(json, options)!.Status.Should().Be(QueueStatus.Triaged);
+    }
+
+    [Theory]
+    [InlineData("{\"status\":1,\"role\":\"Doctor\"}")]
+    [InlineData("{\"status\":\"1\",\"role\":\"Doctor\"}")]
+    [InlineData("{\"status\":\"NotAStatus\",\"role\":\"Doctor\"}")]
+    [InlineData("{\"status\":\"Triaged\",\"priority\":2,\"role\":\"Doctor\"}")]
+    [InlineData("{\"status\":\"Triaged\",\"role\":1}")]
+    public void ApiJsonPipeline_RejectsNumericAndUnknownEnumValues(string body)
+    {
+        var act = () => JsonSerializer.Deserialize<EnumPayload>(body, ApiJsonOptions());
+
+        act.Should().Throw<JsonException>();
+    }
+
+    private sealed record EnumPayload(QueueStatus Status, QueuePriority? Priority, StaffRole Role);
+
+    private static JsonSerializerOptions ApiJsonOptions()
+    {
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddApiServices()
+            .BuildServiceProvider();
+        return new JsonSerializerOptions(provider.GetRequiredService<IOptions<JsonOptions>>().Value.JsonSerializerOptions);
     }
 
     [Fact]
@@ -109,13 +157,13 @@ public class EnumStringConversionTests
         await context.SaveChangesAsync();
 
         // Assert
-        var fetchedStaff = await context.StaffMembers.FirstAsync(s => s.Id == staff.Id);
+        var fetchedStaff = await context.StaffMembers.IgnoreQueryFilters().FirstAsync(s => s.Id == staff.Id);
         fetchedStaff.Role.Should().Be(StaffRole.Doctor);
 
-        var fetchedAppt = await context.Appointments.FirstAsync(a => a.Id == appt.Id);
+        var fetchedAppt = await context.Appointments.IgnoreQueryFilters().FirstAsync(a => a.Id == appt.Id);
         fetchedAppt.Status.Should().Be(AppointmentStatus.CheckedIn);
 
-        var fetchedQueue = await context.QueueItems.FirstAsync(q => q.Id == queueItem.Id);
+        var fetchedQueue = await context.QueueItems.IgnoreQueryFilters().FirstAsync(q => q.Id == queueItem.Id);
         fetchedQueue.Priority.Should().Be(QueuePriority.Urgent);
         fetchedQueue.Status.Should().Be(QueueStatus.Triaged);
     }

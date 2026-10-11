@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Hangfire;
 using Hangfire.Dashboard;
 using ClinicEz.Patient.Api;
@@ -20,16 +18,11 @@ builder.Configuration
     .AddUserSecrets<Program>(optional: true)
     .AddEnvironmentVariables();
 
-// ── JSON: camelCase properties + lowercase enum strings (matches mobile expectations) ────
-builder.Services.ConfigureHttpJsonOptions(opts =>
-{
-    opts.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-    opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-    opts.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-});
+// ── JSON: camelCase properties + PascalCase enum member names; numeric enum values are rejected ────
+builder.Services.ConfigureHttpJsonOptions(opts => ApiJson.Configure(opts.SerializerOptions));
 
 builder.Services
-    .AddApiServices()
+    .AddApiServices(builder.Configuration, builder.Environment)
     .AddApplicationServices()
     .AddInfrastructureServices(builder.Configuration, builder.Environment);
 
@@ -51,7 +44,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseForwardedHeaders();
-app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+app.UseCors();
 app.UseHttpsRedirection();
 app.UseExceptionHandler();
 
@@ -63,6 +56,10 @@ app.UseAuthorization();
 // Bypassed entirely in Development (Encryption:Enabled = false in appsettings.Development.json).
 if (app.Configuration.GetValue<bool>("Encryption:Enabled"))
     app.UseMiddleware<PayloadEncryptionMiddleware>();
+
+// Object-level authorisation: callers may only address their own patient record.
+// Runs after authentication/authorisation so the caller identity is known.
+app.UseMiddleware<PatientOwnershipMiddleware>();
 
 // Hangfire dashboard — protected by HTTP Basic Auth (credentials from config)
 var hangfireAuth = app.Services.GetRequiredService<HangfireDashboardBasicAuthFilter>();

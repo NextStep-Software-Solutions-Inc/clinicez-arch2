@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
+using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
@@ -170,6 +171,7 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
             encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo);
+            encounter.PhilHealthSoapTransNo,
+            RxPharmacyStatusDto.From(encounter));
     }
 }

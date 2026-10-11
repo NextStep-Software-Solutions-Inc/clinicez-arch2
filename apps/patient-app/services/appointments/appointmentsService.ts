@@ -15,6 +15,7 @@ import { clinics } from '@db/schema/clinics';
 import { getClinicDetailOnline, listClinics } from '../discovery/discoveryService';
 import { fetchAppointmentsLive } from '../api/appointmentsApi';
 import type { RemoteAppointment } from '../api/appointmentsApi';
+import { localAppointmentStatus } from './statusMap';
 import type {
     AppointmentItem,
     AvailableSlotsResponse,
@@ -89,18 +90,6 @@ function localBookingToAppointmentItem(
     };
 }
 
-function mapRemoteStatus(status?: string): AppointmentItem['status'] {
-    if (!status) return 'pending';
-    const s = status.toLowerCase();
-    if (s.includes('cancel')) return 'canceled';
-    if (s.includes('noshow')) return 'no_show';
-    if (s.includes('action')) return 'action_required';
-    if (s === 'confirmed') return 'confirmed';
-    if (s === 'completed') return 'completed';
-    if (s === 'pending') return 'pending';
-    return 'pending';
-}
-
 function remoteToLocalItem(remote: RemoteAppointment): AppointmentItem {
     return {
         id: remote.id,
@@ -126,7 +115,7 @@ function remoteToLocalItem(remote: RemoteAppointment): AppointmentItem {
         serviceType: remote.serviceType ?? 'Consultation',
         scheduledAt: remote.scheduledAt,
         durationMinutes: remote.durationMinutes,
-        status: mapRemoteStatus(remote.status),
+        status: localAppointmentStatus(remote.status),
         notes: remote.notes ?? null,
         subject: remote.subject ?? null,
         chiefComplaint: remote.chiefComplaint ?? null,

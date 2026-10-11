@@ -43,11 +43,9 @@ public interface IPhilHealthProxyClient
         CancellationToken ct = default);
 
     Task<ApiResponse<PhilHealthConfigStatusResponse>> GetTenantConfigurationStatusAsync(
-        System.Guid? tenantId = null,
         CancellationToken ct = default);
 
     Task<ApiResponse<string>> TestTenantConnectionAsync(
-        System.Guid? tenantId = null,
         CancellationToken ct = default);
 }
 

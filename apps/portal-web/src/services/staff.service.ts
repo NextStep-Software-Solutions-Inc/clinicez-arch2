@@ -1,12 +1,16 @@
 import { apiClient } from "@/transport/apiClient";
 
+/** Display labels of `StaffMemberMapping.StatusName`; an invited member is "PendingInvitation", not the enum name. */
+export type StaffMemberStatus = "Active" | "PendingInvitation" | "Suspended";
+
 export interface StaffMemberDto {
   id: string;
   userId?: string | null;
   email: string;
   fullName: string;
+  /** Job title for a plain member with a profile, otherwise the workspace role name. */
   role: string;
-  status: string;
+  status: StaffMemberStatus;
   facilityId?: string | null;
   facilityName?: string | null;
   joinedAt?: string | null;

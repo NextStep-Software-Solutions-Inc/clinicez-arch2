@@ -9,6 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/transport/apiClient";
 import { useBillingInfo } from "@/hooks/useBilling";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { useHubCredentials } from "@/components/dashboard/HubCredentialsDialog";
+import { facilityService, type FacilityKind } from "@/services/facility.service";
+import { ENTITLEMENT_KEYS } from "@/services/entitlement.service";
+import type { FacilityDeploymentMode } from "@/services/tenant.service";
+import { toastApiError } from "@/lib/apiToast";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   PHILIPPINE_REGIONS,
@@ -55,11 +62,20 @@ export default function FacilityOnboardingWizard({
   const { billingInfo } = useBillingInfo(tenantSlug);
 
   const resolvedType = (initialType || searchParams.get("create") || "clinic") as "clinic" | "laboratory" | "pharmacy" | "organization";
-  const normalizedFacilityType = resolvedType.charAt(0).toUpperCase() + resolvedType.slice(1);
+  const normalizedFacilityType = (resolvedType.charAt(0).toUpperCase() + resolvedType.slice(1)) as FacilityKind;
 
   // Step Tracker: 1 to 4
   const [currentStep, setCurrentStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+
+  // Deployment: shared cloud, or on-premise (needs the https address staff use on their network)
+  const [deploymentMode, setDeploymentMode] = useState<FacilityDeploymentMode>("SharedCloud");
+  const [consoleBaseUrl, setConsoleBaseUrl] = useState("");
+  const { hasFeature } = useEntitlements(tenantSlug);
+  const onPremAvailable = hasFeature(ENTITLEMENT_KEYS.onPrem);
+  const isOnPremise = deploymentMode === "OnPremise";
+  const isConsoleUrlValid = /^https:\/\/[^\s/]+\S*$/i.test(consoleBaseUrl.trim());
+  const { showEdge } = useHubCredentials();
 
   // Step 1: Classification & Facility Identity
   const [name, setName] = useState("");
@@ -333,7 +349,7 @@ export default function FacilityOnboardingWizard({
     }
     setSubmitting(true);
     try {
-      const payload = {
+      const result = await facilityService.createFacility({
         tenantId: tenantSlug,
         facilityType: normalizedFacilityType,
         name: name.trim(),
@@ -351,19 +367,26 @@ export default function FacilityOnboardingWizard({
         streetAddress: streetAddress.trim() || undefined,
         contactNumber: contactNumber.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
-      };
-
-      await apiClient.post("/facilities", payload);
+        deploymentMode,
+        consoleBaseUrl: isOnPremise ? consoleBaseUrl.trim() : undefined,
+      });
       toast.success(`${normalizedFacilityType} "${name}" registered and provisioning event broadcasted!`);
+      const facilityName = name.trim();
       handleClose();
+      if (result.hubCredentials) {
+        showEdge(facilityName, result.hubCredentials);
+      } else if (result.hubOnboardingPending) {
+        toast.warning(
+          "The hub could not be reached, so no credentials were issued yet. Open Settings → Facilities and use \"Rotate hub credentials\" for this facility.",
+        );
+      }
       if (onFacilityCreated) {
         onFacilityCreated();
       } else {
         router.refresh();
       }
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || `Failed to register ${resolvedType}`;
-      toast.error(msg);
+    } catch (err: unknown) {
+      toastApiError(err, `Failed to register ${resolvedType}`, tenantSlug);
     } finally {
       setSubmitting(false);
     }
@@ -513,6 +536,68 @@ export default function FacilityOnboardingWizard({
                 <p className="text-[11px] text-slate-400">
                   Each facility has its own unique subdomain. It is auto-suggested from the facility name, but you can choose your own.
                 </p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Deployment</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {[
+                    { value: "SharedCloud" as const, label: "Shared cloud", description: "Hosted by ClinicEZ. Nothing to install." },
+                    { value: "OnPremise" as const, label: "On-premise", description: "Runs on your own server and syncs through the hub." },
+                  ].map((option) => {
+                    const isSelected = deploymentMode === option.value;
+                    const isLocked = option.value === "OnPremise" && onPremAvailable === false;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        disabled={isLocked}
+                        onClick={() => setDeploymentMode(option.value)}
+                        className={`p-3.5 rounded-2xl border text-left transition-all ${
+                          isSelected
+                            ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                            : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-card"
+                        } ${isLocked ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-100">{option.label}</span>
+                          {isSelected && <IconCheck className="h-4 w-4 text-primary" />}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{option.description}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {onPremAvailable === false && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    On-premise deployment is not part of your current plan.{" "}
+                    <Link href={`/${tenantSlug}/dashboard/plan`} className="font-semibold underline">
+                      View plans
+                    </Link>
+                  </p>
+                )}
+                {isOnPremise && (
+                  <div className="space-y-1.5 pt-1">
+                    <Label htmlFor="facility-console-base-url" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Console base URL <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="facility-console-base-url"
+                      type="url"
+                      inputMode="url"
+                      placeholder="https://clinic.example.org"
+                      value={consoleBaseUrl}
+                      onChange={(e) => setConsoleBaseUrl(e.target.value)}
+                      className={`h-10 rounded-xl text-sm font-mono ${
+                        consoleBaseUrl && !isConsoleUrlValid ? "border-rose-500 focus-visible:ring-rose-500" : ""
+                      }`}
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      The https address where staff open this facility on your network. The first on-premise facility also issues the
+                      hub credentials your server needs.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2 pt-2">
@@ -881,6 +966,18 @@ export default function FacilityOnboardingWizard({
                     </div>
                   )}
                 </div>
+
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Deployment
+                  </span>
+                  <div className="text-slate-800 dark:text-slate-200 font-medium mt-0.5">
+                    {isOnPremise ? "On-premise" : "Shared cloud"}
+                  </div>
+                  {isOnPremise && (
+                    <div className="font-mono text-[11px] text-slate-500 mt-0.5 truncate">{consoleBaseUrl.trim()}</div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -904,7 +1001,7 @@ export default function FacilityOnboardingWizard({
               <Button
                 type="button"
                 onClick={handleNext}
-                disabled={currentStep === 1 && (!name.trim() || isDuplicateName || !slug.trim() || !!slugError || isCheckingSlug)}
+                disabled={currentStep === 1 && (!name.trim() || isDuplicateName || !slug.trim() || !!slugError || isCheckingSlug || (isOnPremise && !isConsoleUrlValid))}
                 className="rounded-xl text-xs font-bold px-5 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-sm"
               >
                 <span>Continue</span>

@@ -1,3 +1,4 @@
+import type { BookingShareSection } from '../sharing/bookingSections';
 export type ShareableFieldKey =
     | 'fullName'
     | 'dateOfBirth'
@@ -75,7 +76,6 @@ export interface ClinicEntity {
     specialties: string[];
     featuredScore: number;
     activeMemberCount: number;
-    baseUrl?: string;
 }
 
 export interface ConsentSelection {
@@ -137,6 +137,7 @@ export interface BookingDraftRecord {
     reason?: string | null;
     notes?: string | null;
     shareFields: ShareableFieldKey[];
+    shareSections: BookingShareSection[];
     status: 'draft' | 'ready';
     attachedFileIds: string[];
 }
@@ -149,6 +150,7 @@ export interface BookingDraftInput {
     reason: string;
     notes?: string;
     shareFields: ShareableFieldKey[];
+    shareSections: BookingShareSection[];
     attachedFileIds?: string[];
 }
 

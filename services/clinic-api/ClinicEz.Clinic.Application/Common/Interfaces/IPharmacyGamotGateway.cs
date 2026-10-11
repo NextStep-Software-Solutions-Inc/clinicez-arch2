@@ -8,8 +8,8 @@ public sealed record GamotGatewayResult(int StatusCode, string? ContentType, str
 
 /// <summary>
 /// Reaches the pharmacy's GAMOT endpoints on behalf of a signed-in clinic user. The browser or phone never talks to the
-/// pharmacy directly: the clinic API authenticates to it with the facility's internal service key, so the pharmacy
-/// needs no clinic credentials and the key never leaves the server.
+/// pharmacy directly: the clinic API asks it through the interop hub (request/reply), so no pharmacy address or service
+/// key is configured and the pharmacy answers only for senders of its own tenant.
 /// </summary>
 public interface IPharmacyGamotGateway
 {

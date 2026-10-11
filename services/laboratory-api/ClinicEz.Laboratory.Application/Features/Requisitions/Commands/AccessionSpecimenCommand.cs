@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Laboratory.Application.Common;
+using ClinicEz.Laboratory.Application.Common.Interfaces;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
@@ -16,7 +18,7 @@ public record SpecimenAccessionInput
 {
     public Guid? SpecimenId { get; init; }
     public string? Barcode { get; init; }
-    public string ContainerType { get; init; } = "Purple_EDTA";
+    public SpecimenContainerType ContainerType { get; init; } = SpecimenContainerType.Purple_EDTA;
     public string SpecimenType { get; init; } = "WholeBlood";
     public DateTime? CollectedAt { get; init; }
     public string? Notes { get; init; }
@@ -32,13 +34,16 @@ public class AccessionSpecimenCommandHandler : IRequestHandler<AccessionSpecimen
 {
     private readonly IRepository<LabRequisition> _requisitionRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILabOrderLifecycle _lifecycle;
 
     public AccessionSpecimenCommandHandler(
         IRepository<LabRequisition> requisitionRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILabOrderLifecycle lifecycle)
     {
         _requisitionRepository = requisitionRepository;
         _unitOfWork = unitOfWork;
+        _lifecycle = lifecycle;
     }
 
     public async Task<LabRequisitionDto> Handle(AccessionSpecimenCommand request, CancellationToken cancellationToken)
@@ -53,6 +58,9 @@ public class AccessionSpecimenCommandHandler : IRequestHandler<AccessionSpecimen
         {
             throw new KeyNotFoundException($"Requisition with ID {request.RequisitionId} not found.");
         }
+
+        // A prepaid order cannot be collected until the cashier has confirmed payment.
+        OrderWorkGate.EnsureCanWork(requisition);
 
         var collectionTime = DateTime.UtcNow;
 
@@ -81,12 +89,11 @@ public class AccessionSpecimenCommandHandler : IRequestHandler<AccessionSpecimen
             }
             else
             {
-                Enum.TryParse<SpecimenContainerType>(input.ContainerType, true, out var containerType);
                 var newSpecimen = new Specimen
                 {
                     LabRequisitionId = requisition.Id,
                     Barcode = !string.IsNullOrWhiteSpace(input.Barcode) ? input.Barcode.Trim() : $"{requisition.AccessionNumber}-S{requisition.Specimens.Count + 1:D2}",
-                    ContainerType = containerType,
+                    ContainerType = input.ContainerType,
                     SpecimenType = string.IsNullOrWhiteSpace(input.SpecimenType) ? "WholeBlood" : input.SpecimenType,
                     Status = SpecimenStatus.Collected,
                     CollectedAt = input.CollectedAt ?? collectionTime,
@@ -100,6 +107,7 @@ public class AccessionSpecimenCommandHandler : IRequestHandler<AccessionSpecimen
 
         requisition.Status = RequisitionStatus.SpecimenCollected;
         _requisitionRepository.Update(requisition);
+        await _lifecycle.TransitionAsync(requisition, RequisitionStage.SpecimenCollected, null, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Queries.GetWorklistQueryHandler.MapToDto(requisition);

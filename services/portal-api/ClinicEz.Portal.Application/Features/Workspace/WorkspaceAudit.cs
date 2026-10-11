@@ -1,4 +1,5 @@
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Shared.Common;
 using ClinicEz.Portal.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -20,8 +21,8 @@ public static class WorkspaceSettingsStore
         Tenant tenant,
         CancellationToken cancellationToken)
     {
-        var settings = await context.WorkspaceSettings
-            .FirstOrDefaultAsync(s => s.TenantId == tenant.Id, cancellationToken);
+        var settings = context.WorkspaceSettings.Local.FirstOrDefault(s => s.TenantId == tenant.Id)
+            ?? await context.WorkspaceSettings.FirstOrDefaultAsync(s => s.TenantId == tenant.Id, cancellationToken);
 
         if (settings != null) return settings;
 
@@ -40,6 +41,8 @@ public static class WorkspaceSettingsStore
 /// </summary>
 public sealed class WorkspaceChangeSet
 {
+    private static readonly JsonSerializerOptions Json = new() { Converters = { new StrictJsonStringEnumConverter() } };
+
     private readonly SortedDictionary<string, object> _changes = new(StringComparer.Ordinal);
 
     public bool HasChanges => _changes.Count > 0;
@@ -52,7 +55,7 @@ public sealed class WorkspaceChangeSet
         return true;
     }
 
-    public string ToJson() => JsonSerializer.Serialize(_changes);
+    public string ToJson() => JsonSerializer.Serialize(_changes, Json);
 
     /// <summary>Stages an audit entry. No-op when nothing changed. Never pass secrets as tracked values.</summary>
     public void Stage(IApplicationDbContext context, Guid tenantId, WorkspaceActor actor, string section, string action = "updated")

@@ -1,4 +1,4 @@
-﻿// token-guard:ignore-file (native Android notification channel light colours)
+// token-guard:ignore-file (native Android notification channel light colours)
 import * as ExpoNotifications from 'expo-notifications';
 import { storage } from '@utils/storage';
 import { Platform } from 'react-native';
@@ -214,7 +214,47 @@ import {
   fetchNotificationsFromBackend,
   markNotificationReadOnBackend,
   markAllNotificationsReadOnBackend,
+  type SyncNotificationDto,
 } from '../api/notificationsApi';
+import { localNotificationCategory, localNotificationType } from './wireMapping';
+
+/**
+ * Upserts backend notifications into the local SQLite table. Rows the user deleted
+ * locally stay deleted (`deletedAt` is never reset by an upsert).
+ */
+export async function upsertRemoteNotifications(
+  patientId: string,
+  items: readonly SyncNotificationDto[],
+): Promise<void> {
+  for (const n of items) {
+    await db
+      .insert(notifications)
+      .values({
+        id: n.id,
+        patientId,
+        type: localNotificationType(n.type),
+        category: n.category ? localNotificationCategory(n.category) : 'system',
+        title: n.title,
+        body: n.body,
+        data: n.payload,
+        isRead: n.isRead,
+        createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
+        readAt: n.readAt ? new Date(n.readAt) : null,
+        expiresAt: n.expiresAt ? new Date(n.expiresAt) : null,
+        sourceId: n.sourceId ?? null,
+        deletedAt: null,
+      })
+      .onConflictDoUpdate({
+        target: notifications.id,
+        set: {
+          isRead: n.isRead,
+          readAt: n.readAt ? new Date(n.readAt) : null,
+          title: n.title,
+          body: n.body,
+        },
+      });
+  }
+}
 
 /**
  * Pulls the latest notifications from the backend and upserts them into the
@@ -227,34 +267,7 @@ export async function syncNotificationsFromBackend(
 ): Promise<void> {
   try {
     const result = await fetchNotificationsFromBackend(getToken, patientId, { take: 100 });
-    for (const n of result.items) {
-      await db
-        .insert(notifications)
-        .values({
-          id: n.id,
-          patientId,
-          type: (n.type as NotificationType) ?? 'system',
-          category: (n.category as NotificationCategory) ?? 'system',
-          title: n.title,
-          body: n.body,
-          data: n.payload,
-          isRead: n.isRead,
-          createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
-          readAt: n.readAt ? new Date(n.readAt) : null,
-          expiresAt: n.expiresAt ? new Date(n.expiresAt) : null,
-          sourceId: n.sourceId,
-          deletedAt: null,
-        })
-        .onConflictDoUpdate({
-          target: notifications.id,
-          set: {
-            isRead: n.isRead,
-            readAt: n.readAt ? new Date(n.readAt) : null,
-            title: n.title,
-            body: n.body,
-          },
-        });
-    }
+    await upsertRemoteNotifications(patientId, result.items);
   } catch {
     // Offline — local cache remains unchanged
   }

@@ -4,7 +4,7 @@ using ClinicEz.Laboratory.Domain.Enums;
 
 namespace ClinicEz.Laboratory.Domain.Entities;
 
-public sealed class LabStaffMember : BaseEntity
+public sealed class LabStaffMember : BaseEntity, ILabScopedEntity
 {
     public required string TenantId { get; set; }
     public Guid LaboratoryId { get; set; }

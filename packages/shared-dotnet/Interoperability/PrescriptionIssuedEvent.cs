@@ -49,6 +49,8 @@ public record PrescriptionIssuedEvent
     public string OrderingFacilityName { get; init; } = string.Empty;
     public string TenantId { get; init; } = string.Empty;
     public string? BranchId { get; init; }
+    /// <summary>Clinic encounter/queue id; lets the shared cashier consolidate clinic, lab and pharmacy charges of one visit.</summary>
+    public string? VisitKey { get; init; }
     public string? TargetPharmacyFacilityId { get; init; }
     public string? TargetPharmacyTenantId { get; init; }
     public PrescriberDoctorDto PrescriberDoctor { get; init; } = new();

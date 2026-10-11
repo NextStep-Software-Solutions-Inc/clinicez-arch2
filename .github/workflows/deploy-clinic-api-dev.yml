@@ -7,6 +7,7 @@ on:
     paths:
       - 'services/clinic-api/**'
       - 'deploy/clinic-api/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-clinic-api-dev.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
     paths:
       - 'services/clinic-api/**'
       - 'deploy/clinic-api/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-clinic-api-dev.yml'
   workflow_dispatch:
@@ -83,20 +85,36 @@ jobs:
       env:
         ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
         CONNECTION_STRING: ${{ secrets.CLINIC_DB_CONNECTION_STRING || secrets.CLINICAPP_DB_CONNECTION_STRING }}
-        RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+        HUB_URL: ${{ vars.HUB_URL || vars.MESSAGING_HUB_URL || secrets.HUB_URL || secrets.MESSAGING_HUB_URL }}
+        CLINIC_HUB_CLIENT_ID: ${{ secrets.CLINIC_HUB_CLIENT_ID || secrets.CLINIC_MESSAGING_CLIENT_ID }}
+        CLINIC_HUB_CLIENT_SECRET: ${{ secrets.CLINIC_HUB_CLIENT_SECRET || secrets.CLINIC_MESSAGING_CLIENT_SECRET }}
+        CLINIC_HUB_SIGNING_KEY: ${{ secrets.CLINIC_HUB_SIGNING_KEY || secrets.CLINIC_MESSAGING_SIGNING_KEY }}
+        FACILITY_LICENSE_PUBLIC_KEY: ${{ vars.FACILITY_LICENSE_PUBLIC_KEY || secrets.FACILITY_LICENSE_PUBLIC_KEY }}
+        FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS: ${{ vars.FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS || secrets.FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS }}
         HANGFIRE_DASHBOARD_PASSWORD: ${{ secrets.CLINICAPP_HANGFIRE_PASSWORD || secrets.CLINIC_HANGFIRE_PASSWORD || secrets.HANGFIRE_PASSWORD }}
-        INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
-        INTERNAL_API_KEY_PREVIOUS: ${{ secrets.INTERNAL_API_KEY_PREVIOUS }}
         PHARMACY_API_URL: ${{ vars.PHARMACY_API_URL }}
-        PHARMACY_API_KEY: ${{ secrets.PHARMACY_API_KEY }}
         CLINIC_JWT_SIGNING_KEY: ${{ secrets.CLINIC_JWT_SIGNING_KEY }}
+        CLINIC_PUBLIC_UPLOAD_BASE_URL: ${{ vars.CLINIC_PUBLIC_UPLOAD_BASE_URL || secrets.CLINIC_PUBLIC_UPLOAD_BASE_URL }}
+        CLINIC_ENCRYPTION_MASTER_SECRET: ${{ secrets.CLINIC_ENCRYPTION_MASTER_SECRET }}
+        DOCUMENT_SIGNING_KEY: ${{ secrets.CLINIC_DOCUMENT_SIGNING_KEY }}
+        CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0: ${{ secrets.CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0 }}
+        CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1: ${{ secrets.CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1 }}
+        PHILHEALTH_PROXY_URL: ${{ vars.PHILHEALTH_PROXY_URL }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
         BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
+        CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
         CORS_ALLOWED_DOMAINS: ${{ vars.CORS_ALLOWED_DOMAINS || 'dev.clinicez.net,clinicez.net,dev.nextstep-software.com,nextstep-software.com' }}
-        RABBITMQ_NETWORK: ${{ vars.RABBITMQ_NETWORK || 'data-network' }}
+        DATA_NETWORK: ${{ vars.DATA_NETWORK || 'data-network' }}
         NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
       run: |
+        . scripts/ci/prepare-key-env.sh
+        prepare_key_env private CLINIC_HUB_SIGNING_KEY
+        prepare_key_env public FACILITY_LICENSE_PUBLIC_KEY
+        prepare_key_env optional-public FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS
+        require_min_length CLINIC_ENCRYPTION_MASTER_SECRET 32
+        require_min_length DOCUMENT_SIGNING_KEY 32
+        require_min_length CLINIC_JWT_SIGNING_KEY 32
         if [ -z "$CONNECTION_STRING" ]; then
           echo "::error::CLINIC_DB_CONNECTION_STRING is not configured. Set it as a GitHub secret (Settings -> Secrets and variables -> Actions)."
           exit 1
@@ -105,9 +123,16 @@ jobs:
           echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
           exit 1
         fi
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_PASSWORD HANGFIRE_DASHBOARD_PASSWORD INTERNAL_API_KEY INTERNAL_API_KEY_PREVIOUS PHARMACY_API_URL PHARMACY_API_KEY CLINIC_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN CORS_ALLOWED_DOMAINS RABBITMQ_NETWORK NPM_NETWORK; do
+        for var in HUB_URL CLINIC_HUB_CLIENT_ID CLINIC_HUB_CLIENT_SECRET CLINIC_PUBLIC_UPLOAD_BASE_URL CLINIC_ENCRYPTION_MASTER_SECRET HANGFIRE_DASHBOARD_PASSWORD; do
+          if [ -z "$(printenv $var)" ]; then
+            echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+        done
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING HUB_URL CLINIC_HUB_CLIENT_ID CLINIC_HUB_CLIENT_SECRET HANGFIRE_DASHBOARD_PASSWORD PHARMACY_API_URL CLINIC_JWT_SIGNING_KEY CLINIC_PUBLIC_UPLOAD_BASE_URL CLINIC_ENCRYPTION_MASTER_SECRET PHILHEALTH_PROXY_URL IMAGE_NAME IMAGE_TAG BASE_DOMAIN CORS_ALLOWED_DOMAINS DATA_NETWORK NPM_NETWORK CLINIC_HUB_SIGNING_KEY FACILITY_LICENSE_PUBLIC_KEY FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS DOCUMENT_SIGNING_KEY CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0 CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1 CORS_ALLOWED_ORIGINS; do
           echo "$var=$(printenv $var)" >> deploy/clinic-api/.env
         done
+
 
     - name: Download Docker image artifact
       uses: actions/download-artifact@v4
@@ -156,9 +181,9 @@ jobs:
           cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
 
           echo "==> Ensuring networks exist..."
-          RABBIT_NET=$(grep -E '^RABBITMQ_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+          DATA_NET=$(grep -E '^DATA_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
           PROXY_NET=$(grep -E '^NPM_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
-          docker network inspect "${RABBIT_NET:-data-network}" >/dev/null 2>&1 || docker network create "${RABBIT_NET:-data-network}"
+          docker network inspect "${DATA_NET:-data-network}" >/dev/null 2>&1 || docker network create "${DATA_NET:-data-network}"
           docker network inspect "${PROXY_NET:-npm-default}" >/dev/null 2>&1 || docker network create "${PROXY_NET:-npm-default}"
 
           echo "==> Loading Docker image..."

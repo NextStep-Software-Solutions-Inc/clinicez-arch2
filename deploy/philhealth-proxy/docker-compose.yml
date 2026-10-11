@@ -20,6 +20,7 @@ services:
       - npm-default
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - PortalApi__BaseUrl=${PORTAL_API_BASE_URL:?PORTAL_API_BASE_URL must be set}
     restart: unless-stopped
 
 networks:

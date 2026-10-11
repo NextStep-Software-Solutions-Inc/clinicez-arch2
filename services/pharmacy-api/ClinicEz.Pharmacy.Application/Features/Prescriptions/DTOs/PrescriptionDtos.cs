@@ -70,5 +70,13 @@ public record PrescriptionOrderDto(
     decimal TotalAmount,
     List<PrescriptionItemResponseDto> Items,
     List<DispenseAuditRecordDto> DispenseRecords,
-    string? BranchId = null
+    string? BranchId = null,
+    string PaymentPolicy = "None",
+    string PaymentStatus = "NotRequired",
+    decimal? QuotedAmount = null,
+    DateTime? PaidAt = null,
+    string? StatusReason = null,
+    string PharmacyName = "",
+    string? DispenseBlockedReason = null,
+    bool PatientLinked = false
 );

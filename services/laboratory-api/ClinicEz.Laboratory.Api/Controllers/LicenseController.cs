@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Laboratory.Domain.Entities;
+using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Licensing;
@@ -14,7 +15,7 @@ namespace ClinicEz.Laboratory.Api.Controllers;
 public record ApplyLabLicenseRequest(string LicenseToken);
 
 public record LabLicenseStatusDto(
-    string Status, // "Active", "ActivationRequired", "Expired", "Tampered"
+    LabLicenseStatus Status,
     Guid LaboratoryId,
     string LaboratoryName,
     string PlanTier,
@@ -23,7 +24,9 @@ public record LabLicenseStatusDto(
     System.Collections.Generic.List<string> EnabledFeatures,
     DateTime? ExpiresAtUtc,
     bool IsTampered,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    bool IsReadOnlyGrace = false,
+    DateTime? ReadOnlyGraceUntilUtc = null);
 
 [ApiController]
 [Route("api/v1/laboratory/license")]
@@ -54,23 +57,19 @@ public sealed class LicenseController : ControllerBase
         [FromHeader(Name = "X-Tenant-Id")] string? tenantId,
         CancellationToken ct)
     {
-        var settings = (facilityId.HasValue && facilityId.Value != Guid.Empty)
-            ? await _settingsRepo.FindAsync(s => s.LaboratoryId == facilityId.Value, ct)
-            : await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+        var settings = await FindSettingsAsync(tenantId, facilityId, ct);
 
-        var targetLabId = facilityId ?? settings?.LaboratoryId ?? Guid.Empty;
+        var targetLabId = facilityId ?? Guid.Empty;
 
-        var activeStaffCount = targetLabId != Guid.Empty
-            ? await _staffRepo.Query(s => s.LaboratoryId == targetLabId && s.IsActive).CountAsync(ct)
-            : await _staffRepo.Query(s => s.IsActive).CountAsync(ct);
+        var activeStaffCount = settings == null ? 0 : await CountActiveStaffAsync(settings, ct);
 
         var validation = _licenseValidator.Validate(settings?.LicenseToken, targetLabId, tenantId ?? settings?.TenantId);
 
-        string status;
-        if (validation.IsMissing) status = "ActivationRequired";
-        else if (validation.IsTampered) status = "Tampered";
-        else if (validation.IsExpired) status = "Expired";
-        else status = "Active";
+        LabLicenseStatus status;
+        if (validation.IsMissing) status = LabLicenseStatus.ActivationRequired;
+        else if (validation.IsTampered) status = LabLicenseStatus.Tampered;
+        else if (validation.IsExpired) status = LabLicenseStatus.Expired;
+        else status = LabLicenseStatus.Active;
 
         var limits = validation.Payload?.Limits ?? PlanTierDefaults.GetLimitsForTier(settings?.PlanTier ?? "Community");
         var features = validation.Payload?.EnabledFeatures ?? PlanTierDefaults.GetFeaturesForTier(settings?.PlanTier ?? "Community");
@@ -78,14 +77,16 @@ public sealed class LicenseController : ControllerBase
         var dto = new LabLicenseStatusDto(
             status,
             targetLabId,
-            settings?.LaboratoryName ?? "Laboratory Facility",
+            settings?.LaboratoryName ?? string.Empty,
             validation.Payload?.PlanTier ?? settings?.PlanTier ?? "Community",
             limits,
             activeStaffCount,
             features,
             validation.Payload?.ExpiresAtUtc ?? settings?.LicenseExpiresAt,
             validation.IsTampered,
-            validation.ErrorMessage);
+            validation.ErrorMessage,
+            validation.IsReadOnlyGrace,
+            validation.ReadOnlyGraceUntilUtc);
 
         return Ok(ApiResponse<LabLicenseStatusDto>.Success(dto));
     }
@@ -113,10 +114,9 @@ public sealed class LicenseController : ControllerBase
         }
 
         var resolvedLabId = targetLabId != Guid.Empty ? targetLabId : (validation.Payload?.FacilityId ?? Guid.Empty);
+        var resolvedTenantId = !string.IsNullOrWhiteSpace(targetTenantId) ? targetTenantId : validation.Payload?.TenantId;
 
-        var settings = resolvedLabId != Guid.Empty
-            ? await _settingsRepo.FindAsync(s => s.LaboratoryId == resolvedLabId, ct)
-            : await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+        var settings = await FindSettingsAsync(resolvedTenantId, resolvedLabId, ct);
 
         if (settings == null)
         {
@@ -125,8 +125,9 @@ public sealed class LicenseController : ControllerBase
                 Id = Guid.NewGuid(),
                 TenantId = !string.IsNullOrWhiteSpace(targetTenantId) ? targetTenantId : (validation.Payload?.TenantId ?? "default"),
                 LaboratoryId = targetLabId != Guid.Empty ? targetLabId : (validation.Payload?.FacilityId ?? Guid.NewGuid()),
-                LaboratoryName = validation.Payload?.FacilityName ?? "Laboratory Facility",
+                LaboratoryName = validation.Payload?.FacilityName ?? string.Empty,
                 LicenseToken = request.LicenseToken.Trim(),
+                EntitlementVersion = validation.Payload?.EntitlementVersion ?? 0,
                 PlanTier = validation.Payload?.PlanTier ?? "Community",
                 MaxStaffLimit = validation.Payload?.Limits?.MaxStaff ?? 5,
                 MaxAnalyzersLimit = validation.Payload?.Limits?.MaxAnalyzers ?? 1,
@@ -139,6 +140,7 @@ public sealed class LicenseController : ControllerBase
         else
         {
             settings.LicenseToken = request.LicenseToken.Trim();
+            settings.EntitlementVersion = validation.Payload?.EntitlementVersion ?? 0;
             settings.PlanTier = validation.Payload?.PlanTier ?? "Community";
             settings.MaxStaffLimit = validation.Payload?.Limits?.MaxStaff ?? 5;
             settings.MaxAnalyzersLimit = validation.Payload?.Limits?.MaxAnalyzers ?? 1;
@@ -147,10 +149,9 @@ public sealed class LicenseController : ControllerBase
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var activeStaffCount = await _staffRepo.Query(s => s.LaboratoryId == settings.LaboratoryId && s.IsActive)
-            .CountAsync(ct);
+        var activeStaffCount = await CountActiveStaffAsync(settings, ct);
 
-        var status = validation.IsExpired ? "Expired" : "Active";
+        var status = validation.IsExpired ? LabLicenseStatus.Expired : LabLicenseStatus.Active;
 
         var dto = new LabLicenseStatusDto(
             status,
@@ -162,8 +163,29 @@ public sealed class LicenseController : ControllerBase
             validation.Payload?.EnabledFeatures ?? PlanTierDefaults.GetFeaturesForTier(settings.PlanTier),
             validation.Payload?.ExpiresAtUtc,
             false,
-            validation.ErrorMessage);
+            validation.ErrorMessage,
+            validation.IsReadOnlyGrace,
+            validation.ReadOnlyGraceUntilUtc);
 
         return Ok(ApiResponse<LabLicenseStatusDto>.Success(dto, "Laboratory facility license successfully applied and verified."));
     }
+
+    /// <summary>
+    /// These endpoints are anonymous (activation happens before any staff session exists), so there is no ambient scope:
+    /// the row is matched on BOTH the tenant and the laboratory, and nothing is returned when either is unknown.
+    /// </summary>
+    private Task<LabSettings?> FindSettingsAsync(string? tenantId, Guid? laboratoryId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) || laboratoryId is null || laboratoryId == Guid.Empty)
+        {
+            return Task.FromResult<LabSettings?>(null);
+        }
+
+        return _settingsRepo.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.LaboratoryId == laboratoryId && !s.IsDeleted, ct);
+    }
+
+    private Task<int> CountActiveStaffAsync(LabSettings settings, CancellationToken ct) =>
+        _staffRepo.IgnoreQueryFilters()
+            .CountAsync(s => s.TenantId == settings.TenantId && s.LaboratoryId == settings.LaboratoryId && s.IsActive && !s.IsDeleted, ct);
 }

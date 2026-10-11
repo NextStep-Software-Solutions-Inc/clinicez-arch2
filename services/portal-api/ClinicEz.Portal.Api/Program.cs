@@ -1,4 +1,5 @@
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Middlewares;
 using ClinicEz.Portal.Api;
 using ClinicEz.Portal.Application;
 using ClinicEz.Portal.Infrastructure;
@@ -18,6 +19,8 @@ var builder = WebApplication.CreateBuilder(args);
 var env = builder.Environment;
 builder.Configuration.AddJsonFile("appsettings.json", false, true);
 builder.Configuration.AddJsonFile($"appsettings.{env.EnvironmentName}.json", true, true);
+// CreateBuilder put the environment variables before the files added here, so the files would override them; re-add them last.
+builder.Configuration.AddEnvironmentVariables();
 builder.Configuration.AddUserSecrets(typeof(Program).Assembly, true);
 
 // 0. Add Authentication and Authorization Services
@@ -31,12 +34,7 @@ builder.Services
     .AddJwtBearer(options =>
     {
         // These values MUST be correctly configured in appsettings.json
-        var authority = builder.Configuration["Clerk:Authority"];
-        if (string.IsNullOrWhiteSpace(authority) && env.IsDevelopment())
-        {
-            authority = "https://amazing-mosquito-75.clerk.accounts.dev";
-        }
-        options.Authority = authority;
+        options.Authority = builder.Configuration["Clerk:Authority"];
 
         // This parameter block configures how the token is validated
         options.TokenValidationParameters = new TokenValidationParameters
@@ -102,8 +100,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 // 1. Add services from our other layers
 builder.Services
     .AddApiServices()
-    .AddApplicationServices(builder.Configuration)
+    .AddApplicationServices()
     .AddInfrastructureServices(builder.Configuration, builder.Environment);
+
+builder.Services.AddClinicEzCors(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 bool isDevelopment = app.Environment.IsDevelopment();
@@ -157,6 +157,9 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine("[ClinicEz.Portal] Warning: Migration encountered an issue during startup; continuing application execution.");
     }
 
+    // The plan catalogue (Billing:Plans) is production data: seeded in every environment, creating only plans that are missing.
+    scope.ServiceProvider.GetRequiredService<ClinicEz.Portal.Infrastructure.Persistence.Seeders.PlanSeeder>().SeedAsync().GetAwaiter().GetResult();
+
     if (isDevelopment)
     {
         var seeders = scope.ServiceProvider.GetServices<IBaseSeeder>();
@@ -197,7 +200,7 @@ if (isDevelopment)
 
 // 4. Add middleware
 app.UseForwardedHeaders();
-app.UseCors(isDevelopment ? "development" : "production");
+app.UseCors(isDevelopment ? CorsExtensions.DevelopmentPolicyName : CorsExtensions.ProductionPolicyName);
 app.UseHttpsRedirection();
 app.UseExceptionHandler(); // Use our global exception handler
 app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [new HangfireDashboardAuthFilter(app.Configuration)] }); // Basic Auth; denied when no password is configured
@@ -216,19 +219,24 @@ RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Webhooks.IWebhookDeliver
     "* * * * *"
 );
 
-// Support root /api/internal requests from internal microservices (e.g. philhealth-proxy)
-app.Use(async (context, next) =>
-{
-    if (context.Request.Path.StartsWithSegments("/api/internal", out var remaining))
-    {
-        context.Request.Path = "/api/v1/internal" + remaining;
-    }
-    await next();
-});
+// Facility licenses are short-lived: re-mint and re-send (entitlements.changed) those about to expire
+RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IEntitlementRenewalJob>(
+    "facility-license-renewal",
+    job => job.RenewExpiringAsync(CancellationToken.None),
+    "0 * * * *"
+);
+
+// Once a workspace's subscription has lapsed past the read-only grace period its on-premise hub clients are revoked
+RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IEntitlementRenewalJob>(
+    "lapsed-hub-client-revocation",
+    job => job.RevokeLapsedHubClientsAsync(CancellationToken.None),
+    "30 3 * * *"
+);
 
 // IMPORTANT: Authentication MUST run before Authorization
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 // 5. Tell the app to use controllers
 app.MapApiEndpoints();

@@ -86,6 +86,15 @@ export interface AdminUserDto {
   createdAt: string;
 }
 
+export interface AdminSystemSettingDto {
+  key: string;
+  value: string;
+  category: string;
+  description: string;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
 export const adminService = {
   getMe: async (): Promise<AdminMeDto> => {
     const res = await apiClient.get<AdminMeDto>("/admin/me");
@@ -204,6 +213,16 @@ export const adminService = {
 
   deleteUser: async (id: string): Promise<boolean> => {
     const res = await apiClient.delete<boolean>(`/admin/users/${id}`);
+    return res.data;
+  },
+
+  getSettings: async (): Promise<AdminSystemSettingDto[]> => {
+    const res = await apiClient.get<AdminSystemSettingDto[]>("/admin/settings");
+    return res.data;
+  },
+
+  updateSettings: async (settings: Record<string, string>): Promise<AdminSystemSettingDto[]> => {
+    const res = await apiClient.put<AdminSystemSettingDto[]>("/admin/settings", settings);
     return res.data;
   }
 };

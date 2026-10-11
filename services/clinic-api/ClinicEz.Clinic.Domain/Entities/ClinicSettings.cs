@@ -8,6 +8,13 @@ public sealed class ClinicSettings : BaseEntity
     public required string TenantId { get; set; }
     public Guid ClinicId { get; set; }
 
+    /// <summary>
+    /// Workspace/facility slugs announced by the control plane when the facility is provisioned. They make the
+    /// workspace-by-slug lookup a purely local read (no portal database or HTTP dependency).
+    /// </summary>
+    public string? TenantSlug { get; set; }
+    public string? FacilitySlug { get; set; }
+
     public required string ClinicName { get; set; }
     public string? TaxIdentificationNumber { get; set; } // TIN
     public string? AccreditationNumber { get; set; }     // e.g. PHIC-KONSULTA-09214
@@ -21,6 +28,8 @@ public sealed class ClinicSettings : BaseEntity
     public string PlanTier { get; set; } = "Community";
     public int MaxStaffLimit { get; set; } = 5;
     public DateTime? LicenseExpiresAt { get; set; }
+    /// <summary>Version of the entitlements the held license was minted for; an older <c>entitlements.changed</c> never replaces a newer one.</summary>
+    public int EntitlementVersion { get; set; }
 
     /// <summary>
     /// JSON encoded schedule, e.g. "Mon-Fri 8:00 AM - 5:00 PM, Sat 8:00 AM - 12:00 PM"

@@ -106,7 +106,7 @@ public class AnalyzerFeedTests
 
         var simulatedAstm = feedService.GenerateSimulationPayload("Mindray BC-5150", "ACC-FEED-001", "ASTM");
 
-        var handler = new IngestAnalyzerFeedCommandHandler(repo, uow, feedService);
+        var handler = new IngestAnalyzerFeedCommandHandler(repo, uow, feedService, LabTestDbHelper.CreateLifecycle(db, sieve));
         var result = await handler.Handle(new IngestAnalyzerFeedCommand(simulatedAstm), CancellationToken.None);
 
         result.AccessionNumber.Should().Be("ACC-FEED-001");

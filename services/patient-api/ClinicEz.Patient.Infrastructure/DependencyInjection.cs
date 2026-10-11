@@ -1,5 +1,12 @@
 using System.Security.Claims;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interfaces;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interoperability;
+using ClinicEz.Patient.Application.Features.Appointments.Interop;
+using ClinicEz.Patient.Application.Features.Documents.Interop;
+using ClinicEz.Patient.Application.Features.Sharing;
+using ClinicEz.Patient.Application.Features.Sharing.Interop;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -8,6 +15,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Domain.Interfaces;
@@ -16,16 +24,11 @@ using ClinicEz.Patient.Infrastructure.Persistence;
 using ClinicEz.Patient.Infrastructure.Persistence.Repositories;
 using ClinicEz.Patient.Infrastructure.Services;
 using ClinicEz.Patient.Infrastructure.Services.Auth;
-using ClinicEz.Patient.Infrastructure.Services.Clinic;
 using ClinicEz.Patient.Infrastructure.Services.Jobs;
 using ClinicEz.Patient.Infrastructure.Services.Jobs.Processors;
-using ClinicEz.Patient.Infrastructure.Services.Session;
 using ClinicEz.Patient.Infrastructure.Services.Storage;
-using ClinicEz.Patient.Infrastructure.Services.Workers;
 using ClinicEz.Patient.Infrastructure.Services.Notifications;
-using ClinicEz.Patient.Infrastructure.Consumers;
-using MassTransit;
-using StackExchange.Redis;
+using ClinicEz.Patient.Infrastructure.Interop;
 
 namespace ClinicEz.Patient.Infrastructure;
 
@@ -39,13 +42,20 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
-        var redisConnection = configuration.GetConnectionString("Redis")
-            ?? throw new InvalidOperationException("Connection string 'Redis' is not configured.");
 
         // ── Options ──────────────────────────────────────────────────────────
         services.Configure<R2Options>(configuration.GetSection("R2"));
         services.Configure<ClerkOptions>(configuration.GetSection("Clerk"));
-        services.Configure<EncryptionOptions>(configuration.GetSection("Encryption"));
+        services.AddOptions<EncryptionOptions>()
+            .Bind(configuration.GetSection("Encryption"))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<EncryptionOptions>, EncryptionOptionsValidator>();
+        services.AddOptions<SharingOptions>()
+            .Bind(configuration.GetSection(SharingOptions.SectionName))
+            .Validate(
+                o => !string.IsNullOrWhiteSpace(o.SigningKey) && o.SigningKey.Length >= SharingOptions.MinimumSigningKeyLength,
+                $"{SharingOptions.SectionName}:SigningKey must be set to a secret of at least {SharingOptions.MinimumSigningKeyLength} characters.")
+            .ValidateOnStart();
 
         // ── EF Core — PostgreSQL with snake_case naming ───────────────────────
         services.AddDbContext<ApplicationDbContext>(options =>
@@ -55,27 +65,6 @@ public static class DependencyInjection
                 .UseSnakeCaseNamingConvention()
                 .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
-        // ── Redis ─────────────────────────────────────────────────────────────
-        services.AddSingleton<IConnectionMultiplexer>(
-            ConnectionMultiplexer.Connect(redisConnection));
-
-        // ── Clinic Dashboard — named HttpClient with Polly standard resilience ─
-        var clinicTimeout = configuration.GetValue<int>("ClinicDashboard:TimeoutSeconds", 30);
-        var clinicRetry = configuration.GetValue<int>("ClinicDashboard:RetryCount", 3);
-
-        services.AddHttpClient("ClinicDashboard")
-            .AddStandardResilienceHandler(options =>
-            {
-                options.Retry.MaxRetryAttempts = clinicRetry;
-                options.Retry.Delay = TimeSpan.FromMilliseconds(500);
-                options.Retry.UseJitter = true;
-                // Total timeout accounts for all retry attempts
-                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(clinicTimeout * (clinicRetry + 1));
-                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(clinicTimeout);
-            });
-
-        services.AddScoped<IClinicDashboardService, ClinicDashboardService>();
-
 
         services.AddHangfire(config => config
             .UseSimpleAssemblyNameTypeSerializer()
@@ -84,29 +73,7 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
-        // ── MassTransit — RabbitMQ & EF Core Outbox ───────────────────────────
-        services.AddMassTransit(x =>
-        {
-            x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("patient", false));
-            x.AddConsumer<FacilityCreatedConsumer>();
-            x.AddConsumer<ClinicRecordVerifiedConsumer>();
-            x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
-            {
-                o.UsePostgres();
-                o.UseBusOutbox();
-            });
-
-            x.UsingRabbitMq((context, cfg) =>
-            {
-                cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
-                {
-                    h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
-                    h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
-                });
-
-                cfg.ConfigureEndpoints(context);
-            });
-        });
+        services.AddPatientInterop(configuration);
 
         // ── Repositories & Unit of Work ───────────────────────────────────────
         services.AddScoped<IPatientRepository, PatientRepository>();
@@ -126,10 +93,12 @@ public static class DependencyInjection
         services.AddScoped<IFileRecordRepository, FileRecordRepository>();
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IPatientAccessRepository, PatientAccessRepository>();
+        services.AddScoped<IShareCodeRepository, ShareCodeRepository>();
+        services.AddScoped<IPatientDocumentRepository, PatientDocumentRepository>();
 
         // ── Application Services ──────────────────────────────────────────────
         services.AddSingleton<IStorageService, R2StorageService>();
-        services.AddScoped<ISessionService, RedisSessionService>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IBackgroundJobEnqueuer, HangfireJobEnqueuer>();
@@ -186,10 +155,25 @@ public static class DependencyInjection
             DbSeeder.Seed(dbContext);
         }
 
-        services.AddHostedService<ClinicPingBackgroundService>();
-        
         return services;
     }
+
+    /// <summary>
+    /// Wires the patient plane into the interop hub (mailbox <c>patient</c>): the outbox/inbox live on the
+    /// service's own DbContext, and every message type patient-api receives is routed to its handler.
+    /// </summary>
+    public static IServiceCollection AddPatientInterop(
+        this IServiceCollection services,
+        IConfiguration configuration) =>
+        services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
+            .Handle<FacilityCreatedEvent, FacilityDirectoryUpdatedInteropHandler>(InteropTypes.FacilityDirectoryUpdated)
+            .Handle<ClinicRecordVerifiedEvent, ClinicRecordVerifiedInteropHandler>(InteropTypes.ClinicRecordVerified)
+            .Handle<ClinicAppointmentUpdatedEvent, ClinicAppointmentUpdatedInteropHandler>(InteropTypes.ClinicAppointmentUpdated)
+            .Handle<PatientShareRedeemPayload, PatientShareRedeemInteropHandler>(InteropTypes.PatientShareRedeem)
+            .Handle<PatientDocumentIssuedPayload, PatientDocumentIssuedInteropHandler>(InteropTypes.PatientDocumentIssued)
+            .Handle<LabOrderStatusChangedPayload, LabOrderStatusChangedInteropHandler>(InteropTypes.LabOrderStatusChanged)
+            .Handle<RxStatusChangedPayload, RxStatusChangedInteropHandler>(InteropTypes.RxStatusChanged)
+            .Handle<LabResultReviewedPayload, LabResultReviewedInteropHandler>(InteropTypes.LabResultReviewed));
 
     public static IServiceCollection AddClerkAuthentication(
         this IServiceCollection services,

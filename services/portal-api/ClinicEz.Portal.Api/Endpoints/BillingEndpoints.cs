@@ -1,10 +1,13 @@
 using System;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Billing.Commands;
 using ClinicEz.Portal.Application.Features.Billing.Queries;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -28,14 +31,14 @@ public class BillingEndpoints : IEndpoint
 
         if (tenant.OwnerId == clerkUserId) return (true, true);
 
-        var staff = await context.StaffMembers
-            .FirstOrDefaultAsync(s => s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == "Active");
+        var staff = await context.WorkspaceMembers
+            .FirstOrDefaultAsync(s => s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active);
 
         if (staff == null) return (false, false);
 
-        // Biller and Admin can manage billing (checkout, update info, cancel)
-        var canManage = staff.Role == "Admin" || staff.Role == "Biller";
-        // Any active member (including Viewer) can view billing info
+        // Billing and Admin members can manage billing (checkout, update info, cancel)
+        var canManage = staff.Role is WorkspaceMemberRole.Admin or WorkspaceMemberRole.Billing;
+        // Any active member (any role) can view billing info
         return (true, canManage);
     }
 
@@ -186,15 +189,15 @@ public class BillingEndpoints : IEndpoint
             ISender sender,
             Microsoft.Extensions.Configuration.IConfiguration config) =>
         {
+            // Xendit:CallbackToken has no built-in default: without it (or with a wrong header) every callback is refused.
             var expectedToken = config["Xendit:CallbackToken"];
-            if (string.IsNullOrEmpty(expectedToken))
-            {
-                expectedToken = "clinicez_callback_token_development";
-            }
 
-            if (!httpContext.Request.Headers.TryGetValue("x-callback-token", out var callbackToken) ||
+            if (string.IsNullOrEmpty(expectedToken) ||
+                !httpContext.Request.Headers.TryGetValue("x-callback-token", out var callbackToken) ||
                 string.IsNullOrEmpty(callbackToken) ||
-                callbackToken != expectedToken)
+                !CryptographicOperations.FixedTimeEquals(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(callbackToken.ToString())),
+                    SHA256.HashData(Encoding.UTF8.GetBytes(expectedToken))))
             {
                 Console.WriteLine("[Webhook] Unauthorized webhook call: x-callback-token verification failed.");
                 return Results.Unauthorized();

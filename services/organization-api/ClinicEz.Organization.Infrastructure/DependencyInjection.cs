@@ -3,8 +3,12 @@ using ClinicEz.Organization.Infrastructure.Persistence;
 using ClinicEz.Organization.Infrastructure.Persistence.Repositories;
 using Hangfire;
 using Hangfire.PostgreSql;
-using MassTransit;
-using ClinicEz.Organization.Infrastructure.Consumers;
+using ClinicEz.Organization.Application.Interop;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Facility;
+using ClinicEz.Shared.Workspace;
+using ClinicEz.Organization.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,6 +41,7 @@ public static class DependencyInjection
         });
         // Register repositories and Unit of Work
         services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Add Hangfire
@@ -47,28 +52,18 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
-		services.AddMassTransit(x =>
-		{
-			x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("organization", false));
-			x.AddConsumer<FacilityCreatedConsumer>();
-			x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
-			{
-				o.UsePostgres();
-				o.UseBusOutbox();
-			});
+        // Facility entitlements (signed license held per organization) and the heartbeat to the portal.
+        services.AddFacilityEntitlements<OrganizationLicenseStore>();
+        services.AddFacilityHeartbeat<OrganizationLicenseStore>();
 
-			x.UsingRabbitMq((context, cfg) =>
-			{
-				cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
-				{
-					h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
-					h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
-				});
+        // Workspace profile (brand and regional defaults), pushed by the portal and held in this service's own database.
+        services.AddWorkspaceProfile<ApplicationDbContext>();
 
-				cfg.ConfigureEndpoints(context);
-			});
-		});
-
+        // Interop hub messaging (replaces the message broker): transactional outbox/inbox + typed handlers.
+        services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
+            .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
+            .HandleEntitlementsChanged()
+            .HandleWorkspaceProfileUpdated());
 
         if (env != null && env.IsDevelopment())
         {

@@ -14,22 +14,30 @@ public class CreateBillingPlanCommand : IRequest<Guid>
     public string Name { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public int Rank { get; set; }
     public decimal PriceMonthly { get; set; }
     public decimal PriceAnnually { get; set; }
     public bool IsHighlighted { get; set; }
     public bool RequiresCheckout { get; set; }
     public List<string> Features { get; set; } = new();
+
+    /// <summary>Limit key to ceiling (<c>-1</c> = unlimited), e.g. <c>limit.clinics</c>.</summary>
+    public Dictionary<string, long> Limits { get; set; } = new();
+
+    /// <summary>Feature keys the plan switches on, e.g. <c>feature.cross_tenant_interop</c>.</summary>
+    public List<string> EnabledFeatures { get; set; } = new();
 }
 
 public class CreateBillingPlanCommandHandler(IApplicationDbContext context) : IRequestHandler<CreateBillingPlanCommand, Guid>
 {
     public async Task<Guid> Handle(CreateBillingPlanCommand request, CancellationToken cancellationToken)
     {
-        var plan = new SubscriptionPlan
+        var plan = new Plan
         {
             Name = request.Name,
             Slug = request.Slug,
             Description = request.Description,
+            Rank = request.Rank,
             PriceMonthly = request.PriceMonthly,
             PriceAnnually = request.PriceAnnually,
             IsHighlighted = request.IsHighlighted,
@@ -38,14 +46,16 @@ public class CreateBillingPlanCommandHandler(IApplicationDbContext context) : IR
 
         for (int i = 0; i < request.Features.Count; i++)
         {
-            plan.Features.Add(new SubscriptionPlanFeature
+            plan.Features.Add(new PlanFeature
             {
                 Name = request.Features[i],
                 DisplayOrder = i + 1
             });
         }
 
-        context.SubscriptionPlans.Add(plan);
+        PlanCatalog.ApplyEntitlements(context, plan, request.Limits, request.EnabledFeatures);
+
+        context.Plans.Add(plan);
         await context.SaveChangesAsync(cancellationToken);
 
         return plan.Id;

@@ -34,7 +34,7 @@ public sealed class ClinicConfiguration : IEntityTypeConfiguration<Clinic>
         builder.Property(e => e.Name).HasMaxLength(200).IsRequired();
         builder.Property(e => e.Description).HasMaxLength(1000);
         builder.Property(e => e.Address).HasMaxLength(300);
-        builder.Property(e => e.BaseUrl).HasMaxLength(500).IsRequired();
+        builder.Property(e => e.TenantId).HasMaxLength(100);
         builder.Property(e => e.LogoUrl).HasMaxLength(500);
         builder.Property(e => e.CoverImageUrl).HasMaxLength(500);
         builder.Property(e => e.PrivacyPolicyUrl).HasMaxLength(500);
@@ -120,6 +120,7 @@ public sealed class BookingDraftConfiguration : IEntityTypeConfiguration<Booking
         builder.Property(e => e.Reason).HasMaxLength(500);
         builder.Property(e => e.Notes).HasMaxLength(1000);
         builder.Property(e => e.ShareFieldsJson).HasColumnType("text").IsRequired();
+        builder.Property(e => e.ShareSections).HasConversion<string>().HasMaxLength(200);
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(e => e.UpdatedBy).HasMaxLength(128);

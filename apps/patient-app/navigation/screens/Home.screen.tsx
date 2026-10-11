@@ -308,6 +308,22 @@ export default function HomeScreen() {
             icon="calendar"
             tone="warning"
             onPress={() => navigation.navigate('Main', { screen: 'BookingDraftScreen' })}
+            divider
+          />
+          <ListRow
+            title="Documents"
+            subtitle="Lab requests, prescriptions, results and certificates"
+            icon="document"
+            tone="info"
+            onPress={() => navigation.navigate('Main', { screen: 'DocumentsScreen' })}
+            divider
+          />
+          <ListRow
+            title="Share my records"
+            subtitle="Show a QR code and manage who can see your data"
+            icon="qrCode"
+            tone="purple"
+            onPress={() => navigation.navigate('Main', { screen: 'ShareRecordsScreen' })}
           />
         </Card>
       </View>

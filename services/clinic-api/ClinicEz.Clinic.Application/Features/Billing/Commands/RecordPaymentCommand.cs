@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Exceptions;
 using ClinicEz.Clinic.Application.Features.Billing.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
@@ -56,6 +57,18 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
         if (invoice.Status == InvoiceStatus.Voided)
         {
             throw new BadRequestException("Cannot accept payment for a voided invoice.");
+        }
+
+        if (invoice.Status == InvoiceStatus.Refunded)
+        {
+            throw new BadRequestException("Cannot accept payment for a refunded invoice.");
+        }
+
+        // The shared billing counter collects what was requested to it; a local payment would charge the patient twice.
+        // Local cashiering stays for charges that were never sent to billing.
+        if (invoice.BillingRequestedAt.HasValue)
+        {
+            throw new PaidAtBillingCounterException(invoice.InvoiceNumber);
         }
 
         var today = DateTime.UtcNow.Date;

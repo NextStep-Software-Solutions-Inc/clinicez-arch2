@@ -36,7 +36,6 @@ namespace ClinicEz.Pharmacy.Application.Tests;
 /// </summary>
 public class PharmacyAuthPipelineTests
 {
-    private const string InternalKey = "internal-service-secret-key";
     private const string Audience = "clinicez-pharmacy";
     private static readonly Guid PharmacyA = Guid.Parse("11111111-aaaa-aaaa-aaaa-111111111111");
 
@@ -96,8 +95,7 @@ public class PharmacyAuthPipelineTests
         {
             ["Jwt:SigningKey"] = signingKey ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
             ["Jwt:Audience"] = audience,
-            ["Jwt:Issuer"] = audience,
-            ["Internal:ApiKey"] = InternalKey
+            ["Jwt:Issuer"] = audience
         });
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddFacilityLocalAuth(builder.Configuration, audience, PharmacyTokenEvents.OnTokenValidated);
@@ -105,7 +103,6 @@ public class PharmacyAuthPipelineTests
         builder.Services.AddSingleton(cache);
         builder.Services.AddSingleton(sender);
         builder.Services.AddSingleton(auth);
-        builder.Services.AddSingleton(Substitute.For<IWorkspaceResolver>());
         builder.Services.AddControllers().AddApplicationPart(typeof(HasPermissionAttribute).Assembly);
 
         var app = builder.Build();
@@ -118,7 +115,6 @@ public class PharmacyAuthPipelineTests
             tenant = ctx.TenantId,
             pharmacy = ctx.PharmacyId,
             staff = ctx.StaffId,
-            internalService = ctx.IsInternalService,
             canInventory = ctx.HasPermission(PharmacyPermissions.InventoryRead),
             canManageStaff = ctx.HasPermission(PharmacyPermissions.StaffManage)
         }));
@@ -144,6 +140,10 @@ public class PharmacyAuthPipelineTests
     private static readonly object BatchBody = new { inventoryItemId = Guid.NewGuid(), batchNumber = "B-1", expiryDate = DateTime.UtcNow.AddYears(1), quantityReceived = 5 };
     private static readonly object StaffBody = new { firstName = "Sam", lastName = "Staff", role = 3 };
     private static readonly object TempPasswordBody = new { temporaryPassword = "Temp-Pass-12345" };
+    private static readonly object ClaimBody = new { token = "claim-token-1" };
+    private static readonly object PartialAcceptBody = new { acceptedItemIds = new[] { Guid.NewGuid() }, reason = "Out of stock" };
+    private static readonly object RejectBody = new { reason = "Not dispensable here" };
+    private static readonly object PaymentPolicyBody = new { paymentPolicy = "Postpaid" };
 
     private static (HttpMethod Method, string Url, object? Body, string Permission) Route(string method, string url, object? body, string permission) =>
         (new HttpMethod(method), url, body, permission);
@@ -170,7 +170,14 @@ public class PharmacyAuthPipelineTests
         Route("POST", "/api/v1/inventory/seed", null, PharmacyPermissions.InventoryManage),
         Route("GET", "/api/v1/prescriptions", null, PharmacyPermissions.PrescriptionsRead),
         Route("GET", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444", null, PharmacyPermissions.PrescriptionsRead),
-        Route("POST", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444/dispense", new { }, PharmacyPermissions.PrescriptionsDispense)
+        Route("POST", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444/dispense", new { }, PharmacyPermissions.PrescriptionsDispense),
+        Route("GET", "/api/v1/prescriptions/by-prescription/55555555-5555-5555-5555-555555555555", null, PharmacyPermissions.PrescriptionsRead),
+        Route("POST", "/api/v1/prescriptions/claim", ClaimBody, PharmacyPermissions.PrescriptionsClaim),
+        Route("POST", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444/accept", new { }, PharmacyPermissions.PrescriptionsReview),
+        Route("POST", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444/partial-accept", PartialAcceptBody, PharmacyPermissions.PrescriptionsReview),
+        Route("POST", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444/reject", RejectBody, PharmacyPermissions.PrescriptionsReview),
+        Route("GET", "/api/v1/settings", null, PharmacyPermissions.PrescriptionsRead),
+        Route("PUT", "/api/v1/settings/payment-policy", PaymentPolicyBody, PharmacyPermissions.StaffManage)
     };
 
     private static IEnumerable<(HttpMethod Method, string Url, object? Body, string Permission)> AllRoutes => GamotRoutes.Concat(NonGamotRoutes);
@@ -370,7 +377,6 @@ public class PharmacyAuthPipelineTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         json.Should().Contain("tenant-a").And.Contain(PharmacyA.ToString());
         json.Should().NotContain("victim-tenant");
-        json.Should().Contain("\"internalService\":false");
     }
 
     [Fact]
@@ -407,67 +413,24 @@ public class PharmacyAuthPipelineTests
         await app.Auth.Received(1).SetTemporaryPasswordAsync(Guid.Parse("33333333-3333-3333-3333-333333333333"), PharmacyA, "Temp-Pass-12345", Arg.Any<System.Threading.CancellationToken>());
     }
 
-    // ── internal service key ────────────────────────────────────────────────────────────
+    // ── internal service key (retired: clinic GAMOT lookups arrive over the hub) ────────
 
     [Fact]
-    public async Task InternalKey_AuthenticatesServices_AndWrongKeyIsRejected()
+    public async Task InternalKeyHeader_NoLongerAuthenticatesAnything()
     {
         await using var app = await StartAsync();
 
-        (await app.Client.SendAsync(Req(HttpMethod.Get, "/whoami", null, null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey))))
-            .StatusCode.Should().Be(HttpStatusCode.OK);
-        (await app.Client.SendAsync(Req(HttpMethod.Get, "/whoami", null, null, (FacilityAuthSchemes.InternalKeyHeader, "wrong-key"))))
-            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await app.Client.SendAsync(Req(HttpMethod.Get, "/api/v1/gamot/formulary", null, null, (FacilityAuthSchemes.InternalKeyHeader, "wrong-key"))))
-            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
-
-    [Fact]
-    public async Task InternalKey_CanCallEveryGamotEndpoint()
-    {
-        await using var app = await StartAsync();
-
-        foreach (var (method, url, body, _) in GamotRoutes)
+        foreach (var (method, url, body, _) in GamotRoutes.Concat(NonGamotRoutes))
         {
             var response = await app.Client.SendAsync(Req(method, url, null, body,
-                (FacilityAuthSchemes.InternalKeyHeader, InternalKey), ("X-Tenant-Id", "tenant-from-clinic"), ("X-Facility-Id", PharmacyA.ToString())));
-            Reached(response).Should().BeTrue($"the internal service must reach {method} {url} (got {(int)response.StatusCode})");
-        }
-    }
-
-    [Fact]
-    public async Task InternalKey_IsDeniedOnStaffAuthInventoryAndPrescriptionEndpoints()
-    {
-        await using var app = await StartAsync();
-
-        foreach (var (method, url, body, _) in NonGamotRoutes)
-        {
-            var response = await app.Client.SendAsync(Req(method, url, null, body, (FacilityAuthSchemes.InternalKeyHeader, InternalKey)));
-            response.StatusCode.Should().Be(HttpStatusCode.Forbidden, $"the internal key must not unlock {method} {url}");
+                (FacilityAuthSchemes.InternalKeyHeader, "any-key"), ("X-Tenant-Id", "tenant-from-clinic"), ("X-Facility-Id", PharmacyA.ToString())));
+            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized, $"{method} {url} must not accept a service key");
         }
 
-        // Personal-session endpoints are meaningless for a service principal.
-        (await app.Client.SendAsync(Req(HttpMethod.Get, "/api/v1/auth/me", null, null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey))))
-            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await app.Client.SendAsync(Req(HttpMethod.Post, "/api/v1/auth/change-password", null, new { currentPassword = "a", newPassword = "b" }, (FacilityAuthSchemes.InternalKeyHeader, InternalKey))))
+        (await app.Client.SendAsync(Req(HttpMethod.Get, "/whoami", null, null, (FacilityAuthSchemes.InternalKeyHeader, "any-key"))))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         app.Sender.ReceivedCalls().Should().BeEmpty();
         app.Auth.ReceivedCalls().Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task InternalKey_HonoursTenantAndFacilityHeaders_AndHasGamotPermissionsOnly()
-    {
-        await using var app = await StartAsync();
-
-        var response = await app.Client.SendAsync(Req(HttpMethod.Get, "/whoami", null, null,
-            (FacilityAuthSchemes.InternalKeyHeader, InternalKey),
-            ("X-Tenant-Id", "tenant-from-clinic"),
-            ("X-Facility-Id", "44444444-dddd-dddd-dddd-444444444444")));
-        var json = await response.Content.ReadAsStringAsync();
-
-        json.Should().Contain("tenant-from-clinic").And.Contain("44444444-dddd");
-        json.Should().Contain("\"internalService\":true").And.Contain("\"canInventory\":false").And.Contain("\"canManageStaff\":false");
     }
 
     [Fact]
@@ -484,5 +447,47 @@ public class PharmacyAuthPipelineTests
         (await app.Client.SendAsync(Req(HttpMethod.Post, "/api/v1/gamot/dispense", clerk, DispenseBody))).StatusCode
             .Should().Be(HttpStatusCode.Forbidden);
         app.Sender.ReceivedCalls().Should().HaveCount(1);
+    }
+
+    // ── prescription review / claim / settings endpoints ────────────────────────────────
+
+    [Fact]
+    public async Task ReviewClaimAndSettingsEndpoints_BuildTheExpectedCommands()
+    {
+        await using var app = await StartAsync();
+        var chief = app.StaffToken(PharmacyStaffRole.ChiefPharmacist);
+        var orderId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var itemId = Guid.NewGuid();
+
+        await app.Client.SendAsync(Req(HttpMethod.Post, $"/api/v1/prescriptions/{orderId}/accept", chief, new { }));
+        await app.Client.SendAsync(Req(HttpMethod.Post, $"/api/v1/prescriptions/{orderId}/partial-accept", chief, new { acceptedItemIds = new[] { itemId }, reason = "Out of stock" }));
+        await app.Client.SendAsync(Req(HttpMethod.Post, $"/api/v1/prescriptions/{orderId}/reject", chief, new { reason = "Not dispensable" }));
+        await app.Client.SendAsync(Req(HttpMethod.Post, "/api/v1/prescriptions/claim", chief, new { token = "abc123" }));
+        await app.Client.SendAsync(Req(HttpMethod.Put, "/api/v1/settings/payment-policy", chief, new { paymentPolicy = "postpaid" }));
+
+        var commands = app.Sender.ReceivedCalls().Select(c => c.GetArguments()[0]).ToList();
+        commands.OfType<ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands.AcceptPrescriptionCommand>().Single().PrescriptionId.Should().Be(orderId);
+        var partial = commands.OfType<ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands.PartiallyAcceptPrescriptionCommand>().Single();
+        partial.AcceptedItemIds.Should().Equal(itemId);
+        partial.Reason.Should().Be("Out of stock");
+        commands.OfType<ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands.RejectPrescriptionCommand>().Single().Reason.Should().Be("Not dispensable");
+        commands.OfType<ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands.ClaimPrescriptionCommand>().Single().Token.Should().Be("abc123");
+        commands.OfType<ClinicEz.Pharmacy.Application.Features.Settings.UpdatePaymentPolicyCommand>().Single().PaymentPolicy.Should().Be(PharmacyPaymentPolicy.Postpaid);
+    }
+
+    [Theory]
+    [InlineData("Free")]
+    [InlineData("7")]
+    [InlineData("")]
+    public async Task UpdatePaymentPolicy_WithAnUnknownPolicy_IsRejected_AndNeverRunsTheHandler(string policy)
+    {
+        await using var app = await StartAsync();
+        var token = app.StaffToken(PharmacyStaffRole.ChiefPharmacist);
+
+        var act = async () => await app.Client.SendAsync(
+            Req(HttpMethod.Put, "/api/v1/settings/payment-policy", token, new { paymentPolicy = policy }));
+
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.BadRequestException>();
+        app.Sender.ReceivedCalls().Should().BeEmpty();
     }
 }

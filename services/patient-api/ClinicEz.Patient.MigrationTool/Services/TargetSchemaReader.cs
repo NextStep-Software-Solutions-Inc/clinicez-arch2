@@ -11,8 +11,9 @@ public sealed class TargetSchemaReader(IOptions<MigrationToolOptions> options)
 {
     public TargetDatabaseSchema Read()
     {
+        // The context below is only used to read the EF model; this placeholder is never opened and carries no credentials.
         var connectionString = string.IsNullOrWhiteSpace(options.Value.TargetConnection)
-            ? "Host=localhost;Database=patientapp_migration_metadata;Username=metadata;Password=metadata"
+            ? "Host=localhost;Database=patientapp_migration_metadata"
             : PostgresConnectionString.Normalize(options.Value.TargetConnection);
 
         var dbOptions = new DbContextOptionsBuilder<ApplicationDbContext>()

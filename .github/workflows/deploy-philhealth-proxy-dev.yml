@@ -7,6 +7,7 @@ on:
     paths:
       - 'services/philhealth-proxy/**'
       - 'deploy/philhealth-proxy/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-philhealth-proxy-dev.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
     paths:
       - 'services/philhealth-proxy/**'
       - 'deploy/philhealth-proxy/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-philhealth-proxy-dev.yml'
   workflow_dispatch:
@@ -84,8 +86,15 @@ jobs:
         ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        PORTAL_API_BASE_URL: ${{ vars.PORTAL_API_BASE_URL || secrets.PORTAL_API_BASE_URL }}
       run: |
-        for var in ASPNETCORE_ENVIRONMENT IMAGE_NAME IMAGE_TAG; do
+        for var in PORTAL_API_BASE_URL; do
+          if [ -z "$(printenv $var)" ]; then
+            echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+        done
+        for var in ASPNETCORE_ENVIRONMENT IMAGE_NAME IMAGE_TAG PORTAL_API_BASE_URL; do
           echo "$var=$(printenv $var)" >> deploy/philhealth-proxy/.env
         done
 

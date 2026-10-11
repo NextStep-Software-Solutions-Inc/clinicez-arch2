@@ -54,10 +54,11 @@ public class ClinicAuthServiceTests
 
     private static async Task<Fixture> CreateAsync(string? ownerEmail = "owner@clinic.test", bool withSettings = true)
     {
+        var clinicId = Guid.NewGuid();
         var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
         var (db, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        var clinicId = Guid.NewGuid();
         var tenantId = Guid.NewGuid().ToString();
         var license = SignLicense(clinicId, tenantId, ownerEmail, "Olivia Owner");
 

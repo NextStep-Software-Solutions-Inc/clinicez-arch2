@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Applied to every test project by Directory.Build.targets. -->
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <!-- Lets unit tests that construct FacilityLicenseSigner/Validator without configuration use the per-machine
+           development authority key (there is no built-in key). Hosts keep the environment they are built with. -->
+      <CLINICEZ_DEV_KEYS>true</CLINICEZ_DEV_KEYS>
+    </EnvironmentVariables>
+  </RunConfiguration>
+</RunSettings>

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
 import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList } from '@ui';
 import SegmentedControl from '@ui/SegmentedControl';
 import { useClinic } from '@context/ClinicContext';
@@ -19,6 +19,9 @@ import { openDocument } from '../../services/documentOpener';
 import { notify } from '@utils/feedback';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
+import { PERMISSIONS } from '@constants/permissions';
+import { usePermission } from '@context/AuthContext';
+import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
 import PhilHealthProfileModal from '../../components/PhilHealthProfileModal';
@@ -45,8 +48,12 @@ const humanizeKey = (key: string) => {
 
 type PatientFilter = 'ALL' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES';
 
-export default function PatientsScreen() {
+export type PatientsScreenProps = StaticScreenProps<{ openPatientId?: string } | undefined>;
+
+export default function PatientsScreen({ route }: PatientsScreenProps) {
   const navigation = useNavigation<any>();
+  const canImportPatient = usePermission(PERMISSIONS.patientsWrite);
+  const openPatientId = route.params?.openPatientId;
   const { letterhead } = useClinic();
   const { currentName } = useStaff();
   const [patients, setPatients] = useState<ClinicPatient[] | null>(null);
@@ -284,6 +291,26 @@ export default function PatientsScreen() {
     setLoadingAttachments(false);
   };
 
+  // Arriving from "Scan patient QR": open the freshly imported patient's chart once.
+  useEffect(() => {
+    if (!openPatientId) return;
+    let cancelled = false;
+    (async () => {
+      const [patient, err] = await clinicService.getPatientById(openPatientId);
+      if (cancelled) return;
+      navigation.setParams({ openPatientId: undefined });
+      if (patient) {
+        handleOpenChart(patient);
+      } else {
+        notify.error(err?.message || 'Could not open the imported patient.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openPatientId]);
+
   const handleOpenPhilHealthProfile = (patient: ClinicPatient) => {
     setSelectedPatientForProfile(patient);
     setPhilHealthProfileModalVisible(true);
@@ -506,7 +533,18 @@ export default function PatientsScreen() {
     <ResponsiveLayout
       headerTitle="Patients"
       rightAction={
-        <Button title="Register patient" variant="primary" size="sm" icon="plus" onPress={() => setRegisterVisible(true)} />
+        <View style={styles.headerActions}>
+          {canImportPatient ? (
+            <Button
+              title="Scan patient QR"
+              variant="outline"
+              size="sm"
+              icon="scan"
+              onPress={() => navigation.navigate('ShareImport')}
+            />
+          ) : null}
+          <Button title="Register patient" variant="primary" size="sm" icon="plus" onPress={() => setRegisterVisible(true)} />
+        </View>
       }
     >
       <ScrollView
@@ -1237,6 +1275,8 @@ export default function PatientsScreen() {
                             </View>
                           </View>
 
+                          <LabOrderStageChip order={order} />
+
                           <ThemedText style={{ fontSize: theme.fontSizes.xs, color: theme.colors.textMuted }}>
                             Ordered: {new Date(order.orderDate).toLocaleDateString()} • Doctor: {order.orderedByDoctorName ?? 'Not recorded'}
                           </ThemedText>
@@ -1722,6 +1762,11 @@ export default function PatientsScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,

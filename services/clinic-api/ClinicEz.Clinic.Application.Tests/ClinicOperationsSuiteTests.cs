@@ -139,7 +139,7 @@ public class ClinicOperationsSuiteTests
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var repo = TestDbHelper.CreateRepository<MedicalCertificate>(context, sieve);
-        var handler = new IssueMedicalCertificateCommandHandler(repo, uow, _clinicContext);
+        var handler = Phase3TestKit.MedCert(repo, uow, _clinicContext, context);
         var queryHandler = new GetMedicalCertificatesQueryHandler(repo);
 
         var patientId = Guid.NewGuid();

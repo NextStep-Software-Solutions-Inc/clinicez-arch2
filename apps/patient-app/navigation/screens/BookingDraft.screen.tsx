@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { FlatList, Image, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { addDays, format } from 'date-fns';
@@ -34,12 +34,7 @@ import {
   saveBookingDraft,
   createBookingDraftOnline,
   submitBookingDraftOnline,
-  uploadSharedFileToClinic,
 } from '../../services/discovery/discoveryService';
-import {
-  preparePreviewFile,
-  cleanupPreviewCache,
-} from '../../services/files/filesService';
 import {
   consumeAttachedFileSelection,
   initAttachedFileSelection,
@@ -50,6 +45,12 @@ import {
   fetchServiceOptions,
 } from '../../services/appointments/appointmentsService';
 import type { ClinicView, ShareableFieldKey } from '../../services/discovery/types';
+import BookingSectionsPicker from 'components/sharing/BookingSectionsPicker';
+import {
+  clinicRequestedSections,
+  shareSectionsSummary,
+  type BookingShareSection,
+} from '../../services/sharing/bookingSections';
 import type {
   AvailableSlot,
   BookingProviderOption,
@@ -355,9 +356,23 @@ export default function BookingDraftScreen(props: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [isDraftSaving, setIsDraftSaving] = useState(false);
   const [hasPaid, setHasPaid] = useState(false);
+  const [shareSections, setShareSections] = useState<BookingShareSection[]>([]);
+  const [requestedSections, setRequestedSections] = useState<BookingShareSection[]>([]);
 
   // Validation errors
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Hint only: which record sections the selected clinic asks for.
+  useEffect(() => {
+    if (step !== 5 || !selectedClinicId) return;
+    let mounted = true;
+    getClinicDetail(patientId, selectedClinicId)
+      .then(detail => {
+        if (mounted) setRequestedSections(clinicRequestedSections(detail?.requiredShareFields ?? []));
+      })
+      .catch(err => console.warn('[BookingDraftScreen] getClinicDetail error:', err));
+    return () => { mounted = false; };
+  }, [step, selectedClinicId, patientId]);
 
   // ── Load clinics on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -583,6 +598,7 @@ export default function BookingDraftScreen(props: Props) {
       reason: reasonValue,
       notes: notesValue,
       shareFieldsJson: shareFieldsJsonValue,
+      shareSections: shareSections.length > 0 ? shareSections : undefined,
       attachedFileIdsJson: JSON.stringify(attachedFileIds),
     }));
 
@@ -602,6 +618,7 @@ export default function BookingDraftScreen(props: Props) {
         reason: reasonValue,
         notes: notesValue || undefined,
         shareFields: consentedShareFields,
+        shareSections,
       }, serverDraftId));
 
       setIsSaving(false);
@@ -624,42 +641,6 @@ export default function BookingDraftScreen(props: Props) {
         return;
       }
 
-      // Stream decrypted file copies to the clinic's intake pipeline for re-encryption under clinic CMK
-      if (attachedFileIds && attachedFileIds.length > 0) {
-        for (const fileId of attachedFileIds) {
-          try {
-            const prepared = await preparePreviewFile(patientId, fileId, getToken);
-            if (prepared?.uri) {
-              if (Platform.OS === 'web') {
-                const res = await fetch(prepared.uri);
-                const blob = await res.blob();
-                const rawBaseUrl = selectedClinic?.baseUrl || process.env.EXPO_PUBLIC_CLINIC_API_URL || 'http://localhost:5245';
-                const targetUrl = `${rawBaseUrl.replace(/\/+$/, '')}/records/intake/patient-shared-file`;
-                const formData = new FormData();
-                formData.append('PatientId', patientId);
-                formData.append('FileId', fileId);
-                formData.append('RecordType', 'LabResult');
-                formData.append('Title', prepared.name);
-                formData.append('File', blob, prepared.name);
-                await fetch(targetUrl, { method: 'POST', body: formData });
-              } else {
-                await uploadSharedFileToClinic(
-                  patientId,
-                  selectedClinic?.baseUrl,
-                  fileId,
-                  prepared.name,
-                  prepared.uri,
-                  prepared.mimeType
-                );
-              }
-              await cleanupPreviewCache(patientId, fileId);
-            }
-          } catch (streamErr) {
-            console.warn(`[BookingDraftScreen] Decrypt & stream file ${fileId} to clinic warning:`, streamErr);
-          }
-        }
-      }
-
       await safeAwait(saveBookingDraft(patientId, {
         clinicId: selectedClinicId,
         organizationId: null,
@@ -668,6 +649,7 @@ export default function BookingDraftScreen(props: Props) {
         reason: reasonValue,
         notes: notesValue || undefined,
         shareFields: consentedShareFields,
+        shareSections,
       }, serverDraftId));
 
       await safeAwait(db
@@ -1046,6 +1028,10 @@ export default function BookingDraftScreen(props: Props) {
         <SummaryRow
           label="Chief Complaint"
           value={chiefComplaint.trim() || '—'}
+        />
+        <SummaryRow
+          label="Records shared"
+          value={shareSectionsSummary(shareSections)}
           last={!hasPayment}
         />
         {hasPayment ? (
@@ -1056,6 +1042,12 @@ export default function BookingDraftScreen(props: Props) {
           />
         ) : null}
       </View>
+
+      <BookingSectionsPicker
+        selected={shareSections}
+        requested={requestedSections}
+        onChange={setShareSections}
+      />
 
       {/* Payment notice */}
       {hasPayment ? (

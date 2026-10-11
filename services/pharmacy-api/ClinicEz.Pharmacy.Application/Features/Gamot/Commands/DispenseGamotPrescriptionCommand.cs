@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Pharmacy.Application.Common;
 using ClinicEz.Pharmacy.Application.Common.Interfaces;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.DTOs;
@@ -91,10 +92,12 @@ public sealed class DispenseGamotPrescriptionCommandHandler : IRequestHandler<Di
             throw new BadRequestException("Prescription has already been dispensed.");
         }
 
-        if (order.Status == PrescriptionStatus.Cancelled)
+        if (order.Status is PrescriptionStatus.Cancelled or PrescriptionStatus.Rejected)
         {
-            throw new BadRequestException("Cancelled prescriptions cannot be dispensed.");
+            throw new BadRequestException($"{order.Status} prescriptions cannot be dispensed.");
         }
+
+        PrescriptionDispenseGate.EnsureCanDispense(order);
 
         var pin = !string.IsNullOrWhiteSpace(order.PhilHealthIdentificationNumber)
             ? new string(order.PhilHealthIdentificationNumber.Where(char.IsDigit).ToArray()).PadLeft(12, '0')
@@ -129,7 +132,7 @@ public sealed class DispenseGamotPrescriptionCommandHandler : IRequestHandler<Di
 
         // 2. Validate and price GAMOT items
         decimal totalGamotAmount = 0.00m;
-        foreach (var item in order.Items)
+        foreach (var item in order.Items.Where(i => i.Status != ItemDispenseStatus.Rejected))
         {
             if (string.IsNullOrWhiteSpace(item.PhilHealthDrugCode))
             {
@@ -178,7 +181,7 @@ public sealed class DispenseGamotPrescriptionCommandHandler : IRequestHandler<Di
         var allDeductions = new List<object>();
         var dispensedMedications = new List<DispensedMedicationDto>();
 
-        foreach (var item in order.Items)
+        foreach (var item in order.Items.Where(i => i.Status != ItemDispenseStatus.Rejected))
         {
             var searchName = item.GenericName.ToLower();
             var inventoryItem = await _inventoryRepo.Query(i =>
@@ -285,7 +288,7 @@ public sealed class DispenseGamotPrescriptionCommandHandler : IRequestHandler<Di
             }
         }
 
-        var totalAmount = order.Items.Sum(i => i.Subtotal);
+        var totalAmount = order.Items.Where(i => i.Status != ItemDispenseStatus.Rejected).Sum(i => i.Subtotal);
 
         order.Status = PrescriptionStatus.Dispensed;
         order.DispensedAt = DateTime.UtcNow;
@@ -316,34 +319,27 @@ public sealed class DispenseGamotPrescriptionCommandHandler : IRequestHandler<Di
         await _auditRepo.AddAsync(auditRecord, cancellationToken);
         _orderRepo.Update(order);
 
+        // Queue rx.dispensed in the interop outbox BEFORE saving so it commits atomically with the dispense.
+        var dispensedEvent = new PrescriptionDispensedEvent
+        {
+            DispenseId = auditRecord.Id,
+            PrescriptionId = order.ExternalPrescriptionId != Guid.Empty ? order.ExternalPrescriptionId : order.Id,
+            PrescriptionNumber = order.PrescriptionNumber,
+            PharmacyFacilityId = order.PharmacyId,
+            PharmacyFacilityName = order.PharmacyName,
+            PharmacyTenantId = order.TenantId,
+            DispensingPharmacistName = order.DispensingPharmacistName,
+            DispensingPharmacistPrcLicense = order.DispensingPharmacistPrc,
+            DispensedAt = order.DispensedAt.Value,
+            DispensedItems = dispensedMedications,
+            TotalAmount = totalAmount,
+            ReceiptNumber = request.ReceiptNumber,
+            Notes = request.Notes
+        };
+
+        _dispensedPublisher.Enqueue(order, dispensedEvent);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // 6. Broadcast PrescriptionDispensedEvent
-        try
-        {
-            var dispensedEvent = new PrescriptionDispensedEvent
-            {
-                DispenseId = auditRecord.Id,
-                PrescriptionId = order.ExternalPrescriptionId != Guid.Empty ? order.ExternalPrescriptionId : order.Id,
-                PrescriptionNumber = order.PrescriptionNumber,
-                PharmacyFacilityId = order.PharmacyId,
-                PharmacyFacilityName = "ClinicEz Partner Pharmacy Hub",
-                PharmacyTenantId = order.TenantId,
-                DispensingPharmacistName = order.DispensingPharmacistName,
-                DispensingPharmacistPrcLicense = order.DispensingPharmacistPrc,
-                DispensedAt = order.DispensedAt.Value,
-                DispensedItems = dispensedMedications,
-                TotalAmount = totalAmount,
-                ReceiptNumber = request.ReceiptNumber,
-                Notes = request.Notes
-            };
-
-            await _dispensedPublisher.PublishPrescriptionDispensedAsync(dispensedEvent, cancellationToken);
-        }
-        catch
-        {
-            // Event publication non-blocking
-        }
 
         var dto = new PrescriptionOrderDto(
             order.Id,
@@ -402,8 +398,9 @@ public sealed class DispenseGamotPrescriptionCommandHandler : IRequestHandler<Di
                     auditRecord.BatchDeductionsJson,
                     auditRecord.Notes
                 )
-            }
-        );
+            },
+            order.BranchId
+        ).WithWorkflow(order);
 
         return ApiResponse<PrescriptionOrderDto>.Success(dto, "Prescription successfully verified and dispensed under PhilHealth GAMOT benefit.");
     }

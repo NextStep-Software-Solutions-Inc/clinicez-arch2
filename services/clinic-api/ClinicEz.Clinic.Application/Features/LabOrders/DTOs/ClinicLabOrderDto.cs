@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Interoperability;
 
 namespace ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
 
@@ -10,6 +11,12 @@ public record ClinicLabOrderItemDto(
     string Category,
     string? Instructions,
     LabOrderStatus Status
+);
+
+public record ClinicLabResultSummaryDto(
+    Guid Id,
+    ResultSource Source,
+    VerificationState VerificationState
 );
 
 public record ClinicLabOrderDto(
@@ -27,11 +34,9 @@ public record ClinicLabOrderDto(
     string? ClinicalDiagnosis,
     string? Notes,
     List<ClinicLabOrderItemDto> Items,
-    string? PublicUploadToken = null,
     string? PublicUploadUrl = null,
     string? ExternalLabName = null,
     string? ExternalReportUrl = null,
-    string? ExternalReportFileBase64 = null,
     string? ExternalReportType = null,
     string? UploadedBy = null,
     string? ObservationsJson = null,
@@ -43,7 +48,15 @@ public record ClinicLabOrderDto(
     string? CriticalFindingsJson = null,
     DateTime? PanicAlertTriggeredAt = null,
     DateTime? PanicAcknowledgedAt = null,
-    string? PanicAcknowledgedBy = null
+    string? PanicAcknowledgedBy = null,
+    LabOrderStage Stage = LabOrderStage.Issued,
+    string? StageReason = null,
+    decimal? QuotedAmount = null,
+    string? QuotedCurrency = null,
+    bool PaymentRequired = false,
+    string? LaboratoryName = null,
+    string? ClaimToken = null,
+    List<ClinicLabResultSummaryDto>? Results = null
 );
 
 public record AcknowledgePanicAlertRequest(
@@ -73,27 +86,11 @@ public record CreateClinicLabOrderRequest(
 public record AttachExternalLabResultRequest(
     string? ExternalLabName,
     string DocumentType, // Photo, PDF
-    string? DocumentUrl,
     string? FileBase64,
     string? Notes,
-    string UploadedBy = "ClinicStaff",
     string? ContactNumber = null,
     string? PathologistName = null,
-    string? PathologistPrcLicense = null
-);
-
-public record PublicLabUploadInfoResponse(
-    string OrderNumber,
-    string PatientInitials,
-    int PatientAge,
-    string PatientGender,
-    string OrderingDoctorName,
-    string OrderingFacilityName,
-    string? ClinicalDiagnosis,
-    List<string> RequestedTests,
-    DateTime OrderDate,
-    string? DoctorPrcLicense = null,
-    DateTime? ExpiresAt = null,
-    bool IsExpired = false,
-    string? Status = null
+    string? PathologistPrcLicense = null,
+    string? ContentType = null,
+    string? FileName = null
 );

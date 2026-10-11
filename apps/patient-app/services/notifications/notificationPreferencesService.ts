@@ -133,6 +133,7 @@ import {
   fetchNotificationPreferencesFromBackend,
   upsertNotificationPreferenceOnBackend,
 } from '../api/notificationsApi';
+import { localNotificationCategory, wireNotificationCategory } from './wireMapping';
 
 /**
  * Pulls notification preferences from the backend and merges them into the
@@ -148,7 +149,7 @@ export async function syncPreferencesFromBackend(
     for (const p of remote) {
       await setPreference(
         patientId,
-        p.category as NotificationCategory,
+        localNotificationCategory(p.category),
         p.pushEnabled,
         p.inAppEnabled,
       );
@@ -168,6 +169,12 @@ export async function setPreferenceWithSync(
 ): Promise<void> {
   await setPreference(patientId, category, pushEnabled, inAppEnabled);
   try {
-    await upsertNotificationPreferenceOnBackend(getToken, patientId, category, pushEnabled, inAppEnabled);
+    await upsertNotificationPreferenceOnBackend(
+      getToken,
+      patientId,
+      wireNotificationCategory(category),
+      pushEnabled,
+      inAppEnabled,
+    );
   } catch { /* offline — will reconcile on next sync */ }
 }

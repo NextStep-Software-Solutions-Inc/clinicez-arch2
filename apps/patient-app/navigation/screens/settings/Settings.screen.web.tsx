@@ -61,6 +61,14 @@ export default function SettingsScreenWeb() {
       {/* Account */}
       <SettingsSection title="Account">
         <SettingsRow
+          title="My devices"
+          subtitle="Manage where you're signed in"
+          icon={{ android: 'devices', ios: 'iphone' }}
+          iconColor={colors.primary}
+          right={{ type: 'chevron' }}
+          onPress={() => navigation.navigate('Main', { screen: 'MyDevicesScreen' })}
+        />
+        <SettingsRow
           title="Sign Out"
           icon={{ android: 'logout', ios: 'rectangle.portrait.and.arrow.right' }}
           iconColor={colors.emergency}

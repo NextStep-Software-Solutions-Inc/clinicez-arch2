@@ -1,6 +1,12 @@
+using System.Net.Http;
+using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Interfaces;
-using ClinicEz.Clinic.Infrastructure.Consumers;
+using ClinicEz.Clinic.Infrastructure.Messaging;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Facility;
+using ClinicEz.Shared.Interoperability;
 using ClinicEz.Shared.Workspace;
 using ClinicEz.Clinic.Infrastructure.Context;
 using ClinicEz.Clinic.Infrastructure.Persistence;
@@ -9,7 +15,6 @@ using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Documents;
 using Hangfire;
 using Hangfire.PostgreSql;
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,7 +37,7 @@ public static class DependencyInjection
             throw new InvalidOperationException("DbSchema configuration value is required but was not specified.");
         }
 
-        // Must be registered before Hangfire/MassTransit so the schema exists when they start (fresh on-prem installs).
+        // Must be registered before Hangfire/interop so the schema exists when they start (fresh on-prem installs).
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.DatabaseMigrationHostedService>();
 
         services.AddHttpContextAccessor();
@@ -52,7 +57,7 @@ public static class DependencyInjection
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
-        services.AddHttpClient<ITenantLookupService, TenantLookupService>();
+        services.AddScoped<ITenantLookupService, TenantLookupService>();
 
         // Facility-local authentication (no external identity provider; works offline/LAN)
         services.AddMemoryCache();
@@ -70,22 +75,37 @@ public static class DependencyInjection
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogSeedHostedService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyCleanupHostedService>();
 
-        // Workspace brand/regional defaults, pulled from portal-api (works against a remote portal)
-        services.AddWorkspaceProfileClient();
+        // Workspace brand/regional defaults: fed by workspace.profile.updated messages and held in this service's own database
+        services.AddWorkspaceProfile<ApplicationDbContext>();
 
-        // Outbound patient webhook notifier
-        services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();
-
-        // Outbound PhilHealth Yakap integration client
-        services.AddHttpClient<IPhilHealthProxyClient, PhilHealthProxyClient>();
-        services.AddHttpClient<IPharmacyGamotGateway, PharmacyGamotGateway>();
+        // PhilHealth Yakap and GAMOT lookups are hub request/reply calls, not HTTP clients
+        services.AddScoped<IPhilHealthProxyClient, PhilHealthProxyClient>();
+        services.AddScoped<IPharmacyGamotGateway, PharmacyGamotGateway>();
         services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator, PhilHealthSequenceGenerator>();
 
-        // Outbound interoperability publisher
+        // Interoperability: outbound messages are queued in the transactional interop outbox; inbound ones are
+        // scoped to the clinic they are addressed to.
+        services.AddScoped<ClinicRecipientResolver>();
+        services.AddScoped<ClinicPatientAddressResolver>();
+        services.AddScoped<IClinicIdentityProvider, ClinicIdentityProvider>();
+        services.AddScoped<IPatientAppointmentPublisher, PatientAppointmentPublisher>();
         services.AddScoped<ILabRequisitionPublisher, LabRequisitionPublisher>();
         services.AddScoped<IPrescriptionPublisher, PrescriptionPublisher>();
+        services.AddHttpClient(PatientRecordSharedHandler.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.Configure<ClinicUploadOptions>(configuration.GetSection(ClinicUploadOptions.SectionName));
+        services.AddScoped<IUploadGrantService, UploadGrantService>();
+        services.AddScoped<ILabResultFileStore, LabResultFileStore>();
+        services.AddScoped<ILabResultIntake, LabResultIntake>();
+        services.AddScoped<IPatientDocumentPublisher, PatientDocumentPublisher>();
+        services.AddScoped<IClaimSlipService, ClaimSlipService>();
+        services.AddScoped<IBillingRequestPublisher, BillingRequestPublisher>();
+        services.AddScoped<IPatientRecordGateway, PatientRecordGateway>();
+        services.AddScoped<ILabResultReviewedPublisher, LabResultReviewedPublisher>();
         services.AddClinicEzDocumentEngine();
         services.AddScoped<IClinicDocumentPdfService, ClinicDocumentPdfService>();
+        // Read eagerly: a missing or too-short ClinicEncryption:MasterSecret stops the service from starting.
+        services.AddSingleton(ClinicEz.Clinic.Infrastructure.Services.Storage.ClinicEncryptionKeyRing.FromConfiguration(configuration));
         services.AddSingleton<IClinicEncryptionService, ClinicEz.Clinic.Infrastructure.Services.Storage.ClinicEncryptionService>();
         services.AddSingleton<IClinicStorageService, ClinicEz.Clinic.Infrastructure.Services.Storage.LocalClinicStorageService>();
         services.AddScoped<IClinicRecordEventPublisher, ClinicEz.Clinic.Infrastructure.Services.ClinicRecordEventPublisher>();
@@ -99,48 +119,31 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
-        services.AddMassTransit(x =>
-        {
-            x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("clinic", false));
-            x.AddConsumer<FacilityCreatedConsumer>();
-            x.AddConsumer<ClinicEz.Shared.Workspace.WorkspaceProfileUpdatedConsumer>();
-            x.AddConsumer<AppointmentBookedConsumer>();
-            x.AddConsumer<DiagnosticReportFinalizedConsumer>();
-            x.AddConsumer<PrescriptionDispensedConsumer>();
-            x.AddConsumer<LabPanicResultAlertConsumer>();
-            x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
-            {
-                o.UsePostgres();
-                o.UseBusOutbox();
-            });
+        // Subscription entitlements: the license store, the heartbeat to the control plane and entitlements.changed.
+        services.AddFacilityEntitlements<ClinicLicenseStore>();
+        services.AddFacilityHeartbeat<ClinicLicenseStore>();
 
-            x.UsingRabbitMq((context, cfg) =>
-            {
-                var host = configuration["RabbitMq:Host"];
-                if (string.IsNullOrWhiteSpace(host) || host == "localhost")
-                {
-                    host = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true" ? "rabbitmq" : (string.IsNullOrWhiteSpace(host) ? "localhost" : host);
-                }
-                var portStr = configuration["RabbitMq:Port"];
-                ushort port = !string.IsNullOrEmpty(portStr) && ushort.TryParse(portStr, out var p) ? p : (ushort)5672;
-                var useSsl = configuration.GetValue<bool>("RabbitMq:UseSsl", port == 5671);
-
-                cfg.Host(host, port, configuration["RabbitMq:VirtualHost"] ?? "/", h =>
-                {
-                    h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
-                    h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
-                    if (useSsl)
-                    {
-                        h.UseSsl(s =>
-                        {
-                            // Supports on-premises outbound AMQPS firewall traversal over port 5671
-                        });
-                    }
-                });
-
-                cfg.ConfigureEndpoints(context);
-            });
-        });
+        // Catalog types the clinic deliberately does not handle: the laboratory reports every stage of an order (accepted,
+        // rejected, payment confirmed included) through lab.order.status.changed only, so no other lab.order.* type is
+        // ever sent to a clinic. GAMOT and PhilHealth answers are replies to this clinic's own requests.
+        services.AddInterop<ApplicationDbContext>(configuration, b => b
+            .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
+            .HandleWorkspaceProfileUpdated()
+            .Handle<AppointmentBookedEvent, AppointmentBookedHandler>(InteropTypes.PatientAppointmentBooked)
+            .Handle<DiagnosticReportFinalizedEvent, DiagnosticReportFinalizedHandler>(InteropTypes.LabResultFinalized)
+            .Handle<PrescriptionDispensedEvent, PrescriptionDispensedHandler>(InteropTypes.RxDispensed)
+            .Handle<LabPanicResultAlertEvent, LabPanicResultAlertHandler>(InteropTypes.LabResultPanic)
+            .Handle<LabOrderStatusChangedPayload, LabOrderStatusChangedHandler>(InteropTypes.LabOrderStatusChanged)
+            .Handle<ExternalLabResultUploadedEvent, LabResultExternalSubmittedHandler>(InteropTypes.LabResultExternalSubmitted)
+            .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
+            .Handle<PatientShareSnapshotPayload, PatientShareSnapshotHandler>(InteropTypes.PatientShareSnapshot)
+            .Handle<PatientRecordSharedPayload, PatientRecordSharedHandler>(InteropTypes.PatientRecordShared)
+            .Handle<ExternalPrescriptionDispensedEvent, ExternalPrescriptionDispensedHandler>(InteropTypes.RxExternalDispensed)
+            .Handle<RxStatusChangedPayload, RxStatusChangedHandler>(InteropTypes.RxStatusChanged)
+            .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
+            .HandleReply(InteropTypes.GamotLookupResponded)
+            .HandleReply(InteropTypes.PhilHealthResponse)
+            .HandleEntitlementsChanged());
 
         if (env != null && env.IsDevelopment())
         {

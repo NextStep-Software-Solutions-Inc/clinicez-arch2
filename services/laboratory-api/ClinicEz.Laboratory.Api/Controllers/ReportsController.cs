@@ -11,6 +11,7 @@ using ClinicEz.Laboratory.Application.Features.Reports.Queries;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
 using ClinicEz.Laboratory.Application.Features.Requisitions.Queries;
 using ClinicEz.Laboratory.Domain.Entities;
+using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using MediatR;
@@ -25,15 +26,18 @@ public sealed class ReportsController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IDiagnosticReportPdfGenerator _pdfGenerator;
+    private readonly ILabPrintoutConfigProvider _printoutConfig;
     private readonly IRepository<LabRequisition> _requisitionRepository;
 
     public ReportsController(
         ISender sender,
         IDiagnosticReportPdfGenerator pdfGenerator,
+        ILabPrintoutConfigProvider printoutConfig,
         IRepository<LabRequisition> requisitionRepository)
     {
         _sender = sender;
         _pdfGenerator = pdfGenerator;
+        _printoutConfig = printoutConfig;
         _requisitionRepository = requisitionRepository;
     }
 
@@ -85,7 +89,7 @@ public sealed class ReportsController : ControllerBase
         if (requisition == null)
             return NotFound($"Requisition {requisitionId} not found.");
 
-        var pdfBytes = _pdfGenerator.GeneratePdf(requisition);
+        var pdfBytes = _pdfGenerator.GeneratePdf(requisition, await _printoutConfig.GetAsync(requisition, ct));
         var filename = $"ClinicEz-LabReport-{requisition.AccessionNumber}.pdf";
 
         return File(pdfBytes, "application/pdf", filename);
@@ -106,7 +110,7 @@ public sealed class ReportsController : ControllerBase
         if (requisition == null)
             return NotFound($"Requisition {requisitionId} not found.");
 
-        var html = _pdfGenerator.GenerateHtml(requisition);
+        var html = _pdfGenerator.GenerateHtml(requisition, await _printoutConfig.GetAsync(requisition, ct));
         return Content(html, "text/html");
     }
 
@@ -121,7 +125,7 @@ public sealed class ReportsController : ControllerBase
             RequisitionId: requisitionId,
             DispatchedByMedTechName: request.DispatchedByMedTechName,
             NotifiedDoctorName: request.NotifiedDoctorName,
-            NotificationMethod: request.NotificationMethod ?? "Telephone",
+            NotificationMethod: request.NotificationMethod ?? NotificationMethod.Telephone,
             ReadbackConfirmed: request.ReadbackConfirmed,
             ReadbackNotes: request.ReadbackNotes
         );
@@ -155,7 +159,7 @@ public record PanicDispatchRequest
 {
     public required string DispatchedByMedTechName { get; init; }
     public required string NotifiedDoctorName { get; init; }
-    public string? NotificationMethod { get; init; } = "Telephone";
+    public NotificationMethod? NotificationMethod { get; init; } = Domain.Enums.NotificationMethod.Telephone;
     public bool ReadbackConfirmed { get; init; } = true;
     public string? ReadbackNotes { get; init; }
 }

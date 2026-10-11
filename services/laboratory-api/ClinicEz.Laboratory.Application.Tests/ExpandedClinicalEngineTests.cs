@@ -152,7 +152,7 @@ public class ExpandedClinicalEngineTests
         await db.LabRequisitions.AddAsync(currentReq);
         await db.SaveChangesAsync();
 
-        var handler = new RecordAnalyteResultCommandHandler(repo, uow);
+        var handler = new RecordAnalyteResultCommandHandler(repo, uow, LabTestDbHelper.CreateLifecycle(db, sieve));
         var result = await handler.Handle(new RecordAnalyteResultCommand(
             currentReq.Id,
             "Carlos RMT",
