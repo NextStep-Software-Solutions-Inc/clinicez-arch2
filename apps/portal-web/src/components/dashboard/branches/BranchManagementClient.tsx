@@ -571,32 +571,37 @@ export default function BranchManagementClient() {
               >
                 <div>
                   {/* Branch Card Header */}
-                  <CardHeader className="pb-3 border-b bg-muted/10">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1 min-w-0 flex-1">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <CardTitle className="text-base font-bold truncate text-foreground" title={branch.name}>
+                  <CardHeader className="pb-3 border-b bg-muted/10 flex flex-col w-full min-w-0 max-w-full overflow-hidden">
+                    <div className="flex items-start justify-between gap-3 w-full min-w-0">
+                      <div className="space-y-1.5 min-w-0 flex-1 overflow-hidden">
+                        <div className="flex items-start sm:items-center gap-2 min-w-0 flex-wrap">
+                          <CardTitle
+                            className="text-base font-bold text-foreground min-w-0 max-w-full break-words [overflow-wrap:anywhere] line-clamp-2 leading-snug"
+                            title={branch.name}
+                          >
                             {branch.name}
                           </CardTitle>
-                          {branch.code && (
-                            <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0 shrink-0">
-                              {branch.code}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {branch.code && (
+                              <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0 shrink-0">
+                                {branch.code}
+                              </Badge>
+                            )}
+                            <Badge
+                              className={`text-[10px] font-semibold shrink-0 ${
+                                branch.isActive
+                                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {branch.isActive ? "Active" : "Inactive"}
                             </Badge>
-                          )}
-                          <Badge
-                            className={`text-[10px] font-semibold shrink-0 ${
-                              branch.isActive
-                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {branch.isActive ? "Active" : "Inactive"}
-                          </Badge>
+                          </div>
                         </div>
                         <CardDescription className="text-xs flex items-center gap-1.5 min-w-0">
                           <IconMapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span
-                            className="truncate"
+                            className="truncate block min-w-0"
                             title={
                               [branch.streetAddress, branch.barangay, branch.city, branch.province]
                                 .filter(Boolean)
@@ -610,18 +615,19 @@ export default function BranchManagementClient() {
                         </CardDescription>
                       </div>
 
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground shrink-0"
-                            title="Branch actions"
-                          >
-                            <IconDotsVertical className="h-4 w-4" />
-                            <span className="sr-only">Branch options</span>
-                          </Button>
-                        </DropdownMenuTrigger>
+                      <div className="shrink-0 flex items-center self-start">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground shrink-0 focus-visible:ring-1"
+                              title="Branch actions"
+                            >
+                              <IconDotsVertical className="h-4 w-4" />
+                              <span className="sr-only">Branch options</span>
+                            </Button>
+                          </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48 rounded-xl shadow-lg border">
                           <DropdownMenuItem
                             onClick={() => handleOpenEdit(branch)}
@@ -651,6 +657,7 @@ export default function BranchManagementClient() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      </div>
                     </div>
                   </CardHeader>
 
