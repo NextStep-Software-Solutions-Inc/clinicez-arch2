@@ -2,6 +2,7 @@ using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Interop.E2E.Support;
+using ClinicEz.Patient.Application.Features.Sharing.Commands.CreateShareCode;
 using ClinicEz.Patient.Application.Features.Sharing.Commands.CreateShareToken;
 using ClinicEz.Patient.Domain.Enums;
 using ClinicEz.Shared.Interoperability;
@@ -81,6 +82,84 @@ public class PatientShareFlowTests
 
         var import = await RedeemTokenAsync(cell, clinic, "not-a-real-token");
 
+        import.Status.Should().Be(ShareImportStatus.Denied);
+        import.DenialReason.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Redeem_WithClinicEzIdAndCode_ImportsTheChartSuccessfully()
+    {
+        await using var cell = new TestCell();
+        var clinic = await cell.ProvisionAsync(Fac.Clinic("tenant-a"));
+        var accountId = await PatientSeed.AccountAsync(cell.Patient, allergy: "Amoxicillin");
+
+        var codeDto = await cell.Patient.SendAsync(new CreateShareCodeCommand(accountId, ["demographics", "allergies"], "Consultation"));
+        codeDto.Code.Should().NotBeNullOrWhiteSpace();
+        codeDto.ClinicEzId.Should().StartWith("CE-");
+
+        var accepted = await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new RedeemPatientShareCommand(
+            ShareToken: null,
+            Purpose: "Consultation",
+            AddToQueue: false,
+            ChiefComplaint: null,
+            ClinicEzId: codeDto.ClinicEzId,
+            Code: codeDto.Code));
+
+        await cell.PumpAsync();
+
+        var import = await cell.Clinic.DbAsync(db => db.ShareImports.IgnoreQueryFilters().SingleAsync(i => i.Id == accepted.CorrelationId));
+        import.Status.Should().Be(ShareImportStatus.Imported);
+        import.Scopes.Should().Be(SharingScopes.Demographics | SharingScopes.Allergies);
+
+        var chart = await ChartAsync(cell, import);
+        chart.SyncPatientId.Should().Be(accountId);
+        chart.FirstName.Should().Be("Maria");
+        chart.LastName.Should().Be("Santos");
+        chart.Allergies.Should().Contain("Amoxicillin");
+
+        var grant = (await cell.Patient.DbAsync(db => db.PatientAccessGrants.IgnoreQueryFilters().Where(g => g.PatientId == accountId).ToListAsync())).Should().ContainSingle().Subject;
+        grant.TenantId.Should().Be(clinic.Tenant);
+        grant.FacilityId.Should().Be(clinic.Id);
+        grant.Scopes.Should().Be(AccessScopes.Demographics | AccessScopes.Allergies);
+        grant.Source.Should().Be(AccessGrantSource.Manual);
+
+        // A second attempt with the same one-time code must be denied
+        var secondAccepted = await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new RedeemPatientShareCommand(
+            ShareToken: null,
+            Purpose: "Consultation",
+            AddToQueue: false,
+            ChiefComplaint: null,
+            ClinicEzId: codeDto.ClinicEzId,
+            Code: codeDto.Code));
+
+        await cell.PumpAsync();
+
+        var secondImport = await cell.Clinic.DbAsync(db => db.ShareImports.IgnoreQueryFilters().SingleAsync(i => i.Id == secondAccepted.CorrelationId));
+        secondImport.Status.Should().Be(ShareImportStatus.Denied);
+        secondImport.DenialReason.Should().NotBeNullOrWhiteSpace();
+
+        foreach (var host in cell.Hosts) await host.AssertNothingStuckAsync();
+    }
+
+    [Fact]
+    public async Task Redeem_WithInvalidCode_IsAnsweredWithADenial()
+    {
+        await using var cell = new TestCell();
+        var clinic = await cell.ProvisionAsync(Fac.Clinic("tenant-a"));
+        var accountId = await PatientSeed.AccountAsync(cell.Patient);
+        var patient = await cell.Patient.DbAsync(db => db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == accountId));
+
+        var accepted = await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new RedeemPatientShareCommand(
+            ShareToken: null,
+            Purpose: "Consultation",
+            AddToQueue: false,
+            ChiefComplaint: null,
+            ClinicEzId: patient.ClinicEzId,
+            Code: "WRONGCOD"));
+
+        await cell.PumpAsync();
+
+        var import = await cell.Clinic.DbAsync(db => db.ShareImports.IgnoreQueryFilters().SingleAsync(i => i.Id == accepted.CorrelationId));
         import.Status.Should().Be(ShareImportStatus.Denied);
         import.DenialReason.Should().NotBeNullOrWhiteSpace();
     }

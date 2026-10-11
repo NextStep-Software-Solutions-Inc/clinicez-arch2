@@ -28,6 +28,7 @@ import ServicesCatalogTab from '../../components/settings/ServicesCatalogTab';
 import CustomFieldsTab from '../../components/settings/CustomFieldsTab';
 import PhilHealthSettingsTab from '../../components/settings/PhilHealthSettingsTab';
 import LicenseSystemTab from '../../components/settings/LicenseSystemTab';
+import DoctorSchedulingTab from '../../components/settings/DoctorSchedulingTab';
 import { SettingsTabItem, SettingsTabKey } from '../../components/settings/types';
 import { formatPeso } from '../../components/settings/common';
 
@@ -223,9 +224,16 @@ export default function SettingsScreen() {
     if (isAdmin || canManageStaff) {
       list.push({
         key: 'staff',
-        label: 'Staff Management',
+        label: 'Staff Directory & Roster',
         icon: 'staff',
         badge: maxStaffSeats != null ? `${activeStaffCount}/${maxStaffSeats}` : activeStaffCount,
+        adminOnly: true,
+      });
+
+      list.push({
+        key: 'schedules',
+        label: 'Doctor & Clinic Schedules',
+        icon: 'calendar',
         adminOnly: true,
       });
     }
@@ -362,6 +370,18 @@ export default function SettingsScreen() {
             onStaffAdded={async () => {
               await refreshLicense();
               await reloadStaffContext();
+              const [fresh] = await clinicService.getStaff();
+              if (fresh) setStaff(fresh);
+            }}
+          />
+        )}
+
+        {activeTab === 'schedules' && (
+          <DoctorSchedulingTab
+            settings={settings}
+            staff={staff}
+            onNavigateTab={setActiveTab}
+            onRefresh={async () => {
               const [fresh] = await clinicService.getStaff();
               if (fresh) setStaff(fresh);
             }}

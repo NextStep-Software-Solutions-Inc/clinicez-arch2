@@ -21,6 +21,7 @@ import {
   inferStaffRole,
   FALLBACK_SYSTEM_ROLES,
 } from '../../services/roleUtils';
+import { DoctorRosterCalendarModal } from '../roster/DoctorRosterCalendarModal';
 
 interface StaffManagementTabProps {
   staff: StaffMember[];
@@ -117,6 +118,11 @@ export default function StaffManagementTab({
   const [isActiveStaff, setIsActiveStaff] = useState(true);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  // Doctor Roster Calendar Modal State
+  const [rosterModalVisible, setRosterModalVisible] = useState(false);
+  const [rosterDoctorId, setRosterDoctorId] = useState<string | undefined>(undefined);
+  const doctors = (staff || []).filter((s) => s.role === 'Doctor' && s.isActive);
 
   const generateRandomPassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
@@ -405,12 +411,25 @@ export default function StaffManagementTab({
               : `Active staff members: ${activeStaffCount}`
           }
           rightAction={
-            <Button
-              title="Add staff member"
-              icon="plus"
-              onPress={handleOpenAddModal}
-              disabled={maxStaffSeats != null && activeStaffCount >= maxStaffSeats}
-            />
+            <View style={styles.headerActionsRow}>
+              {doctors.length > 0 ? (
+                <Button
+                  title="Doctor Rosters & Schedules"
+                  icon="calendar"
+                  variant="outline"
+                  onPress={() => {
+                    setRosterDoctorId(doctors[0]?.id);
+                    setRosterModalVisible(true);
+                  }}
+                />
+              ) : null}
+              <Button
+                title="Add staff member"
+                icon="plus"
+                onPress={handleOpenAddModal}
+                disabled={maxStaffSeats != null && activeStaffCount >= maxStaffSeats}
+              />
+            </View>
           }
         />
         <CardContent>
@@ -468,6 +487,18 @@ export default function StaffManagementTab({
                     </View>
 
                     <View style={styles.staffActionsCol}>
+                      {s.role === 'Doctor' ? (
+                        <Button
+                          title="Roster & Schedule"
+                          icon="calendar"
+                          variant="outline"
+                          size="sm"
+                          onPress={() => {
+                            setRosterDoctorId(s.id);
+                            setRosterModalVisible(true);
+                          }}
+                        />
+                      ) : null}
                       <Button
                         title="Edit"
                         icon="edit"
@@ -1230,6 +1261,15 @@ export default function StaffManagementTab({
           </View>
         </Modal>
       ) : null}
+
+      {rosterModalVisible ? (
+        <DoctorRosterCalendarModal
+          visible={rosterModalVisible}
+          onClose={() => setRosterModalVisible(false)}
+          doctors={doctors}
+          initialDoctorId={rosterDoctorId}
+        />
+      ) : null}
     </View>
   );
 }
@@ -1237,6 +1277,12 @@ export default function StaffManagementTab({
 const styles = StyleSheet.create({
   container: {
     gap: theme.spacing.lg,
+  },
+  headerActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
   staffList: {
     gap: theme.spacing.sm,

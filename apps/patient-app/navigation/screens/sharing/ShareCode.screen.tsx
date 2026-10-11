@@ -40,6 +40,12 @@ export default function ShareCodeScreen() {
     dialog.alert('Copied', `${subject} was copied to the clipboard.`);
   };
 
+  const copyBoth = async () => {
+    if (!code) return;
+    await Clipboard.setStringAsync(`ClinicEZ ID: ${code.clinicEzId} | Code: ${code.code}`);
+    dialog.alert('Copied', 'Both your ClinicEZ ID and One-Time Code were copied to the clipboard.');
+  };
+
   return (
     <Screen width="form" contentContainerStyle={{ gap: spacing.lg }}>
       {code ? (
@@ -61,14 +67,17 @@ export default function ShareCodeScreen() {
             Expires in {formatCountdown(secondsLeft)}
           </ThemedText>
           <ThemedText variant="small" color="textMuted">
-            Single use. Read it to the clinic staff; once they enter it, it stops working.
+            Single use. Read BOTH your One-Time Code and your ClinicEZ ID to clinic staff.
+          </ThemedText>
+          <ThemedText variant="small" color="textMuted">
+            Staff must enter this ID together with your one-time code to fetch your record.
           </ThemedText>
           <View style={[styles.row, { gap: spacing.xs }]}>
             {code.scopes.map((scope) => (
               <Badge key={scope} label={scopeLabel(scope)} tone="info" size="sm" />
             ))}
           </View>
-          <Button label="Copy code" icon="copy" variant="outline" onPress={() => copy(code.code, 'The code')} />
+          <Button label="Copy ID & Code" icon="copy" variant="primary" fullWidth onPress={copyBoth} />
           <View style={[styles.row, styles.idRow, { gap: spacing.md }]}>
             <View style={styles.flex}>
               <ThemedText variant="captionBold" color="textMuted">
@@ -86,6 +95,7 @@ export default function ShareCodeScreen() {
               onPress={() => copy(code.clinicEzId, 'Your ClinicEZ ID')}
             />
           </View>
+          <Button label="Copy code only" icon="copy" variant="outline" onPress={() => copy(code.code, 'The code')} />
         </Card>
       ) : (
         <>

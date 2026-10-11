@@ -14,7 +14,9 @@ import {
   decidePoll,
   DEFAULT_SHARE_PURPOSE,
   describeShareStatus,
+  parseSmartShareInput,
   POLL_INTERVAL_MS,
+  type RedeemMode,
   scopeLabels,
 } from '../../services/shareImport';
 import { toneToVariant } from '../../components/interop/InteropBadges';
@@ -30,6 +32,11 @@ interface ShareImportScreenProps {
     };
   };
 }
+
+const MODE_OPTIONS: Array<{ value: RedeemMode; label: string }> = [
+  { value: 'token', label: 'Scan QR / Token' },
+  { value: 'code', label: 'One-Time Code' },
+];
 
 const QUEUE_OPTIONS: Array<{ value: QueueChoice; label: string }> = [
   { value: 'yes', label: 'Add to queue' },
@@ -51,7 +58,10 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
   const navigation = useNavigation();
   const canImport = usePermission(PERMISSIONS.patientsWrite);
 
+  const [mode, setMode] = useState<RedeemMode>('token');
   const [token, setToken] = useState(route?.params?.initialToken ?? '');
+  const [clinicEzId, setClinicEzId] = useState('');
+  const [code, setCode] = useState('');
   const [purpose, setPurpose] = useState(DEFAULT_SHARE_PURPOSE);
   const [queueChoice, setQueueChoice] = useState<QueueChoice>('yes');
   const [chiefComplaint, setChiefComplaint] = useState('');
@@ -60,6 +70,7 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
 
   useEffect(() => {
     if (route?.params?.initialToken) {
+      setMode('token');
       setToken(route?.params?.initialToken);
       setFormError(null);
     }
@@ -106,6 +117,8 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
 
   const reset = useCallback(() => {
     setToken('');
+    setClinicEzId('');
+    setCode('');
     setChiefComplaint('');
     setFormError(null);
     setCorrelationId(null);
@@ -114,9 +127,65 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
     setPhase('idle');
   }, []);
 
+  const handleTokenChange = (value: string) => {
+    if (formError) setFormError(null);
+    const parsed = parseSmartShareInput(value);
+    if (parsed && (parsed.clinicEzId || parsed.code) && !parsed.token) {
+      setMode('code');
+      if (parsed.clinicEzId) setClinicEzId(parsed.clinicEzId);
+      if (parsed.code) setCode(parsed.code);
+      setToken('');
+      notify.info('Switched to One-Time Code mode based on input.');
+      return;
+    }
+    setToken(value);
+  };
+
+  const handleClinicEzIdChange = (value: string) => {
+    if (formError) setFormError(null);
+    const parsed = parseSmartShareInput(value);
+    if (parsed?.token && !parsed.clinicEzId && !parsed.code) {
+      setMode('token');
+      setToken(parsed.token);
+      notify.info('Switched to QR / Token mode based on pasted token.');
+      return;
+    }
+    if (parsed?.clinicEzId && parsed?.code) {
+      setClinicEzId(parsed.clinicEzId);
+      setCode(parsed.code);
+      return;
+    }
+    setClinicEzId(value);
+  };
+
+  const handleCodeChange = (value: string) => {
+    if (formError) setFormError(null);
+    const parsed = parseSmartShareInput(value);
+    if (parsed?.token && !parsed.clinicEzId && !parsed.code) {
+      setMode('token');
+      setToken(parsed.token);
+      notify.info('Switched to QR / Token mode based on pasted token.');
+      return;
+    }
+    if (parsed?.clinicEzId && parsed?.code) {
+      setClinicEzId(parsed.clinicEzId);
+      setCode(parsed.code);
+      return;
+    }
+    setCode(value);
+  };
+
   const submit = useCallback(async () => {
     if (phase === 'submitting' || phase === 'polling') return;
-    const built = buildRedeemRequest({ token, purpose, addToQueue, chiefComplaint });
+    const built = buildRedeemRequest({
+      mode,
+      token,
+      clinicEzId,
+      code,
+      purpose,
+      addToQueue,
+      chiefComplaint,
+    });
     if (!built.ok) {
       setFormError(built.error);
       return;
@@ -129,12 +198,17 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
     const [result, err] = await clinicService.redeemShareToken(built.request);
     if (err || !result?.correlationId) {
       setPhase('idle');
-      setFormError(err?.message || 'The share token could not be redeemed. Check it and try again.');
+      setFormError(
+        err?.message ||
+          (mode === 'code'
+            ? 'The share code could not be redeemed. Check it and try again.'
+            : 'The share token could not be redeemed. Check it and try again.')
+      );
       return;
     }
     setCorrelationId(result.correlationId);
     setPhase('polling');
-  }, [phase, token, purpose, addToQueue, chiefComplaint]);
+  }, [phase, mode, token, clinicEzId, code, purpose, addToQueue, chiefComplaint]);
 
   const openPatient = useCallback(
     (patientId: string) => {
@@ -211,7 +285,11 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
             {display.detail}
           </ThemedText>
           <View style={styles.actionRow}>
-            <Button title="Scan another" icon="scan" onPress={reset} />
+            <Button
+              title={mode === 'code' ? 'Try another code' : 'Scan another'}
+              icon={mode === 'code' ? 'refresh' : 'scan'}
+              onPress={reset}
+            />
           </View>
         </Card>
       );
@@ -264,14 +342,19 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
           {status.patientId ? (
             <Button title="Open patient" icon="patient" onPress={() => openPatient(status.patientId as string)} />
           ) : null}
-          <Button title="Scan another" variant="secondary" icon="scan" onPress={reset} />
+          <Button
+            title={mode === 'code' ? 'Import another' : 'Scan another'}
+            variant="secondary"
+            icon={mode === 'code' ? 'refresh' : 'scan'}
+            onPress={reset}
+          />
         </View>
       </Card>
     );
   };
 
   return (
-    <ResponsiveLayout headerTitle="Scan patient QR" headerSubtitle="Import a patient record from their share token">
+    <ResponsiveLayout headerTitle="Import Patient Share" headerSubtitle="Import a patient record from a QR code, share token, or one-time code">
       <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {!canImport ? (
           <EmptyState
@@ -283,38 +366,88 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
           <>
             <Card style={styles.formCard}>
               <CardHeader
-                title="Share token"
-                subtitle="Scan the patient's QR code or paste the token."
-                icon="scan"
+                title={mode === 'token' ? 'Share token' : 'One-time share code'}
+                subtitle={
+                  mode === 'token'
+                    ? "Scan the patient's QR code or paste the token."
+                    : "Ask the patient for their ClinicEZ ID and 8-character code."
+                }
+                icon={mode === 'token' ? 'scan' : 'key'}
                 rightAction={
-                  <Button
-                    title="Camera Scanner"
-                    variant="outline"
-                    size="sm"
-                    icon="scan"
-                    disabled={busy}
-                    onPress={() => setCameraScannerVisible(true)}
-                  />
+                  mode === 'token' ? (
+                    <Button
+                      title="Camera Scanner"
+                      variant="outline"
+                      size="sm"
+                      icon="scan"
+                      disabled={busy}
+                      onPress={() => setCameraScannerVisible(true)}
+                    />
+                  ) : undefined
                 }
               />
-              <Input
-                label="Patient share token"
-                required
-                autoFocus
-                autoCapitalize="none"
-                autoCorrect={false}
-                placeholder="Scan or paste token"
-                helperText="A USB or keyboard scanner types the token here; or tap Camera Scanner above."
-                value={token}
-                onChangeText={(value) => {
-                  setToken(value);
-                  if (formError) setFormError(null);
-                }}
-                onSubmitEditing={submit}
-                returnKeyType="go"
-                editable={!busy}
-                error={formError ?? undefined}
-              />
+              <View style={styles.fieldGroup}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Import method
+                </ThemedText>
+                <SegmentedControl
+                  options={MODE_OPTIONS}
+                  value={mode}
+                  onChange={(nextMode) => {
+                    setMode(nextMode);
+                    setFormError(null);
+                  }}
+                />
+              </View>
+              {mode === 'token' ? (
+                <Input
+                  label="Patient share token"
+                  required
+                  autoFocus
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="Scan or paste token"
+                  helperText="A USB or keyboard scanner types the token here; or tap Camera Scanner above."
+                  value={token}
+                  onChangeText={handleTokenChange}
+                  onSubmitEditing={submit}
+                  returnKeyType="go"
+                  editable={!busy}
+                  error={formError ?? undefined}
+                />
+              ) : (
+                <>
+                  <Input
+                    label="ClinicEZ ID"
+                    required
+                    autoFocus
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    placeholder="e.g. CE-ABCD-1234"
+                    helperText="The patient's ClinicEZ ID (e.g. CE-ABCD-1234)."
+                    value={clinicEzId}
+                    onChangeText={handleClinicEzIdChange}
+                    onSubmitEditing={submit}
+                    returnKeyType="next"
+                    editable={!busy}
+                    error={formError && !clinicEzId.trim() ? formError : undefined}
+                  />
+                  <Input
+                    label="One-time share code"
+                    required
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    placeholder="e.g. WXYZ-5678"
+                    helperText="8-character code shown on the patient's phone."
+                    value={code}
+                    onChangeText={handleCodeChange}
+                    onSubmitEditing={submit}
+                    returnKeyType="go"
+                    editable={!busy}
+                    error={formError && clinicEzId.trim() ? formError : undefined}
+                  />
+                </>
+              )}
               <Input
                 label="Purpose"
                 placeholder={DEFAULT_SHARE_PURPOSE}
@@ -342,7 +475,12 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
                   title="Fetch patient record"
                   icon="download"
                   loading={busy}
-                  disabled={token.trim().length === 0}
+                  disabled={
+                    busy ||
+                    (mode === 'token'
+                      ? token.trim().length === 0
+                      : clinicEzId.trim().length === 0 || code.trim().length === 0)
+                  }
                   onPress={submit}
                 />
               </View>

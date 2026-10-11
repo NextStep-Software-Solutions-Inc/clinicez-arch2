@@ -959,3 +959,5 @@ const styles = StyleSheet.create({
     padding: theme.spacing.sm,
   },
 });
+
+export default DoctorRosterCalendarModal;

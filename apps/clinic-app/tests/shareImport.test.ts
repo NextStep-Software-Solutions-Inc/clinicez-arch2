@@ -5,7 +5,10 @@ import {
   DEFAULT_SHARE_PURPOSE,
   describeShareStatus,
   isTerminalShareStatus,
+  normalizeClinicEzId,
+  normalizeShareCode,
   normalizeShareToken,
+  parseSmartShareInput,
   POLL_INTERVAL_MS,
   POLL_TIMEOUT_MS,
   scopeLabels,
@@ -44,15 +47,106 @@ describe('normalizeShareToken', () => {
     expect(normalizeShareToken('x'.repeat(2000))).toBeNull();
     expect(normalizeShareToken('{"nothing":"here"}')).toBeNull();
   });
+
+  test('rejects 8-character codes and ClinicEZ IDs without dots from masquerading as tokens', () => {
+    expect(normalizeShareToken('ABCD-EFGH')).toBeNull();
+    expect(normalizeShareToken('ABCDEFGH')).toBeNull();
+    expect(normalizeShareToken('ce-1234-5678')).toBeNull();
+    expect(normalizeShareToken('CE-ABCD-1234')).toBeNull();
+  });
+});
+
+describe('normalizeClinicEzId', () => {
+  test('canonicalizes standard ClinicEZ IDs', () => {
+    expect(normalizeClinicEzId('CE-ABCD-1234')).toBe('CE-ABCD-1234');
+    expect(normalizeClinicEzId('ce-abcd-1234')).toBe('CE-ABCD-1234');
+    expect(normalizeClinicEzId('ce abcd 1234')).toBe('CE-ABCD-1234');
+    expect(normalizeClinicEzId('ceabcd1234')).toBe('CE-ABCD-1234');
+  });
+
+  test('canonicalizes IDs without CE prefix if 8 characters', () => {
+    expect(normalizeClinicEzId('ABCD-1234')).toBe('CE-ABCD-1234');
+    expect(normalizeClinicEzId('abcd1234')).toBe('CE-ABCD-1234');
+  });
+
+  test('rejects invalid or incomplete ClinicEZ IDs', () => {
+    expect(normalizeClinicEzId(null)).toBeNull();
+    expect(normalizeClinicEzId(undefined)).toBeNull();
+    expect(normalizeClinicEzId('')).toBeNull();
+    expect(normalizeClinicEzId('CE-123')).toBeNull();
+    expect(normalizeClinicEzId('CE-TOO-LONG-123456')).toBeNull();
+  });
+});
+
+describe('normalizeShareCode', () => {
+  test('canonicalizes 8-character share codes', () => {
+    expect(normalizeShareCode('ABCD-EFGH')).toBe('ABCD-EFGH');
+    expect(normalizeShareCode('abcd-efgh')).toBe('ABCD-EFGH');
+    expect(normalizeShareCode('abcdefgh')).toBe('ABCD-EFGH');
+    expect(normalizeShareCode('abcd efgh')).toBe('ABCD-EFGH');
+  });
+
+  test('rejects invalid share codes', () => {
+    expect(normalizeShareCode(null)).toBeNull();
+    expect(normalizeShareCode(undefined)).toBeNull();
+    expect(normalizeShareCode('')).toBeNull();
+    expect(normalizeShareCode('ABC')).toBeNull();
+    expect(normalizeShareCode('ABCDEFGHIJKL')).toBeNull();
+  });
+});
+
+describe('parseSmartShareInput', () => {
+  test('parses labeled patient-app copy string', () => {
+    const parsed = parseSmartShareInput('ClinicEZ ID: CE-ABCD-1234 | Code: WXYZ-5678');
+    expect(parsed).toEqual({
+      clinicEzId: 'CE-ABCD-1234',
+      code: 'WXYZ-5678',
+    });
+  });
+
+  test('parses multi-line or comma-separated pairs', () => {
+    expect(parseSmartShareInput('CE-ABCD-1234, WXYZ-5678')).toEqual({
+      clinicEzId: 'CE-ABCD-1234',
+      code: 'WXYZ-5678',
+    });
+    expect(parseSmartShareInput('CE-ABCD-1234\nWXYZ-5678')).toEqual({
+      clinicEzId: 'CE-ABCD-1234',
+      code: 'WXYZ-5678',
+    });
+    expect(parseSmartShareInput('WXYZ-5678 CE-ABCD-1234')).toEqual({
+      clinicEzId: 'CE-ABCD-1234',
+      code: 'WXYZ-5678',
+    });
+  });
+
+  test('parses single ID or single Code', () => {
+    expect(parseSmartShareInput('CE-ABCD-1234')).toEqual({ clinicEzId: 'CE-ABCD-1234' });
+    expect(parseSmartShareInput('WXYZ-5678')).toEqual({ code: 'WXYZ-5678' });
+  });
+
+  test('parses token URLs or bare tokens', () => {
+    expect(parseSmartShareInput('https://app.clinicez.ph/share?token=tok_12345678')).toEqual({
+      token: 'tok_12345678',
+    });
+    expect(parseSmartShareInput('tok_12345678')).toEqual({
+      token: 'tok_12345678',
+    });
+  });
+
+  test('returns null for empty or invalid input', () => {
+    expect(parseSmartShareInput(null)).toBeNull();
+    expect(parseSmartShareInput('')).toBeNull();
+    expect(parseSmartShareInput('???')).toBeNull();
+  });
 });
 
 describe('buildRedeemRequest', () => {
-  test('defaults the purpose and keeps the chief complaint only when queuing', () => {
-    expect(buildRedeemRequest({ token: 'tok_12345678', purpose: '  ', addToQueue: true, chiefComplaint: ' cough ' })).toEqual({
+  test('defaults the purpose and keeps the chief complaint only when queuing in token mode', () => {
+    expect(buildRedeemRequest({ mode: 'token', token: 'tok_12345678', purpose: '  ', addToQueue: true, chiefComplaint: ' cough ' })).toEqual({
       ok: true,
       request: { shareToken: 'tok_12345678', purpose: DEFAULT_SHARE_PURPOSE, addToQueue: true, chiefComplaint: 'cough' },
     });
-    expect(buildRedeemRequest({ token: 'tok_12345678', purpose: 'Follow-up', addToQueue: false, chiefComplaint: 'cough' })).toEqual({
+    expect(buildRedeemRequest({ mode: 'token', token: 'tok_12345678', purpose: 'Follow-up', addToQueue: false, chiefComplaint: 'cough' })).toEqual({
       ok: true,
       request: { shareToken: 'tok_12345678', purpose: 'Follow-up', addToQueue: false },
     });
@@ -67,6 +161,42 @@ describe('buildRedeemRequest', () => {
     const result = buildRedeemRequest({ token: 'nope', purpose: '', addToQueue: true, chiefComplaint: '' });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.length).toBeGreaterThan(0);
+  });
+
+  test('builds request in code mode with valid clinicEzId and code', () => {
+    const result = buildRedeemRequest({
+      mode: 'code',
+      clinicEzId: 'ce-abcd-1234',
+      code: 'wxyz-5678',
+      purpose: 'Consultation',
+      addToQueue: true,
+      chiefComplaint: 'fever',
+    });
+    expect(result).toEqual({
+      ok: true,
+      request: {
+        clinicEzId: 'CE-ABCD-1234',
+        code: 'WXYZ-5678',
+        purpose: 'Consultation',
+        addToQueue: true,
+        chiefComplaint: 'fever',
+      },
+    });
+  });
+
+  test('validates errors in code mode', () => {
+    expect(buildRedeemRequest({ mode: 'code', clinicEzId: '', code: '', purpose: '', addToQueue: false, chiefComplaint: '' })).toEqual({
+      ok: false,
+      error: "Enter the patient's ClinicEZ ID and one-time code.",
+    });
+    expect(buildRedeemRequest({ mode: 'code', clinicEzId: 'bad', code: 'WXYZ-5678', purpose: '', addToQueue: false, chiefComplaint: '' })).toEqual({
+      ok: false,
+      error: 'Enter a valid ClinicEZ ID (e.g. CE-ABCD-1234).',
+    });
+    expect(buildRedeemRequest({ mode: 'code', clinicEzId: 'CE-ABCD-1234', code: 'bad', purpose: '', addToQueue: false, chiefComplaint: '' })).toEqual({
+      ok: false,
+      error: 'Enter a valid 8-character one-time code (e.g. ABCD-EFGH).',
+    });
   });
 });
 

@@ -16,7 +16,20 @@ const TOKEN_QUERY_KEYS = ['shareToken', 'sharetoken', 'token', 't'];
 
 function isPlausibleToken(value: string): boolean {
   // Visible ASCII only: keyboard-wedge scanners can append Enter/Tab, and pastes pick up stray whitespace.
-  return value.length >= MIN_TOKEN_LENGTH && value.length <= MAX_TOKEN_LENGTH && /^[\x21-\x7e]+$/.test(value);
+  if (value.length < MIN_TOKEN_LENGTH || value.length > MAX_TOKEN_LENGTH || !/^[\x21-\x7e]+$/.test(value)) {
+    return false;
+  }
+  // Tokens without dots should not match short one-time codes or ClinicEZ IDs
+  if (!value.includes('.')) {
+    const clean = value.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+    if (clean.length === 8 && /^[0-9A-Z]{8}$/.test(clean)) {
+      return false;
+    }
+    if ((clean.length === 10 || clean.length === 8) && clean.startsWith('CE')) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function fromJson(text: string): string | null {
@@ -67,6 +80,111 @@ export function normalizeShareToken(input: string | null | undefined): string | 
   if (candidate === null) return null;
   const token = candidate.trim();
   return isPlausibleToken(token) ? token : null;
+}
+
+/**
+ * Normalizes a patient's ClinicEZ ID (e.g. "CE-ABCD-1234", "ce-abcd-1234", "abcd-1234", "ceabcd1234")
+ * to the canonical format "CE-XXXX-XXXX".
+ */
+export function normalizeClinicEzId(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const trimmed = input.trim().toUpperCase();
+  if (!trimmed) return null;
+
+  const clean = trimmed.replace(/[^0-9A-Z]/g, '');
+  const withoutPrefix = clean.startsWith('CE') ? clean.slice(2) : clean;
+
+  if (withoutPrefix.length === 8) {
+    return `CE-${withoutPrefix.slice(0, 4)}-${withoutPrefix.slice(4, 8)}`;
+  }
+  return null;
+}
+
+/**
+ * Normalizes an 8-character one-time share code (e.g. "ABCD-EFGH", "abcd-efgh", "abcdefgh", "abcd efgh")
+ * to the canonical format "XXXX-XXXX".
+ */
+export function normalizeShareCode(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const trimmed = input.trim().toUpperCase();
+  if (!trimmed) return null;
+
+  const clean = trimmed.replace(/[^0-9A-Z]/g, '');
+  if (clean.length === 8) {
+    return `${clean.slice(0, 4)}-${clean.slice(4, 8)}`;
+  }
+  return null;
+}
+
+export interface SmartShareInputResult {
+  clinicEzId?: string;
+  code?: string;
+  token?: string;
+}
+
+/**
+ * Smartly parses clipboard or pasted share input:
+ * - Labeled pairs: "ClinicEZ ID: CE-ABCD-1234 | Code: WXYZ-5678"
+ * - Delimited pairs: "CE-ABCD-1234, WXYZ-5678" or "CE-ABCD-1234 WXYZ-5678"
+ * - Bare ClinicEZ ID: "CE-ABCD-1234"
+ * - Bare Share Code: "WXYZ-5678"
+ * - Full QR token, URL, or JSON: "https://... or tok_..."
+ */
+export function parseSmartShareInput(input: string | null | undefined): SmartShareInputResult | null {
+  if (!input) return null;
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  // 1. Check for labeled format e.g. "ClinicEZ ID: CE-ABCD-1234 | Code: WXYZ-5678"
+  const idMatch = trimmed.match(/(?:clinicez\s*id|id)\s*[:=]\s*([a-zA-Z0-9-]+)/i);
+  const codeMatch = trimmed.match(/(?:code)\s*[:=]\s*([a-zA-Z0-9-]+)/i);
+
+  if (idMatch || codeMatch) {
+    const parsedId = idMatch ? normalizeClinicEzId(idMatch[1]) : null;
+    const parsedCode = codeMatch ? normalizeShareCode(codeMatch[1]) : null;
+    if (parsedId || parsedCode) {
+      return {
+        ...(parsedId ? { clinicEzId: parsedId } : {}),
+        ...(parsedCode ? { code: parsedCode } : {}),
+      };
+    }
+  }
+
+  // 2. Check for delimiter-separated values: e.g. "CE-ABCD-1234 | WXYZ-5678", "CE-ABCD-1234, WXYZ-5678", "CE-ABCD-1234\nWXYZ-5678"
+  const parts = trimmed.split(/[\s|,\n\r]+/).filter(Boolean);
+  if (parts.length === 2) {
+    const idFirst = normalizeClinicEzId(parts[0]);
+    const codeSecond = normalizeShareCode(parts[1]);
+    if (idFirst && codeSecond) {
+      return { clinicEzId: idFirst, code: codeSecond };
+    }
+
+    const codeFirst = normalizeShareCode(parts[0]);
+    const idSecond = normalizeClinicEzId(parts[1]);
+    if (codeFirst && idSecond) {
+      return { clinicEzId: idSecond, code: codeFirst };
+    }
+  }
+
+  // 3. Check if the entire string is a ClinicEZ ID
+  const directId = normalizeClinicEzId(trimmed);
+  if (directId && !trimmed.includes('.') && (trimmed.toUpperCase().startsWith('CE') || !normalizeShareCode(trimmed))) {
+    return { clinicEzId: directId };
+  }
+
+  // 4. Check if the entire string is a Share Code
+  const directCode = normalizeShareCode(trimmed);
+  if (directCode && !trimmed.toUpperCase().startsWith('CE') && !trimmed.includes('.')) {
+    return { code: directCode };
+  }
+
+  // 5. Check if it's a Share Token
+  const token = normalizeShareToken(trimmed);
+  if (token) {
+    return { token };
+  }
+
+  return null;
 }
 
 export function isTerminalShareStatus(status: ShareImportState | string): boolean {
@@ -127,25 +245,70 @@ export function describeShareStatus(
   }
 }
 
+export type RedeemMode = 'token' | 'code';
+
 export interface RedeemInput {
-  token: string;
+  mode?: RedeemMode;
+  token?: string;
+  clinicEzId?: string;
+  code?: string;
   purpose: string;
   addToQueue: boolean;
   chiefComplaint: string;
 }
 
 export type RedeemRequestResult =
-  | { ok: true; request: { shareToken: string; purpose: string; addToQueue: boolean; chiefComplaint?: string } }
+  | {
+      ok: true;
+      request: {
+        shareToken?: string;
+        clinicEzId?: string;
+        code?: string;
+        purpose: string;
+        addToQueue: boolean;
+        chiefComplaint?: string;
+      };
+    }
   | { ok: false; error: string };
 
 /** Validates form input and builds the redeem request body. The chief complaint only applies when queuing. */
 export function buildRedeemRequest(input: RedeemInput): RedeemRequestResult {
+  const isCodeMode =
+    input.mode === 'code' || (!input.mode && !input.token && (Boolean(input.clinicEzId) || Boolean(input.code)));
+  const purpose = input.purpose.trim() || DEFAULT_SHARE_PURPOSE;
+  const complaint = input.chiefComplaint.trim();
+
+  if (isCodeMode) {
+    const clinicEzId = normalizeClinicEzId(input.clinicEzId);
+    const code = normalizeShareCode(input.code);
+
+    if (!clinicEzId && !code) {
+      return { ok: false, error: "Enter the patient's ClinicEZ ID and one-time code." };
+    }
+    if (!clinicEzId) {
+      return { ok: false, error: 'Enter a valid ClinicEZ ID (e.g. CE-ABCD-1234).' };
+    }
+    if (!code) {
+      return { ok: false, error: 'Enter a valid 8-character one-time code (e.g. ABCD-EFGH).' };
+    }
+
+    return {
+      ok: true,
+      request: {
+        clinicEzId,
+        code,
+        purpose,
+        addToQueue: input.addToQueue,
+        ...(input.addToQueue && complaint ? { chiefComplaint: complaint } : {}),
+      },
+    };
+  }
+
   const shareToken = normalizeShareToken(input.token);
   if (!shareToken) {
     return { ok: false, error: 'Scan the patient QR code or paste a valid share token.' };
   }
-  const purpose = input.purpose.trim() || DEFAULT_SHARE_PURPOSE;
-  const complaint = input.chiefComplaint.trim();
+
   return {
     ok: true,
     request: {

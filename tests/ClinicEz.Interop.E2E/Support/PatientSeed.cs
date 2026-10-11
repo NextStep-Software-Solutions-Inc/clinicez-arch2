@@ -13,7 +13,7 @@ public static class PatientSeed
         {
             Id = id,
             ClerkUserId = $"clerk_{id:N}",
-            ClinicEzId = $"CE-{id.ToString("N")[..8].ToUpperInvariant()}",
+            ClinicEzId = $"CE-{id.ToString("N")[..4].ToUpperInvariant()}-{id.ToString("N")[4..8].ToUpperInvariant()}",
             FirstName = first,
             LastName = last,
             DateOfBirth = new DateOnly(1984, 3, 12),

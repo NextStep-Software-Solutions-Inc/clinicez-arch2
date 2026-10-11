@@ -22,10 +22,12 @@ namespace ClinicEz.Patient.Application.Features.Sharing.Interop;
 /// </summary>
 public sealed class PatientShareRedeemInteropHandler : IInteropHandler<PatientShareRedeemPayload>
 {
-    private const string TokenNotValid = "The share code is not valid. Ask the patient to show a fresh code.";
-    private const string TokenExpired = "The share code has expired. Ask the patient to show a fresh code.";
-    private const string TokenUsed = "The share code was already used. Ask the patient to show a fresh code.";
+    private const string TokenNotValid = "The share token is not valid. Ask the patient to show a fresh QR code.";
+    private const string TokenExpired = "The share token has expired. Ask the patient to show a fresh QR code.";
+    private const string TokenUsed = "The share token was already used. Ask the patient to show a fresh QR code.";
     private const string CodeNotValid = "The patient ID or code is not valid. Check both with the patient.";
+    private const string CodeExpired = "The share code has expired. Ask the patient to generate a new code.";
+    private const string CodeUsed = "The share code was already used. Ask the patient to generate a new code.";
     private const string TooManyAttempts = "Too many wrong codes were tried. Wait a few minutes and ask the patient for a new code.";
     private const string AccessRevoked = "The patient has revoked this facility's access. Ask them to share again.";
     private const string PatientUnknown = "The patient could not be found.";
@@ -122,8 +124,8 @@ public sealed class PatientShareRedeemInteropHandler : IInteropHandler<PatientSh
         if (uses.Count >= claims.MaxRedemptions)
         {
             var reason = claims.MaxRedemptions == 1
-                ? TokenUsed
-                : $"The share code was already used {claims.MaxRedemptions} times. Ask the patient to show a fresh code.";
+                ? (viaCode ? CodeUsed : TokenUsed)
+                : $"The share {(viaCode ? "code" : "token")} was already used {claims.MaxRedemptions} times. Ask the patient to show a fresh {(viaCode ? "code" : "QR code")}.";
             Reply(context, Denied(reason, ShareDenialCode.Exhausted, patient.Id));
             return;
         }
@@ -185,7 +187,8 @@ public sealed class PatientShareRedeemInteropHandler : IInteropHandler<PatientSh
         var grant = await _access.GetGrantAsync(patient.Id, delivered.GrantId, ct);
         if (grant is null)
         {
-            Reply(context, Denied(TokenUsed, ShareDenialCode.Exhausted, patient.Id));
+            var isCode = claims.TokenId.StartsWith("code-", StringComparison.Ordinal);
+            Reply(context, Denied(isCode ? CodeUsed : TokenUsed, ShareDenialCode.Exhausted, patient.Id));
             return;
         }
 
@@ -214,8 +217,8 @@ public sealed class PatientShareRedeemInteropHandler : IInteropHandler<PatientSh
         if (await _codes.CountFailuresByActorAsync(requester.Address, since, ct) >= _options.MaxShareCodeFailuresPerFacility)
             return rateLimited;
 
-        var clinicEzId = payload.ClinicEzId?.Trim().ToUpperInvariant();
-        var patient = string.IsNullOrEmpty(clinicEzId) ? null : await _patients.GetByClinicEzIdAsync(clinicEzId, ct);
+        var patient = await FindPatientByClinicEzIdAsync(payload.ClinicEzId, ct);
+
         if (patient is not null && await _codes.CountFailuresByPatientAsync(patient.Id, since, ct) >= _options.MaxShareCodeFailuresPerPatient)
             return rateLimited;
 
@@ -231,7 +234,7 @@ public sealed class PatientShareRedeemInteropHandler : IInteropHandler<PatientSh
         }
 
         if (code.ExpiresAt <= now)
-            return (null, Denied(TokenExpired, ShareDenialCode.Expired, Guid.Empty));
+            return (null, Denied(CodeExpired, ShareDenialCode.Expired, Guid.Empty));
 
         return (new ShareTokenClaims(code.TokenId, code.PatientId, (SharingScopes)(int)code.Scopes, code.Purpose, code.ExpiresAt, 1), null);
     }
@@ -284,5 +287,49 @@ public sealed class PatientShareRedeemInteropHandler : IInteropHandler<PatientSh
             && !string.IsNullOrWhiteSpace(party.TenantId)
             && Guid.TryParse(party.FacilityId, out facilityId)
             && (party.Service is not null || party.FacilityType is not null);
+    }
+
+    private async Task<Domain.Entities.Patient?> FindPatientByClinicEzIdAsync(string? rawInput, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(rawInput))
+            return null;
+
+        var trimmed = rawInput.Trim().ToUpperInvariant();
+        var patient = await _patients.GetByClinicEzIdAsync(trimmed, ct);
+        if (patient is not null)
+            return patient;
+
+        var clean = new string(trimmed.Where(char.IsLetterOrDigit).ToArray());
+        if (clean.StartsWith("CE", StringComparison.Ordinal))
+            clean = clean[2..];
+
+        if (clean.Length == 8)
+        {
+            var withMiddleHyphen = $"CE-{clean[..4]}-{clean[4..]}";
+            if (withMiddleHyphen != trimmed)
+            {
+                patient = await _patients.GetByClinicEzIdAsync(withMiddleHyphen, ct);
+                if (patient is not null)
+                    return patient;
+            }
+
+            var singleHyphen = $"CE-{clean}";
+            if (singleHyphen != trimmed)
+            {
+                patient = await _patients.GetByClinicEzIdAsync(singleHyphen, ct);
+                if (patient is not null)
+                    return patient;
+            }
+
+            var noHyphen = $"CE{clean}";
+            if (noHyphen != trimmed)
+            {
+                patient = await _patients.GetByClinicEzIdAsync(noHyphen, ct);
+                if (patient is not null)
+                    return patient;
+            }
+        }
+
+        return null;
     }
 }
