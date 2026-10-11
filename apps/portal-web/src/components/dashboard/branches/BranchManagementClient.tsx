@@ -186,16 +186,6 @@ export default function BranchManagementClient() {
     };
   }, [tenantSlug]);
 
-  // Open create branch modal if trigger param is present in URL
-  useEffect(() => {
-    if (searchParams.get("createBranch") === "true") {
-      handleOpenCreate();
-      const sp = new URLSearchParams(window.location.search);
-      sp.delete("createBranch");
-      window.history.replaceState({}, "", `${window.location.pathname}${sp.toString() ? `?${sp.toString()}` : ""}`);
-    }
-  }, [searchParams]);
-
   // Open Create Modal
   const handleOpenCreate = () => {
     setFormName("");
@@ -210,6 +200,16 @@ export default function BranchManagementClient() {
     setFormEmail("");
     setIsCreateOpen(true);
   };
+
+  // Open create branch modal if trigger param is present in URL
+  useEffect(() => {
+    if (searchParams.get("createBranch") === "true") {
+      handleOpenCreate();
+      const sp = new URLSearchParams(window.location.search);
+      sp.delete("createBranch");
+      window.history.replaceState({}, "", `${window.location.pathname}${sp.toString() ? `?${sp.toString()}` : ""}`);
+    }
+  }, [searchParams]);
 
   // Open Edit Modal
   const handleOpenEdit = (branch: BranchDto) => {
@@ -513,6 +513,10 @@ export default function BranchManagementClient() {
 
             const occupiedCount = branchFacilities.length;
             const hasAvailableSlots = occupiedCount < 4;
+            const contactPhone = branch.contactNumber?.trim();
+            const contactEmail = branch.contactEmail?.trim();
+            const cleanPhone = contactPhone ? contactPhone.replace(/^tel:\s*/i, "") : null;
+            const cleanEmail = contactEmail ? contactEmail.replace(/^email:\s*/i, "") : null;
 
             return (
               <Card
@@ -523,27 +527,36 @@ export default function BranchManagementClient() {
                   {/* Branch Card Header */}
                   <CardHeader className="pb-3 border-b bg-muted/10">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <CardTitle className="text-base font-bold truncate text-foreground">{branch.name}</CardTitle>
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CardTitle className="text-base font-bold truncate text-foreground" title={branch.name}>
+                            {branch.name}
+                          </CardTitle>
                           {branch.code && (
-                            <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0">
+                            <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0 shrink-0">
                               {branch.code}
                             </Badge>
                           )}
                           <Badge
-                            className={
+                            className={`text-[10px] font-semibold shrink-0 ${
                               branch.isActive
-                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] font-semibold"
-                                : "bg-muted text-muted-foreground text-[10px]"
-                            }
+                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                : "bg-muted text-muted-foreground"
+                            }`}
                           >
                             {branch.isActive ? "Active" : "Inactive"}
                           </Badge>
                         </div>
-                        <CardDescription className="text-xs flex items-center gap-1.5">
+                        <CardDescription className="text-xs flex items-center gap-1.5 min-w-0">
                           <IconMapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="truncate">
+                          <span
+                            className="truncate"
+                            title={
+                              [branch.streetAddress, branch.barangay, branch.city, branch.province]
+                                .filter(Boolean)
+                                .join(", ") || undefined
+                            }
+                          >
                             {[branch.streetAddress, branch.barangay, branch.city, branch.province]
                               .filter(Boolean)
                               .join(", ") || "No street address configured"}
@@ -551,12 +564,12 @@ export default function BranchManagementClient() {
                         </CardDescription>
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleOpenEdit(branch)}
-                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground shrink-0"
                           title="Edit Branch"
                         >
                           <IconEdit className="h-3.5 w-3.5" />
@@ -565,7 +578,7 @@ export default function BranchManagementClient() {
                           variant="ghost"
                           size="icon"
                           onClick={() => setDeletingBranch(branch)}
-                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive"
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive shrink-0"
                           title="Delete Branch"
                         >
                           <IconTrash className="h-3.5 w-3.5" />
@@ -577,15 +590,22 @@ export default function BranchManagementClient() {
                   <CardContent className="space-y-4 pt-4 text-xs">
                     {/* PhilHealth YAKAP Accreditation Status Bar */}
                     <div className="p-3 rounded-xl border bg-muted/20 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded-lg bg-card border text-primary">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="p-1.5 rounded-lg bg-card border text-primary shrink-0">
                           <IconShieldCheck className="h-4 w-4" />
                         </div>
-                        <div>
-                          <div className="font-semibold text-xs text-foreground">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-xs text-foreground truncate">
                             {branch.isPhilHealthAccredited ? "PhilHealth Accredited" : "PhilHealth Unconfigured"}
                           </div>
-                          <div className="text-[11px] text-muted-foreground font-mono">
+                          <div
+                            className="text-[11px] text-muted-foreground font-mono truncate"
+                            title={
+                              branch.isPhilHealthAccredited
+                                ? `PMCC: ${branch.philHealthPmccNumber || "Configured"} | ACC: ${branch.philHealthAccreditationNumber || "—"}`
+                                : undefined
+                            }
+                          >
                             {branch.isPhilHealthAccredited
                               ? `PMCC: ${branch.philHealthPmccNumber || "Configured"} | ACC: ${branch.philHealthAccreditationNumber || "—"}`
                               : "No credentials bound yet"}
@@ -597,7 +617,7 @@ export default function BranchManagementClient() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleOpenPhilHealth(branch)}
-                        className="h-7 text-[11px] font-semibold rounded-lg gap-1 px-2.5"
+                        className="h-7 text-[11px] font-semibold rounded-lg gap-1 px-2.5 shrink-0"
                       >
                         <IconKey className="h-3 w-3 text-primary" />
                         <span>{branch.isPhilHealthAccredited ? "Configure" : "Setup"}</span>
@@ -626,19 +646,19 @@ export default function BranchManagementClient() {
                               return (
                                 <div
                                   key={activeFacility.id}
-                                  className="p-3 rounded-xl border bg-card flex flex-col justify-between gap-2.5 transition-all shadow-2xs hover:border-slate-300 dark:hover:border-slate-700"
+                                  className="p-2.5 sm:p-3 rounded-xl border bg-card flex flex-col justify-between gap-2 sm:gap-2.5 transition-all shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 min-w-0"
                                 >
                                   <div className="flex items-start justify-between gap-2">
-                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                      <div className={`p-2 rounded-lg shrink-0 ${slot.bg} ${slot.color}`}>
+                                    <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+                                      <div className={`p-1.5 sm:p-2 rounded-lg shrink-0 ${slot.bg} ${slot.color}`}>
                                         <Icon className="h-4 w-4" />
                                       </div>
                                       <div className="min-w-0 flex-1">
                                         <div className="font-bold text-xs truncate text-foreground" title={activeFacility.name}>
                                           {activeFacility.name}
                                         </div>
-                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                          <span className="text-[11px] font-medium text-muted-foreground">{slot.label}</span>
+                                        <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                                          <span className="text-[11px] font-medium text-muted-foreground truncate min-w-0">{slot.label}</span>
                                           <Badge
                                             variant="secondary"
                                             className={`text-[10px] font-semibold px-1.5 py-0 shrink-0 ${
@@ -664,8 +684,8 @@ export default function BranchManagementClient() {
                                     </Button>
                                   </div>
 
-                                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
-                                    <span className="font-mono text-[10px] text-muted-foreground truncate" title={`${activeFacility.slug}.${slot.key}`}>
+                                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40 min-w-0">
+                                    <span className="font-mono text-[10px] text-muted-foreground truncate min-w-0" title={`${activeFacility.slug}.${slot.key}`}>
                                       {activeFacility.slug}.{slot.key}
                                     </span>
 
@@ -695,16 +715,16 @@ export default function BranchManagementClient() {
                             <div
                               key={slot.key}
                               onClick={() => handleOpenAddFacility(branch, slot.key)}
-                              className="group border-2 border-dashed border-border/70 hover:border-primary/70 hover:bg-primary/5 p-3 rounded-xl flex items-center gap-3 cursor-pointer transition-all duration-200"
+                              className="group border-2 border-dashed border-border/70 hover:border-primary/70 hover:bg-primary/5 p-2.5 sm:p-3 rounded-xl flex items-center gap-2.5 sm:gap-3 cursor-pointer transition-all duration-200 min-w-0"
                             >
-                              <div className="p-2 rounded-lg bg-muted/80 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
+                              <div className="p-1.5 sm:p-2 rounded-lg bg-muted/80 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
                                 <Icon className="h-4 w-4" />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors">
+                                <div className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors tracking-tight whitespace-nowrap">
                                   + Add {slot.label}
                                 </div>
-                                <p className="text-[10px] text-muted-foreground/70 truncate">
+                                <p className="text-[10px] text-muted-foreground/70 truncate" title={slot.description}>
                                   {slot.description || "Available service slot"}
                                 </p>
                               </div>
@@ -720,21 +740,21 @@ export default function BranchManagementClient() {
                 {/* Card Actions Footer */}
                 <div className="p-3 border-t bg-muted/10 flex items-center justify-between gap-2 mt-2">
                   <div
-                    className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium min-w-0 truncate"
+                    className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium min-w-0 overflow-hidden"
                     title={[
-                      branch.contactNumber ? `Tel: ${branch.contactNumber}` : null,
-                      branch.contactEmail ? `Email: ${branch.contactEmail}` : null,
+                      cleanPhone ? `Tel: ${cleanPhone}` : null,
+                      cleanEmail ? `Email: ${cleanEmail}` : null,
                     ].filter(Boolean).join(" | ")}
                   >
-                    {branch.contactNumber ? (
+                    {cleanPhone ? (
                       <>
                         <IconPhone className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
-                        <span className="truncate">Tel: {branch.contactNumber}</span>
+                        <span className="truncate">Tel: {cleanPhone}</span>
                       </>
-                    ) : branch.contactEmail ? (
+                    ) : cleanEmail ? (
                       <>
                         <IconMail className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
-                        <span className="truncate">Email: {branch.contactEmail}</span>
+                        <span className="truncate">Email: {cleanEmail}</span>
                       </>
                     ) : (
                       <span className="text-muted-foreground/50 italic">No contact info</span>
