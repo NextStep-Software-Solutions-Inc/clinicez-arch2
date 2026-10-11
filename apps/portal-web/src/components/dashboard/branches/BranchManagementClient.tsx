@@ -17,6 +17,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   IconBuilding, 
   IconHospital, 
@@ -36,7 +44,8 @@ import {
   IconRefresh,
   IconSettings,
   IconPhone,
-  IconMail
+  IconMail,
+  IconDotsVertical
 } from "@tabler/icons-react";
 import FacilitySettingsHub, { FacilityData } from "@/components/dashboard/FacilitySettingsHub";
 import { getConsoleBaseDomain } from "@/utils/domain";
@@ -124,6 +133,9 @@ export default function BranchManagementClient() {
   const [editingBranch, setEditingBranch] = useState<BranchDto | null>(null);
   const [philhealthBranch, setPhilhealthBranch] = useState<BranchDto | null>(null);
   const [deletingBranch, setDeletingBranch] = useState<BranchDto | null>(null);
+  const [deleteBranchConfirmName, setDeleteBranchConfirmName] = useState("");
+  const [deleteBranchAcknowledged, setDeleteBranchAcknowledged] = useState(false);
+  const [isDeletingBranch, setIsDeletingBranch] = useState(false);
 
   // Contextual facility onboarding wizard
   const [wizardBranch, setWizardBranch] = useState<BranchDto | null>(null);
@@ -156,8 +168,8 @@ export default function BranchManagementClient() {
   const [phEndpoint, setPhEndpoint] = useState("https://staging.philhealth.gov.ph/KONSULTA/SOAP");
   const [savingPh, setSavingPh] = useState(false);
 
-  // Fetch branches and facilities
-  const loadData = async () => {
+  // Fetch branches and facilities (optionally opening settings for a newly created facility)
+  const loadData = async (focusFacilityId?: string, focusFacilityName?: string) => {
     setLoading(true);
     try {
       const [branchList, facList] = await Promise.all([
@@ -166,6 +178,16 @@ export default function BranchManagementClient() {
       ]);
       setBranches(branchList || []);
       setFacilities(facList || []);
+
+      if (focusFacilityId || focusFacilityName) {
+        const found = (facList || []).find((f) => 
+          (focusFacilityId && f.id === focusFacilityId) ||
+          (focusFacilityName && f.name.toLowerCase() === focusFacilityName.toLowerCase())
+        );
+        if (found) {
+          setSettingsFacility(found as FacilityData);
+        }
+      }
     } catch (err: unknown) {
       console.error("Failed to load branch data", err);
       toast.error("Could not load branches. Please refresh the page.");
@@ -177,8 +199,9 @@ export default function BranchManagementClient() {
   useEffect(() => {
     loadData();
 
-    const handleFacilityCreated = () => {
-      loadData();
+    const handleFacilityCreated = (e: Event) => {
+      const customEvent = e as CustomEvent<{ facilityId?: string; facilityName?: string }>;
+      loadData(customEvent.detail?.facilityId, customEvent.detail?.facilityName);
     };
     window.addEventListener("clinicez:facility-created", handleFacilityCreated);
     return () => {
@@ -201,7 +224,7 @@ export default function BranchManagementClient() {
     setIsCreateOpen(true);
   };
 
-  // Open create branch modal if trigger param is present in URL
+  // Open create branch modal or contextual wizard if trigger params are present in URL
   useEffect(() => {
     if (searchParams.get("createBranch") === "true") {
       handleOpenCreate();
@@ -209,7 +232,21 @@ export default function BranchManagementClient() {
       sp.delete("createBranch");
       window.history.replaceState({}, "", `${window.location.pathname}${sp.toString() ? `?${sp.toString()}` : ""}`);
     }
-  }, [searchParams]);
+
+    const createType = searchParams.get("create");
+    const targetBranchId = searchParams.get("branchId");
+    if (createType && ["clinic", "laboratory", "pharmacy", "organization"].includes(createType)) {
+      const branch = branches.find((b) => b.id === targetBranchId) || null;
+      if (branch) {
+        setWizardBranch(branch);
+        setWizardType(createType as "clinic" | "laboratory" | "pharmacy" | "organization");
+        setIsWizardOpen(true);
+        const sp = new URLSearchParams(window.location.search);
+        sp.delete("create");
+        sp.delete("branchId");
+      }
+    }
+  }, [searchParams, branches]);
 
   // Open Edit Modal
   const handleOpenEdit = (branch: BranchDto) => {
@@ -323,17 +360,26 @@ export default function BranchManagementClient() {
     }
   };
 
-  // Delete Branch
+  // Delete Branch (Intentional confirmation required)
   const handleDeleteBranch = async () => {
     if (!deletingBranch) return;
+    if (deleteBranchConfirmName.trim() !== deletingBranch.name.trim() || !deleteBranchAcknowledged) {
+      toast.error("Please type the exact branch name and acknowledge the deletion impact.");
+      return;
+    }
+    setIsDeletingBranch(true);
     try {
       await branchService.deleteBranch(deletingBranch.id);
       toast.success(`Branch "${deletingBranch.name}" removed.`);
       setDeletingBranch(null);
+      setDeleteBranchConfirmName("");
+      setDeleteBranchAcknowledged(false);
       await loadData();
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Unknown error";
       toast.error("Failed to delete branch: " + errorMsg);
+    } finally {
+      setIsDeletingBranch(false);
     }
   };
 
@@ -390,7 +436,7 @@ export default function BranchManagementClient() {
           <Button
             variant="outline"
             size="sm"
-            onClick={loadData}
+            onClick={() => loadData()}
             disabled={loading}
             className="rounded-xl h-9 text-xs font-semibold gap-1.5"
           >
@@ -564,26 +610,47 @@ export default function BranchManagementClient() {
                         </CardDescription>
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleOpenEdit(branch)}
-                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground shrink-0"
-                          title="Edit Branch"
-                        >
-                          <IconEdit className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeletingBranch(branch)}
-                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive shrink-0"
-                          title="Delete Branch"
-                        >
-                          <IconTrash className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground shrink-0"
+                            title="Branch actions"
+                          >
+                            <IconDotsVertical className="h-4 w-4" />
+                            <span className="sr-only">Branch options</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 rounded-xl shadow-lg border">
+                          <DropdownMenuItem
+                            onClick={() => handleOpenEdit(branch)}
+                            className="cursor-pointer text-xs font-medium gap-2 py-2"
+                          >
+                            <IconEdit className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span>Edit Branch</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleOpenPhilHealth(branch)}
+                            className="cursor-pointer text-xs font-medium gap-2 py-2"
+                          >
+                            <IconShieldCheck className="h-3.5 w-3.5 text-primary" />
+                            <span>Configure PhilHealth</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setDeletingBranch(branch);
+                              setDeleteBranchConfirmName("");
+                              setDeleteBranchAcknowledged(false);
+                            }}
+                            className="cursor-pointer text-xs font-medium gap-2 py-2 text-destructive focus:text-destructive focus:bg-destructive/10"
+                          >
+                            <IconTrash className="h-3.5 w-3.5" />
+                            <span>Delete Branch</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </CardHeader>
 
@@ -869,7 +936,7 @@ export default function BranchManagementClient() {
           facility={settingsFacility}
           open={!!settingsFacility}
           onOpenChange={(open) => !open && setSettingsFacility(null)}
-          onSaved={loadData}
+          onSaved={() => loadData()}
         />
       )}
 
@@ -1134,23 +1201,73 @@ export default function BranchManagementClient() {
         </DialogContent>
       </Dialog>
 
-      {/* ── DELETE CONFIRMATION MODAL ── */}
-      <Dialog open={!!deletingBranch} onOpenChange={(open) => !open && setDeletingBranch(null)}>
-        <DialogContent className="max-w-sm rounded-2xl">
+      {/* ── INTENTIONAL DELETE CONFIRMATION MODAL ── */}
+      <Dialog
+        open={!!deletingBranch}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingBranch(null);
+            setDeleteBranchConfirmName("");
+            setDeleteBranchAcknowledged(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md rounded-2xl border-destructive/20 shadow-2xl">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-destructive flex items-center gap-2">
               <IconAlertTriangle className="h-5 w-5" />
-              Delete Branch
+              Delete Branch: {deletingBranch?.name}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Are you sure you want to delete &quot;{deletingBranch?.name}&quot;? All linked facilities will be preserved.
+              Deleting a physical branch is a destructive operation. Its physical location and statutory PhilHealth credentials will be permanently erased.
             </DialogDescription>
           </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs leading-relaxed flex items-start gap-2">
+              <IconAlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Permanent Impact:</span> All facilities associated with this branch will remain intact, but will become unassigned floating facilities without an accredited physical location.
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-foreground">
+                To confirm, type the branch name <span className="font-mono font-bold select-all bg-muted px-1.5 py-0.5 rounded border text-foreground">{deletingBranch?.name}</span> below:
+              </Label>
+              <Input
+                value={deleteBranchConfirmName}
+                onChange={(e) => setDeleteBranchConfirmName(e.target.value)}
+                placeholder={deletingBranch?.name}
+                className="rounded-xl text-xs h-9 border-destructive/30 focus-visible:ring-destructive"
+              />
+            </div>
+
+            <div className="flex items-start gap-2.5 pt-1">
+              <Checkbox
+                id="ack-delete-branch"
+                checked={deleteBranchAcknowledged}
+                onCheckedChange={(checked) => setDeleteBranchAcknowledged(checked === true)}
+                className="mt-0.5 data-[state=checked]:bg-destructive data-[state=checked]:border-destructive"
+              />
+              <label
+                htmlFor="ack-delete-branch"
+                className="text-xs text-muted-foreground leading-tight cursor-pointer select-none"
+              >
+                I understand that deleting this branch permanently removes its credentials and leaves associated facilities unassigned.
+              </label>
+            </div>
+          </div>
+
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setDeletingBranch(null)}
+              onClick={() => {
+                setDeletingBranch(null);
+                setDeleteBranchConfirmName("");
+                setDeleteBranchAcknowledged(false);
+              }}
               className="rounded-xl text-xs"
             >
               Cancel
@@ -1159,9 +1276,15 @@ export default function BranchManagementClient() {
               variant="destructive"
               size="sm"
               onClick={handleDeleteBranch}
-              className="rounded-xl text-xs font-bold"
+              disabled={
+                deleteBranchConfirmName.trim() !== deletingBranch?.name.trim() ||
+                !deleteBranchAcknowledged ||
+                isDeletingBranch
+              }
+              className="rounded-xl text-xs font-bold gap-1.5 disabled:opacity-50"
             >
-              Delete
+              {isDeletingBranch && <IconLoader className="h-3.5 w-3.5 animate-spin" />}
+              Permanently Delete Branch
             </Button>
           </DialogFooter>
         </DialogContent>
