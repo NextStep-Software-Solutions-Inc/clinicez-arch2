@@ -209,6 +209,8 @@ public class BranchEndpoints : IEndpoint
             if (!isOwner && !isStaff)
             {
                 return Results.Forbid();
+            }
+
             // Auto-group legacy or unassigned facilities under a synthesized Main Branch
             var unassignedFacilities = await context.Facilities
                 .Where(f => f.TenantId == tenant.Id && !f.IsDeleted && f.BranchId == null)
