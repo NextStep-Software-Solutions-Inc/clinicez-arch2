@@ -125,9 +125,9 @@ export interface SmartShareInputResult {
 /**
  * Smartly parses clipboard or pasted share input:
  * - Labeled pairs: "ClinicEZ ID: CE-ABCD-1234 | Code: WXYZ-5678"
- * - Delimited pairs: "CE-ABCD-1234, WXYZ-5678" or "CE-ABCD-1234 WXYZ-5678"
+ * - Delimited pairs: "CE-ABCD-1234, WXYZ-5678", "CE-ABCD-1234 / WXYZ-5678", "CE-ABCD-1234:WXYZ-5678"
  * - Bare ClinicEZ ID: "CE-ABCD-1234"
- * - Bare Share Code: "WXYZ-5678"
+ * - Bare Share Code: "WXYZ-5678" or "CE42-7890"
  * - Full QR token, URL, or JSON: "https://... or tok_..."
  */
 export function parseSmartShareInput(input: string | null | undefined): SmartShareInputResult | null {
@@ -136,8 +136,9 @@ export function parseSmartShareInput(input: string | null | undefined): SmartSha
   if (!trimmed) return null;
 
   // 1. Check for labeled format e.g. "ClinicEZ ID: CE-ABCD-1234 | Code: WXYZ-5678"
-  const idMatch = trimmed.match(/(?:clinicez\s*id|id)\s*[:=]\s*([a-zA-Z0-9-]+)/i);
-  const codeMatch = trimmed.match(/(?:code)\s*[:=]\s*([a-zA-Z0-9-]+)/i);
+  // Using \b word boundaries prevents false positives on words like "Valid:" or "Fluid:"
+  const idMatch = trimmed.match(/\b(?:clinicez\s*id|clinicez|patient\s*id|id)\b\s*[:=]\s*([a-zA-Z0-9-]+)/i);
+  const codeMatch = trimmed.match(/\b(?:one-time\s*code|share\s*code|code)\b\s*[:=]\s*([a-zA-Z0-9-]+)/i);
 
   if (idMatch || codeMatch) {
     const parsedId = idMatch ? normalizeClinicEzId(idMatch[1]) : null;
@@ -150,32 +151,59 @@ export function parseSmartShareInput(input: string | null | undefined): SmartSha
     }
   }
 
-  // 2. Check for delimiter-separated values: e.g. "CE-ABCD-1234 | WXYZ-5678", "CE-ABCD-1234, WXYZ-5678", "CE-ABCD-1234\nWXYZ-5678"
-  const parts = trimmed.split(/[\s|,\n\r]+/).filter(Boolean);
-  if (parts.length === 2) {
-    const idFirst = normalizeClinicEzId(parts[0]);
-    const codeSecond = normalizeShareCode(parts[1]);
-    if (idFirst && codeSecond) {
-      return { clinicEzId: idFirst, code: codeSecond };
+  // 2. Check for delimiter-separated values: e.g. "CE-ABCD-1234 | WXYZ-5678", "CE-ABCD-1234, WXYZ-5678", "CE-ABCD-1234:WXYZ-5678", "CE-ABCD-1234 / WXYZ-5678"
+  const parts = trimmed.split(/[\s|,\n\r;/:]+|\s+-\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    // Priority 1: A token explicitly starting with CE (10 chars, e.g. CE-ABCD-1234)
+    const idToken = parts.find((p) => {
+      const clean = p.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+      return clean.startsWith('CE') && clean.length === 10;
+    });
+
+    const codeToken = idToken
+      ? parts.find((p) => p !== idToken && normalizeShareCode(p) !== null)
+      : undefined;
+
+    if (idToken && codeToken) {
+      const parsedId = normalizeClinicEzId(idToken);
+      const parsedCode = normalizeShareCode(codeToken);
+      if (parsedId && parsedCode) {
+        return { clinicEzId: parsedId, code: parsedCode };
+      }
     }
 
-    const codeFirst = normalizeShareCode(parts[0]);
-    const idSecond = normalizeClinicEzId(parts[1]);
-    if (codeFirst && idSecond) {
-      return { clinicEzId: idSecond, code: codeFirst };
+    // Priority 2: If neither has explicit CE, check if the first is ID and second is code, or vice versa
+    if (parts.length === 2) {
+      const idFirst = normalizeClinicEzId(parts[0]);
+      const codeSecond = normalizeShareCode(parts[1]);
+      if (idFirst && codeSecond) {
+        return { clinicEzId: idFirst, code: codeSecond };
+      }
+
+      const codeFirst = normalizeShareCode(parts[0]);
+      const idSecond = normalizeClinicEzId(parts[1]);
+      if (codeFirst && idSecond) {
+        return { clinicEzId: idSecond, code: codeFirst };
+      }
     }
   }
 
-  // 3. Check if the entire string is a ClinicEZ ID
+  // 3. Check if the entire string is a ClinicEZ ID (has CE prefix and 10 alphanumeric characters)
   const directId = normalizeClinicEzId(trimmed);
-  if (directId && !trimmed.includes('.') && (trimmed.toUpperCase().startsWith('CE') || !normalizeShareCode(trimmed))) {
+  const cleanTrimmed = trimmed.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+  if (directId && !trimmed.includes('.') && cleanTrimmed.startsWith('CE') && cleanTrimmed.length === 10) {
     return { clinicEzId: directId };
   }
 
-  // 4. Check if the entire string is a Share Code
+  // 4. Check if the entire string is an 8-character Share Code (e.g. "WXYZ-5678" or "CE42-7890")
   const directCode = normalizeShareCode(trimmed);
-  if (directCode && !trimmed.toUpperCase().startsWith('CE') && !trimmed.includes('.')) {
+  if (directCode && !trimmed.includes('.')) {
     return { code: directCode };
+  }
+
+  // If it's an 8-character string without CE prefix that wasn't matched as a code:
+  if (directId && !trimmed.includes('.')) {
+    return { clinicEzId: directId };
   }
 
   // 5. Check if it's a Share Token
@@ -306,6 +334,9 @@ export function buildRedeemRequest(input: RedeemInput): RedeemRequestResult {
 
   const shareToken = normalizeShareToken(input.token);
   if (!shareToken) {
+    if (normalizeShareCode(input.token) || normalizeClinicEzId(input.token)) {
+      return { ok: false, error: 'This looks like a one-time code or ClinicEZ ID. Switch to One-Time Code mode to enter it.' };
+    }
     return { ok: false, error: 'Scan the patient QR code or paste a valid share token.' };
   }
 

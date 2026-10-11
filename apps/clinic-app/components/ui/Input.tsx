@@ -23,6 +23,7 @@ export interface InputProps extends TextInputProps {
   containerStyle?: ViewStyle;
   inputStyle?: TextStyle;
   required?: boolean;
+  inputRef?: React.Ref<any>;
 }
 
 export default function Input({
@@ -35,6 +36,7 @@ export default function Input({
   containerStyle,
   inputStyle,
   required,
+  inputRef,
   onFocus,
   onBlur,
   ...rest
@@ -65,6 +67,7 @@ export default function Input({
         ) : null}
 
         <TextInput
+          ref={inputRef}
           style={[styles.input, inputStyle]}
           placeholderTextColor={theme.colors.textLight}
           onFocus={(e) => {

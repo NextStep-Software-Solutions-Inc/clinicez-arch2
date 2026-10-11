@@ -122,6 +122,36 @@ describe('parseSmartShareInput', () => {
   test('parses single ID or single Code', () => {
     expect(parseSmartShareInput('CE-ABCD-1234')).toEqual({ clinicEzId: 'CE-ABCD-1234' });
     expect(parseSmartShareInput('WXYZ-5678')).toEqual({ code: 'WXYZ-5678' });
+    expect(parseSmartShareInput('CE42-7890')).toEqual({ code: 'CE42-7890' });
+  });
+
+  test('parses slash, dash, semicolon, colon, or sentence-embedded pairs', () => {
+    expect(parseSmartShareInput('CE-ABCD-1234 / WXYZ-5678')).toEqual({
+      clinicEzId: 'CE-ABCD-1234',
+      code: 'WXYZ-5678',
+    });
+    expect(parseSmartShareInput('CE-ABCD-1234 - WXYZ-5678')).toEqual({
+      clinicEzId: 'CE-ABCD-1234',
+      code: 'WXYZ-5678',
+    });
+    expect(parseSmartShareInput('CE-ABCD-1234;WXYZ-5678')).toEqual({
+      clinicEzId: 'CE-ABCD-1234',
+      code: 'WXYZ-5678',
+    });
+    expect(parseSmartShareInput('CE-ABCD-1234:WXYZ-5678')).toEqual({
+      clinicEzId: 'CE-ABCD-1234',
+      code: 'WXYZ-5678',
+    });
+    expect(parseSmartShareInput('Patient Maria Santos: CE-ABCD-1234, code WXYZ-5678')).toEqual({
+      clinicEzId: 'CE-ABCD-1234',
+      code: 'WXYZ-5678',
+    });
+  });
+
+  test('ignores English words ending in id without falsely fabricating an ID', () => {
+    expect(parseSmartShareInput('Valid: tomorrow. Code: WXYZ-5678')).toEqual({
+      code: 'WXYZ-5678',
+    });
   });
 
   test('parses token URLs or bare tokens', () => {
@@ -161,6 +191,12 @@ describe('buildRedeemRequest', () => {
     const result = buildRedeemRequest({ token: 'nope', purpose: '', addToQueue: true, chiefComplaint: '' });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.length).toBeGreaterThan(0);
+  });
+
+  test('gives diagnostic feedback when code is entered in token mode', () => {
+    const result = buildRedeemRequest({ mode: 'token', token: 'ABCD-EFGH', purpose: '', addToQueue: false, chiefComplaint: '' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('looks like a one-time code');
   });
 
   test('builds request in code mode with valid clinicEzId and code', () => {

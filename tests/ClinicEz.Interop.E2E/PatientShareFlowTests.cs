@@ -164,6 +164,39 @@ public class PatientShareFlowTests
         import.DenialReason.Should().NotBeNullOrWhiteSpace();
     }
 
+    [Fact]
+    public async Task Redeem_WithAlternativeFormattingOfClinicEzIdAndCode_ImportsTheChartSuccessfully()
+    {
+        await using var cell = new TestCell();
+        var clinic = await cell.ProvisionAsync(Fac.Clinic("tenant-a"));
+        var accountId = await PatientSeed.AccountAsync(cell.Patient);
+
+        var codeDto = await cell.Patient.SendAsync(new CreateShareCodeCommand(accountId, ["demographics"], "Consultation"));
+
+        // Format ClinicEzId as unhyphenated lowercase (e.g. ceabcd1234) and Code with space (e.g. abcd efgh)
+        var unhyphenatedId = codeDto.ClinicEzId.Replace("-", "").ToLowerInvariant();
+        var spacedCode = codeDto.Code.Replace("-", " ").ToLowerInvariant();
+
+        var accepted = await cell.Clinic.SendAsync(clinic.Tenant, clinic.Id, new RedeemPatientShareCommand(
+            ShareToken: null,
+            Purpose: "Consultation",
+            AddToQueue: false,
+            ChiefComplaint: null,
+            ClinicEzId: unhyphenatedId,
+            Code: spacedCode));
+
+        await cell.PumpAsync();
+
+        var import = await cell.Clinic.DbAsync(db => db.ShareImports.IgnoreQueryFilters().SingleAsync(i => i.Id == accepted.CorrelationId));
+        import.Status.Should().Be(ShareImportStatus.Imported);
+
+        var chart = await ChartAsync(cell, import);
+        chart.SyncPatientId.Should().Be(accountId);
+        chart.FirstName.Should().Be("Maria");
+
+        foreach (var host in cell.Hosts) await host.AssertNothingStuckAsync();
+    }
+
     private static async Task<ShareImport> RedeemAsync(TestCell cell, Fac clinic, Guid accountId, params string[] scopes)
     {
         var token = await cell.Patient.SendAsync(new CreateShareTokenCommand(accountId, scopes, "Consultation"));

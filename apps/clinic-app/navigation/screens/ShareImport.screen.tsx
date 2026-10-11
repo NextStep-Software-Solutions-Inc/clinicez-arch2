@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { Badge, Button, Card, CardHeader, EmptyState, Input, SegmentedControl, ThemedText } from '@ui';
@@ -67,6 +67,7 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
   const [chiefComplaint, setChiefComplaint] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [cameraScannerVisible, setCameraScannerVisible] = useState(false);
+  const codeInputRef = useRef<any>(null);
 
   useEffect(() => {
     if (route?.params?.initialToken) {
@@ -218,6 +219,26 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
   );
 
   const busy = phase === 'submitting' || phase === 'polling';
+
+  const idError = formError
+    ? formError.includes('ClinicEZ ID')
+      ? formError.includes('one-time code')
+        ? 'ClinicEZ ID is required'
+        : formError
+      : undefined
+    : undefined;
+
+  const codeError = formError
+    ? formError.includes('one-time code')
+      ? formError.includes('ClinicEZ ID')
+        ? 'One-time code is required'
+        : formError
+      : formError.includes('code') && !formError.includes('ClinicEZ ID')
+      ? formError
+      : undefined
+    : undefined;
+
+  const generalError = formError && !idError && !codeError ? formError : undefined;
 
   const renderResult = () => {
     if (phase === 'idle') return null;
@@ -427,12 +448,19 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
                     helperText="The patient's ClinicEZ ID (e.g. CE-ABCD-1234)."
                     value={clinicEzId}
                     onChangeText={handleClinicEzIdChange}
-                    onSubmitEditing={submit}
+                    onSubmitEditing={() => {
+                      if (codeInputRef.current?.focus) {
+                        codeInputRef.current.focus();
+                      } else if (code.trim()) {
+                        submit();
+                      }
+                    }}
                     returnKeyType="next"
                     editable={!busy}
-                    error={formError && !clinicEzId.trim() ? formError : undefined}
+                    error={idError}
                   />
                   <Input
+                    inputRef={codeInputRef}
                     label="One-time share code"
                     required
                     autoCapitalize="characters"
@@ -444,7 +472,7 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
                     onSubmitEditing={submit}
                     returnKeyType="go"
                     editable={!busy}
-                    error={formError && clinicEzId.trim() ? formError : undefined}
+                    error={codeError}
                   />
                 </>
               )}
@@ -469,6 +497,11 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
                   onChangeText={setChiefComplaint}
                   editable={!busy}
                 />
+              ) : null}
+              {generalError ? (
+                <ThemedText variant="caption" color={theme.colors.emergency}>
+                  {generalError}
+                </ThemedText>
               ) : null}
               <View style={styles.actionRow}>
                 <Button
@@ -495,8 +528,7 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
         title="Scan Patient Share QR"
         subtitle="Align the patient's digital share QR code within the frame"
         onScanned={(scannedCode) => {
-          setToken(scannedCode);
-          setFormError(null);
+          handleTokenChange(scannedCode);
         }}
         onClose={() => setCameraScannerVisible(false)}
       />

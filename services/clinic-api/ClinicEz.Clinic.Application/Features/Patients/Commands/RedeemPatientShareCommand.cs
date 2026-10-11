@@ -64,8 +64,8 @@ public sealed class RedeemPatientShareCommandHandler : IRequestHandler<RedeemPat
         var purpose = string.IsNullOrWhiteSpace(request.Purpose) ? DefaultPurpose : request.Purpose.Trim();
         var chiefComplaint = string.IsNullOrWhiteSpace(request.ChiefComplaint) ? null : request.ChiefComplaint.Trim();
 
-        var clinicEzId = CanonicalizeClinicEzId(request.ClinicEzId);
-        var code = CleanCode(request.Code);
+        var clinicEzId = string.IsNullOrWhiteSpace(request.ClinicEzId) ? null : request.ClinicEzId.Trim();
+        var code = string.IsNullOrWhiteSpace(request.Code) ? null : request.Code.Trim();
         var hasCode = !string.IsNullOrWhiteSpace(clinicEzId) || !string.IsNullOrWhiteSpace(code);
         var shareToken = hasCode ? string.Empty : (request.ShareToken?.Trim() ?? string.Empty);
 
@@ -81,32 +81,5 @@ public sealed class RedeemPatientShareCommandHandler : IRequestHandler<RedeemPat
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new PatientShareRedeemAccepted(requestId);
-    }
-
-    private static string? CanonicalizeClinicEzId(string? input)
-    {
-        if (string.IsNullOrWhiteSpace(input))
-            return null;
-
-        var clean = new string(input.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
-        if (clean.StartsWith("CE", StringComparison.Ordinal))
-            clean = clean[2..];
-
-        if (clean.Length == 8)
-            return $"CE-{clean[..4]}-{clean[4..]}";
-
-        return input.Trim().ToUpperInvariant();
-    }
-
-    private static string? CleanCode(string? code)
-    {
-        if (string.IsNullOrWhiteSpace(code))
-            return null;
-
-        var clean = new string(code.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
-        if (clean.Length == 8)
-            return $"{clean[..4]}-{clean[4..]}";
-
-        return code.Trim().ToUpperInvariant();
     }
 }

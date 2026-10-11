@@ -173,3 +173,68 @@ Resolve the NU1903 security advisory for System.Security.Cryptography.Xml. Verif
 ### Mobile Components
 - Camera QR scanner modal renders with permission handling and camera fallback in apps/clinic-app.
 - TypeScript typecheck passes for @clinicez/clinic-app (bun run typecheck:clinic).
+
+
+## 2026-10-11T17:03:54Z
+
+Redesign and enhance the ClinicEZ EMR Patient Registration, Management, and Full Chart architecture across clinic-app and clinic-api to support high-density glanceable clinical charting, efficient multi-doctor/multi-nurse collaborative workflows, and 100% strict compliance with PhilHealth Konsulta (Yakap) statutory standards.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Patient Registration & Triage Routing (with PhilHealth PIN Validation)
+Modernize the patient registration experience in `apps/clinic-app` with real-time debounced duplicate detection (matching PhilHealth PIN, Contact Number, or Name + DOB against `/api/v1/patients`), strict PhilHealth Identification Number formatting (12-digit format `XX-XXXXXXXXX-X` under RA 11223), structured clinical allergy categorization (medication, food, environmental with severity and anaphylaxis flags), and a 1-click "Register & Send to Triage" flow that automatically creates the queue ticket and routes the patient to the nursing triage queue.
+
+### R2. High-Density Glanceable EMR Patient Summary Spine
+Implement an always-visible, information-dense clinical patient spine component (`PatientSummarySpine.tsx`) rendered on both the EMR Full Chart and the active Consultation workstation. Within 5 seconds, clinicians can perceive: verified patient demographics, PhilHealth Member/Dependent status with active Case No and ATC badges, Senior/PWD identifiers, high-urgency red alert banners (anaphylactic allergies, fall risk, pregnancy), today's latest triage vitals with color-coded abnormal indicators and WHO pediatric Z-scores, active chronic problem pills, and ongoing active medications.
+
+### R3. Comprehensive EMR Full Chart with 100% PhilHealth Statutory Coverage
+Consolidate `PatientChartDto` and `GetPatientChartQueryHandler` in `services/clinic-api` so that problems, allergies, immunizations, and record attachments are returned alongside encounters, vitals, procedures, and lab orders in a single atomic query. Reorganize the EMR Full Chart into a high-density, modular workstation layout that strictly supports all PhilHealth statutory libraries (`lib_*`):
+1. Executive Clinical Summary Dashboard (4-quadrant glanceable view of Problems, Allergies, Active Meds, and Vitals/Lab Timeline).
+2. Longitudinal SOAP Encounters Timeline (with expandable encounter details, provider filters, and PhilHealth Case/Trans links).
+3. Diagnostic Laboratory & Pathology Reports (ClinicEZ orders, critical panic values with readback, and external reports mapped to `lib_diagnostic`).
+4. In-Clinic Nursing Procedures (ordered by physicians, executed by nurses with lot numbers, pre/post vitals, and `lib_management` mapping).
+5. Statutory Immunizations Card (100% integration with PhilHealth libraries: `lib_immchild` for children 0-17y, `lib_immyoungw` for adolescent/young women, `lib_immpregw` for pregnant women, `lib_immelderly` for senior citizens 60+, with dose sequences and AEFI tracking).
+6. Health Profiles (Surgical history, Lifestyle/Social history with smoking pack-years, Reproductive OB-GYN health, and Cardiometabolic NCD risk assessments strictly mapped to `lib_mdiseases` and `lib_ncdq` 24-question survey).
+7. External Document Vault (scanned COR, outside films mapped to `lib_chestxray_findings` and `lib_chestxray_observation`, and medical clearances with staff verification audit trail).
+
+### R4. 100% PhilHealth Konsulta (Yakap) Consultation Compliance & DTD Validation
+Ensure the Consultation workflow in `apps/clinic-app` and backend services strictly meets PhilHealth Konsulta accreditation rules (`KonsultaData_v1.14.dtd`):
+1. **Automated Credential Snapshotting**: Attending Physician's PhilHealth Accreditation Number (PAN), PRC License, PTR, and S2 licenses automatically snapshot upon signing.
+2. **Statutory Code Mapping**: 100% compliance mapping for statutory complaints (`lib_signs_symptoms` including mandatory pain site and other complaint descriptions), 9-system physical exam findings (`lib_heent`, `lib_chest`, `lib_heart`, `lib_abdomen`, `lib_genitourinary`, `lib_digital_rectal`, `lib_skin_extremities`, `lib_neuro`, and General Survey), ICD-10 primary/secondary diagnoses (`lib_icd`), and medicines (`lib_medicine`).
+3. **Statutory Pre-Flight Validation**: Provide an inline "Yakap Claim Readiness" validator before encounter signing that guarantees 0 missing statutory fields, preventing claim rejections during batch XML generation and transmission.
+
+### R5. Multi-Doctor & Multi-Nurse Workstation Collaboration
+Enhance the Queue management and Consultation workstation to support busy clinics with concurrent multi-doctor and multi-nurse teams:
+1. Support Station and Room assignment ("Exam Room 1 - Dr. Santos", "Exam Room 2 - Dr. Reyes", "Triage Station A", "Procedure Bay").
+2. Multi-provider queue filtering allowing physicians to view "My Room / Assigned", "Waiting for Doctor", or "All Clinic Queue", and nurses to view "Triage Queue" and "Procedure Execution Queue".
+3. Closed-loop procedure handoffs: when a doctor orders an in-clinic procedure during consultation (e.g. nebulization, IV therapy, wound dressing, vaccination), the patient can transition to `PendingProcedure` for nurse execution and return to `ReEvaluation` or final doctor signing without prematurely dropping off the active queue.
+4. Split-screen workstation layout: on desktop screens ($\ge 1024\text{px}$), the consultation screen displays active SOAP documentation and order entry side-by-side with the patient's longitudinal EMR chart and summary spine, eliminating modal context switching.
+
+## Acceptance Criteria
+
+### Patient Registration & Intake
+- [ ] Debounced duplicate detection checks existing records while typing and displays an actionable warning if PhilHealth PIN, Contact Number, or Name + DOB match an existing patient.
+- [ ] PhilHealth PIN field validates standard 12-digit format (`XX-XXXXXXXXX-X`) per RA 11223.
+- [ ] Structured allergies can be recorded during intake with category (Medication, Food, Environmental) and severity (Mild, Moderate, Severe, LifeThreatening/Anaphylactic), saving as first-class `PatientAllergy` entities.
+- [ ] Front-desk staff can register a walk-in patient and route them directly to the triage queue with a single submission action.
+
+### EMR Full Chart & Information Density
+- [ ] Persistent `PatientSummarySpine` renders on both the patient chart and active consultation views adhering to `@clinicez/design-tokens` semantic tokens (`emergencyText`, `urgentText`, `warningText`, `primary`).
+- [ ] `PatientChartDto` returns consultations, vitals, procedures, lab orders, invoices, problems, allergies, immunizations, and attachments in a single backend roundtrip.
+- [ ] Statutory immunization schedule tab displays child (`lib_immchild`), young women (`lib_immyoungw`), pregnant (`lib_immpregw`), and elderly (`lib_immelderly`) vaccines with batch/lot numbers and AEFI tracking.
+- [ ] Pediatric anthropometrics displays calculated WHO Z-scores (WAZ, HAZ, WHZ) and PhilHealth Z-score categorization code (`lib_zscore`).
+- [ ] NCD Risk Assessment tab strictly adheres to the PhilHealth 24-question survey (`lib_ncdq`) and 10-year CVD risk scoring.
+
+### PhilHealth Konsulta Standard Compliance & DTD Verification
+- [ ] All Konsulta encounter fields strictly conform to `KonsultaData_v1.14.dtd` structure and pass pre-flight validation before signing.
+- [ ] Attending physician's PhilHealth PAN and PRC license numbers are validated and stored with the encounter record.
+- [ ] 9-system physical examination checklist maps directly to PhilHealth physical exam libraries (`lib_heent`, `lib_chest`, etc.) with 1-click "All Normal" and explicit abnormal findings.
+
+### Multi-Provider Queue & Collaboration
+- [ ] Queue items support room/station assignment and clinician-specific filtering ("My Room / Assigned" vs "All Clinic Queue").
+- [ ] Doctors can order in-clinic nursing procedures or vaccinations during consultation with queue transition to `PendingProcedure` and handoff back to `ReEvaluation`.
+- [ ] Consultation screen on widescreen desktop ($\ge 1024\text{px}$) supports side-by-side split view of active SOAP notes and longitudinal chart history.
+- [ ] All automated test suites (`dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests` and `bun test apps/clinic-app/tests`) pass with 0 failures.
