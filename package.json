@@ -21,8 +21,5 @@
     "build:portal": "bun --filter @clinicez/portal-web build",
     "build:patient-web": "bun --filter @clinicez/patient-app build:web",
     "build:clinic-web": "bun --filter @clinicez/clinic-app build:web"
-  },
-  "devDependencies": {
-    "typescript": "~6.0.3"
   }
 }
