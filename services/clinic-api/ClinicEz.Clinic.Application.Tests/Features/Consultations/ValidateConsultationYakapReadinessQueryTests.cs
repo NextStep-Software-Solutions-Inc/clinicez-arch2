@@ -75,7 +75,7 @@ public class ValidateConsultationYakapReadinessQueryTests
             },
             Prescriptions = new List<PrescriptionItem>
             {
-                new() { Id = Guid.NewGuid(), GenericName = "Paracetamol", Dosage = "500mg", PhilHealthDrugCode = "DRUG00000000000000000000000001" }
+                new() { Id = Guid.NewGuid(), GenericName = "Paracetamol", Dosage = "500mg", Form = "Tablet", Sig = "1 tab TID PO", PhilHealthDrugCode = "DRUG00000000000000000000000001" }
             }
         };
 
@@ -276,6 +276,8 @@ public class ValidateConsultationYakapReadinessQueryTests
             Id = Guid.NewGuid(),
             GenericName = "Morphine Sulfate",
             Dosage = "10mg",
+            Form = "Tablet",
+            Sig = "1 tab PRN severe pain",
             IsDangerousDrug = true,
             PhilHealthDrugCode = "DRUG00000000000000000000000002"
         });
