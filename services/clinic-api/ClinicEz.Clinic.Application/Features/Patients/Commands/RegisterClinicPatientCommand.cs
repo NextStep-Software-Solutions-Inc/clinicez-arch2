@@ -1,9 +1,13 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -36,22 +40,32 @@ public sealed record RegisterClinicPatientCommand(
     string? Alerts,
     Guid? SyncPatientId = null,
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
-    string VerificationStatus = "Verified") : IRequest<ClinicPatientDto>;
+    string VerificationStatus = "Verified",
+    List<CreateAllergyRequest>? StructuredAllergies = null,
+    bool SendToTriage = false,
+    string? Priority = "Normal",
+    string? ChiefComplaint = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
     private readonly IRepository<ClinicPatient> _patientRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<PatientAllergy>? _allergyRepo;
+    private readonly IRepository<QueueItem>? _queueRepo;
 
     public RegisterClinicPatientCommandHandler(
         IRepository<ClinicPatient> patientRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<PatientAllergy>? allergyRepo = null,
+        IRepository<QueueItem>? queueRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _allergyRepo = allergyRepo;
+        _queueRepo = queueRepo;
     }
 
     public async Task<ClinicPatientDto> Handle(RegisterClinicPatientCommand request, CancellationToken ct)
@@ -95,16 +109,121 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             CustomFields = request.CustomFields ?? new System.Collections.Generic.Dictionary<string, object?>(),
             VerificationStatus = string.IsNullOrWhiteSpace(request.VerificationStatus) ? "Verified" : request.VerificationStatus,
             CreatedAt = DateTime.UtcNow,
-            CreatedBy = "ClinicStaff"
+            CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicStaff"
         };
 
         await _patientRepo.AddAsync(patient, ct);
+
+        // 1. Ingest Structured Allergies
+        if (request.StructuredAllergies != null && request.StructuredAllergies.Count > 0 && _allergyRepo != null)
+        {
+            var recordedAllergens = new List<string>();
+
+            foreach (var allergyReq in request.StructuredAllergies)
+            {
+                if (string.IsNullOrWhiteSpace(allergyReq.Allergen)) continue;
+
+                var category = Enum.TryParse<AllergyCategory>(allergyReq.Category, true, out var parsedCategory)
+                    ? parsedCategory
+                    : AllergyCategory.Medication;
+
+                var severity = Enum.TryParse<AllergySeverity>(allergyReq.Severity, true, out var parsedSeverity)
+                    ? parsedSeverity
+                    : (allergyReq.IsAnaphylactic ? AllergySeverity.LifeThreatening : AllergySeverity.Moderate);
+
+                var allergy = new PatientAllergy
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    Category = category,
+                    Allergen = allergyReq.Allergen.Trim(),
+                    AllergenDrugCode = allergyReq.AllergenDrugCode?.Trim(),
+                    Severity = severity,
+                    ReactionManifestation = allergyReq.ReactionManifestation?.Trim(),
+                    IsAnaphylactic = allergyReq.IsAnaphylactic || severity == AllergySeverity.LifeThreatening,
+                    Status = AllergyStatus.Active,
+                    OnsetDate = allergyReq.OnsetDate,
+                    Notes = allergyReq.Notes?.Trim(),
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicStaff"
+                };
+
+                await _allergyRepo.AddAsync(allergy, ct);
+                recordedAllergens.Add(allergy.Allergen);
+            }
+
+            // Keep patient.Allergies summary string updated in sync
+            if (recordedAllergens.Count > 0)
+            {
+                var summary = string.Join(", ", recordedAllergens);
+                if (string.IsNullOrWhiteSpace(patient.Allergies))
+                {
+                    patient.Allergies = summary;
+                }
+                else
+                {
+                    patient.Allergies = $"{patient.Allergies}, {summary}";
+                }
+            }
+        }
+
+        // 2. 1-Click "Send to Triage" Flow
+        QueueItem? queueItem = null;
+        if (request.SendToTriage && _queueRepo != null)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var lastSequence = await _queueRepo.Query(q =>
+                q.ClinicId == _clinicContext.ClinicId &&
+                q.QueueDate == today)
+                .MaxAsync(q => (int?)q.SequenceNumber, ct) ?? 0;
+
+            var nextSequence = lastSequence + 1;
+            var queueNumber = $"Q-{nextSequence:D3}";
+
+            var priority = QueuePriority.Routine;
+            if (!string.IsNullOrWhiteSpace(request.Priority))
+            {
+                if (request.Priority.Equals("Urgent", StringComparison.OrdinalIgnoreCase))
+                    priority = QueuePriority.Urgent;
+                else if (request.Priority.Equals("Emergency", StringComparison.OrdinalIgnoreCase))
+                    priority = QueuePriority.Emergency;
+            }
+
+            var middleInitial = !string.IsNullOrWhiteSpace(patient.MiddleName) ? $" {patient.MiddleName[0]}." : "";
+            var suffix = !string.IsNullOrWhiteSpace(patient.Suffix) ? $" {patient.Suffix}" : "";
+            var fullName = $"{patient.LastName}, {patient.FirstName}{middleInitial}{suffix}";
+
+            queueItem = new QueueItem
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _clinicContext.TenantId,
+                ClinicId = _clinicContext.ClinicId,
+                QueueNumber = queueNumber,
+                SequenceNumber = nextSequence,
+                QueueDate = today,
+                PatientId = patient.Id,
+                PatientName = fullName,
+                Priority = priority,
+                Status = QueueStatus.Waiting, // Routes to nursing triage queue
+                CheckInTime = DateTime.UtcNow,
+                ChiefComplaint = request.ChiefComplaint?.Trim(),
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = _clinicContext.StaffId?.ToString() ?? "FrontDesk"
+            };
+
+            await _queueRepo.AddAsync(queueItem, ct);
+        }
+
         await _unitOfWork.SaveChangesAsync(ct);
 
-        return MapToDto(patient);
+        return MapToDto(patient, queueItem?.QueueNumber, queueItem?.Id);
     }
 
-    public static ClinicPatientDto MapToDto(ClinicPatient p)
+    public static ClinicPatientDto MapToDto(ClinicPatient p) => MapToDto(p, null, null);
+
+    public static ClinicPatientDto MapToDto(ClinicPatient p, string? activeQueueTicket, Guid? activeQueueItemId)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var age = today.Year - p.DateOfBirth.Year;
@@ -147,6 +266,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             p.SyncPatientId,
             p.CreatedAt,
             p.CustomFields,
-            p.VerificationStatus);
+            p.VerificationStatus,
+            activeQueueTicket,
+            activeQueueItemId);
     }
 }

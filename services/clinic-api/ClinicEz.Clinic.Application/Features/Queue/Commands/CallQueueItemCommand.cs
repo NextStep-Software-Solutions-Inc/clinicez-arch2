@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.Queue.Commands;
 
-public sealed record CallQueueItemCommand(Guid Id, Guid? DoctorId = null, string? DoctorName = null) : IRequest<QueueItemDto>;
+public sealed record CallQueueItemCommand(Guid Id, Guid? DoctorId = null, string? DoctorName = null, string? RoomOrStation = null) : IRequest<QueueItemDto>;
 
 public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemCommand, QueueItemDto>
 {
@@ -44,6 +44,7 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
         item.CalledTime = DateTime.UtcNow;
         if (request.DoctorId.HasValue) item.DoctorId = request.DoctorId.Value;
         if (!string.IsNullOrWhiteSpace(request.DoctorName)) item.DoctorName = request.DoctorName;
+        if (!string.IsNullOrWhiteSpace(request.RoomOrStation)) item.RoomOrStation = request.RoomOrStation.Trim();
         item.UpdatedAt = DateTime.UtcNow;
         item.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Doctor";
 
@@ -73,7 +74,8 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
             item.CompletedTime,
             item.ChiefComplaint,
             item.TriageVitals != null,
-            vitalsSummary);
+            vitalsSummary,
+            item.RoomOrStation);
     }
 }
 

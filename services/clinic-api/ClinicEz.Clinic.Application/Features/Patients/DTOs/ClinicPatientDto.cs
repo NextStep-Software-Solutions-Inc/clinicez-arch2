@@ -35,4 +35,6 @@ public sealed record ClinicPatientDto(
     Guid? SyncPatientId,
     DateTime CreatedAt,
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
-    string VerificationStatus = "Verified");
+    string VerificationStatus = "Verified",
+    string? ActiveQueueTicket = null,
+    Guid? ActiveQueueItemId = null);

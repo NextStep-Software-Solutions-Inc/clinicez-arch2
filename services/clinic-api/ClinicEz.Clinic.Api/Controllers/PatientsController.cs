@@ -38,6 +38,27 @@ public sealed class PatientsController : ControllerBase
         return Ok(ApiResponse<IReadOnlyList<ClinicPatientDto>>.Success(result));
     }
 
+    [HttpGet("check-duplicates")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<DuplicatePatientCheckResultDto>>> CheckDuplicates(
+        [FromQuery] string? philHealthNumber,
+        [FromQuery] string? contactNumber,
+        [FromQuery] string? firstName,
+        [FromQuery] string? lastName,
+        [FromQuery] DateOnly? dateOfBirth,
+        CancellationToken ct)
+    {
+        var query = new CheckPatientDuplicatesQuery(
+            philHealthNumber,
+            contactNumber,
+            firstName,
+            lastName,
+            dateOfBirth);
+
+        var result = await _sender.Send(query, ct);
+        return Ok(ApiResponse<DuplicatePatientCheckResultDto>.Success(result));
+    }
+
     [HttpGet("{id:guid}")]
     [HasPermission(ClinicPermissions.PatientsRead)]
     public async Task<ActionResult<ApiResponse<ClinicPatientDto>>> GetPatientById(

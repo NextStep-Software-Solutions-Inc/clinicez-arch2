@@ -21,7 +21,8 @@ public sealed record CheckInPatientCommand(
     Guid? DoctorId = null,
     string? DoctorName = null,
     QueuePriority Priority = QueuePriority.Routine,
-    string? ChiefComplaint = null) : IRequest<QueueItemDto>;
+    string? ChiefComplaint = null,
+    string? RoomOrStation = null) : IRequest<QueueItemDto>;
 
 public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPatientCommand>
 {
@@ -104,6 +105,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             Status = QueueStatus.Waiting,
             CheckInTime = DateTime.UtcNow,
             ChiefComplaint = request.ChiefComplaint ?? appointment?.Reason,
+            RoomOrStation = request.RoomOrStation?.Trim(),
             CreatedAt = DateTime.UtcNow,
             CreatedBy = _clinicContext.StaffId?.ToString() ?? "FrontDesk"
         };
@@ -168,6 +170,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             queueItem.CompletedTime,
             queueItem.ChiefComplaint,
             false,
-            null);
+            null,
+            queueItem.RoomOrStation);
     }
 }

@@ -61,7 +61,8 @@ public sealed class StaffController : ControllerBase
             request.PrcLicenseNumber,
             request.PtrNumber,
             request.S2LicenseNumber,
-            request.Specialty);
+            request.Specialty,
+            request.PhilHealthPan);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Profile updated successfully."));
@@ -124,7 +125,8 @@ public sealed class StaffController : ControllerBase
                 request.PrcLicenseNumber,
                 request.PtrNumber,
                 request.S2LicenseNumber,
-                request.Specialty);
+                request.Specialty,
+                request.PhilHealthPan);
 
             var myResult = await _sender.Send(myCommand, ct);
             return Ok(ApiResponse<StaffMemberDto>.Success(myResult, "Profile updated successfully."));
@@ -144,7 +146,8 @@ public sealed class StaffController : ControllerBase
             request.PtrNumber,
             request.S2LicenseNumber,
             request.Specialty,
-            request.IsActive);
+            request.IsActive,
+            request.PhilHealthPan);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member updated successfully."));
@@ -194,7 +197,8 @@ public sealed record UpdateStaffMemberRequest(
     string? PtrNumber,
     string? S2LicenseNumber,
     string? Specialty,
-    bool IsActive = true);
+    bool IsActive = true,
+    string? PhilHealthPan = null);
 
 public sealed record UpdateMyProfileRequest(
     string FirstName,
@@ -205,4 +209,5 @@ public sealed record UpdateMyProfileRequest(
     string? PrcLicenseNumber,
     string? PtrNumber,
     string? S2LicenseNumber,
-    string? Specialty);
+    string? Specialty,
+    string? PhilHealthPan = null);

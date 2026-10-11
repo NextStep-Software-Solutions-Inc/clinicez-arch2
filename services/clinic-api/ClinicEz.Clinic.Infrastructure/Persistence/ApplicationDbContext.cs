@@ -272,6 +272,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
             entity.Property(e => e.DoctorName).HasMaxLength(150);
             entity.Property(e => e.ChiefComplaint).HasMaxLength(255);
+            entity.Property(e => e.RoomOrStation).HasMaxLength(100);
 
             entity.HasOne(e => e.Appointment)
                 .WithMany()

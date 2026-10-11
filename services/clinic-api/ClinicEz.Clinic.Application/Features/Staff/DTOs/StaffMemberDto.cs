@@ -24,4 +24,5 @@ public sealed record StaffMemberDto(
     DateTime CreatedAt,
     bool HasCredentials = false,
     bool MustChangePassword = false,
-    string? TemporaryPassword = null);
+    string? TemporaryPassword = null,
+    string? PhilHealthPan = null);

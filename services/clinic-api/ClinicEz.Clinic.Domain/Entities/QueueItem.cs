@@ -26,6 +26,11 @@ public sealed class QueueItem : BaseEntity
     public string? DoctorName { get; set; }
 
     /// <summary>
+    /// Exam room or nursing station assignment (e.g. "Exam Room 1 - Dr. Santos", "Triage Station A", "Procedure Bay")
+    /// </summary>
+    public string? RoomOrStation { get; set; }
+
+    /// <summary>
     /// Stored as string in database: "Routine", "Urgent", "Emergency"
     /// </summary>
     public QueuePriority Priority { get; set; } = QueuePriority.Routine;

@@ -45,6 +45,35 @@ const SLOT_INTERVALS = [15, 30, 60];
 
 const LEAVE_TYPES = ['Vacation', 'SickLeave', 'CME', 'Emergency', 'Holiday'];
 
+const DAY_INDEX_TO_NAME: Record<number, string> = {
+  0: 'Sunday',
+  1: 'Monday',
+  2: 'Tuesday',
+  3: 'Wednesday',
+  4: 'Thursday',
+  5: 'Friday',
+  6: 'Saturday',
+};
+
+const DAY_NAME_TO_INDEX: Record<string, number> = {
+  Sunday: 0,
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+};
+
+const getDayIndex = (day: string | number): number => {
+  if (typeof day === 'number') return day;
+  return DAY_NAME_TO_INDEX[day] ?? -1;
+};
+
+const getDayName = (day: number): string => {
+  return DAY_INDEX_TO_NAME[day] ?? 'Monday';
+};
+
 export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps> = ({
   visible,
   onClose,
@@ -136,10 +165,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
 
   // Sync form when day or templates change
   useEffect(() => {
-    const existing = templates.find((t) => {
-      const tDay = typeof t.dayOfWeek === 'string' ? parseInt(t.dayOfWeek, 10) : t.dayOfWeek;
-      return tDay === selectedDay;
-    });
+    const existing = templates.find((t) => getDayIndex(t.dayOfWeek) === selectedDay);
 
     if (existing) {
       setStartTime(existing.startTime ? existing.startTime.substring(0, 5) : '09:00');
@@ -178,7 +204,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
       setSavingTemplate(true);
       const [, err] = await clinicService.upsertDoctorScheduleTemplate(selectedDoctorId, {
         doctorName,
-        dayOfWeek: selectedDay,
+        dayOfWeek: getDayName(selectedDay),
         startTime: startTime.length === 5 ? `${startTime}:00` : startTime,
         endTime: endTime.length === 5 ? `${endTime}:00` : endTime,
         isOvernightShift: isOvernight,
@@ -374,10 +400,9 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                 <View style={styles.daySelector}>
                   {DAYS_OF_WEEK.map((d) => {
                     const isSelected = selectedDay === d.day;
-                    const hasTemplate = templates.some((t) => {
-                      const tDay = typeof t.dayOfWeek === 'string' ? parseInt(t.dayOfWeek, 10) : t.dayOfWeek;
-                      return tDay === d.day && t.isActive;
-                    });
+                    const hasTemplate = templates.some(
+                      (t) => getDayIndex(t.dayOfWeek) === d.day && t.isActive
+                    );
 
                     return (
                       <Pressable

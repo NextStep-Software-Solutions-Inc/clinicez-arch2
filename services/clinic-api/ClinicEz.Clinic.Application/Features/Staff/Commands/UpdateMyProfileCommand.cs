@@ -22,7 +22,8 @@ public sealed record UpdateMyProfileCommand(
     string? PrcLicenseNumber,
     string? PtrNumber,
     string? S2LicenseNumber,
-    string? Specialty) : IRequest<StaffMemberDto>;
+    string? Specialty,
+    string? PhilHealthPan = null) : IRequest<StaffMemberDto>;
 
 public sealed class UpdateMyProfileCommandValidator : AbstractValidator<UpdateMyProfileCommand>
 {
@@ -31,6 +32,11 @@ public sealed class UpdateMyProfileCommandValidator : AbstractValidator<UpdateMy
         RuleFor(x => x.StaffId).NotEmpty();
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(100);
+
+        When(x => !string.IsNullOrEmpty(x.PhilHealthPan), () =>
+        {
+            RuleFor(x => x.PhilHealthPan).MaximumLength(50);
+        });
     }
 }
 
@@ -78,6 +84,7 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
         staff.PtrNumber = request.PtrNumber?.Trim();
         staff.S2LicenseNumber = request.S2LicenseNumber?.Trim();
         staff.Specialty = request.Specialty?.Trim();
+        staff.PhilHealthPan = request.PhilHealthPan?.Trim();
         staff.UpdatedAt = DateTime.UtcNow;
         staff.UpdatedBy = staff.Id.ToString();
 
@@ -106,6 +113,7 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
             staff.IsActive,
             staff.CreatedAt,
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword);
+            MustChangePassword: staff.MustChangePassword,
+            PhilHealthPan: staff.PhilHealthPan);
     }
 }

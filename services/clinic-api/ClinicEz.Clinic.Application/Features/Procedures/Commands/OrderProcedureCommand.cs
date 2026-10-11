@@ -8,6 +8,8 @@ using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace ClinicEz.Clinic.Application.Features.Procedures.Commands;
 
 public record OrderProcedureCommand(
@@ -28,15 +30,18 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
     private readonly IRepository<ClinicalProcedure> _procRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<QueueItem>? _queueRepo;
 
     public OrderProcedureCommandHandler(
         IRepository<ClinicalProcedure> procRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<QueueItem>? queueRepo = null)
     {
         _procRepo = procRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _queueRepo = queueRepo;
     }
 
     public async Task<ClinicalProcedureDto> Handle(OrderProcedureCommand request, CancellationToken cancellationToken)
@@ -65,6 +70,19 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
         };
 
         await _procRepo.AddAsync(procedure, cancellationToken);
+
+        if (request.QueueItemId.HasValue && _queueRepo != null)
+        {
+            var queueItem = await _queueRepo.Query(q => q.Id == request.QueueItemId.Value && q.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (queueItem != null && queueItem.Status != QueueStatus.Completed && queueItem.Status != QueueStatus.Cancelled)
+            {
+                queueItem.Status = QueueStatus.PendingProcedure;
+                queueItem.UpdatedAt = DateTime.UtcNow;
+                _queueRepo.Update(queueItem);
+            }
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return MapToDto(procedure, _clinicContext.TenantId);

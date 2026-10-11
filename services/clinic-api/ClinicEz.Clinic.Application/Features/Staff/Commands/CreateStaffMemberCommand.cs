@@ -30,7 +30,8 @@ public sealed record CreateStaffMemberCommand(
     string? S2LicenseNumber,
     string? Specialty,
     string? InitialPassword = null,
-    bool SendInviteEmail = false) : IRequest<StaffMemberDto>;
+    bool SendInviteEmail = false,
+    string? PhilHealthPan = null) : IRequest<StaffMemberDto>;
 
 public sealed class CreateStaffMemberCommandValidator : AbstractValidator<CreateStaffMemberCommand>
 {
@@ -46,6 +47,11 @@ public sealed class CreateStaffMemberCommandValidator : AbstractValidator<Create
             RuleFor(x => x.PrcLicenseNumber)
                 .NotEmpty()
                 .WithMessage("PRC License Number is mandatory for Doctors.");
+        });
+
+        When(x => !string.IsNullOrEmpty(x.PhilHealthPan), () =>
+        {
+            RuleFor(x => x.PhilHealthPan).MaximumLength(50);
         });
 
         When(x => !string.IsNullOrEmpty(x.InitialPassword), () =>
@@ -215,6 +221,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             PtrNumber = request.PtrNumber?.Trim(),
             S2LicenseNumber = request.S2LicenseNumber?.Trim(),
             Specialty = request.Specialty?.Trim(),
+            PhilHealthPan = request.PhilHealthPan?.Trim(),
             IsActive = true,
             PasswordHash = passwordHash,
             MustChangePassword = mustChangePassword,
@@ -247,6 +254,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             staff.CreatedAt,
             HasCredentials: passwordHash != null,
             MustChangePassword: mustChangePassword,
-            TemporaryPassword: returnedTempPassword);
+            TemporaryPassword: returnedTempPassword,
+            PhilHealthPan: staff.PhilHealthPan);
     }
 }

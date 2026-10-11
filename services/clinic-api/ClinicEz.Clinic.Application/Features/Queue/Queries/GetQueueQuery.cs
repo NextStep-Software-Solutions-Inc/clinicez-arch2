@@ -12,7 +12,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.Queue.Queries;
 
-public sealed record GetQueueQuery(DateOnly? Date = null, QueueStatus? Status = null) : IRequest<IReadOnlyList<QueueItemDto>>;
+public sealed record GetQueueQuery(
+    DateOnly? Date = null,
+    QueueStatus? Status = null,
+    Guid? DoctorId = null,
+    string? RoomOrStation = null,
+    string? View = null // "All", "MyRoom", "WaitingForDoctor", "Triage", "PendingProcedure"
+) : IRequest<IReadOnlyList<QueueItemDto>>;
 
 public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadOnlyList<QueueItemDto>>
 {
@@ -37,13 +43,55 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
             .Include(q => q.TriageVitals)
             .AsQueryable();
 
+        // Specific Doctor Filter
+        if (request.DoctorId.HasValue)
+        {
+            query = query.Where(q => q.DoctorId == request.DoctorId.Value);
+        }
+
+        // Specific Room/Station Filter
+        if (!string.IsNullOrWhiteSpace(request.RoomOrStation))
+        {
+            var room = request.RoomOrStation.Trim();
+            query = query.Where(q => q.RoomOrStation == room);
+        }
+
+        // Explicit Status or View Filter
         if (request.Status.HasValue)
         {
             query = query.Where(q => q.Status == request.Status.Value);
         }
+        else if (!string.IsNullOrWhiteSpace(request.View))
+        {
+            var view = request.View.Trim();
+            if (view.Equals("MyRoom", StringComparison.OrdinalIgnoreCase))
+            {
+                // Items assigned to the clinician or room that are actively in workflow
+                query = query.Where(q => q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow);
+            }
+            else if (view.Equals("WaitingForDoctor", StringComparison.OrdinalIgnoreCase))
+            {
+                // Triaged patients ready for first consult OR patients returned from procedures for re-evaluation
+                query = query.Where(q => q.Status == QueueStatus.Triaged || q.Status == QueueStatus.ReEvaluation);
+            }
+            else if (view.Equals("Triage", StringComparison.OrdinalIgnoreCase))
+            {
+                // Patients waiting for initial triage
+                query = query.Where(q => q.Status == QueueStatus.Waiting);
+            }
+            else if (view.Equals("PendingProcedure", StringComparison.OrdinalIgnoreCase))
+            {
+                // Patients ordered for in-clinic procedures
+                query = query.Where(q => q.Status == QueueStatus.PendingProcedure);
+            }
+            else if (view.Equals("All", StringComparison.OrdinalIgnoreCase))
+            {
+                // All items including completed
+            }
+        }
         else
         {
-            // Default: show active queue (not cancelled or completed, unless requested)
+            // Default: show active queue (not cancelled or no-show)
             query = query.Where(q => q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow);
         }
 
@@ -77,7 +125,8 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
                 item.CompletedTime,
                 item.ChiefComplaint,
                 item.TriageVitals != null,
-                vitalsSummary);
+                vitalsSummary,
+                item.RoomOrStation);
         }).ToList();
     }
 }
@@ -106,7 +155,11 @@ public sealed class GetQueueMetricsQueryHandler : IRequestHandler<GetQueueMetric
             q.QueueDate == targetDate)
             .ToListAsync(cancellationToken);
 
-        var inQueue = items.Count(q => q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged || q.Status == QueueStatus.InConsultation);
+        var inQueue = items.Count(q => q.Status == QueueStatus.Waiting || 
+                                       q.Status == QueueStatus.Triaged || 
+                                       q.Status == QueueStatus.InConsultation ||
+                                       q.Status == QueueStatus.PendingProcedure ||
+                                       q.Status == QueueStatus.ReEvaluation);
         var urgentTriage = items.Count(q => (q.Priority == QueuePriority.Urgent || q.Priority == QueuePriority.Emergency) && q.Status == QueueStatus.Waiting);
         var completedToday = items.Count(q => q.Status == QueueStatus.Completed);
         var total = items.Count;

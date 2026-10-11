@@ -69,7 +69,8 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
             staff.IsActive,
             staff.CreatedAt,
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword
+            MustChangePassword: staff.MustChangePassword,
+            PhilHealthPan: staff.PhilHealthPan
         )).ToList();
     }
 }
@@ -120,6 +121,7 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
             staff.IsActive,
             staff.CreatedAt,
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword);
+            MustChangePassword: staff.MustChangePassword,
+            PhilHealthPan: staff.PhilHealthPan);
     }
 }

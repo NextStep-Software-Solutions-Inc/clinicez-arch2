@@ -1,6 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  GestureResponderEvent,
   Linking,
   Modal,
   Platform,
@@ -9,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { Button, ThemedText } from './ui';
+import { Button, Icon, ThemedText } from './ui';
 import { theme } from '../constants/theme';
 
 export interface CameraQrScannerModalProps {
@@ -23,6 +25,7 @@ export interface CameraQrScannerModalProps {
 /**
  * Native and web camera scanner modal for patient QR codes, share tokens, and laboratory/prescription slips.
  * Handles permission states (requesting, granted, denied/blocked) and delivers a single scan per presentation.
+ * Supports auto (continuous) and manual (tap-to-focus) modes, zoom toggle, and torch for rapid scanning.
  */
 export default function CameraQrScannerModal({
   visible,
@@ -34,11 +37,85 @@ export default function CameraQrScannerModal({
   const [permission, requestPermission] = useCameraPermissions();
   const handled = useRef(false);
 
+  // Focus & camera controls
+  const [focusMode, setFocusMode] = useState<'auto' | 'manual'>('auto');
+  const [autofocusProp, setAutofocusProp] = useState<'off' | 'on'>('off'); // 'off' is continuous AF in expo-camera
+  const [torch, setTorch] = useState(false);
+  const [zoom, setZoom] = useState<number>(0);
+  const [focusCoord, setFocusCoord] = useState<{ x: number; y: number } | null>(null);
+
+  // Focus ring animation
+  const focusScale = useRef(new Animated.Value(1.5)).current;
+  const focusOpacity = useRef(new Animated.Value(0)).current;
+  const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (visible) {
       handled.current = false;
+      setFocusMode('auto');
+      setAutofocusProp('off');
+      setTorch(false);
+      setZoom(0);
+      setFocusCoord(null);
     }
   }, [visible]);
+
+  useEffect(() => {
+    return () => {
+      if (focusTimeoutRef.current) {
+        clearTimeout(focusTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const triggerFocusPulse = (coord?: { x: number; y: number }) => {
+    if (coord) {
+      setFocusCoord(coord);
+    }
+    // Animate focus ring
+    focusScale.setValue(1.5);
+    focusOpacity.setValue(1);
+    Animated.parallel([
+      Animated.timing(focusScale, {
+        toValue: 1.0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(focusOpacity, {
+        toValue: 0,
+        delay: 600,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Momentarily toggle autofocus prop to trigger CameraX/AVFoundation focus cycle
+    setAutofocusProp('on');
+    if (focusTimeoutRef.current) {
+      clearTimeout(focusTimeoutRef.current);
+    }
+    focusTimeoutRef.current = setTimeout(() => {
+      setFocusCoord(null);
+      if (focusMode === 'auto') {
+        setAutofocusProp('off');
+      }
+    }, 1100);
+  };
+
+  const handleTapToFocus = (e: GestureResponderEvent) => {
+    const { locationX, locationY } = e.nativeEvent;
+    triggerFocusPulse({ x: locationX, y: locationY });
+  };
+
+  const handleModeSwitch = (mode: 'auto' | 'manual') => {
+    setFocusMode(mode);
+    if (mode === 'auto') {
+      setAutofocusProp('off'); // continuous autofocus
+    } else {
+      setAutofocusProp('on'); // lock focus
+      triggerFocusPulse();
+    }
+  };
 
   const handleScan = (result: BarcodeScanningResult) => {
     if (handled.current) return;
@@ -56,10 +133,10 @@ export default function CameraQrScannerModal({
       <View style={styles.container}>
         {/* Header Overlay */}
         <View style={styles.header}>
-          <ThemedText variant="h3" color="#FFFFFF">
+          <ThemedText variant="h3" color={theme.colors.textInverted}>
             {title}
           </ThemedText>
-          <ThemedText variant="small" color="#94A3B8" style={styles.headerSubtitle}>
+          <ThemedText variant="small" color={theme.colors.textLight} style={styles.headerSubtitle}>
             {subtitle}
           </ThemedText>
         </View>
@@ -68,13 +145,13 @@ export default function CameraQrScannerModal({
         {!permission ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
-            <ThemedText variant="body" color="#FFFFFF">
+            <ThemedText variant="body" color={theme.colors.textInverted}>
               Initializing camera…
             </ThemedText>
           </View>
         ) : !permission.granted ? (
           <View style={styles.center}>
-            <ThemedText variant="body" color="#FFFFFF" style={styles.message}>
+            <ThemedText variant="body" color={theme.colors.textInverted} style={styles.message}>
               {permission.canAskAgain
                 ? 'Camera access is required to scan patient QR codes and share tokens.'
                 : 'Camera permission is disabled. Please enable camera access in your device settings to scan QR codes.'}
@@ -101,15 +178,126 @@ export default function CameraQrScannerModal({
               facing="back"
               barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
               onBarcodeScanned={handleScan}
+              autofocus={autofocusProp}
+              enableTorch={torch}
+              zoom={zoom}
             />
 
-            {/* Target Reticle Overlay */}
-            <View style={styles.reticleOverlay} pointerEvents="none">
-              <View style={styles.reticleFrame} />
-              <View style={styles.hintBadge}>
-                <ThemedText variant="captionBold" color="#FFFFFF">
-                  Align QR code within the frame
-                </ThemedText>
+            {/* Tap-to-focus interactive surface */}
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={handleTapToFocus}
+              accessibilityLabel="Tap viewfinder to focus camera"
+            >
+              {/* Target Reticle Frame */}
+              <View style={styles.reticleOverlay} pointerEvents="none">
+                <View style={styles.reticleFrame} />
+                <View style={styles.hintBadge}>
+                  <ThemedText variant="captionBold" color={theme.colors.textInverted}>
+                    {focusMode === 'auto'
+                      ? 'Auto-focus active • Tap anywhere to focus on code'
+                      : 'Manual focus locked • Tap code to focus'}
+                  </ThemedText>
+                </View>
+              </View>
+
+              {/* Dynamic tap-to-focus indicator ring */}
+              {focusCoord && (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.focusRing,
+                    {
+                      left: focusCoord.x - 30,
+                      top: focusCoord.y - 30,
+                      transform: [{ scale: focusScale }],
+                      opacity: focusOpacity,
+                    },
+                  ]}
+                >
+                  <View style={styles.focusCenterDot} />
+                </Animated.View>
+              )}
+            </Pressable>
+
+            {/* Quick Camera Tuning Controls Overlay */}
+            <View style={styles.controlsStrip}>
+              <View style={styles.controlGroup}>
+                <Pressable
+                  style={[styles.controlPill, focusMode === 'auto' && styles.controlPillActive]}
+                  onPress={() => handleModeSwitch('auto')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Auto Focus mode"
+                >
+                  <Icon
+                    name="scan"
+                    size={theme.sizes.iconSm}
+                    color={focusMode === 'auto' ? theme.colors.textInverted : theme.colors.textLight}
+                  />
+                  <ThemedText
+                    variant="captionBold"
+                    color={focusMode === 'auto' ? theme.colors.textInverted : theme.colors.textLight}
+                  >
+                    Auto
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.controlPill, focusMode === 'manual' && styles.controlPillActive]}
+                  onPress={() => handleModeSwitch('manual')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Manual Focus mode"
+                >
+                  <Icon
+                    name="eye"
+                    size={theme.sizes.iconSm}
+                    color={focusMode === 'manual' ? theme.colors.textInverted : theme.colors.textLight}
+                  />
+                  <ThemedText
+                    variant="captionBold"
+                    color={focusMode === 'manual' ? theme.colors.textInverted : theme.colors.textLight}
+                  >
+                    Manual
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  style={styles.controlIconBtn}
+                  onPress={() => triggerFocusPulse()}
+                  accessibilityRole="button"
+                  accessibilityLabel="Trigger Refocus"
+                >
+                  <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.textInverted} />
+                </Pressable>
+              </View>
+
+              <View style={styles.controlGroup}>
+                <Pressable
+                  style={[styles.controlIconBtn, torch && styles.controlIconBtnActive]}
+                  onPress={() => setTorch((prev) => !prev)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle Torch"
+                >
+                  <Icon
+                    name="zap"
+                    size={theme.sizes.iconSm}
+                    color={torch ? theme.colors.warning : theme.colors.textInverted}
+                  />
+                </Pressable>
+
+                <Pressable
+                  style={[styles.controlPill, zoom > 0 && styles.controlPillActive]}
+                  onPress={() => setZoom((prev) => (prev === 0 ? 0.25 : 0))}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle Zoom 1x or 2x"
+                >
+                  <ThemedText
+                    variant="captionBold"
+                    color={zoom > 0 ? theme.colors.textInverted : theme.colors.textLight}
+                  >
+                    {zoom > 0 ? '2x' : '1x'}
+                  </ThemedText>
+                </Pressable>
               </View>
             </View>
           </View>
@@ -118,7 +306,7 @@ export default function CameraQrScannerModal({
         {/* Footer Actions */}
         <View style={styles.footer}>
           <Pressable style={styles.cancelButton} onPress={onClose} accessibilityRole="button">
-            <ThemedText variant="bodyBold" color="#111827">
+            <ThemedText variant="bodyBold" color={theme.colors.surfaceInverse}>
               Close Scanner
             </ThemedText>
           </Pressable>
@@ -131,27 +319,27 @@ export default function CameraQrScannerModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: theme.colors.surfaceInverse,
     justifyContent: 'space-between',
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 56 : 32,
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingTop: Platform.OS === 'ios' ? theme.spacing['3xl'] : theme.spacing.xl,
+    paddingHorizontal: theme.spacing.xl,
+    paddingBottom: theme.spacing.md,
+    backgroundColor: theme.colors.overlay,
     alignItems: 'center',
     zIndex: 10,
   },
   headerSubtitle: {
-    marginTop: 4,
+    marginTop: theme.spacing.xs,
     textAlign: 'center',
   },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
-    gap: 20,
+    padding: theme.spacing['2xl'],
+    gap: theme.spacing.lg,
   },
   message: {
     textAlign: 'center',
@@ -159,7 +347,7 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   permissionActions: {
-    gap: 12,
+    gap: theme.spacing.md,
     width: '100%',
     maxWidth: 280,
   },
@@ -178,27 +366,82 @@ const styles = StyleSheet.create({
     height: 250,
     borderWidth: 3,
     borderColor: theme.colors.primary,
-    borderRadius: 20,
-    backgroundColor: 'transparent',
+    borderRadius: theme.radii.xl,
+    backgroundColor: theme.colors.transparent,
   },
   hintBadge: {
-    marginTop: 24,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    marginTop: theme.spacing.xl,
+    backgroundColor: theme.colors.overlay,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.full,
+  },
+  focusRing: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: theme.radii.full,
+    borderWidth: 2,
+    borderColor: theme.colors.focusRing,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.transparent,
+  },
+  focusCenterDot: {
+    width: 6,
+    height: 6,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.focusRing,
+  },
+  controlsStrip: {
+    position: 'absolute',
+    top: theme.spacing.md,
+    left: theme.spacing.md,
+    right: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 20,
+  },
+  controlGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.overlay,
+    padding: theme.spacing.xs,
+    borderRadius: theme.radii.full,
+  },
+  controlPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.transparent,
+  },
+  controlPillActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  controlIconBtn: {
+    padding: theme.spacing.xs,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.transparent,
+  },
+  controlIconBtnActive: {
+    backgroundColor: theme.colors.surfaceHighlight,
   },
   footer: {
-    paddingVertical: 32,
-    paddingHorizontal: 24,
+    paddingVertical: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.xl,
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    backgroundColor: theme.colors.overlay,
     zIndex: 10,
   },
   cancelButton: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 14,
-    paddingHorizontal: 36,
-    borderRadius: 12,
+    backgroundColor: theme.colors.surface,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing['2xl'],
+    borderRadius: theme.radii.lg,
   },
 });

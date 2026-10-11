@@ -13,17 +13,6 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ClinicEz.Clinic.Api.Controllers;
 
-public record CreateAllergyRequest(
-    string Category = "Medication",
-    string Allergen = "",
-    string? AllergenDrugCode = null,
-    string Severity = "Moderate",
-    string? ReactionManifestation = null,
-    bool IsAnaphylactic = false,
-    DateOnly? OnsetDate = null,
-    string? Notes = null
-);
-
 [ApiController]
 [Route("api/v1/patients/{patientId:guid}/allergies")]
 public sealed class AllergiesController : ControllerBase

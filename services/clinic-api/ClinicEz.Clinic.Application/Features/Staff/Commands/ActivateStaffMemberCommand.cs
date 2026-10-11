@@ -124,6 +124,7 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
             staff.IsActive,
             staff.CreatedAt,
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword
+            MustChangePassword: staff.MustChangePassword,
+            PhilHealthPan: staff.PhilHealthPan
         );
 }

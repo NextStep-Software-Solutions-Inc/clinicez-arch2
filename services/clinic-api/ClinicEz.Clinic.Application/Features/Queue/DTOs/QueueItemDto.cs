@@ -22,7 +22,8 @@ public sealed record QueueItemDto(
     DateTime? CompletedTime,
     string? ChiefComplaint,
     bool HasVitals,
-    string? VitalsSummary);
+    string? VitalsSummary,
+    string? RoomOrStation = null);
 
 public sealed record QueueMetricsDto(
     int InQueue,

@@ -31,15 +31,18 @@ public class RecordProcedureExecutionCommandHandler : IRequestHandler<RecordProc
     private readonly IRepository<ClinicalProcedure> _procRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<QueueItem>? _queueRepo;
 
     public RecordProcedureExecutionCommandHandler(
         IRepository<ClinicalProcedure> procRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<QueueItem>? queueRepo = null)
     {
         _procRepo = procRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _queueRepo = queueRepo;
     }
 
     public async Task<ClinicalProcedureDto> Handle(RecordProcedureExecutionCommand request, CancellationToken cancellationToken)
@@ -64,6 +67,18 @@ public class RecordProcedureExecutionCommandHandler : IRequestHandler<RecordProc
         proc.SiteRoute = request.SiteRoute?.Trim();
         proc.ClinicalNotes = request.ClinicalNotes?.Trim();
         proc.Complications = request.Complications?.Trim();
+
+        if (proc.QueueItemId.HasValue && _queueRepo != null)
+        {
+            var queueItem = await _queueRepo.Query(q => q.Id == proc.QueueItemId.Value && q.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (queueItem != null && queueItem.Status == QueueStatus.PendingProcedure)
+            {
+                queueItem.Status = QueueStatus.ReEvaluation;
+                queueItem.UpdatedAt = DateTime.UtcNow;
+                _queueRepo.Update(queueItem);
+            }
+        }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

@@ -26,7 +26,8 @@ public sealed record UpdateStaffMemberCommand(
     string? PtrNumber,
     string? S2LicenseNumber,
     string? Specialty,
-    bool IsActive) : IRequest<StaffMemberDto>;
+    bool IsActive,
+    string? PhilHealthPan = null) : IRequest<StaffMemberDto>;
 
 public sealed class UpdateStaffMemberCommandValidator : AbstractValidator<UpdateStaffMemberCommand>
 {
@@ -42,6 +43,11 @@ public sealed class UpdateStaffMemberCommandValidator : AbstractValidator<Update
             RuleFor(x => x.PrcLicenseNumber)
                 .NotEmpty()
                 .WithMessage("PRC License Number is mandatory for Doctors.");
+        });
+
+        When(x => !string.IsNullOrEmpty(x.PhilHealthPan), () =>
+        {
+            RuleFor(x => x.PhilHealthPan).MaximumLength(50);
         });
     }
 }
@@ -106,6 +112,7 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         staff.PtrNumber = request.PtrNumber?.Trim();
         staff.S2LicenseNumber = request.S2LicenseNumber?.Trim();
         staff.Specialty = request.Specialty?.Trim();
+        staff.PhilHealthPan = request.PhilHealthPan?.Trim();
         staff.IsActive = request.IsActive;
         staff.UpdatedAt = DateTime.UtcNow;
         staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
@@ -135,6 +142,7 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             staff.IsActive,
             staff.CreatedAt,
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword);
+            MustChangePassword: staff.MustChangePassword,
+            PhilHealthPan: staff.PhilHealthPan);
     }
 }

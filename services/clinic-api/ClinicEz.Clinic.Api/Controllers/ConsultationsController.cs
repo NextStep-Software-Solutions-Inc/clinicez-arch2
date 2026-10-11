@@ -44,6 +44,16 @@ public sealed class ConsultationsController : ControllerBase
         return Ok(ApiResponse<ConsultationEncounterDto>.Success(result));
     }
 
+    [HttpGet("{id:guid}/yakap-readiness")]
+    [HasPermission(ClinicPermissions.ConsultationsRead)]
+    public async Task<ActionResult<ApiResponse<YakapClaimReadinessDto>>> ValidateYakapReadiness(
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new ValidateConsultationYakapReadinessQuery(id), ct);
+        return Ok(ApiResponse<YakapClaimReadinessDto>.Success(result));
+    }
+
     [HttpPost]
     [HasPermission(ClinicPermissions.ConsultationsWrite)]
     public async Task<ActionResult<ApiResponse<ConsultationEncounterDto>>> CreateConsultation(

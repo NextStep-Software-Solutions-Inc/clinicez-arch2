@@ -24,12 +24,6 @@ public sealed class DoctorScheduleTemplate : BaseEntity
     /// <summary>Slot interval / duration in minutes: 15, 30, 60.</summary>
     public int SlotDurationMinutes { get; set; } = 30;
 
-    /// <summary>Alias for SlotDurationMinutes.</summary>
-    public int SlotIntervalMinutes
-    {
-        get => SlotDurationMinutes;
-        set => SlotDurationMinutes = value;
-    }
 
     /// <summary>Maximum simultaneous patients per slot (default 1).</summary>
     public int MaxPatientsPerSlot { get; set; } = 1;
