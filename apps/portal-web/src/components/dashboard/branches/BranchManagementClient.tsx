@@ -34,7 +34,9 @@ import {
   IconExternalLink,
   IconKey,
   IconRefresh,
-  IconSettings
+  IconSettings,
+  IconPhone,
+  IconMail
 } from "@tabler/icons-react";
 import FacilitySettingsHub, { FacilityData } from "@/components/dashboard/FacilitySettingsHub";
 import { getConsoleBaseDomain } from "@/utils/domain";
@@ -609,7 +611,7 @@ export default function BranchManagementClient() {
                         <span className="font-mono">{occupiedCount} / 4 Slots Occupied</span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
                         {FACILITY_SLOTS.map((slot) => {
                           const slotFacilities = branchFacilities.filter(
                             (f) => f.facilityType.toLowerCase() === slot.key
@@ -627,20 +629,19 @@ export default function BranchManagementClient() {
                                   className="p-3 rounded-xl border bg-card flex flex-col justify-between gap-2.5 transition-all shadow-2xs hover:border-slate-300 dark:hover:border-slate-700"
                                 >
                                   <div className="flex items-start justify-between gap-2">
-                                    <div className="flex items-center gap-2 truncate">
-                                      <div className={`p-1.5 rounded-lg shrink-0 ${slot.bg} ${slot.color}`}>
+                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                      <div className={`p-2 rounded-lg shrink-0 ${slot.bg} ${slot.color}`}>
                                         <Icon className="h-4 w-4" />
                                       </div>
-                                      <div className="truncate">
+                                      <div className="min-w-0 flex-1">
                                         <div className="font-bold text-xs truncate text-foreground" title={activeFacility.name}>
                                           {activeFacility.name}
                                         </div>
-                                        <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                          <span>{slot.label}</span>
-                                          <span>•</span>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                          <span className="text-[11px] font-medium text-muted-foreground">{slot.label}</span>
                                           <Badge
                                             variant="secondary"
-                                            className={`text-[9px] px-1 py-0 ${
+                                            className={`text-[10px] font-semibold px-1.5 py-0 shrink-0 ${
                                               isProvisioning
                                                 ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
                                                 : "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
@@ -663,8 +664,8 @@ export default function BranchManagementClient() {
                                     </Button>
                                   </div>
 
-                                  <div className="flex items-center justify-between pt-1 border-t border-border/40">
-                                    <span className="font-mono text-[10px] text-muted-foreground truncate">
+                                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
+                                    <span className="font-mono text-[10px] text-muted-foreground truncate" title={`${activeFacility.slug}.${slot.key}`}>
                                       {activeFacility.slug}.{slot.key}
                                     </span>
 
@@ -673,13 +674,13 @@ export default function BranchManagementClient() {
                                         href={resolvedUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"
+                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline shrink-0"
                                       >
                                         <span>Launch Console</span>
                                         <IconExternalLink className="h-3 w-3" />
                                       </a>
                                     ) : (
-                                      <span className="text-[10px] text-muted-foreground italic">
+                                      <span className="text-[10px] text-muted-foreground italic shrink-0">
                                         {isProvisioning ? "Provisioning..." : "Console inactive"}
                                       </span>
                                     )}
@@ -694,28 +695,20 @@ export default function BranchManagementClient() {
                             <div
                               key={slot.key}
                               onClick={() => handleOpenAddFacility(branch, slot.key)}
-                              className="group border-2 border-dashed border-border/80 hover:border-primary/60 hover:bg-primary/5 p-3 rounded-xl flex items-center justify-between cursor-pointer transition-all duration-200"
+                              className="group border-2 border-dashed border-border/70 hover:border-primary/70 hover:bg-primary/5 p-3 rounded-xl flex items-center gap-3 cursor-pointer transition-all duration-200"
                             >
-                              <div className="flex items-center gap-2.5 truncate">
-                                <div className="p-1.5 rounded-lg bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                                  <Icon className="h-4 w-4" />
-                                </div>
-                                <div className="truncate">
-                                  <div className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors truncate">
-                                    + Add {slot.label}
-                                  </div>
-                                  <p className="text-[10px] text-muted-foreground/70 truncate">
-                                    Empty facility slot
-                                  </p>
-                                </div>
+                              <div className="p-2 rounded-lg bg-muted/80 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
+                                <Icon className="h-4 w-4" />
                               </div>
-
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] font-mono border-dashed border-border group-hover:border-primary/40 group-hover:text-primary transition-colors shrink-0"
-                              >
-                                Empty
-                              </Badge>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors">
+                                  + Add {slot.label}
+                                </div>
+                                <p className="text-[10px] text-muted-foreground/70 truncate">
+                                  {slot.description || "Available service slot"}
+                                </p>
+                              </div>
+                              <IconPlus className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary shrink-0 transition-colors" />
                             </div>
                           );
                         })}
@@ -726,16 +719,34 @@ export default function BranchManagementClient() {
 
                 {/* Card Actions Footer */}
                 <div className="p-3 border-t bg-muted/10 flex items-center justify-between gap-2 mt-2">
-                  <span className="text-[11px] text-muted-foreground font-medium">
-                    {branch.contactNumber || branch.contactEmail || "No contact info"}
-                  </span>
+                  <div
+                    className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium min-w-0 truncate"
+                    title={[
+                      branch.contactNumber ? `Tel: ${branch.contactNumber}` : null,
+                      branch.contactEmail ? `Email: ${branch.contactEmail}` : null,
+                    ].filter(Boolean).join(" | ")}
+                  >
+                    {branch.contactNumber ? (
+                      <>
+                        <IconPhone className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                        <span className="truncate">Tel: {branch.contactNumber}</span>
+                      </>
+                    ) : branch.contactEmail ? (
+                      <>
+                        <IconMail className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+                        <span className="truncate">Email: {branch.contactEmail}</span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground/50 italic">No contact info</span>
+                    )}
+                  </div>
 
                   {hasAvailableSlots && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleOpenAddFacility(branch)}
-                      className="h-8 text-[11px] font-bold rounded-xl gap-1 text-primary border-primary/30 hover:bg-primary/5"
+                      className="h-8 text-[11px] font-bold rounded-xl gap-1 text-primary border-primary/30 hover:bg-primary/5 shrink-0"
                     >
                       <IconPlus className="h-3.5 w-3.5" />
                       <span>Add Facility</span>
