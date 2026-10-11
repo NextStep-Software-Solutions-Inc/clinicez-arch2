@@ -16,10 +16,6 @@ export default function PlatformSettingsPage() {
   const [activeTab, setActiveTab] = useState<"Licensing" | "Billing" | "Storage" | "Mailer">("Licensing");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
   const fetchSettings = async () => {
     try {
       setLoading(true);
@@ -36,6 +32,10 @@ export default function PlatformSettingsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
 
   const handleChange = (key: string, value: string) => {
     setFormData(prev => ({ ...prev, [key]: value }));
