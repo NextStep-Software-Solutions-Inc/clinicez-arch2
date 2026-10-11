@@ -9,7 +9,8 @@ import EmptyState from '../ui/EmptyState';
 import ErrorState from '../ui/ErrorState';
 import { SkeletonList } from '../ui/Skeleton';
 import { Card, CardContent, CardHeader } from '../ui/Card';
-import Icon from '../ui/Icon';
+import Icon, { IconName } from '../ui/Icon';
+import ActionMenu from '../ui/ActionMenu';
 import { theme } from '../../constants/theme';
 import { notify, Alert } from '../../utils/feedback';
 import { clinicService, StaffMember, StaffRole, ResetStaffPasswordResult, ClinicRole } from '../../services/clinicService';
@@ -487,18 +488,6 @@ export default function StaffManagementTab({
                     </View>
 
                     <View style={styles.staffActionsCol}>
-                      {s.role === 'Doctor' ? (
-                        <Button
-                          title="Roster & Schedule"
-                          icon="calendar"
-                          variant="outline"
-                          size="sm"
-                          onPress={() => {
-                            setRosterDoctorId(s.id);
-                            setRosterModalVisible(true);
-                          }}
-                        />
-                      ) : null}
                       <Button
                         title="Edit"
                         icon="edit"
@@ -506,30 +495,53 @@ export default function StaffManagementTab({
                         size="sm"
                         onPress={() => handleOpenEditModal(s)}
                       />
-                      {s.role === 'Doctor' ? (
-                        <Button
-                          title="View Stamp"
-                          variant="outline"
-                          size="sm"
-                          onPress={() => setStampModalStaff(s)}
-                        />
-                      ) : null}
-                      <Button
-                        title="Reset Password"
-                        icon="key"
-                        variant="ghost"
-                        size="sm"
-                        onPress={() => {
-                          setResetModalStaff(s);
-                          setCustomResetPassword(generateRandomPassword());
-                          setResetError(null);
-                        }}
-                      />
-                      <Button
-                        title={s.isActive ? 'Deactivate' : 'Activate'}
-                        variant="ghost"
-                        size="sm"
-                        onPress={() => handleToggleActive(s)}
+                      <ActionMenu
+                        align="right"
+                        triggerAriaLabel={`More actions for ${fullName}`}
+                        items={[
+                          ...(s.role === 'Doctor'
+                            ? [
+                                {
+                                  id: 'roster',
+                                  label: 'Roster & Schedule',
+                                  icon: 'calendar' as const,
+                                  hint: 'Configure weekly shifts & leaves',
+                                  onPress: () => {
+                                    setRosterDoctorId(s.id);
+                                    setRosterModalVisible(true);
+                                  },
+                                },
+                                {
+                                  id: 'stamp',
+                                  label: 'View Doctor Stamp',
+                                  icon: 'eye' as const,
+                                  hint: 'Preview credentials & signature imprint',
+                                  onPress: () => setStampModalStaff(s),
+                                },
+                              ]
+                            : []),
+                          {
+                            id: 'reset-pwd',
+                            label: 'Reset Password',
+                            icon: 'key' as const,
+                            hint: 'Issue temporary credentials',
+                            dividerBefore: s.role === 'Doctor',
+                            onPress: () => {
+                              setResetModalStaff(s);
+                              setCustomResetPassword(generateRandomPassword());
+                              setResetError(null);
+                            },
+                          },
+                          {
+                            id: 'toggle-active',
+                            label: s.isActive ? 'Deactivate Staff Member' : 'Activate Staff Member',
+                            icon: (s.isActive ? 'close' : 'checkCircle') as IconName,
+                            hint: s.isActive ? 'Revoke login and seat access' : 'Restore staff login access',
+                            destructive: s.isActive,
+                            dividerBefore: true,
+                            onPress: () => handleToggleActive(s),
+                          },
+                        ]}
                       />
                     </View>
                   </View>
