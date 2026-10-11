@@ -158,7 +158,7 @@ public class GetPatientChartQueryHandlerTests
             patientRepo: patientRepo,
             problemRepo: problemRepo,
             allergyRepo: allergyRepo,
-            immunizationRepo: immunizationRepo,
+            immunizationRepo: immRepo,
             attachmentRepo: attachRepo);
 
         // Act

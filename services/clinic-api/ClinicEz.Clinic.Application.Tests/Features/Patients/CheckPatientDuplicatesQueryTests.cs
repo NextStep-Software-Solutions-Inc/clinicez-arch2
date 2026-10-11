@@ -192,7 +192,7 @@ public class CheckPatientDuplicatesQueryTests
             ContactNumber: "09170001111",
             FirstName: "Jose",
             LastName: "Rizal",
-            DateOfBirth = new DateOnly(1991, 6, 19)
+            DateOfBirth: new DateOnly(1991, 6, 19)
         ), CancellationToken.None);
 
         // Assert
