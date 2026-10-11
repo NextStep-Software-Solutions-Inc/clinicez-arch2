@@ -618,7 +618,7 @@ public class SlotAvailabilityServiceTests
     public async Task GetDoctorAvailabilityAsync_OvernightShift_BookedSlotDuringRollover_MarksBooked()
     {
         using var db = MessagingTestKit.CreateDbContext(_clinicContext);
-        var mondayDate = new DateOnly(2026, 10, 12);
+        var mondayDate = new DateOnly(2026, 10, 19);
 
         // Sunday night shift: 22:00 to 02:00 (spills into Monday 00:00 to 02:00)
         var sundayTemplate = new DoctorScheduleTemplate
