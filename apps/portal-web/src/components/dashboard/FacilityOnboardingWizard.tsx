@@ -25,6 +25,7 @@ import {
   PhilippineProvince,
   PhilippineCity,
 } from "@/constants/philippine-addresses";
+import { cn } from "@/lib/utils";
 import {
   IconBuildingHospital,
   IconBuilding,
@@ -39,9 +40,51 @@ import {
   IconInfoCircle,
   IconChevronDown,
   IconChevronUp,
+  IconHospital,
+  IconTestPipe,
+  IconPill,
 } from "@tabler/icons-react";
 import { getConsoleBaseDomain } from "@/utils/domain";
 import { APP_SUBDOMAINS } from "@/config/site";
+
+const FACILITY_TYPE_OPTIONS = [
+  {
+    type: "clinic" as const,
+    label: "Clinic",
+    desc: "Outpatient consultations, EHR & medical records",
+    icon: IconHospital,
+    color: "text-blue-500",
+    bg: "bg-blue-500/10",
+    activeBorder: "border-blue-600 bg-blue-500/5 text-blue-700 dark:text-blue-300 ring-2 ring-blue-500/20 shadow-xs",
+  },
+  {
+    type: "laboratory" as const,
+    label: "Laboratory",
+    desc: "Diagnostic orders, specimen tracking & LIS",
+    icon: IconTestPipe,
+    color: "text-purple-500",
+    bg: "bg-purple-500/10",
+    activeBorder: "border-purple-600 bg-purple-500/5 text-purple-700 dark:text-purple-300 ring-2 ring-purple-500/20 shadow-xs",
+  },
+  {
+    type: "pharmacy" as const,
+    label: "Pharmacy",
+    desc: "Drug dispensing, inventory & prescription fulfillment",
+    icon: IconPill,
+    color: "text-emerald-500",
+    bg: "bg-emerald-500/10",
+    activeBorder: "border-emerald-600 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-500/20 shadow-xs",
+  },
+  {
+    type: "organization" as const,
+    label: "Organization",
+    desc: "Hospital networks, HMOs & provider administration",
+    icon: IconBuilding,
+    color: "text-amber-500",
+    bg: "bg-amber-500/10",
+    activeBorder: "border-amber-600 bg-amber-500/5 text-amber-700 dark:text-amber-300 ring-2 ring-amber-500/20 shadow-xs",
+  },
+];
 
 interface FacilityOnboardingWizardProps {
   initialType?: "clinic" | "laboratory" | "pharmacy" | "organization" | null;
@@ -66,14 +109,39 @@ export default function FacilityOnboardingWizard({
   const tenantSlug = params?.tenant as string;
   const { billingInfo } = useBillingInfo(tenantSlug);
 
-  const resolvedType = (initialType || searchParams.get("create") || "clinic") as "clinic" | "laboratory" | "pharmacy" | "organization";
-  const normalizedFacilityType = (resolvedType.charAt(0).toUpperCase() + resolvedType.slice(1)) as FacilityKind;
+  const [facilityType, setFacilityType] = useState<"clinic" | "laboratory" | "pharmacy" | "organization">(
+    (initialType || (searchParams.get("create") as any) || "clinic")
+  );
+
+  useEffect(() => {
+    if (initialType) {
+      setFacilityType(initialType);
+    }
+  }, [initialType]);
+
+  const normalizedFacilityType = (facilityType.charAt(0).toUpperCase() + facilityType.slice(1)) as FacilityKind;
 
   // Branch foundation state
   const [selectedBranch, setSelectedBranch] = useState<BranchDto | null>(targetBranch || null);
   const [availableBranches, setAvailableBranches] = useState<BranchDto[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [customizeLocation, setCustomizeLocation] = useState(false);
+
+  const occupiedFacilityTypes = (selectedBranch?.facilities || []).map((f) => f.facilityType.toLowerCase());
+
+  // If selected branch already has the current facility type, auto-switch to first free slot
+  useEffect(() => {
+    if (selectedBranch) {
+      const occupied = (selectedBranch.facilities || []).map((f) => f.facilityType.toLowerCase());
+      if (occupied.includes(facilityType)) {
+        const firstFree = FACILITY_TYPE_OPTIONS.find((opt) => !occupied.includes(opt.type));
+        if (firstFree) {
+          setFacilityType(firstFree.type);
+          setClassification("");
+        }
+      }
+    }
+  }, [selectedBranch]);
 
   // Stepper state
   const [currentStep, setCurrentStep] = useState(1);
@@ -324,7 +392,7 @@ export default function FacilityOnboardingWizard({
   const isTrialing = billingInfo?.subscriptionStatus === "TRIALING";
   const hasAllocations = (isSubscribed || isTrialing) && !!billingInfo?.planLimits;
 
-  const isClinic = resolvedType === "clinic";
+  const isClinic = facilityType === "clinic";
   const isAtClinicLimit =
     isClinic &&
     hasAllocations &&
@@ -499,7 +567,7 @@ export default function FacilityOnboardingWizard({
         router.refresh();
       }
     } catch (err: unknown) {
-      toastApiError(err, `Failed to register ${resolvedType}`, tenantSlug);
+      toastApiError(err, `Failed to register ${facilityType}`, tenantSlug);
     } finally {
       setSubmitting(false);
     }
@@ -686,13 +754,77 @@ export default function FacilityOnboardingWizard({
                 </div>
               )}
 
+              {/* Facility Type Selector */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Facility Type <span className="text-rose-500">*</span>
+                  </Label>
+                  {selectedBranch && (
+                    <span className="text-[10px] text-muted-foreground font-medium">
+                      One facility of each type per branch
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {FACILITY_TYPE_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    const isOccupied = occupiedFacilityTypes.includes(opt.type);
+                    const isSelected = facilityType === opt.type;
+
+                    return (
+                      <button
+                        key={opt.type}
+                        type="button"
+                        disabled={isOccupied}
+                        onClick={() => {
+                          setFacilityType(opt.type);
+                          setClassification("");
+                        }}
+                        className={cn(
+                          "p-2.5 rounded-2xl border text-left transition-all duration-200 flex flex-col justify-between gap-2 relative",
+                          isSelected
+                            ? opt.activeBorder
+                            : isOccupied
+                            ? "opacity-40 cursor-not-allowed bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800"
+                            : "hover:border-slate-400 dark:hover:border-slate-700 bg-card border-slate-200 dark:border-slate-800 cursor-pointer"
+                        )}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <div className={cn("p-1.5 rounded-xl", opt.bg, opt.color)}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          {isOccupied ? (
+                            <Badge variant="secondary" className="text-[9px] px-1 py-0 font-medium">
+                              Added
+                            </Badge>
+                          ) : isSelected ? (
+                            <IconCheck className="h-4 w-4 text-primary shrink-0" />
+                          ) : null}
+                        </div>
+
+                        <div>
+                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                            {opt.label}
+                          </div>
+                          <div className="text-[10px] text-slate-500 line-clamp-1">
+                            {opt.desc}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="facility-name" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Facility Operating Name <span className="text-rose-500">*</span>
                 </Label>
                 <Input
                   id="facility-name"
-                  placeholder={`e.g. St. Jude Medical Clinic - BGC Branch`}
+                  placeholder={`e.g. St. Jude ${normalizedFacilityType} - ${selectedBranch?.name || "Branch"}`}
                   value={name}
                   onChange={(e) => handleNameChange(e.target.value)}
                   className={`h-10 rounded-xl text-sm font-semibold ${

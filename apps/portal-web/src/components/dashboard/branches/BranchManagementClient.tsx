@@ -51,6 +51,7 @@ import FacilitySettingsHub, { FacilityData } from "@/components/dashboard/Facili
 import { getConsoleBaseDomain } from "@/utils/domain";
 import { APP_SUBDOMAINS } from "@/config/site";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const DASHBOARD_PORTS: Record<string, number> = {
   Clinic: 8081,
@@ -836,15 +837,50 @@ export default function BranchManagementClient() {
                   </div>
 
                   {hasAvailableSlots && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenAddFacility(branch)}
-                      className="h-8 text-[11px] font-bold rounded-xl gap-1 text-primary border-primary/30 hover:bg-primary/5 shrink-0"
-                    >
-                      <IconPlus className="h-3.5 w-3.5" />
-                      <span>Add Facility</span>
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-[11px] font-bold rounded-xl gap-1 text-primary border-primary/30 hover:bg-primary/5 shrink-0"
+                        >
+                          <IconPlus className="h-3.5 w-3.5" />
+                          <span>Add Facility</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-lg border">
+                        <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Choose Facility Type
+                        </div>
+                        {FACILITY_SLOTS.map((slot) => {
+                          const Icon = slot.icon;
+                          const isOccupied = branchFacilities.some(
+                            (f) => f.facilityType.toLowerCase() === slot.key
+                          );
+
+                          return (
+                            <DropdownMenuItem
+                              key={slot.key}
+                              disabled={isOccupied}
+                              onClick={() => handleOpenAddFacility(branch, slot.key)}
+                              className="cursor-pointer text-xs font-medium gap-2 py-2 flex items-center justify-between"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className={cn("p-1 rounded-md", slot.bg, slot.color)}>
+                                  <Icon className="h-3.5 w-3.5" />
+                                </div>
+                                <span>+ Add {slot.label}</span>
+                              </div>
+                              {isOccupied && (
+                                <Badge variant="secondary" className="text-[9px] px-1 py-0 font-medium">
+                                  Added
+                                </Badge>
+                              )}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
               </Card>
