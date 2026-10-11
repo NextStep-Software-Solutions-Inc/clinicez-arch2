@@ -228,5 +228,48 @@ public class BranchManagementTests : IDisposable
         Assert.NotNull(reloaded);
         Assert.Equal(mainBranch.Id, reloaded!.BranchId);
     }
+
+    [Fact]
+    public async Task TestPhilHealthSoapTester_WhenSandboxEndpoint_ReturnsVerifiedSuccessWithToken()
+    {
+        var httpClient = new System.Net.Http.HttpClient();
+        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester>.Instance;
+        var tester = new ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester(httpClient, logger);
+
+        var result = await tester.TestConnectionAsync(
+            accreditationNumber: "H91001234",
+            username: "demo_soap_user",
+            password: "demo_password",
+            softwareCertificateId: "CERT-2026-TEST",
+            endpoint: "/soap/konsulta");
+
+        Assert.True(result.Success);
+        Assert.Contains("Simulation Sandbox Verified", result.Message);
+        Assert.NotNull(result.Token);
+        Assert.StartsWith("PKA-SIM-H91001234", result.Token);
+    }
+
+    [Theory]
+    [InlineData("", "user", "pass", "Accreditation Number")]
+    [InlineData("H91001234", "", "pass", "Username")]
+    [InlineData("H91001234", "user", "", "Password")]
+    public async Task TestPhilHealthSoapTester_WhenMissingMandatoryCredentials_ReturnsDescriptiveFailure(
+        string accreditation, string user, string pass, string expectedErrorSubstr)
+    {
+        var httpClient = new System.Net.Http.HttpClient();
+        var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester>.Instance;
+        var tester = new ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester(httpClient, logger);
+
+        var result = await tester.TestConnectionAsync(
+            accreditationNumber: accreditation,
+            username: user,
+            password: pass,
+            softwareCertificateId: "CERT-2026",
+            endpoint: "/soap/konsulta");
+
+        Assert.False(result.Success);
+        Assert.Contains(expectedErrorSubstr, result.Message);
+    }
 }
+
 

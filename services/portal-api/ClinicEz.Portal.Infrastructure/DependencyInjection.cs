@@ -156,6 +156,10 @@ public static class DependencyInjection
 
         // The PhilHealth proxy asks the portal for the credentials it holds; the key ring protects them at rest.
         services.AddSingleton<IPhilHealthSecretProtector, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSecretProtector>();
+        services.AddHttpClient<IPhilHealthSoapTester, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
 
         // Hub directory feed and onboarding
         services.AddOptions<HubOptions>().Bind(configuration.GetSection(HubOptions.Section));

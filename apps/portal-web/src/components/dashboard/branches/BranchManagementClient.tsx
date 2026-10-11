@@ -7,7 +7,9 @@ import {
   BranchDto, 
   CreateBranchPayload, 
   UpdateBranchPayload, 
-  ConfigureBranchPhilHealthPayload 
+  ConfigureBranchPhilHealthPayload,
+  TestBranchPhilHealthPayload,
+  TestPhilHealthConnectionResult
 } from "@/services/branch.service";
 import { facilityService, WorkspaceFacility } from "@/services/facility.service";
 import FacilityOnboardingWizard from "@/components/dashboard/FacilityOnboardingWizard";
@@ -45,7 +47,9 @@ import {
   IconSettings,
   IconPhone,
   IconMail,
-  IconDotsVertical
+  IconDotsVertical,
+  IconBolt,
+  IconAlertCircle
 } from "@tabler/icons-react";
 import FacilitySettingsHub, { FacilityData } from "@/components/dashboard/FacilitySettingsHub";
 import { getConsoleBaseDomain } from "@/utils/domain";
@@ -168,6 +172,8 @@ export default function BranchManagementClient() {
   const [phCipherKey, setPhCipherKey] = useState("");
   const [phEndpoint, setPhEndpoint] = useState("https://staging.philhealth.gov.ph/KONSULTA/SOAP");
   const [savingPh, setSavingPh] = useState(false);
+  const [isTestingPh, setIsTestingPh] = useState(false);
+  const [testPhResult, setTestPhResult] = useState<TestPhilHealthConnectionResult | null>(null);
 
   // Fetch branches and facilities (optionally opening settings for a newly created facility)
   const loadData = async (focusFacilityId?: string, focusFacilityName?: string) => {
@@ -327,6 +333,49 @@ export default function BranchManagementClient() {
     setPhPassword("");
     setPhCipherKey("");
     setPhEndpoint(branch.philHealthKonsultaEndpoint || "https://staging.philhealth.gov.ph/KONSULTA/SOAP");
+    setTestPhResult(null);
+    setIsTestingPh(false);
+  };
+
+  // Test PhilHealth Gateway Connection (before saving)
+  const handleTestPhilHealth = async () => {
+    if (!philhealthBranch) return;
+    if (!phAccreditation.trim()) {
+      toast.error("PhilHealth Accreditation Number is required to test gateway connection.");
+      return;
+    }
+
+    setIsTestingPh(true);
+    setTestPhResult(null);
+    try {
+      const payload: TestBranchPhilHealthPayload = {
+        accreditationNumber: phAccreditation.trim(),
+        pmccNumber: phPmcc.trim() || undefined,
+        softwareCertificateId: phCertId.trim() || undefined,
+        username: phUsername.trim() || undefined,
+        password: phPassword || undefined,
+        cipherKey: phCipherKey.trim() || undefined,
+        konsultaEndpoint: phEndpoint.trim() || undefined,
+      };
+
+      const result = await branchService.testPhilHealthConnection(philhealthBranch.id, payload);
+      setTestPhResult(result);
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      const failureResult: TestPhilHealthConnectionResult = {
+        success: false,
+        message: "Failed to connect to gateway: " + errorMsg,
+      };
+      setTestPhResult(failureResult);
+      toast.error(failureResult.message);
+    } finally {
+      setIsTestingPh(false);
+    }
   };
 
   // Save PhilHealth Credentials
@@ -1132,7 +1181,7 @@ export default function BranchManagementClient() {
 
       {/* ── PHILHEALTH YAKAP CREDENTIALS MODAL ── */}
       <Dialog open={!!philhealthBranch} onOpenChange={(open) => !open && setPhilhealthBranch(null)}>
-        <DialogContent className="max-w-md rounded-2xl">
+        <DialogContent className="max-w-lg rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <IconShieldCheck className="h-5 w-5 text-primary" />
@@ -1218,9 +1267,83 @@ export default function BranchManagementClient() {
                 className="h-9 rounded-xl text-xs font-mono"
               />
             </div>
+
+            {/* Diagnostic Gateway Connectivity Test */}
+            <div className="rounded-xl border border-border/80 bg-muted/30 p-3 space-y-2 mt-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <IconBolt className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                    Gateway Connectivity Test
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-snug">
+                    Verifies credentials &amp; tests <code className="font-mono text-[10px]">getToken</code> against the SOAP gateway before saving.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestPhilHealth}
+                  disabled={isTestingPh || !phAccreditation.trim()}
+                  className="h-8 rounded-xl text-xs font-bold gap-1.5 shrink-0 bg-background hover:bg-muted"
+                >
+                  {isTestingPh ? (
+                    <>
+                      <IconLoader className="h-3.5 w-3.5 animate-spin text-primary" />
+                      <span>Testing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <IconBolt className="h-3.5 w-3.5 text-amber-500" />
+                      <span>Test Connection</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {testPhResult && (
+                <div
+                  className={cn(
+                    "p-2.5 rounded-lg border text-xs flex items-start gap-2 animate-in fade-in-50 duration-200",
+                    testPhResult.success
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
+                      : "bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300"
+                  )}
+                >
+                  {testPhResult.success ? (
+                    <IconCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <IconAlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold">
+                      {testPhResult.success ? "Gateway Connection Verified" : "Connection Failed"}
+                    </div>
+                    <div className="text-[11px] opacity-90 break-words mt-0.5">
+                      {testPhResult.message}
+                    </div>
+                    {testPhResult.token && (
+                      <div className="mt-1 text-[10px] font-mono opacity-80 truncate">
+                        Session Token: {testPhResult.token}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 sm:justify-between items-center">
+            <div className="text-[11px] text-muted-foreground hidden sm:block">
+              {testPhResult?.success ? (
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                  <IconCheck className="h-3.5 w-3.5" /> Credentials tested &amp; verified
+                </span>
+              ) : (
+                <span>Test connection before saving is recommended</span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -1233,7 +1356,7 @@ export default function BranchManagementClient() {
               <Button
                 size="sm"
                 onClick={handleSavePhilHealth}
-                disabled={savingPh}
+                disabled={savingPh || isTestingPh}
                 className="rounded-xl text-xs font-bold gap-1.5"
               >
                 {savingPh && <IconLoader className="h-3.5 w-3.5 animate-spin" />}

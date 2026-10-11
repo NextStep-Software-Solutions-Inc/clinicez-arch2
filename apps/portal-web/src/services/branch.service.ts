@@ -70,6 +70,22 @@ export interface ConfigureBranchPhilHealthPayload {
   isPhilHealthAccredited?: boolean;
 }
 
+export interface TestBranchPhilHealthPayload {
+  accreditationNumber?: string;
+  pmccNumber?: string;
+  softwareCertificateId?: string;
+  username?: string;
+  password?: string;
+  cipherKey?: string;
+  konsultaEndpoint?: string;
+}
+
+export interface TestPhilHealthConnectionResult {
+  success: boolean;
+  message: string;
+  token?: string | null;
+}
+
 export const branchService = {
   getBranches: async (tenantSlug: string, token?: string | null): Promise<BranchDto[]> => {
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
@@ -106,6 +122,16 @@ export const branchService = {
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
     const response = await apiClient.put<any>(`/branches/${id}/philhealth-config`, payload, { headers });
     return response.data?.success ?? true;
+  },
+
+  testPhilHealthConnection: async (
+    id: string,
+    payload: TestBranchPhilHealthPayload,
+    token?: string | null
+  ): Promise<TestPhilHealthConnectionResult> => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    const response = await apiClient.post<any>(`/branches/${id}/philhealth-test`, payload, { headers });
+    return response.data?.data || response.data;
   },
 
   assignFacilities: async (id: string, facilityIds: string[], token?: string | null): Promise<boolean> => {

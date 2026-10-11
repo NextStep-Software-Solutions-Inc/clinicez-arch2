@@ -50,6 +50,15 @@ public record ConfigureBranchPhilHealthRequest(
     string? KonsultaEndpoint = null,
     bool IsPhilHealthAccredited = true);
 
+public record TestBranchPhilHealthRequest(
+    string? AccreditationNumber = null,
+    string? PmccNumber = null,
+    string? SoftwareCertificateId = null,
+    string? Username = null,
+    string? Password = null,
+    string? CipherKey = null,
+    string? KonsultaEndpoint = null);
+
 public record BranchFacilitySummaryDto(
     Guid Id,
     string Name,
@@ -486,6 +495,100 @@ public class BranchEndpoints : IEndpoint
         .RequireAuthorization()
         .WithName("ConfigureBranchPhilHealth")
         .WithDescription("Encrypted configuration of PhilHealth PMCC, software cert, and SOAP credentials on a branch.");
+
+        // 5b. Test PhilHealth SOAP gateway connection for a branch before or after saving
+        branches.MapPost("/{id:guid}/philhealth-test", async (
+            Guid id,
+            TestBranchPhilHealthRequest request,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            IPhilHealthSecretProtector protector,
+            IPhilHealthSoapTester soapTester,
+            CancellationToken ct) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var branch = await context.Branches.FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted, ct);
+            if (branch == null)
+            {
+                return Results.NotFound(new { Message = "Branch not found." });
+            }
+
+            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == branch.TenantId, ct);
+            if (tenant == null)
+            {
+                return Results.NotFound(new { Message = "Workspace not found." });
+            }
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isStaff = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active, ct);
+
+            if (!isOwner && !isStaff)
+            {
+                return Results.Forbid();
+            }
+
+            // Resolve values from request (in-flight before saving) or fallback to saved credentials
+            var accreditationNumber = !string.IsNullOrWhiteSpace(request.AccreditationNumber)
+                ? request.AccreditationNumber.Trim()
+                : branch.PhilHealthAccreditationNumber;
+
+            var pmccNumber = !string.IsNullOrWhiteSpace(request.PmccNumber)
+                ? request.PmccNumber.Trim()
+                : branch.PhilHealthPmccNumber;
+
+            var softwareCertId = !string.IsNullOrWhiteSpace(request.SoftwareCertificateId)
+                ? request.SoftwareCertificateId.Trim()
+                : branch.PhilHealthSoftwareCertificateId;
+
+            var username = !string.IsNullOrWhiteSpace(request.Username)
+                ? request.Username.Trim()
+                : (!string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedUsername) ? protector.Unprotect(branch.PhilHealthEncryptedUsername) : null);
+
+            var password = !string.IsNullOrWhiteSpace(request.Password)
+                ? request.Password
+                : (!string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedPassword) ? protector.Unprotect(branch.PhilHealthEncryptedPassword) : null);
+
+            var endpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
+                ? request.KonsultaEndpoint.Trim()
+                : (!string.IsNullOrWhiteSpace(branch.PhilHealthKonsultaEndpoint) ? branch.PhilHealthKonsultaEndpoint : PhilHealthDefaults.KonsultaEndpoint);
+
+            if (string.IsNullOrWhiteSpace(accreditationNumber))
+            {
+                return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(
+                    new PhilHealthTestConnectionResult(false, "PhilHealth Accreditation Number (Hospital Code) is required to test gateway connectivity.")));
+            }
+
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(
+                    new PhilHealthTestConnectionResult(false, "SOAP Username is required to authenticate with the PhilHealth gateway.")));
+            }
+
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(
+                    new PhilHealthTestConnectionResult(false, "SOAP Password is required to authenticate with the PhilHealth gateway.")));
+            }
+
+            var result = await soapTester.TestConnectionAsync(
+                accreditationNumber: accreditationNumber,
+                username: username,
+                password: password,
+                softwareCertificateId: softwareCertId,
+                endpoint: endpoint,
+                ct: ct);
+
+            return Results.Ok(ApiResponse<PhilHealthTestConnectionResult>.Success(result));
+        })
+        .RequireAuthorization()
+        .WithName("TestBranchPhilHealthConnection")
+        .WithDescription("Tests live connectivity and authentication with PhilHealth SOAP gateway before or after saving credentials.");
 
         // 6. Assign facilities to a branch
         branches.MapPost("/{id:guid}/facilities", async (
