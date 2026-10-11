@@ -134,7 +134,19 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | **Global CI** | `SSH_USER` | Secret | Deployment SSH Linux user | `deploy` | Linux user account with Docker rights |
 | **Global CI** | `SSH_KEY` | Secret | Private OpenSSH key for SSH deployment | `-----BEGIN OPENSSH PRIVATE KEY-----` | `ssh-keygen -t ed25519 -C "github-actions"` |
 | **Global CI** | `SSH_PASSPHRASE` | Secret | Passphrase for SSH key | `Passphrase123!` | Specified during `ssh-keygen` |
+| **Global CI** | `BASE_DOMAIN` | Var / Secret | Root domain for consoles & API endpoints | `clinicez.com` or `dev.clinicez.net` | Your registered domain |
+| **Global CI** | `DATA_NETWORK` | Variable | Docker bridge network for internal services | `data-network` | Default `data-network` |
+| **Global CI** | `NPM_NETWORK` | Variable | Docker bridge network for Nginx Proxy Manager | `npm-default` | Default `npm-default` |
+| **Global CI** | `HANGFIRE_PASSWORD` | Secret | Shared admin password for Hangfire dashboards | `admin_strong_password_123` | `scripts/generate-secrets.ps1` |
+| **Shared Storage** | `R2_ACCOUNT_ID` | Secret / Var | Cloudflare R2 Account ID (shared across APIs) | `a1b2c3d4e5f6...` | Cloudflare Dashboard ➔ R2 |
+| **Shared Storage** | `R2_BUCKET_NAME` | Secret / Var | Cloudflare R2 Bucket Name (shared across APIs) | `clinicez-uploads` | Cloudflare Dashboard ➔ R2 |
+| **Shared Storage** | `R2_ACCESS_KEY_ID` | Secret | Cloudflare R2 Access Key ID | `r2_access_key_12345` | Cloudflare Dashboard ➔ R2 API Tokens |
+| **Shared Storage** | `R2_SECRET_ACCESS_KEY` | Secret | Cloudflare R2 Secret Access Key | `r2_secret_key_12345` | Cloudflare Dashboard ➔ R2 API Tokens |
+| **Shared Storage** | `R2_PUBLIC_URL` | Secret / Var | Cloudflare R2 Public CDN / Domain URL | `https://pub-xxx.r2.dev` | Cloudflare Dashboard ➔ R2 Custom Domain |
 | **Vercel Apps** | `VERCEL_TOKEN` | Secret | Vercel API deployment token | `vcp_1234567890abcdef...` | Vercel Account Settings ➔ Tokens |
+| **Vercel Apps** | `VERCEL_ORG_ID` | Secret | Vercel Organization ID | `team_xxx...` | Vercel Project ➔ Settings ➔ General |
+| **Vercel Apps** | `VERCEL_PROJECT_ID_CLINIC_WEB` | Secret | Vercel Project ID for Clinic Web Console | `prj_xxx_clinic...` | Vercel Project ➔ Settings ➔ General |
+| **Vercel Apps** | `VERCEL_PROJECT_ID_PATIENT_WEB` | Secret | Vercel Project ID for Patient Web App | `prj_xxx_patient...` | Vercel Project ➔ Settings ➔ General |
 | **Mobile Apps** | `EXPO_TOKEN` | Secret | Expo Application Services token | `eas_1234567890...` | Expo Account Settings ➔ Access Tokens |
 
 ---
@@ -179,7 +191,17 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | **Portal API** | `PORTAL_HUB_CLIENT_ID` | Secret | Hub Client ID for Portal ControlPlane | `dev-portal` | Set `dev-portal` |
 | **Portal API** | `PORTAL_HUB_CLIENT_SECRET` | Secret | Hub Client Secret for Portal ControlPlane | `dev-portal-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
 | **Portal API** | `PORTAL_HUB_SIGNING_KEY` | Secret | ECDSA P-256 private key for Portal messages | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
+| **Portal API** | `PORTAL_CLERK_AUTHORITY` | Var / Secret | Clerk JWT issuer authority URL | `https://clerk.your-domain.com` | Issued in Clerk Dashboard |
+| **Portal API** | `PORTAL_HANGFIRE_PASSWORD` | Secret | Hangfire dashboard admin password (falls back to `HANGFIRE_PASSWORD`) | `portal_hangfire_pass_123` | Secure random password |
 | **Portal API** | `PORTAL_API_BASE_URL` | Variable | Public API domain for Portal API | `https://portal-api.clinicez.com` | Public domain |
+| **Portal API** | `HUB_PUBLIC_URL` | Var / Secret | Public base URL of cloud hub handed to edge sites | `https://hub.clinicez.com` | Public hub URL |
+| **Portal API** | `SMTP_HOST` | Var / Secret | Outgoing SMTP mail server hostname | `smtp.resend.com` | Mail service provider |
+| **Portal API** | `SMTP_PORT` | Variable | Outgoing SMTP port (default `587`) | `587` | Default `587` |
+| **Portal API** | `SMTP_SECURITY` | Variable | SMTP encryption (`Auto`, `None`, `StartTls`, `SslOnConnect`) | `Auto` | Default `Auto` |
+| **Portal API** | `SMTP_USER` | Secret | SMTP authentication username | `resend` / `apikey` | Mail service provider |
+| **Portal API** | `SMTP_PASSWORD` | Secret | SMTP authentication password / API key | `re_123456789...` | Mail service provider |
+| **Portal API** | `SMTP_FROM_EMAIL` | Var / Secret | Outgoing sender email address | `notifications@clinicez.com` | Verified domain email |
+| **Portal API** | `SMTP_FROM_NAME` | Variable | Outgoing sender display name | `Clinic EZ` | Default `Clinic EZ` |
 
 ---
 
@@ -195,6 +217,8 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | **Clinic API** | `CLINIC_HUB_CLIENT_ID` | Secret | Hub Client ID for Clinic Service | `dev-clinic` | Set `dev-clinic` |
 | **Clinic API** | `CLINIC_HUB_CLIENT_SECRET` | Secret | Hub Client Secret for Clinic Service | `dev-clinic-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
 | **Clinic API** | `CLINIC_HUB_SIGNING_KEY` | Secret | ECDSA P-256 private key for Clinic messages | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
+| **Clinic API** | `CLINIC_HANGFIRE_PASSWORD` | Secret | Hangfire dashboard admin password (falls back to `HANGFIRE_PASSWORD`) | `clinic_hangfire_pass_123` | Secure random password |
+| **Clinic API** | `CLINIC_PUBLIC_UPLOAD_BASE_URL` | Var / Secret | Public base URL for external lab result uploads | `https://portal.clinicez.com` | Public domain |
 
 ---
 
@@ -208,6 +232,7 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | **Laboratory API** | `LABORATORY_HUB_CLIENT_ID` | Secret | Hub Client ID for Laboratory Service | `dev-laboratory` | Set `dev-laboratory` |
 | **Laboratory API** | `LABORATORY_HUB_CLIENT_SECRET` | Secret | Hub Client Secret for Laboratory Service | `dev-laboratory-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
 | **Laboratory API** | `LABORATORY_HUB_SIGNING_KEY` | Secret | ECDSA P-256 private key for Lab messages | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
+| **Laboratory API** | `LABORATORY_HANGFIRE_PASSWORD` | Secret | Hangfire dashboard admin password (falls back to `HANGFIRE_PASSWORD`) | `lab_hangfire_pass_123` | Secure random password |
 
 ---
 
@@ -221,6 +246,7 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | **Pharmacy API** | `PHARMACY_HUB_CLIENT_ID` | Secret | Hub Client ID for Pharmacy Service | `dev-pharmacy` | Set `dev-pharmacy` |
 | **Pharmacy API** | `PHARMACY_HUB_CLIENT_SECRET` | Secret | Hub Client Secret for Pharmacy Service | `dev-pharmacy-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
 | **Pharmacy API** | `PHARMACY_HUB_SIGNING_KEY` | Secret | ECDSA P-256 private key for Pharmacy | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
+| **Pharmacy API** | `PHARMACY_HANGFIRE_PASSWORD` | Secret | Hangfire dashboard admin password (falls back to `HANGFIRE_PASSWORD`) | `pharmacy_hangfire_pass_123` | Secure random password |
 
 ---
 
@@ -244,6 +270,7 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | **Organization API** | `ORGANIZATION_HUB_CLIENT_ID` | Secret | Hub Client ID for Organization Service | `dev-organization` | Set `dev-organization` |
 | **Organization API** | `ORGANIZATION_HUB_CLIENT_SECRET` | Secret | Hub Client Secret for Organization Service | `dev-organization-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
 | **Organization API** | `ORGANIZATION_HUB_SIGNING_KEY` | Secret | ECDSA P-256 private key for Organization | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
+| **Organization API** | `ORGANIZATION_HANGFIRE_PASSWORD` | Secret | Hangfire dashboard admin password (falls back to `HANGFIRE_PASSWORD`) | `org_hangfire_pass_123` | Secure random password |
 
 ---
 
@@ -252,10 +279,17 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Patient API** | `PATIENT_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_PATIENT_DB;...` | Standard connection string |
-| **Patient API** | `PATIENT_SHARING_SIGNING_KEY` | Secret | HMAC key for QR patient share tokens | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
+| **Patient API** | `PATIENT_CLERK_AUTHORITY` | Var / Secret | Clerk JWT issuer authority URL | `https://clerk.your-domain.com` | Issued in Clerk Dashboard |
+| **Patient API** | `PATIENT_CLERK_AUDIENCE` | Var / Secret | Optional Clerk token audience | `patient-api` | Optional (leave empty if unset) |
 | **Patient API** | `PATIENT_CLERK_WEBHOOK_SECRET` | Secret | Clerk user sync webhook secret | `whsec_1234567890abcdef...` | Issued in Clerk Webhooks Dashboard |
-| **Patient API** | `PATIENT_R2_ACCESS_KEY_ID` | Secret | Cloudflare R2 Access Key ID | `r2_access_key_12345` | Issued in Cloudflare R2 Dashboard |
-| **Patient API** | `PATIENT_R2_SECRET_ACCESS_KEY` | Secret | Cloudflare R2 Secret Access Key | `r2_secret_key_12345` | Issued in Cloudflare R2 Dashboard |
+| **Patient API** | `PATIENT_SHARING_SIGNING_KEY` | Secret | HMAC key (≥ 32 chars) for QR patient share tokens | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
+| **Patient API** | `PATIENT_FIREBASE_JSON` | Secret | Firebase Admin SDK service account JSON for FCM | `{"type": "service_account", ...}` | Firebase Console ➔ Service Accounts |
+| **Patient API** | `PATIENT_HANGFIRE_PASSWORD` | Secret | Hangfire dashboard admin password (falls back to `HANGFIRE_PASSWORD`) | `patient_hangfire_pass_123` | Secure random password |
+| **Patient API** | `PATIENT_R2_ACCOUNT_ID` | Secret / Var | Cloudflare R2 Account ID (falls back to `R2_ACCOUNT_ID`) | `a1b2c3d4e5f6...` | Cloudflare Dashboard ➔ R2 |
+| **Patient API** | `PATIENT_R2_BUCKET_NAME` | Secret / Var | Cloudflare R2 Bucket Name (falls back to `R2_BUCKET_NAME`) | `clinicez-patient-uploads` | Cloudflare Dashboard ➔ R2 |
+| **Patient API** | `PATIENT_R2_ACCESS_KEY_ID` | Secret | Cloudflare R2 Access Key ID (falls back to `R2_ACCESS_KEY_ID`) | `r2_access_key_12345` | Cloudflare Dashboard ➔ R2 API Tokens |
+| **Patient API** | `PATIENT_R2_SECRET_ACCESS_KEY` | Secret | Cloudflare R2 Secret Access Key (falls back to `R2_SECRET_ACCESS_KEY`) | `r2_secret_key_12345` | Cloudflare Dashboard ➔ R2 API Tokens |
+| **Patient API** | `PATIENT_R2_PUBLIC_URL` | Secret / Var | Cloudflare R2 Public CDN / Domain URL (falls back to `R2_PUBLIC_URL`) | `https://pub-xxx.r2.dev` | Cloudflare Dashboard ➔ R2 Custom Domain |
 | **Patient API** | `PATIENT_HUB_CLIENT_ID` | Secret | Hub Client ID for Patient Service | `dev-patient` | Set `dev-patient` |
 | **Patient API** | `PATIENT_HUB_CLIENT_SECRET` | Secret | Hub Client Secret for Patient Service | `dev-patient-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
 | **Patient API** | `PATIENT_HUB_SIGNING_KEY` | Secret | ECDSA P-256 private key for Patient Service | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
