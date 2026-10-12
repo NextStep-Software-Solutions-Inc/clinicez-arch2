@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     width: '100%',
     maxWidth: 540,
-    maxHeight: '92%',
+    maxHeight: '95%',
     overflow: 'hidden',
   },
   modalTopBar: {

@@ -99,6 +99,8 @@ mock.module('../utils/useBreakpoint', () => ({
 }));
 
 const { default: PatientChartModal, CHART_TABS } = await import('../components/chart/PatientChartModal');
+const { default: HealthProfilesTab } = await import('../components/chart/HealthProfilesTab');
+const { getSessionItem, setSessionItem } = await import('../utils/deviceStorage');
 import type { ClinicPatient, PatientChart } from '../services/clinicService';
 
 describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR', () => {
@@ -390,5 +392,48 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     );
 
     expect(markup).toContain('Medical chart');
+  });
+
+  test('11. Removes Edit Demographics button from summary spine and preserves header pencil button', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: mockPatient,
+        patientChart: mockChart,
+        loadingChart: false,
+        onClose: () => {},
+      })
+    );
+
+    // Header pencil button exists with accessibility label
+    expect(markup).toContain('aria-label="Edit Demographics"');
+    // Spine text button "Edit Demographics" is not rendered
+    expect(markup).not.toContain('>Edit Demographics<');
+  });
+
+  test('12. HealthProfilesTab renders horizontally scrollable sub-tabs with all sections', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(HealthProfilesTab, {
+        patient: mockPatient,
+      })
+    );
+
+    // Rendered inside ScrollView
+    expect(markup).toContain('data-component="ScrollView"');
+    expect(markup).toContain('Surgical &amp; Clinical');
+    expect(markup).toContain('Lifestyle &amp; Social');
+    expect(markup).toContain('Reproductive / OB-GYN');
+    expect(markup).toContain('Cardiometabolic &amp; NCD (lib_ncdq)');
+  });
+
+  test('13. Storage helpers persist and retrieve active chart tab and sub-tab', () => {
+    setSessionItem('clinicez_active_chart_tab', 'profiles');
+    expect(getSessionItem('clinicez_active_chart_tab')).toBe('profiles');
+
+    setSessionItem('clinicez_health_profiles_active_subtab', 'lifestyle');
+    expect(getSessionItem('clinicez_health_profiles_active_subtab')).toBe('lifestyle');
+
+    setSessionItem('clinicez_active_chart_tab', null);
+    expect(getSessionItem('clinicez_active_chart_tab')).toBeNull();
   });
 });

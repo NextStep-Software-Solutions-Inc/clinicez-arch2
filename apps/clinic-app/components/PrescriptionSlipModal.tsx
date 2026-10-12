@@ -58,7 +58,7 @@ export default function PrescriptionSlipModal({
       onClose={onClose}
       title="Prescription slip"
       maxWidth={640}
-      maxHeight="92%"
+      maxHeight="95%"
       footer={
         <View style={styles.footerBar}>
           <Button title="Download / print PDF" icon="print" variant="outline" onPress={handlePrint} />

@@ -272,7 +272,7 @@ export default function CsvCatalogImportModal({
         title="Import services and formulary catalog"
         subtitle="Add clinic services, medicines and diagnostics from a CSV file, matched to PhilHealth codes."
         maxWidth={880}
-        maxHeight="92%"
+        maxHeight="95%"
         footer={footer}
       >
         {/* Step Navigation */}

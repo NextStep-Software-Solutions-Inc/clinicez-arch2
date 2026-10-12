@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Icon } from '../ui';
+import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
 import type {
   ClinicPatient,
   PatientSurgicalHistory,
@@ -47,7 +48,34 @@ export default function HealthProfilesTab({
   initialLatestAssessment,
   onRefreshChart,
 }: HealthProfilesTabProps) {
-  const [activeSubTab, setActiveSubTab] = useState<ProfileSubTab>('surgical');
+  const [activeSubTab, setActiveSubTab] = useState<ProfileSubTab>(() => {
+    if (typeof window !== 'undefined' && window.location?.search) {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const sub = sp.get('subTab') as ProfileSubTab;
+        if (sub && ['surgical', 'lifestyle', 'reproductive', 'cardiometabolic'].includes(sub)) {
+          return sub;
+        }
+      } catch {}
+    }
+    const saved = getSessionItem('clinicez_health_profiles_active_subtab') as ProfileSubTab | null;
+    if (saved && ['surgical', 'lifestyle', 'reproductive', 'cardiometabolic'].includes(saved)) {
+      return saved;
+    }
+    return 'surgical';
+  });
+
+  const handleSubTabChange = (sub: ProfileSubTab) => {
+    setActiveSubTab(sub);
+    setSessionItem('clinicez_health_profiles_active_subtab', sub);
+    if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('subTab', sub);
+        window.history.replaceState(null, '', url.toString());
+      } catch {}
+    }
+  };
 
   const surg = surgicalHistories || initialSurgicalHistories;
   const soc = socialHistory || initialSocialHistory;
@@ -57,9 +85,16 @@ export default function HealthProfilesTab({
   return (
     <View style={styles.container}>
       {/* Sub-Tab Navigation Bar */}
-      <View style={styles.subTabBar}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.subTabScroll}
+        contentContainerStyle={styles.subTabBar}
+      >
         <Pressable
-          onPress={() => setActiveSubTab('surgical')}
+          onPress={() => handleSubTabChange('surgical')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeSubTab === 'surgical' }}
           style={[styles.subTabBtn, activeSubTab === 'surgical' && styles.subTabBtn_active]}
         >
           <Icon
@@ -76,7 +111,9 @@ export default function HealthProfilesTab({
         </Pressable>
 
         <Pressable
-          onPress={() => setActiveSubTab('lifestyle')}
+          onPress={() => handleSubTabChange('lifestyle')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeSubTab === 'lifestyle' }}
           style={[styles.subTabBtn, activeSubTab === 'lifestyle' && styles.subTabBtn_active]}
         >
           <Icon
@@ -93,7 +130,9 @@ export default function HealthProfilesTab({
         </Pressable>
 
         <Pressable
-          onPress={() => setActiveSubTab('reproductive')}
+          onPress={() => handleSubTabChange('reproductive')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeSubTab === 'reproductive' }}
           style={[styles.subTabBtn, activeSubTab === 'reproductive' && styles.subTabBtn_active]}
         >
           <Icon
@@ -110,7 +149,9 @@ export default function HealthProfilesTab({
         </Pressable>
 
         <Pressable
-          onPress={() => setActiveSubTab('cardiometabolic')}
+          onPress={() => handleSubTabChange('cardiometabolic')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeSubTab === 'cardiometabolic' }}
           style={[styles.subTabBtn, activeSubTab === 'cardiometabolic' && styles.subTabBtn_active]}
         >
           <Icon
@@ -125,7 +166,7 @@ export default function HealthProfilesTab({
             Cardiometabolic & NCD (lib_ncdq)
           </ThemedText>
         </Pressable>
-      </View>
+      </ScrollView>
 
       {/* Sub-Tab Content View */}
       <View style={styles.subTabContent}>
@@ -167,15 +208,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  subTabScroll: {
+    flexGrow: 0,
+    marginBottom: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderLight,
+  },
   subTabBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
-    marginBottom: theme.spacing.sm,
-    paddingBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderLight,
+    paddingBottom: 6,
   },
   subTabBtn: {
     flexDirection: 'row',
@@ -187,6 +231,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: theme.colors.borderLight,
+    flexShrink: 0,
   },
   subTabBtn_active: {
     backgroundColor: theme.colors.primarySubtle,

@@ -971,7 +971,7 @@ export default function PhilHealthProfileModal({
       title="PhilHealth patient profile"
       subtitle={`${patient.fullName} · ${patient.gender} · ${patient.age} yrs · PIN: ${patient.philHealthNumber || 'Not enlisted'}`}
       maxWidth={900}
-      maxHeight="92%"
+      maxHeight="95%"
       footer={
         <View style={styles.footerBar}>
           <Button title="Cancel" variant="ghost" onPress={onClose} disabled={saving} />

@@ -204,6 +204,8 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
+    maxHeight: '95%',
+    overflow: 'hidden',
   },
   headerRow: {
     flexDirection: 'row',

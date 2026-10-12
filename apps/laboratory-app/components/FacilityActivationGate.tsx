@@ -422,6 +422,8 @@ const styles = StyleSheet.create({
     padding: 24,
     maxWidth: 500,
     width: '100%',
+    maxHeight: '95%',
+    overflow: 'hidden',
     gap: 14,
   },
   modalTitle: {

@@ -34,7 +34,7 @@ export default function Modal({
   children,
   footer,
   maxWidth = 540,
-  maxHeight = '90%',
+  maxHeight = '95%',
   contentStyle,
 }: ModalProps) {
   return (
@@ -72,6 +72,7 @@ export default function Modal({
 
           {/* Body Content */}
           <ScrollView
+            style={styles.scrollArea}
             contentContainerStyle={styles.body}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -107,7 +108,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.xl,
     overflow: 'hidden',
+    maxHeight: '95%',
+    display: 'flex',
+    flexDirection: 'column',
     ...theme.shadows.lg,
+  },
+  scrollArea: {
+    flexShrink: 1,
   },
   header: {
     flexDirection: 'row',

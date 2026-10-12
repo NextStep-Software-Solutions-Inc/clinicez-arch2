@@ -116,7 +116,7 @@ export default function PhilHealthCatalogMappingModal({
       title="Map to PhilHealth catalog"
       subtitle={`${itemName} · ${itemType === 'Medicine' ? 'GAMOT formulary' : 'Yakap diagnostics'}`}
       maxWidth={680}
-      maxHeight="90%"
+      maxHeight="95%"
       footer={
         <View style={styles.footerRow}>
           <Button title="Cancel" variant="ghost" onPress={onClose} />

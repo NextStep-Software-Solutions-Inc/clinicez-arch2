@@ -46,3 +46,41 @@ export function setDeviceItem(key: string, value: string | null) {
     // ignore - memory copy still holds it for this session
   }
 }
+
+function webSessionStorage(): Storage | null {
+  try {
+    if (typeof sessionStorage !== 'undefined') return sessionStorage;
+  } catch {
+    // Access can throw in private mode / sandboxed frames.
+  }
+  return null;
+}
+
+export function getSessionItem(key: string): string | null {
+  const session = webSessionStorage();
+  if (session) {
+    try {
+      const val = session.getItem(key);
+      if (val !== null) return val;
+    } catch {
+      // ignore
+    }
+  }
+  return getDeviceItem(key);
+}
+
+export function setSessionItem(key: string, value: string | null) {
+  const session = webSessionStorage();
+  if (session) {
+    try {
+      if (value === null) {
+        session.removeItem(key);
+      } else {
+        session.setItem(key, value);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  setDeviceItem(key, value);
+}

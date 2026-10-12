@@ -42,6 +42,7 @@ import {
 } from '../../components/chart';
 import EditPatientModal from '../../components/patient/EditPatientModal';
 import { formatLongAge } from '../../utils/age';
+import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
 import {
   InlinePhysicalExamCard,
   DEFAULT_PHYSICAL_EXAM_NORMAL,
@@ -274,7 +275,18 @@ export default function ConsultationsScreen() {
 
   // Split-Screen & Longitudinal Chart Review States (Feature 21)
   type ChartReviewTab = 'summary' | 'encounters' | 'diagnostics' | 'procedures' | 'immunizations' | 'profiles' | 'vault';
-  const [activeChartTab, setActiveChartTab] = useState<ChartReviewTab>('summary');
+  const [activeChartTab, setActiveChartTab] = useState<ChartReviewTab>(() => {
+    const saved = getSessionItem('clinicez_consultations_active_chart_tab') as ChartReviewTab | null;
+    if (saved && ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault'].includes(saved)) {
+      return saved;
+    }
+    return 'summary';
+  });
+
+  const handleSelectChartTab = (tab: ChartReviewTab) => {
+    setActiveChartTab(tab);
+    setSessionItem('clinicez_consultations_active_chart_tab', tab);
+  };
   const [mobileWorkstationView, setMobileWorkstationView] = useState<'soap' | 'chart'>('soap');
 
   // Multi-Provider Queue Room / Station Filter States (Feature 19)
@@ -1715,7 +1727,7 @@ export default function ConsultationsScreen() {
               <Pressable
                 key={tab.id}
                 accessibilityRole="button"
-                onPress={() => setActiveChartTab(tab.id as ChartReviewTab)}
+                onPress={() => handleSelectChartTab(tab.id as ChartReviewTab)}
                 style={[styles.chartTabButton, isActive && styles.chartTabButtonActive]}
               >
                 <Icon
@@ -1739,7 +1751,7 @@ export default function ConsultationsScreen() {
         <ExecutiveSummaryTab
           patient={patientRecord}
           chart={patientChart}
-          onNavigateTab={(tab: any) => setActiveChartTab(tab)}
+          onNavigateTab={(tab: any) => handleSelectChartTab(tab)}
           onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
         />
       )}

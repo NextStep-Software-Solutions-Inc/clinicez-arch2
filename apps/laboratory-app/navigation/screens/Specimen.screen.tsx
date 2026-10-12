@@ -893,6 +893,8 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     maxWidth: 440,
+    maxHeight: '95%',
+    overflow: 'hidden',
     gap: 16,
   },
   rejectModalCard: {
@@ -901,6 +903,8 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     maxWidth: 520,
+    maxHeight: '95%',
+    overflow: 'hidden',
     gap: 14,
   },
   rackModalCard: {
@@ -909,6 +913,8 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     maxWidth: 480,
+    maxHeight: '95%',
+    overflow: 'hidden',
     gap: 14,
   },
   inventoryModalCard: {
@@ -917,6 +923,8 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     maxWidth: 560,
+    maxHeight: '95%',
+    overflow: 'hidden',
     gap: 14,
   },
   modalHeaderRow: {

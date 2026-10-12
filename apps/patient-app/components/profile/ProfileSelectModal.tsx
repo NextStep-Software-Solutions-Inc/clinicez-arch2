@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     maxWidth: 380,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    maxHeight: 520,
+    maxHeight: '95%',
     zIndex: 100001,
   },
   title: {

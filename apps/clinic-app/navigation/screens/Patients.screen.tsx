@@ -51,6 +51,7 @@ import StructuredAllergyIntakeModal, {
 } from '../../components/patient/StructuredAllergyIntakeModal';
 import EditPatientModal from '../../components/patient/EditPatientModal';
 import { formatLongAge } from '../../utils/age';
+import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
 
 import {
   clinicService,
@@ -88,7 +89,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterMode, setFilterMode] = useState<PatientFilter>('ALL');
+  const [filterMode, setFilterMode] = useState<PatientFilter>(() => {
+    const saved = getSessionItem('clinicez_patients_filter_mode') as PatientFilter | null;
+    if (saved && ['ALL', 'STUDENTS', 'EMPLOYEES', 'ALERTS', 'SENIOR_PWD'].includes(saved)) {
+      return saved;
+    }
+    return 'ALL';
+  });
+
+  const handleFilterModeChange = (mode: PatientFilter) => {
+    setFilterMode(mode);
+    setSessionItem('clinicez_patients_filter_mode', mode);
+  };
 
   // Register Modal state
   const [registerVisible, setRegisterVisible] = useState(false);
@@ -127,14 +139,43 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formChiefComplaint, setFormChiefComplaint] = useState('');
   const [formTriagePriority, setFormTriagePriority] = useState<'Routine' | 'Urgent' | 'Emergency'>('Routine');
 
-
   // Chart Modal state
   const [chartVisible, setChartVisible] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<ClinicPatient | null>(null);
   const [patientChart, setPatientChart] = useState<PatientChart | null>(null);
   const [loadingChart, setLoadingChart] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
-  const [activeChartTab, setActiveChartTab] = useState<ChartTab>('summary');
+
+  const getInitialChartTab = (): ChartTab => {
+    if (typeof window !== 'undefined' && window.location?.search) {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const tabParam = sp.get('tab') as ChartTab;
+        if (tabParam && CHART_TABS.some((t) => t.value === tabParam)) {
+          return tabParam;
+        }
+      } catch {}
+    }
+    const saved = getSessionItem('clinicez_active_chart_tab') as ChartTab | null;
+    if (saved && CHART_TABS.some((t) => t.value === saved)) {
+      return saved;
+    }
+    return 'summary';
+  };
+
+  const [activeChartTab, setActiveChartTab] = useState<ChartTab>(getInitialChartTab);
+
+  const handleChartTabChange = (tab: ChartTab) => {
+    setActiveChartTab(tab);
+    setSessionItem('clinicez_active_chart_tab', tab);
+    if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        window.history.replaceState(null, '', url.toString());
+      } catch {}
+    }
+  };
 
   // Standalone PhilHealth Profile Modal state
   const [philHealthProfileModalVisible, setPhilHealthProfileModalVisible] = useState(false);
@@ -356,9 +397,20 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
-  const handleOpenChart = async (patient: ClinicPatient) => {
+  const handleOpenChart = async (patient: ClinicPatient, tabToOpen?: ChartTab) => {
     setSelectedPatient(patient);
-    setActiveChartTab('summary');
+    const targetTab = tabToOpen ?? activeChartTab ?? getInitialChartTab();
+    setActiveChartTab(targetTab);
+    setSessionItem('clinicez_active_patient_id', patient.id);
+    setSessionItem('clinicez_active_chart_tab', targetTab);
+    if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('patientId', patient.id);
+        url.searchParams.set('tab', targetTab);
+        window.history.replaceState(null, '', url.toString());
+      } catch {}
+    }
     setChartVisible(true);
     setLoadingChart(true);
     setLoadingAttachments(true);
@@ -387,6 +439,49 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       setLoadingAttachments(false);
     }
   };
+
+  const handleCloseChart = () => {
+    setChartVisible(false);
+    setSelectedPatient(null);
+    setSessionItem('clinicez_active_patient_id', null);
+    if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('patientId');
+        url.searchParams.delete('tab');
+        url.searchParams.delete('subTab');
+        window.history.replaceState(null, '', url.toString());
+      } catch {}
+    }
+  };
+
+  // Restore open chart session on mount if page was refreshed
+  useEffect(() => {
+    if (openPatientId) return; // Handled by openPatientId effect below
+    let targetPatientId: string | null = null;
+    if (typeof window !== 'undefined' && window.location?.search) {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        targetPatientId = sp.get('patientId');
+      } catch {}
+    }
+    if (!targetPatientId) {
+      targetPatientId = getSessionItem('clinicez_active_patient_id');
+    }
+    if (!targetPatientId) return;
+
+    let cancelled = false;
+    (async () => {
+      const [patient] = await clinicService.getPatientById(targetPatientId!);
+      if (cancelled || !patient) return;
+      const initialTab = getInitialChartTab();
+      handleOpenChart(patient, initialTab);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Arriving from "Scan patient QR": open the freshly imported patient's chart once.
   useEffect(() => {
@@ -804,7 +899,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       {/* Filters */}
       <SegmentedControl<PatientFilter>
         value={filterMode}
-        onChange={setFilterMode}
+        onChange={handleFilterModeChange}
         options={[
           { value: 'ALL', label: 'All patients' },
           { value: 'STUDENTS', label: 'Students' },
@@ -965,7 +1060,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               </Pressable>
             </View>
 
-            <ScrollView style={{ maxHeight: 500 }} contentContainerStyle={{ gap: 12 }}>
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 12 }}>
               {/* Debounced Duplicate Detection Banner */}
               <DebouncedDuplicateChecker
                 firstName={formFirstName}
@@ -1331,9 +1426,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         chartError={chartError}
         patientAttachments={patientAttachments}
         activeTab={activeChartTab}
-        onTabChange={setActiveChartTab}
-        onClose={() => setChartVisible(false)}
-        onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+        onTabChange={handleChartTabChange}
+        onClose={handleCloseChart}
+        onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient, activeChartTab)}
         onViewPrescriptionSlip={handleViewPrescriptionSlip}
         onOpenExternalDispense={handleOpenExternalDispense}
         onViewLabSlip={handleViewSlip}
@@ -1348,7 +1443,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             notify.error(err.message || 'Could not record vaccine administration.');
           } else {
             notify.success('Vaccine administration recorded.');
-            handleOpenChart(selectedPatient);
+            handleOpenChart(selectedPatient, activeChartTab);
           }
         }}
         onRecordHistoricalVaccine={async (payload) => {
@@ -1358,7 +1453,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             notify.error(err.message || 'Could not record historical immunization.');
           } else {
             notify.success('Historical immunization added.');
-            handleOpenChart(selectedPatient);
+            handleOpenChart(selectedPatient, activeChartTab);
           }
         }}
         onRecordAefi={async (immId, payload) => {
@@ -1368,7 +1463,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             notify.error(err.message || 'Could not record adverse reaction.');
           } else {
             notify.success('Adverse event (AEFI) recorded.');
-            handleOpenChart(selectedPatient);
+            handleOpenChart(selectedPatient, activeChartTab);
           }
         }}
         onPatientUpdated={handlePatientDemographicsSaved}
@@ -1398,7 +1493,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               <ThemedText style={styles.slipOrderNo}>Order: {selectedSlip?.orderNumber}</ThemedText>
             </View>
 
-            <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ gap: 12 }}>
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 12 }}>
               {/* Doctor & Patient Info */}
               <View style={styles.slipSectionBox}>
                 <ThemedText style={styles.slipSectionHeading}>Attending Physician</ThemedText>
@@ -1476,12 +1571,22 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       <Modal visible={attachModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxWidth: 480 }]}>
-            <ThemedText style={styles.modalTitle}>Attach External Lab Result (Path B)</ThemedText>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Attach External Lab Result (Path B)</ThemedText>
+              <Pressable onPress={() => setAttachModalVisible(false)} hitSlop={theme.spacing.sm}>
+                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
+              </Pressable>
+            </View>
             <ThemedText style={styles.modalSub}>
               Attach test reports from outside diagnostic centers to complete the electronic health record.
             </ThemedText>
 
-            <View style={{ gap: 12, marginTop: 10 }}>
+            <ScrollView
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+            >
               <View>
                 <ThemedText style={styles.inputLabel}>Diagnostic Laboratory Name *</ThemedText>
                 <TextInput
@@ -1524,7 +1629,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   placeholder="Official stamp and physician signature verified."
                 />
               </View>
-            </View>
+            </ScrollView>
 
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>
               <Pressable
@@ -1577,7 +1682,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           <View style={[styles.modalContent, { maxWidth: 500 }]}>
             <View style={styles.modalHeader}>
               <ThemedText style={styles.modalTitle}>Attach External Physical Document</ThemedText>
-              <Pressable onPress={() => setUploadDocModalVisible(false)}>
+              <Pressable onPress={() => setUploadDocModalVisible(false)} hitSlop={theme.spacing.sm}>
                 <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
               </Pressable>
             </View>
@@ -1585,7 +1690,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               Ingest scanned physical documents (paper COR, outside Chest X-Ray films, lab sheets, or med certs) directly into {selectedPatient?.fullName}'s profile.
             </ThemedText>
 
-            <View style={{ gap: 12, marginTop: 12 }}>
+            <ScrollView
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+            >
               <View>
                 <ThemedText style={styles.inputLabel}>Document Title *</ThemedText>
                 <TextInput
@@ -1695,27 +1805,27 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   onChangeText={setDocNotes}
                 />
               </View>
+            </ScrollView>
 
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 14 }}>
-                <Pressable
-                  style={styles.cancelModalBtn}
-                  onPress={() => setUploadDocModalVisible(false)}
-                  disabled={uploadingDoc}
-                >
-                  <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
-                </Pressable>
-                <Pressable
-                  style={styles.confirmAttachBtn}
-                  onPress={handleUploadDocument}
-                  disabled={uploadingDoc}
-                >
-                  {uploadingDoc ? (
-                    <ActivityIndicator color={theme.colors.textInverted} />
-                  ) : (
-                    <ThemedText style={styles.confirmAttachText}>Save & Attach to Profile</ThemedText>
-                  )}
-                </Pressable>
-              </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 14 }}>
+              <Pressable
+                style={styles.cancelModalBtn}
+                onPress={() => setUploadDocModalVisible(false)}
+                disabled={uploadingDoc}
+              >
+                <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                style={styles.confirmAttachBtn}
+                onPress={handleUploadDocument}
+                disabled={uploadingDoc}
+              >
+                {uploadingDoc ? (
+                  <ActivityIndicator color={theme.colors.textInverted} />
+                ) : (
+                  <ThemedText style={styles.confirmAttachText}>Save & Attach to Profile</ThemedText>
+                )}
+              </Pressable>
             </View>
           </View>
         </View>
@@ -1850,7 +1960,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.overlay,
     justifyContent: 'center',
-    padding: 20,
+    alignItems: 'center',
+    padding: theme.spacing.md,
   },
   modalContent: {
     backgroundColor: theme.colors.surface,
@@ -1859,9 +1970,11 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
     width: '100%',
     maxWidth: 720,
+    maxHeight: '95%',
     alignSelf: 'center',
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',

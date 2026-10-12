@@ -29,5 +29,9 @@ public record PatientChartDto(
     List<PatientProblemDto>? Problems = null,
     List<PatientAllergyDto>? Allergies = null,
     List<PatientImmunizationDto>? Immunizations = null,
-    List<ClinicRecordAttachmentDto>? Attachments = null
+    List<ClinicRecordAttachmentDto>? Attachments = null,
+    List<PatientPastMedicalHistoryDto>? PastMedicalHistories = null,
+    string? PersonalMedicalHistoryNotes = null,
+    List<PatientFamilyHistoryDto>? FamilyHistories = null,
+    string? FamilyMedicalHistoryNotes = null
 );

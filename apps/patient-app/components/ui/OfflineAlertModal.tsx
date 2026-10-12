@@ -151,6 +151,8 @@ const styles = StyleSheet.create({
   },
   dialog: {
     width: Math.min(width - 48, 380),
+    maxHeight: '95%',
+    overflow: 'hidden',
     alignItems: 'center',
   },
   iconWrapper: {

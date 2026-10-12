@@ -764,9 +764,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     width: '100%',
     maxWidth: 720,
-    maxHeight: '90%',
+    maxHeight: '95%',
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -783,6 +784,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xs,
   },
   formScroll: {
+    flexShrink: 1,
     maxHeight: 520,
   },
   formContent: {

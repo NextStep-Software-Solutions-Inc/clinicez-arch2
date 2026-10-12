@@ -77,4 +77,17 @@ public sealed class ClinicPatient : BaseEntity
     public PatientSocialHistory? SocialHistory { get; set; }
     public PatientReproductiveHistory? ReproductiveHistory { get; set; }
     public System.Collections.Generic.ICollection<NcdRiskAssessment> NcdRiskAssessments { get; set; } = new System.Collections.Generic.List<NcdRiskAssessment>();
+
+    /// <summary>
+    /// Free-text clinician notes on past medical history, disease control, and onset context.
+    /// </summary>
+    public string? PersonalMedicalHistoryNotes { get; set; }
+
+    /// <summary>
+    /// Free-text clinician notes on family medical history, pedigree context, and affected relatives.
+    /// </summary>
+    public string? FamilyMedicalHistoryNotes { get; set; }
+
+    public System.Collections.Generic.ICollection<PatientPastMedicalHistory> PastMedicalHistories { get; set; } = new System.Collections.Generic.List<PatientPastMedicalHistory>();
+    public System.Collections.Generic.ICollection<PatientFamilyHistory> FamilyHistories { get; set; } = new System.Collections.Generic.List<PatientFamilyHistory>();
 }

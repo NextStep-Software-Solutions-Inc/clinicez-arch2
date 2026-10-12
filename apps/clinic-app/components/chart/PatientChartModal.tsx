@@ -122,7 +122,7 @@ export default function PatientChartModal({
   onPatientUpdated,
   onPressEdit,
 }: PatientChartModalProps) {
-  const [internalTab, setInternalTab] = useState<ChartTab>(initialTab);
+  const [internalTab, setInternalTab] = useState<ChartTab>(activeTabProp || initialTab);
   const [isMaximized, setIsMaximized] = useState(false);
   const [editDemographicsVisible, setEditDemographicsVisible] = useState(false);
   const [currentPatient, setCurrentPatient] = useState<ClinicPatient | null>(patient);
@@ -131,6 +131,12 @@ export default function PatientChartModal({
   useEffect(() => {
     setCurrentPatient(patient);
   }, [patient]);
+
+  useEffect(() => {
+    if (activeTabProp) {
+      setInternalTab(activeTabProp);
+    }
+  }, [activeTabProp]);
 
   const handleEditPress = () => {
     if (onPressEdit) {
@@ -148,12 +154,16 @@ export default function PatientChartModal({
 
   const displayPatient = currentPatient || patient;
 
-  // Reset tab to initial when modal becomes visible
+  // Sync tab when modal becomes visible
   useEffect(() => {
     if (visible) {
-      setInternalTab(initialTab);
+      if (activeTabProp) {
+        setInternalTab(activeTabProp);
+      } else if (initialTab) {
+        setInternalTab(initialTab);
+      }
     }
-  }, [visible, initialTab]);
+  }, [visible, activeTabProp, initialTab]);
 
   const activeTab = activeTabProp ?? internalTab;
   const handleTabChange = (tab: ChartTab) => {
@@ -292,7 +302,6 @@ export default function PatientChartModal({
                 vitals={patientChart?.vitalsHistory?.[0]}
                 loading={loadingChart}
                 onPressRefresh={onRefreshChart}
-                onPressEdit={handleEditPress}
               />
             </View>
           )}

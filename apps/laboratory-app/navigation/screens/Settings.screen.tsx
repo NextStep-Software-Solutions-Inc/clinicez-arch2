@@ -645,6 +645,8 @@ const styles = StyleSheet.create({
     padding: 22,
     maxWidth: 500,
     width: '100%',
+    maxHeight: '95%',
+    overflow: 'hidden',
     gap: 12,
   },
   modalHeaderTitle: {

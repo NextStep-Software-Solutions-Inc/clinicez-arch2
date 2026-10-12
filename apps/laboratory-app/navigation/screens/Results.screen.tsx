@@ -1079,6 +1079,8 @@ const styles = StyleSheet.create({
     padding: 24,
     width: '100%',
     maxWidth: 520,
+    maxHeight: '95%',
+    overflow: 'hidden',
     gap: 16,
   },
   analyzerModalCard: {
@@ -1087,6 +1089,8 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     maxWidth: 560,
+    maxHeight: '95%',
+    overflow: 'hidden',
     gap: 14,
   },
   panicModalCard: {
@@ -1095,6 +1099,8 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     maxWidth: 520,
+    maxHeight: '95%',
+    overflow: 'hidden',
     gap: 14,
   },
   reportModalCard: {
@@ -1103,6 +1109,8 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '100%',
     maxWidth: 620,
+    maxHeight: '95%',
+    overflow: 'hidden',
     gap: 14,
   },
   modalHeading: {

@@ -583,6 +583,8 @@ const styles = StyleSheet.create({
   modalBox: {
     width: '100%',
     maxWidth: 480,
+    maxHeight: '95%',
+    overflow: 'hidden',
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.md,
     padding: theme.spacing.md,

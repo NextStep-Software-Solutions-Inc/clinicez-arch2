@@ -573,6 +573,8 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     maxWidth: 520,
+    maxHeight: '95%',
+    overflow: 'hidden',
     padding: theme.spacing['2xl'],
     gap: theme.spacing.lg,
   },

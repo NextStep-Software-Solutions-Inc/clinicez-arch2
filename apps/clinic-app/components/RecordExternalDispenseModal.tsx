@@ -105,7 +105,7 @@ export default function RecordExternalDispenseModal({
       title="Log external dispense"
       subtitle={`Record a medication purchase from an outside drugstore${prescriptionNumber ? ` (${prescriptionNumber})` : ''}`}
       maxWidth={560}
-      maxHeight="90%"
+      maxHeight="95%"
       footer={
         <View style={styles.footer}>
           <Button title="Cancel" variant="ghost" onPress={onClose} disabled={submitting} />

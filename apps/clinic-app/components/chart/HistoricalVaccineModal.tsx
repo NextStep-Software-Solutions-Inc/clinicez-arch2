@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '100%',
     maxWidth: 620,
-    maxHeight: '90%',
+    maxHeight: '95%',
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.lg,
     overflow: 'hidden',
@@ -423,6 +423,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
   },
   formScroll: {
+    flexShrink: 1,
     maxHeight: 520,
   },
   formScrollContent: {

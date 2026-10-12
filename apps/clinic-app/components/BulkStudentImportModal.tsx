@@ -187,7 +187,7 @@ export function BulkStudentImportModal({
       title={title}
       subtitle={subtitle}
       maxWidth={680}
-      maxHeight="90%"
+      maxHeight="95%"
       footer={footer}
     >
       {/* Step 1: Input CSV */}

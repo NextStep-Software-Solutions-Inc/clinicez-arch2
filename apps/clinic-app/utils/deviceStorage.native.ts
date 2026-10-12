@@ -33,3 +33,6 @@ export function setDeviceItem(key: string, value: string | null) {
     // ignore - the in-memory copy still holds it for this session
   }
 }
+
+export const getSessionItem = getDeviceItem;
+export const setSessionItem = setDeviceItem;

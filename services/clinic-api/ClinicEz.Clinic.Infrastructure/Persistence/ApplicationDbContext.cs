@@ -72,6 +72,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<PatientImmunization> PatientImmunizations { get; set; } = null!;
     public DbSet<PatientProblem> PatientProblems { get; set; } = null!;
     public DbSet<PatientAllergy> PatientAllergies { get; set; } = null!;
+    public DbSet<PatientPastMedicalHistory> PatientPastMedicalHistories { get; set; } = null!;
+    public DbSet<PatientFamilyHistory> PatientFamilyHistories { get; set; } = null!;
     public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
@@ -138,6 +140,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<PatientImmunization>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PatientProblem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PatientAllergy>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientPastMedicalHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientFamilyHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted);
@@ -642,6 +646,41 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
             entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.Category });
+        });
+
+        modelBuilder.Entity<PatientPastMedicalHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ConditionTitle).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.PhilHealthMdiseaseCode).HasMaxLength(50);
+            entity.Property(e => e.Icd10Code).HasMaxLength(50);
+            entity.Property(e => e.SpecificDescription).HasMaxLength(500);
+            entity.Property(e => e.ClinicalNotes).HasMaxLength(1000);
+            entity.HasOne(e => e.Patient)
+                .WithMany(p => p.PastMedicalHistories)
+                .HasForeignKey(e => e.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.PhilHealthMdiseaseCode });
+        });
+
+        modelBuilder.Entity<PatientFamilyHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ConditionTitle).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.PhilHealthMdiseaseCode).HasMaxLength(50);
+            entity.Property(e => e.Icd10Code).HasMaxLength(50);
+            entity.Property(e => e.SpecificDescription).HasMaxLength(500);
+            entity.Property(e => e.Relationship).HasMaxLength(100);
+            entity.Property(e => e.ClinicalNotes).HasMaxLength(1000);
+            entity.HasOne(e => e.Patient)
+                .WithMany(p => p.FamilyHistories)
+                .HasForeignKey(e => e.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.PhilHealthMdiseaseCode });
         });
 
         modelBuilder.Entity<PatientImmunization>(entity =>
