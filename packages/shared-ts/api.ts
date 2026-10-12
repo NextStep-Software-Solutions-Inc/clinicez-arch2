@@ -13,6 +13,8 @@ export interface ApiResponse<T = any> {
   succeeded: boolean;
   message: string | null;
   data: T | null;
+  errorCode?: string;
+  traceId?: string;
   errors?: ApiFieldError[];
 }
 
@@ -28,16 +30,96 @@ export interface PaginatedApiResponse<T = any> extends ApiResponse<T[]> {
 export class ApiError extends Error {
   readonly status: number;
   readonly errors: ApiFieldError[];
+  readonly errorCode?: string;
+  readonly traceId?: string;
 
-  constructor(message: string, status: number, errors: ApiFieldError[] = []) {
+  constructor(
+    message: string,
+    status: number,
+    errors: ApiFieldError[] = [],
+    errorCode?: string,
+    traceId?: string
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.errorCode = errorCode;
+    this.traceId = traceId;
     this.errors =
       errors.length > 0
         ? errors
-        : [{ field: null, code: 'API_ERROR', message }];
+        : [{ field: null, code: errorCode || 'API_ERROR', message }];
   }
+
+  /**
+   * Returns an array of error messages for the given field name (case-insensitive lookup).
+   * Strips JSON path prefixes like '$.' or leading '/'.
+   * Example: "patientCode" matches "PatientCode" or "patientCode" or "$.patientCode".
+   */
+  getFieldErrors(field: string): string[] {
+    if (!field || typeof field !== 'string') return [];
+    const target = field.replace(/^(\$\.|\/)/, '').trim().toLowerCase();
+    return this.errors
+      .filter((e) => {
+        if (!e.field || typeof e.field !== 'string') return false;
+        const normalized = e.field.replace(/^(\$\.|\/)/, '').trim().toLowerCase();
+        return normalized === target;
+      })
+      .map((e) => e.message);
+  }
+
+  /**
+   * Returns the first error message for the field, or undefined if no error exists.
+   */
+  getFieldError(field: string): string | undefined {
+    const messages = this.getFieldErrors(field);
+    return messages.length > 0 ? messages[0] : undefined;
+  }
+
+  /**
+   * Returns true if any errors exist for the field.
+   */
+  hasFieldError(field: string): boolean {
+    return this.getFieldErrors(field).length > 0;
+  }
+
+  /**
+   * Returns a map of field names (normalized to camelCase) to their first error message.
+   */
+  getFieldErrorsMap(): Record<string, string> {
+    const map: Record<string, string> = {};
+    for (const e of this.errors) {
+      if (e.field && typeof e.field === 'string') {
+        const clean = e.field.replace(/^(\$\.|\/)/, '').trim();
+        const camel = clean.charAt(0).toLowerCase() + clean.slice(1);
+        if (!map[camel]) {
+          map[camel] = e.message;
+        }
+      }
+    }
+    return map;
+  }
+}
+
+/**
+ * Detects whether an error message leaks raw database or ORM exception strings.
+ */
+function isDatabaseOrOrmLeak(message: string): boolean {
+  if (!message || typeof message !== 'string') return false;
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('an error occurred while saving the entity changes') ||
+    lower.includes('see the inner exception for details') ||
+    lower.includes('microsoft.entityframeworkcore') ||
+    lower.includes('npgsql.postgresexception') ||
+    lower.includes('postgresexception') ||
+    lower.includes('duplicate key value violates unique constraint') ||
+    lower.includes('violates foreign key constraint') ||
+    lower.includes('violates not-null constraint') ||
+    lower.includes('value too long for type character varying') ||
+    /at\s+(microsoft\.entityframeworkcore|npgsql|system\.data)/i.test(message) ||
+    /exception\s+while\s+executing\s+database\s+command/i.test(message)
+  );
 }
 
 /**
@@ -52,6 +134,52 @@ export function extractApiError(error: unknown, defaultFallback = 'Request faile
   const status: number = typeof axiosErr?.response?.status === 'number' ? axiosErr.response.status : 0;
   const rawData = axiosErr?.response?.data;
 
+  // Extract traceId from response data (rawData.traceId) or response headers (x-trace-id, traceparent)
+  let traceId: string | undefined = undefined;
+  if (rawData && typeof rawData === 'object') {
+    const rawTrace = rawData.traceId ?? rawData.TraceId;
+    if (typeof rawTrace === 'string' && rawTrace.trim().length > 0) {
+      traceId = rawTrace.trim();
+    }
+  }
+
+  if (!traceId && axiosErr?.response?.headers) {
+    const headers = axiosErr.response.headers;
+    if (typeof headers.get === 'function') {
+      const hTrace = headers.get('x-trace-id') || headers.get('traceparent');
+      if (typeof hTrace === 'string' && hTrace.trim().length > 0) {
+        traceId = hTrace.trim();
+      }
+    }
+    if (!traceId && typeof headers === 'object') {
+      const hTrace =
+        headers['x-trace-id'] ||
+        headers['traceparent'] ||
+        headers['X-Trace-Id'] ||
+        headers['Traceparent'] ||
+        headers['x-correlation-id'] ||
+        headers['X-Correlation-Id'];
+      if (typeof hTrace === 'string' && hTrace.trim().length > 0) {
+        traceId = hTrace.trim();
+      }
+    }
+  }
+
+  // Extract errorCode from response data (rawData.errorCode || rawData.code || rawData.title)
+  let errorCode: string | undefined = undefined;
+  if (rawData && typeof rawData === 'object') {
+    const rawCode =
+      rawData.errorCode ??
+      rawData.ErrorCode ??
+      rawData.code ??
+      rawData.Code ??
+      rawData.title ??
+      rawData.Title;
+    if (typeof rawCode === 'string' && rawCode.trim().length > 0) {
+      errorCode = rawCode.trim();
+    }
+  }
+
   // Network / server connection error
   if (status === 0 && !rawData) {
     const rawMsg = axiosErr?.message || '';
@@ -62,7 +190,7 @@ export function extractApiError(error: unknown, defaultFallback = 'Request faile
     const msg = isNetwork
       ? 'Cannot reach the clinic server. Check your connection and the server address.'
       : (rawMsg || defaultFallback);
-    return new ApiError(msg, 0);
+    return new ApiError(msg, 0, [], 'NETWORK_ERROR', traceId);
   }
 
   const fieldErrors: ApiFieldError[] = [];
@@ -73,7 +201,7 @@ export function extractApiError(error: unknown, defaultFallback = 'Request faile
     if (Array.isArray(rawData.errors)) {
       for (const item of rawData.errors) {
         if (typeof item === 'string') {
-          fieldErrors.push({ field: null, code: 'VALIDATION_ERROR', message: item });
+          fieldErrors.push({ field: null, code: errorCode || 'VALIDATION_ERROR', message: item });
         } else if (item && typeof item === 'object') {
           fieldErrors.push({
             field: item.field ?? null,
@@ -118,8 +246,21 @@ export function extractApiError(error: unknown, defaultFallback = 'Request faile
     extractedMessage = rawData.trim();
   }
 
-  const finalMessage = extractedMessage || axiosErr?.message || defaultFallback;
-  return new ApiError(finalMessage, status, fieldErrors);
+  let finalMessage = extractedMessage || axiosErr?.message || defaultFallback;
+
+  // Client-side safety net: inspect derived message for raw ORM or database exception leakage
+  if (isDatabaseOrOrmLeak(finalMessage)) {
+    finalMessage = `A database error occurred while saving changes. Please contact support with reference ID: ${traceId || 'N/A'}`;
+    errorCode = errorCode || 'DATABASE_ERROR';
+    for (const fe of fieldErrors) {
+      if (isDatabaseOrOrmLeak(fe.message)) {
+        fe.message = finalMessage;
+        fe.code = errorCode;
+      }
+    }
+  }
+
+  return new ApiError(finalMessage, status, fieldErrors, errorCode, traceId);
 }
 
 export enum FacilityType {

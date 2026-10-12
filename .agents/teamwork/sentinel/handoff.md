@@ -1,43 +1,36 @@
-# Sentinel Final Handoff Report — Entity Custom Metadata Engine
+# Sentinel Handoff Report — Medical Chart Workstation Layouts Refinement
 
-## 1. Observation
-- **Original User Request**: Recorded in `.agents/teamwork/ORIGINAL_REQUEST.md` (header `## 2026-10-12T18:55:51Z`) requiring an extensible, generic Entity Custom Metadata Engine in ClinicEZ supporting custom field definitions scoped by `EntityType`, mandatory/required flags enforced conditionally when visible, persistent arrangement and bulk reordering (`PUT /api/v1/custom-fields/reorder`), conditional visibility rules (`VisibilityRuleJson`), cascading dropdown options (`ConditionalOptionsJson`), pre-built template libraries (USTP University, Workplace, Demographics), reactive `DynamicCustomFieldsRenderer` integrated across all intake/registration/profile touchpoints, and strict compliance with `@clinicez/design-tokens`.
-- **Routing Decision**: Evaluated routing signals per Routing Decision Table -> General path routed to `teamwork_preview_orchestrator` (`orchestrator_9`: `244a259f-87b9-4d6a-a5cf-626c99392364`).
-- **Milestone Iteration Loops**:
-  - **Milestone M1 (Backend Architecture & Schema)**: Domain model `ClinicCustomFieldDefinition` extended with `VisibilityRuleJson` and `ConditionalOptionsJson`. EF Core migration `20261012190000_AddCustomFieldVisibilityAndConditionalOptions.cs` deployed with idempotent guards. CQRS MediatR handlers implemented for CRUD, bulk reordering (`PUT /api/v1/custom-fields/reorder`), and template installation (`POST /api/v1/custom-fields/templates/install`). Verified by 2 Reviewers, 2 Challengers, and Forensic Auditor (ALL APPROVE/CLEAN).
-  - **Milestone M2 (Clinic Admin Intake Fields Management & Template Library)**: Administrative workstation in `apps/clinic-app/components/settings/CustomFieldsTab.tsx` and `AddEditFieldModal.tsx` built with Up / Down sequence arrangement controls, mandatory switch toggle with Required/Optional badges, live visibility condition rule builder, cascading dropdown mapper, and 1-click suggested template bundles. Category filter index mismatch caught by Challenger M2_1 and remediated to persistent `field.id` global lookup (CLEAN audit).
-  - **Milestone M3 (Dynamic Patient Intake & Registration Form Integration)**: Built reactive `DynamicCustomFieldsRenderer.tsx` evaluating visibility rules dynamically (`isFieldVisible`), deriving cascading choices (`getAvailableOptions`), enforcing required validation only when visible (`validateCustomFields`), and stripping hidden values (`sanitizeCustomFieldsPayload`). Fully integrated into `Patients.screen.tsx` (registration modal + patient card custom metadata), `EditPatientModal.tsx`, patient longitudinal chart, and `StudentIntakeClient.tsx` in `apps/portal-web`.
-  - **Milestone M4 (Final Verification & Adversarial Hardening)**: 113-test opaque-box E2E suite (`TEST_READY.md`) validated across Tiers 1-4 alongside adversarial Tier 5 stress suites.
-- **Independent Victory Audit**:
-  - Independent post-victory auditor `victory_auditor_4` (`36062bef-e38a-42cd-a92a-7074d24cb24c`) dispatched with zero shared context from the implementation swarm.
-  - Phase A (Timeline): Sequential, realistic development history verified.
-  - Phase B (Anti-Cheating): Zero hardcoded test fixtures, zero dummy facades, and zero bypasses in production code paths.
-  - Phase C (Independent Test Execution):
-    - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests`: 1,297 passed, 0 failed, 0 skipped.
-    - `bun test apps/clinic-app/tests`: 899 passed, 0 failed across 49 test files (110 passed across custom field test suites).
-    - `bun test packages/design-tokens/src/tokens.test.ts`: 27 passed, 0 failed.
-    - `node apps/clinic-app/scripts/check-tokens.mjs --strict`: 0 violations across 154 files.
-    - `bun run typecheck:clinic`: 0 errors.
-  - Verdict: **VICTORY CONFIRMED**.
-- **Cleanup**: Monitoring crons (task-46, task-49) cancelled; all subagents terminated via `manage_subagents(action="kill_all")`.
+## Observation
+The user submitted a single self-contained task with explicit lightness and focus cues to refine and elevate the 3 Medical Chart workstation layouts (Centered Modal, Split-Pane Workstation, Slide-Over Drawer) in `apps/clinic-app`. The request specified 5 key requirements:
+1. Fix the layout reset bug on tab navigation in `PatientChartModal.tsx` so clinician layout selection persists across all 7 chart tabs.
+2. Restore default Centered Modal padding, margins, dimensions, and surfaces in `CenteredModalChartLayout.tsx`.
+3. Harmonize padding & margins in `SlideOverDrawerChartLayout.tsx` and `SplitPaneChartLayout.tsx`.
+4. Normalize tab content padding in `StatutoryImmunizationsTab.tsx`.
+5. Remove duplicate `+ ` prefixes from action buttons and stack patient identity block into non-breaking key-value rows in Split-Pane.
 
-## 2. Logic Chain
-1. User request specified 4 core architectural requirements and quality standards for an extensible custom metadata engine.
-2. The orchestrator decomposed the scope into 4 focused milestones and managed parallel exploration, implementation, peer review, empirical adversarial challenges, and gate audits.
-3. Every milestone enforced strict design-token compliance and zero regression testing.
-4. Independent post-victory auditor independently executed all test suites, inspected AST and source files, and rendered `VICTORY CONFIRMED`.
-5. All mandatory cleanup procedures have executed.
+## Logic Chain
+1. **User Request Logging**: Logged verbatim request into `c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\ORIGINAL_REQUEST.md` under `## 2026-10-12T21:01:17Z`.
+2. **Task Routing**: Evaluated against the Routing Decision Table. The request is a single self-contained frontend enhancement with explicit lightness signals ("This is a single self-contained fix; keep it small and focused."). Routed to SWE Light (`teamwork_preview_swe`). Pre-flight dependency audit is not required for SWE Light.
+3. **Dispatch & Monitoring**: Created `.agents/teamwork/swe_1/DISPATCH.md` and dispatched `swe_1` (`a7978b1b-92d6-4dd4-a27e-cbc0108d96d9`). Initialized dual monitoring crons (Progress Reporting `*/8 * * * *`, Liveness Check `*/10 * * * *`).
+4. **Execution Loop**:
+   - Round 0 (Implementer `aaec8636-1d05-4333-9768-f24f3b38cfb4`): Authored fixes for R1–R5.
+   - Round 1 (Reviewer `0d2e627d-b2df-46a4-8759-fd94e61d50c9`): Probed tab flipping state machines and added 32 adversarial test cases (`adversarialWorkstationLayoutsR1.test.ts`).
+   - Round 2 (Reviewer `28d177e7-f0e6-46a9-aeca-a22c0f96d3bd`): Probed mobile/tablet breakpoint degradation and accessibility, adding 33 tests (`adversarialWorkstationLayoutsR2.test.ts`).
+   - Round 3 (Reviewer `8af561e9-a24c-4d5d-b40f-d3cbad6ec382`): Probed runtime lifecycle hooks and async chart refreshes, adding 15 tests (`adversarialWorkstationLayoutsR3.test.ts`).
+   - Total clinic-app test suite expanded to 982 tests (100% passing, 0 failures).
+5. **Swarm Victory Claim & Independent Audit**: `swe_1` claimed milestone victory. Per Sentinel Job 4, the claim was not accepted at face value. Dispatched independent Post-Victory Auditor `victory_auditor_5` (`4ccdd8e8-6d2f-4063-b2d3-7349be60404e`) with zero shared context from the implementation swarm.
+6. **Verdict**: `victory_auditor_5` verified Git timeline history, confirmed absence of facades/shortcuts/raw hex colors, independently executed test suites (982/982 pass), ran token checks (0 violations), checked TypeScript (0 errors), and confirmed web build export (`build:web` exit code 0). Verdict: **VICTORY CONFIRMED**.
+7. **Cleanup**: Cancelled all crons and terminated all subagents per Sentinel governance protocol.
 
-## 3. Caveats
-- Production deployments should ensure database migrations (`20261012190000_AddCustomFieldVisibilityAndConditionalOptions`) are executed during service startup (standard EF Core migration lifecycle in ClinicEZ).
-- Pre-built templates provide default options for USTP, Corporate, and Demographics that clinic administrators can further customize or extend at any time through the Settings workstation.
+## Caveats
+- Native touch gestures on physical mobile devices were verified via browser touch simulation and compact breakpoint unit tests rather than physical Android/iOS hardware.
+- All modified styles strictly adhere to `@clinicez/design-tokens`; any future modifications must maintain token references rather than introducing hardcoded pixel or hex values.
 
-## 4. Conclusion
-All 4 requirements (R1–R4), 20 project features, and monorepo quality gates are 100% satisfied, fully tested, and certified with a verified `VICTORY CONFIRMED` verdict.
+## Conclusion
+The Medical Chart workstation layouts across `apps/clinic-app` are fully elevated, hardened, and verified. Clinician layout choices persist across all 7 tabs, modal geometry and padding match authentic design specifications, double-plus icons are eliminated, Split-Pane patient identity lines never wrap, and all monorepo test, lint, and build gates pass with 100% compliance.
 
-## 5. Verification Method
-1. `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests` -> 1,297 pass, 0 fail.
-2. `bun test apps/clinic-app/tests` -> 899 pass, 0 fail.
-3. `bun test packages/design-tokens/src/tokens.test.ts` -> 27 pass, 0 fail.
-4. `node apps/clinic-app/scripts/check-tokens.mjs --strict` -> 0 violations.
-5. `bun run typecheck:clinic` -> 0 errors.
+## Verification Method
+1. `bun test apps/clinic-app/tests`: 982 tests passed, 0 failures across 52 test files (13,499 assertions).
+2. `node apps/clinic-app/scripts/check-tokens.mjs --strict`: 0 token violations across 154 files.
+3. `bun run typecheck:clinic`: Clean compilation with 0 errors.
+4. `bun run --filter @clinicez/clinic-app build:web`: Clean production build export to `dist/` with exit code 0.

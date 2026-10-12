@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.DTOs;
@@ -31,6 +32,9 @@ public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPa
         RuleFor(x => x.PatientId).NotEmpty();
         RuleFor(x => x.PatientName).NotEmpty().MaximumLength(150);
         RuleFor(x => x.Priority).IsInEnum();
+        RuleFor(x => x.ChiefComplaint)
+            .MaximumLength(255)
+            .WithMessage("Chief complaint must not exceed 255 characters.");
     }
 }
 
@@ -88,6 +92,12 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             }
         }
 
+        var rawComplaint = !string.IsNullOrWhiteSpace(request.ChiefComplaint)
+            ? request.ChiefComplaint
+            : appointment?.Reason;
+
+        var sanitizedComplaint = SanitizeChiefComplaint(rawComplaint);
+
         var queueItem = new QueueItem
         {
             Id = Guid.NewGuid(),
@@ -104,7 +114,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             Priority = request.Priority,
             Status = QueueStatus.Waiting,
             CheckInTime = DateTime.UtcNow,
-            ChiefComplaint = request.ChiefComplaint ?? appointment?.Reason,
+            ChiefComplaint = sanitizedComplaint,
             RoomOrStation = request.RoomOrStation?.Trim(),
             CreatedAt = DateTime.UtcNow,
             CreatedBy = _clinicContext.StaffId?.ToString() ?? "FrontDesk"
@@ -172,5 +182,21 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             false,
             null,
             queueItem.RoomOrStation);
+    }
+
+    private static string? SanitizeChiefComplaint(string? rawInput)
+    {
+        if (string.IsNullOrWhiteSpace(rawInput))
+            return null;
+
+        var cleaned = new string(rawInput
+            .Where(c => !char.IsControl(c) || c == '\r' || c == '\n' || c == '\t')
+            .ToArray())
+            .Trim();
+
+        if (string.IsNullOrWhiteSpace(cleaned))
+            return null;
+
+        return cleaned.Length > 255 ? cleaned[..255] : cleaned;
     }
 }

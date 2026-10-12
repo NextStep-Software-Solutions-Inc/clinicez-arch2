@@ -77,17 +77,34 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
         }
 
         var year = DateTime.UtcNow.Year;
-        var existingCount = await _patientRepo.Query()
-            .CountAsync(p => p.CreatedAt.Year == year, ct);
+        var prefix = $"PAT-{year}-";
+        var existingCodes = await _patientRepo.Query(
+            p => p.ClinicId == _clinicContext.ClinicId && p.PatientCode != null && p.PatientCode.StartsWith(prefix),
+            ignoreQueryFilters: true)
+            .Select(p => p.PatientCode)
+            .ToListAsync(ct);
+
+        var maxSeq = 0;
+        foreach (var code in existingCodes)
+        {
+            if (!string.IsNullOrEmpty(code) && code.Length > prefix.Length)
+            {
+                var suffix = code.Substring(prefix.Length);
+                if (int.TryParse(suffix, out var parsed) && parsed > maxSeq)
+                {
+                    maxSeq = parsed;
+                }
+            }
+        }
 
         var createdEntities = new List<ClinicPatient>();
         var resultDtos = new List<ClinicPatientDto>();
 
-        var seq = existingCount;
+        var seq = maxSeq;
         foreach (var item in request.Patients)
         {
             seq++;
-            var patientCode = $"PAT-{year}-{seq:D5}";
+            var patientCode = $"{prefix}{seq:D5}";
 
             var patient = new ClinicPatient
             {

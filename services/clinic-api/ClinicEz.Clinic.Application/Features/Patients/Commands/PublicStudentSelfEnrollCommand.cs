@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
@@ -75,11 +76,29 @@ public sealed class PublicStudentSelfEnrollCommandHandler
         CancellationToken ct)
     {
         var year = DateTime.UtcNow.Year;
-        var count = await _patientRepo.Query()
-            .CountAsync(p => p.CreatedAt.Year == year, ct);
+        var prefix = $"PAT-{year}-";
+        var existingCodes = await _patientRepo.Query(
+            p => p.ClinicId == _clinicContext.ClinicId && p.PatientCode != null && p.PatientCode.StartsWith(prefix),
+            ignoreQueryFilters: true)
+            .Select(p => p.PatientCode)
+            .ToListAsync(ct);
 
-        var patientCode = $"PAT-{year}-{(count + 1):D5}";
-        var queueToken = $"Q-{(count % 500 + 1):D3}";
+        var maxSeq = 0;
+        foreach (var code in existingCodes)
+        {
+            if (!string.IsNullOrEmpty(code) && code.Length > prefix.Length)
+            {
+                var suffix = code.Substring(prefix.Length);
+                if (int.TryParse(suffix, out var parsed) && parsed > maxSeq)
+                {
+                    maxSeq = parsed;
+                }
+            }
+        }
+
+        var nextSeq = maxSeq + 1;
+        var patientCode = $"{prefix}{nextSeq:D5}";
+        var queueToken = $"Q-{((nextSeq - 1) % 500 + 1):D3}";
 
         var customFields = request.AdditionalCustomFields ?? new Dictionary<string, object?>();
         customFields["classification"] = "Student";
