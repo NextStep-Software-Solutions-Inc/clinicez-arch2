@@ -18,6 +18,7 @@ export interface ClinicContextValue {
   planTier: string;
   queuePrefix: string;
   invoicePrefix: string;
+  preferredChartLayout: 'modal' | 'split' | 'drawer';
   settings: ClinicSettingsRecord | null;
   license: FacilityLicenseStatus | null;
   /** Print/receipt letterhead, sourced from settings - never hardcoded. */
@@ -36,6 +37,7 @@ const ClinicContext = createContext<ClinicContextValue>({
   planTier: '',
   queuePrefix: '',
   invoicePrefix: '',
+  preferredChartLayout: 'modal',
   settings: null,
   license: null,
   letterhead: EMPTY_LETTERHEAD,
@@ -80,6 +82,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       planTier: license?.planTier || '',
       queuePrefix: settings?.queuePrefix || '',
       invoicePrefix: settings?.invoicePrefix || '',
+      preferredChartLayout: settings?.preferredChartLayout || 'modal',
       settings,
       license,
       letterhead: {

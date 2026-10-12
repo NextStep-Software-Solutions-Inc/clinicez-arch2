@@ -79,6 +79,7 @@ export default function SettingsScreen() {
   const [letterheadHeader, setLetterheadHeader] = useState('');
   const [letterheadAddress, setLetterheadAddress] = useState('');
   const [letterheadContact, setLetterheadContact] = useState('');
+  const [preferredChartLayout, setPreferredChartLayout] = useState<'modal' | 'split' | 'drawer'>('modal');
 
   // Modals for sub-components
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
@@ -119,6 +120,9 @@ export default function SettingsScreen() {
       setLetterheadHeader(settingsData.letterheadHeader ?? '');
       setLetterheadAddress(settingsData.letterheadAddress ?? '');
       setLetterheadContact(settingsData.letterheadContact ?? '');
+      if (settingsData.preferredChartLayout) {
+        setPreferredChartLayout(settingsData.preferredChartLayout as 'modal' | 'split' | 'drawer');
+      }
     }
 
     setStaffLoadError(staffErr ? staffErr.message || 'Unable to load staff.' : null);
@@ -171,6 +175,7 @@ export default function SettingsScreen() {
       letterheadHeader: letterheadHeader.trim(),
       letterheadAddress: letterheadAddress.trim(),
       letterheadContact: letterheadContact.trim(),
+      preferredChartLayout,
     });
     setSavingSettings(false);
 
@@ -316,6 +321,8 @@ export default function SettingsScreen() {
 
         {activeTab === 'general' && (
           <GeneralSettingsTab
+            preferredChartLayout={preferredChartLayout}
+            setPreferredChartLayout={setPreferredChartLayout}
             clinicName={clinicName}
             setClinicName={setClinicName}
             accreditationNumber={accreditationNumber}

@@ -11,7 +11,7 @@ import {
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
 import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
-import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString } from '@ui';
+import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect } from '@ui';
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import * as DocumentPicker from 'expo-document-picker';
 import {
@@ -1289,13 +1289,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.inputLabel}>Blood Type</ThemedText>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="O+, A+, B+, AB+"
-                    placeholderTextColor={theme.colors.textMuted}
+                  <BloodTypeSelect
                     value={formBloodType}
-                    onChangeText={setFormBloodType}
+                    onChange={setFormBloodType}
                   />
                 </View>
               </View>

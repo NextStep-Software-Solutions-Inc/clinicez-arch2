@@ -99,6 +99,12 @@ mock.module('../utils/useBreakpoint', () => ({
 }));
 
 const { default: PatientChartModal, CHART_TABS } = await import('../components/chart/PatientChartModal');
+const {
+  CenteredModalChartLayout,
+  SplitPaneChartLayout,
+  SlideOverDrawerChartLayout,
+  CHART_LAYOUT_OPTIONS,
+} = await import('../components/chart');
 const { default: HealthProfilesTab } = await import('../components/chart/HealthProfilesTab');
 const { getSessionItem, setSessionItem } = await import('../utils/deviceStorage');
 import type { ClinicPatient, PatientChart } from '../services/clinicService';
@@ -435,5 +441,129 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
 
     setSessionItem('clinicez_active_chart_tab', null);
     expect(getSessionItem('clinicez_active_chart_tab')).toBeNull();
+  });
+
+  test('14. CHART_LAYOUT_OPTIONS exports canonical 3 layout configurations', () => {
+    expect(CHART_LAYOUT_OPTIONS).toHaveLength(3);
+    const ids = CHART_LAYOUT_OPTIONS.map((o) => o.id);
+    expect(ids).toEqual(['modal', 'split', 'drawer']);
+
+    const modalOpt = CHART_LAYOUT_OPTIONS.find((o) => o.id === 'modal');
+    expect(modalOpt?.label).toBe('Centered Workstation Modal');
+    expect(modalOpt?.icon).toBe('layoutModal');
+
+    const splitOpt = CHART_LAYOUT_OPTIONS.find((o) => o.id === 'split');
+    expect(splitOpt?.label).toBe('Split-Pane Clinical Workstation');
+    expect(splitOpt?.icon).toBe('layoutSplit');
+
+    const drawerOpt = CHART_LAYOUT_OPTIONS.find((o) => o.id === 'drawer');
+    expect(drawerOpt?.label).toBe('Slide-Over Focus Drawer');
+    expect(drawerOpt?.icon).toBe('layoutDrawer');
+  });
+
+  test('15. CenteredModalChartLayout renders floating workstation dialog with maximize action', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(CenteredModalChartLayout, {
+        patient: mockPatient,
+        patientChart: mockChart,
+        activeTab: 'summary',
+        onTabChange: () => {},
+        onClose: () => {},
+        onEditDemographics: () => {},
+        currentLayout: 'modal',
+        onSwitchLayout: () => {},
+      })
+    );
+
+    expect(markup).toContain('aria-label="Medical Chart for Maria DB"');
+    expect(markup).toContain('aria-label="Maximize chart window"');
+    expect(markup).toContain('aria-label="Chart Layout Selector"');
+    expect(markup).toContain('Summary');
+    expect(markup).toContain('Doc Vault');
+  });
+
+  test('16. SplitPaneChartLayout renders persistent left sidebar rail with clinical alerts and vertical nav', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(SplitPaneChartLayout, {
+        patient: mockPatient,
+        patientChart: mockChart,
+        activeTab: 'summary',
+        onTabChange: () => {},
+        onClose: () => {},
+        onEditDemographics: () => {},
+        currentLayout: 'split',
+        onSwitchLayout: () => {},
+      })
+    );
+
+    expect(markup).toContain('aria-label="Clinical Workstation for Maria DB"');
+    expect(markup).toContain('CLINICAL ALERTS');
+    expect(markup).toContain('ALLERGY: Paracetamol');
+    expect(markup).toContain('LATEST VITALS');
+    expect(markup).toContain('CHART NAVIGATION');
+    expect(markup).toContain('Executive Summary');
+    expect(markup).toContain('Encounters Timeline');
+    expect(markup).toContain('Diagnostic Labs');
+  });
+
+  test('17. SlideOverDrawerChartLayout renders right-docked offcanvas drawer and backdrop dismiss', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(SlideOverDrawerChartLayout, {
+        patient: mockPatient,
+        patientChart: mockChart,
+        activeTab: 'summary',
+        onTabChange: () => {},
+        onClose: () => {},
+        onEditDemographics: () => {},
+        currentLayout: 'drawer',
+        onSwitchLayout: () => {},
+      })
+    );
+
+    expect(markup).toContain('aria-label="Medical Chart Drawer for Maria DB"');
+    expect(markup).toContain('aria-label="Dismiss drawer and return to queue"');
+    expect(markup).toContain('Click to close &amp; return to queue');
+    expect(markup).toContain('aria-label="Chart Layout Selector"');
+  });
+
+  test('18. PatientChartModal dispatches to preferredLayout prop', () => {
+    // Split pane layout dispatch
+    const splitMarkup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: mockPatient,
+        patientChart: mockChart,
+        preferredLayout: 'split',
+        onClose: () => {},
+      })
+    );
+    expect(splitMarkup).toContain('aria-label="Clinical Workstation for Maria DB"');
+    expect(splitMarkup).toContain('CLINICAL ALERTS');
+
+    // Drawer layout dispatch
+    const drawerMarkup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: mockPatient,
+        patientChart: mockChart,
+        preferredLayout: 'drawer',
+        onClose: () => {},
+      })
+    );
+    expect(drawerMarkup).toContain('aria-label="Medical Chart Drawer for Maria DB"');
+    expect(drawerMarkup).toContain('Click to close &amp; return to queue');
+
+    // Centered modal layout dispatch
+    const modalMarkup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: mockPatient,
+        patientChart: mockChart,
+        preferredLayout: 'modal',
+        onClose: () => {},
+      })
+    );
+    expect(modalMarkup).toContain('aria-label="Medical Chart for Maria DB"');
+    expect(modalMarkup).toContain('aria-label="Maximize chart window"');
   });
 });

@@ -784,6 +784,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.KonsultaEndpoint).HasMaxLength(255);
             entity.Property(e => e.DefaultConsultationFee).HasPrecision(18, 2);
             entity.Property(e => e.VatRate).HasPrecision(5, 4);
+            entity.Property(e => e.PreferredChartLayout).HasMaxLength(50).HasDefaultValue("modal");
             entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
         });
 

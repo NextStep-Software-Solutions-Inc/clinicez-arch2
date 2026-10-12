@@ -1,0 +1,133 @@
+import type { SegmentedOption } from '../ui/SegmentedControl';
+import type { IconName } from '../ui/Icon';
+import type {
+  ClinicPatient,
+  PatientChart,
+  ClinicRecordAttachmentRecord,
+  AdministerVaccinePayload,
+  RecordHistoricalImmunizationPayload,
+  RecordAefiPayload,
+  ConsultationRecord,
+} from '../../services/clinicService';
+
+export type ChartTab =
+  | 'summary'
+  | 'encounters'
+  | 'diagnostics'
+  | 'procedures'
+  | 'immunizations'
+  | 'profiles'
+  | 'vault';
+
+export const CHART_TABS: SegmentedOption<ChartTab>[] = [
+  { value: 'summary', label: 'Summary' },
+  { value: 'encounters', label: 'Encounters' },
+  { value: 'diagnostics', label: 'Diagnostics' },
+  { value: 'procedures', label: 'Procedures' },
+  { value: 'immunizations', label: 'Vaccines' },
+  { value: 'profiles', label: 'Health Profiles' },
+  { value: 'vault', label: 'Doc Vault' },
+];
+
+export type ChartLayoutMode = 'modal' | 'split' | 'drawer';
+
+export const DEFAULT_CHART_LAYOUT: ChartLayoutMode = 'modal';
+
+export interface ChartLayoutOptionMeta {
+  id: ChartLayoutMode;
+  label: string;
+  shortLabel: string;
+  badge: string;
+  icon: IconName;
+  description: string;
+}
+
+export const CHART_LAYOUT_OPTIONS: readonly ChartLayoutOptionMeta[] = [
+  {
+    id: 'modal',
+    label: 'Centered Workstation Modal',
+    shortLabel: 'Modal',
+    badge: 'Standard Default',
+    icon: 'layoutModal',
+    description: 'Expansive centered dialog with 1-click Maximize toggle. Ideal for general consultations and balanced multitasking.',
+  },
+  {
+    id: 'split',
+    label: 'Split-Pane Clinical Workstation',
+    shortLabel: 'Split-Pane',
+    badge: 'Institutional EMR',
+    icon: 'layoutSplit',
+    description: 'Dual-column layout with persistent left navigation sidebar and wide clinical reading canvas. Ideal for deep chart review and specialist clinics.',
+  },
+  {
+    id: 'drawer',
+    label: 'Slide-Over Focus Drawer',
+    shortLabel: 'Drawer',
+    badge: 'Fast-Paced Triage',
+    icon: 'layoutDrawer',
+    description: 'Right-anchored offcanvas sheet occupying 75% screen width. Keeps the patient queue visible in peripheral view. Ideal for triage and front desk.',
+  },
+] as const;
+
+/**
+ * Standard props passed to each layout implementation.
+ * Ensures strict decoupling and zero logic bleed across layout components.
+ */
+export interface ChartLayoutProps {
+  patient: ClinicPatient | null;
+  patientChart: PatientChart | null;
+  loadingChart?: boolean;
+  chartError?: string | null;
+  patientAttachments?: ClinicRecordAttachmentRecord[];
+  activeTab: ChartTab;
+  onTabChange: (tab: ChartTab) => void;
+  onClose: () => void;
+  onRefreshChart?: () => void;
+  onEditDemographics: () => void;
+
+  // In-modal quick layout switcher
+  currentLayout: ChartLayoutMode;
+  onSwitchLayout: (layout: ChartLayoutMode) => void;
+
+  // Clinical Tab Action Handlers
+  onViewPrescriptionSlip?: (consultation: ConsultationRecord) => void;
+  onOpenExternalDispense?: (consultation: ConsultationRecord) => void;
+  onViewLabSlip?: (orderId: string) => void;
+  onAttachExternalResult?: (orderId: string) => void;
+  onUploadDocument?: () => void;
+  onVerifyAttachment?: (attachmentId: string, isApproved: boolean) => Promise<void>;
+  onDownloadAttachment?: (attachmentId: string) => Promise<void>;
+  onAdministerVaccine?: (payload: AdministerVaccinePayload) => Promise<void>;
+  onRecordHistoricalVaccine?: (payload: RecordHistoricalImmunizationPayload) => Promise<void>;
+  onRecordAefi?: (immId: string, payload: RecordAefiPayload) => Promise<void>;
+}
+
+export interface PatientChartModalProps {
+  visible: boolean;
+  patient: ClinicPatient | null;
+  patientChart: PatientChart | null;
+  loadingChart?: boolean;
+  chartError?: string | null;
+  patientAttachments?: ClinicRecordAttachmentRecord[];
+  initialTab?: ChartTab;
+  activeTab?: ChartTab;
+  onTabChange?: (tab: ChartTab) => void;
+  onClose: () => void;
+  onRefreshChart?: () => void;
+  onPatientUpdated?: (updated: ClinicPatient) => void;
+  onPressEdit?: () => void;
+  /** Override layout mode; falls back to clinic setting or 'modal' */
+  preferredLayout?: ChartLayoutMode;
+
+  // Tab Action Handlers
+  onViewPrescriptionSlip?: (consultation: ConsultationRecord) => void;
+  onOpenExternalDispense?: (consultation: ConsultationRecord) => void;
+  onViewLabSlip?: (orderId: string) => void;
+  onAttachExternalResult?: (orderId: string) => void;
+  onUploadDocument?: () => void;
+  onVerifyAttachment?: (attachmentId: string, isApproved: boolean) => Promise<void>;
+  onDownloadAttachment?: (attachmentId: string) => Promise<void>;
+  onAdministerVaccine?: (payload: AdministerVaccinePayload) => Promise<void>;
+  onRecordHistoricalVaccine?: (payload: RecordHistoricalImmunizationPayload) => Promise<void>;
+  onRecordAefi?: (immId: string, payload: RecordAefiPayload) => Promise<void>;
+}

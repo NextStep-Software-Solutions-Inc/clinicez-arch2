@@ -11,7 +11,21 @@ export {
 export type { PatientSummarySpineProps, VitalsThresholdResult, UrgencyLevel } from './PatientSummarySpine';
 
 export { default as PatientChartModal, CHART_TABS } from './PatientChartModal';
-export type { PatientChartModalProps, ChartTab } from './PatientChartModal';
+export type { PatientChartModalProps, ChartTab, ChartLayoutMode } from './types';
+export {
+  CHART_LAYOUT_OPTIONS,
+  DEFAULT_CHART_LAYOUT,
+  type ChartLayoutProps,
+  type ChartLayoutOptionMeta,
+} from './types';
+
+export {
+  CenteredModalChartLayout,
+  SplitPaneChartLayout,
+  SlideOverDrawerChartLayout,
+} from './layouts';
+
+export { default as ChartLayoutSwitcher } from './ChartLayoutSwitcher';
 
 export { default as ExecutiveSummaryTab } from './ExecutiveSummaryTab';
 export type { ExecutiveSummaryTabProps } from './ExecutiveSummaryTab';

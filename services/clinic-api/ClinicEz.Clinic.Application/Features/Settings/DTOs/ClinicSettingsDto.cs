@@ -30,5 +30,6 @@ public sealed record ClinicSettingsDto(
     bool IsPhilHealthConfigured = false,
     string PrimaryColorHex = "#0284C7",
     string? PrimaryLogoUrl = null,
-    string PaperSize = "Letter");
+    string PaperSize = "Letter",
+    string PreferredChartLayout = "modal");
 

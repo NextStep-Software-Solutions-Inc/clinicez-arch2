@@ -36,7 +36,7 @@ type FormValues = {
   dob: string;
   placeOfBirth: string;
   civilStatus: 'Single' | 'Married' | 'Widowed' | 'Separated' | 'Divorced' | '';
-  bloodType: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-' | '';
+  bloodType: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-' | 'Unknown' | '';
   nationality: string;
   ethnicity: string;
   religion: string;

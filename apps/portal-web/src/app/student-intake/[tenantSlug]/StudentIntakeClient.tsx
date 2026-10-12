@@ -66,7 +66,7 @@ export default function StudentIntakeClient({
   const [college, setCollege] = useState("College of Computer Studies");
   const [program, setProgram] = useState("BS Computer Science");
   const [yearLevel, setYearLevel] = useState("1st Year (Freshman)");
-  const [bloodType, setBloodType] = useState("O+");
+  const [bloodType, setBloodType] = useState("");
   const [allergies, setAllergies] = useState("None known");
   const [chronicConditions, setChronicConditions] = useState("None");
 
@@ -562,18 +562,19 @@ export default function StudentIntakeClient({
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Blood Type</label>
               <select
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#0D6963] focus:border-[#0D6963]"
                 value={bloodType}
                 onChange={(e) => setBloodType(e.target.value)}
               >
-                <option value="O+">O+</option>
-                <option value="O-">O-</option>
+                <option value="">Select blood type...</option>
                 <option value="A+">A+</option>
                 <option value="A-">A-</option>
                 <option value="B+">B+</option>
                 <option value="B-">B-</option>
                 <option value="AB+">AB+</option>
                 <option value="AB-">AB-</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
                 <option value="Unknown">Unknown</option>
               </select>
             </div>

@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
+import Badge from '../ui/Badge';
+import Icon from '../ui/Icon';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import StatCard from '../ui/StatCard';
 import EmptyState from '../ui/EmptyState';
@@ -12,9 +14,12 @@ import SecuritySection from './SecuritySection';
 import EdgeServerSwitcherSection from './EdgeServerSwitcherSection';
 import { theme } from '../../constants/theme';
 import { DailyEodReport, ClinicSettingsRecord } from '../../services/clinicService';
+import { CHART_LAYOUT_OPTIONS, type ChartLayoutMode } from '../chart/types';
 import { InfoRow } from './common';
 
 interface GeneralSettingsTabProps {
+  preferredChartLayout?: string;
+  setPreferredChartLayout?: (v: ChartLayoutMode) => void;
   clinicName: string;
   setClinicName: (v: string) => void;
   accreditationNumber: string;
@@ -43,6 +48,8 @@ interface GeneralSettingsTabProps {
 }
 
 export default function GeneralSettingsTab({
+  preferredChartLayout = 'modal',
+  setPreferredChartLayout,
   clinicName,
   setClinicName,
   accreditationNumber,
@@ -149,6 +156,80 @@ export default function GeneralSettingsTab({
 
               <View style={styles.actionsEnd}>
                 <Button title="Save changes" onPress={onSavePreferences} loading={savingSettings} />
+              </View>
+            </View>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Preferred Medical Chart Workstation Layout */}
+      <Card>
+        <CardHeader
+          title="Preferred Medical Chart Layout"
+          subtitle="Configure the default workstation layout when opening patient medical charts across your facility"
+        />
+        <CardContent>
+          {showSkeletons ? (
+            <SkeletonList rows={3} />
+          ) : (
+            <View style={styles.layoutSelectorGrid}>
+              {CHART_LAYOUT_OPTIONS.map((opt) => {
+                const isSelected = preferredChartLayout === opt.id;
+                return (
+                  <Pressable
+                    key={opt.id}
+                    onPress={() => setPreferredChartLayout?.(opt.id)}
+                    style={({ pressed }) => [
+                      styles.layoutCard,
+                      isSelected && styles.layoutCardSelected,
+                      pressed && styles.layoutCardPressed,
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={`${opt.label} (${opt.badge})`}
+                  >
+                    <View style={styles.layoutCardHeader}>
+                      <View style={styles.layoutCardIconTitle}>
+                        <View style={[styles.layoutIconWrap, isSelected && styles.layoutIconWrapSelected]}>
+                          <Icon
+                            name={opt.icon}
+                            size={theme.sizes.iconLg}
+                            color={isSelected ? theme.colors.onPrimary : theme.colors.primaryDark}
+                          />
+                        </View>
+                        <View style={styles.layoutTitleGroup}>
+                          <ThemedText
+                            variant="bodyBold"
+                            color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                          >
+                            {opt.label}
+                          </ThemedText>
+                          <Badge
+                            label={opt.badge}
+                            variant={isSelected ? 'info' : 'neutral'}
+                            size="sm"
+                          />
+                        </View>
+                      </View>
+
+                      <View style={[styles.radioOuter, isSelected && styles.radioOuterSelected]}>
+                        {isSelected && <View style={styles.radioInner} />}
+                      </View>
+                    </View>
+
+                    <ThemedText
+                      variant="caption"
+                      color={theme.colors.textSecondary}
+                      style={styles.layoutDescription}
+                    >
+                      {opt.description}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+
+              <View style={styles.actionsEnd}>
+                <Button title="Save layout preference" onPress={onSavePreferences} loading={savingSettings} />
               </View>
             </View>
           )}
@@ -286,5 +367,79 @@ const styles = StyleSheet.create({
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.border,
     gap: theme.spacing.sm,
+  },
+  layoutSelectorGrid: {
+    gap: theme.spacing.md,
+  },
+  layoutCard: {
+    backgroundColor: theme.colors.surfaceHighlight,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  layoutCardSelected: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primaryBorder,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  layoutCardPressed: {
+    opacity: 0.8,
+  },
+  layoutCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  layoutCardIconTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    flex: 1,
+  },
+  layoutIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  layoutIconWrapSelected: {
+    backgroundColor: theme.colors.primaryDark,
+    borderColor: theme.colors.primaryDark,
+  },
+  layoutTitleGroup: {
+    flex: 1,
+    gap: 2,
+  },
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: theme.radii.full,
+    borderWidth: 2,
+    borderColor: theme.colors.borderDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: theme.spacing.sm,
+  },
+  radioOuterSelected: {
+    borderColor: theme.colors.primaryDark,
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.primaryDark,
+  },
+  layoutDescription: {
+    lineHeight: 18,
   },
 });

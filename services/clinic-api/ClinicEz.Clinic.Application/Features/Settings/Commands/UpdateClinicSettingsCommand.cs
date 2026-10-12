@@ -27,7 +27,8 @@ public sealed record UpdateClinicSettingsCommand(
     string? LetterheadFooter,
     string? PrimaryColorHex = null,
     string? PrimaryLogoUrl = null,
-    string? PaperSize = null) : IRequest<ClinicSettingsDto>;
+    string? PaperSize = null,
+    string? PreferredChartLayout = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -84,6 +85,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.PrimaryLogoUrl = request.PrimaryLogoUrl.Trim();
         if (!string.IsNullOrWhiteSpace(request.PaperSize))
             settings.PaperSize = request.PaperSize.Trim();
+        if (!string.IsNullOrWhiteSpace(request.PreferredChartLayout))
+            settings.PreferredChartLayout = request.PreferredChartLayout.Trim();
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -117,7 +120,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.IsPhilHealthConfigured,
             settings.PrimaryColorHex,
             settings.PrimaryLogoUrl,
-            settings.PaperSize);
+            settings.PaperSize,
+            settings.PreferredChartLayout);
     }
 }
 

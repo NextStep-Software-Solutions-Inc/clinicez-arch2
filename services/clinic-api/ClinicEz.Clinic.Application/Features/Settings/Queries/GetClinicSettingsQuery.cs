@@ -89,7 +89,8 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.IsPhilHealthConfigured,
             settings.PrimaryColorHex,
             settings.PrimaryLogoUrl,
-            settings.PaperSize);
+            settings.PaperSize,
+            settings.PreferredChartLayout);
     }
 }
 

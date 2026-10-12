@@ -7,7 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { ThemedText, TextInput, Icon, Button, PhilHealthPinInput, ValidatedDateInput, validateDateString } from '../ui';
+import { ThemedText, TextInput, Icon, Button, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect } from '../ui';
 import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload } from '../../services/clinicService';
 import { notify, Alert } from '../../utils/feedback';
@@ -332,15 +332,9 @@ export function EditPatientModal({
                 />
               </View>
               <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Blood Type
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="O+, A+, B+, AB+"
-                  placeholderTextColor={theme.colors.textMuted}
+                <BloodTypeSelect
                   value={bloodType}
-                  onChangeText={setBloodType}
+                  onChange={setBloodType}
                 />
               </View>
             </View>

@@ -10,6 +10,7 @@ import {
   ArrowRight,
   ArrowUp,
   ArrowUpRight,
+  AppWindow,
   Baby,
   Banknote,
   BarChart3,
@@ -56,6 +57,8 @@ import {
   Minimize2,
   MoreHorizontal,
   MoreVertical,
+  PanelLeft,
+  PanelRight,
   Paperclip,
   Pencil,
   Phone,
@@ -139,6 +142,9 @@ export const ICONS = {
   lock: Lock,
   key: KeyRound,
   eye: Eye,
+  layoutModal: AppWindow,
+  layoutSplit: PanelLeft,
+  layoutDrawer: PanelRight,
 
   // Direction
   arrowRight: ArrowRight,

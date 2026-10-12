@@ -1568,6 +1568,7 @@ export interface ClinicSettingsRecord {
   letterheadAddress?: string;
   letterheadContact?: string;
   letterheadFooter?: string;
+  preferredChartLayout?: 'modal' | 'split' | 'drawer';
 }
 
 export interface CheckInRequest {

@@ -35,4 +35,8 @@ export {
   default as Icd10AutocompleteInput,
   type Icd10AutocompleteInputProps,
 } from './Icd10AutocompleteInput';
+export {
+  default as BloodTypeSelect,
+  type BloodTypeSelectProps,
+} from './BloodTypeSelect';
 

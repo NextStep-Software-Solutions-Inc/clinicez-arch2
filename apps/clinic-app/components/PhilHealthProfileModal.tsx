@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
-import { Modal, Input, Button, Badge, Icon, ErrorState, SkeletonList, ThemedText, ValidatedDateInput, validateDateString } from '@ui';
+import { Modal, Input, Button, Badge, Icon, ErrorState, SkeletonList, ThemedText, ValidatedDateInput, validateDateString, BloodTypeSelect } from '@ui';
 import { Alert } from '@utils/feedback';
 import { usePhilHealthCatalog } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthLibraryName } from '@services/philHealthCatalogService';
@@ -504,12 +504,11 @@ export default function PhilHealthProfileModal({
                   />
                 </View>
               </View>
-              <Input
+              <BloodTypeSelect
                 containerStyle={styles.fieldCol}
-                label="Blood type"
+                label="Blood Type"
                 value={profile.bloodType || ''}
-                onChangeText={(txt) => setProfile({ ...profile, bloodType: txt })}
-                placeholder="e.g. O+, A+, B+"
+                onChange={(val) => setProfile({ ...profile, bloodType: val })}
               />
             </View>
 

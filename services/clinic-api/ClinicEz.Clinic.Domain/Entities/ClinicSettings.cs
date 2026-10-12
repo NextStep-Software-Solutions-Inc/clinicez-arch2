@@ -53,4 +53,5 @@ public sealed class ClinicSettings : BaseEntity
     public string PrimaryColorHex { get; set; } = "#0284C7";
     public string? PrimaryLogoUrl { get; set; }
     public string PaperSize { get; set; } = "Letter";
+    public string PreferredChartLayout { get; set; } = "modal";
 }
