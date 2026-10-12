@@ -14,6 +14,10 @@ public class ApiResponse<T>
 
     public string? Message { get; set; }
 
+    public string? ErrorCode { get; set; }
+
+    public string? TraceId { get; set; }
+
     public T? Data { get; set; }
 
     /// <summary>
@@ -29,13 +33,26 @@ public class ApiResponse<T>
 
     public static ApiResponse<T> Fail(
         string message,
-        IReadOnlyList<ApiFieldError>? errors = null)
+        IReadOnlyList<ApiFieldError>? errors = null,
+        string? errorCode = null,
+        string? traceId = null)
     {
+        var resolvedCode = errorCode ?? errors?.FirstOrDefault()?.Code ?? "ERROR";
         return new ApiResponse<T>
         {
             Succeeded = false,
             Message = message,
-            Errors = errors ?? [new ApiFieldError(null, "ERROR", message)],
+            ErrorCode = resolvedCode,
+            TraceId = traceId,
+            Errors = errors ?? [new ApiFieldError(null, resolvedCode, message)],
         };
+    }
+
+    public static ApiResponse<T> Fail(
+        string message,
+        string errorCode,
+        string? traceId = null)
+    {
+        return Fail(message, null, errorCode, traceId);
     }
 }
