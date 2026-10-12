@@ -8,6 +8,7 @@ import type {
   PatientSocialHistory,
   PatientReproductiveHistory,
   NcdRiskAssessment,
+  PhilHealthPatientProfile,
 } from '../../services/clinicService';
 
 import ClinicalHistoryTab from './ClinicalHistoryTab';
@@ -19,6 +20,8 @@ export type ProfileSubTab = 'surgical' | 'lifestyle' | 'reproductive' | 'cardiom
 
 export interface HealthProfilesTabProps {
   patient: ClinicPatient;
+  profile?: PhilHealthPatientProfile;
+  initialProfile?: PhilHealthPatientProfile;
   surgicalHistories?: PatientSurgicalHistory[];
   initialSurgicalHistories?: PatientSurgicalHistory[];
   socialHistory?: PatientSocialHistory;
@@ -32,6 +35,8 @@ export interface HealthProfilesTabProps {
 
 export default function HealthProfilesTab({
   patient,
+  profile,
+  initialProfile,
   surgicalHistories,
   initialSurgicalHistories,
   socialHistory,
@@ -128,6 +133,7 @@ export default function HealthProfilesTab({
           <ClinicalHistoryTab
             patient={patient}
             initialSurgicalHistories={surg}
+            initialProfile={profile || initialProfile}
             onRefreshChart={onRefreshChart}
           />
         )}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { theme } from '@constants/theme';
-import { ThemedText, Button, Input, Icon, EmptyState, ErrorState, SkeletonList, Modal, Badge } from '@ui';
+import { ThemedText, Button, Input, Icon, EmptyState, ErrorState, SkeletonList, Modal, Badge, ValidatedDateInput, Icd10AutocompleteInput, validateDateString } from '@ui';
 import { Alert } from '@utils/feedback';
 import { usePhilHealthCatalog } from '@utils/usePhilHealthCatalog';
 import {
@@ -13,17 +13,79 @@ import {
   CreatePatientProblemPayload,
   PatientAllergyRecord,
   CreatePatientAllergyPayload,
+  PhilHealthPatientProfile,
+  PhilHealthConditionEntry,
 } from '../../services/clinicService';
 
-interface ClinicalHistoryTabProps {
+export const PHILHEALTH_MDISEASES_CONDITIONS: { code: string; description: string }[] = [
+  { code: '001', description: 'Allergy' },
+  { code: '002', description: 'Asthma' },
+  { code: '003', description: 'Cancer' },
+  { code: '004', description: 'Cerebrovascular Disease' },
+  { code: '005', description: 'Coronary Artery Disease' },
+  { code: '006', description: 'Diabetes Mellitus' },
+  { code: '007', description: 'Emphysema' },
+  { code: '008', description: 'Epilepsy/Seizure Disorder' },
+  { code: '009', description: 'Hepatitis' },
+  { code: '010', description: 'Hyperlipidemia' },
+  { code: '011', description: 'Hypertension' },
+  { code: '012', description: 'Peptic Ulcer' },
+  { code: '013', description: 'Pneumonia' },
+  { code: '014', description: 'Thyroid Disease' },
+  { code: '015', description: 'Pulmonary Tuberculosis' },
+  { code: '016', description: 'Extrapulmonary Tuberculosis' },
+  { code: '017', description: 'Urinary Tract Infection' },
+  { code: '018', description: 'Mental Illness' },
+  { code: '998', description: 'Others' },
+];
+
+export const defaultPhilHealthProfile: PhilHealthPatientProfile = {
+  medicalHistories: [],
+  surgicalHistories: [],
+  familyHistories: [],
+  isSmoker: false,
+  isAlcoholDrinker: false,
+  illDrugUser: false,
+  isSexuallyActive: false,
+  childImmunizations: [],
+  youngWomanImmunizations: [],
+  pregnantWomanImmunizations: [],
+  elderlyImmunizations: [],
+  otherImmunizations: [],
+  menstrualApplicable: false,
+  isMenopause: false,
+  pregnancyApplicable: false,
+  gravida: 0,
+  para: 0,
+  fullTermCount: 0,
+  prematureCount: 0,
+  abortionCount: 0,
+  livingChildrenCount: 0,
+  preEclampsiaHypertension: false,
+  familyPlanningCounseling: false,
+  skinId: '1',
+  heentId: '1',
+  chestId: '1',
+  heartId: '1',
+  abdomenId: '1',
+  neuroId: '1',
+  rectalId: '1',
+  guId: '1',
+  genSurveyId: '1',
+  ncdAnswers: {},
+};
+
+export interface ClinicalHistoryTabProps {
   patient: ClinicPatient;
   initialSurgicalHistories?: PatientSurgicalHistory[];
+  initialProfile?: PhilHealthPatientProfile;
   onRefreshChart?: () => void;
 }
 
 export default function ClinicalHistoryTab({
   patient,
   initialSurgicalHistories,
+  initialProfile,
   onRefreshChart,
 }: ClinicalHistoryTabProps) {
   // Surgical History State
@@ -75,8 +137,228 @@ export default function ClinicalHistoryTab({
   const [allergyNotes, setAllergyNotes] = useState('');
   const [allergyFormError, setAllergyFormError] = useState<string | null>(null);
 
+  // PhilHealth Profile & Statutory Medical/Family History State
+  const [profile, setProfile] = useState<PhilHealthPatientProfile | null>(initialProfile || null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+
+  // Personal Medical History
+  const [selectedMedicalCodes, setSelectedMedicalCodes] = useState<Set<string>>(() => {
+    if (initialProfile?.medicalHistories?.length) {
+      return new Set(initialProfile.medicalHistories.map((m) => m.code));
+    }
+    if (patient.chronicConditions) {
+      const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
+      const codes = new Set<string>();
+      for (const item of PHILHEALTH_MDISEASES_CONDITIONS) {
+        if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
+          codes.add(item.code);
+        }
+      }
+      return codes;
+    }
+    return new Set();
+  });
+  const [medicalOtherDesc, setMedicalOtherDesc] = useState(() => {
+    return initialProfile?.medicalHistories?.find((m) => m.code === '998')?.specificDesc || '';
+  });
+  const [personalNotes, setPersonalNotes] = useState(() => {
+    return initialProfile?.medicalHistoryNotes || '';
+  });
+
+  // Family Medical History
+  const [selectedFamilyCodes, setSelectedFamilyCodes] = useState<Set<string>>(() => {
+    if (initialProfile?.familyHistories?.length) {
+      return new Set(initialProfile.familyHistories.map((f) => f.code));
+    }
+    return new Set();
+  });
+  const [familyOtherDesc, setFamilyOtherDesc] = useState(() => {
+    return initialProfile?.familyHistories?.find((f) => f.code === '998')?.specificDesc || '';
+  });
+  const [familyNotes, setFamilyNotes] = useState(() => {
+    return initialProfile?.familyHistoryNotes || '';
+  });
+
   // Catalog for past medical conditions (lib_mdiseases)
   const { items: diseaseCatalog } = usePhilHealthCatalog('lib_mdiseases');
+  const activeCatalogConditions = diseaseCatalog && diseaseCatalog.length > 0
+    ? diseaseCatalog
+        .filter((item) => item.code !== '999' && item.description.toLowerCase() !== 'none')
+        .map((item) => ({ code: item.code, description: item.description }))
+    : PHILHEALTH_MDISEASES_CONDITIONS;
+  const availableConditions = activeCatalogConditions;
+
+  const seedFromProfile = useCallback((data: PhilHealthPatientProfile) => {
+    if (data.medicalHistories && Array.isArray(data.medicalHistories)) {
+      const medCodes = new Set(data.medicalHistories.map((m) => m.code));
+      setSelectedMedicalCodes(medCodes);
+      const otherMed = data.medicalHistories.find((m) => m.code === '998');
+      if (otherMed?.specificDesc) {
+        setMedicalOtherDesc(otherMed.specificDesc);
+      }
+    } else if (patient.chronicConditions) {
+      const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
+      const codes = new Set<string>();
+      for (const item of activeCatalogConditions) {
+        if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
+          codes.add(item.code);
+        }
+      }
+      if (codes.size > 0) {
+        setSelectedMedicalCodes(codes);
+      }
+    }
+
+    if (data.familyHistories && Array.isArray(data.familyHistories)) {
+      const famCodes = new Set(data.familyHistories.map((f) => f.code));
+      setSelectedFamilyCodes(famCodes);
+      const otherFam = data.familyHistories.find((f) => f.code === '998');
+      if (otherFam?.specificDesc) {
+        setFamilyOtherDesc(otherFam.specificDesc);
+      }
+    }
+
+    if (data.medicalHistoryNotes) {
+      setPersonalNotes(data.medicalHistoryNotes);
+    }
+    if (data.familyHistoryNotes) {
+      setFamilyNotes(data.familyHistoryNotes);
+    }
+  }, [patient.chronicConditions, activeCatalogConditions]);
+
+  const fetchProfile = useCallback(async () => {
+    setLoadingProfile(true);
+    setProfileError(null);
+    try {
+      const [data, err] = await clinicService.getPhilHealthPatientProfile(patient.id);
+      if (data) {
+        setProfile(data);
+        seedFromProfile(data);
+      } else if (patient.chronicConditions) {
+        const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
+        const codes = new Set<string>();
+        for (const item of activeCatalogConditions) {
+          if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
+            codes.add(item.code);
+          }
+        }
+        if (codes.size > 0) {
+          setSelectedMedicalCodes(codes);
+        }
+      }
+    } catch {
+      if (patient.chronicConditions) {
+        const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
+        const codes = new Set<string>();
+        for (const item of activeCatalogConditions) {
+          if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
+            codes.add(item.code);
+          }
+        }
+        if (codes.size > 0) {
+          setSelectedMedicalCodes(codes);
+        }
+      }
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, [patient.id, patient.chronicConditions, seedFromProfile, activeCatalogConditions]);
+
+  useEffect(() => {
+    if (initialProfile) {
+      setProfile(initialProfile);
+      seedFromProfile(initialProfile);
+    } else {
+      fetchProfile();
+    }
+  }, [fetchProfile, initialProfile, seedFromProfile]);
+
+  const toggleMedicalCondition = (code: string) => {
+    setSelectedMedicalCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) {
+        next.delete(code);
+        if (code === '998') {
+          setMedicalOtherDesc('');
+        }
+      } else {
+        next.add(code);
+      }
+      return next;
+    });
+    setProfileSuccess(false);
+  };
+
+  const toggleFamilyCondition = (code: string) => {
+    setSelectedFamilyCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) {
+        next.delete(code);
+        if (code === '998') {
+          setFamilyOtherDesc('');
+        }
+      } else {
+        next.add(code);
+      }
+      return next;
+    });
+    setProfileSuccess(false);
+  };
+
+  const handleSaveMedicalAndFamilyHistory = async () => {
+    setSavingProfile(true);
+    setProfileError(null);
+    setProfileSuccess(false);
+
+    const medicalHistories: PhilHealthConditionEntry[] = Array.from(selectedMedicalCodes).map((code) => {
+      const match = activeCatalogConditions.find((c) => c.code === code);
+      const desc = code === '998' ? (medicalOtherDesc.trim() || 'Others') : (match?.description || code);
+      return {
+        code,
+        specificDesc: desc,
+      };
+    });
+
+    const familyHistories: PhilHealthConditionEntry[] = Array.from(selectedFamilyCodes).map((code) => {
+      const match = activeCatalogConditions.find((c) => c.code === code);
+      const desc = code === '998' ? (familyOtherDesc.trim() || 'Others') : (match?.description || code);
+      return {
+        code,
+        specificDesc: desc,
+      };
+    });
+
+    const updatedProfile: PhilHealthPatientProfile = {
+      ...(profile || defaultPhilHealthProfile),
+      medicalHistories,
+      familyHistories,
+      medicalHistoryNotes: personalNotes.trim() || undefined,
+      familyHistoryNotes: familyNotes.trim() || undefined,
+    };
+
+    try {
+      const [saved, err] = await clinicService.updatePhilHealthPatientProfile(patient.id, updatedProfile);
+      if (err) {
+        setProfileError(err.message || 'Failed to save medical & family history.');
+        Alert.alert('Error', err.message || 'Failed to save medical & family history.');
+      } else {
+        if (saved) {
+          setProfile(saved);
+        }
+        setProfileSuccess(true);
+        Alert.alert('Success', 'Medical & family history saved successfully.');
+        onRefreshChart?.();
+      }
+    } catch (e: any) {
+      setProfileError(e.message || 'An unexpected error occurred while saving.');
+      Alert.alert('Error', e.message || 'An unexpected error occurred while saving.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const fetchSurgicalHistories = useCallback(async () => {
     setLoading(true);
@@ -161,6 +443,11 @@ export default function ClinicalHistoryTab({
     }
     if (!surgeryDate.trim()) {
       setFormError('Surgery date is required (YYYY-MM-DD).');
+      return;
+    }
+    const surgeryDateValidation = validateDateString(surgeryDate, { boundaryMode: 'pastOrToday' });
+    if (!surgeryDateValidation.isValid) {
+      setFormError(surgeryDateValidation.errorMessage || 'Invalid surgery date (must be past or today).');
       return;
     }
 
@@ -252,6 +539,13 @@ export default function ClinicalHistoryTab({
     if (!problemTitle.trim()) {
       setProblemFormError('Problem diagnosis description is required.');
       return;
+    }
+    if (problemOnsetDate && problemOnsetDate.trim()) {
+      const onsetValidation = validateDateString(problemOnsetDate, { boundaryMode: 'pastOrToday' });
+      if (!onsetValidation.isValid) {
+        setProblemFormError(onsetValidation.errorMessage || 'Invalid onset date (must be past or today).');
+        return;
+      }
     }
 
     setSavingProblem(true);
@@ -367,10 +661,6 @@ export default function ClinicalHistoryTab({
     );
   };
 
-  const knownConditions = (patient.chronicConditions || '')
-    .split(',')
-    .map((c) => c.trim())
-    .filter(Boolean);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -533,45 +823,178 @@ export default function ClinicalHistoryTab({
         )}
       </View>
 
-      {/* SECTION 3: Chronic & Statutory Past Medical Conditions */}
+      {/* SECTION 3: Interactive Personal Past Medical History (lib_mdiseases) */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View style={styles.iconTitleRow}>
             <Icon name="check" size={theme.sizes.iconMd} color={theme.colors.primary} />
-            <ThemedText variant="h3">Statutory Medical Conditions (lib_mdiseases)</ThemedText>
+            <ThemedText variant="h3">Past Medical History (Personal - lib_mdiseases)</ThemedText>
           </View>
           <Badge
-            label={`${knownConditions.length} Documented`}
-            variant={knownConditions.length > 0 ? 'primary' : 'outline'}
+            label={`${selectedMedicalCodes.size} Selected`}
+            variant={selectedMedicalCodes.size > 0 ? 'primary' : 'outline'}
           />
         </View>
 
         <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.sectionDescription}>
-          PhilHealth statutory conditions for 1:1 Yakap MEDHIST transmittal.
+          PhilHealth statutory conditions (001–018, 998 Others) for 1:1 Yakap MEDHIST transmittal.
         </ThemedText>
 
-        {knownConditions.length > 0 ? (
-          <View style={styles.chipsWrap}>
-            {knownConditions.map((condition, idx) => (
-              <View key={idx} style={styles.conditionChip}>
-                <Icon name="check" size={theme.fontSizes.sm} color={theme.colors.primary} />
-                <ThemedText variant="smallBold" color={theme.colors.primary}>
-                  {condition}
+        <View style={styles.chipsWrap}>
+          {availableConditions.map((cond) => {
+            const isSelected = selectedMedicalCodes.has(cond.code);
+            return (
+              <Pressable
+                key={`personal-${cond.code}`}
+                onPress={() => toggleMedicalCondition(cond.code)}
+                accessibilityRole="button"
+                accessibilityLabel={`Toggle personal ${cond.description}`}
+                style={[
+                  styles.toggleChip,
+                  isSelected && styles.toggleChip_active,
+                ]}
+              >
+                <Icon
+                  name={isSelected ? 'check' : 'plus'}
+                  size={theme.fontSizes.sm}
+                  color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                />
+                <ThemedText
+                  variant="smallBold"
+                  color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                >
+                  {cond.description}
                 </ThemedText>
-              </View>
-            ))}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {selectedMedicalCodes.has('998') ? (
+          <View style={styles.otherInputRow}>
+            <Input
+              label="Specific Description for Other Medical Condition *"
+              value={medicalOtherDesc}
+              onChangeText={setMedicalOtherDesc}
+              placeholder="e.g. Systemic Lupus Erythematosus, Chronic Kidney Disease"
+            />
           </View>
-        ) : (
-          <View style={styles.emptyNoticeStrip}>
-            <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-            <ThemedText variant="small" color={theme.colors.textMuted}>
-              No chronic statutory conditions recorded for this patient.
-            </ThemedText>
-          </View>
-        )}
+        ) : null}
+
+        <View style={styles.notesRow}>
+          <Input
+            label="Personal Medical History Notes"
+            value={personalNotes}
+            onChangeText={setPersonalNotes}
+            placeholder="Clinical notes, disease severity, onset context..."
+            multiline
+            numberOfLines={2}
+          />
+        </View>
       </View>
 
-      {/* SECTION 4: Relational Surgical Procedure History */}
+      {/* SECTION 4: Interactive Family Medical History (lib_mdiseases) */}
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.iconTitleRow}>
+            <Icon name="heartPulse" size={theme.sizes.iconMd} color={theme.colors.primary} />
+            <ThemedText variant="h3">Family Medical History (lib_mdiseases)</ThemedText>
+          </View>
+          <Badge
+            label={`${selectedFamilyCodes.size} Selected`}
+            variant={selectedFamilyCodes.size > 0 ? 'primary' : 'outline'}
+          />
+        </View>
+
+        <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.sectionDescription}>
+          Hereditary and familial risk factors mapped to PhilHealth statutory conditions.
+        </ThemedText>
+
+        <View style={styles.chipsWrap}>
+          {availableConditions.map((cond) => {
+            const isSelected = selectedFamilyCodes.has(cond.code);
+            return (
+              <Pressable
+                key={`family-${cond.code}`}
+                onPress={() => toggleFamilyCondition(cond.code)}
+                accessibilityRole="button"
+                accessibilityLabel={`Toggle family ${cond.description}`}
+                style={[
+                  styles.toggleChip,
+                  isSelected && styles.toggleChip_active,
+                ]}
+              >
+                <Icon
+                  name={isSelected ? 'check' : 'plus'}
+                  size={theme.fontSizes.sm}
+                  color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                />
+                <ThemedText
+                  variant="smallBold"
+                  color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                >
+                  {cond.description}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {selectedFamilyCodes.has('998') ? (
+          <View style={styles.otherInputRow}>
+            <Input
+              label="Specific Description for Other Family Condition *"
+              value={familyOtherDesc}
+              onChangeText={setFamilyOtherDesc}
+              placeholder="e.g. Familial Hypercholesterolemia, Polycystic Kidney Disease"
+            />
+          </View>
+        ) : null}
+
+        <View style={styles.notesRow}>
+          <Input
+            label="Family Medical History Notes"
+            value={familyNotes}
+            onChangeText={setFamilyNotes}
+            placeholder="Pedigree notes, affected 1st-degree relatives, age of onset..."
+            multiline
+            numberOfLines={2}
+          />
+        </View>
+      </View>
+
+      {/* SECTION 5: Save Profile Persistence Action */}
+      <View style={styles.persistenceCard}>
+        {profileError ? (
+          <View style={styles.formErrorBanner}>
+            <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+            <ThemedText variant="small" color={theme.colors.emergencyText}>
+              {profileError}
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {profileSuccess ? (
+          <View style={styles.successBanner}>
+            <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.successText} />
+            <ThemedText variant="small" color={theme.colors.successText}>
+              Medical &amp; family history saved successfully to PhilHealth profile.
+            </ThemedText>
+          </View>
+        ) : null}
+
+        <View style={styles.saveActionRow}>
+          <Button
+            title="Save Medical & Family History"
+            variant="primary"
+            icon="check"
+            loading={savingProfile}
+            onPress={handleSaveMedicalAndFamilyHistory}
+          />
+        </View>
+      </View>
+
+      {/* SECTION 6: Relational Surgical Procedure History */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View style={styles.iconTitleRow}>
@@ -698,10 +1121,12 @@ export default function ClinicalHistoryTab({
             placeholder="e.g. Appendectomy, Cesarean Section"
           />
 
-          <Input
-            label="Surgery Date (YYYY-MM-DD) *"
+          <ValidatedDateInput
+            label="Surgery Date (YYYY-MM-DD)"
+            required
             value={surgeryDate}
             onChangeText={setSurgeryDate}
+            boundaryMode="pastOrToday"
             placeholder="YYYY-MM-DD"
           />
 
@@ -773,25 +1198,29 @@ export default function ClinicalHistoryTab({
             </View>
           ) : null}
 
-          <Input
-            label="ICD-10 Code *"
-            value={problemIcd10}
-            onChangeText={setProblemIcd10}
-            placeholder="e.g. I10, E11.9, J45.909"
-            autoCapitalize="characters"
+          <Icd10AutocompleteInput
+            selectedCode={problemIcd10}
+            selectedTitle={problemTitle}
+            onSelect={(code, desc) => {
+              setProblemIcd10(code);
+              setProblemTitle(desc);
+              setProblemFormError(null);
+            }}
+            onClear={() => {
+              setProblemIcd10('');
+              setProblemTitle('');
+            }}
+            onTitleChange={(title) => {
+              setProblemTitle(title);
+            }}
+            required
           />
 
-          <Input
-            label="Problem Title / Diagnosis Description *"
-            value={problemTitle}
-            onChangeText={setProblemTitle}
-            placeholder="e.g. Essential (primary) hypertension"
-          />
-
-          <Input
+          <ValidatedDateInput
             label="Onset Date (YYYY-MM-DD)"
             value={problemOnsetDate}
             onChangeText={setProblemOnsetDate}
+            boundaryMode="pastOrToday"
             placeholder="YYYY-MM-DD"
           />
 
@@ -936,6 +1365,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.radii.full,
+  },
+  toggleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderLight,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.full,
+  },
+  toggleChip_active: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+  },
+  otherInputRow: {
+    marginTop: theme.spacing.xs,
+  },
+  notesRow: {
+    marginTop: theme.spacing.xs,
+  },
+  persistenceCard: {
+    gap: theme.spacing.sm,
+  },
+  saveActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
   },
   emptyNoticeStrip: {
     flexDirection: 'row',

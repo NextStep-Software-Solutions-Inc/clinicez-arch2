@@ -11,8 +11,9 @@ import {
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
 import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
-import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList } from '@ui';
+import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString } from '@ui';
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
+import * as DocumentPicker from 'expo-document-picker';
 import {
   PatientSummarySpine,
   PatientChartModal,
@@ -48,6 +49,8 @@ import StructuredAllergyIntakeModal, {
   AllergyPillList,
   CreateAllergyRequest,
 } from '../../components/patient/StructuredAllergyIntakeModal';
+import EditPatientModal from '../../components/patient/EditPatientModal';
+import { formatLongAge } from '../../utils/age';
 
 import {
   clinicService,
@@ -137,6 +140,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [philHealthProfileModalVisible, setPhilHealthProfileModalVisible] = useState(false);
   const [selectedPatientForProfile, setSelectedPatientForProfile] = useState<ClinicPatient | null>(null);
 
+  // Edit Patient Demographics state
+  const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
+  const [patientToEdit, setPatientToEdit] = useState<ClinicPatient | null>(null);
+
   // Lab Slip & External Results Interoperability state
   const [selectedSlip, setSelectedSlip] = useState<LabOrderSlipData | null>(null);
   const [slipModalVisible, setSlipModalVisible] = useState(false);
@@ -155,6 +162,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [docRecordType, setDocRecordType] = useState('OutsideChestXRay');
   const [docFileType, setDocFileType] = useState<'PDF' | 'Photo'>('PDF');
   const [docNotes, setDocNotes] = useState('');
+  const [docDate, setDocDate] = useState(new Date().toISOString().split('T')[0]);
+  const [pickedDocFile, setPickedDocFile] = useState<{
+    name: string;
+    size?: number;
+    uri: string;
+    mimeType?: string;
+    file?: any;
+  } | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [verifyingAttachmentId, setVerifyingAttachmentId] = useState<string | null>(null);
 
@@ -207,6 +222,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
     if (!formFirstName.trim() || !formLastName.trim() || !formPhone.trim() || !formDob.trim()) {
       Alert.alert('Missing details', 'First name, last name, date of birth and phone number are required.');
+      return;
+    }
+
+    const dobValidation = validateDateString(formDob, { boundaryMode: 'pastOrToday' });
+    if (!dobValidation.isValid) {
+      Alert.alert('Invalid Date of Birth', dobValidation.errorMessage || 'Please enter a valid date of birth not in the future.');
       return;
     }
 
@@ -303,6 +324,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormLastName('');
     setFormMiddleName('');
     setFormDob('');
+    setFormGender('Male');
+    setFormCivilStatus('Single');
     setFormPhone('');
     setFormEmail('');
     setFormAddress('');
@@ -394,6 +417,20 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     fetchPatients();
   };
 
+  const handleOpenEditDemographics = (patient: ClinicPatient) => {
+    setPatientToEdit(patient);
+    setEditPatientModalVisible(true);
+  };
+
+  const handlePatientDemographicsSaved = (updated: ClinicPatient) => {
+    setPatients((prev) =>
+      prev ? prev.map((p) => (p.id === updated.id ? updated : p)) : [updated]
+    );
+    if (selectedPatient?.id === updated.id) {
+      setSelectedPatient(updated);
+    }
+  };
+
   const handleVerifyAttachment = async (attachmentId: string, isApproved: boolean) => {
     setVerifyingAttachmentId(attachmentId);
     const rejectionReason = !isApproved ? 'Document illegible or missing official physician signature/stamp.' : undefined;
@@ -430,6 +467,36 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/jpeg', 'image/png'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      setPickedDocFile({
+        name: asset.name,
+        size: asset.size,
+        uri: asset.uri,
+        mimeType: asset.mimeType || (asset.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'),
+        file: (asset as any).file,
+      });
+      if (!docTitle.trim()) {
+        const cleanName = asset.name.replace(/\.[^/.]+$/, '');
+        setDocTitle(cleanName);
+      }
+      if (asset.name.toLowerCase().endsWith('.pdf')) {
+        setDocFileType('PDF');
+      } else {
+        setDocFileType('Photo');
+      }
+    } catch (err: any) {
+      Alert.alert('File Selection Error', err?.message || 'Could not pick file.');
+    }
+  };
+
   const handleUploadDocument = async () => {
     if (!selectedPatient) return;
     if (!docTitle.trim()) {
@@ -437,7 +504,58 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       return;
     }
 
+    const docDateValidation = validateDateString(docDate, { boundaryMode: 'pastOrToday' });
+    if (!docDateValidation.isValid) {
+      Alert.alert('Invalid Document Date', docDateValidation.errorMessage || 'Please enter a valid document date not in the future.');
+      return;
+    }
+
+    const strictlyFormattedDocDate = (docDateValidation.formattedDate || new Date().toISOString().split('T')[0]).split('T')[0];
+
     setUploadingDoc(true);
+
+    if (pickedDocFile) {
+      try {
+        const formData = new FormData();
+        formData.append('PatientId', selectedPatient.id);
+        formData.append('RecordType', docRecordType);
+        formData.append('Title', docTitle.trim());
+        if (docNotes.trim()) formData.append('Notes', docNotes.trim());
+        formData.append('DocumentDate', strictlyFormattedDocDate);
+
+        if (pickedDocFile.file) {
+          formData.append('File', pickedDocFile.file);
+        } else {
+          formData.append('File', {
+            uri: pickedDocFile.uri,
+            name: pickedDocFile.name,
+            type: pickedDocFile.mimeType || 'application/octet-stream',
+          } as any);
+        }
+
+        const [newAtt, err] = await clinicService.uploadRecordAttachmentFile(formData);
+        setUploadingDoc(false);
+
+        if (newAtt) {
+          setPatientAttachments((prev) => [newAtt, ...prev]);
+          setUploadDocModalVisible(false);
+          setPickedDocFile(null);
+          setDocTitle('');
+          setDocNotes('');
+          setDocDate(new Date().toISOString().split('T')[0]);
+          notify.success('Document attached to the patient record.');
+          return;
+        } else if (err) {
+          notify.error(err.message || 'The server rejected this document upload.');
+          return;
+        }
+      } catch (uploadErr: any) {
+        setUploadingDoc(false);
+        notify.error(uploadErr?.message || 'Failed to upload document file.');
+        return;
+      }
+    }
+
     const payload = {
       patientId: selectedPatient.id,
       recordType: docRecordType,
@@ -446,7 +564,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       contentType: docFileType === 'PDF' ? 'application/pdf' : 'image/jpeg',
       fileSizeBytes: 1024 * 450,
       storageUri: `tenants/${selectedPatient.tenantId}/clinics/${selectedPatient.clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
-      documentDate: new Date().toISOString(),
+      documentDate: strictlyFormattedDocDate,
       notes: docNotes.trim() || undefined,
       uploadedByStaffName: currentName || undefined,
       encryptionAlgorithm: 'AES-256-GCM',
@@ -459,8 +577,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     if (newAtt) {
       setPatientAttachments((prev) => [newAtt, ...prev]);
       setUploadDocModalVisible(false);
+      setPickedDocFile(null);
       setDocTitle('');
       setDocNotes('');
+      setDocDate(new Date().toISOString().split('T')[0]);
       notify.success('Document attached to the patient record.');
     } else if (!shouldQueueOffline(err?.status ?? 0)) {
       notify.error(err?.message || 'The server rejected this document.');
@@ -468,8 +588,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       const queuedAtt = await offlineSyncService.enqueueAttachment(payload, currentName || undefined);
       setPatientAttachments((prev) => [queuedAtt, ...prev]);
       setUploadDocModalVisible(false);
+      setPickedDocFile(null);
       setDocTitle('');
       setDocNotes('');
+      setDocDate(new Date().toISOString().split('T')[0]);
       Alert.alert('Saved on this device', 'The document is queued and will upload automatically once the connection is back.');
     }
   };
@@ -717,8 +839,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       ) : (
         <View style={styles.list}>
           {filteredPatients.map((item) => {
+            const ageDisplay = item.dateOfBirth
+              ? formatLongAge(item.dateOfBirth)
+              : (item.age !== undefined && item.age !== null ? `${item.age} yrs` : null);
             const demographics = [
-              item.age !== undefined && item.age !== null ? `${item.age} yrs` : null,
+              ageDisplay,
               item.gender,
               item.civilStatus,
               item.bloodType ? `Blood type ${item.bloodType}` : null,
@@ -794,6 +919,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
                 <View style={styles.actionRow}>
                   <Button title="View chart" variant="outline" size="sm" icon="clipboard" onPress={() => handleOpenChart(item)} />
+                  <Button
+                    title="Edit Demographics"
+                    variant="outline"
+                    size="sm"
+                    icon="edit"
+                    onPress={() => handleOpenEditDemographics(item)}
+                  />
                   <Button
                     title="PhilHealth"
                     variant="outline"
@@ -1000,14 +1132,50 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.inputLabel}>Date of Birth (YYYY-MM-DD) *</ThemedText>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="1990-01-01"
-                    placeholderTextColor={theme.colors.textMuted}
+                  <ValidatedDateInput
+                    label="Date of Birth (YYYY-MM-DD)"
+                    required
                     value={formDob}
                     onChangeText={setFormDob}
+                    boundaryMode="pastOrToday"
+                    placeholder="YYYY-MM-DD"
                   />
+                </View>
+              </View>
+
+              {/* Sex / Gender Selector */}
+              <View>
+                <ThemedText style={styles.inputLabel}>Sex / Gender *</ThemedText>
+                <View style={styles.categoryRow}>
+                  {(['Male', 'Female', 'Other'] as const).map((gender) => (
+                    <Pressable
+                      key={gender}
+                      style={[styles.categoryPill, formGender === gender && styles.categoryPillActive]}
+                      onPress={() => setFormGender(gender)}
+                    >
+                      <ThemedText style={[styles.categoryPillText, formGender === gender && styles.categoryPillTextActive]}>
+                        {gender}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* Civil Status Selector */}
+              <View>
+                <ThemedText style={styles.inputLabel}>Civil Status</ThemedText>
+                <View style={styles.categoryRow}>
+                  {(['Single', 'Married', 'Widowed', 'Separated'] as const).map((status) => (
+                    <Pressable
+                      key={status}
+                      style={[styles.categoryPill, formCivilStatus === status && styles.categoryPillActive]}
+                      onPress={() => setFormCivilStatus(status)}
+                    >
+                      <ThemedText style={[styles.categoryPillText, formCivilStatus === status && styles.categoryPillTextActive]}>
+                        {status}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
                 </View>
               </View>
 
@@ -1203,6 +1371,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             handleOpenChart(selectedPatient);
           }
         }}
+        onPatientUpdated={handlePatientDemographicsSaved}
+      />
+
+      {/* Edit Patient Demographics Modal */}
+      <EditPatientModal
+        visible={editPatientModalVisible}
+        patient={patientToEdit}
+        onClose={() => {
+          setEditPatientModalVisible(false);
+          setPatientToEdit(null);
+        }}
+        onSaved={handlePatientDemographicsSaved}
       />
 
       {/* Lab Order Slip Modal with Verifiable QR Code & Upload Token */}
@@ -1417,6 +1597,15 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 />
               </View>
 
+              <ValidatedDateInput
+                label="Document Date (YYYY-MM-DD)"
+                required
+                value={docDate}
+                onChangeText={setDocDate}
+                boundaryMode="pastOrToday"
+                placeholder="YYYY-MM-DD"
+              />
+
               <View>
                 <ThemedText style={styles.inputLabel}>Document / Record Classification</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
@@ -1455,6 +1644,44 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     </Pressable>
                   ))}
                 </View>
+              </View>
+
+              <View>
+                <ThemedText style={styles.inputLabel}>File Attachment (PDF, JPEG, PNG)</ThemedText>
+                {pickedDocFile ? (
+                  <View style={styles.pickedFileBox}>
+                    <View style={styles.pickedFileInfo}>
+                      <Icon
+                        name={pickedDocFile.name.toLowerCase().endsWith('.pdf') ? 'file' : 'paperclip'}
+                        size={theme.sizes.iconMd}
+                        color={theme.colors.primary}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <ThemedText variant="captionBold" color={theme.colors.text} numberOfLines={1}>
+                          {pickedDocFile.name}
+                        </ThemedText>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          {pickedDocFile.size ? `${(pickedDocFile.size / 1024).toFixed(1)} KB` : 'Ready to upload'}
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <Pressable style={styles.changeFileBtn} onPress={handlePickDocument}>
+                        <ThemedText variant="captionBold" color={theme.colors.primary}>Change</ThemedText>
+                      </Pressable>
+                      <Pressable style={styles.removeFileBtn} onPress={() => setPickedDocFile(null)}>
+                        <ThemedText variant="captionBold" color={theme.colors.emergencyText}>Clear</ThemedText>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <Pressable style={styles.pickFileBtn} onPress={handlePickDocument}>
+                    <Icon name="upload" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                    <ThemedText variant="captionBold" color={theme.colors.primary}>
+                      Select Document File (PDF, JPEG, PNG)
+                    </ThemedText>
+                  </Pressable>
+                )}
               </View>
 
               <View>
@@ -2008,6 +2235,50 @@ const styles = StyleSheet.create({
     color: theme.colors.textInverted,
     fontWeight: '700',
     fontSize: theme.fontSizes.xs,
+  },
+  pickedFileBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    borderRadius: theme.radii.md,
+    gap: theme.spacing.sm,
+  },
+  pickedFileInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flex: 1,
+  },
+  changeFileBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+  },
+  removeFileBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.emergencyBg,
+    borderWidth: 1,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  pickFileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.md,
   },
   categoryRow: {
     flexDirection: 'row',

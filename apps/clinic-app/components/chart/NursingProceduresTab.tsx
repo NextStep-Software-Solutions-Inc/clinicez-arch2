@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState, Input, Button, Modal } from '../ui';
+import { ThemedText, Badge, Icon, EmptyState, Input, Button, Modal, ValidatedDateInput, validateDateString } from '../ui';
 import { notify } from '@utils/feedback';
 import { useStaff } from '../../context/StaffContext';
 import {
@@ -507,6 +507,13 @@ export function ProcedureExecutionModal({
 
   const handleComplete = async () => {
     if (!procedure) return;
+    if (expirationDate.trim()) {
+      const expValidation = validateDateString(expirationDate, { boundaryMode: 'futureOrToday' });
+      if (!expValidation.isValid) {
+        notify.error(expValidation.errorMessage || 'Invalid medication/vaccine expiry date (must be today or future).');
+        return;
+      }
+    }
     setSubmitting(true);
     const preVitals = {
       systolicBp: preSys ? Number(preSys) : undefined,
@@ -644,11 +651,12 @@ export function ProcedureExecutionModal({
               />
             </View>
             <View style={styles.inputHalf}>
-              <Input
+              <ValidatedDateInput
                 label="Expiry Date (YYYY-MM-DD)"
                 value={expirationDate}
                 onChangeText={setExpirationDate}
-                placeholder="e.g. 2027-12-31"
+                boundaryMode="futureOrToday"
+                placeholder="YYYY-MM-DD"
               />
             </View>
           </View>

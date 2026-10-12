@@ -40,6 +40,8 @@ import {
   HealthProfilesTab,
   ExternalDocumentVaultTab,
 } from '../../components/chart';
+import EditPatientModal from '../../components/patient/EditPatientModal';
+import { formatLongAge } from '../../utils/age';
 import {
   InlinePhysicalExamCard,
   DEFAULT_PHYSICAL_EXAM_NORMAL,
@@ -319,6 +321,7 @@ export default function ConsultationsScreen() {
   // Diagnostic Lab Orders & In-Clinic Procedures
   const [orderedLabs, setOrderedLabs] = useState<string[]>([]);
   const [orderedProcedures, setOrderedProcedures] = useState<string[]>([]);
+  const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
 
   // New Prescription Form State
   const [showAddRx, setShowAddRx] = useState(false);
@@ -1548,10 +1551,14 @@ export default function ConsultationsScreen() {
     loadQueue();
   };
 
+  const patientAgeString = patientRecord?.dateOfBirth
+    ? formatLongAge(patientRecord.dateOfBirth)
+    : (patientRecord ? `${patientRecord.age} yrs` : null);
+
   const patientMeta = selectedPatient
     ? [
         `Ticket ${selectedPatient.queueNumber}`,
-        patientRecord ? `${patientRecord.age} yrs, ${patientRecord.gender}` : null,
+        patientRecord ? `${patientAgeString ? `${patientAgeString}, ` : ''}${patientRecord.gender}` : null,
         selectedPatient.chiefComplaint ? `Chief complaint: ${selectedPatient.chiefComplaint}` : null,
       ]
         .filter(Boolean)
@@ -2907,6 +2914,7 @@ export default function ConsultationsScreen() {
                 activeAtc={philHealthAtc}
                 loading={contextLoading}
                 onPressRefresh={() => loadPatientContext(selectedPatient)}
+                onPressEdit={() => setEditPatientModalVisible(true)}
               />
             </View>
 
@@ -3378,6 +3386,19 @@ export default function ConsultationsScreen() {
             placeholder="e.g. Verbal readback confirmed with the laboratory. Repeat serum potassium ordered."
           />
         </Modal>
+
+        {/* Edit Patient Demographics Modal */}
+        <EditPatientModal
+          visible={editPatientModalVisible}
+          patient={patientRecord}
+          onClose={() => setEditPatientModalVisible(false)}
+          onSaved={(updated) => {
+            setPatientRecord(updated);
+            if (selectedPatient) {
+              loadPatientContext(selectedPatient);
+            }
+          }}
+        />
       </ScrollView>
     </ResponsiveLayout>
   );

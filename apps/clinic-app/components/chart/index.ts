@@ -39,3 +39,9 @@ export { default as ClinicalHistoryTab } from './ClinicalHistoryTab';
 export { default as LifestyleSocialTab } from './LifestyleSocialTab';
 export { default as ReproductiveHealthTab } from './ReproductiveHealthTab';
 export { default as CardiometabolicRiskTab } from './CardiometabolicRiskTab';
+
+export { default as AdministerVaccineModal } from './AdministerVaccineModal';
+export type { AdministerVaccineModalProps } from './AdministerVaccineModal';
+
+export { default as HistoricalVaccineModal } from './HistoricalVaccineModal';
+export type { HistoricalVaccineModalProps } from './HistoricalVaccineModal';

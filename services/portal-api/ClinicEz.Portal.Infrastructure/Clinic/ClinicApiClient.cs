@@ -1,76 +1,128 @@
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Common;
+using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Requests;
+using ClinicEz.Shared.Interoperability;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Portal.Infrastructure.Clinic;
 
+/// <summary>
+/// Interop-backed client that routes YAKAP transmittal operations to clinic facilities over the Interop Hub
+/// using the <c>yakap.transmittal.requested</c> request/reply pattern. Replaces direct HTTP calls.
+/// </summary>
 public sealed class ClinicApiClient : IClinicApiClient
 {
-    private readonly HttpClient _httpClient;
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(45);
+    private readonly IInteropRequestClient _requestClient;
+    private readonly IApplicationDbContext _dbContext;
     private readonly ILogger<ClinicApiClient> _logger;
     private readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true }.UseStrictStringEnums();
 
-    public ClinicApiClient(HttpClient httpClient, ILogger<ClinicApiClient> logger)
+    public ClinicApiClient(
+        IInteropRequestClient requestClient,
+        IApplicationDbContext dbContext,
+        ILogger<ClinicApiClient> logger)
     {
-        _httpClient = httpClient;
+        _requestClient = requestClient;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
-    private HttpRequestMessage CreateRequest(HttpMethod method, string path, string tenantId, Guid? branchId = null)
+    private async Task<Party> ResolveClinicPartyAsync(string tenantId, Guid branchId, CancellationToken ct)
     {
-        var request = new HttpRequestMessage(method, path);
-        request.Headers.TryAddWithoutValidation("X-Tenant-Id", tenantId);
-        if (branchId.HasValue)
-        {
-            request.Headers.TryAddWithoutValidation("X-Branch-Id", branchId.Value.ToString());
-        }
-        return request;
+        // Try to locate the Clinic facility operating inside this branch
+        var facility = await _dbContext.Facilities
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => !f.IsDeleted && f.FacilityType == FacilityType.Clinic &&
+                (f.BranchId == branchId || f.Id == branchId), ct);
+
+        var facilityId = facility?.Id ?? branchId;
+        var resolvedTenant = facility?.TenantId.ToString() ?? (!string.IsNullOrWhiteSpace(tenantId) ? tenantId : string.Empty);
+        return Party.ForFacility(resolvedTenant, facilityId.ToString(), FacilityType.Clinic);
     }
 
-    private async Task<ApiResponse<T>> SendAsync<T>(
-        HttpRequestMessage request,
+    private async Task<Party> ResolveClinicPartyForTransmittalAsync(string tenantId, Guid? branchId, CancellationToken ct)
+    {
+        if (branchId.HasValue && branchId.Value != Guid.Empty)
+        {
+            return await ResolveClinicPartyAsync(tenantId, branchId.Value, ct);
+        }
+
+        // Fallback: look up the tenant's first active clinic facility
+        if (Guid.TryParse(tenantId, out var tGuid))
+        {
+            var facility = await _dbContext.Facilities
+                .AsNoTracking()
+                .FirstOrDefaultAsync(f => !f.IsDeleted && f.TenantId == tGuid && f.FacilityType == FacilityType.Clinic, ct);
+            if (facility != null)
+            {
+                return Party.ForFacility(facility.TenantId.ToString(), facility.Id.ToString(), FacilityType.Clinic);
+            }
+        }
+
+        return Party.ForFacility(tenantId, (branchId ?? Guid.Empty).ToString(), FacilityType.Clinic);
+    }
+
+    private async Task<ApiResponse<T>> SendInteropAsync<T>(
+        Party to,
+        string method,
+        string path,
+        string? query,
+        string? body,
         string operationDescription,
         CancellationToken ct)
     {
+        var payload = new YakapTransmittalRequestedPayload
+        {
+            Method = method,
+            Path = path,
+            Query = query,
+            Body = body
+        };
+
         try
         {
-            using var response = await _httpClient.SendAsync(request, ct);
+            var reply = await _requestClient.RequestAsync<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>(
+                InteropTypes.YakapTransmittalRequested,
+                InteropTypes.YakapTransmittalResponded,
+                Party.Portal,
+                to,
+                payload,
+                Timeout,
+                ct);
 
-            if (!response.IsSuccessStatusCode)
+            if (string.IsNullOrWhiteSpace(reply.Body))
             {
-                var err = await response.Content.ReadAsStringAsync(ct);
-                _logger.LogError("Failed to {Operation} from clinic-api. Status: {Status}, Content: {Error}",
-                    operationDescription, response.StatusCode, err);
-                return ApiResponse<T>.Fail($"Clinic API returned {(int)response.StatusCode} ({response.StatusCode}): {err}");
+                return ApiResponse<T>.Fail($"Clinic Interop returned status {reply.StatusCode} with empty body.");
             }
 
-            var result = await response.Content.ReadFromJsonAsync<ApiResponse<T>>(_jsonOptions, ct);
-            return result ?? ApiResponse<T>.Fail("Invalid JSON response from Clinic API");
+            var result = JsonSerializer.Deserialize<ApiResponse<T>>(reply.Body, _jsonOptions);
+            return result ?? ApiResponse<T>.Fail("Invalid JSON response from Clinic Interop.");
         }
-        catch (HttpRequestException ex)
+        catch (InteropRequestTimeoutException ex)
         {
-            _logger.LogError(ex, "Network error communicating with Clinic API at {BaseAddress} during {Operation}",
-                _httpClient.BaseAddress, operationDescription);
-            return ApiResponse<T>.Fail($"Unable to connect to Clinic API at {_httpClient.BaseAddress} ({ex.Message}). Please check if the Clinic API service is running and properly configured.");
+            _logger.LogError(ex, "Timeout communicating with Clinic Interop ({To}) during {Operation}",
+                to.Address, operationDescription);
+            return ApiResponse<T>.Fail($"Request to Clinic Interop timed out after {ex.Timeout.TotalSeconds}s (correlation {ex.CorrelationId}). Please ensure the clinic service is running and connected to the Interop Hub.");
         }
-        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            _logger.LogError(ex, "Timeout communicating with Clinic API at {BaseAddress} during {Operation}",
-                _httpClient.BaseAddress, operationDescription);
-            return ApiResponse<T>.Fail($"Request to Clinic API timed out at {_httpClient.BaseAddress}.");
+            throw;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error communicating with Clinic API at {BaseAddress} during {Operation}",
-                _httpClient.BaseAddress, operationDescription);
-            return ApiResponse<T>.Fail($"Unexpected error calling Clinic API: {ex.Message}");
+            _logger.LogError(ex, "Unexpected error communicating with Clinic Interop ({To}) during {Operation}",
+                to.Address, operationDescription);
+            return ApiResponse<T>.Fail($"Unexpected error calling Clinic Interop: {ex.Message}");
         }
     }
 
@@ -82,12 +134,13 @@ public sealed class ClinicApiClient : IClinicApiClient
         DateTime? endDate,
         CancellationToken ct = default)
     {
-        var url = $"api/v1/yakap/encounters/eligible?reportTagging={Uri.EscapeDataString(reportTagging)}&branchId={branchId}";
-        if (startDate.HasValue) url += $"&startDate={startDate.Value:O}";
-        if (endDate.HasValue) url += $"&endDate={endDate.Value:O}";
+        var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
+        var query = $"reportTagging={Uri.EscapeDataString(reportTagging)}&branchId={branchId}";
+        if (startDate.HasValue) query += $"&startDate={startDate.Value:O}";
+        if (endDate.HasValue) query += $"&endDate={endDate.Value:O}";
 
-        using var request = CreateRequest(HttpMethod.Get, url, tenantId, branchId);
-        return await SendAsync<List<PortalEligibleYakapEncounterDto>>(request, "get eligible encounters", ct);
+        return await SendInteropAsync<List<PortalEligibleYakapEncounterDto>>(
+            to, "GET", "encounters/eligible", query, null, "get eligible encounters", ct);
     }
 
     public async Task<ApiResponse<IReadOnlyList<PortalYakapTransmittalDto>>> GetTransmittalsAsync(
@@ -97,12 +150,13 @@ public sealed class ClinicApiClient : IClinicApiClient
         string? reportTagging,
         CancellationToken ct = default)
     {
-        var url = $"api/v1/yakap/transmittals?branchId={branchId}";
-        if (!string.IsNullOrWhiteSpace(status)) url += $"&status={Uri.EscapeDataString(status)}";
-        if (!string.IsNullOrWhiteSpace(reportTagging)) url += $"&reportTagging={Uri.EscapeDataString(reportTagging)}";
+        var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
+        var query = $"branchId={branchId}";
+        if (!string.IsNullOrWhiteSpace(status)) query += $"&status={Uri.EscapeDataString(status)}";
+        if (!string.IsNullOrWhiteSpace(reportTagging)) query += $"&reportTagging={Uri.EscapeDataString(reportTagging)}";
 
-        using var request = CreateRequest(HttpMethod.Get, url, tenantId, branchId);
-        return await SendAsync<IReadOnlyList<PortalYakapTransmittalDto>>(request, "get transmittals", ct);
+        return await SendInteropAsync<IReadOnlyList<PortalYakapTransmittalDto>>(
+            to, "GET", "transmittals", query, null, "get transmittals", ct);
     }
 
     public async Task<ApiResponse<PortalYakapTransmittalDto>> GetTransmittalByIdAsync(
@@ -110,8 +164,9 @@ public sealed class ClinicApiClient : IClinicApiClient
         Guid id,
         CancellationToken ct = default)
     {
-        using var request = CreateRequest(HttpMethod.Get, $"api/v1/yakap/transmittals/{id}", tenantId);
-        return await SendAsync<PortalYakapTransmittalDto>(request, $"get transmittal {id}", ct);
+        var to = await ResolveClinicPartyForTransmittalAsync(tenantId, null, ct);
+        return await SendInteropAsync<PortalYakapTransmittalDto>(
+            to, "GET", $"transmittals/{id}", null, null, $"get transmittal {id}", ct);
     }
 
     public async Task<ApiResponse<string>> GetTransmittalRawXmlAsync(
@@ -119,8 +174,9 @@ public sealed class ClinicApiClient : IClinicApiClient
         Guid id,
         CancellationToken ct = default)
     {
-        using var request = CreateRequest(HttpMethod.Get, $"api/v1/yakap/transmittals/{id}/xml", tenantId);
-        return await SendAsync<string>(request, $"get transmittal XML {id}", ct);
+        var to = await ResolveClinicPartyForTransmittalAsync(tenantId, null, ct);
+        return await SendInteropAsync<string>(
+            to, "GET", $"transmittals/{id}/xml", null, null, $"get transmittal XML {id}", ct);
     }
 
     public async Task<ApiResponse<PortalYakapTransmittalDto>> CreateTransmittalAsync(
@@ -129,16 +185,17 @@ public sealed class ClinicApiClient : IClinicApiClient
         PortalCreateYakapTransmittalRequest requestPayload,
         CancellationToken ct = default)
     {
-        using var request = CreateRequest(HttpMethod.Post, "api/v1/yakap/transmittals", tenantId, branchId);
-        request.Content = JsonContent.Create(new
+        var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
+        var body = JsonSerializer.Serialize(new
         {
             ConsultationEncounterIds = requestPayload.ConsultationEncounterIds,
             ReportTagging = requestPayload.ReportTagging,
             EffectiveYear = requestPayload.EffectiveYear,
             BranchId = branchId
-        });
+        }, _jsonOptions);
 
-        return await SendAsync<PortalYakapTransmittalDto>(request, "create transmittal", ct);
+        return await SendInteropAsync<PortalYakapTransmittalDto>(
+            to, "POST", "transmittals", null, body, "create transmittal", ct);
     }
 
     public async Task<ApiResponse<PortalYakapValidationResultDto>> ValidateTransmittalAsync(
@@ -146,8 +203,9 @@ public sealed class ClinicApiClient : IClinicApiClient
         Guid id,
         CancellationToken ct = default)
     {
-        using var request = CreateRequest(HttpMethod.Post, $"api/v1/yakap/transmittals/{id}/validate", tenantId);
-        return await SendAsync<PortalYakapValidationResultDto>(request, $"validate transmittal {id}", ct);
+        var to = await ResolveClinicPartyForTransmittalAsync(tenantId, null, ct);
+        return await SendInteropAsync<PortalYakapValidationResultDto>(
+            to, "POST", $"transmittals/{id}/validate", null, null, $"validate transmittal {id}", ct);
     }
 
     public async Task<ApiResponse<PortalYakapSubmissionResultDto>> SubmitTransmittalAsync(
@@ -156,7 +214,8 @@ public sealed class ClinicApiClient : IClinicApiClient
         Guid id,
         CancellationToken ct = default)
     {
-        using var request = CreateRequest(HttpMethod.Post, $"api/v1/yakap/transmittals/{id}/submit", tenantId, branchId);
-        return await SendAsync<PortalYakapSubmissionResultDto>(request, $"submit transmittal {id}", ct);
+        var to = await ResolveClinicPartyAsync(tenantId, branchId, ct);
+        return await SendInteropAsync<PortalYakapSubmissionResultDto>(
+            to, "POST", $"transmittals/{id}/submit", null, null, $"submit transmittal {id}", ct);
     }
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { theme } from '@constants/theme';
-import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList } from '@ui';
+import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString } from '@ui';
 import { Alert } from '@utils/feedback';
 import {
   clinicService,
@@ -108,6 +108,13 @@ export default function LifestyleSocialTab({
   const packYears = calcPacks > 0 && calcYears > 0 ? (calcPacks * calcYears).toFixed(1) : '0';
 
   const handleSave = async () => {
+    if (smokingStoppedDate && smokingStoppedDate.trim()) {
+      const stopDateValidation = validateDateString(smokingStoppedDate, { boundaryMode: 'pastOrToday' });
+      if (!stopDateValidation.isValid) {
+        Alert.alert('Invalid Date Stopped', stopDateValidation.errorMessage || 'Please enter a valid smoking cessation date not in the future.');
+        return;
+      }
+    }
     setSaving(true);
     try {
       const payload: UpdatePatientSocialHistoryPayload = {
@@ -252,11 +259,12 @@ export default function LifestyleSocialTab({
               </ThemedText>
             </View>
 
-            <Input
+            <ValidatedDateInput
               label="Date Stopped (if former smoker)"
               placeholder="YYYY-MM-DD"
               value={smokingStoppedDate}
               onChangeText={setSmokingStoppedDate}
+              boundaryMode="pastOrToday"
             />
           </View>
         )}

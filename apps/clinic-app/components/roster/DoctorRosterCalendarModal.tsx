@@ -13,6 +13,8 @@ import {
   Input,
   Icon,
   Badge,
+  ValidatedDateInput,
+  validateDateString,
 } from '@ui';
 import { notify, Alert } from '@utils/feedback';
 import { theme } from '../../constants/theme';
@@ -308,6 +310,21 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
     }
     if (!leaveStartDate || !leaveEndDate) {
       notify.error('Please enter both start date and end date (YYYY-MM-DD).');
+      return;
+    }
+
+    const startCheck = validateDateString(leaveStartDate);
+    if (!startCheck.isValid) {
+      notify.error(startCheck.errorMessage || 'Invalid start date.');
+      return;
+    }
+    const endCheck = validateDateString(leaveEndDate);
+    if (!endCheck.isValid) {
+      notify.error(endCheck.errorMessage || 'Invalid end date.');
+      return;
+    }
+    if (leaveEndDate < leaveStartDate) {
+      notify.error('End date cannot be earlier than start date.');
       return;
     }
 
@@ -683,19 +700,21 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
 
               <View style={styles.formRow}>
                 <View style={styles.flexFill}>
-                  <Input
+                  <ValidatedDateInput
                     label="Start Date"
                     placeholder="YYYY-MM-DD"
                     value={leaveStartDate}
                     onChangeText={setLeaveStartDate}
+                    boundaryMode="any"
                   />
                 </View>
                 <View style={styles.flexFill}>
-                  <Input
+                  <ValidatedDateInput
                     label="End Date"
                     placeholder="YYYY-MM-DD"
                     value={leaveEndDate}
                     onChangeText={setLeaveEndDate}
+                    boundaryMode="any"
                   />
                 </View>
               </View>

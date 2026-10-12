@@ -105,18 +105,8 @@ public static class DependencyInjection
         // Register Xendit Typed HTTP Client with Resilience
         services.AddXenditClient();
 
-        // Register Clinic API Typed HTTP Client with Resilience
-        services.AddHttpClient<ClinicEz.Portal.Application.Interfaces.IClinicApiClient, ClinicEz.Portal.Infrastructure.Clinic.ClinicApiClient>((sp, client) =>
-        {
-            var clinicUrl = (configuration["Services:ClinicApiUrl"] ?? configuration["ClinicSettings:ClinicApiUrl"] ?? "http://clinic-api:8080").TrimEnd('/');
-            if (clinicUrl.EndsWith("/api/v1", StringComparison.OrdinalIgnoreCase))
-            {
-                clinicUrl = clinicUrl[..^7].TrimEnd('/');
-            }
-            client.BaseAddress = new Uri($"{clinicUrl}/");
-            client.Timeout = TimeSpan.FromSeconds(60);
-        })
-        .AddStandardResilienceHandler();
+        // Register Clinic API Interop Client (routes over the Interop Hub)
+        services.AddScoped<ClinicEz.Portal.Application.Interfaces.IClinicApiClient, ClinicEz.Portal.Infrastructure.Clinic.ClinicApiClient>();
 
         // Add Hangfire
         services.AddHangfire(config => config
@@ -152,7 +142,8 @@ public static class DependencyInjection
             .Respond<PhilHealthConfigRequestedPayload, PhilHealthConfigRespondedPayload, PhilHealthConfigRequestedResponder>(
                 InteropTypes.PhilHealthConfigRequested, InteropTypes.PhilHealthConfigResponded)
             .Respond<PhilHealthConfigPayload, PhilHealthConfigUpsertRespondedPayload, PhilHealthConfigUpsertRequestedResponder>(
-                InteropTypes.PhilHealthConfigUpsertRequested, InteropTypes.PhilHealthConfigUpsertResponded));
+                InteropTypes.PhilHealthConfigUpsertRequested, InteropTypes.PhilHealthConfigUpsertResponded)
+            .HandleReply(InteropTypes.YakapTransmittalResponded));
 
         // The PhilHealth proxy asks the portal for the credentials it holds; the key ring protects them at rest.
         services.AddSingleton<IPhilHealthSecretProtector, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSecretProtector>();

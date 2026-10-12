@@ -140,3 +140,33 @@ public sealed record PhilHealthConfigUpsertRespondedPayload
     /// <summary>A short, secret-free explanation when not <see cref="Succeeded"/>.</summary>
     public string? Message { get; init; }
 }
+
+/// <summary>
+/// Portal -> clinic (<c>InteropTypes.YakapTransmittalRequested</c>). Request payload for YAKAP transmittal operations
+/// (encounters, transmittals, compilation, DTD validation, XML retrieval, and PhilHealth submission).
+/// </summary>
+public sealed record YakapTransmittalRequestedPayload
+{
+    /// <summary>HTTP method, upper case (GET or POST).</summary>
+    public string Method { get; init; } = "GET";
+
+    /// <summary>Relative operation path below <c>api/v1/yakap/</c> (e.g. <c>encounters/eligible</c>, <c>transmittals</c>, <c>transmittals/{id}/xml</c>).</summary>
+    public string Path { get; init; } = string.Empty;
+
+    /// <summary>Query string without leading <c>?</c> (e.g. <c>reportTagging=2&amp;branchId=...</c>).</summary>
+    public string? Query { get; init; }
+
+    /// <summary>JSON body for POST operations (e.g. CreateTransmittalPayload).</summary>
+    public string? Body { get; init; }
+}
+
+/// <summary>Clinic -> portal (<c>InteropTypes.YakapTransmittalResponded</c>). Result of the YAKAP operation.</summary>
+public sealed record YakapTransmittalRespondedPayload
+{
+    public int StatusCode { get; init; } = 200;
+    public string? ContentType { get; init; } = "application/json";
+
+    /// <summary>Response body text (JSON), carrying the usual ApiResponse envelope.</summary>
+    public string? Body { get; init; }
+}
+

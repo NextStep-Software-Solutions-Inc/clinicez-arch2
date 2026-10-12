@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, Skeleton } from '../ui';
 import type { BadgeVariant } from '../ui/Badge';
+import { formatLongAge } from '../../utils/age';
 import type {
   ClinicPatient,
   PatientChart,
@@ -462,7 +463,7 @@ export default function PatientSummarySpine({
             </ThemedText>
             <ThemedText variant="caption" color={theme.colors.borderDark}>•</ThemedText>
             <ThemedText variant="caption" color={theme.colors.textSecondary}>
-              {age} yrs, {gender}
+              {dob ? formatLongAge(dob) : `${age} yrs`}, {gender}
             </ThemedText>
             {dob ? (
               <>
@@ -486,8 +487,16 @@ export default function PatientSummarySpine({
         {/* Right Action / Expand toggle */}
         <View style={styles.topActionsRow}>
           {onPressEdit ? (
-            <Pressable onPress={onPressEdit} style={styles.actionIconBtn}>
-              <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+            <Pressable
+              onPress={onPressEdit}
+              style={styles.editDemographicsBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Edit Demographics"
+            >
+              <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
+              <ThemedText variant="captionBold" color={theme.colors.primary}>
+                Edit Demographics
+              </ThemedText>
             </Pressable>
           ) : null}
           {onPressRefresh ? (
@@ -950,6 +959,17 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xs,
     borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surfaceSubtle,
+  },
+  editDemographicsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
   },
   toggleCollapseBtn: {
     flexDirection: 'row',

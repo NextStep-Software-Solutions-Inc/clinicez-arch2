@@ -23,7 +23,7 @@ namespace ClinicEz.Clinic.Infrastructure.Context;
 ///   explicitly means "system scope".</item>
 /// </list>
 /// </summary>
-public sealed class ClinicContext : IClinicContext
+public sealed class ClinicContext : IClinicContext, IClinicScopeSetter
 {
     /// <summary>Sentinel for "no authenticated clinic". Never matches any real clinic row.</summary>
     public static readonly Guid UnauthenticatedClinicId = new("00000000-0000-0000-0000-00000000dead");
@@ -33,11 +33,20 @@ public sealed class ClinicContext : IClinicContext
 
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
+    private (string TenantId, Guid ClinicId, Guid? BranchId)? _explicitScope;
 
     public ClinicContext(IHttpContextAccessor httpContextAccessor, IConfiguration configuration)
     {
         _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
+    }
+
+    public void Enter(string tenantId, Guid clinicId, Guid? branchId = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        if (clinicId == Guid.Empty || clinicId == UnauthenticatedClinicId)
+            throw new ArgumentException("A real clinic id is required.", nameof(clinicId));
+        _explicitScope = (tenantId, clinicId, branchId);
     }
 
     private HttpContext? Http => _httpContextAccessor.HttpContext;
@@ -57,6 +66,8 @@ public sealed class ClinicContext : IClinicContext
     {
         get
         {
+            if (_explicitScope is { } explicitScope) return explicitScope.TenantId;
+
             var http = Http;
             if (http is null)
             {
@@ -85,6 +96,8 @@ public sealed class ClinicContext : IClinicContext
     {
         get
         {
+            if (_explicitScope is { } explicitScope) return explicitScope.ClinicId;
+
             var http = Http;
             if (http is null)
             {
@@ -115,6 +128,8 @@ public sealed class ClinicContext : IClinicContext
     {
         get
         {
+            if (_explicitScope is { } explicitScope && explicitScope.BranchId.HasValue) return explicitScope.BranchId.Value;
+
             var http = Http;
             if (http is null)
             {
@@ -145,6 +160,8 @@ public sealed class ClinicContext : IClinicContext
     {
         get
         {
+            if (_explicitScope is not null) return ClinicPermissions.InternalService;
+
             var http = Http;
             if (http is null)
             {

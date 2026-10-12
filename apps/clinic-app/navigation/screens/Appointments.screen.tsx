@@ -18,6 +18,8 @@ import {
   EmptyState,
   ErrorState,
   SkeletonList,
+  ValidatedDateInput,
+  validateDateString,
 } from '@ui';
 import type { BadgeVariant } from '@ui';
 import { ResponsiveLayout } from '@layout';
@@ -176,6 +178,11 @@ export default function AppointmentsScreen() {
   const handleBookAppointment = async () => {
     if (!formPatient) {
       notify.error('Select a patient for this appointment.');
+      return;
+    }
+    const dateCheck = validateDateString(formDate, { boundaryMode: 'futureOrToday' });
+    if (!dateCheck.isValid) {
+      notify.error(dateCheck.errorMessage || 'Enter a valid appointment date (today or in the future).');
       return;
     }
     const scheduled = new Date(`${formDate}T${formTime}`);
@@ -480,7 +487,13 @@ export default function AppointmentsScreen() {
 
         <View style={styles.fieldRow}>
           <View style={styles.flexFill}>
-            <Input label="Appointment Date" placeholder="YYYY-MM-DD" value={formDate} onChangeText={setFormDate} />
+            <ValidatedDateInput
+              label="Appointment Date"
+              placeholder="YYYY-MM-DD"
+              value={formDate}
+              onChangeText={setFormDate}
+              boundaryMode="futureOrToday"
+            />
           </View>
           <View style={styles.flexFill}>
             <Input label="Selected Time" placeholder="HH:MM" value={formTime} onChangeText={setFormTime} />

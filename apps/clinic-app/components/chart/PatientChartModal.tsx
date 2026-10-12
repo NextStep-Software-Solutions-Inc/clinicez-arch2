@@ -34,6 +34,8 @@ import NursingProceduresTab from './NursingProceduresTab';
 import StatutoryImmunizationsTab from './StatutoryImmunizationsTab';
 import HealthProfilesTab from './HealthProfilesTab';
 import ExternalDocumentVaultTab from './ExternalDocumentVaultTab';
+import EditPatientModal from '../patient/EditPatientModal';
+import { formatLongAge } from '../../utils/age';
 
 export type ChartTab =
   | 'summary'
@@ -89,6 +91,10 @@ export interface PatientChartModalProps {
   onAdministerVaccine?: (payload: AdministerVaccinePayload) => Promise<void>;
   onRecordHistoricalVaccine?: (payload: RecordHistoricalImmunizationPayload) => Promise<void>;
   onRecordAefi?: (immId: string, payload: RecordAefiPayload) => Promise<void>;
+  /** Callback when patient demographics are updated */
+  onPatientUpdated?: (updated: ClinicPatient) => void;
+  /** Optional callback to trigger external demographics editing */
+  onPressEdit?: () => void;
 }
 
 export default function PatientChartModal({
@@ -113,10 +119,34 @@ export default function PatientChartModal({
   onAdministerVaccine,
   onRecordHistoricalVaccine,
   onRecordAefi,
+  onPatientUpdated,
+  onPressEdit,
 }: PatientChartModalProps) {
   const [internalTab, setInternalTab] = useState<ChartTab>(initialTab);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [editDemographicsVisible, setEditDemographicsVisible] = useState(false);
+  const [currentPatient, setCurrentPatient] = useState<ClinicPatient | null>(patient);
   const { isCompact } = useBreakpoint();
+
+  useEffect(() => {
+    setCurrentPatient(patient);
+  }, [patient]);
+
+  const handleEditPress = () => {
+    if (onPressEdit) {
+      onPressEdit();
+    } else {
+      setEditDemographicsVisible(true);
+    }
+  };
+
+  const handleDemographicsSaved = (updated: ClinicPatient) => {
+    setCurrentPatient(updated);
+    onPatientUpdated?.(updated);
+    onRefreshChart?.();
+  };
+
+  const displayPatient = currentPatient || patient;
 
   // Reset tab to initial when modal becomes visible
   useEffect(() => {
@@ -161,37 +191,39 @@ export default function PatientChartModal({
             <View style={styles.headerTitleContainer}>
               <View style={styles.titleRow}>
                 <ThemedText variant="title">Medical chart</ThemedText>
-                {patient ? (
+                {displayPatient ? (
                   <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-                    {patient.fullName}
+                    {displayPatient.fullName}
                   </ThemedText>
                 ) : null}
               </View>
 
-              {patient ? (
+              {displayPatient ? (
                 <View style={styles.headerMetaRow}>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    Code: <ThemedText variant="caption" color={theme.colors.text}>{patient.patientCode || '—'}</ThemedText>
+                    Code: <ThemedText variant="caption" color={theme.colors.text}>{displayPatient.patientCode || '—'}</ThemedText>
                   </ThemedText>
                   <ThemedText variant="caption" color={theme.colors.borderDark}>•</ThemedText>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    {patient.age ? `${patient.age} yrs` : ''}{patient.gender ? `, ${patient.gender}` : ''}
+                    {displayPatient.dateOfBirth
+                      ? `${formatLongAge(displayPatient.dateOfBirth)}, ${displayPatient.gender}`
+                      : `${displayPatient.age ? `${displayPatient.age} yrs, ` : ''}${displayPatient.gender}`}
                   </ThemedText>
-                  {patient.dateOfBirth ? (
+                  {displayPatient.dateOfBirth ? (
                     <>
                       <ThemedText variant="caption" color={theme.colors.borderDark}>•</ThemedText>
                       <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                        DOB: {patient.dateOfBirth}
+                        DOB: {displayPatient.dateOfBirth}
                       </ThemedText>
                     </>
                   ) : null}
-                  {patient.verificationStatus === 'Verified' ? (
+                  {displayPatient.verificationStatus === 'Verified' ? (
                     <Badge label="Verified" variant="success" size="sm" icon="checkCircle" />
                   ) : (
                     <Badge label="Unverified" variant="warning" size="sm" icon="alert" />
                   )}
-                  {patient.bloodType ? (
-                    <Badge label={patient.bloodType} variant="neutral" size="sm" icon="droplet" />
+                  {displayPatient.bloodType ? (
+                    <Badge label={displayPatient.bloodType} variant="neutral" size="sm" icon="droplet" />
                   ) : null}
                 </View>
               ) : null}
@@ -199,6 +231,16 @@ export default function PatientChartModal({
 
             {/* Header Action Controls */}
             <View style={styles.headerActions}>
+              <Pressable
+                onPress={handleEditPress}
+                hitSlop={8}
+                style={({ pressed }) => [styles.actionBtn, pressed && styles.actionBtnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Edit Demographics"
+              >
+                <Icon name="edit" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
+              </Pressable>
+
               {onRefreshChart ? (
                 <Pressable
                   onPress={onRefreshChart}
@@ -242,14 +284,15 @@ export default function PatientChartModal({
           {/* ========================================================================= */}
           {/* PATIENT SUMMARY SPINE (GLANCEABLE 6-ZONE HEADER)                          */}
           {/* ========================================================================= */}
-          {patient && (
+          {displayPatient && (
             <View style={styles.spineWrapper}>
               <PatientSummarySpine
-                patient={patient}
+                patient={displayPatient}
                 chart={patientChart}
                 vitals={patientChart?.vitalsHistory?.[0]}
                 loading={loadingChart}
                 onPressRefresh={onRefreshChart}
+                onPressEdit={handleEditPress}
               />
             </View>
           )}
@@ -346,6 +389,13 @@ export default function PatientChartModal({
           </View>
         </View>
       </View>
+
+      <EditPatientModal
+        visible={editDemographicsVisible}
+        patient={displayPatient}
+        onClose={() => setEditDemographicsVisible(false)}
+        onSaved={handleDemographicsSaved}
+      />
     </RNModal>
   );
 }

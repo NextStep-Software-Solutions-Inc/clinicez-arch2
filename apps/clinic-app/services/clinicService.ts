@@ -2775,6 +2775,9 @@ export interface PhilHealthPatientProfile {
   surgicalHistories: PhilHealthSurgicalEntry[];
   familyHistories: PhilHealthConditionEntry[];
 
+  medicalHistoryNotes?: string;
+  familyHistoryNotes?: string;
+
   isSmoker: boolean;
   cigarettesPerDay?: string;
   isAlcoholDrinker: boolean;

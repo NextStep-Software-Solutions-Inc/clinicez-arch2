@@ -21,4 +21,18 @@ export {
   formatPhilHealthPin,
   validatePhilHealthPinMod11,
 } from './PhilHealthPinInput';
+export {
+  default as ValidatedDateInput,
+  type ValidatedDateInputProps,
+  type DateValidationOptions,
+  type DateValidationResult,
+  formatDateMask,
+  isLeapYear,
+  getDaysInMonth,
+  validateDateString,
+} from './ValidatedDateInput';
+export {
+  default as Icd10AutocompleteInput,
+  type Icd10AutocompleteInputProps,
+} from './Icd10AutocompleteInput';
 

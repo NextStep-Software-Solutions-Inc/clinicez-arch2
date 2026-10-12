@@ -238,3 +238,69 @@ Enhance the Queue management and Consultation workstation to support busy clinic
 - [ ] Doctors can order in-clinic nursing procedures or vaccinations during consultation with queue transition to `PendingProcedure` and handoff back to `ReEvaluation`.
 - [ ] Consultation screen on widescreen desktop ($\ge 1024\text{px}$) supports side-by-side split view of active SOAP notes and longitudinal chart history.
 - [ ] All automated test suites (`dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests` and `bun test apps/clinic-app/tests`) pass with 0 failures.
+
+## 2026-10-12T03:58:40Z
+
+Fix 7 core clinical usability and validation defects across the ClinicEZ EMR workstation in `apps/clinic-app` and `services/clinic-api`: patient demographic editing with missing Sex/Gender fields, long-format age calculation (`Yrs, Months, Weeks, Days`), debounced ICD-10 autocomplete search for structured problems, strict date input validation and bounds constraints, in-chart vaccination administration and historical vaccine modals, resolution of the External Document Vault `documentDate` JSON conversion crash with real file attachments, and integrated personal and family medical history (`lib_mdiseases`).
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Patient Demographic Editing & Missing Sex/Gender Field
+Add an interactive demographic editing workflow accessible from both the persistent `PatientSummarySpine` and the patient card in `Patients.screen.tsx` that communicates with `PUT /api/v1/patients/{id}`. Restore the missing Sex/Gender input field (`Male`, `Female`, `Other`) in both the `Register Walk-In Patient` modal and the `EditPatientModal`. Allow updating First/Middle/Last Name, Suffix, DOB, Sex, Civil Status, Contact Number, Email, Address, Emergency Contact, PhilHealth PIN, Senior/PWD IDs, Blood Type, and Institutional classification.
+
+### R2. Long-Format Age Calculation & Presentation
+Implement a standardized chronological age calculation utility (`formatLongAge`) that computes exact years, months, weeks, and days based on `dateOfBirth` (e.g. `33 yrs, 10 mos, 1 wk, 4 days`, or for infants: `3 mos, 2 wks, 4 days`, or newborns: `12 days`). Display this long-format age consistently across `PatientSummarySpine`, `PatientChartModal` headers, patient registry cards, and consultation headers.
+
+### R3. Debounced Autocomplete ICD-10 Search for Structured Problems
+Replace the plain text inputs in the `Record Clinical Problem` modal (`ClinicalHistoryTab.tsx`) with an interactive autocomplete component powered by `clinicService.searchIcd10(q)` (`lib_icd`). When typing an ICD code or diagnosis term (e.g. `I10` or `hypertension`), display matching suggestions; selecting an item automatically fills both `icd10Code` and `problemTitle` with standard PhilHealth terminology.
+
+### R4. Strict Date Input Validation & Constraints
+Create and deploy a `<ValidatedDateInput>` component across all clinical date inputs in `apps/clinic-app`. The component must enforce `YYYY-MM-DD` masking, reject non-numeric/malformed text (preventing inputs like `2026-10asaasoalkslak`), validate calendar validity (month 1-12, days per month, leap years), and enforce boundary constraints (disallow future dates for DOB, Onset Date, Surgery Date, LMP, and Document Date; require future/valid dates for vaccine Expiration Date).
+
+### R5. In-Chart Vaccination & Immunization Administration Controls
+In `StatutoryImmunizationsTab.tsx`, add prominent `+ Administer Vaccine` and `+ Add Historical Vaccine` action controls. Build `AdministerVaccineModal` supporting PhilHealth cohorts (`lib_immchild`, `lib_immyoungw`, `lib_immpregw`, `lib_immelderly`) with lot/batch number, expiry date, dose sequence, route, site, and administering clinician PRC license. Build `HistoricalVaccineModal` for outside immunizations. Wire both directly to `onAdministerVaccine` and `onRecordHistoricalVaccine` in `PatientChartModal.tsx` and `clinicService`.
+
+### R6. External Document Vault DateOnly Fix & Real File Attachment
+Fix the JSON deserialization error in `Patients.screen.tsx` by formatting `documentDate` as a `DateOnly` string (`YYYY-MM-DD`, e.g. `new Date().toISOString().split('T')[0]`) instead of a full ISO timestamp, eliminating the `Path: $.documentDate` crash. Enhance the upload modal with real file picking (PDF, JPEG, PNG) via Expo DocumentPicker / ImagePicker and dispatch to `/records/attachments/upload` multipart endpoint.
+
+### R7. Personal and Family Medical History Integration
+In `HealthProfilesTab.tsx` and `ClinicalHistoryTab.tsx`, add interactive statutory personal past medical history and family medical history sections mapped to PhilHealth's `lib_mdiseases`. Clinicians must be able to toggle conditions (Hypertension, Diabetes, Asthma, Cancer, CAD, etc.), record free-text clinical notes, and persist the records via `PUT /api/v1/yakap/patients/{id}/profile`, updating both PhilHealth records and the longitudinal EMR chart.
+
+## Acceptance Criteria
+
+### Demographics & Registration
+- [ ] Clinicians can click "Edit Demographics" from `PatientSummarySpine` or the patient card to open `EditPatientModal`.
+- [ ] Sex/Gender is selectable (`Male`, `Female`, `Other`) in both registration and demographic edit modals.
+- [ ] Updating demographics persists to backend `PUT /api/v1/patients/{id}` and immediately updates the patient list and chart spine.
+
+### Age Display
+- [ ] Patient age is rendered in long format (`Yrs, Months, Weeks, Days`) whenever DOB is available.
+- [ ] Handles adults, pediatric patients, infants, and edge cases (leap years) accurately.
+
+### Structured Problems & ICD-10 Search
+- [ ] Typing in the ICD-10 problem modal displays debounced autocomplete suggestions from `clinicService.searchIcd10`.
+- [ ] Selecting a result automatically populates `icd10Code` and `problemTitle`.
+
+### Date Validation
+- [ ] Entering invalid text like `2026-10asaasoalkslak` is blocked; input enforces valid `YYYY-MM-DD`.
+- [ ] Future dates are rejected for DOB, Onset Date, Surgery Date, and LMP.
+
+### Immunization Controls
+- [ ] `StatutoryImmunizationsTab` displays `+ Administer Vaccine` and `+ Add Historical Vaccine` action buttons.
+- [ ] Submitting an administered vaccine creates an immunization record with lot/batch, expiry, and PRC license, updating the immunization list.
+
+### Document Vault Upload
+- [ ] Attaching an external document submits `documentDate` as `YYYY-MM-DD` and successfully saves with no JSON conversion error.
+- [ ] Supports selecting and uploading genuine PDF and image files.
+
+### Medical & Family History
+- [ ] `HealthProfilesTab` allows toggling Personal Past Medical History and Family Medical History conditions from `lib_mdiseases`.
+- [ ] Saved conditions persist to the PhilHealth profile and reflect on the patient chart.
+
+### Quality Gate
+- [ ] All automated test suites (`dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests` and `bun test apps/clinic-app/tests`) pass with 0 failures.
+- [ ] Strict design token audit passes with 0 violations (`node apps/clinic-app/scripts/check-tokens.mjs --strict`).
+- [ ] TypeScript compilation passes with 0 errors (`bun run typecheck:clinic`).

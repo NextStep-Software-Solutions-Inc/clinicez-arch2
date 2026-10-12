@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Modal } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState, Button } from '../ui';
+import AdministerVaccineModal from './AdministerVaccineModal';
+import HistoricalVaccineModal from './HistoricalVaccineModal';
 import type {
   ClinicPatient,
   PatientDemographics,
@@ -66,6 +68,8 @@ export default function StatutoryImmunizationsTab({
   onRefreshChart,
 }: StatutoryImmunizationsTabProps) {
   const [selectedCohort, setSelectedCohort] = useState<string>('ALL');
+  const [administerModalVisible, setAdministerModalVisible] = useState(false);
+  const [historicalModalVisible, setHistoricalModalVisible] = useState(false);
   const [aefiModalVisible, setAefiModalVisible] = useState(false);
   const [targetAefiImm, setTargetAefiImm] = useState<PatientImmunizationRecord | null>(null);
   const [aefiSeverity, setAefiSeverity] = useState<'Mild' | 'Moderate' | 'Severe'>('Moderate');
@@ -117,6 +121,28 @@ export default function StatutoryImmunizationsTab({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      {/* ========================================================================= */}
+      {/* HEADER ACTION CONTROLS (+ Administer Vaccine, + Add Historical Vaccine)   */}
+      {/* ========================================================================= */}
+      <View style={styles.headerActionBar}>
+        <View style={styles.actionButtonsRow}>
+          <Button
+            title="+ Administer Vaccine"
+            variant="primary"
+            icon="plus"
+            size="sm"
+            onPress={() => setAdministerModalVisible(true)}
+          />
+          <Button
+            title="+ Add Historical Vaccine"
+            variant="outline"
+            icon="plus"
+            size="sm"
+            onPress={() => setHistoricalModalVisible(true)}
+          />
+        </View>
+      </View>
+
       {/* ========================================================================= */}
       {/* PHILHEALTH STATUTORY COMPLIANCE BANNER / 999 FALLBACK NOTICE              */}
       {/* ========================================================================= */}
@@ -393,6 +419,44 @@ export default function StatutoryImmunizationsTab({
           </View>
         </View>
       </Modal>
+
+      {/* ========================================================================= */}
+      {/* ADMINISTER VACCINE MODAL (F12)                                            */}
+      {/* ========================================================================= */}
+      <AdministerVaccineModal
+        visible={administerModalVisible}
+        onClose={() => setAdministerModalVisible(false)}
+        patient={patient}
+        patientId={patientId || patient?.id}
+        demographics={demoProp}
+        onAdministerVaccine={async (payload) => {
+          if (onAdministerVaccine) {
+            await onAdministerVaccine(payload);
+          }
+          if (onRefreshChart) {
+            onRefreshChart();
+          }
+        }}
+      />
+
+      {/* ========================================================================= */}
+      {/* HISTORICAL VACCINE MODAL (F13)                                            */}
+      {/* ========================================================================= */}
+      <HistoricalVaccineModal
+        visible={historicalModalVisible}
+        onClose={() => setHistoricalModalVisible(false)}
+        patient={patient}
+        patientId={patientId || patient?.id}
+        demographics={demoProp}
+        onRecordHistoricalVaccine={async (payload) => {
+          if (onRecordHistoricalVaccine) {
+            await onRecordHistoricalVaccine(payload);
+          }
+          if (onRefreshChart) {
+            onRefreshChart();
+          }
+        }}
+      />
     </ScrollView>
   );
 }
@@ -403,6 +467,18 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingBottom: theme.spacing.lg,
+  },
+  headerActionBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
   fallbackNoticeCard: {
     backgroundColor: theme.colors.primarySubtle,

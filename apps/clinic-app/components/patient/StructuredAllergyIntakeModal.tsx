@@ -11,6 +11,7 @@ import Button from '../ui/Button';
 import Badge, { BadgeVariant } from '../ui/Badge';
 import Icon, { IconSlot } from '../ui/Icon';
 import ThemedText from '../ui/ThemedText';
+import ValidatedDateInput, { validateDateString } from '../ui/ValidatedDateInput';
 import { theme } from '../../constants/theme';
 
 export type AllergyCategory = 'Medication' | 'Food' | 'Environmental' | 'Biologic' | 'Other';
@@ -256,6 +257,14 @@ export default function StructuredAllergyIntakeModal({
     if (isDup) {
       setFormError(`"${trimmed}" is already documented in this patient's allergy list.`);
       return;
+    }
+
+    if (onsetDate && onsetDate.trim()) {
+      const onsetValidation = validateDateString(onsetDate, { boundaryMode: 'pastOrToday' });
+      if (!onsetValidation.isValid) {
+        setFormError(onsetValidation.errorMessage || 'Invalid onset date (must be past or today).');
+        return;
+      }
     }
 
     const newAllergy: CreateAllergyRequest = {
@@ -530,11 +539,12 @@ export default function StructuredAllergyIntakeModal({
 
           <View style={styles.notesRow}>
             <View style={styles.flexFill}>
-              <Input
+              <ValidatedDateInput
                 label="Approximate Onset Date"
                 value={onsetDate}
                 onChangeText={setOnsetDate}
-                placeholder="YYYY-MM-DD (e.g. 2021-05-15)"
+                boundaryMode="pastOrToday"
+                placeholder="YYYY-MM-DD"
               />
             </View>
           </View>

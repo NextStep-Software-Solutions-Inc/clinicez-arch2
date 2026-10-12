@@ -1,44 +1,67 @@
 using System;
 using System.Collections.Generic;
-using System.Net;
-using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Clinic;
+using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Requests;
+using ClinicEz.Shared.Interoperability;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Moq.Protected;
 using Xunit;
 
 namespace ClinicEz.Portal.Tests.Clinic;
 
-public class ClinicApiClientTests
+public class ClinicApiClientTests : IDisposable
 {
-    private readonly Mock<HttpMessageHandler> _httpMessageHandlerMock;
+    private readonly ApplicationDbContext _dbContext;
+    private readonly Mock<IInteropRequestClient> _requestClientMock;
     private readonly Mock<ILogger<ClinicApiClient>> _loggerMock;
-    private readonly HttpClient _httpClient;
     private readonly ClinicApiClient _sut;
+    private readonly Guid _tenantId = Guid.NewGuid();
+    private readonly Guid _branchId = Guid.NewGuid();
 
     public ClinicApiClientTests()
     {
-        _httpMessageHandlerMock = new Mock<HttpMessageHandler>();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+
+        _dbContext = new ApplicationDbContext(options);
+        _requestClientMock = new Mock<IInteropRequestClient>();
         _loggerMock = new Mock<ILogger<ClinicApiClient>>();
-        _httpClient = new HttpClient(_httpMessageHandlerMock.Object)
+
+        var facility = new Facility
         {
-            BaseAddress = new Uri("http://clinic-api:8080/")
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            BranchId = _branchId,
+            FacilityType = FacilityType.Clinic,
+            Name = "Metro Clinic",
+            Slug = "metro-clinic"
         };
-        _sut = new ClinicApiClient(_httpClient, _loggerMock.Object);
+        _dbContext.Facilities.Add(facility);
+        _dbContext.SaveChanges();
+
+        _sut = new ClinicApiClient(_requestClientMock.Object, _dbContext, _loggerMock.Object);
+    }
+
+    public void Dispose()
+    {
+        _dbContext.Database.EnsureDeleted();
+        _dbContext.Dispose();
     }
 
     [Fact]
     public async Task GetTransmittalsAsync_ReturnsData_OnSuccess()
     {
         // Arrange
-        var branchId = Guid.NewGuid();
-        var tenantId = "tenant_123";
         var expectedTransmittals = new List<PortalYakapTransmittalDto>
         {
             new(
@@ -56,29 +79,29 @@ public class ClinicApiClientTests
                 CreatedAt: DateTime.UtcNow,
                 TotalItemsCount: 1,
                 Items: new List<PortalYakapTransmittalItemDto>(),
-                BranchId: branchId)
+                BranchId: _branchId)
         };
 
         var apiResponse = ApiResponse<IReadOnlyList<PortalYakapTransmittalDto>>.Success(expectedTransmittals);
         var json = JsonSerializer.Serialize(apiResponse);
 
-        _httpMessageHandlerMock.Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.Is<HttpRequestMessage>(req =>
-                    req.Method == HttpMethod.Get &&
-                    req.RequestUri!.ToString().Contains($"api/v1/yakap/transmittals?branchId={branchId}") &&
-                    req.Headers.Contains("X-Tenant-Id") &&
-                    req.Headers.Contains("X-Branch-Id")),
-                ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
+        _requestClientMock
+            .Setup(c => c.RequestAsync<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>(
+                InteropTypes.YakapTransmittalRequested,
+                InteropTypes.YakapTransmittalResponded,
+                Party.Portal,
+                It.Is<Party>(p => p.Kind == PartyKind.Facility && p.TenantId == _tenantId.ToString()),
+                It.Is<YakapTransmittalRequestedPayload>(req => req.Method == "GET" && req.Path == "transmittals"),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new YakapTransmittalRespondedPayload
             {
-                StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+                StatusCode = 200,
+                Body = json
             });
 
         // Act
-        var result = await _sut.GetTransmittalsAsync(tenantId, branchId, null, null);
+        var result = await _sut.GetTransmittalsAsync(_tenantId.ToString(), _branchId, null, null);
 
         // Assert
         Assert.True(result.Succeeded);
@@ -91,58 +114,66 @@ public class ClinicApiClientTests
     public async Task GetTransmittalsAsync_WhenClinicApiReturnsErrorStatus_ReturnsFailResponse()
     {
         // Arrange
-        var branchId = Guid.NewGuid();
-        _httpMessageHandlerMock.Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
+        var errorResponse = ApiResponse<IReadOnlyList<PortalYakapTransmittalDto>>.Fail("Internal clinic error");
+        var json = JsonSerializer.Serialize(errorResponse);
+
+        _requestClientMock
+            .Setup(c => c.RequestAsync<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>(
+                InteropTypes.YakapTransmittalRequested,
+                InteropTypes.YakapTransmittalResponded,
+                Party.Portal,
+                It.IsAny<Party>(),
+                It.IsAny<YakapTransmittalRequestedPayload>(),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new YakapTransmittalRespondedPayload
             {
-                StatusCode = HttpStatusCode.InternalServerError,
-                Content = new StringContent("Internal server error")
+                StatusCode = 500,
+                Body = json
             });
 
         // Act
-        var result = await _sut.GetTransmittalsAsync("tenant_123", branchId, null, null);
+        var result = await _sut.GetTransmittalsAsync(_tenantId.ToString(), _branchId, null, null);
 
         // Assert
         Assert.False(result.Succeeded);
-        Assert.Contains("500", result.Message);
+        Assert.Contains("Internal clinic error", result.Message);
     }
 
     [Fact]
     public async Task GetTransmittalsAsync_WhenNetworkFails_ReturnsGracefulConnectionErrorMessage()
     {
         // Arrange
-        var branchId = Guid.NewGuid();
-        _httpMessageHandlerMock.Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .ThrowsAsync(new HttpRequestException("Cannot assign requested address (localhost:5245)"));
+        _requestClientMock
+            .Setup(c => c.RequestAsync<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>(
+                InteropTypes.YakapTransmittalRequested,
+                InteropTypes.YakapTransmittalResponded,
+                Party.Portal,
+                It.IsAny<Party>(),
+                It.IsAny<YakapTransmittalRequestedPayload>(),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InteropRequestTimeoutException(InteropTypes.YakapTransmittalRequested, Guid.NewGuid(), TimeSpan.FromSeconds(45)));
 
         // Act
-        var result = await _sut.GetTransmittalsAsync("tenant_123", branchId, null, null);
+        var result = await _sut.GetTransmittalsAsync(_tenantId.ToString(), _branchId, null, null);
 
         // Assert
         Assert.False(result.Succeeded);
-        Assert.Contains("Unable to connect to Clinic API", result.Message);
-        Assert.Contains("http://clinic-api:8080", result.Message);
+        Assert.Contains("timed out", result.Message);
+        Assert.Contains("Interop Hub", result.Message);
     }
 
     [Fact]
     public async Task CreateTransmittalAsync_SendsCorrectPayloadAndReturnsSuccess()
     {
         // Arrange
-        var branchId = Guid.NewGuid();
         var transmittalId = Guid.NewGuid();
         var request = new PortalCreateYakapTransmittalRequest(
             ConsultationEncounterIds: new List<Guid> { Guid.NewGuid() },
             ReportTagging: "2",
             EffectiveYear: "2026",
-            BranchId: branchId);
+            BranchId: _branchId);
 
         var expectedDto = new PortalYakapTransmittalDto(
             Id: transmittalId,
@@ -159,26 +190,28 @@ public class ClinicApiClientTests
             CreatedAt: DateTime.UtcNow,
             TotalItemsCount: 1,
             Items: new List<PortalYakapTransmittalItemDto>(),
-            BranchId: branchId);
+            BranchId: _branchId);
 
         var apiResponse = ApiResponse<PortalYakapTransmittalDto>.Success(expectedDto);
         var json = JsonSerializer.Serialize(apiResponse);
 
-        _httpMessageHandlerMock.Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.Is<HttpRequestMessage>(req =>
-                    req.Method == HttpMethod.Post &&
-                    req.RequestUri!.ToString().Contains("api/v1/yakap/transmittals")),
-                ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
+        _requestClientMock
+            .Setup(c => c.RequestAsync<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload>(
+                InteropTypes.YakapTransmittalRequested,
+                InteropTypes.YakapTransmittalResponded,
+                Party.Portal,
+                It.Is<Party>(p => p.Kind == PartyKind.Facility && p.TenantId == _tenantId.ToString()),
+                It.Is<YakapTransmittalRequestedPayload>(req => req.Method == "POST" && req.Path == "transmittals"),
+                It.IsAny<TimeSpan?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new YakapTransmittalRespondedPayload
             {
-                StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
+                StatusCode = 200,
+                Body = json
             });
 
         // Act
-        var result = await _sut.CreateTransmittalAsync("tenant_123", branchId, request);
+        var result = await _sut.CreateTransmittalAsync(_tenantId.ToString(), _branchId, request);
 
         // Assert
         Assert.True(result.Succeeded);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { theme } from '@constants/theme';
-import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList } from '@ui';
+import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString } from '@ui';
 import { Alert } from '@utils/feedback';
 import {
   clinicService,
@@ -159,6 +159,20 @@ export default function CardiometabolicRiskTab({
   }, [patient.id]);
 
   const handleSaveAssessment = async () => {
+    if (fastingBloodSugarDate && fastingBloodSugarDate.trim()) {
+      const fbsCheck = validateDateString(fastingBloodSugarDate, { boundaryMode: 'pastOrToday' });
+      if (!fbsCheck.isValid) {
+        Alert.alert('Invalid FBS Test Date', fbsCheck.errorMessage || 'Please enter a valid FBS test date not in the future.');
+        return;
+      }
+    }
+    if (totalCholesterolDate && totalCholesterolDate.trim()) {
+      const cholCheck = validateDateString(totalCholesterolDate, { boundaryMode: 'pastOrToday' });
+      if (!cholCheck.isValid) {
+        Alert.alert('Invalid Cholesterol Test Date', cholCheck.errorMessage || 'Please enter a valid cholesterol test date not in the future.');
+        return;
+      }
+    }
     setSaving(true);
     try {
       const payload: SaveNcdRiskAssessmentPayload = {
@@ -530,11 +544,12 @@ export default function CardiometabolicRiskTab({
             />
           </View>
           <View style={styles.gridItem}>
-            <Input
+            <ValidatedDateInput
               label="FBS Test Date"
               placeholder="YYYY-MM-DD"
               value={fastingBloodSugarDate}
               onChangeText={setFastingBloodSugarDate}
+              boundaryMode="pastOrToday"
             />
           </View>
         </View>
@@ -680,11 +695,12 @@ export default function CardiometabolicRiskTab({
             />
           </View>
           <View style={styles.gridItem}>
-            <Input
+            <ValidatedDateInput
               label="Cholesterol Test Date"
               placeholder="YYYY-MM-DD"
               value={totalCholesterolDate}
               onChangeText={setTotalCholesterolDate}
+              boundaryMode="pastOrToday"
             />
           </View>
         </View>

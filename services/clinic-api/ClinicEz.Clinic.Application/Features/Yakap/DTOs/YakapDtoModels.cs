@@ -505,6 +505,8 @@ public sealed record PhilHealthPatientProfileDto
     public List<PhilHealthConditionEntryDto> MedicalHistories { get; init; } = [];
     public List<PhilHealthSurgicalEntryDto> SurgicalHistories { get; init; } = [];
     public List<PhilHealthConditionEntryDto> FamilyHistories { get; init; } = [];
+    public string? MedicalHistoryNotes { get; init; }
+    public string? FamilyHistoryNotes { get; init; }
 
     // Social History
     public bool IsSmoker { get; init; }

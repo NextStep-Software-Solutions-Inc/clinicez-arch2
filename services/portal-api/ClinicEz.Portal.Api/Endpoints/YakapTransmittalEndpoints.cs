@@ -41,6 +41,18 @@ public class YakapTransmittalEndpoints : IEndpoint
         return (true, branch);
     }
 
+    private static async Task<(bool Allowed, string? TenantId)> ValidateUserTenantAccessAsync(
+        string clerkUserId,
+        IApplicationDbContext context)
+    {
+        var tenant = await context.Tenants
+            .FirstOrDefaultAsync(t => !t.IsDeleted && (t.OwnerId == clerkUserId ||
+                context.WorkspaceMembers.Any(s => s.TenantId == t.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active)));
+
+        if (tenant == null) return (false, null);
+        return (true, tenant.Id.ToString());
+    }
+
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/yakap").WithTags("PhilHealth YAKAP Transmittals").RequireAuthorization();
@@ -107,6 +119,7 @@ public class YakapTransmittalEndpoints : IEndpoint
         // 3. Get single transmittal by ID
         group.MapGet("/transmittals/{id:guid}", async (
             Guid id,
+            Guid? branchId,
             HttpContext httpContext,
             IApplicationDbContext context,
             IClinicApiClient clinicClient,
@@ -115,8 +128,21 @@ public class YakapTransmittalEndpoints : IEndpoint
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
 
-            // Default to empty tenant string if not specified, clinic API enforces context
-            var response = await clinicClient.GetTransmittalByIdAsync(string.Empty, id, ct);
+            string tenantId = string.Empty;
+            if (branchId.HasValue && branchId.Value != Guid.Empty)
+            {
+                var (allowed, branch) = await ValidateBranchAccessAsync(branchId.Value, clerkUserId, context);
+                if (!allowed || branch == null) return Results.Forbid();
+                tenantId = branch.TenantId.ToString();
+            }
+            else
+            {
+                var (allowed, userTenantId) = await ValidateUserTenantAccessAsync(clerkUserId, context);
+                if (!allowed || string.IsNullOrEmpty(userTenantId)) return Results.Forbid();
+                tenantId = userTenantId;
+            }
+
+            var response = await clinicClient.GetTransmittalByIdAsync(tenantId, id, ct);
             return response.Succeeded ? Results.Ok(response) : Results.NotFound(response);
         })
         .WithName("GetTransmittalById")
@@ -125,14 +151,30 @@ public class YakapTransmittalEndpoints : IEndpoint
         // 4. Get raw XML for transmittal
         group.MapGet("/transmittals/{id:guid}/xml", async (
             Guid id,
+            Guid? branchId,
             HttpContext httpContext,
+            IApplicationDbContext context,
             IClinicApiClient clinicClient,
             CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
 
-            var response = await clinicClient.GetTransmittalRawXmlAsync(string.Empty, id, ct);
+            string tenantId = string.Empty;
+            if (branchId.HasValue && branchId.Value != Guid.Empty)
+            {
+                var (allowed, branch) = await ValidateBranchAccessAsync(branchId.Value, clerkUserId, context);
+                if (!allowed || branch == null) return Results.Forbid();
+                tenantId = branch.TenantId.ToString();
+            }
+            else
+            {
+                var (allowed, userTenantId) = await ValidateUserTenantAccessAsync(clerkUserId, context);
+                if (!allowed || string.IsNullOrEmpty(userTenantId)) return Results.Forbid();
+                tenantId = userTenantId;
+            }
+
+            var response = await clinicClient.GetTransmittalRawXmlAsync(tenantId, id, ct);
             return response.Succeeded ? Results.Ok(response) : Results.NotFound(response);
         })
         .WithName("GetTransmittalXml")
@@ -180,14 +222,30 @@ public class YakapTransmittalEndpoints : IEndpoint
         // 6. Validate transmittal against DTD schema
         group.MapPost("/transmittals/{id:guid}/validate", async (
             Guid id,
+            Guid? branchId,
             HttpContext httpContext,
+            IApplicationDbContext context,
             IClinicApiClient clinicClient,
             CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
 
-            var response = await clinicClient.ValidateTransmittalAsync(string.Empty, id, ct);
+            string tenantId = string.Empty;
+            if (branchId.HasValue && branchId.Value != Guid.Empty)
+            {
+                var (allowed, branch) = await ValidateBranchAccessAsync(branchId.Value, clerkUserId, context);
+                if (!allowed || branch == null) return Results.Forbid();
+                tenantId = branch.TenantId.ToString();
+            }
+            else
+            {
+                var (allowed, userTenantId) = await ValidateUserTenantAccessAsync(clerkUserId, context);
+                if (!allowed || string.IsNullOrEmpty(userTenantId)) return Results.Forbid();
+                tenantId = userTenantId;
+            }
+
+            var response = await clinicClient.ValidateTransmittalAsync(tenantId, id, ct);
             return response.Succeeded ? Results.Ok(response) : Results.BadRequest(response);
         })
         .WithName("ValidateTransmittal")

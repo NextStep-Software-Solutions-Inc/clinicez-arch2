@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { theme } from '@constants/theme';
-import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList } from '@ui';
+import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString } from '@ui';
 import { Alert } from '@utils/feedback';
 import {
   clinicService,
@@ -125,6 +125,13 @@ export default function ReproductiveHealthTab({
   }
 
   const handleSave = async () => {
+    if (isApplicable && lastMenstrualPeriod && lastMenstrualPeriod.trim()) {
+      const lmpValidation = validateDateString(lastMenstrualPeriod, { boundaryMode: 'pastOrToday' });
+      if (!lmpValidation.isValid) {
+        Alert.alert('Invalid LMP Date', lmpValidation.errorMessage || 'Please enter a valid Last Menstrual Period date not in the future.');
+        return;
+      }
+    }
     setSaving(true);
     try {
       const payload: UpdatePatientReproductiveHistoryPayload = {
@@ -237,11 +244,12 @@ export default function ReproductiveHealthTab({
                 />
               </View>
               <View style={styles.gridItem}>
-                <Input
+                <ValidatedDateInput
                   label="LMP (Last Menstrual Period)"
                   placeholder="YYYY-MM-DD"
                   value={lastMenstrualPeriod}
                   onChangeText={setLastMenstrualPeriod}
+                  boundaryMode="pastOrToday"
                 />
               </View>
             </View>

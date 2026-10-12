@@ -57,7 +57,7 @@ public class SlotAvailabilityServiceTests
     public async Task GetDoctorAvailabilityAsync_RegularShift_GeneratesCorrectSlots()
     {
         using var db = MessagingTestKit.CreateDbContext(_clinicContext);
-        var date = new DateOnly(2026, 10, 12); // Monday
+        var date = new DateOnly(2026, 10, 19); // Monday
 
         var template = new DoctorScheduleTemplate
         {
@@ -89,7 +89,7 @@ public class SlotAvailabilityServiceTests
     public async Task GetDoctorAvailabilityAsync_WithBreaks_MarksBreakSlotsUnavailable()
     {
         using var db = MessagingTestKit.CreateDbContext(_clinicContext);
-        var date = new DateOnly(2026, 10, 12); // Monday
+        var date = new DateOnly(2026, 10, 19); // Monday
 
         var template = new DoctorScheduleTemplate
         {
@@ -131,7 +131,7 @@ public class SlotAvailabilityServiceTests
     public async Task GetDoctorAvailabilityAsync_ApprovedLeave_MarksOverlappingSlotsUnavailable()
     {
         using var db = MessagingTestKit.CreateDbContext(_clinicContext);
-        var date = new DateOnly(2026, 10, 12); // Monday
+        var date = new DateOnly(2026, 10, 19); // Monday
 
         var template = new DoctorScheduleTemplate
         {
@@ -181,7 +181,7 @@ public class SlotAvailabilityServiceTests
     public async Task GetDoctorAvailabilityAsync_UnapprovedLeave_DoesNotBlockSlots()
     {
         using var db = MessagingTestKit.CreateDbContext(_clinicContext);
-        var date = new DateOnly(2026, 10, 12); // Monday
+        var date = new DateOnly(2026, 10, 19); // Monday
 
         var template = new DoctorScheduleTemplate
         {
@@ -225,7 +225,7 @@ public class SlotAvailabilityServiceTests
     public async Task GetDoctorAvailabilityAsync_ExistingAppointment_MarksSlotUnavailable()
     {
         using var db = MessagingTestKit.CreateDbContext(_clinicContext);
-        var date = new DateOnly(2026, 10, 12); // Monday
+        var date = new DateOnly(2026, 10, 19); // Monday
 
         var template = new DoctorScheduleTemplate
         {
@@ -273,7 +273,7 @@ public class SlotAvailabilityServiceTests
     public async Task GetDoctorAvailabilityAsync_CancelledAppointment_DoesNotBlockSlot()
     {
         using var db = MessagingTestKit.CreateDbContext(_clinicContext);
-        var date = new DateOnly(2026, 10, 12); // Monday
+        var date = new DateOnly(2026, 10, 19); // Monday
 
         var template = new DoctorScheduleTemplate
         {
@@ -389,8 +389,8 @@ public class SlotAvailabilityServiceTests
     public async Task GetDoctorAvailabilityAsync_OvernightShift_GeneratesRolloverSlotsNextDay()
     {
         using var db = MessagingTestKit.CreateDbContext(_clinicContext);
-        var sundayDate = new DateOnly(2026, 10, 11);
-        var mondayDate = new DateOnly(2026, 10, 12);
+        var sundayDate = new DateOnly(2026, 10, 18);
+        var mondayDate = new DateOnly(2026, 10, 19);
 
         // Sunday night shift: 22:00 to 02:00 (spans into Monday 00:00 to 02:00)
         var sundayTemplate = new DoctorScheduleTemplate
@@ -561,7 +561,7 @@ public class SlotAvailabilityServiceTests
     public async Task GetDoctorAvailabilityAsync_BreakCollisions_BoundaryContiguity()
     {
         using var db = MessagingTestKit.CreateDbContext(_clinicContext);
-        var date = new DateOnly(2026, 10, 12); // Monday
+        var date = new DateOnly(2026, 10, 19); // Monday
 
         var template = new DoctorScheduleTemplate
         {

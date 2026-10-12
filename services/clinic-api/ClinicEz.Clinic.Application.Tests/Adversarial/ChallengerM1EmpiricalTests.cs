@@ -410,7 +410,7 @@ public class ChallengerM1EmpiricalTests
     {
         var clinicId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();
-        var date = new DateOnly(2026, 10, 12); // Monday
+        var date = new DateOnly(2026, 10, 19); // Monday
 
         var clinicContext = Substitute.For<IClinicContext>();
         clinicContext.ClinicId.Returns(clinicId);

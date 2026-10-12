@@ -42,6 +42,7 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
         services.AddScoped<IClinicContext, ClinicContext>();
+        services.AddScoped<ClinicEz.Clinic.Domain.Interfaces.IClinicScopeSetter>(sp => (ClinicContext)sp.GetRequiredService<IClinicContext>());
 
         services.AddDbContext<ApplicationDbContext>(options =>
         {
@@ -143,6 +144,8 @@ public static class DependencyInjection
             .Handle<ExternalPrescriptionDispensedEvent, ExternalPrescriptionDispensedHandler>(InteropTypes.RxExternalDispensed)
             .Handle<RxStatusChangedPayload, RxStatusChangedHandler>(InteropTypes.RxStatusChanged)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
+            .Respond<YakapTransmittalRequestedPayload, YakapTransmittalRespondedPayload, ClinicEz.Clinic.Infrastructure.Messaging.Responders.YakapTransmittalResponder>(
+                InteropTypes.YakapTransmittalRequested, InteropTypes.YakapTransmittalResponded)
             .HandleReply(InteropTypes.GamotLookupResponded)
             .HandleReply(InteropTypes.PhilHealthResponse)
             .HandleEntitlementsChanged());
