@@ -281,7 +281,7 @@ public class TenantCustomFieldsAndVerificationTests
 
         var ustp = templates.FirstOrDefault(t => t.Key == "university_ustp");
         ustp.Should().NotBeNull();
-        ustp!.Name.Should().Be("University / School Clinic (USTP)");
+        ustp!.Name.Should().Be("University / School Clinic");
         ustp.FieldCount.Should().Be(8);
         ustp.Fields.Should().Contain(f => f.FieldKey == "affiliation" && f.IsRequired && f.DisplayOrder == 1);
         ustp.Fields.Should().Contain(f => f.FieldKey == "student_id" && f.VisibilityRuleJson != null);

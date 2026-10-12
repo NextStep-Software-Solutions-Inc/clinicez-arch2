@@ -37,8 +37,8 @@ export interface TemplateBundlePreset {
 
 const TEMPLATE_BUNDLES: TemplateBundlePreset[] = [
   {
-    key: 'ustp',
-    title: 'University / School Clinic (USTP)',
+    key: 'university',
+    title: 'University / School Clinic',
     subtitle: '8 Fields · Affiliation, Student/Employee IDs, cascading College & Program dropdowns',
     badge: '8 Fields · Cascading',
     icon: 'graduation',
@@ -325,8 +325,8 @@ export default function CustomFieldsTab({
               icon="clipboard"
               title="No custom fields defined"
               description="Add custom intake questions or install a 1-click template bundle."
-              actionTitle="Install USTP Preset"
-              onAction={() => handleInstallBundle('ustp')}
+              actionTitle="Browse Templates"
+              onAction={() => setShowTemplatesSection(true)}
             />
           ) : (
             <View style={styles.fieldList}>

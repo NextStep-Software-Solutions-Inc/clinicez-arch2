@@ -137,34 +137,51 @@ public static class DatabaseExceptionTranslator
         return false;
     }
 
+    private static IEnumerable<Exception> EnumerateExceptions(Exception? root)
+    {
+        if (root is null) yield break;
+
+        const int maxExceptions = 128;
+        var queue = new Queue<Exception>();
+        var visited = new HashSet<Exception>(ReferenceEqualityComparer.Instance);
+        queue.Enqueue(root);
+
+        while (queue.Count > 0 && visited.Count < maxExceptions)
+        {
+            var current = queue.Dequeue();
+            if (current is null || !visited.Add(current)) continue;
+
+            yield return current;
+
+            if (current is AggregateException agg)
+            {
+                foreach (var inner in agg.InnerExceptions)
+                {
+                    if (inner is not null)
+                        queue.Enqueue(inner);
+                }
+            }
+
+            if (current.InnerException is not null)
+            {
+                queue.Enqueue(current.InnerException);
+            }
+        }
+    }
+
     private static DbUpdateConcurrencyException? FindConcurrencyException(Exception? ex)
     {
-        for (var current = ex; current is not null; current = current.InnerException)
-        {
-            if (current is DbUpdateConcurrencyException conc)
-                return conc;
-        }
-        return null;
+        return EnumerateExceptions(ex).OfType<DbUpdateConcurrencyException>().FirstOrDefault();
     }
 
     private static PostgresException? FindPostgresException(Exception? ex)
     {
-        for (var current = ex; current is not null; current = current.InnerException)
-        {
-            if (current is PostgresException pg)
-                return pg;
-        }
-        return null;
+        return EnumerateExceptions(ex).OfType<PostgresException>().FirstOrDefault();
     }
 
     private static DbUpdateException? FindDbUpdateException(Exception? ex)
     {
-        for (var current = ex; current is not null; current = current.InnerException)
-        {
-            if (current is DbUpdateException dbEx)
-                return dbEx;
-        }
-        return null;
+        return EnumerateExceptions(ex).OfType<DbUpdateException>().FirstOrDefault();
     }
 
     private static bool IsPatientCodeConstraint(PostgresException ex)

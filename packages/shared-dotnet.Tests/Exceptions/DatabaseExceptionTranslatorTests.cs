@@ -357,4 +357,73 @@ public class DatabaseExceptionTranslatorTests
         failWithCode.Errors.Should().HaveCount(1);
         failWithCode.Errors[0].Code.Should().Be("QUICK_CODE");
     }
+
+    [Fact]
+    public void TryTranslate_AggregateException_MultipleInnerExceptions_SecondPosition_TranslatesToConflict()
+    {
+        var pgEx = CreatePostgresException("23505", detail: "Key (email)=(doc@example.com) already exists.");
+        var dbEx = new DbUpdateException("ORM save error", pgEx);
+        var aggEx = new AggregateException("Batch error", new InvalidOperationException("First failure"), dbEx);
+
+        var translated = DatabaseExceptionTranslator.TryTranslate(aggEx, "trace-agg-test-2", out var result);
+
+        translated.Should().BeTrue();
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be((int)HttpStatusCode.Conflict);
+        result.ErrorCode.Should().Be("DUPLICATE_RESOURCE");
+        result.Errors[0].Field.Should().Be("email");
+    }
+
+    [Fact]
+    public void TryTranslate_AggregateException_DbUpdateConcurrencyException_AtSecondPosition_TranslatesToConflict()
+    {
+        var concEx = new DbUpdateConcurrencyException("Row version conflict");
+        var aggEx = new AggregateException(
+            "Batch error",
+            new InvalidOperationException("Step 1 failed"),
+            concEx);
+
+        var translated = DatabaseExceptionTranslator.TryTranslate(aggEx, "trace-agg-conc-2", out var result);
+
+        translated.Should().BeTrue();
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be((int)HttpStatusCode.Conflict);
+        result.ErrorCode.Should().Be("CONCURRENCY_CONFLICT");
+    }
+
+    [Fact]
+    public void TryTranslate_CyclicExceptionHierarchy_TerminatesSafelyWithoutLooping()
+    {
+        var ex1 = new Exception("Cycle node 1");
+        var ex2 = new Exception("Cycle node 2", ex1);
+        typeof(Exception)
+            .GetField("_innerException", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.SetValue(ex1, ex2);
+
+        var translated = DatabaseExceptionTranslator.TryTranslate(ex1, "trace-cycle", out var result);
+
+        translated.Should().BeFalse();
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryTranslate_CyclicExceptionWithPostgresChild_FindsPostgresAndTerminatesSafely()
+    {
+        var pgEx = CreatePostgresException("23505", detail: "Key (email)=(cycle@example.com) already exists.");
+        var ex1 = new Exception("Cycle node 1");
+        var ex2 = new Exception("Cycle node 2", ex1);
+        var ex3 = new Exception("Cycle node 3", pgEx);
+
+        var field = typeof(Exception).GetField("_innerException", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        field?.SetValue(ex1, ex2);
+
+        var agg = new AggregateException(ex1, ex3);
+
+        var translated = DatabaseExceptionTranslator.TryTranslate(agg, "trace-cycle-pg", out var result);
+
+        translated.Should().BeTrue();
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be((int)HttpStatusCode.Conflict);
+        result.ErrorCode.Should().Be("DUPLICATE_RESOURCE");
+    }
 }

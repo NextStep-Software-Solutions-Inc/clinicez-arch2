@@ -32,7 +32,13 @@ public static class ClinicCustomFieldTemplatesCatalog
     public static CustomFieldTemplateDto? GetTemplate(string key)
     {
         if (string.IsNullOrWhiteSpace(key)) return null;
-        return _templates.FirstOrDefault(t => string.Equals(t.Key, key.Trim(), StringComparison.OrdinalIgnoreCase));
+        var trimmed = key.Trim();
+        if (string.Equals(trimmed, "university", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(trimmed, "school_clinic", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = UniversityUstpKey;
+        }
+        return _templates.FirstOrDefault(t => string.Equals(t.Key, trimmed, StringComparison.OrdinalIgnoreCase));
     }
 
     private static CustomFieldTemplateDto CreateUniversityUstpTemplate()
@@ -139,7 +145,7 @@ public static class ClinicCustomFieldTemplatesCatalog
 
         return new CustomFieldTemplateDto(
             Key: UniversityUstpKey,
-            Name: "University / School Clinic (USTP)",
+            Name: "University / School Clinic",
             Description: "Standard higher education health services template with affiliation branching (Student vs Employee/Faculty), cascading College/Program dropdowns, and student/employee IDs.",
             EntityType: "ClinicPatient",
             FieldCount: fields.Count,

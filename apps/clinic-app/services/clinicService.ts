@@ -2511,7 +2511,7 @@ export const clinicService = {
   async installTemplateBundle(templateKey: string, entityType = 'ClinicPatient') {
     const normalizedKey = templateKey.toLowerCase();
     let backendKey = templateKey;
-    if (normalizedKey === 'ustp' || normalizedKey === 'university_ustp') {
+    if (normalizedKey === 'university' || normalizedKey === 'ustp' || normalizedKey === 'university_ustp') {
       backendKey = 'university_ustp';
     } else if (normalizedKey === 'workplace' || normalizedKey === 'workplace_corporate') {
       backendKey = 'workplace_corporate';

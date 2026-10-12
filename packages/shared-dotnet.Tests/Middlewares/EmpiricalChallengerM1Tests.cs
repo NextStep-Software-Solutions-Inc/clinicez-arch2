@@ -229,6 +229,29 @@ public class EmpiricalChallengerM1Tests
         response!.TraceId.Should().NotBeNullOrWhiteSpace("traceId must always be populated in response");
     }
 
+    [Fact]
+    public async Task TraceId_WhenTraceIdentifierIsWhitespace_ShouldBePopulatedFallback()
+    {
+        var handler = new GlobalExceptionHandler();
+        var (context, stream) = CreateHttpContext("   ");
+        context.TraceIdentifier = "   ";
+
+        var dbEx = new DbUpdateException(
+            "An error occurred while saving the entity changes.",
+            CreatePgEx("23505", detail: "Key (email)=(x@y.com) already exists."));
+
+        var handled = await handler.TryHandleAsync(context, dbEx, CancellationToken.None);
+
+        handled.Should().BeTrue();
+
+        var response = await ReadResponseAsync(stream);
+        response.Should().NotBeNull();
+        response!.TraceId.Should().NotBeNullOrWhiteSpace("traceId must always be populated in response");
+        response.TraceId.Should().NotBe("   ");
+        context.TraceIdentifier.Should().NotBe("   ");
+        context.TraceIdentifier.Should().Be(response.TraceId);
+    }
+
     #endregion
 
     #region Objective 3: No Raw ORM Strings Leaked
@@ -359,6 +382,57 @@ public class EmpiricalChallengerM1Tests
         var response = await ReadResponseAsync(stream);
         response.Should().NotBeNull();
         response!.Errors[0].Field.Should().Be("allergenName");
+    }
+
+    [Fact]
+    public async Task AggregateException_DatabaseExceptionAtIndex2_MapsToConflict()
+    {
+        var handler = new GlobalExceptionHandler();
+        var (context, stream) = CreateHttpContext("TRACE-AGG-INDEX2");
+
+        var pgEx = CreatePgEx("23505",
+            constraint: "IX_ClinicPatients_ClinicId_PatientCode",
+            detail: "Key (clinic_id, patient_code)=(1, PAT-2026-00042) already exists.");
+        var dbEx = new DbUpdateException("An error occurred while saving the entity changes.", pgEx);
+        var aggEx = new AggregateException(
+            "Batch execution error",
+            new TimeoutException("DB timeout"),
+            new InvalidOperationException("Transaction failed"),
+            dbEx);
+
+        var handled = await handler.TryHandleAsync(context, aggEx, CancellationToken.None);
+
+        handled.Should().BeTrue();
+        context.Response.StatusCode.Should().Be((int)HttpStatusCode.Conflict);
+
+        var response = await ReadResponseAsync(stream);
+        response.Should().NotBeNull();
+        response!.ErrorCode.Should().Be("DUPLICATE_PATIENT_CODE");
+        response.TraceId.Should().Be("TRACE-AGG-INDEX2");
+        response.Errors[0].Field.Should().Be("patientCode");
+    }
+
+    [Fact]
+    public async Task AggregateException_DbUpdateConcurrencyException_AtIndex1_MapsToConflict()
+    {
+        var handler = new GlobalExceptionHandler();
+        var (context, stream) = CreateHttpContext("TRACE-AGG-CONC");
+
+        var concEx = new DbUpdateConcurrencyException("Store update statement affected 0 rows.");
+        var aggEx = new AggregateException(
+            "Batch execution error",
+            new InvalidOperationException("Step 1 failed"),
+            concEx);
+
+        var handled = await handler.TryHandleAsync(context, aggEx, CancellationToken.None);
+
+        handled.Should().BeTrue();
+        context.Response.StatusCode.Should().Be((int)HttpStatusCode.Conflict);
+
+        var response = await ReadResponseAsync(stream);
+        response.Should().NotBeNull();
+        response!.ErrorCode.Should().Be("CONCURRENCY_CONFLICT");
+        response.TraceId.Should().Be("TRACE-AGG-CONC");
     }
 
     #endregion

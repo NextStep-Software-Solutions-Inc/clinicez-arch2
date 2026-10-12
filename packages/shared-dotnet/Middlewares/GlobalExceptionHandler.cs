@@ -29,9 +29,9 @@ public class GlobalExceptionHandler : IExceptionHandler
         var traceId = Activity.Current?.Id;
         if (string.IsNullOrWhiteSpace(traceId))
         {
-            traceId = string.IsNullOrWhiteSpace(httpContext.TraceIdentifier)
-                ? Guid.NewGuid().ToString("N")
-                : httpContext.TraceIdentifier;
+            traceId = !string.IsNullOrWhiteSpace(httpContext.TraceIdentifier)
+                ? httpContext.TraceIdentifier
+                : (httpContext.TraceIdentifier = Guid.NewGuid().ToString("N"));
         }
 
         // ── 1. Unwrap Clerk SDK Errors ─────────────────────────────────────────

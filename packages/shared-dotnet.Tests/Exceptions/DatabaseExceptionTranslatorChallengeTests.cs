@@ -227,10 +227,33 @@ public class DatabaseExceptionTranslatorChallengeTests
 
         var translated = DatabaseExceptionTranslator.TryTranslate(aggEx, "trace-agg-2", out var result);
 
-        // Verification observation: In current implementation, current.InnerException only inspects
-        // InnerExceptions[0], so it returns false when the DB exception is at index 1.
-        translated.Should().BeFalse();
-        result.Should().BeNull();
+        translated.Should().BeTrue();
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be((int)HttpStatusCode.Conflict);
+        result.ErrorCode.Should().Be("DUPLICATE_RESOURCE");
+        result.Errors[0].Field.Should().Be("email");
+    }
+
+    [Fact]
+    public void Challenge_AggregateException_DatabaseExceptionAtIndex2_ThirdPositionBehavior()
+    {
+        var pgEx = CreatePgEx("23505",
+            constraintName: "IX_ClinicPatients_ClinicId_PatientCode",
+            detail: "Key (clinic_id, patient_code)=(1, PAT-2026-00001) already exists.");
+        var dbEx = new DbUpdateException("ORM save error", pgEx);
+        var aggEx = new AggregateException(
+            "Batch error",
+            new TimeoutException("Operation timed out"),
+            new InvalidOperationException("Invalid state"),
+            dbEx);
+
+        var translated = DatabaseExceptionTranslator.TryTranslate(aggEx, "trace-agg-3", out var result);
+
+        translated.Should().BeTrue();
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be((int)HttpStatusCode.Conflict);
+        result.ErrorCode.Should().Be("DUPLICATE_PATIENT_CODE");
+        result.Errors[0].Field.Should().Be("patientCode");
     }
 
     // =========================================================================
@@ -262,6 +285,24 @@ public class DatabaseExceptionTranslatorChallengeTests
         translated.Should().BeTrue();
         result!.StatusCode.Should().Be((int)HttpStatusCode.Conflict);
         result.ErrorCode.Should().Be("CONCURRENCY_CONFLICT");
+    }
+
+    [Fact]
+    public void Challenge_AggregateException_DbUpdateConcurrencyException_AtSecondPosition_TranslatesTo409()
+    {
+        var concEx = new DbUpdateConcurrencyException("Row version conflict");
+        var aggEx = new AggregateException(
+            "Batch error",
+            new InvalidOperationException("First failure"),
+            concEx);
+
+        var translated = DatabaseExceptionTranslator.TryTranslate(aggEx, "trace-conc-agg-2", out var result);
+
+        translated.Should().BeTrue();
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be((int)HttpStatusCode.Conflict);
+        result.ErrorCode.Should().Be("CONCURRENCY_CONFLICT");
+        result.Message.Should().Contain("modified or deleted by another operation");
     }
 
     // =========================================================================

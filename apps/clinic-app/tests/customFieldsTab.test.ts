@@ -341,10 +341,10 @@ class CustomFieldsTabHarness {
     return true;
   }
 
-  public async installTemplate(presetKey: 'ustp' | 'workplace' | 'demographics'): Promise<CustomFieldDefinition[]> {
+  public async installTemplate(presetKey: 'university' | 'ustp' | 'workplace' | 'demographics'): Promise<CustomFieldDefinition[]> {
     let bundle: Partial<CustomFieldDefinition>[] = [];
 
-    if (presetKey === 'ustp') {
+    if (presetKey === 'university' || presetKey === 'ustp') {
       bundle = [
         {
           fieldKey: 'affiliation',
@@ -930,9 +930,9 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
   });
 
   describe('Tier 1: Feature 9 — 1-Click Suggested Templates Library UI', () => {
-    test('F9-1: Installs USTP University Preset with 8 pre-configured fields in exact sequence', async () => {
+    test('F9-1: Installs University Preset with 8 pre-configured fields in exact sequence', async () => {
       const harness = new CustomFieldsTabHarness();
-      const installed = await harness.installTemplate('ustp');
+      const installed = await harness.installTemplate('university');
       expect(installed).toHaveLength(8);
       expect(installed[0].fieldKey).toBe('affiliation');
       expect(installed[1].fieldKey).toBe('student_id');
@@ -944,9 +944,9 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
       expect(installed[7].fieldKey).toBe('campus_location');
     });
 
-    test('F9-2: USTP preset establishes required flags and cascading program mappings accurately', async () => {
+    test('F9-2: University preset establishes required flags and cascading program mappings accurately', async () => {
       const harness = new CustomFieldsTabHarness();
-      const installed = await harness.installTemplate('ustp');
+      const installed = await harness.installTemplate('university');
       const programField = installed.find((f) => f.fieldKey === 'program');
       expect(programField?.conditionalOptionsJson).toBeDefined();
 
