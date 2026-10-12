@@ -43,7 +43,7 @@ export default function WorkstationSidebar({
   onNavigate,
   width = theme.sizes.sidebarWidth,
 }: WorkstationSidebarProps) {
-  const { facilityName, planTier, accreditationNumber } = useClinic();
+  const { facilityName, planTier } = useClinic();
   const { user, can } = useAuth();
 
   const visibleNavItems = useMemo(() => {
@@ -64,9 +64,14 @@ export default function WorkstationSidebar({
           <Icon name="clinic" size={theme.sizes.iconMd} color={theme.colors.onPrimary} />
         </View>
         <View style={styles.brandText}>
-          <ThemedText variant="title" style={styles.brandTitle}>
-            Clinic EZ
-          </ThemedText>
+          <View style={styles.brandTitleRow}>
+            <ThemedText variant="title" style={styles.brandTitle}>
+              Clinic EZ
+            </ThemedText>
+            {planTier ? (
+              <Badge label={planTier.toUpperCase()} variant="primary" size="sm" />
+            ) : null}
+          </View>
           <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1}>
             {facilityName || 'Clinic workstation'}
           </ThemedText>
@@ -110,24 +115,9 @@ export default function WorkstationSidebar({
         })}
       </ScrollView>
 
-      {/* Footer: facility + who is working */}
+      {/* Footer: user profile */}
       <View style={styles.footer}>
         <UserMenu variant="card" onNavigate={onNavigate} currentRoute={currentRoute} />
-
-        {facilityName ? (
-          <View style={styles.facility}>
-            <ThemedText variant="smallBold" numberOfLines={1}>
-              {facilityName}
-            </ThemedText>
-            {planTier || accreditationNumber ? (
-              <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1}>
-                {[planTier, accreditationNumber ? `Accreditation ${accreditationNumber}` : null]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </ThemedText>
-            ) : null}
-          </View>
-        ) : null}
       </View>
     </View>
   );
@@ -161,6 +151,11 @@ const styles = StyleSheet.create({
   brandText: {
     flex: 1,
     minWidth: 0,
+  },
+  brandTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   brandTitle: {
     color: theme.colors.text,
@@ -199,9 +194,5 @@ const styles = StyleSheet.create({
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.border,
     gap: theme.spacing.md,
-  },
-  facility: {
-    paddingHorizontal: theme.spacing.xs,
-    gap: 2,
   },
 });

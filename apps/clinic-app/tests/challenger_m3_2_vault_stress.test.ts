@@ -13,13 +13,38 @@ mock.module('react-native', () => ({
   TextInput: 'TextInput',
   ActivityIndicator: 'ActivityIndicator',
   Modal: 'Modal',
-  Dimensions: { get: () => ({ width: 1280, height: 800 }) },
+  KeyboardAvoidingView: 'KeyboardAvoidingView',
+  FlatList: 'FlatList',
+  SectionList: 'SectionList',
+  Switch: 'Switch',
+  TouchableOpacity: 'TouchableOpacity',
+  TouchableHighlight: 'TouchableHighlight',
+  Image: 'Image',
+  RefreshControl: 'RefreshControl',
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
   useWindowDimensions: () => ({ width: 1280, height: 800 }),
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
   NativeModules: {},
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    sequence: () => ({ start: (cb?: any) => cb && cb() }),
+    loop: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: 'Animated.View',
+    Text: 'Animated.Text',
+  },
   Alert: { alert: mock(() => {}) },
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
+  processColor: (c: any) => c,
 }));
 
 mock.module('expo-crypto', () => ({
@@ -162,7 +187,7 @@ describe('Empirical Adversarial Stress Test: Document Vault & DateOnly Validatio
 
     test('boundaryMode="pastOrToday" blocks future dates across multiple offsets (1 day, 1 week, 10 years)', () => {
       const today = new Date();
-      const formatYMD = (d: Date) => d.toISOString().split('T')[0];
+      const formatYMD = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(d);
 
       const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
       const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);

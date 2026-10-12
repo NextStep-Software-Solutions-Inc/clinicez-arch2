@@ -13,13 +13,38 @@ mock.module('react-native', () => ({
   TextInput: 'TextInput',
   ActivityIndicator: 'ActivityIndicator',
   Modal: 'Modal',
-  Dimensions: { get: () => ({ width: 1280, height: 800 }) },
+  KeyboardAvoidingView: 'KeyboardAvoidingView',
+  FlatList: 'FlatList',
+  SectionList: 'SectionList',
+  Switch: 'Switch',
+  TouchableOpacity: 'TouchableOpacity',
+  TouchableHighlight: 'TouchableHighlight',
+  Image: 'Image',
+  RefreshControl: 'RefreshControl',
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
   useWindowDimensions: () => ({ width: 1280, height: 800 }),
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
   NativeModules: {},
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    sequence: () => ({ start: (cb?: any) => cb && cb() }),
+    loop: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: 'Animated.View',
+    Text: 'Animated.Text',
+  },
   Alert: { alert: mock(() => {}) },
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
+  processColor: (c: any) => c,
 }));
 
 mock.module('expo-crypto', () => ({

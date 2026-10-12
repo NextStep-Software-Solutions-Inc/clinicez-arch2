@@ -4,18 +4,45 @@ import { describe, expect, test, mock } from 'bun:test';
 (globalThis as any).__DEV__ = true;
 
 mock.module('react-native', () => ({
-  StyleSheet: { create: (s: any) => s },
+  StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
   View: 'View',
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',
   TextInput: 'TextInput',
   Text: 'Text',
   ActivityIndicator: 'ActivityIndicator',
+  Modal: 'Modal',
+  KeyboardAvoidingView: 'KeyboardAvoidingView',
+  FlatList: 'FlatList',
+  SectionList: 'SectionList',
+  Switch: 'Switch',
+  TouchableOpacity: 'TouchableOpacity',
+  TouchableHighlight: 'TouchableHighlight',
+  Image: 'Image',
+  RefreshControl: 'RefreshControl',
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
+  useWindowDimensions: () => ({ width: 1280, height: 800 }),
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
   NativeModules: {},
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    sequence: () => ({ start: (cb?: any) => cb && cb() }),
+    loop: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: 'Animated.View',
+    Text: 'Animated.Text',
+  },
   Alert: { alert: () => {} },
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   processColor: (c: any) => c,
 }));
 

@@ -298,7 +298,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
     });
 
     test('validates vaccine expiration date with boundaryMode="futureOrToday"', () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
       const futureDate = '2028-12-31';
       const pastDate = '2020-01-01';
 
@@ -380,7 +380,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
     });
 
     test('validates administered date with boundaryMode="pastOrToday"', () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
       const validPastDate = '2024-06-15';
       const invalidFutureDate = '2099-12-31';
 

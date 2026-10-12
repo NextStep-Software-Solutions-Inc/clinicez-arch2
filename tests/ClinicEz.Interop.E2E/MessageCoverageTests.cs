@@ -69,6 +69,9 @@ public class MessageCoverageTests
         new(InteropTypes.PhilHealthConfigUpsertRequested, [PhilHealth], [Portal]),
         new(InteropTypes.PhilHealthConfigUpsertResponded, [Portal], [PhilHealth]),
 
+        new(InteropTypes.YakapTransmittalRequested, [Portal], [Clinic]),
+        new(InteropTypes.YakapTransmittalResponded, [Clinic], [Portal]),
+
         new(InteropTypes.BillingInvoiceRequested, [Clinic, Lab, Pharmacy], [Billing]),
         new(InteropTypes.BillingPaymentConfirmed, [Billing], [Clinic, Lab, Pharmacy]),
         new(InteropTypes.BillingInvoicePaid, [Billing], [Portal]),

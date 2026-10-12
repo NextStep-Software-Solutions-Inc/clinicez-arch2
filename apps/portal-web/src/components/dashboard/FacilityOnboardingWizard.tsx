@@ -129,20 +129,6 @@ export default function FacilityOnboardingWizard({
 
   const occupiedFacilityTypes = (selectedBranch?.facilities || []).map((f) => f.facilityType.toLowerCase());
 
-  // If selected branch already has the current facility type, auto-switch to first free slot
-  useEffect(() => {
-    if (selectedBranch) {
-      const occupied = (selectedBranch.facilities || []).map((f) => f.facilityType.toLowerCase());
-      if (occupied.includes(facilityType)) {
-        const firstFree = FACILITY_TYPE_OPTIONS.find((opt) => !occupied.includes(opt.type));
-        if (firstFree) {
-          setFacilityType(firstFree.type);
-          setClassification("");
-        }
-      }
-    }
-  }, [selectedBranch]);
-
   // Stepper state
   const [currentStep, setCurrentStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -164,6 +150,20 @@ export default function FacilityOnboardingWizard({
   const [slugError, setSlugError] = useState<string | null>(null);
   const [isCheckingSlug, setIsCheckingSlug] = useState(false);
   const slugCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // If selected branch already has the current facility type, auto-switch to first free slot
+  useEffect(() => {
+    if (selectedBranch) {
+      const occupied = (selectedBranch.facilities || []).map((f) => f.facilityType.toLowerCase());
+      if (occupied.includes(facilityType)) {
+        const firstFree = FACILITY_TYPE_OPTIONS.find((opt) => !occupied.includes(opt.type));
+        if (firstFree) {
+          setFacilityType(firstFree.type);
+          setClassification("");
+        }
+      }
+    }
+  }, [selectedBranch, facilityType]);
 
   // Regulatory & Statutory
   const [licenseToOperate, setLicenseToOperate] = useState("");
