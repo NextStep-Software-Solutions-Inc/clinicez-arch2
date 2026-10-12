@@ -105,6 +105,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           onAdministerVaccine={onAdministerVaccine}
           onRecordHistoricalVaccine={onRecordHistoricalVaccine}
           onRecordAefi={onRecordAefi}
+          onRefreshChart={onRefreshChart}
         />
       )}
       {activeTab === 'profiles' && patient && (

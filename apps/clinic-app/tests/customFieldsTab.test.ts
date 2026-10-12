@@ -232,6 +232,12 @@ class CustomFieldsTabHarness {
         ? JSON.stringify(this.draftOptions.split(',').map((s) => s.trim()).filter(Boolean))
         : undefined;
 
+    if (this.draftVisibilityRule && !this.draftVisibilityRule.field?.trim()) {
+      this.modalError = 'Please select a trigger field for the conditional visibility rule, or turn the toggle off.';
+      this.saving = false;
+      return null;
+    }
+
     const visibilityRuleJson = this.draftVisibilityRule
       ? JSON.stringify(this.draftVisibilityRule)
       : undefined;
@@ -301,9 +307,10 @@ class CustomFieldsTabHarness {
     return null;
   }
 
-  public async moveUp(index: number): Promise<boolean> {
-    if (index <= 0 || index >= this.fields.length) return false;
+  public async moveUp(target: number | string): Promise<boolean> {
     const sorted = [...this.fields].sort((a, b) => a.displayOrder - b.displayOrder);
+    const index = typeof target === 'string' ? sorted.findIndex((f) => f.id === target) : target;
+    if (index <= 0 || index >= sorted.length) return false;
     const current = sorted[index];
     const prev = sorted[index - 1];
 
@@ -317,9 +324,10 @@ class CustomFieldsTabHarness {
     return true;
   }
 
-  public async moveDown(index: number): Promise<boolean> {
-    if (index < 0 || index >= this.fields.length - 1) return false;
+  public async moveDown(target: number | string): Promise<boolean> {
     const sorted = [...this.fields].sort((a, b) => a.displayOrder - b.displayOrder);
+    const index = typeof target === 'string' ? sorted.findIndex((f) => f.id === target) : target;
+    if (index < 0 || index >= sorted.length - 1) return false;
     const current = sorted[index];
     const next = sorted[index + 1];
 
@@ -681,6 +689,47 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
       expect(harness.notifications).toHaveLength(1);
       expect(harness.notifications[0].message).toContain('Moved "Field B" up');
     });
+
+    test('F6-6: Reordering under category filter correctly identifies global index by fieldId without corrupting other categories', async () => {
+      const f1: CustomFieldDefinition = { id: 'd1', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'd1', label: 'Demo 1', category: 'Demographics', dataType: 'Text', isRequired: false, displayOrder: 1, isActive: true };
+      const f2: CustomFieldDefinition = { id: 'd2', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'd2', label: 'Demo 2', category: 'Demographics', dataType: 'Text', isRequired: false, displayOrder: 2, isActive: true };
+      const f3: CustomFieldDefinition = { id: 'a1', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'a1', label: 'Acad 1', category: 'Academic', dataType: 'Text', isRequired: false, displayOrder: 3, isActive: true };
+      const f4: CustomFieldDefinition = { id: 'a2', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'a2', label: 'Acad 2', category: 'Academic', dataType: 'Text', isRequired: false, displayOrder: 4, isActive: true };
+
+      const harness = new CustomFieldsTabHarness([f1, f2, f3, f4]);
+      harness.selectedCategory = 'Academic';
+
+      // Under category filter "Academic", visibleFields has Acad 1 (index 0) and Acad 2 (index 1)
+      expect(harness.visibleFields).toHaveLength(2);
+      expect(harness.visibleFields[0].id).toBe('a1');
+      expect(harness.visibleFields[1].id).toBe('a2');
+
+      // In filtered list, the user clicks Move Up on Acad 2 (field id 'a2').
+      // It must identify globalIndex = 3 in all fields, and swap with Acad 1 (globalIndex = 2).
+      // Demographics fields at global indices 0 and 1 must remain untouched!
+      const success = await harness.moveUp('a2');
+      expect(success).toBe(true);
+
+      const sorted = [...harness.fields].sort((a, b) => a.displayOrder - b.displayOrder);
+      expect(sorted[0].id).toBe('d1');
+      expect(sorted[1].id).toBe('d2');
+      expect(sorted[2].id).toBe('a2');
+      expect(sorted[3].id).toBe('a1');
+
+      expect(sorted[0].label).toBe('Demo 1');
+      expect(sorted[1].label).toBe('Demo 2');
+      expect(sorted[2].label).toBe('Acad 2');
+      expect(sorted[3].label).toBe('Acad 1');
+
+      // Also verify Move Down by fieldId in filtered list
+      const successDown = await harness.moveDown('a2');
+      expect(successDown).toBe(true);
+      const restored = [...harness.fields].sort((a, b) => a.displayOrder - b.displayOrder);
+      expect(restored[0].id).toBe('d1');
+      expect(restored[1].id).toBe('d2');
+      expect(restored[2].id).toBe('a1');
+      expect(restored[3].id).toBe('a2');
+    });
   });
 
   describe('Tier 1: Feature 7 — Live Visibility Condition Rule Builder', () => {
@@ -767,6 +816,21 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
       const parsed: VisibilityRule = JSON.parse(created!.visibilityRuleJson!);
       expect(parsed.operator).toBe('not_empty');
       expect(parsed.value).toBeUndefined();
+    });
+
+    test('F7-6: Formats not_empty visibility condition badge label properly as "If {field} is not empty"', () => {
+      const visibilityRule: VisibilityRule = {
+        source: 'custom_field',
+        field: 'affiliation',
+        operator: 'not_empty',
+      };
+
+      const formatBadgeLabel = (rule: VisibilityRule) =>
+        rule.operator === 'not_empty'
+          ? `If ${rule.field} is not empty`
+          : `If ${rule.field} ${rule.operator === 'equals' ? '==' : rule.operator === 'not_equals' ? '!=' : rule.operator} '${rule.value ?? ''}'`;
+
+      expect(formatBadgeLabel(visibilityRule)).toBe('If affiliation is not empty');
     });
   });
 
@@ -1024,6 +1088,23 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
       expect(harness.fields[50].id).toBe('id-49');
       // Ensure all 100 items exist and display orders remain contiguous
       expect(harness.fields).toHaveLength(100);
+    });
+
+    test('T2-6: Empty trigger field when visibility rule is configured blocks submission with validation error', async () => {
+      const harness = new CustomFieldsTabHarness();
+      harness.openAddModal();
+      harness.draftLabel = 'Dependent Detail';
+      harness.setVisibilityRule({
+        source: 'custom_field',
+        field: '   ',
+        operator: 'equals',
+        value: 'Yes',
+      });
+      const result = await harness.saveField();
+      expect(result).toBeNull();
+      expect(harness.modalError).toBe(
+        'Please select a trigger field for the conditional visibility rule, or turn the toggle off.'
+      );
     });
   });
 

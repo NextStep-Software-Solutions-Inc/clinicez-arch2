@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Modal as RNModal } from 'react-native';
 import { useClinic } from '../../context/ClinicContext';
 import type { ClinicPatient } from '../../services/clinicService';
@@ -67,6 +67,10 @@ export default function PatientChartModal({
   const [editDemographicsVisible, setEditDemographicsVisible] = useState(false);
   const [currentPatient, setCurrentPatient] = useState<ClinicPatient | null>(patient);
 
+  const tabVisibleRef = useRef(false);
+  const layoutVisibleRef = useRef(false);
+  const prevConfiguredLayoutRef = useRef(configuredLayout);
+
   useEffect(() => {
     setCurrentPatient(patient);
   }, [patient]);
@@ -78,16 +82,27 @@ export default function PatientChartModal({
   }, [activeTabProp]);
 
   useEffect(() => {
-    if (visible) {
+    if (visible && !tabVisibleRef.current) {
       if (activeTabProp) {
         setInternalTab(activeTabProp);
       } else if (initialTab) {
         setInternalTab(initialTab);
       }
-      // Re-sync with configured layout preference on open
+    }
+    tabVisibleRef.current = visible;
+  }, [visible, activeTabProp, initialTab]);
+
+  useEffect(() => {
+    const justOpened = visible && !layoutVisibleRef.current;
+    const layoutPreferenceChanged = configuredLayout !== prevConfiguredLayoutRef.current;
+
+    if (justOpened || (visible && layoutPreferenceChanged)) {
       setActiveLayout(configuredLayout);
     }
-  }, [visible, activeTabProp, initialTab, configuredLayout]);
+
+    layoutVisibleRef.current = visible;
+    prevConfiguredLayoutRef.current = configuredLayout;
+  }, [visible, configuredLayout]);
 
   const handleEditPress = () => {
     if (onPressEdit) {

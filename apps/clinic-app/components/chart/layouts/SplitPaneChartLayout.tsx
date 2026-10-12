@@ -111,25 +111,53 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                   {patient.fullName}
                 </ThemedText>
 
-                <View style={styles.metaRow}>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    MRN: <ThemedText variant="caption" color={theme.colors.text}>{patient.patientCode || '—'}</ThemedText>
-                  </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.borderDark}>•</ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    {patient.dateOfBirth
-                      ? `${formatLongAge(patient.dateOfBirth)}, ${patient.gender}`
-                      : `${patient.age ? `${patient.age} yrs, ` : ''}${patient.gender}`}
-                  </ThemedText>
-                </View>
-
-                {formattedPin ? (
-                  <View style={styles.pinRow}>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      PHIC: {formattedPin}
+                <View style={styles.identityDetails}>
+                  <View style={styles.identityRow}>
+                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                      MRN:
+                    </ThemedText>
+                    <ThemedText
+                      variant="captionBold"
+                      color={theme.colors.text}
+                      numberOfLines={1}
+                      style={styles.identityValue}
+                    >
+                      {patient.patientCode || '—'}
                     </ThemedText>
                   </View>
-                ) : null}
+
+                  <View style={styles.identityRow}>
+                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                      Demographics:
+                    </ThemedText>
+                    <ThemedText
+                      variant="caption"
+                      color={theme.colors.text}
+                      numberOfLines={1}
+                      style={styles.identityValue}
+                    >
+                      {patient.dateOfBirth
+                        ? `${formatLongAge(patient.dateOfBirth)}, ${patient.gender}`
+                        : `${patient.age ? `${patient.age} yrs, ` : ''}${patient.gender}`}
+                    </ThemedText>
+                  </View>
+
+                  {formattedPin ? (
+                    <View style={styles.identityRow}>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        PHIC:
+                      </ThemedText>
+                      <ThemedText
+                        variant="caption"
+                        color={theme.colors.text}
+                        numberOfLines={1}
+                        style={styles.identityValue}
+                      >
+                        {formattedPin}
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                </View>
 
                 <View style={styles.badgeRow}>
                   {patient.verificationStatus === 'Verified' ? (
@@ -381,14 +409,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: theme.spacing.sm,
   },
-  metaRow: {
+  identityDetails: {
+    width: '100%',
+    marginTop: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
   },
-  pinRow: {
-    marginTop: theme.spacing.xs,
+  identityValue: {
+    flexShrink: 1,
+    textAlign: 'right',
   },
   badgeRow: {
     flexDirection: 'row',
@@ -541,5 +575,8 @@ const styles = StyleSheet.create({
   canvasViewport: {
     flex: 1,
     minHeight: 0,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
   },
 });

@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-12T18:55:51Z
+# BRIEFING — 2026-10-12T21:05:00Z
 
 ## Mission
-Supervise, monitor, and victory-audit the implementation of an extensible, generic Entity Custom Metadata Engine in ClinicEZ (custom field definition, arrangement/reordering, mandatory rules, conditional visibility, cascading dropdown options, pre-built suggested templates, and full integration across Patient intake, registration, and profile touchpoints adhering to @clinicez/design-tokens).
+Supervise, monitor, and victory-audit the implementation of structured error handling and contextual cause resolution across ClinicEZ backend services and frontend applications (packages/shared-dotnet, services/clinic-api, packages/shared-ts, apps/clinic-app), eliminating raw database/ORM leaks and providing clear, actionable error feedback to clinicians and clinic staff.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -13,6 +13,11 @@ Supervise, monitor, and victory-audit the implementation of an extensible, gener
 - Active Orchestrator (Clinical Usability & Validation Defects): c9cd8b6e-b9fd-47c0-b568-f5bc0a808115 (orchestrator_7)
 - Victory Auditor (Generation 7 Usability Defects): 4aff5a42-42ef-4c36-8b2a-87c4ee0cf71e (victory_auditor_3)
 - Active Orchestrator (Entity Custom Metadata Engine): 244a259f-87b9-4d6a-a5cf-626c99392364 (orchestrator_9)
+- Victory Auditor (Entity Custom Metadata Engine): 36062bef-e38a-42cd-a92a-7074d24cb24c (victory_auditor_4)
+- Active SWE Orchestrator: a7978b1b-92d6-4dd4-a27e-cbc0108d96d9 (swe_1)
+- Victory Auditor (Medical Chart Workstation Layouts): TBD (to be spawned on victory claim)
+- Active Orchestrator (Structured Error Handling & Resolution): 5408d029-4875-4700-88c6-ab860f92ea2c (orchestrator_10)
+- Victory Auditor (Structured Error Handling & Resolution): [TBD]
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -33,20 +38,31 @@ Supervise, monitor, and victory-audit the implementation of an extensible, gener
 - DynamicCustomFieldsRenderer deployed across Patient Registration, Edit Modal, Patient Chart, and Student Intake Portal
 - Enforce mandatory validation only when field is visible
 - @clinicez/design-tokens compliance across all touchpoints
+- Medical Chart Workstation Layouts: persist activeLayout across tab changes, restore Centered Modal styling, normalize tab padding across all 7 tabs, remove duplicate '+' in button labels, non-breaking MRN layout in Split-Pane.
+- Intercept unhandled database exceptions in packages/shared-dotnet (PostgreSQL 23505, 22001, foreign keys, not-null, concurrency conflicts) without leaking raw ORM strings
+- Map to standardized HTTP status codes (409, 400, 500) and structured response payloads (errorCode, traceId, message, errors array with field attribution)
+- Sequence & validation hardening in services/clinic-api (ignore soft-delete filters on max sequence, enforce 255 char limit on ChiefComplaint)
+- Shared TypeScript contract & client safety net in packages/shared-ts (extractApiError, sanitize legacy ORM strings, getFieldErrors helper)
+- apps/clinic-app feedback toast enhancements (10s duration, dismiss button, copy Ref ID) and form field error border/caption attribution
+- packages/shared-dotnet.Tests must pass via dotnet test
+- services/clinic-api tests must pass via dotnet test
+- packages/shared-ts tests must pass via pnpm --filter @clinicez/shared-ts test
+- apps/clinic-app builds cleanly
 
 ## User Context
-- **Last user request**: Build an extensible, generic Entity Custom Metadata Engine in ClinicEZ that allows clinic administrators to define, arrange/reorder, and mark custom fields as mandatory/required with conditional visibility rules, cascading dropdown options, and pre-built suggested templates, initially implemented and fully integrated across all Patient intake, registration, and profile touchpoints in accordance with the @clinicez/design-tokens UI/UX standards.
+- **Last user request**: Implement structured error handling and contextual cause resolution across ClinicEZ backend services and frontend applications (packages/shared-dotnet, services/clinic-api, packages/shared-ts, apps/clinic-app), eliminating raw database/ORM leaks and providing clear, actionable error feedback to clinicians and clinic staff.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded user request to `ORIGINAL_REQUEST.md` (## 2026-10-12T18:55:51Z).
-  - Prepared `orchestrator_9/DISPATCH.md`.
-  - Dispatched `orchestrator_9` (`244a259f-87b9-4d6a-a5cf-626c99392364`).
+  - Recorded user request to `ORIGINAL_REQUEST.md` (timestamp `## 2026-10-12T21:00:58Z`).
+  - Created dispatch specification `c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_10\DISPATCH.md`.
+  - Dispatched `orchestrator_10` (`5408d029-4875-4700-88c6-ab860f92ea2c`).
+  - Initialized monitoring crons (Cron 1 task-24, Cron 2 task-26).
 
 ## Project Status
 - **Phase**: in progress
-- **Route**: General -> teamwork_preview_orchestrator (orchestrator_9: `244a259f-87b9-4d6a-a5cf-626c99392364`)
-- **Active Subagents**: orchestrator_9 (`244a259f-87b9-4d6a-a5cf-626c99392364`)
-- **Active Tasks**: task-46 (Cron 1: Progress Reporting */8), task-49 (Cron 2: Liveness Check */10)
+- **Route**: General -> teamwork_preview_orchestrator (orchestrator_10: `5408d029-4875-4700-88c6-ab860f92ea2c`)
+- **Active Subagents**: 5408d029-4875-4700-88c6-ab860f92ea2c (orchestrator_10)
+- **Active Tasks**: task-24 (Progress Reporting Cron `*/8 * * * *`), task-26 (Liveness Cron `*/10 * * * *`)
 
 ## Victory Audit Status
 - **Triggered**: no
@@ -55,4 +71,4 @@ Supervise, monitor, and victory-audit the implementation of an extensible, gener
 
 ## Artifact Index
 - c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\ORIGINAL_REQUEST.md — Authoritative record of user requests
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_9\DISPATCH.md — Orchestrator Generation 9 dispatch specification
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_10\DISPATCH.md — Orchestrator Generation 10 dispatch specification

@@ -380,3 +380,98 @@ Every modified and newly created UI screen and component must strictly comply wi
 - [ ] Suggested template library allows 1-click installation of the University Preset into the clinic's active custom fields.
 - [ ] Patient registration, edit modal, and patient chart display custom fields reactively and cleanly in configured order with inline validation.
 - [ ] bun test packages/design-tokens/src/tokens.test.ts passes with 0 failures, and no forbidden raw hex color literals exist in touched frontend files.
+
+
+## 2026-10-12T21:00:58Z
+
+Implement structured error handling and contextual cause resolution across ClinicEZ backend services and frontend applications, eliminating raw database/ORM leaks and providing clear, actionable error feedback to clinicians and clinic staff.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Database Exception Translation & Structured Error Responses
+Intercept unhandled database exceptions (including PostgreSQL unique constraint violations, string data right truncation, foreign key violations, not-null violations, and EF Core concurrency conflicts) within the shared .NET pipeline (`packages/shared-dotnet`). Map these exceptions to standardized HTTP status codes (HTTP 409 Conflict for unique and concurrency conflicts, HTTP 400 Bad Request for truncation and missing fields, HTTP 500 for general database errors) and structured response payloads containing `errorCode`, `traceId`, a user-friendly `message`, and `errors` array with field attribution. Never leak raw internal ORM exception strings (such as *"An error occurred while saving the entity changes. See the inner exception for details."*) to clients.
+
+### R2. Database Sequence & Validation Hardening
+Harden patient code generation in `services/clinic-api` (`RegisterClinicPatientCommand`, `BulkRegisterClinicPatientsCommand`, and `PublicStudentSelfEnrollCommand`) to query the maximum existing sequence number ignoring soft-delete query filters, preventing duplicate code collisions (`23505`). Enforce maximum length validation (255 characters) on `ChiefComplaint` in `CheckInPatientCommandValidator` and sanitize inputs before saving to prevent string truncation exceptions (`22001`).
+
+### R3. Shared TypeScript Contract & Error Client Sanitization
+Extend the shared TypeScript API layer (`packages/shared-ts`) so `ApiResponse` and `ApiError` carry `errorCode`, `traceId`, and field-specific errors with a helper method to retrieve errors by field name. Implement a client-side safety net in `extractApiError` that sanitizes any legacy or untranslated ORM error strings into user-friendly messages with support reference IDs.
+
+### R4. Contextual UI Feedback & Workstation Form Attribution
+Update `apps/clinic-app` feedback components (`FeedbackHost`, `notify.error`) to support structured error payloads, extend error toast duration to 10 seconds with an explicit dismiss button and a "Copy Ref ID" action. In patient registration and demographic edit modals, bind returned field errors directly to form inputs so input fields display error borders and captions.
+
+## Acceptance Criteria
+
+### Backend Translation & Response Verification
+- [ ] Database exception translator accurately maps PostgreSQL error code `23505` to HTTP 409 with `DUPLICATE_RESOURCE` or `DUPLICATE_PATIENT_CODE` and field attribution.
+- [ ] Database exception translator maps PostgreSQL error code `22001` to HTTP 400 with `FIELD_TOO_LONG` and field attribution.
+- [ ] Database exception translator maps `DbUpdateConcurrencyException` to HTTP 409 with `CONCURRENCY_CONFLICT`.
+- [ ] `GlobalExceptionHandler` logs full exception details and stack traces with `traceId` on the server and attaches `traceId` to the response.
+- [ ] `packages/shared-dotnet.Tests` has automated test coverage for exception translation and passes via `dotnet test`.
+
+### Sequence & Validation Verification
+- [ ] Patient code generation does not collide when soft-deleted patients exist in the clinic.
+- [ ] `CheckInPatientCommandValidator` rejects `ChiefComplaint` exceeding 255 characters with HTTP 400.
+- [ ] `services/clinic-api` tests pass via `dotnet test`.
+
+### Frontend & Client Verification
+- [ ] `packages/shared-ts` extracts `errorCode`, `traceId`, and field errors correctly into `ApiError`.
+- [ ] Client-side safety net intercepts raw strings matching `"An error occurred while saving the entity changes"` and formats them with reference IDs.
+- [ ] Automated tests in `packages/shared-ts` pass via `pnpm --filter @clinicez/shared-ts test`.
+- [ ] `apps/clinic-app` builds cleanly and renders field error states and copyable trace IDs in toasts.
+
+
+## 2026-10-12T21:01:17Z
+
+This is a single self-contained fix; keep it small and focused.
+
+Refine and elevate the 3 Medical Chart workstation layouts (Centered Modal, Split-Pane Workstation, Slide-Over Drawer) in `apps/clinic-app` to:
+1. Fix the critical layout reset bug where clicking any tab reverts the user's active layout back to the default setting.
+2. Fully restore the authentic padding, margins, spacing, and surface backgrounds of the default Centered Modal layout.
+3. Normalize viewport padding across all 7 chart tabs (eliminating tab edge touching and double-padding).
+4. Remove double-plus `+ +` strings from action buttons and fix MRN line-wrapping in Split-Pane.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Fix Layout Reset Bug on Tab Navigation
+In `PatientChartModal.tsx`, decouple `activeLayout` from `activeTabProp`. Use a transition ref so `setActiveLayout(configuredLayout)` only executes when `visible` transitions from `false` to `true` or when `configuredLayout` changes. Clinician layout choice must persist across all 7 tabs during the consultation.
+
+### R2. Restore Default Centered Modal Padding, Margins & Backgrounds
+Restore the original styling in `CenteredModalChartLayout.tsx`:
+- `header`: `paddingHorizontal: theme.spacing.xl`, `paddingVertical: theme.spacing.md`, `backgroundColor: theme.colors.surfaceSubtle`, `borderBottomColor: theme.colors.borderLight`.
+- `spineWrapper`: `paddingHorizontal: theme.spacing.xl`, `paddingTop: theme.spacing.sm`, `paddingBottom: theme.spacing.xs`, `backgroundColor: theme.colors.surface`, `borderBottomColor: theme.colors.borderLight`.
+- `tabBarContainer`: `paddingHorizontal: theme.spacing.xl`, `paddingVertical: theme.spacing.xs`, `backgroundColor: theme.colors.surfaceSubtle`, `borderBottomColor: theme.colors.borderLight`.
+- `viewport`: `flex: 1`, `minHeight: 0`, `paddingHorizontal: theme.spacing.xl`, `paddingVertical: theme.spacing.md`, `backgroundColor: theme.colors.surface`.
+- Modal dimensions: `maxWidth: 1400`, `width: '95%'`, `height: '92%'`, `...theme.shadows.lg`.
+
+### R3. Harmonize Padding & Margins in Slide-Over Drawer & Split-Pane
+- In `SlideOverDrawerChartLayout.tsx`, provide balanced workstation padding (`paddingHorizontal: theme.spacing.lg`, `paddingVertical: theme.spacing.md`, `backgroundColor: theme.colors.surface`) on the viewport, and slim header bar padding (`paddingVertical: theme.spacing.sm`).
+- In `SplitPaneChartLayout.tsx`, set canvas viewport to `paddingHorizontal: theme.spacing.xl`, `paddingVertical: theme.spacing.md`, `backgroundColor: theme.colors.surface`.
+
+### R4. Normalize Tab Content Padding
+In `StatutoryImmunizationsTab.tsx`, update `contentContainerStyle` to `paddingBottom: theme.spacing.lg, gap: theme.spacing.md` (removing redundant internal `padding: theme.spacing.xl`), ensuring perfect visual alignment with `ExecutiveSummaryTab`, `EncountersTimelineTab`, `DiagnosticLabTab`, etc.
+
+### R5. Button Label & Line-Wrapping Polish
+- Remove literal `+ ` prefixes from button titles in `StatutoryImmunizationsTab.tsx` (`"Administer Vaccine"`, `"Add Historical Vaccine"`).
+- Restructure the patient identity block in `SplitPaneChartLayout.tsx` to stack MRN, PHIC, and demographics into non-breaking key-value rows.
+
+## Acceptance Criteria
+
+### Bug Fixes & UX Behaviors
+- [ ] Switching between any of the 7 tabs (`Summary`, `Encounters`, `Diagnostics`, `Procedures`, `Vaccines`, `Health Profiles`, `Doc Vault`) NEVER resets the active layout mode back to default.
+- [ ] The default Centered Modal layout matches its original padding (24px horizontal, 16px vertical), surface backgrounds, and clean visual borders.
+- [ ] Tab content in `ExecutiveSummaryTab`, `EncountersTimelineTab`, `DiagnosticLabTab`, `StatutoryImmunizationsTab`, `NursingProceduresTab`, `HealthProfilesTab`, and `ExternalDocumentVaultTab` renders with consistent, non-zero padding across all layouts without edge clipping or double-padding.
+- [ ] No double-plus `+ +` strings appear on any action button in the Medical Chart.
+- [ ] Patient MRN / Code never breaks across lines in the Split-Pane left sidebar rail.
+- [ ] Zero raw hex codes in any modified `.tsx` file; 100% compliance with `@clinicez-design-tokens` verified by `bun run lint:clinic`.
+
+### Quality Verification & Builds
+- [ ] All `apps/clinic-app` unit & integration tests pass cleanly (`bun test apps/clinic-app/tests`).
+- [ ] TypeScript check passes with zero errors (`bun run typecheck:clinic`).
+- [ ] Production web bundle exports without build errors (`bun run build:web` in `apps/clinic-app`).

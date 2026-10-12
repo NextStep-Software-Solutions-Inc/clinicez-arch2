@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, Alert } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -282,7 +282,15 @@ export default function AddEditFieldModal({
 
     // 2. Visibility rule serialization
     let visibilityRuleJson: string | undefined = undefined;
-    if (hasVisibilityRule && ruleField.trim()) {
+    if (hasVisibilityRule) {
+      if (!ruleField.trim()) {
+        const errorMsg = 'Please select a trigger field for the conditional visibility rule, or turn the toggle off.';
+        setError(errorMsg);
+        Alert.alert('Validation Error', errorMsg);
+        setSaving(false);
+        return;
+      }
+
       let val: any = ruleValue.trim();
       if (ruleOperator === 'in') {
         val = ruleValue
@@ -304,7 +312,13 @@ export default function AddEditFieldModal({
 
     // 3. Cascading options serialization
     let conditionalOptionsJson: string | undefined = undefined;
-    if (dataType === 'Select' && isCascading && parentField.trim()) {
+    if (dataType === 'Select' && isCascading) {
+      if (!parentField.trim()) {
+        setError('Please select a parent dropdown field for cascading choices, or turn the toggle off.');
+        setSaving(false);
+        return;
+      }
+
       const mapObj: Record<string, string[]> = {};
       for (const entry of mappingEntries) {
         if (entry.parentVal.trim()) {
@@ -579,7 +593,11 @@ export default function AddEditFieldModal({
                 </ThemedText>
                 {ruleField ? (
                   <Badge
-                    label={`Visible when [${ruleField}] ${ruleOperator} '${ruleOperator === 'not_empty' ? 'any' : ruleValue || '...'}'`}
+                    label={
+                      ruleOperator === 'not_empty'
+                        ? `If ${ruleField} is not empty`
+                        : `Visible when [${ruleField}] ${ruleOperator} '${ruleValue || '...'}'`
+                    }
                     variant="warning"
                     size="md"
                   />

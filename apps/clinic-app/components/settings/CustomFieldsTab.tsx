@@ -79,6 +79,7 @@ export default function CustomFieldsTab({
   const [editingField, setEditingField] = useState<ClinicCustomFieldDefinition | null>(null);
   const [showTemplatesSection, setShowTemplatesSection] = useState(false);
   const [installingBundle, setInstallingBundle] = useState<string | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
 
   // Sorted fields by displayOrder
   const sortedFields = [...fields].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
@@ -145,49 +146,65 @@ export default function CustomFieldsTab({
     notify.success('Custom field deleted.');
   };
 
-  const handleMoveUp = async (index: number) => {
-    if (index <= 0 || index >= sortedFields.length) return;
-    const current = sortedFields[index];
-    const prev = sortedFields[index - 1];
+  const handleMoveUp = async (fieldId: string) => {
+    if (isReordering) return;
+    const globalIndex = sortedFields.findIndex((f) => f.id === fieldId);
+    if (globalIndex <= 0) return;
+    const current = sortedFields[globalIndex];
+    const prev = sortedFields[globalIndex - 1];
 
-    // Optimistically swap display orders
-    const prevOrder = prev.displayOrder ?? index;
-    prev.displayOrder = current.displayOrder ?? index + 1;
-    current.displayOrder = prevOrder;
+    setIsReordering(true);
+    try {
+      const newFields = [...sortedFields];
+      newFields[globalIndex - 1] = current;
+      newFields[globalIndex] = prev;
+      newFields.forEach((f, i) => {
+        f.displayOrder = i + 1;
+      });
 
-    const newSorted = [...sortedFields].sort((a, b) => a.displayOrder - b.displayOrder);
-    setFields(newSorted);
-    notify.success(`Moved "${current.label}" up.`);
+      setFields(newFields);
+      notify.success(`Moved "${current.label}" up.`);
 
-    // Persist reorder to backend
-    const orderedIds = newSorted.map((f) => f.id);
-    const [_, err] = await clinicService.reorderCustomFields(orderedIds);
-    if (err) {
-      notify.error(err.message || 'Could not persist reordered sequence.');
-      await onRefreshFields();
+      // Persist reorder to backend
+      const orderedIds = newFields.map((f) => f.id);
+      const [_, err] = await clinicService.reorderCustomFields(orderedIds);
+      if (err) {
+        notify.error(err.message || 'Could not persist reordered sequence.');
+        await onRefreshFields();
+      }
+    } finally {
+      setIsReordering(false);
     }
   };
 
-  const handleMoveDown = async (index: number) => {
-    if (index < 0 || index >= sortedFields.length - 1) return;
-    const current = sortedFields[index];
-    const next = sortedFields[index + 1];
+  const handleMoveDown = async (fieldId: string) => {
+    if (isReordering) return;
+    const globalIndex = sortedFields.findIndex((f) => f.id === fieldId);
+    if (globalIndex < 0 || globalIndex >= sortedFields.length - 1) return;
+    const current = sortedFields[globalIndex];
+    const next = sortedFields[globalIndex + 1];
 
-    // Optimistically swap display orders
-    const nextOrder = next.displayOrder ?? index + 2;
-    next.displayOrder = current.displayOrder ?? index + 1;
-    current.displayOrder = nextOrder;
+    setIsReordering(true);
+    try {
+      const newFields = [...sortedFields];
+      newFields[globalIndex] = next;
+      newFields[globalIndex + 1] = current;
+      newFields.forEach((f, i) => {
+        f.displayOrder = i + 1;
+      });
 
-    const newSorted = [...sortedFields].sort((a, b) => a.displayOrder - b.displayOrder);
-    setFields(newSorted);
-    notify.success(`Moved "${current.label}" down.`);
+      setFields(newFields);
+      notify.success(`Moved "${current.label}" down.`);
 
-    // Persist reorder to backend
-    const orderedIds = newSorted.map((f) => f.id);
-    const [_, err] = await clinicService.reorderCustomFields(orderedIds);
-    if (err) {
-      notify.error(err.message || 'Could not persist reordered sequence.');
-      await onRefreshFields();
+      // Persist reorder to backend
+      const orderedIds = newFields.map((f) => f.id);
+      const [_, err] = await clinicService.reorderCustomFields(orderedIds);
+      if (err) {
+        notify.error(err.message || 'Could not persist reordered sequence.');
+        await onRefreshFields();
+      }
+    } finally {
+      setIsReordering(false);
     }
   };
 
@@ -344,47 +361,48 @@ export default function CustomFieldsTab({
                   }
                 }
 
-                const isFirst = index === 0;
-                const isLast = index === visibleFields.length - 1;
+                const globalIndex = sortedFields.findIndex((f) => f.id === field.id);
+                const isFirst = globalIndex <= 0;
+                const isLast = globalIndex >= sortedFields.length - 1;
 
                 return (
                   <View key={field.id} style={styles.fieldItem}>
                     {/* Sequence and Reordering Arrangement Controls */}
                     <View style={styles.reorderControlsCol}>
                       <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sequenceIndexText}>
-                        #{index + 1}
+                        #{globalIndex >= 0 ? globalIndex + 1 : index + 1}
                       </ThemedText>
                       <View style={styles.reorderButtonPair}>
                         <Pressable
-                          onPress={() => handleMoveUp(index)}
-                          disabled={isFirst}
+                          onPress={() => handleMoveUp(field.id)}
+                          disabled={isFirst || isReordering}
                           accessibilityRole="button"
                           accessibilityLabel={`Move "${field.label}" up`}
                           style={[
                             styles.reorderButton,
-                            isFirst && styles.reorderButtonDisabled,
+                            (isFirst || isReordering) && styles.reorderButtonDisabled,
                           ]}
                         >
                           <Icon
                             name="arrowUp"
                             size={theme.sizes.iconSm}
-                            color={isFirst ? theme.colors.textLight : theme.colors.primary}
+                            color={isFirst || isReordering ? theme.colors.textLight : theme.colors.primary}
                           />
                         </Pressable>
                         <Pressable
-                          onPress={() => handleMoveDown(index)}
-                          disabled={isLast}
+                          onPress={() => handleMoveDown(field.id)}
+                          disabled={isLast || isReordering}
                           accessibilityRole="button"
                           accessibilityLabel={`Move "${field.label}" down`}
                           style={[
                             styles.reorderButton,
-                            isLast && styles.reorderButtonDisabled,
+                            (isLast || isReordering) && styles.reorderButtonDisabled,
                           ]}
                         >
                           <Icon
                             name="arrowDown"
                             size={theme.sizes.iconSm}
-                            color={isLast ? theme.colors.textLight : theme.colors.primary}
+                            color={isLast || isReordering ? theme.colors.textLight : theme.colors.primary}
                           />
                         </Pressable>
                       </View>
@@ -406,17 +424,21 @@ export default function CustomFieldsTab({
                         />
                         {visibilityRule ? (
                           <Badge
-                            label={`If ${visibilityRule.field} ${
-                              visibilityRule.operator === 'equals'
-                                ? '=='
-                                : visibilityRule.operator === 'not_equals'
-                                ? '!='
-                                : visibilityRule.operator
-                            } '${
-                              Array.isArray(visibilityRule.value)
-                                ? visibilityRule.value.join(', ')
-                                : visibilityRule.value ?? ''
-                            }'`}
+                            label={
+                              visibilityRule.operator === 'not_empty'
+                                ? `If ${visibilityRule.field} is not empty`
+                                : `If ${visibilityRule.field} ${
+                                    visibilityRule.operator === 'equals'
+                                      ? '=='
+                                      : visibilityRule.operator === 'not_equals'
+                                      ? '!='
+                                      : visibilityRule.operator
+                                  } '${
+                                    Array.isArray(visibilityRule.value)
+                                      ? visibilityRule.value.join(', ')
+                                      : visibilityRule.value ?? ''
+                                  }'`
+                            }
                             variant="warning"
                             size="sm"
                           />

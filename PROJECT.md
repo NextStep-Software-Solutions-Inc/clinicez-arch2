@@ -38,9 +38,9 @@ ClinicEZ is a multi-tenant clinical workstation and healthcare platform composed
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
 | M1 | Generic Entity Metadata Engine Architecture (Backend) | Features 1-4, 19 (Domain schema, EF Core migration, DTOs, CQRS commands/queries, reorder API, template install, tests) | none | DONE |
-| M2 | Clinic Admin Intake Fields Management & Template Library | Features 5-9, 19 (CustomFieldsTab, Move Up/Down controls, Add/Edit modal with rule builder & cascading mapper, 1-click templates) | M1 | PLANNED |
-| M3 | Dynamic Patient Intake, Registration & Chart Integration | Features 10-18, 19 (DynamicCustomFieldsRenderer, Patients.screen.tsx, EditPatientModal.tsx, chart view, StudentIntakeClient.tsx) | M1, M2 | PLANNED |
-| M4 | Final Milestone: 100% E2E Test Suite Pass & Adversarial Hardening | Feature 20 (Pass 100% E2E test suite Tiers 1-4, then Tier 5 adversarial hardening) | M1, M2, M3 | PLANNED |
+| M2 | Clinic Admin Intake Fields Management & Template Library | Features 5-9, 19 (CustomFieldsTab, Move Up/Down controls, Add/Edit modal with rule builder & cascading mapper, 1-click templates) | M1 | DONE |
+| M3 | Dynamic Patient Intake, Registration & Chart Integration | Features 10-18, 19 (DynamicCustomFieldsRenderer, Patients.screen.tsx, EditPatientModal.tsx, chart view, StudentIntakeClient.tsx) | M1, M2 | DONE |
+| M4 | Final Milestone: 100% E2E Test Suite Pass & Adversarial Hardening | Feature 20 (Pass 100% E2E test suite Tiers 1-4, then Tier 5 adversarial hardening) | M1, M2, M3 | DONE |
 
 ## Interface Contracts
 ### Custom Fields Backend ↔ Frontend Client (M1 ↔ M2 & M3)

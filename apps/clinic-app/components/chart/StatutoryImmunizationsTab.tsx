@@ -134,14 +134,14 @@ export default function StatutoryImmunizationsTab({
       <View style={styles.headerActionBar}>
         <View style={styles.actionButtonsRow}>
           <Button
-            title="+ Administer Vaccine"
+            title="Administer Vaccine"
             variant="primary"
             icon="plus"
             size="sm"
             onPress={() => setAdministerModalVisible(true)}
           />
           <Button
-            title="+ Add Historical Vaccine"
+            title="Add Historical Vaccine"
             variant="outline"
             icon="plus"
             size="sm"
@@ -477,6 +477,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingBottom: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   headerActionBar: {
     flexDirection: 'row',
