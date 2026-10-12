@@ -423,7 +423,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).toContain('Surgical &amp; Clinical');
     expect(markup).toContain('Lifestyle &amp; Social');
     expect(markup).toContain('Reproductive / OB-GYN');
-    expect(markup).toContain('Cardiometabolic &amp; NCD (lib_ncdq)');
+    expect(markup).toContain('Cardiometabolic &amp; NCD');
   });
 
   test('13. Storage helpers persist and retrieve active chart tab and sub-tab', () => {

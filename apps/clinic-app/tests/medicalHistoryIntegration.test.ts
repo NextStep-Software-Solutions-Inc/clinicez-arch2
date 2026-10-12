@@ -226,8 +226,8 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
       );
 
       // Section titles
-      expect(markup).toContain('Past Medical History (Personal - lib_mdiseases)');
-      expect(markup).toContain('Family Medical History (lib_mdiseases)');
+      expect(markup).toContain('Past Medical History (Personal)');
+      expect(markup).toContain('Family Medical History');
       expect(markup).toContain('Save Medical &amp; Family History');
 
       // Badges
@@ -254,7 +254,7 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
       expect(markup).toContain('Surgical &amp; Clinical');
       expect(markup).toContain('Lifestyle &amp; Social');
       expect(markup).toContain('Reproductive / OB-GYN');
-      expect(markup).toContain('Cardiometabolic &amp; NCD (lib_ncdq)');
+      expect(markup).toContain('Cardiometabolic &amp; NCD');
     });
   });
 

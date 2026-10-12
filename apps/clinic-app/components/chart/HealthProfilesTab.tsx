@@ -163,7 +163,7 @@ export default function HealthProfilesTab({
             variant="captionBold"
             color={activeSubTab === 'cardiometabolic' ? theme.colors.primaryDark : theme.colors.textSecondary}
           >
-            Cardiometabolic & NCD (lib_ncdq)
+            Cardiometabolic & NCD
           </ThemedText>
         </Pressable>
       </ScrollView>

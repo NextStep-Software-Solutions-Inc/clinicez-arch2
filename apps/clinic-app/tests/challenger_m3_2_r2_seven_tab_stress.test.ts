@@ -707,7 +707,7 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
       expect(markup).toContain('Surgical &amp; Clinical');
       expect(markup).toContain('Lifestyle &amp; Social');
       expect(markup).toContain('Reproductive / OB-GYN');
-      expect(markup).toContain('Cardiometabolic &amp; NCD (lib_ncdq)');
+      expect(markup).toContain('Cardiometabolic &amp; NCD');
     });
 
     test('2.7 Tab 7: ExternalDocumentVaultTab renders outside records, AES-256-GCM badges, and empty state', () => {

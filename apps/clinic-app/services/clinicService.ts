@@ -936,6 +936,70 @@ export interface UpsertPatientSurgicalHistoryPayload {
   remarks?: string;
 }
 
+export interface PatientPastMedicalHistory {
+  id: string;
+  patientId: string;
+  conditionTitle: string;
+  philHealthMdiseaseCode?: string | null;
+  icd10Code?: string | null;
+  specificDescription?: string | null;
+  diagnosisDate?: string | null;
+  isResolved: boolean;
+  clinicalNotes?: string | null;
+  createdAt: string;
+}
+
+export interface PatientMedicalHistoryResponse {
+  items: PatientPastMedicalHistory[];
+  personalMedicalHistoryNotes?: string | null;
+}
+
+export interface MedicalHistoryEntryItem {
+  conditionTitle: string;
+  philHealthMdiseaseCode?: string | null;
+  icd10Code?: string | null;
+  specificDescription?: string | null;
+  diagnosisDate?: string | null;
+  isResolved?: boolean;
+  clinicalNotes?: string | null;
+}
+
+export interface SavePatientMedicalHistoriesPayload {
+  items: MedicalHistoryEntryItem[];
+  personalMedicalHistoryNotes?: string | null;
+}
+
+export interface PatientFamilyHistory {
+  id: string;
+  patientId: string;
+  conditionTitle: string;
+  philHealthMdiseaseCode?: string | null;
+  icd10Code?: string | null;
+  specificDescription?: string | null;
+  relationship?: string | null;
+  clinicalNotes?: string | null;
+  createdAt: string;
+}
+
+export interface PatientFamilyHistoryResponse {
+  items: PatientFamilyHistory[];
+  familyMedicalHistoryNotes?: string | null;
+}
+
+export interface FamilyHistoryEntryItem {
+  conditionTitle: string;
+  philHealthMdiseaseCode?: string | null;
+  icd10Code?: string | null;
+  specificDescription?: string | null;
+  relationship?: string | null;
+  clinicalNotes?: string | null;
+}
+
+export interface SavePatientFamilyHistoriesPayload {
+  items: FamilyHistoryEntryItem[];
+  familyMedicalHistoryNotes?: string | null;
+}
+
 export interface PatientSocialHistory {
   id: string;
   clinicId: string;
@@ -1255,6 +1319,10 @@ export interface PatientChart {
   immunizations?: PatientImmunizationRecord[];
   attachments?: ClinicRecordAttachmentRecord[];
   surgicalHistories?: PatientSurgicalHistory[];
+  pastMedicalHistories?: PatientPastMedicalHistory[];
+  familyHistories?: PatientFamilyHistory[];
+  personalMedicalHistoryNotes?: string;
+  familyMedicalHistoryNotes?: string;
   socialHistory?: PatientSocialHistory;
   reproductiveHistory?: PatientReproductiveHistory;
   latestNcdAssessment?: NcdRiskAssessment;
@@ -1289,6 +1357,8 @@ export interface ClinicPatient {
   bloodType?: string;
   allergies?: string;
   chronicConditions?: string;
+  personalMedicalHistoryNotes?: string;
+  familyMedicalHistoryNotes?: string;
   alerts?: string;
   syncPatientId?: string;
   customFields?: Record<string, any>;
@@ -2017,6 +2087,24 @@ export const clinicService = {
 
   async deletePatientAllergy(patientId: string, allergyId: string) {
     return clinicApiClient.delete<boolean>(`/patients/${patientId}/allergies/${allergyId}`);
+  },
+
+  // Patient Past Medical History (Personal)
+  async getPastMedicalHistories(patientId: string) {
+    return clinicApiClient.get<PatientMedicalHistoryResponse>(`/patients/${patientId}/medical-history`);
+  },
+
+  async savePastMedicalHistories(patientId: string, payload: SavePatientMedicalHistoriesPayload) {
+    return clinicApiClient.put<PatientMedicalHistoryResponse>(`/patients/${patientId}/medical-history`, payload);
+  },
+
+  // Patient Family Medical History
+  async getFamilyHistories(patientId: string) {
+    return clinicApiClient.get<PatientFamilyHistoryResponse>(`/patients/${patientId}/family-history`);
+  },
+
+  async saveFamilyHistories(patientId: string, payload: SavePatientFamilyHistoriesPayload) {
+    return clinicApiClient.put<PatientFamilyHistoryResponse>(`/patients/${patientId}/family-history`, payload);
   },
 
   // Patient Surgical History

@@ -562,10 +562,10 @@ describe('Empirical Challenger Gen7 — Milestone M4 Stress Test Harness', () =>
       expect(markup).toContain('Surgical &amp; Clinical');
       expect(markup).toContain('Lifestyle &amp; Social');
       expect(markup).toContain('Reproductive / OB-GYN');
-      expect(markup).toContain('Cardiometabolic &amp; NCD (lib_ncdq)');
+      expect(markup).toContain('Cardiometabolic &amp; NCD');
       // Embedded section from ClinicalHistoryTab must be present
-      expect(markup).toContain('Past Medical History (Personal - lib_mdiseases)');
-      expect(markup).toContain('Family Medical History (lib_mdiseases)');
+      expect(markup).toContain('Past Medical History (Personal)');
+      expect(markup).toContain('Family Medical History');
     });
   });
 });

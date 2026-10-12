@@ -184,7 +184,7 @@ describe('Challenger M4.2 Adversarial Stress Suite: Profile Persistence & Chart 
           initialProfile: undefined,
         })
       );
-      expect(markup1).toContain('Past Medical History (Personal - lib_mdiseases)');
+      expect(markup1).toContain('Past Medical History (Personal)');
       expect(markup1).toContain('0 Selected');
 
       const markup2 = renderToStaticMarkup(
@@ -193,7 +193,7 @@ describe('Challenger M4.2 Adversarial Stress Suite: Profile Persistence & Chart 
           initialProfile: null as any,
         })
       );
-      expect(markup2).toContain('Past Medical History (Personal - lib_mdiseases)');
+      expect(markup2).toContain('Past Medical History (Personal)');
       expect(markup2).toContain('0 Selected');
     });
 
@@ -441,8 +441,8 @@ describe('Challenger M4.2 Adversarial Stress Suite: Profile Persistence & Chart 
       );
 
       // Verify HealthProfilesTab renders the active 'Surgical & Clinical' sub-tab containing ClinicalHistoryTab
-      expect(markup).toContain('Past Medical History (Personal - lib_mdiseases)');
-      expect(markup).toContain('Family Medical History (lib_mdiseases)');
+      expect(markup).toContain('Past Medical History (Personal)');
+      expect(markup).toContain('Family Medical History');
       expect(markup).toContain('Save Medical &amp; Family History');
     });
   });
@@ -478,7 +478,7 @@ describe('Challenger M4.2 Adversarial Stress Suite: Profile Persistence & Chart 
       expect(markup).toContain('Surgical &amp; Clinical');
       expect(markup).toContain('Lifestyle &amp; Social');
       expect(markup).toContain('Reproductive / OB-GYN');
-      expect(markup).toContain('Cardiometabolic &amp; NCD (lib_ncdq)');
+      expect(markup).toContain('Cardiometabolic &amp; NCD');
     });
   });
 });

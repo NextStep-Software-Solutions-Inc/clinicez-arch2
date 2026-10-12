@@ -823,12 +823,12 @@ export default function ClinicalHistoryTab({
         )}
       </View>
 
-      {/* SECTION 3: Interactive Personal Past Medical History (lib_mdiseases) */}
+      {/* SECTION 3: Interactive Personal Past Medical History */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View style={styles.iconTitleRow}>
             <Icon name="check" size={theme.sizes.iconMd} color={theme.colors.primary} />
-            <ThemedText variant="h3">Past Medical History (Personal - lib_mdiseases)</ThemedText>
+            <ThemedText variant="h3">Past Medical History (Personal)</ThemedText>
           </View>
           <Badge
             label={`${selectedMedicalCodes.size} Selected`}
@@ -837,7 +837,7 @@ export default function ClinicalHistoryTab({
         </View>
 
         <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.sectionDescription}>
-          PhilHealth statutory conditions (001–018, 998 Others) for 1:1 Yakap MEDHIST transmittal.
+          Documented personal past and chronic medical conditions.
         </ThemedText>
 
         <View style={styles.chipsWrap}>
@@ -893,12 +893,12 @@ export default function ClinicalHistoryTab({
         </View>
       </View>
 
-      {/* SECTION 4: Interactive Family Medical History (lib_mdiseases) */}
+      {/* SECTION 4: Interactive Family Medical History */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View style={styles.iconTitleRow}>
             <Icon name="heartPulse" size={theme.sizes.iconMd} color={theme.colors.primary} />
-            <ThemedText variant="h3">Family Medical History (lib_mdiseases)</ThemedText>
+            <ThemedText variant="h3">Family Medical History</ThemedText>
           </View>
           <Badge
             label={`${selectedFamilyCodes.size} Selected`}
@@ -907,7 +907,7 @@ export default function ClinicalHistoryTab({
         </View>
 
         <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.sectionDescription}>
-          Hereditary and familial risk factors mapped to PhilHealth statutory conditions.
+          Documented hereditary and familial health risk factors.
         </ThemedText>
 
         <View style={styles.chipsWrap}>

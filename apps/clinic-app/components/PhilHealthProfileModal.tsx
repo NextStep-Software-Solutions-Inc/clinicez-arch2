@@ -984,19 +984,6 @@ export default function PhilHealthProfileModal({
         </View>
       }
     >
-      {/* Deprecation notice banner */}
-      <View style={styles.deprecationNoticeBanner}>
-        <Icon name="alert" size={theme.sizes.iconMd} color={theme.colors.warningText} />
-        <View style={{ flex: 1 }}>
-          <ThemedText variant="smallBold" color={theme.colors.warningText}>
-            Deprecated Modal — Migrated to Native Patient Chart Tabs
-          </ThemedText>
-          <ThemedText variant="caption" color={theme.colors.warningText}>
-            This standalone modal is superseded by native longitudinal chart tabs (Clinical History, Lifestyle, Women&apos;s Health, Cardiometabolic). Data saved here will continue to sync to relational tables for backward compatibility.
-          </ThemedText>
-        </View>
-      </View>
-
       {/* Tab navigation */}
       <View style={styles.tabBar}>
         {TABS.map((tab) => {
@@ -1026,17 +1013,6 @@ export default function PhilHealthProfileModal({
 }
 
 const styles = StyleSheet.create({
-  deprecationNoticeBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    backgroundColor: theme.colors.warningBg,
-    borderColor: theme.colors.warningBorder,
-    borderWidth: 1,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
-  },
   footerBar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
