@@ -36,7 +36,9 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         IReadOnlyDictionary<Guid, List<PatientAllergy>>? allergiesMap = null,
         IReadOnlyDictionary<Guid, PatientSocialHistory>? socialHistoriesMap = null,
         IReadOnlyDictionary<Guid, PatientReproductiveHistory>? reproductiveHistoriesMap = null,
-        IReadOnlyDictionary<Guid, List<PatientSurgicalHistory>>? surgicalHistoriesMap = null)
+        IReadOnlyDictionary<Guid, List<PatientSurgicalHistory>>? surgicalHistoriesMap = null,
+        IReadOnlyDictionary<Guid, List<PatientPastMedicalHistory>>? pastMedicalHistoriesMap = null,
+        IReadOnlyDictionary<Guid, List<PatientFamilyHistory>>? familyHistoriesMap = null)
     {
         var isFirstTranche = reportTagging == "1";
         var accreditationNo = !string.IsNullOrWhiteSpace(settings.AccreditationNumber)
@@ -170,14 +172,20 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             PatientReproductiveHistory? relRepro = null;
             reproductiveHistoriesMap?.TryGetValue(patient.Id, out relRepro);
 
+            List<PatientPastMedicalHistory>? relMeds = null;
+            pastMedicalHistoriesMap?.TryGetValue(patient.Id, out relMeds);
+
+            List<PatientFamilyHistory>? relFams = null;
+            familyHistoriesMap?.TryGetValue(patient.Id, out relFams);
+
             // Medical histories & specifics (chronic conditions with 3-digit codes or DTD '+' fallback)
-            var (medHistories, medSpecifics) = MapMedicalHistories(patient, customProfile, relProblems);
+            var (medHistories, medSpecifics) = MapMedicalHistories(patient, customProfile, relProblems, relMeds);
 
             // Surgical histories (DTD '+' fallback to 'None' if none recorded)
             var surgHistories = MapSurgicalHistories(customProfile, relSurg);
 
             // Family histories & specifics (DTD '+' fallback)
-            var (famHistories, famSpecifics) = MapFamilyHistories(customProfile);
+            var (famHistories, famSpecifics) = MapFamilyHistories(customProfile, relFams);
 
             // Social history (pediatric zeroes vs adult responses)
             var socHist = MapSocialHistory(customProfile, isPediatric, relSocial);
@@ -548,8 +556,22 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
     private (List<YakapMedicalHistoryDto> Histories, List<YakapSpecificHistoryDto> Specifics) MapMedicalHistories(
         ClinicPatient patient,
         PhilHealthPatientProfileDto? customProfile,
-        List<PatientProblem>? relProblems = null)
+        List<PatientProblem>? relProblems = null,
+        List<PatientPastMedicalHistory>? relMedical = null)
     {
+        if (relMedical != null && relMedical.Count > 0)
+        {
+            var medEntries = relMedical
+                .Select(m => new PhilHealthConditionEntryDto(
+                    Code: !string.IsNullOrWhiteSpace(m.PhilHealthMdiseaseCode) ? m.PhilHealthMdiseaseCode : (_resolver.ResolveKnownConditions(m.ConditionTitle).FirstOrDefault()?.Code ?? (_catalog.FindByDescription(PhilHealthCatalogResolver.MedicalHistoryLibrary, "Others")?.Code ?? "099")),
+                    SpecificDesc: !string.IsNullOrWhiteSpace(m.SpecificDescription) ? m.SpecificDescription : m.ConditionTitle))
+                .ToList();
+            if (medEntries.Count > 0)
+            {
+                return _resolver.ResolveMedicalHistories(patient.ChronicConditions, medEntries);
+            }
+        }
+
         if (relProblems != null && relProblems.Count > 0)
         {
             var problemEntries = relProblems
@@ -600,12 +622,29 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
     }
 
     private (List<YakapMedicalHistoryDto> Histories, List<YakapSpecificHistoryDto> Specifics) MapFamilyHistories(
-        PhilHealthPatientProfileDto? customProfile)
+        PhilHealthPatientProfileDto? customProfile,
+        List<PatientFamilyHistory>? relFamily = null)
     {
         var histories = new List<YakapMedicalHistoryDto>();
         var specifics = new List<YakapSpecificHistoryDto>();
 
-        if (customProfile?.FamilyHistories?.Count > 0)
+        if (relFamily != null && relFamily.Count > 0)
+        {
+            foreach (var fh in relFamily)
+            {
+                var code = !string.IsNullOrWhiteSpace(fh.PhilHealthMdiseaseCode)
+                    ? fh.PhilHealthMdiseaseCode
+                    : (_resolver.ResolveKnownConditions(fh.ConditionTitle).FirstOrDefault()?.Code ?? (_catalog.FindByDescription(PhilHealthCatalogResolver.MedicalHistoryLibrary, "Others")?.Code ?? "099"));
+                var desc = !string.IsNullOrWhiteSpace(fh.SpecificDescription) ? fh.SpecificDescription : fh.ConditionTitle;
+
+                histories.Add(new YakapMedicalHistoryDto(code));
+                if (!string.IsNullOrWhiteSpace(desc))
+                {
+                    specifics.Add(new YakapSpecificHistoryDto(code, desc));
+                }
+            }
+        }
+        else if (customProfile?.FamilyHistories?.Count > 0)
         {
             foreach (var fh in customProfile.FamilyHistories)
             {

@@ -86,7 +86,7 @@ public sealed class SavePatientFamilyHistoriesCommandHandler : IRequestHandler<S
                 existing.ClinicalNotes = item.ClinicalNotes?.Trim();
                 existing.UpdatedAt = DateTime.UtcNow;
                 existing.UpdatedBy = staffName;
-                await _familyRepo.UpdateAsync(existing, cancellationToken);
+                _familyRepo.Update(existing);
             }
             else
             {
@@ -118,14 +118,14 @@ public sealed class SavePatientFamilyHistoriesCommandHandler : IRequestHandler<S
 
             if (!incomingKeys.Contains(key))
             {
-                await _familyRepo.DeleteAsync(existing, cancellationToken);
+                _familyRepo.Remove(existing);
             }
         }
 
         // Update summary notes on ClinicPatient
         patient.FamilyMedicalHistoryNotes = request.Notes?.Trim();
 
-        await _patientRepo.UpdateAsync(patient, cancellationToken);
+        _patientRepo.Update(patient);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Fetch refreshed active items

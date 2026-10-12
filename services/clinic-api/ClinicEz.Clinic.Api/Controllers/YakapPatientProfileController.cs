@@ -24,6 +24,8 @@ public sealed class YakapPatientProfileController : ControllerBase
 {
     private readonly IRepository<ClinicPatient> _patientRepo;
     private readonly IRepository<TriageVitals> _vitalsRepo;
+    private readonly IRepository<PatientPastMedicalHistory> _medicalRepo;
+    private readonly IRepository<PatientFamilyHistory> _familyRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly PhilHealthCatalogResolver _catalogResolver;
@@ -32,6 +34,8 @@ public sealed class YakapPatientProfileController : ControllerBase
     public YakapPatientProfileController(
         IRepository<ClinicPatient> patientRepo,
         IRepository<TriageVitals> vitalsRepo,
+        IRepository<PatientPastMedicalHistory> medicalRepo,
+        IRepository<PatientFamilyHistory> familyRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IPhilHealthCatalogLookup catalog,
@@ -40,6 +44,8 @@ public sealed class YakapPatientProfileController : ControllerBase
         _catalogResolver = new PhilHealthCatalogResolver(catalog);
         _patientRepo = patientRepo;
         _vitalsRepo = vitalsRepo;
+        _medicalRepo = medicalRepo;
+        _familyRepo = familyRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _ingestionService = ingestionService;
@@ -65,6 +71,15 @@ public sealed class YakapPatientProfileController : ControllerBase
         }
 
         await _ingestionService.EnsureIngestedAsync(patientId, ct);
+
+        // Load relational medical histories and family histories
+        var relMedHistories = await _medicalRepo.Query(m => m.PatientId == patientId)
+            .OrderBy(m => m.ConditionTitle)
+            .ToListAsync(ct);
+
+        var relFamHistories = await _familyRepo.Query(f => f.PatientId == patientId)
+            .OrderBy(f => f.ConditionTitle)
+            .ToListAsync(ct);
 
         // Check if custom profile already exists in CustomFields
         if (patient.CustomFields != null && patient.CustomFields.TryGetValue("philhealth_profile", out var profObj) && profObj != null)
@@ -93,6 +108,36 @@ public sealed class YakapPatientProfileController : ControllerBase
 
             if (existing != null)
             {
+                if (relMedHistories.Count > 0)
+                {
+                    existing = existing with
+                    {
+                        MedicalHistories = relMedHistories.Select(m => new PhilHealthConditionEntryDto(
+                            Code: !string.IsNullOrWhiteSpace(m.PhilHealthMdiseaseCode) ? m.PhilHealthMdiseaseCode : (_catalogResolver.ResolveKnownConditions(m.ConditionTitle).FirstOrDefault()?.Code ?? "998"),
+                            SpecificDesc: !string.IsNullOrWhiteSpace(m.SpecificDescription) ? m.SpecificDescription : m.ConditionTitle)).ToList(),
+                        MedicalHistoryNotes = patient.PersonalMedicalHistoryNotes ?? existing.MedicalHistoryNotes
+                    };
+                }
+                else if (patient.PersonalMedicalHistoryNotes != null)
+                {
+                    existing = existing with { MedicalHistoryNotes = patient.PersonalMedicalHistoryNotes };
+                }
+
+                if (relFamHistories.Count > 0)
+                {
+                    existing = existing with
+                    {
+                        FamilyHistories = relFamHistories.Select(f => new PhilHealthConditionEntryDto(
+                            Code: !string.IsNullOrWhiteSpace(f.PhilHealthMdiseaseCode) ? f.PhilHealthMdiseaseCode : (_catalogResolver.ResolveKnownConditions(f.ConditionTitle).FirstOrDefault()?.Code ?? "998"),
+                            SpecificDesc: !string.IsNullOrWhiteSpace(f.SpecificDescription) ? f.SpecificDescription : f.ConditionTitle)).ToList(),
+                        FamilyHistoryNotes = patient.FamilyMedicalHistoryNotes ?? existing.FamilyHistoryNotes
+                    };
+                }
+                else if (patient.FamilyMedicalHistoryNotes != null)
+                {
+                    existing = existing with { FamilyHistoryNotes = patient.FamilyMedicalHistoryNotes };
+                }
+
                 return Ok(ApiResponse<PhilHealthPatientProfileDto>.Success(existing));
             }
         }
@@ -113,7 +158,15 @@ public sealed class YakapPatientProfileController : ControllerBase
         bool isSenior = ageYears >= 60;
 
         // Pre-fill from the patient's recorded conditions using the PhilHealth Catalog (clinician reviews before saving).
-        var defaultMedHistories = _catalogResolver.ResolveKnownConditions(patient.ChronicConditions);
+        var defaultMedHistories = relMedHistories.Count > 0
+            ? relMedHistories.Select(m => new PhilHealthConditionEntryDto(
+                Code: !string.IsNullOrWhiteSpace(m.PhilHealthMdiseaseCode) ? m.PhilHealthMdiseaseCode : (_catalogResolver.ResolveKnownConditions(m.ConditionTitle).FirstOrDefault()?.Code ?? "998"),
+                SpecificDesc: !string.IsNullOrWhiteSpace(m.SpecificDescription) ? m.SpecificDescription : m.ConditionTitle)).ToList()
+            : _catalogResolver.ResolveKnownConditions(patient.ChronicConditions);
+
+        var defaultFamHistories = relFamHistories.Select(f => new PhilHealthConditionEntryDto(
+            Code: !string.IsNullOrWhiteSpace(f.PhilHealthMdiseaseCode) ? f.PhilHealthMdiseaseCode : (_catalogResolver.ResolveKnownConditions(f.ConditionTitle).FirstOrDefault()?.Code ?? "998"),
+            SpecificDesc: !string.IsNullOrWhiteSpace(f.SpecificDescription) ? f.SpecificDescription : f.ConditionTitle)).ToList();
 
         var isDependentDefault = isPediatric;
         var defaultProfile = new PhilHealthPatientProfileDto
@@ -132,7 +185,9 @@ public sealed class YakapPatientProfileController : ControllerBase
             BloodType = patient.BloodType,
             MedicalHistories = defaultMedHistories,
             SurgicalHistories = [],
-            FamilyHistories = [],
+            FamilyHistories = defaultFamHistories,
+            MedicalHistoryNotes = patient.PersonalMedicalHistoryNotes,
+            FamilyHistoryNotes = patient.FamilyMedicalHistoryNotes,
             IsSmoker = false,
             IsAlcoholDrinker = false,
             IllDrugUser = false,
@@ -226,6 +281,121 @@ public sealed class YakapPatientProfileController : ControllerBase
             patient.ChronicConditions = string.Join(", ", updatedProfile.MedicalHistories
                 .Select(m => !string.IsNullOrWhiteSpace(m.SpecificDesc) ? m.SpecificDesc : m.Code));
         }
+
+        // Sync medical histories to relational table
+        if (updatedProfile.MedicalHistories != null)
+        {
+            var existingMeds = await _medicalRepo.Query(m => m.PatientId == patientId).ToListAsync(ct);
+            var incomingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var item in updatedProfile.MedicalHistories)
+            {
+                var code = item.Code?.Trim();
+                var desc = !string.IsNullOrWhiteSpace(item.SpecificDesc) ? item.SpecificDesc.Trim() : code ?? "Condition";
+                var key = !string.IsNullOrWhiteSpace(code) ? $"code:{code}" : $"title:{desc}";
+                incomingKeys.Add(key);
+
+                var existing = existingMeds.FirstOrDefault(e =>
+                    (!string.IsNullOrWhiteSpace(code) && string.Equals(e.PhilHealthMdiseaseCode, code, StringComparison.OrdinalIgnoreCase)) ||
+                    (string.IsNullOrWhiteSpace(code) && string.Equals(e.ConditionTitle, desc, StringComparison.OrdinalIgnoreCase)));
+
+                if (existing != null)
+                {
+                    existing.ConditionTitle = desc;
+                    existing.PhilHealthMdiseaseCode = code;
+                    existing.SpecificDescription = code == "998" ? desc : null;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                    existing.UpdatedBy = updatedProfile.UpdatedBy;
+                    await _medicalRepo.UpdateAsync(existing, ct);
+                }
+                else
+                {
+                    var newMed = new PatientPastMedicalHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = patient.TenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        ConditionTitle = desc,
+                        PhilHealthMdiseaseCode = code,
+                        SpecificDescription = code == "998" ? desc : null,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = updatedProfile.UpdatedBy ?? "ClinicStaff"
+                    };
+                    await _medicalRepo.AddAsync(newMed, ct);
+                }
+            }
+
+            foreach (var existing in existingMeds)
+            {
+                var key = !string.IsNullOrWhiteSpace(existing.PhilHealthMdiseaseCode)
+                    ? $"code:{existing.PhilHealthMdiseaseCode}"
+                    : $"title:{existing.ConditionTitle}";
+                if (!incomingKeys.Contains(key))
+                {
+                    await _medicalRepo.DeleteAsync(existing, ct);
+                }
+            }
+        }
+
+        // Sync family histories to relational table
+        if (updatedProfile.FamilyHistories != null)
+        {
+            var existingFams = await _familyRepo.Query(f => f.PatientId == patientId).ToListAsync(ct);
+            var incomingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var item in updatedProfile.FamilyHistories)
+            {
+                var code = item.Code?.Trim();
+                var desc = !string.IsNullOrWhiteSpace(item.SpecificDesc) ? item.SpecificDesc.Trim() : code ?? "Condition";
+                var key = !string.IsNullOrWhiteSpace(code) ? $"code:{code}" : $"title:{desc}";
+                incomingKeys.Add(key);
+
+                var existing = existingFams.FirstOrDefault(e =>
+                    (!string.IsNullOrWhiteSpace(code) && string.Equals(e.PhilHealthMdiseaseCode, code, StringComparison.OrdinalIgnoreCase)) ||
+                    (string.IsNullOrWhiteSpace(code) && string.Equals(e.ConditionTitle, desc, StringComparison.OrdinalIgnoreCase)));
+
+                if (existing != null)
+                {
+                    existing.ConditionTitle = desc;
+                    existing.PhilHealthMdiseaseCode = code;
+                    existing.SpecificDescription = code == "998" ? desc : null;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                    existing.UpdatedBy = updatedProfile.UpdatedBy;
+                    await _familyRepo.UpdateAsync(existing, ct);
+                }
+                else
+                {
+                    var newFam = new PatientFamilyHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = patient.TenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        ConditionTitle = desc,
+                        PhilHealthMdiseaseCode = code,
+                        SpecificDescription = code == "998" ? desc : null,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = updatedProfile.UpdatedBy ?? "ClinicStaff"
+                    };
+                    await _familyRepo.AddAsync(newFam, ct);
+                }
+            }
+
+            foreach (var existing in existingFams)
+            {
+                var key = !string.IsNullOrWhiteSpace(existing.PhilHealthMdiseaseCode)
+                    ? $"code:{existing.PhilHealthMdiseaseCode}"
+                    : $"title:{existing.ConditionTitle}";
+                if (!incomingKeys.Contains(key))
+                {
+                    await _familyRepo.DeleteAsync(existing, ct);
+                }
+            }
+        }
+
+        patient.PersonalMedicalHistoryNotes = updatedProfile.MedicalHistoryNotes?.Trim();
+        patient.FamilyMedicalHistoryNotes = updatedProfile.FamilyHistoryNotes?.Trim();
 
         await _unitOfWork.SaveChangesAsync(ct);
 

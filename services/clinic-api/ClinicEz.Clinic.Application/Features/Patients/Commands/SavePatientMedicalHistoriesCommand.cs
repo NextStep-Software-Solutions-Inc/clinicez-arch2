@@ -87,7 +87,7 @@ public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<
                 existing.ClinicalNotes = item.ClinicalNotes?.Trim();
                 existing.UpdatedAt = DateTime.UtcNow;
                 existing.UpdatedBy = staffName;
-                await _medicalRepo.UpdateAsync(existing, cancellationToken);
+                _medicalRepo.Update(existing);
             }
             else
             {
@@ -120,7 +120,7 @@ public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<
 
             if (!incomingKeys.Contains(key))
             {
-                await _medicalRepo.DeleteAsync(existing, cancellationToken);
+                _medicalRepo.Remove(existing);
             }
         }
 
@@ -136,7 +136,7 @@ public sealed class SavePatientMedicalHistoriesCommandHandler : IRequestHandler<
             patient.ChronicConditions = null;
         }
 
-        await _patientRepo.UpdateAsync(patient, cancellationToken);
+        _patientRepo.Update(patient);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Fetch refreshed active items

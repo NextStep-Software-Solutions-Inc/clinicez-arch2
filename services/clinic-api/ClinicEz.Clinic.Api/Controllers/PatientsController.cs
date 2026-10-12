@@ -281,6 +281,54 @@ public sealed class PatientsController : ControllerBase
         return Ok(ApiResponse<PatientSocialHistoryDto>.Success(result, "Social history updated successfully."));
     }
 
+    // --- Past Medical History Endpoints ---
+
+    [HttpGet("{patientId:guid}/medical-history")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<PatientMedicalHistoryResultDto>>> GetMedicalHistory(
+        Guid patientId,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetPatientMedicalHistoryQuery(patientId), ct);
+        return Ok(ApiResponse<PatientMedicalHistoryResultDto>.Success(result));
+    }
+
+    [HttpPut("{patientId:guid}/medical-history")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientMedicalHistoryResultDto>>> UpdateMedicalHistory(
+        Guid patientId,
+        [FromBody] SavePatientMedicalHistoriesRequest request,
+        CancellationToken ct)
+    {
+        var command = new SavePatientMedicalHistoriesCommand(patientId, request.Items, request.Notes);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PatientMedicalHistoryResultDto>.Success(result, "Past medical history updated successfully."));
+    }
+
+    // --- Family Medical History Endpoints ---
+
+    [HttpGet("{patientId:guid}/family-history")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<PatientFamilyHistoryResultDto>>> GetFamilyHistory(
+        Guid patientId,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetPatientFamilyHistoryQuery(patientId), ct);
+        return Ok(ApiResponse<PatientFamilyHistoryResultDto>.Success(result));
+    }
+
+    [HttpPut("{patientId:guid}/family-history")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientFamilyHistoryResultDto>>> UpdateFamilyHistory(
+        Guid patientId,
+        [FromBody] SavePatientFamilyHistoriesRequest request,
+        CancellationToken ct)
+    {
+        var command = new SavePatientFamilyHistoriesCommand(patientId, request.Items, request.Notes);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PatientFamilyHistoryResultDto>.Success(result, "Family medical history updated successfully."));
+    }
+
     // --- Reproductive History Endpoints ---
 
     [HttpGet("{patientId:guid}/reproductive-history")]
