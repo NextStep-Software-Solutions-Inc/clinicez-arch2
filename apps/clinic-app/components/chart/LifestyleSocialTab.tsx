@@ -621,7 +621,7 @@ export default function LifestyleSocialTab({
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => setPhysicalActivityFrequency(opt)}
                 >
-                  {active && <Icon name="check" size={theme.sizes.iconXs} color={theme.colors.primary} />}
+                  {active && <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.primary} />}
                   <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
                     {opt}
                   </ThemedText>
@@ -647,7 +647,7 @@ export default function LifestyleSocialTab({
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => toggleDietaryHabit(opt)}
                 >
-                  <Icon name={active ? 'check' : 'plus'} size={theme.sizes.iconXs} color={active ? theme.colors.primary : theme.colors.textMuted} />
+                  <Icon name={active ? 'check' : 'plus'} size={theme.sizes.iconSm} color={active ? theme.colors.primary : theme.colors.textMuted} />
                   <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
                     {opt}
                   </ThemedText>

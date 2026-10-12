@@ -1543,6 +1543,13 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     padding: theme.spacing.sm,
   },
+  conditionalForm: {
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
   behavioralRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

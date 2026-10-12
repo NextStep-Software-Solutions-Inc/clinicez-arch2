@@ -1,3 +1,5 @@
+using ClinicEz.Clinic.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace ClinicEz.Clinic.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(ApplicationDbContext))]
+    [Migration("20261012190000_AddCustomFieldVisibilityAndConditionalOptions")]
     public partial class AddCustomFieldVisibilityAndConditionalOptions : Migration
     {
         /// <inheritdoc />

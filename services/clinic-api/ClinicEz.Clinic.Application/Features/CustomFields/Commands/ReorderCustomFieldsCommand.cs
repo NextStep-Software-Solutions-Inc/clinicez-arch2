@@ -15,32 +15,19 @@ namespace ClinicEz.Clinic.Application.Features.CustomFields.Commands;
 
 public sealed record CustomFieldOrderItem(Guid Id, int DisplayOrder);
 
-public sealed record ReorderCustomFieldsCommand : IRequest<IReadOnlyList<ClinicCustomFieldDefinitionDto>>
+public sealed record ReorderCustomFieldsCommand(
+    IReadOnlyList<CustomFieldOrderItem>? Items = null,
+    IReadOnlyList<Guid>? OrderedIds = null,
+    string? EntityType = "ClinicPatient") : IRequest<IReadOnlyList<ClinicCustomFieldDefinitionDto>>
 {
-    public string? EntityType { get; init; } = "ClinicPatient";
-    public IReadOnlyList<CustomFieldOrderItem>? Items { get; init; }
-    public IReadOnlyList<Guid>? OrderedIds { get; init; }
-
-    public ReorderCustomFieldsCommand() { }
-
-    public ReorderCustomFieldsCommand(
-        IReadOnlyList<CustomFieldOrderItem>? items = null,
-        IReadOnlyList<Guid>? orderedIds = null,
-        string? entityType = "ClinicPatient")
+    public ReorderCustomFieldsCommand(string entityType, IReadOnlyList<Guid> orderedIds)
+        : this(null, orderedIds, entityType)
     {
-        Items = items;
-        OrderedIds = orderedIds;
-        EntityType = entityType ?? "ClinicPatient";
     }
 
-    public ReorderCustomFieldsCommand(
-        string? entityType,
-        IReadOnlyList<CustomFieldOrderItem>? items = null,
-        IReadOnlyList<Guid>? orderedIds = null)
+    public ReorderCustomFieldsCommand(string entityType, IReadOnlyList<CustomFieldOrderItem> items)
+        : this(items, null, entityType)
     {
-        EntityType = entityType ?? "ClinicPatient";
-        Items = items;
-        OrderedIds = orderedIds;
     }
 }
 
