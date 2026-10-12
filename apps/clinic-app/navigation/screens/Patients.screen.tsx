@@ -50,6 +50,7 @@ import StructuredAllergyIntakeModal, {
   CreateAllergyRequest,
 } from '../../components/patient/StructuredAllergyIntakeModal';
 import EditPatientModal from '../../components/patient/EditPatientModal';
+import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
 import { formatLongAge } from '../../utils/age';
 import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
 
@@ -113,7 +114,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formEmployeeId, setFormEmployeeId] = useState('');
   const [formDepartment, setFormDepartment] = useState('');
   const [tenantCustomFields, setTenantCustomFields] = useState<ClinicCustomFieldDefinition[]>([]);
-  const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, string>>({});
+  const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, any>>({});
+  const [dynamicFieldErrors, setDynamicFieldErrors] = useState<Record<string, string>>({});
   const [formFirstName, setFormFirstName] = useState('');
   const [formLastName, setFormLastName] = useState('');
   const [formMiddleName, setFormMiddleName] = useState('');
@@ -272,27 +274,36 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       return;
     }
 
+    // Defensive custom fields validation
+    const staticValues = { gender: formGender, civilStatus: formCivilStatus, dateOfBirth: formDob };
+    if (tenantCustomFields.length > 0) {
+      const { isValid, errors } = validateCustomFields(tenantCustomFields, dynamicFieldValues, staticValues);
+      if (!isValid) {
+        setDynamicFieldErrors(errors);
+        Alert.alert('Missing Required Custom Fields', Object.values(errors).join('\n'));
+        return;
+      }
+    }
+
     setSavingPatient(true);
 
     const customFields: Record<string, any> = {};
-    if (formClassification === 'Student') {
-      customFields['classification'] = 'Student';
-      if (formStudentId.trim()) customFields['student_id'] = formStudentId.trim();
-      if (formCollege.trim()) customFields['college'] = formCollege.trim();
-      if (formProgram.trim()) customFields['program'] = formProgram.trim();
-      if (formYearLevel.trim()) customFields['year_level'] = formYearLevel.trim();
-    } else if (formClassification === 'Employee') {
-      customFields['classification'] = 'Employee';
-      if (formEmployeeId.trim()) customFields['employee_id'] = formEmployeeId.trim();
-      if (formDepartment.trim()) customFields['department'] = formDepartment.trim();
-    }
-
-    // Merge additional tenant-configured custom fields
-    Object.entries(dynamicFieldValues).forEach(([k, v]) => {
-      if (v && v.trim()) {
-        customFields[k] = v.trim();
+    if (tenantCustomFields.length > 0) {
+      const cleanCustom = sanitizeCustomFieldsPayload(tenantCustomFields, dynamicFieldValues, staticValues);
+      Object.assign(customFields, cleanCustom);
+    } else {
+      if (formClassification === 'Student') {
+        customFields['classification'] = 'Student';
+        if (formStudentId.trim()) customFields['student_id'] = formStudentId.trim();
+        if (formCollege.trim()) customFields['college'] = formCollege.trim();
+        if (formProgram.trim()) customFields['program'] = formProgram.trim();
+        if (formYearLevel.trim()) customFields['year_level'] = formYearLevel.trim();
+      } else if (formClassification === 'Employee') {
+        customFields['classification'] = 'Employee';
+        if (formEmployeeId.trim()) customFields['employee_id'] = formEmployeeId.trim();
+        if (formDepartment.trim()) customFields['department'] = formDepartment.trim();
       }
-    });
+    }
 
     const allergiesSummary = structuredAllergies.length > 0
       ? structuredAllergies.map((a) => `${a.allergen} (${a.category}${a.isAnaphylactic ? ' - STAT' : ''})`).join(', ')
@@ -354,6 +365,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
     setRegisterVisible(false);
     // Reset form
+    setDynamicFieldValues({});
+    setDynamicFieldErrors({});
     setFormClassification('General');
     setFormStudentId('');
     setFormCollege('');
@@ -1075,125 +1088,130 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 onSelectExistingPatient={handleViewExistingPatient}
               />
 
-              {/* Classification Selector */}
-              <View>
-                <ThemedText style={styles.inputLabel}>Patient Classification / Profile Type</ThemedText>
-                <View style={styles.categoryRow}>
-                  {(['General', 'Student', 'Employee'] as const).map((cat) => (
-                    <Pressable
-                      key={cat}
-                      style={[styles.categoryPill, formClassification === cat && styles.categoryPillActive]}
-                      onPress={() => setFormClassification(cat)}
-                    >
-                      <ThemedText style={[styles.categoryPillText, formClassification === cat && styles.categoryPillTextActive]}>
-                        {cat === 'General' ? 'General' : cat === 'Student' ? 'Student' : 'Employee'}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
+              {/* Institutional & Custom Metadata Section */}
+              {tenantCustomFields.length > 0 ? (
+                <View style={{ marginBottom: theme.spacing.sm }}>
+                  <ThemedText style={styles.inputLabel}>Institutional & Additional Details</ThemedText>
+                  <DynamicCustomFieldsRenderer
+                    fields={tenantCustomFields}
+                    values={dynamicFieldValues}
+                    onChange={(key, val) => {
+                      setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
+                      setDynamicFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                      });
+                    }}
+                    errors={dynamicFieldErrors}
+                    staticValues={{
+                      gender: formGender,
+                      civilStatus: formCivilStatus,
+                      dateOfBirth: formDob,
+                    }}
+                  />
                 </View>
-              </View>
+              ) : (
+                <>
+                  {/* Classification Selector */}
+                  <View>
+                    <ThemedText style={styles.inputLabel}>Patient Classification / Profile Type</ThemedText>
+                    <View style={styles.categoryRow}>
+                      {(['General', 'Student', 'Employee'] as const).map((cat) => (
+                        <Pressable
+                          key={cat}
+                          style={[styles.categoryPill, formClassification === cat && styles.categoryPillActive]}
+                          onPress={() => setFormClassification(cat)}
+                        >
+                          <ThemedText style={[styles.categoryPillText, formClassification === cat && styles.categoryPillTextActive]}>
+                            {cat === 'General' ? 'General' : cat === 'Student' ? 'Student' : 'Employee'}
+                          </ThemedText>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
 
-              {/* Student-specific Institutional Fields */}
-              {formClassification === 'Student' && (
-                <View style={styles.institutionalBox}>
-                  <ThemedText style={styles.institutionalBoxTitle}>School Clinic: Student Details</ThemedText>
-                  <View style={styles.formRow}>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.inputLabel}>Student ID / LRN *</ThemedText>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="e.g. 2026-10492"
-                        placeholderTextColor={theme.colors.textMuted}
-                        value={formStudentId}
-                        onChangeText={setFormStudentId}
-                      />
+                  {/* Student-specific Institutional Fields */}
+                  {formClassification === 'Student' && (
+                    <View style={styles.institutionalBox}>
+                      <ThemedText style={styles.institutionalBoxTitle}>School Clinic: Student Details</ThemedText>
+                      <View style={styles.formRow}>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={styles.inputLabel}>Student ID / LRN *</ThemedText>
+                          <TextInput
+                            style={styles.textInput}
+                            placeholder="e.g. 2026-10492"
+                            placeholderTextColor={theme.colors.textMuted}
+                            value={formStudentId}
+                            onChangeText={setFormStudentId}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={styles.inputLabel}>Year Level</ThemedText>
+                          <TextInput
+                            style={styles.textInput}
+                            placeholder="e.g. 1st Year"
+                            placeholderTextColor={theme.colors.textMuted}
+                            value={formYearLevel}
+                            onChangeText={setFormYearLevel}
+                          />
+                        </View>
+                      </View>
+                      <View style={styles.formRow}>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={styles.inputLabel}>College / Faculty</ThemedText>
+                          <TextInput
+                            style={styles.textInput}
+                            placeholder="e.g. College of Computer Studies"
+                            placeholderTextColor={theme.colors.textMuted}
+                            value={formCollege}
+                            onChangeText={setFormCollege}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={styles.inputLabel}>Program / Course</ThemedText>
+                          <TextInput
+                            style={styles.textInput}
+                            placeholder="e.g. BS Computer Science"
+                            placeholderTextColor={theme.colors.textMuted}
+                            value={formProgram}
+                            onChangeText={setFormProgram}
+                          />
+                        </View>
+                      </View>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.inputLabel}>Year Level</ThemedText>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="e.g. 1st Year"
-                        placeholderTextColor={theme.colors.textMuted}
-                        value={formYearLevel}
-                        onChangeText={setFormYearLevel}
-                      />
+                  )}
+
+                  {/* Employee-specific Institutional Fields */}
+                  {formClassification === 'Employee' && (
+                    <View style={styles.institutionalBox}>
+                      <ThemedText style={styles.institutionalBoxTitle}>School Clinic: Employee Details</ThemedText>
+                      <View style={styles.formRow}>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={styles.inputLabel}>Employee ID *</ThemedText>
+                          <TextInput
+                            style={styles.textInput}
+                            placeholder="e.g. EMP-2026-042"
+                            placeholderTextColor={theme.colors.textMuted}
+                            value={formEmployeeId}
+                            onChangeText={setFormEmployeeId}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <ThemedText style={styles.inputLabel}>Department / Unit</ThemedText>
+                          <TextInput
+                            style={styles.textInput}
+                            placeholder="e.g. Registrar / Faculty of Sciences"
+                            placeholderTextColor={theme.colors.textMuted}
+                            value={formDepartment}
+                            onChangeText={setFormDepartment}
+                          />
+                        </View>
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.formRow}>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.inputLabel}>College / Faculty</ThemedText>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="e.g. College of Computer Studies"
-                        placeholderTextColor={theme.colors.textMuted}
-                        value={formCollege}
-                        onChangeText={setFormCollege}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.inputLabel}>Program / Course</ThemedText>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="e.g. BS Computer Science"
-                        placeholderTextColor={theme.colors.textMuted}
-                        value={formProgram}
-                        onChangeText={setFormProgram}
-                      />
-                    </View>
-                  </View>
-                </View>
+                  )}
+                </>
               )}
-
-              {/* Employee-specific Institutional Fields */}
-              {formClassification === 'Employee' && (
-                <View style={styles.institutionalBox}>
-                  <ThemedText style={styles.institutionalBoxTitle}>School Clinic: Employee Details</ThemedText>
-                  <View style={styles.formRow}>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.inputLabel}>Employee ID *</ThemedText>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="e.g. EMP-2026-042"
-                        placeholderTextColor={theme.colors.textMuted}
-                        value={formEmployeeId}
-                        onChangeText={setFormEmployeeId}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={styles.inputLabel}>Department / Unit</ThemedText>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder="e.g. Registrar / Faculty of Sciences"
-                        placeholderTextColor={theme.colors.textMuted}
-                        value={formDepartment}
-                        onChangeText={setFormDepartment}
-                      />
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* Additional Tenant-Configured Dynamic Custom Fields */}
-              {tenantCustomFields
-                .filter(
-                  (f) =>
-                    (f.category === formClassification || (!f.category && formClassification === 'General')) &&
-                    !['student_id', 'college', 'program', 'year_level', 'employee_id', 'department'].includes(f.fieldKey)
-                )
-                .map((f) => (
-                  <View key={f.id} style={{ marginTop: 2 }}>
-                    <ThemedText style={styles.inputLabel}>
-                      {f.label} {f.isRequired ? '*' : ''}
-                    </ThemedText>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder={f.placeholder || `Enter ${f.label}`}
-                      placeholderTextColor={theme.colors.textMuted}
-                      value={dynamicFieldValues[f.fieldKey] || ''}
-                      onChangeText={(val) => setDynamicFieldValues((prev) => ({ ...prev, [f.fieldKey]: val }))}
-                    />
-                  </View>
-                ))}
 
               <View style={styles.formRow}>
                 <View style={{ flex: 1 }}>
