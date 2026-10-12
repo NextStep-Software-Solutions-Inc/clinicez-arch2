@@ -630,6 +630,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("EmergencyContactRelationship")
                         .HasColumnType("text");
 
+                    b.Property<string>("FamilyMedicalHistoryNotes")
+                        .HasColumnType("text");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -655,6 +658,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
+
+                    b.Property<string>("PersonalMedicalHistoryNotes")
+                        .HasColumnType("text");
 
                     b.Property<string>("PhilHealthCaseNo")
                         .HasColumnType("text");
@@ -2524,6 +2530,81 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.ToTable("PatientAllergies", "clinic_dashboard");
                 });
 
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientFamilyHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClinicalNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ConditionTitle")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Icd10Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PhilHealthMdiseaseCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Relationship")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SpecificDescription")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("ClinicId", "PatientId", "PhilHealthMdiseaseCode");
+
+                    b.HasIndex("TenantId", "ClinicId", "PatientId");
+
+                    b.ToTable("PatientFamilyHistories", "clinic_dashboard");
+                });
+
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientImmunization", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2679,6 +2760,83 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
                     b.ToTable("PatientImmunizations", "clinic_dashboard");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientPastMedicalHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClinicalNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ConditionTitle")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Icd10Code")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsResolved")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly?>("OnsetDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PhilHealthMdiseaseCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("SpecificDescription")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("ClinicId", "PatientId", "PhilHealthMdiseaseCode");
+
+                    b.HasIndex("TenantId", "ClinicId", "PatientId");
+
+                    b.ToTable("PatientPastMedicalHistories", "clinic_dashboard");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientProblem", b =>
@@ -4507,6 +4665,28 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientFamilyHistory", b =>
+                {
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.ClinicPatient", "Patient")
+                        .WithMany("FamilyHistories")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientPastMedicalHistory", b =>
+                {
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.ClinicPatient", "Patient")
+                        .WithMany("PastMedicalHistories")
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Patient");
+                });
+
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientReproductiveHistory", b =>
                 {
                     b.HasOne("ClinicEz.Clinic.Domain.Entities.ClinicPatient", "Patient")
@@ -4624,7 +4804,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicPatient", b =>
                 {
+                    b.Navigation("FamilyHistories");
+
                     b.Navigation("NcdRiskAssessments");
+
+                    b.Navigation("PastMedicalHistories");
 
                     b.Navigation("ReproductiveHistory");
 

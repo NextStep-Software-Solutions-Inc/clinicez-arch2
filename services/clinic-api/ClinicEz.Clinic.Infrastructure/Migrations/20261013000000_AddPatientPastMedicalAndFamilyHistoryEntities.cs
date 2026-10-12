@@ -1,4 +1,6 @@
 using System;
+using ClinicEz.Clinic.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -77,6 +79,12 @@ public partial class AddPatientPastMedicalAndFamilyHistoryEntities : Migration
             table: "PatientPastMedicalHistories",
             columns: new[] { "ClinicId", "PatientId", "PhilHealthMdiseaseCode" });
 
+        migrationBuilder.CreateIndex(
+            name: "IX_PatientPastMedicalHistories_PatientId",
+            schema: "clinic_dashboard",
+            table: "PatientPastMedicalHistories",
+            column: "PatientId");
+
         // 3. PatientFamilyHistories Table
         migrationBuilder.CreateTable(
             name: "PatientFamilyHistories",
@@ -124,6 +132,12 @@ public partial class AddPatientPastMedicalAndFamilyHistoryEntities : Migration
             schema: "clinic_dashboard",
             table: "PatientFamilyHistories",
             columns: new[] { "ClinicId", "PatientId", "PhilHealthMdiseaseCode" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_PatientFamilyHistories_PatientId",
+            schema: "clinic_dashboard",
+            table: "PatientFamilyHistories",
+            column: "PatientId");
     }
 
     /// <inheritdoc />
