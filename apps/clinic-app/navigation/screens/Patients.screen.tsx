@@ -15,6 +15,9 @@ import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, S
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import {
   PatientSummarySpine,
+  PatientChartModal,
+  CHART_TABS,
+  type ChartTab,
   ExecutiveSummaryTab,
   EncountersTimelineTab,
   DiagnosticLabTab,
@@ -68,24 +71,6 @@ const humanizeKey = (key: string) => {
 };
 
 type PatientFilter = 'ALL' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES';
-type ChartTab =
-  | 'summary'
-  | 'encounters'
-  | 'diagnostics'
-  | 'procedures'
-  | 'immunizations'
-  | 'profiles'
-  | 'vault';
-
-const CHART_TABS: SegmentedOption<ChartTab>[] = [
-  { value: 'summary', label: 'Summary' },
-  { value: 'encounters', label: 'Encounters' },
-  { value: 'diagnostics', label: 'Diagnostics' },
-  { value: 'procedures', label: 'Procedures' },
-  { value: 'immunizations', label: 'Vaccines' },
-  { value: 'profiles', label: 'Health Profiles' },
-  { value: 'vault', label: 'Doc Vault' },
-];
 
 export type PatientsScreenProps = StaticScreenProps<{ openPatientId?: string } | undefined>;
 
@@ -1169,147 +1154,56 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         onChange={setStructuredAllergies}
       />
 
-      {/* Patient Longitudinal Chart Modal */}
-      <Modal visible={chartVisible} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
-            <View style={styles.modalHeader}>
-              <View>
-                <ThemedText variant="title">Medical chart</ThemedText>
-                <ThemedText variant="small" color={theme.colors.textSecondary}>{selectedPatient?.fullName}</ThemedText>
-              </View>
-              <View style={styles.chartHeaderActions}>
-                <Pressable onPress={() => setChartVisible(false)}>
-                  <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Patient Summary Spine (Glanceable 6-Zone Header) */}
-            {selectedPatient && (
-              <View style={{ marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.sm }}>
-                <PatientSummarySpine
-                  patient={selectedPatient}
-                  chart={patientChart}
-                  vitals={patientChart?.vitalsHistory?.[0]}
-                  loading={loadingChart}
-                  onPressRefresh={() => selectedPatient && handleOpenChart(selectedPatient)}
-                />
-              </View>
-            )}
-
-            {/* Longitudinal Chart Tabs */}
-            <View style={{ marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.sm }}>
-              <SegmentedControl
-                options={CHART_TABS}
-                value={activeChartTab}
-                onChange={setActiveChartTab}
-              />
-            </View>
-
-            {loadingChart ? (
-              <SkeletonList rows={5} />
-            ) : chartError && !patientChart ? (
-              <ErrorState
-                title="Unable to load the chart"
-                message={chartError}
-                onRetry={() => selectedPatient && handleOpenChart(selectedPatient)}
-              />
-            ) : patientChart && selectedPatient ? (
-              activeChartTab === 'summary' ? (
-                <ExecutiveSummaryTab
-                  patient={selectedPatient}
-                  chart={patientChart}
-                  onNavigateTab={(tab) => setActiveChartTab(tab)}
-                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-                />
-              ) : activeChartTab === 'encounters' ? (
-                <EncountersTimelineTab
-                  patient={selectedPatient}
-                  patientId={selectedPatient.id}
-                  consultations={patientChart.consultations || []}
-                  onViewPrescriptionSlip={handleViewPrescriptionSlip}
-                  onOpenExternalDispense={handleOpenExternalDispense}
-                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-                />
-              ) : activeChartTab === 'diagnostics' ? (
-                <DiagnosticLabTab
-                  patient={selectedPatient}
-                  patientId={selectedPatient.id}
-                  labOrders={patientChart.labOrdersHistory || []}
-                  onViewLabSlip={handleViewSlip}
-                  onOpenLabSlip={(order) => handleViewSlip(order.id)}
-                  onAttachExternalResult={handleOpenAttach}
-                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-                />
-              ) : activeChartTab === 'procedures' ? (
-                <NursingProceduresTab
-                  patient={selectedPatient}
-                  patientId={selectedPatient.id}
-                  procedures={patientChart.proceduresHistory || []}
-                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-                />
-              ) : activeChartTab === 'immunizations' ? (
-                <StatutoryImmunizationsTab
-                  patient={selectedPatient}
-                  patientId={selectedPatient.id}
-                  demographics={patientChart.demographics}
-                  immunizations={patientChart.immunizations || []}
-                  onAdministerVaccine={async (payload) => {
-                    const [, err] = await clinicService.administerVaccine(selectedPatient.id, payload);
-                    if (err) {
-                      notify.error(err.message || 'Could not record vaccine administration.');
-                    } else {
-                      notify.success('Vaccine administration recorded.');
-                      handleOpenChart(selectedPatient);
-                    }
-                  }}
-                  onRecordHistoricalVaccine={async (payload) => {
-                    const [, err] = await clinicService.recordHistoricalImmunization(selectedPatient.id, payload);
-                    if (err) {
-                      notify.error(err.message || 'Could not record historical immunization.');
-                    } else {
-                      notify.success('Historical immunization added.');
-                      handleOpenChart(selectedPatient);
-                    }
-                  }}
-                  onRecordAefi={async (immId, payload) => {
-                    const [, err] = await clinicService.recordImmunizationAefi(selectedPatient.id, immId, payload);
-                    if (err) {
-                      notify.error(err.message || 'Could not record adverse reaction.');
-                    } else {
-                      notify.success('Adverse event (AEFI) recorded.');
-                      handleOpenChart(selectedPatient);
-                    }
-                  }}
-                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-                />
-              ) : activeChartTab === 'profiles' ? (
-                <HealthProfilesTab
-                  patient={selectedPatient}
-                  surgicalHistories={patientChart.surgicalHistories}
-                  socialHistory={patientChart.socialHistory}
-                  reproductiveHistory={patientChart.reproductiveHistory}
-                  latestNcdAssessment={patientChart.latestNcdAssessment}
-                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-                />
-              ) : activeChartTab === 'vault' ? (
-                <ExternalDocumentVaultTab
-                  patient={selectedPatient}
-                  patientId={selectedPatient.id}
-                  attachments={patientChart.attachments || patientAttachments}
-                  onUploadDocument={() => setUploadDocModalVisible(true)}
-                  onVerifyAttachment={handleVerifyAttachment}
-                  onDownloadAttachment={async (attId) => {
-                    handleDownloadAttachment(attId);
-                  }}
-                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-                />
-              ) : null
-          ) : null}
-        </View>
-        </View>
-      </Modal>
+      {/* Patient Longitudinal Chart Workstation Modal */}
+      <PatientChartModal
+        visible={chartVisible}
+        patient={selectedPatient}
+        patientChart={patientChart}
+        loadingChart={loadingChart}
+        chartError={chartError}
+        patientAttachments={patientAttachments}
+        activeTab={activeChartTab}
+        onTabChange={setActiveChartTab}
+        onClose={() => setChartVisible(false)}
+        onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+        onViewPrescriptionSlip={handleViewPrescriptionSlip}
+        onOpenExternalDispense={handleOpenExternalDispense}
+        onViewLabSlip={handleViewSlip}
+        onAttachExternalResult={handleOpenAttach}
+        onUploadDocument={() => setUploadDocModalVisible(true)}
+        onVerifyAttachment={handleVerifyAttachment}
+        onDownloadAttachment={handleDownloadAttachment}
+        onAdministerVaccine={async (payload) => {
+          if (!selectedPatient) return;
+          const [, err] = await clinicService.administerVaccine(selectedPatient.id, payload);
+          if (err) {
+            notify.error(err.message || 'Could not record vaccine administration.');
+          } else {
+            notify.success('Vaccine administration recorded.');
+            handleOpenChart(selectedPatient);
+          }
+        }}
+        onRecordHistoricalVaccine={async (payload) => {
+          if (!selectedPatient) return;
+          const [, err] = await clinicService.recordHistoricalImmunization(selectedPatient.id, payload);
+          if (err) {
+            notify.error(err.message || 'Could not record historical immunization.');
+          } else {
+            notify.success('Historical immunization added.');
+            handleOpenChart(selectedPatient);
+          }
+        }}
+        onRecordAefi={async (immId, payload) => {
+          if (!selectedPatient) return;
+          const [, err] = await clinicService.recordImmunizationAefi(selectedPatient.id, immId, payload);
+          if (err) {
+            notify.error(err.message || 'Could not record adverse reaction.');
+          } else {
+            notify.success('Adverse event (AEFI) recorded.');
+            handleOpenChart(selectedPatient);
+          }
+        }}
+      />
 
       {/* Lab Order Slip Modal with Verifiable QR Code & Upload Token */}
       <Modal visible={slipModalVisible} transparent animationType="slide">
@@ -1705,11 +1599,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
-  },
-  chartHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
   },
   noticeText: {
     flex: 1,

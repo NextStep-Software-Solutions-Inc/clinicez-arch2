@@ -10,6 +10,9 @@ export {
 } from './PatientSummarySpine';
 export type { PatientSummarySpineProps, VitalsThresholdResult, UrgencyLevel } from './PatientSummarySpine';
 
+export { default as PatientChartModal, CHART_TABS } from './PatientChartModal';
+export type { PatientChartModalProps, ChartTab } from './PatientChartModal';
+
 export { default as ExecutiveSummaryTab } from './ExecutiveSummaryTab';
 export type { ExecutiveSummaryTabProps } from './ExecutiveSummaryTab';
 
