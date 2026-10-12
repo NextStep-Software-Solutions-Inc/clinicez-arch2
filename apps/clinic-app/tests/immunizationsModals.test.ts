@@ -204,7 +204,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
   ];
 
   describe('Feature 11: StatutoryImmunizationsTab Action Controls & Compliance Layout', () => {
-    test('renders + Administer Vaccine and + Add Historical Vaccine header action buttons', () => {
+    test('renders Administer Vaccine and Add Historical Vaccine header action buttons', () => {
       const html = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
           patient: mockChildPatient,
@@ -215,8 +215,9 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
         })
       );
 
-      expect(html).toContain('+ Administer Vaccine');
-      expect(html).toContain('+ Add Historical Vaccine');
+      expect(html).toContain('Administer Vaccine');
+      expect(html).toContain('Add Historical Vaccine');
+      expect(html).not.toContain('+ +');
     });
 
     test('renders PhilHealth Konsulta 999 statutory fallback banner when zero immunizations recorded', () => {

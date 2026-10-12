@@ -741,8 +741,9 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       expect(html).toContain('PhilHealth Konsulta Statutory Coverage (Fallback Code 999)');
       expect(html).toContain('statutory fallback code 999');
       expect(html).toContain('No immunizations recorded');
-      expect(html).toContain('+ Administer Vaccine');
-      expect(html).toContain('+ Add Historical Vaccine');
+      expect(html).toContain('Administer Vaccine');
+      expect(html).toContain('Add Historical Vaccine');
+      expect(html).not.toContain('+ +');
     });
   });
 });

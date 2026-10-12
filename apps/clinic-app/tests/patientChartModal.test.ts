@@ -566,4 +566,74 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(modalMarkup).toContain('aria-label="Medical Chart for Maria DB"');
     expect(modalMarkup).toContain('aria-label="Maximize chart window"');
   });
+
+  test('19. SplitPaneChartLayout stacks MRN, demographics, and PHIC into non-breaking key-value rows', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(SplitPaneChartLayout, {
+        patient: {
+          ...mockPatient,
+          philHealthNumber: '12-345678901-2',
+        },
+        patientChart: mockChart,
+        activeTab: 'summary',
+        onTabChange: () => {},
+        onClose: () => {},
+        onEditDemographics: () => {},
+        currentLayout: 'split',
+        onSwitchLayout: () => {},
+      })
+    );
+
+    expect(markup).toContain('MRN:');
+    expect(markup).toContain('PAT-2026-00001');
+    expect(markup).toContain('Demographics:');
+    expect(markup).toContain('PHIC:');
+    expect(markup).toContain('12-345678901-2');
+  });
+
+  test('20. StatutoryImmunizationsTab renders action buttons without duplicate plus prefix', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: mockPatient,
+        patientChart: mockChart,
+        activeTab: 'immunizations',
+        onClose: () => {},
+      })
+    );
+
+    expect(markup).toContain('Administer Vaccine');
+    expect(markup).toContain('Add Historical Vaccine');
+    expect(markup).not.toContain('+ +');
+    expect(markup).not.toContain('+ Administer Vaccine');
+    expect(markup).not.toContain('+ Add Historical Vaccine');
+  });
+
+  test('21. PatientChartModal renders all 7 longitudinal tabs seamlessly across all 3 workstation layouts', () => {
+    const layouts: ('modal' | 'split' | 'drawer')[] = ['modal', 'split', 'drawer'];
+    const tabs: any[] = ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault'];
+
+    for (const layout of layouts) {
+      for (const tab of tabs) {
+        const markup = renderToStaticMarkup(
+          React.createElement(PatientChartModal, {
+            visible: true,
+            patient: mockPatient,
+            patientChart: mockChart,
+            preferredLayout: layout,
+            activeTab: tab,
+            onClose: () => {},
+          })
+        );
+        expect(markup.length).toBeGreaterThan(0);
+        if (layout === 'split') {
+          expect(markup).toContain('aria-label="Clinical Workstation for Maria DB"');
+        } else if (layout === 'drawer') {
+          expect(markup).toContain('aria-label="Medical Chart Drawer for Maria DB"');
+        } else {
+          expect(markup).toContain('aria-label="Medical Chart for Maria DB"');
+        }
+      }
+    }
+  });
 });
