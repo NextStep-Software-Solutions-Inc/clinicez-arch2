@@ -56,6 +56,18 @@ function Toast({ toast }: { toast: ToastRequest }) {
   );
 }
 
+function getPortal() {
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return (require('react-dom') as typeof import('react-dom')).createPortal;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 /**
  * Mount once at the app root. Renders web alert dialogs (native uses system dialogs)
  * and toasts for both platforms.
@@ -63,6 +75,20 @@ function Toast({ toast }: { toast: ToastRequest }) {
 export default function FeedbackHost() {
   const { alerts, toasts } = useSyncExternalStore(subscribeFeedback, getFeedbackState, getFeedbackState);
   const current = alerts[0];
+  const portal = getPortal();
+
+  const toastContainer = (
+    <View pointerEvents="box-none" style={styles.toastLayer}>
+      {toasts.map((toast) => (
+        <Toast key={toast.id} toast={toast} />
+      ))}
+    </View>
+  );
+
+  const renderedToasts =
+    portal && typeof document !== 'undefined' && document.body
+      ? portal(toastContainer, document.body)
+      : toastContainer;
 
   return (
     <>
@@ -107,11 +133,7 @@ export default function FeedbackHost() {
         </Modal>
       ) : null}
 
-      <View pointerEvents="box-none" style={styles.toastLayer}>
-        {toasts.map((toast) => (
-          <Toast key={toast.id} toast={toast} />
-        ))}
-      </View>
+      {toasts.length > 0 ? renderedToasts : null}
     </>
   );
 }
@@ -130,7 +152,9 @@ const styles = StyleSheet.create({
     right: theme.spacing.lg,
     alignItems: 'center',
     gap: theme.spacing.sm,
-    zIndex: 1000,
+    zIndex: 999999,
+    elevation: 999999,
+    pointerEvents: 'box-none',
   },
   toast: {
     flexDirection: 'row',
@@ -142,6 +166,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     borderWidth: theme.sizes.borderWidth,
     ...theme.shadows.lg,
+    pointerEvents: 'auto',
   },
   toastText: {
     flexShrink: 1,
