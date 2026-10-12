@@ -14,7 +14,7 @@ import {
   Icon,
   Badge,
 } from '@ui';
-import { notify } from '@utils/feedback';
+import { notify, Alert } from '@utils/feedback';
 import { theme } from '../../constants/theme';
 import {
   clinicService,
@@ -90,6 +90,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
   const [templates, setTemplates] = useState<DoctorScheduleTemplateItem[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState<boolean>(false);
   const [savingTemplate, setSavingTemplate] = useState<boolean>(false);
+  const [deletingTemplate, setDeletingTemplate] = useState<boolean>(false);
 
   const [startTime, setStartTime] = useState<string>('09:00');
   const [endTime, setEndTime] = useState<string>('17:00');
@@ -222,13 +223,61 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
         return;
       }
 
-      notify.success('Doctor schedule template saved successfully.');
+      notify.success(
+        isActiveDay
+          ? `${getDayName(selectedDay)} schedule saved successfully.`
+          : `${getDayName(selectedDay)} marked as Off Duty.`
+      );
       await loadTemplates(selectedDoctorId);
     } catch (err: any) {
       notify.error(err?.message || 'Failed to save schedule template.');
     } finally {
       setSavingTemplate(false);
     }
+  };
+
+  const handleDeleteTemplate = () => {
+    const existing = templates.find((t) => getDayIndex(t.dayOfWeek) === selectedDay);
+    if (!existing || !selectedDoctorId) return;
+
+    const dayName = getDayName(selectedDay);
+    const doctor = doctors.find((d) => d.id === selectedDoctorId);
+    const doctorName = doctor ? `Dr. ${doctor.firstName} ${doctor.lastName}` : 'the doctor';
+
+    Alert.alert(
+      `Remove ${dayName} Schedule`,
+      `Are you sure you want to remove the ${dayName} schedule for ${doctorName}? This will delete all shift hours and breaks for this day.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove Day',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingTemplate(true);
+              const [, err] = await clinicService.deleteDoctorScheduleTemplate(selectedDoctorId, existing.id);
+              if (err) {
+                notify.error(err.message || `Failed to remove ${dayName} schedule.`);
+                return;
+              }
+              notify.success(`${dayName} schedule removed successfully.`);
+              await loadTemplates(selectedDoctorId);
+              // Reset day form to clean defaults
+              setStartTime('09:00');
+              setEndTime('17:00');
+              setIsOvernight(false);
+              setSlotInterval(30);
+              setIsActiveDay(true);
+              setBreaks([]);
+            } catch (err: any) {
+              notify.error(err?.message || `Failed to remove ${dayName} schedule.`);
+            } finally {
+              setDeletingTemplate(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleAddBreak = () => {
@@ -308,6 +357,8 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
       notify.error(err?.message || 'Failed to delete leave.');
     }
   };
+
+  const currentTemplate = templates.find((t) => getDayIndex(t.dayOfWeek) === selectedDay);
 
   return (
     <Modal
@@ -400,9 +451,9 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                 <View style={styles.daySelector}>
                   {DAYS_OF_WEEK.map((d) => {
                     const isSelected = selectedDay === d.day;
-                    const hasTemplate = templates.some(
-                      (t) => getDayIndex(t.dayOfWeek) === d.day && t.isActive
-                    );
+                    const template = templates.find((t) => getDayIndex(t.dayOfWeek) === d.day);
+                    const hasActiveTemplate = template?.isActive === true;
+                    const isConfiguredOffDuty = template != null && template.isActive === false;
 
                     return (
                       <Pressable
@@ -410,36 +461,85 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                         style={[
                           styles.dayPill,
                           isSelected && styles.dayPillSelected,
-                          hasTemplate && !isSelected && styles.dayPillActive,
+                          hasActiveTemplate && !isSelected && styles.dayPillActive,
+                          isConfiguredOffDuty && !isSelected && styles.dayPillOffDuty,
                         ]}
                         onPress={() => setSelectedDay(d.day)}
                       >
                         <ThemedText
                           variant="captionBold"
-                          style={[styles.dayPillText, isSelected && styles.dayPillTextSelected]}
+                          style={[
+                            styles.dayPillText,
+                            isSelected && styles.dayPillTextSelected,
+                            hasActiveTemplate && !isSelected && styles.dayPillTextActive,
+                            isConfiguredOffDuty && !isSelected && styles.dayPillTextOffDuty,
+                          ]}
                         >
                           {d.label}
                         </ThemedText>
+                        {hasActiveTemplate && !isSelected ? (
+                          <View style={styles.dayIndicatorWorking} />
+                        ) : null}
                       </Pressable>
                     );
                   })}
                 </View>
 
-                {/* Day Working Status Switch */}
-                <View style={styles.switchRow}>
-                  <ThemedText variant="bodyBold">Doctor Working on this Day</ThemedText>
-                  <Pressable
-                    style={[styles.toggleBadge, isActiveDay ? styles.toggleBadgeActive : styles.toggleBadgeInactive]}
-                    onPress={() => setIsActiveDay(!isActiveDay)}
-                  >
-                    <ThemedText
-                      variant="captionBold"
-                      style={isActiveDay ? styles.toggleTextActive : styles.toggleTextInactive}
+                {/* Duty Status Segmented Toggle */}
+                <View style={styles.statusSection}>
+                  <ThemedText variant="captionBold" style={styles.fieldLabel}>
+                    Duty Status for {getDayName(selectedDay)}:
+                  </ThemedText>
+                  <View style={styles.segmentedControl}>
+                    <Pressable
+                      style={[styles.segmentBtn, isActiveDay && styles.segmentBtnActiveWorking]}
+                      onPress={() => setIsActiveDay(true)}
                     >
-                      {isActiveDay ? 'Working' : 'Off Duty'}
-                    </ThemedText>
-                  </Pressable>
+                      <Icon
+                        name="checkCircle"
+                        size={theme.sizes.iconSm}
+                        color={isActiveDay ? theme.colors.routineText : theme.colors.textMuted}
+                      />
+                      <ThemedText
+                        variant="smallBold"
+                        style={[styles.segmentText, isActiveDay && styles.segmentTextActiveWorking]}
+                      >
+                        Working (On Duty)
+                      </ThemedText>
+                    </Pressable>
+
+                    <Pressable
+                      style={[styles.segmentBtn, !isActiveDay && styles.segmentBtnActiveOff]}
+                      onPress={() => setIsActiveDay(false)}
+                    >
+                      <Icon
+                        name="clock"
+                        size={theme.sizes.iconSm}
+                        color={!isActiveDay ? theme.colors.emergencyText : theme.colors.textMuted}
+                      />
+                      <ThemedText
+                        variant="smallBold"
+                        style={[styles.segmentText, !isActiveDay && styles.segmentTextActiveOff]}
+                      >
+                        Off Duty (Not Working)
+                      </ThemedText>
+                    </Pressable>
+                  </View>
                 </View>
+
+                {!isActiveDay ? (
+                  <View style={styles.offDutyNotice}>
+                    <Icon name="info" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
+                    <View style={styles.offDutyNoticeContent}>
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
+                        Doctor is Off Duty on {getDayName(selectedDay)}s
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        No consultation appointment slots will be scheduled on this day. You can save this day as inactive or remove the schedule completely.
+                      </ThemedText>
+                    </View>
+                  </View>
+                ) : null}
 
                 {isActiveDay ? (
                   <>
@@ -554,6 +654,15 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                 ) : null}
 
                 <View style={styles.submitRow}>
+                  {currentTemplate ? (
+                    <Button
+                      title={`Remove ${getDayName(selectedDay)} Schedule`}
+                      variant="outline"
+                      icon="trash"
+                      loading={deletingTemplate}
+                      onPress={handleDeleteTemplate}
+                    />
+                  ) : null}
                   <Button
                     title="Save Template"
                     variant="primary"
@@ -820,12 +929,79 @@ const styles = StyleSheet.create({
   dayPillTextSelected: {
     color: theme.colors.onPrimary,
   },
-  switchRow: {
+  dayPillOffDuty: {
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    opacity: 0.6,
+  },
+  dayPillTextActive: {
+    color: theme.colors.primaryDark,
+  },
+  dayPillTextOffDuty: {
+    color: theme.colors.textMuted,
+  },
+  dayIndicatorWorking: {
+    width: 6,
+    height: 6,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.success,
+    marginTop: 2,
+  },
+  statusSection: {
+    marginBottom: theme.spacing.md,
+  },
+  segmentedControl: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    padding: 3,
+    gap: 4,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+  },
+  segmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.sm,
+    gap: theme.spacing.xs,
+  },
+  segmentBtnActiveWorking: {
+    backgroundColor: theme.colors.routineBg,
+    borderWidth: 1,
+    borderColor: theme.colors.routineBorder,
+  },
+  segmentBtnActiveOff: {
+    backgroundColor: theme.colors.emergencyBg,
+    borderWidth: 1,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  segmentText: {
+    color: theme.colors.textMuted,
+  },
+  segmentTextActiveWorking: {
+    color: theme.colors.routineText,
+  },
+  segmentTextActiveOff: {
+    color: theme.colors.emergencyText,
+  },
+  offDutyNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  offDutyNoticeContent: {
+    flex: 1,
+    gap: 2,
   },
   toggleBadge: {
     paddingHorizontal: theme.spacing.md,
@@ -908,7 +1084,11 @@ const styles = StyleSheet.create({
   },
   submitRow: {
     marginTop: theme.spacing.md,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
   leaveFormCard: {
     backgroundColor: theme.colors.surfaceMuted,

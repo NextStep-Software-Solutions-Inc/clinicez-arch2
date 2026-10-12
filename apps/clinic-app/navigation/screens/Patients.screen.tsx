@@ -13,7 +13,20 @@ import { Alert } from '@utils/feedback';
 import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
 import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList } from '@ui';
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
-import { ClinicalHistoryTab, LifestyleSocialTab, ReproductiveHealthTab, CardiometabolicRiskTab } from '../../components/chart';
+import {
+  PatientSummarySpine,
+  ExecutiveSummaryTab,
+  EncountersTimelineTab,
+  DiagnosticLabTab,
+  NursingProceduresTab,
+  StatutoryImmunizationsTab,
+  HealthProfilesTab,
+  ExternalDocumentVaultTab,
+  ClinicalHistoryTab,
+  LifestyleSocialTab,
+  ReproductiveHealthTab,
+  CardiometabolicRiskTab,
+} from '../../components/chart';
 import { useClinic } from '@context/ClinicContext';
 import { useStaff } from '@context/StaffContext';
 import { openDocument } from '../../services/documentOpener';
@@ -26,6 +39,13 @@ import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
 import PhilHealthProfileModal from '../../components/PhilHealthProfileModal';
+import PhilHealthPinInput from '../../components/ui/PhilHealthPinInput';
+import DebouncedDuplicateChecker from '../../components/patient/DebouncedDuplicateChecker';
+import StructuredAllergyIntakeModal, {
+  AllergyPillList,
+  CreateAllergyRequest,
+} from '../../components/patient/StructuredAllergyIntakeModal';
+
 import {
   clinicService,
   ClinicPatient,
@@ -48,14 +68,23 @@ const humanizeKey = (key: string) => {
 };
 
 type PatientFilter = 'ALL' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES';
-type ChartTab = 'visits' | 'history' | 'lifestyle' | 'reproductive' | 'cardiometabolic';
+type ChartTab =
+  | 'summary'
+  | 'encounters'
+  | 'diagnostics'
+  | 'procedures'
+  | 'immunizations'
+  | 'profiles'
+  | 'vault';
 
 const CHART_TABS: SegmentedOption<ChartTab>[] = [
-  { value: 'visits', label: 'Clinical Visits' },
-  { value: 'history', label: 'Clinical History' },
-  { value: 'lifestyle', label: 'Lifestyle & Social' },
-  { value: 'reproductive', label: "Women's Health" },
-  { value: 'cardiometabolic', label: 'Cardiometabolic' },
+  { value: 'summary', label: 'Summary' },
+  { value: 'encounters', label: 'Encounters' },
+  { value: 'diagnostics', label: 'Diagnostics' },
+  { value: 'procedures', label: 'Procedures' },
+  { value: 'immunizations', label: 'Vaccines' },
+  { value: 'profiles', label: 'Health Profiles' },
+  { value: 'vault', label: 'Doc Vault' },
 ];
 
 export type PatientsScreenProps = StaticScreenProps<{ openPatientId?: string } | undefined>;
@@ -104,6 +133,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formAllergies, setFormAllergies] = useState('');
   const [formChronicConditions, setFormChronicConditions] = useState('');
   const [formAlerts, setFormAlerts] = useState('');
+  const [isPinValid, setIsPinValid] = useState<boolean | null>(null);
+  const [structuredAllergies, setStructuredAllergies] = useState<CreateAllergyRequest[]>([]);
+  const [allergyModalVisible, setAllergyModalVisible] = useState(false);
+  const [formChiefComplaint, setFormChiefComplaint] = useState('');
+  const [formTriagePriority, setFormTriagePriority] = useState<'Routine' | 'Urgent' | 'Emergency'>('Routine');
+
 
   // Chart Modal state
   const [chartVisible, setChartVisible] = useState(false);
@@ -111,7 +146,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [patientChart, setPatientChart] = useState<PatientChart | null>(null);
   const [loadingChart, setLoadingChart] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
-  const [activeChartTab, setActiveChartTab] = useState<ChartTab>('visits');
+  const [activeChartTab, setActiveChartTab] = useState<ChartTab>('summary');
 
   // Standalone PhilHealth Profile Modal state
   const [philHealthProfileModalVisible, setPhilHealthProfileModalVisible] = useState(false);
@@ -182,7 +217,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setRefreshing(false);
   }, [fetchPatients]);
 
-  const handleRegisterPatient = async () => {
+  const handleRegisterPatient = async (options?: { sendToTriage?: boolean }) => {
+    const sendToTriage = options?.sendToTriage ?? false;
+
     if (!formFirstName.trim() || !formLastName.trim() || !formPhone.trim() || !formDob.trim()) {
       Alert.alert('Missing details', 'First name, last name, date of birth and phone number are required.');
       return;
@@ -210,6 +247,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       }
     });
 
+    const allergiesSummary = structuredAllergies.length > 0
+      ? structuredAllergies.map((a) => `${a.allergen} (${a.category}${a.isAnaphylactic ? ' - STAT' : ''})`).join(', ')
+      : formAllergies.trim() || undefined;
+
     const payload: RegisterPatientPayload = {
       firstName: formFirstName.trim(),
       lastName: formLastName.trim(),
@@ -227,11 +268,15 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       seniorCitizenId: formSeniorId.trim() || undefined,
       pwdId: formPwdId.trim() || undefined,
       bloodType: formBloodType || undefined,
-      allergies: formAllergies.trim() || undefined,
+      allergies: allergiesSummary,
       chronicConditions: formChronicConditions.trim() || undefined,
       alerts: formAlerts.trim() || undefined,
       customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
       verificationStatus: 'Verified',
+      structuredAllergies: structuredAllergies.length > 0 ? structuredAllergies : undefined,
+      sendToTriage,
+      priority: sendToTriage ? formTriagePriority : 'Routine',
+      chiefComplaint: sendToTriage && formChiefComplaint.trim() ? formChiefComplaint.trim() : undefined,
     };
 
     const [newPat, err] = await clinicService.registerPatient(payload);
@@ -239,14 +284,20 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
     if (newPat) {
       setPatients((prev) => [newPat, ...(prev ?? [])]);
-      notify.success(`${newPat.fullName} registered (${newPat.patientCode}).`);
+      if (sendToTriage) {
+        const ticketText = newPat.activeQueueTicket ? ` (${newPat.activeQueueTicket})` : '';
+        notify.success(`${newPat.fullName} registered & queued for triage${ticketText}.`);
+      } else {
+        notify.success(`${newPat.fullName} registered (${newPat.patientCode}).`);
+      }
     } else if (shouldQueueOffline(err?.status ?? 0)) {
       // Server unreachable: keep the registration on this device and sync it when the connection is back.
       const offlinePat = await offlineSyncService.enqueuePatient(payload);
       setPatients((prev) => [offlinePat, ...(prev ?? [])]);
+      const triageNote = sendToTriage ? ' and will be placed in the triage queue upon sync' : '';
       Alert.alert(
         'Saved on this device',
-        `${offlinePat.fullName} was saved locally because the server could not be reached. It will sync automatically once the connection is back.${err?.message ? `\n\n${err.message}` : ''}`
+        `${offlinePat.fullName} was saved locally because the server could not be reached. It will sync automatically${triageNote}.${err?.message ? `\n\n${err.message}` : ''}`
       );
     } else {
       // The server answered and refused: the user has to fix the form, so keep it open.
@@ -266,20 +317,40 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormFirstName('');
     setFormLastName('');
     setFormMiddleName('');
+    setFormDob('');
     setFormPhone('');
     setFormEmail('');
+    setFormAddress('');
+    setFormBarangay('');
+    setFormCity('');
+    setFormProvince('');
     setFormPhilHealth('');
     setFormSeniorId('');
     setFormPwdId('');
+    setFormBloodType('');
     setFormAllergies('');
     setFormChronicConditions('');
     setFormAlerts('');
     setDynamicFieldValues({});
+    setStructuredAllergies([]);
+    setIsPinValid(null);
+    setFormChiefComplaint('');
+    setFormTriagePriority('Routine');
+  };
+
+  const handleViewExistingPatient = async (patientId: string) => {
+    setRegisterVisible(false);
+    const [patient, err] = await clinicService.getPatientById(patientId);
+    if (patient) {
+      handleOpenChart(patient);
+    } else {
+      Alert.alert('Error', err?.message || 'Could not load existing patient record.');
+    }
   };
 
   const handleOpenChart = async (patient: ClinicPatient) => {
     setSelectedPatient(patient);
-    setActiveChartTab('visits');
+    setActiveChartTab('summary');
     setChartVisible(true);
     setLoadingChart(true);
     setLoadingAttachments(true);
@@ -288,19 +359,25 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     if (chartData) {
       setPatientChart(chartData);
       setChartError(null);
+      if (chartData.attachments && chartData.attachments.length > 0) {
+        setPatientAttachments(chartData.attachments);
+        setLoadingAttachments(false);
+      }
     } else {
       setChartError(chartErr?.message || 'Unable to load the patient chart.');
     }
     setLoadingChart(false);
 
-    // Fetch attachments
-    const [attData] = await clinicService.getPatientRecordAttachments(patient.id);
-    if (attData) {
-      setPatientAttachments(attData);
-    } else {
-      setPatientAttachments([]);
+    // Fetch attachments fallback if not populated
+    if (!chartData?.attachments) {
+      const [attData] = await clinicService.getPatientRecordAttachments(patient.id);
+      if (attData) {
+        setPatientAttachments(attData);
+      } else {
+        setPatientAttachments([]);
+      }
+      setLoadingAttachments(false);
     }
-    setLoadingAttachments(false);
   };
 
   // Arriving from "Scan patient QR": open the freshly imported patient's chart once.
@@ -772,6 +849,17 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             </View>
 
             <ScrollView style={{ maxHeight: 500 }} contentContainerStyle={{ gap: 12 }}>
+              {/* Debounced Duplicate Detection Banner */}
+              <DebouncedDuplicateChecker
+                firstName={formFirstName}
+                lastName={formLastName}
+                dateOfBirth={formDob}
+                contactNumber={formPhone}
+                philHealthNumber={formPhilHealth}
+                onSelectDuplicate={handleViewExistingPatient}
+                onSelectExistingPatient={handleViewExistingPatient}
+              />
+
               {/* Classification Selector */}
               <View>
                 <ThemedText style={styles.inputLabel}>Patient Classification / Profile Type</ThemedText>
@@ -961,16 +1049,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 </View>
               </View>
 
-              <View>
-                <ThemedText style={styles.inputLabel}>PhilHealth PIN (RA 11223)</ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="12-345678901-2"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={formPhilHealth}
-                  onChangeText={setFormPhilHealth}
-                />
-              </View>
+              {/* Embedded PhilHealth PIN Input with Auto-Mask & Mod-11 Check */}
+              <PhilHealthPinInput
+                label="PhilHealth PIN (RA 11223)"
+                value={formPhilHealth}
+                onChangeText={setFormPhilHealth}
+                onValidityChange={setIsPinValid}
+              />
 
               <View style={styles.formRow}>
                 <View style={{ flex: 1 }}>
@@ -995,14 +1080,28 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 </View>
               </View>
 
-              <View>
-                <ThemedText style={styles.inputLabel}>Known Allergies (Crucial Alert)</ThemedText>
-                <TextInput
-                  style={[styles.textInput, { borderColor: theme.colors.emergencyBorder, backgroundColor: theme.colors.emergencySubtle }]}
-                  placeholder="e.g. Penicillin, Aspirin, Shellfish"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={formAllergies}
-                  onChangeText={setFormAllergies}
+              {/* Embedded Structured Allergy Section */}
+              <View style={styles.allergySectionCard}>
+                <View style={styles.allergySectionHeader}>
+                  <View style={styles.allergySectionTitleRow}>
+                    <Icon name="emergency" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+                    <ThemedText style={styles.inputLabel}>
+                      Known Allergies & Anaphylaxis Alerts
+                    </ThemedText>
+                  </View>
+                  <Button
+                    title="+ Add Allergy"
+                    variant="outline"
+                    size="sm"
+                    onPress={() => setAllergyModalVisible(true)}
+                  />
+                </View>
+
+                <AllergyPillList
+                  allergies={structuredAllergies}
+                  onRemove={(index) => {
+                    setStructuredAllergies((prev) => prev.filter((_, i) => i !== index));
+                  }}
                 />
               </View>
 
@@ -1017,21 +1116,58 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 />
               </View>
 
-              <Pressable
-                style={[styles.saveBtn, savingPatient && { opacity: 0.6 }]}
-                onPress={handleRegisterPatient}
-                disabled={savingPatient}
-              >
-                {savingPatient ? (
-                  <ActivityIndicator color={theme.colors.textInverted} />
-                ) : (
-                  <ThemedText style={styles.saveBtnText}>Save & Register Patient</ThemedText>
-                )}
-              </Pressable>
+              {/* Walk-in Triage Routing Box */}
+              <View style={styles.triageRoutingBox}>
+                <ThemedText style={styles.triageRoutingTitle}>Walk-in Triage Routing (Optional)</ThemedText>
+                <ThemedText style={styles.inputLabel}>Chief Complaint / Triage Note</ThemedText>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. Fever x 3 days, cough and sore throat"
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={formChiefComplaint}
+                  onChangeText={setFormChiefComplaint}
+                />
+              </View>
+
+              {/* Dual Submission Action Buttons */}
+              <View style={styles.dualActionRow}>
+                {/* Secondary: Save & Register Patient */}
+                <Pressable
+                  style={[styles.secondaryRegisterBtn, savingPatient && styles.disabledBtn]}
+                  onPress={() => handleRegisterPatient({ sendToTriage: false })}
+                  disabled={savingPatient}
+                >
+                  <ThemedText style={styles.secondaryRegisterBtnText}>Save & Register Patient</ThemedText>
+                </Pressable>
+
+                {/* Primary Teal: Register & Send to Triage */}
+                <Pressable
+                  style={[styles.primaryTriageBtn, savingPatient && styles.disabledBtn]}
+                  onPress={() => handleRegisterPatient({ sendToTriage: true })}
+                  disabled={savingPatient}
+                >
+                  {savingPatient ? (
+                    <ActivityIndicator color={theme.colors.onPrimary} />
+                  ) : (
+                    <View style={styles.triageBtnContent}>
+                      <Icon name="arrowRight" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />
+                      <ThemedText style={styles.primaryTriageBtnText}>Register & Send to Triage</ThemedText>
+                    </View>
+                  )}
+                </Pressable>
+              </View>
             </ScrollView>
           </View>
         </View>
       </Modal>
+
+      {/* Structured Allergy Intake Sub-Modal */}
+      <StructuredAllergyIntakeModal
+        visible={allergyModalVisible}
+        onClose={() => setAllergyModalVisible(false)}
+        allergies={structuredAllergies}
+        onChange={setStructuredAllergies}
+      />
 
       {/* Patient Longitudinal Chart Modal */}
       <Modal visible={chartVisible} animationType="fade" transparent>
@@ -1048,6 +1184,19 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 </Pressable>
               </View>
             </View>
+
+            {/* Patient Summary Spine (Glanceable 6-Zone Header) */}
+            {selectedPatient && (
+              <View style={{ marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.sm }}>
+                <PatientSummarySpine
+                  patient={selectedPatient}
+                  chart={patientChart}
+                  vitals={patientChart?.vitalsHistory?.[0]}
+                  loading={loadingChart}
+                  onPressRefresh={() => selectedPatient && handleOpenChart(selectedPatient)}
+                />
+              </View>
+            )}
 
             {/* Longitudinal Chart Tabs */}
             <View style={{ marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.sm }}>
@@ -1067,429 +1216,96 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 onRetry={() => selectedPatient && handleOpenChart(selectedPatient)}
               />
             ) : patientChart && selectedPatient ? (
-              activeChartTab === 'visits' ? (
-                <ScrollView contentContainerStyle={{ gap: 14 }}>
-                <View style={styles.chartSummaryBar}>
-                  <View style={styles.chartMetric}>
-                    <ThemedText style={styles.chartMetricVal}>{patientChart.totalVisits}</ThemedText>
-                    <ThemedText style={styles.chartMetricLabel}>Total Encounters</ThemedText>
-                  </View>
-                  <View style={styles.chartMetric}>
-                    <ThemedText style={styles.chartMetricVal}>{patientChart.proceduresHistory?.length ?? 0}</ThemedText>
-                    <ThemedText style={styles.chartMetricLabel}>Procedures</ThemedText>
-                  </View>
-                  <View style={styles.chartMetric}>
-                    <ThemedText style={styles.chartMetricVal}>{patientChart.labOrdersHistory?.length ?? 0}</ThemedText>
-                    <ThemedText style={styles.chartMetricLabel}>Lab Requisitions</ThemedText>
-                  </View>
-                  <View style={styles.chartMetric}>
-                    <ThemedText style={styles.chartMetricVal}>{patientChart.invoicesHistory?.length ?? 0}</ThemedText>
-                    <ThemedText style={styles.chartMetricLabel}>Invoices</ThemedText>
-                  </View>
-                </View>
-
-                {/* Institutional Profile Banner (Student / Employee) */}
-                {selectedPatient?.customFields?.classification === 'Student' || selectedPatient?.customFields?.student_id ? (
-                  <View style={styles.institutionalBanner}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <ThemedText style={styles.institutionalBannerTitle}>Student Institutional Profile (COR / Enrollment)
-                      </ThemedText>
-                      <ThemedText style={{
-                        fontSize: theme.fontSizes.xs,
-                        fontWeight: '700',
-                        color: selectedPatient.verificationStatus === 'PendingVerification' ? theme.colors.warningText : theme.colors.successText,
-                        backgroundColor: selectedPatient.verificationStatus === 'PendingVerification' ? theme.colors.warningBg : theme.colors.successBg,
-                        paddingHorizontal: 8,
-                        paddingVertical: 3,
-                        borderRadius: theme.radii.sm,
-                      }}>
-                        {selectedPatient.verificationStatus === 'PendingVerification' ? 'Verification pending' : 'Verified Enrollment'}
-                      </ThemedText>
-                    </View>
-                    <View style={styles.institutionalGrid}>
-                      <View style={styles.institutionalItem}>
-                        <ThemedText style={styles.institutionalLabel}>Student ID / LRN</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.student_id || '—'}</ThemedText>
-                      </View>
-                      <View style={styles.institutionalItem}>
-                        <ThemedText style={styles.institutionalLabel}>Year Level</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.year_level || '—'}</ThemedText>
-                      </View>
-                      <View style={styles.institutionalItem}>
-                        <ThemedText style={styles.institutionalLabel}>College</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.college || '—'}</ThemedText>
-                      </View>
-                      <View style={styles.institutionalItem}>
-                        <ThemedText style={styles.institutionalLabel}>Degree Program</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.program || '—'}</ThemedText>
-                      </View>
-                      {selectedPatient.customFields &&
-                        Object.entries(selectedPatient.customFields)
-                          .filter(([k]) => !['classification', 'student_id', 'college', 'program', 'year_level', 'employee_id', 'department'].includes(k))
-                          .map(([k, v]) => (
-                            <View key={k} style={styles.institutionalItem}>
-                              <ThemedText style={styles.institutionalLabel}>{humanizeKey(k)}</ThemedText>
-                              <ThemedText style={styles.institutionalValue}>{String(v)}</ThemedText>
-                            </View>
-                          ))}
-                    </View>
-                  </View>
-                ) : selectedPatient?.customFields?.classification === 'Employee' || selectedPatient?.customFields?.employee_id ? (
-                  <View style={[styles.institutionalBanner, { backgroundColor: theme.colors.successBg, borderColor: theme.colors.successBorder }]}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <ThemedText style={[styles.institutionalBannerTitle, { color: theme.colors.successText }]}>Employee Institutional Profile
-                      </ThemedText>
-                      <ThemedText style={{
-                        fontSize: theme.fontSizes.xs,
-                        fontWeight: '700',
-                        color: theme.colors.successText,
-                        backgroundColor: theme.colors.successBg,
-                        paddingHorizontal: 8,
-                        paddingVertical: 3,
-                        borderRadius: theme.radii.sm,
-                      }}>Verified Staff
-                      </ThemedText>
-                    </View>
-                    <View style={styles.institutionalGrid}>
-                      <View style={styles.institutionalItem}>
-                        <ThemedText style={styles.institutionalLabel}>Employee ID</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.employee_id || '—'}</ThemedText>
-                      </View>
-                      <View style={styles.institutionalItem}>
-                        <ThemedText style={styles.institutionalLabel}>Department / Unit</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.department || '—'}</ThemedText>
-                      </View>
-                      {selectedPatient.customFields &&
-                        Object.entries(selectedPatient.customFields)
-                          .filter(([k]) => !['classification', 'student_id', 'college', 'program', 'year_level', 'employee_id', 'department'].includes(k))
-                          .map(([k, v]) => (
-                            <View key={k} style={styles.institutionalItem}>
-                              <ThemedText style={styles.institutionalLabel}>{humanizeKey(k)}</ThemedText>
-                              <ThemedText style={styles.institutionalValue}>{String(v)}</ThemedText>
-                            </View>
-                          ))}
-                    </View>
-                  </View>
-                ) : null}
-
-                {selectedPatient?.allergies && (
-                  <View style={[styles.noticeStrip, styles.allergyStrip]}>
-                    <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                    <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.noticeText}>
-                      Allergies: {selectedPatient.allergies}
-                    </ThemedText>
-                  </View>
-                )}
-
-                {/* History Section */}
-                <View style={styles.chartSection}>
-                  <ThemedText style={styles.chartSectionTitle}>Clinical Visits & Diagnoses</ThemedText>
-                  {patientChart.consultations && patientChart.consultations.length > 0 ? (
-                    patientChart.consultations.map((c) => (
-                      <View key={c.id} style={styles.historyCard}>
-                        <ThemedText style={{ fontSize: theme.fontSizes.xs, fontWeight: '700', color: theme.colors.primary }}>
-                          Encounter: {new Date(c.encounterDate).toLocaleDateString()} • Dr: {c.doctorName}
-                        </ThemedText>
-                        <ThemedText style={{ fontSize: theme.fontSizes.sm, color: theme.colors.textSecondary }}>
-                          Subjective: {c.subjective ?? 'Follow-up'}
-                        </ThemedText>
-                        <ThemedText style={{ fontSize: theme.fontSizes.sm, fontWeight: '600', color: theme.colors.text }}>
-                          Assessment: {c.assessment ?? 'Clinical examination normal'}
-                        </ThemedText>
-
-                        {/* Prescriptions & Dual-Path Status */}
-                        {((c.prescriptions && c.prescriptions.length > 0) || c.prescriptionNumber) && (
-                          <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.colors.border, gap: 6 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <ThemedText style={{ fontSize: theme.fontSizes.xs, fontWeight: '700', color: theme.colors.textSecondary }}>Prescriptions ({c.prescriptions?.length ?? 0}):
-                              </ThemedText>
-                              <ThemedText style={{
-                                fontSize: theme.fontSizes.xs,
-                                fontWeight: '700',
-                                color: c.rxDispenseStatus === 'Dispensed' ? theme.colors.successText : c.rxDispenseStatus === 'DispensedExternally' ? theme.colors.warningText : theme.colors.primary,
-                                backgroundColor: c.rxDispenseStatus === 'Dispensed' ? theme.colors.successBg : c.rxDispenseStatus === 'DispensedExternally' ? theme.colors.warningBg : theme.colors.primaryLight,
-                                paddingHorizontal: 6,
-                                paddingVertical: 2,
-                                borderRadius: theme.radii.xs,
-                              }}>
-                                {c.rxDispenseStatus === 'Dispensed'
-                                  ? 'Dispensed (Partner)'
-                                  : c.rxDispenseStatus === 'DispensedExternally'
-                                  ? `Dispensed (${c.rxDispensedPharmacyName || 'External'})`
-                                  : '● In Partner Queue'}
-                              </ThemedText>
-                            </View>
-
-                            {c.prescriptions && c.prescriptions.length > 0 && (
-                              <ThemedText style={{ fontSize: theme.fontSizes.xs, color: theme.colors.textSecondary }}>
-                                {c.prescriptions.map(p => `${p.genericName} ${p.dosage} (Qty: ${p.quantity})`).join(', ')}
-                              </ThemedText>
-                            )}
-
-                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-                              <Pressable
-                                style={styles.viewSlipBtn}
-                                onPress={() => handleViewPrescriptionSlip(c)}
-                              >
-                                <ThemedText style={styles.viewSlipBtnText}>View E-Rx Slip</ThemedText>
-                              </Pressable>
-
-                              {c.rxDispenseStatus !== 'Dispensed' && c.rxDispenseStatus !== 'DispensedExternally' && (
-                                <Pressable
-                                  style={[styles.viewSlipBtn, { backgroundColor: theme.colors.primarySubtle, borderColor: theme.colors.primaryBorder }]}
-                                  onPress={() => handleOpenExternalDispense(c)}
-                                >
-                                  <ThemedText style={[styles.viewSlipBtnText, { color: theme.colors.primary }]}>Log External Dispense
-                                  </ThemedText>
-                                </Pressable>
-                              )}
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    ))
-                  ) : (
-                    <ThemedText style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.sm }}>
-                      Prior visits documented under paper records. New encounters will appear here.
-                    </ThemedText>
-                  )}
-                </View>
-
-                <View style={styles.chartSection}>
-                  <ThemedText style={styles.chartSectionTitle}>Historical Vitals Trends</ThemedText>
-                  {patientChart.vitalsHistory && patientChart.vitalsHistory.length > 0 ? (
-                    patientChart.vitalsHistory.map((v, i) => (
-                      <View key={i} style={styles.historyCard}>
-                        <ThemedText style={{ fontSize: theme.fontSizes.xs, fontWeight: '600', color: theme.colors.successText }}>
-                          BP: {v.systolicBp}/{v.diastolicBp} mmHg • HR: {v.heartRateBpm} bpm • SpO2: {v.oxygenSaturationPercent}%
-                        </ThemedText>
-                      </View>
-                    ))
-                  ) : (
-                    <ThemedText style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.sm }}>No vitals trend recorded yet.</ThemedText>
-                  )}
-                </View>
-
-                {/* Diagnostic Lab Orders & Dual-Path Results Section */}
-                <View style={styles.chartSection}>
-                  <ThemedText style={styles.chartSectionTitle}>Diagnostic Lab Requisitions & Dual-Path Results</ThemedText>
-                  {patientChart.labOrdersHistory && patientChart.labOrdersHistory.length > 0 ? (
-                    patientChart.labOrdersHistory.map((order) => {
-                      const isCompleted = order.status === 'Completed' || order.status === 'CompletedWithExternalReport';
-                      return (
-                        <View key={order.id} style={styles.labCard}>
-                          <View style={styles.rowBetween}>
-                            <ThemedText style={styles.orderNumberText}>{order.orderNumber}</ThemedText>
-                            <View style={[
-                              styles.orderStatusBadge,
-                              isCompleted ? styles.statusBadgeCompleted : styles.statusBadgePending
-                            ]}>
-                              <ThemedText style={styles.orderStatusText}>{order.status}</ThemedText>
-                            </View>
-                          </View>
-
-                          <LabOrderStageChip order={order} />
-
-                          <ThemedText style={{ fontSize: theme.fontSizes.xs, color: theme.colors.textMuted }}>
-                            Ordered: {new Date(order.orderDate).toLocaleDateString()} • Doctor: {order.orderedByDoctorName ?? 'Not recorded'}
-                          </ThemedText>
-
-                          {order.clinicalDiagnosis && (
-                            <ThemedText style={{ fontSize: theme.fontSizes.xs, fontStyle: 'italic', color: theme.colors.textSecondary }}>
-                              Dx: {order.clinicalDiagnosis}
-                            </ThemedText>
-                          )}
-
-                          <View style={styles.testChipsRow}>
-                            {order.items?.map((item, idx) => (
-                              <View key={idx} style={styles.testChip}>
-                                <ThemedText style={styles.testChipText}>{item.testName}</ThemedText>
-                              </View>
-                            ))}
-                          </View>
-
-                          {/* Dual-Path Verification Results */}
-                          {order.status === 'CompletedWithExternalReport' && (
-                            <View style={styles.externalResultBanner}>
-                              <ThemedText style={styles.externalResultTitle}>External Lab Report ({order.externalLabName || 'Non-Clinic EZ Lab'})
-                              </ThemedText>
-                              <ThemedText style={styles.externalResultMeta}>
-                                Ingested via {order.uploadedBy || 'Portal Dropzone'} • Document Verified
-                              </ThemedText>
-                            </View>
-                          )}
-
-                          {order.verifiedByPathologist && (
-                            <View style={styles.verifiedPathologistBanner}>
-                              <ThemedText style={styles.verifiedPathologistTitle}>Verified by Pathologist: Dr. {order.verifiedByPathologist} ({order.pathologistPrcLicense})
-                              </ThemedText>
-                              {order.pathologistImpression && (
-                                <ThemedText style={styles.verifiedPathologistImpression}>
-                                  Impression: {order.pathologistImpression}
-                                </ThemedText>
-                              )}
-                            </View>
-                          )}
-
-                          {/* Actions */}
-                          <View style={styles.labActionRow}>
-                            <Pressable
-                              style={styles.viewSlipBtn}
-                              onPress={() => handleViewSlip(order.id)}
-                            >
-                              <ThemedText style={styles.viewSlipBtnText}>View Lab Slip & QR</ThemedText>
-                            </Pressable>
-
-                            {!isCompleted && (
-                              <Pressable
-                                style={styles.attachResultBtn}
-                                onPress={() => handleOpenAttach(order.id)}
-                              >
-                                <ThemedText style={styles.attachResultBtnText}>Attach External Result</ThemedText>
-                              </Pressable>
-                            )}
-                          </View>
-                        </View>
-                      );
-                    })
-                  ) : (
-                    <ThemedText style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.sm }}>
-                      No active or historical laboratory orders recorded for this patient.
-                    </ThemedText>
-                  )}
-                </View>
-
-                {/* Attached Physical Documents & External Records Section */}
-                <View style={styles.chartSection}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <ThemedText style={styles.chartSectionTitle}>External Records & Physical Attachments ({patientAttachments.length})
-                    </ThemedText>
-                    <Pressable
-                      style={styles.addDocBtn}
-                      onPress={() => setUploadDocModalVisible(true)}
-                    >
-                      <ThemedText style={styles.addDocBtnText}>+ Attach External Document</ThemedText>
-                    </Pressable>
-                  </View>
-
-                  <ThemedText style={{ fontSize: theme.fontSizes.xs, color: theme.colors.textMuted, marginBottom: 8 }}>
-                    Scanned paper Certificate of Registration (COR), outside Chest X-Ray films, lab sheets, and outside medical clearance certificates.
-                  </ThemedText>
-
-                  {loadingAttachments ? (
-                    <ActivityIndicator size="small" color={theme.colors.primary} style={{ padding: 12 }} />
-                  ) : patientAttachments.length > 0 ? (
-                    patientAttachments.map((att) => {
-                      const isVerified = att.verificationStatus === 'Verified';
-                      const isPending = att.verificationStatus === 'PendingVerification' || !att.verificationStatus;
-                      const isRejected = att.verificationStatus === 'Rejected';
-                      return (
-                        <View key={att.id} style={styles.attachmentCard}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <View style={{ flex: 1, paddingRight: 8 }}>
-                              <ThemedText style={styles.attachmentTitle}>{att.title}</ThemedText>
-                              <ThemedText style={styles.attachmentMeta}>
-                                Type: {att.recordType} • File: {att.fileName} ({Math.round(att.fileSizeBytes / 1024)} KB)
-                              </ThemedText>
-                              <ThemedText style={styles.attachmentMeta}>
-                                Uploaded: {new Date(att.documentDate || att.createdAt).toLocaleDateString()} • Ingested by: {att.uploadedByStaffName || 'Clinic Staff'}
-                              </ThemedText>
-                              {att.encryptionAlgorithm ? (
-                                <ThemedText style={[styles.attachmentMeta, { color: theme.colors.primary, fontWeight: '600' }]}>Encrypted At-Rest ({att.encryptionAlgorithm})
-                                </ThemedText>
-                              ) : null}
-                              {att.notes ? (
-                                <ThemedText style={styles.attachmentNotes}>Notes: {att.notes}
-                                </ThemedText>
-                              ) : null}
-                              <Pressable
-                                style={styles.viewDocBtn}
-                                onPress={() => handleDownloadAttachment(att.id)}
-                              >
-                                <ThemedText style={styles.viewDocBtnText}>View / Decrypt Document</ThemedText>
-                              </Pressable>
-                            </View>
-                            <View style={[
-                              styles.attBadge,
-                              isVerified ? styles.attBadgeVerified : isRejected ? styles.attBadgeRejected : styles.attBadgePending
-                            ]}>
-                              <ThemedText style={[
-                                styles.attBadgeText,
-                                isVerified ? styles.attBadgeTextVerified : isRejected ? styles.attBadgeTextRejected : styles.attBadgeTextPending
-                              ]}>
-                                {isVerified ? 'Verified' : isRejected ? 'Rejected' : 'Pending review'}
-                              </ThemedText>
-                            </View>
-                          </View>
-
-                          {/* Verification Meta or Action Buttons */}
-                          {isVerified && att.verifiedByStaffName && (
-                            <View style={styles.verifiedMetaBox}>
-                              <ThemedText style={styles.verifiedMetaText}>Verified by {att.verifiedByStaffName} on {att.verifiedAt ? new Date(att.verifiedAt).toLocaleDateString() : 'today'}
-                              </ThemedText>
-                            </View>
-                          )}
-
-                          {isRejected && (
-                            <View style={[styles.verifiedMetaBox, { backgroundColor: theme.colors.emergencySubtle, borderColor: theme.colors.emergencyBorder }]}>
-                              <ThemedText style={[styles.verifiedMetaText, { color: theme.colors.emergencyText }]}>Rejection reason: {att.rejectionReason || 'Illegible or unverifiable external document.'}
-                              </ThemedText>
-                            </View>
-                          )}
-
-                          {isPending && (
-                            <View style={styles.attActionRow}>
-                              <Pressable
-                                style={[styles.verifyBtn, verifyingAttachmentId === att.id && { opacity: 0.6 }]}
-                                onPress={() => handleVerifyAttachment(att.id, true)}
-                                disabled={verifyingAttachmentId === att.id}
-                              >
-                                <ThemedText style={styles.verifyBtnText}>Verify & Accept Document
-                                </ThemedText>
-                              </Pressable>
-                              <Pressable
-                                style={[styles.rejectBtn, verifyingAttachmentId === att.id && { opacity: 0.6 }]}
-                                onPress={() => handleVerifyAttachment(att.id, false)}
-                                disabled={verifyingAttachmentId === att.id}
-                              >
-                                <ThemedText style={styles.rejectBtnText}>Reject
-                                </ThemedText>
-                              </Pressable>
-                            </View>
-                          )}
-                        </View>
-                      );
-                    })
-                  ) : (
-                    <EmptyState icon="paperclip" title="No documents attached" description="Outside records you attach appear here." />
-                  )}
-                </View>
-              </ScrollView>
-            ) : activeChartTab === 'history' ? (
-              <ClinicalHistoryTab
-                patient={selectedPatient}
-                initialSurgicalHistories={patientChart.surgicalHistories}
-                onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-              />
-            ) : activeChartTab === 'lifestyle' ? (
-              <LifestyleSocialTab
-                patient={selectedPatient}
-                initialSocialHistory={patientChart.socialHistory}
-                onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-              />
-            ) : activeChartTab === 'reproductive' ? (
-              <ReproductiveHealthTab
-                patient={selectedPatient}
-                initialReproductiveHistory={patientChart.reproductiveHistory}
-                onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-              />
-            ) : activeChartTab === 'cardiometabolic' ? (
-              <CardiometabolicRiskTab
-                patient={selectedPatient}
-                initialLatestAssessment={patientChart.latestNcdAssessment}
-                onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
-              />
-            ) : null
+              activeChartTab === 'summary' ? (
+                <ExecutiveSummaryTab
+                  patient={selectedPatient}
+                  chart={patientChart}
+                  onNavigateTab={(tab) => setActiveChartTab(tab)}
+                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+                />
+              ) : activeChartTab === 'encounters' ? (
+                <EncountersTimelineTab
+                  patient={selectedPatient}
+                  patientId={selectedPatient.id}
+                  consultations={patientChart.consultations || []}
+                  onViewPrescriptionSlip={handleViewPrescriptionSlip}
+                  onOpenExternalDispense={handleOpenExternalDispense}
+                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+                />
+              ) : activeChartTab === 'diagnostics' ? (
+                <DiagnosticLabTab
+                  patient={selectedPatient}
+                  patientId={selectedPatient.id}
+                  labOrders={patientChart.labOrdersHistory || []}
+                  onViewLabSlip={handleViewSlip}
+                  onOpenLabSlip={(order) => handleViewSlip(order.id)}
+                  onAttachExternalResult={handleOpenAttach}
+                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+                />
+              ) : activeChartTab === 'procedures' ? (
+                <NursingProceduresTab
+                  patient={selectedPatient}
+                  patientId={selectedPatient.id}
+                  procedures={patientChart.proceduresHistory || []}
+                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+                />
+              ) : activeChartTab === 'immunizations' ? (
+                <StatutoryImmunizationsTab
+                  patient={selectedPatient}
+                  patientId={selectedPatient.id}
+                  demographics={patientChart.demographics}
+                  immunizations={patientChart.immunizations || []}
+                  onAdministerVaccine={async (payload) => {
+                    const [, err] = await clinicService.administerVaccine(selectedPatient.id, payload);
+                    if (err) {
+                      notify.error(err.message || 'Could not record vaccine administration.');
+                    } else {
+                      notify.success('Vaccine administration recorded.');
+                      handleOpenChart(selectedPatient);
+                    }
+                  }}
+                  onRecordHistoricalVaccine={async (payload) => {
+                    const [, err] = await clinicService.recordHistoricalImmunization(selectedPatient.id, payload);
+                    if (err) {
+                      notify.error(err.message || 'Could not record historical immunization.');
+                    } else {
+                      notify.success('Historical immunization added.');
+                      handleOpenChart(selectedPatient);
+                    }
+                  }}
+                  onRecordAefi={async (immId, payload) => {
+                    const [, err] = await clinicService.recordImmunizationAefi(selectedPatient.id, immId, payload);
+                    if (err) {
+                      notify.error(err.message || 'Could not record adverse reaction.');
+                    } else {
+                      notify.success('Adverse event (AEFI) recorded.');
+                      handleOpenChart(selectedPatient);
+                    }
+                  }}
+                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+                />
+              ) : activeChartTab === 'profiles' ? (
+                <HealthProfilesTab
+                  patient={selectedPatient}
+                  surgicalHistories={patientChart.surgicalHistories}
+                  socialHistory={patientChart.socialHistory}
+                  reproductiveHistory={patientChart.reproductiveHistory}
+                  latestNcdAssessment={patientChart.latestNcdAssessment}
+                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+                />
+              ) : activeChartTab === 'vault' ? (
+                <ExternalDocumentVaultTab
+                  patient={selectedPatient}
+                  patientId={selectedPatient.id}
+                  attachments={patientChart.attachments || patientAttachments}
+                  onUploadDocument={() => setUploadDocModalVisible(true)}
+                  onVerifyAttachment={handleVerifyAttachment}
+                  onDownloadAttachment={async (attId) => {
+                    handleDownloadAttachment(attId);
+                  }}
+                  onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+                />
+              ) : null
           ) : null}
         </View>
         </View>
@@ -2496,5 +2312,81 @@ const styles = StyleSheet.create({
     color: theme.colors.textInverted,
     fontWeight: '700',
     fontSize: theme.fontSizes.xs,
+  },
+  allergySectionCard: {
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm + 4,
+    backgroundColor: theme.colors.surfaceMuted,
+    gap: theme.spacing.xs,
+  },
+  allergySectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  allergySectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  triageRoutingBox: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm + 4,
+    gap: theme.spacing.xs,
+  },
+  triageRoutingTitle: {
+    fontSize: theme.fontSizes.xs,
+    fontWeight: '600',
+    color: theme.colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  dualActionRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.xs,
+    paddingBottom: theme.spacing.md,
+  },
+  secondaryRegisterBtn: {
+    flex: 1,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
+    paddingVertical: theme.spacing.sm + 4,
+    borderRadius: theme.radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryRegisterBtnText: {
+    color: theme.colors.text,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: '600',
+  },
+  primaryTriageBtn: {
+    flex: 1,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: theme.spacing.sm + 4,
+    borderRadius: theme.radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  triageBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  primaryTriageBtnText: {
+    color: theme.colors.onPrimary,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: '700',
+  },
+  disabledBtn: {
+    opacity: 0.6,
   },
 });

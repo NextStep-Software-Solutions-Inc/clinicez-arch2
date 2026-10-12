@@ -51,19 +51,34 @@ export default function ActionMenu({
   const calculatePosition = useCallback((x: number, y: number, width: number, height: number) => {
     const { width: windowWidth, height: windowHeight } = Dimensions.get('window');
     const estimatedMenuHeight = items.length * 40 + 16;
+    const estimatedMenuWidth = 260;
     const shouldOpenUp = y + height + estimatedMenuHeight > windowHeight - 16;
 
     const top = shouldOpenUp
       ? Math.max(16, y - estimatedMenuHeight)
       : Math.min(windowHeight - estimatedMenuHeight - 16, y + height + 4);
 
-    if (align === 'left') {
-      const left = Math.max(12, Math.min(x, windowWidth - 220));
-      setCoords({ top, left });
+    const spaceToLeft = x + width;
+    const spaceToRight = windowWidth - x;
+
+    let targetLeft: number | undefined;
+    let targetRight: number | undefined;
+
+    if (align === 'left' || spaceToLeft < estimatedMenuWidth) {
+      targetLeft = Math.max(12, Math.min(x, windowWidth - estimatedMenuWidth - 12));
+    } else if (align === 'right' && spaceToRight < estimatedMenuWidth) {
+      targetRight = Math.max(12, Math.min(windowWidth - (x + width), windowWidth - estimatedMenuWidth - 12));
+    } else if (align === 'right') {
+      targetRight = Math.max(12, Math.min(windowWidth - (x + width), windowWidth - estimatedMenuWidth - 12));
     } else {
-      const right = Math.max(12, windowWidth - (x + width));
-      setCoords({ top, right });
+      targetLeft = Math.max(12, Math.min(x, windowWidth - estimatedMenuWidth - 12));
     }
+
+    setCoords({
+      top,
+      ...(targetLeft != null ? { left: targetLeft } : {}),
+      ...(targetRight != null ? { right: targetRight } : {}),
+    });
   }, [align, items.length]);
 
   const handleOpen = () => {

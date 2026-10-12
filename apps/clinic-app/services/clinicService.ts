@@ -3,7 +3,21 @@ import { clinicApiClient, clinicApiUrl } from './apiClient';
 import { SyncStatus } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
-export type QueueStatus = 'Waiting' | 'Triaged' | 'InConsultation' | 'Completed' | 'Cancelled' | 'NoShow';
+export type QueueStatus =
+  | 'Waiting'
+  | 'Triaged'
+  | 'InConsultation'
+  | 'Completed'
+  | 'Cancelled'
+  | 'NoShow'
+  | 'PendingProcedure'
+  | 'ReEvaluation';
+export type QueueView =
+  | 'All'
+  | 'MyRoom'
+  | 'WaitingForDoctor'
+  | 'Triage'
+  | 'PendingProcedure';
 export type AppointmentStatus = 'Pending' | 'Confirmed' | 'CheckedIn' | 'InConsultation' | 'Completed' | 'Cancelled';
 export type StaffRole = 'Doctor' | 'Nurse' | 'Receptionist' | 'Cashier' | 'Admin';
 export type InvoiceStatus = 'Draft' | 'Paid' | 'PartiallyPaid' | 'Voided' | 'Refunded';
@@ -61,6 +75,7 @@ export interface CreateStaffPayload {
   prcLicenseNumber?: string;
   ptrNumber?: string;
   s2LicenseNumber?: string;
+  philHealthPan?: string;
   specialty?: string;
   initialPassword?: string;
   sendInviteEmail?: boolean;
@@ -78,6 +93,7 @@ export interface UpdateStaffPayload {
   prcLicenseNumber?: string;
   ptrNumber?: string;
   s2LicenseNumber?: string;
+  philHealthPan?: string;
   specialty?: string;
   isActive?: boolean;
 }
@@ -91,6 +107,7 @@ export interface UpdateMyProfilePayload {
   prcLicenseNumber?: string;
   ptrNumber?: string;
   s2LicenseNumber?: string;
+  philHealthPan?: string;
   specialty?: string;
 }
 
@@ -145,6 +162,33 @@ export interface PatientQueueItem {
   chiefComplaint?: string;
   hasVitals: boolean;
   vitalsSummary?: string;
+  roomOrStation?: string;
+}
+
+export interface GetQueueParams {
+  date?: string;
+  status?: QueueStatus;
+  doctorId?: string;
+  roomOrStation?: string;
+  view?: QueueView | string;
+}
+
+export interface YakapClaimReadinessDto {
+  isReady: boolean;
+  encounterId: string;
+  doctorPanValid: boolean;
+  doctorPrcValid: boolean;
+  patientPinValid: boolean;
+  atcValid: boolean;
+  symptomsValid: boolean;
+  physicalExamComplete: boolean;
+  primaryDiagnosisPresent: boolean;
+  vitalsComplete: boolean;
+  medicinesValid: boolean;
+  missingFields: string[];
+  warnings: string[];
+  generalSurveyValid?: boolean;
+  s2LicenseValid?: boolean;
 }
 
 export interface QueueMetrics {
@@ -1092,15 +1136,124 @@ export interface CalculatePediatricZScorePayload {
   assessmentDate?: string;
 }
 
+export interface PatientDemographics {
+  dob?: string;
+  dateOfBirth?: string;
+  age: number;
+  gender: string;
+  civilStatus?: string | null;
+  contactNumber: string;
+  email?: string | null;
+  addressLine?: string | null;
+  barangay?: string | null;
+  city?: string | null;
+  province?: string | null;
+  philHealthNumber?: string | null;
+  seniorCitizenId?: string | null;
+  pwdId?: string | null;
+  bloodType?: string | null;
+  memberStatus?: string | null;
+  philHealthAtc?: string | null;
+  atc?: string | null;
+  activeCaseNo?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelationship?: string | null;
+  alerts?: string | null;
+  patientCode?: string | null;
+  clinicEzId?: string | null;
+  verificationStatus?: string;
+  isSenior?: boolean;
+  isPwd?: boolean;
+  hasActiveCaseNo?: boolean;
+  patientName?: string;
+}
+
+export interface PatientImmunizationRecord {
+  id: string;
+  patientId: string;
+  patientName: string;
+  consultationEncounterId?: string | null;
+  philHealthLibrary: string; // 'lib_immchild' | 'lib_immyoungw' | 'lib_immpregw' | 'lib_immelderly' | 'OtherImm'
+  philHealthCode: string;
+  vaccineName: string;
+  brandName?: string | null;
+  manufacturer?: string | null;
+  lotBatchNumber: string;
+  expirationDate: string; // 'YYYY-MM-DD'
+  doseSequence: number;
+  isSeriesCompleted: boolean;
+  route: string;
+  injectionSite: string;
+  administeredAtUtc: string; // ISO
+  administeredByStaffId: string;
+  administeredByStaffName: string;
+  administeredByPrcLicense?: string | null;
+  hasAdverseReaction: boolean;
+  adverseReactionSeverity: string;
+  adverseReactionRemarks?: string | null;
+  adverseReactionRecordedAtUtc?: string | null;
+  isHistorical: boolean;
+  historicalFacilityName?: string | null;
+  remarks?: string | null;
+  isSynchronizedToPatientApp: boolean;
+  synchronizedAtUtc?: string | null;
+}
+
+export interface AdministerVaccinePayload {
+  consultationEncounterId?: string | null;
+  philHealthLibrary: string;
+  philHealthCode: string;
+  vaccineName: string;
+  brandName?: string | null;
+  manufacturer?: string | null;
+  lotBatchNumber: string;
+  expirationDate: string; // 'YYYY-MM-DD'
+  doseSequence: number;
+  isSeriesCompleted: boolean;
+  route: string;
+  injectionSite: string;
+  administeredAtUtc: string; // ISO
+  administeredByStaffId: string;
+  administeredByStaffName: string;
+  administeredByPrcLicense?: string | null;
+  remarks?: string | null;
+}
+
+export interface RecordHistoricalImmunizationPayload {
+  philHealthLibrary: string;
+  philHealthCode: string;
+  vaccineName: string;
+  administeredDate: string; // 'YYYY-MM-DD'
+  doseSequence: number;
+  isSeriesCompleted: boolean;
+  lotBatchNumber?: string | null;
+  historicalFacilityName?: string | null;
+  route?: string | null;
+  injectionSite?: string | null;
+  remarks?: string | null;
+}
+
+export interface RecordAefiPayload {
+  adverseReactionSeverity: 'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening';
+  adverseReactionRemarks: string;
+  recordedAtUtc: string; // ISO
+}
+
 export interface PatientChart {
   patientId: string;
   patientName: string;
   totalVisits: number;
+  demographics?: PatientDemographics;
   consultations: ConsultationRecord[];
   vitalsHistory: TriageVitals[];
   proceduresHistory: ClinicalProcedureRecord[];
   labOrdersHistory: ClinicLabOrderRecord[];
   invoicesHistory: InvoiceRecord[];
+  problems?: PatientProblemRecord[];
+  allergies?: PatientAllergyRecord[];
+  immunizations?: PatientImmunizationRecord[];
+  attachments?: ClinicRecordAttachmentRecord[];
   surgicalHistories?: PatientSurgicalHistory[];
   socialHistory?: PatientSocialHistory;
   reproductiveHistory?: PatientReproductiveHistory;
@@ -1141,6 +1294,42 @@ export interface ClinicPatient {
   customFields?: Record<string, any>;
   verificationStatus?: string;
   createdAt: string;
+  activeQueueTicket?: string | null;
+  activeQueueItemId?: string | null;
+}
+
+export interface DuplicateMatch {
+  patientId: string;
+  patientCode: string;
+  fullName: string;
+  dateOfBirth: string;
+  contactNumber?: string | null;
+  philHealthNumber?: string | null;
+  matchReason: string;
+}
+
+export interface DuplicatePatientCheckResult {
+  hasDuplicates: boolean;
+  matches: DuplicateMatch[];
+}
+
+export interface CheckPatientDuplicatesParams {
+  philHealthNumber?: string;
+  contactNumber?: string;
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+}
+
+export interface CreateAllergyPayload {
+  category: 'Medication' | 'Food' | 'Environmental' | 'Biologic' | 'Other';
+  allergen: string;
+  allergenDrugCode?: string | null;
+  severity: 'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening';
+  reactionManifestation?: string | null;
+  isAnaphylactic: boolean;
+  onsetDate?: string | null;
+  notes?: string | null;
 }
 
 export interface RegisterPatientPayload {
@@ -1169,6 +1358,10 @@ export interface RegisterPatientPayload {
   alerts?: string;
   customFields?: Record<string, any>;
   verificationStatus?: string;
+  structuredAllergies?: CreateAllergyPayload[];
+  sendToTriage?: boolean;
+  priority?: 'Routine' | 'Urgent' | 'Emergency' | 'Normal';
+  chiefComplaint?: string;
 }
 
 export interface ClinicCustomFieldDefinition {
@@ -1409,10 +1602,18 @@ export interface RecordPaymentRequest {
 
 export const clinicService = {
   // Queue & Walk-In Engine
-  async getQueue(date?: string, status?: QueueStatus) {
+  async getQueue(paramsOrDate?: string | GetQueueParams, status?: QueueStatus) {
     const params = new URLSearchParams();
-    if (date) params.append('date', date);
-    if (status) params.append('status', status);
+    if (typeof paramsOrDate === 'string') {
+      if (paramsOrDate) params.append('date', paramsOrDate);
+      if (status) params.append('status', status);
+    } else if (paramsOrDate && typeof paramsOrDate === 'object') {
+      if (paramsOrDate.date) params.append('date', paramsOrDate.date);
+      if (paramsOrDate.status) params.append('status', paramsOrDate.status);
+      if (paramsOrDate.doctorId) params.append('doctorId', paramsOrDate.doctorId);
+      if (paramsOrDate.roomOrStation) params.append('roomOrStation', paramsOrDate.roomOrStation);
+      if (paramsOrDate.view) params.append('view', paramsOrDate.view);
+    }
     const qs = params.toString();
     return clinicApiClient.get<PatientQueueItem[]>(`/queue${qs ? `?${qs}` : ''}`);
   },
@@ -1426,8 +1627,8 @@ export const clinicService = {
     return clinicApiClient.post<PatientQueueItem>('/queue/check-in', payload);
   },
 
-  async callQueueItem(id: string, doctorId?: string, doctorName?: string) {
-    return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/call`, { doctorId, doctorName });
+  async callQueueItem(id: string, doctorId?: string, doctorName?: string, roomOrStation?: string) {
+    return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/call`, { doctorId, doctorName, roomOrStation });
   },
 
   async completeQueueItem(id: string) {
@@ -1497,6 +1698,11 @@ export const clinicService = {
       targetPharmacyTenantId: credentials?.targetPharmacyTenantId,
     };
     return clinicApiClient.post<ConsultationRecord>(`/consultations/${id}/sign`, payload);
+  },
+
+  // PhilHealth Konsulta (Yakap) Statutory Claim Readiness
+  async validateConsultationYakapReadiness(consultationId: string) {
+    return clinicApiClient.get<YakapClaimReadinessDto>(`/consultations/${consultationId}/yakap-readiness`);
   },
 
   // E-Prescriptions & Dual-Path Dispense
@@ -1761,6 +1967,27 @@ export const clinicService = {
     return clinicApiClient.get<PatientChart>(`/patients/${patientId}/chart`);
   },
 
+  // Patient Immunizations (PhilHealth Statutory)
+  async getPatientImmunizations(patientId: string) {
+    return clinicApiClient.get<PatientImmunizationRecord[]>(`/patients/${patientId}/immunizations`);
+  },
+
+  async recordImmunization(patientId: string, payload: AdministerVaccinePayload) {
+    return clinicApiClient.post<PatientImmunizationRecord>(`/patients/${patientId}/immunizations/administer`, payload);
+  },
+
+  async administerVaccine(patientId: string, payload: AdministerVaccinePayload) {
+    return clinicApiClient.post<PatientImmunizationRecord>(`/patients/${patientId}/immunizations/administer`, payload);
+  },
+
+  async recordHistoricalImmunization(patientId: string, payload: RecordHistoricalImmunizationPayload) {
+    return clinicApiClient.post<PatientImmunizationRecord>(`/patients/${patientId}/immunizations/historical`, payload);
+  },
+
+  async recordImmunizationAefi(patientId: string, immunizationId: string, payload: RecordAefiPayload) {
+    return clinicApiClient.post<PatientImmunizationRecord>(`/patients/${patientId}/immunizations/${immunizationId}/aefi`, payload);
+  },
+
   // Patient Structured Problems
   async getPatientProblems(patientId: string, status?: string) {
     const url = status ? `/patients/${patientId}/problems?status=${encodeURIComponent(status)}` : `/patients/${patientId}/problems`;
@@ -1938,6 +2165,13 @@ export const clinicService = {
     return clinicApiClient.get<ClinicPatient>(`/patients/${id}`);
   },
 
+  async checkPatientDuplicates(params: CheckPatientDuplicatesParams, config?: AxiosRequestConfig) {
+    return clinicApiClient.get<DuplicatePatientCheckResult>('/patients/check-duplicates', {
+      params,
+      ...config,
+    });
+  },
+
   async registerPatient(payload: RegisterPatientPayload, config?: AxiosRequestConfig) {
     return clinicApiClient.post<ClinicPatient>('/patients', payload, config);
   },
@@ -1998,6 +2232,10 @@ export const clinicService = {
     breaks?: DoctorBreakTimeItem[];
   }) {
     return clinicApiClient.post<DoctorScheduleTemplateItem>(`/doctors/${doctorId}/schedules/templates`, payload);
+  },
+
+  async deleteDoctorScheduleTemplate(doctorId: string, templateId: string) {
+    return clinicApiClient.delete<boolean>(`/doctors/${doctorId}/schedules/templates/${templateId}`);
   },
 
   async getDoctorAvailableSlots(doctorId: string, date: string, interval?: number) {

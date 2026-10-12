@@ -5,6 +5,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { Alert, notify } from '@utils/feedback';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -16,11 +17,13 @@ import {
   Input,
   Card,
   CardHeader,
+  CardContent,
   Icon,
   EmptyState,
   ErrorState,
   SkeletonList,
   Modal,
+  SegmentedControl,
 } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
@@ -28,10 +31,22 @@ import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
 import {
+  PatientSummarySpine,
+  ExecutiveSummaryTab,
+  EncountersTimelineTab,
+  DiagnosticLabTab,
+  NursingProceduresTab,
+  StatutoryImmunizationsTab,
+  HealthProfilesTab,
+  ExternalDocumentVaultTab,
+} from '../../components/chart';
+import {
   InlinePhysicalExamCard,
   DEFAULT_PHYSICAL_EXAM_NORMAL,
   PhysicalExamFindings,
-} from '../../components/consultation/InlinePhysicalExamCard';
+  YakapClaimReadinessCard,
+  StatutorySectionKey,
+} from '../../components/consultation';
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
 import { useClinic } from '../../context/ClinicContext';
@@ -40,6 +55,10 @@ import { openDocument } from '../../services/documentOpener';
 import {
   clinicService,
   PatientQueueItem,
+  QueueStatus,
+  QueueView,
+  YakapClaimReadinessDto,
+  ClinicalProcedureRecord,
   TriageVitals,
   Icd10Code,
   MedicalCertificateRecord,
@@ -47,6 +66,7 @@ import {
   PrescriptionSlipData,
   ClinicLabOrderRecord,
   ClinicPatient,
+  PatientChart,
   CdsAlert,
   CdsAlertSeverity,
   ClinicServiceItem,
@@ -238,12 +258,47 @@ export default function ConsultationsScreen() {
   const [vitals, setVitals] = useState<TriageVitals | null>(null);
   const [vitalsError, setVitalsError] = useState<string | null>(null);
   const [patientRecord, setPatientRecord] = useState<ClinicPatient | null>(null);
+  const [patientChart, setPatientChart] = useState<PatientChart | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
   const [labOrders, setLabOrders] = useState<ClinicLabOrderRecord[]>([]);
   const [labError, setLabError] = useState<string | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const activePatientId = useRef<string | null>(null);
   const appliedRouteKey = useRef<string | null>(null);
+
+  // Responsive Desktop Workstation Detection (Feature 21)
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktopWorkstation = windowWidth >= (theme.breakpoints.desktop ?? 1024);
+
+  // Split-Screen & Longitudinal Chart Review States (Feature 21)
+  type ChartReviewTab = 'summary' | 'encounters' | 'diagnostics' | 'procedures' | 'immunizations' | 'profiles' | 'vault';
+  const [activeChartTab, setActiveChartTab] = useState<ChartReviewTab>('summary');
+  const [mobileWorkstationView, setMobileWorkstationView] = useState<'soap' | 'chart'>('soap');
+
+  // Multi-Provider Queue Room / Station Filter States (Feature 19)
+  const [queueViewFilter, setQueueViewFilter] = useState<QueueView>('WaitingForDoctor');
+  const [selectedStationFilter, setSelectedStationFilter] = useState<string>('ALL');
+
+  // PhilHealth Yakap Claim Readiness States (Feature 17)
+  const [serverReadiness, setServerReadiness] = useState<YakapClaimReadinessDto | null>(null);
+  const [isValidatingReadiness, setIsValidatingReadiness] = useState(false);
+
+  // Jump to section refs
+  const scrollViewRef = useRef<ScrollView>(null);
+  const sectionOffsets = useRef<Record<string, number>>({});
+  const soapPaneOffsetY = useRef<number>(0);
+
+  const handleJumpToSection = (section: StatutorySectionKey) => {
+    if (mobileWorkstationView !== 'soap') {
+      setMobileWorkstationView('soap');
+    }
+    const rawY = sectionOffsets.current[section];
+    if (rawY != null) {
+      const isSpineSection = section === 'patient-pin' || section === 'vitals';
+      const containerOffset = isSpineSection ? 0 : soapPaneOffsetY.current;
+      scrollViewRef.current?.scrollTo({ y: Math.max(0, rawY + containerOffset - 24), animated: true });
+    }
+  };
 
   // SOAP Inputs
   const [subjective, setSubjective] = useState('');
@@ -611,7 +666,12 @@ export default function ConsultationsScreen() {
 
   const loadQueue = useCallback(async () => {
     setQueueLoading(true);
-    const [queueData, queueErr] = await clinicService.getQueue();
+    const doctorId = signer?.id;
+    const [queueData, queueErr] = await clinicService.getQueue({
+      view: queueViewFilter,
+      doctorId: queueViewFilter === 'MyRoom' ? doctorId : undefined,
+      roomOrStation: selectedStationFilter === 'ALL' ? undefined : selectedStationFilter,
+    });
     if (queueErr || !queueData) {
       setQueueError(queueErr?.message || 'Unable to load the patient queue.');
     } else {
@@ -619,7 +679,7 @@ export default function ConsultationsScreen() {
       setQueueError(null);
     }
     setQueueLoading(false);
-  }, []);
+  }, [signer?.id, queueViewFilter, selectedStationFilter]);
 
   useEffect(() => {
     loadQueue();
@@ -629,10 +689,11 @@ export default function ConsultationsScreen() {
   const loadPatientContext = useCallback(async (p: PatientQueueItem) => {
     activePatientId.current = p.id;
     setContextLoading(true);
-    const [triageRes, recordRes, labRes] = await Promise.all([
+    const [triageRes, recordRes, labRes, chartRes] = await Promise.all([
       clinicService.getTriage(p.id),
       clinicService.getPatientById(p.patientId),
       clinicService.getLabOrders(p.patientId),
+      clinicService.getPatientChart(p.patientId),
     ]);
     if (activePatientId.current !== p.id) return;
 
@@ -654,6 +715,13 @@ export default function ConsultationsScreen() {
       setPatientRecord(record);
       setRecordError(null);
       setIsYakapEligible(Boolean(record.philHealthNumber));
+    }
+
+    const [chartData] = chartRes;
+    if (chartData) {
+      setPatientChart(chartData);
+    } else {
+      setPatientChart(null);
     }
 
     const [labData, labErr] = labRes;
@@ -699,6 +767,7 @@ export default function ConsultationsScreen() {
     setVitals(null);
     setVitalsError(null);
     setPatientRecord(null);
+    setPatientChart(null);
     setRecordError(null);
     setLabOrders([]);
     setLabError(null);
@@ -1045,17 +1114,40 @@ export default function ConsultationsScreen() {
 
     // PDEA Dangerous Drug validation (Philippine Comprehensive Dangerous Drugs Act RA 9165)
     const hasDangerousDrug = prescriptions.some((p) => p.isDangerousDrug);
-    if (hasDangerousDrug && (!doctorS2 || !doctorS2.trim())) {
+    const finalS2 = doctorS2.trim() || signerStaff?.s2LicenseNumber;
+    if (hasDangerousDrug && !finalS2) {
       setBanner({
         text: 'An S2 license number is required to prescribe PDEA dangerous drugs.',
         isError: true,
       });
+      handleJumpToSection('doctor-s2');
       return;
     }
 
-    if (!doctorPrc || !doctorPrc.trim()) {
+    const finalPrc = doctorPrc.trim() || signerStaff?.prcLicenseNumber;
+    if (!finalPrc) {
       setBanner({
         text: 'A PRC license number is required to sign clinical encounters.',
+        isError: true,
+      });
+      handleJumpToSection('doctor-prc');
+      return;
+    }
+
+    const finalPan = isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined;
+    if (isYakapEligible && (!finalPan || !finalPrc)) {
+      setBanner({
+        text: 'Doctor PhilHealth Accreditation Number (PAN) and PRC license are required for Konsulta encounters.',
+        isError: true,
+      });
+      handleJumpToSection('doctor-pan');
+      return;
+    }
+
+    // Pre-flight Yakap readiness gatekeeper
+    if (isYakapEligible && !isYakapReady) {
+      setBanner({
+        text: 'Encounter signing is locked: Complete all 10 statutory conditions on the Yakap Claim Readiness checklist before signing.',
         isError: true,
       });
       return;
@@ -1143,10 +1235,10 @@ export default function ConsultationsScreen() {
     }
 
     const [, signErr] = await clinicService.signConsultation(consultationId, {
-      prcLicenseNumber: doctorPrc,
-      ptrNumber: doctorPtr,
-      s2LicenseNumber: doctorS2,
-      doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
+      prcLicenseNumber: finalPrc,
+      ptrNumber: doctorPtr.trim() || signerStaff?.ptrNumber,
+      s2LicenseNumber: finalS2,
+      doctorPhilHealthPan: finalPan,
       philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'ATC-2026-KON01') : undefined,
     });
     if (signErr) {
@@ -1280,12 +1372,181 @@ export default function ConsultationsScreen() {
       : []
   ).filter((v): v is { label: string; value: string } => v !== null);
 
-  const yakapMissing = [
-    selectedSymptomCodes.length === 0 ? 'a statutory complaint' : null,
-    selectedDiagnoses.length === 0 ? 'a diagnosis' : null,
-    !vitals?.systolicBp ? 'triage vitals' : null,
-  ].filter((m): m is string => m !== null);
-  const yakapReady = yakapMissing.length === 0;
+  const localEvaluation = useMemo(() => {
+    const panValid = !!(doctorPan.trim() || signerStaff?.philHealthPan?.trim());
+    const prcValid = !!(doctorPrc.trim() || signerStaff?.prcLicenseNumber?.trim());
+    const pinRaw = patientRecord?.philHealthNumber || (patientRecord as any)?.pin || patientChart?.demographics?.philHealthNumber || '';
+    const pinDigits = pinRaw.replace(/\D/g, '');
+    const pinValid = pinDigits.length === 12;
+    const atcVal = philHealthAtc.trim();
+    const atcValid = !!atcVal;
+
+    const hasSymptom = selectedSymptomCodes.length > 0;
+    const hasPainCode = selectedSymptomCodes.includes('38');
+    const painSiteValid = !hasPainCode || !!symptomPainSite.trim();
+    const hasOtherCode = selectedSymptomCodes.includes('X');
+    const otherValid = !hasOtherCode || !!(symptomOtherDesc.trim() || subjective.trim());
+    const symptomsValid = hasSymptom && painSiteValid && otherValid;
+
+    const peComplete = !!(
+      physicalExamFindings.generalSurvey &&
+      physicalExamFindings.skin &&
+      physicalExamFindings.heent &&
+      physicalExamFindings.chest &&
+      physicalExamFindings.heart &&
+      physicalExamFindings.abdomen &&
+      physicalExamFindings.neuro &&
+      physicalExamFindings.rectal &&
+      physicalExamFindings.gu &&
+      physicalExamFindings.musculoskeletal
+    );
+
+    const primaryDiagPresent = selectedDiagnoses.some((d) => d.isPrimary);
+
+    const vitalsComp = !!(
+      vitals?.systolicBp &&
+      vitals?.diastolicBp &&
+      vitals?.heartRateBpm &&
+      vitals?.temperatureCelsius &&
+      vitals?.heightCm &&
+      vitals?.weightKg
+    );
+
+    const hasDangerousDrug = prescriptions.some((p) => p.isDangerousDrug);
+    const s2Valid = !hasDangerousDrug || !!(doctorS2.trim() || signerStaff?.s2LicenseNumber?.trim());
+    const medicinesValid = prescriptions.length === 0 || prescriptions.every((p) => !!p.genericName);
+
+    const missing: string[] = [];
+    if (!panValid) missing.push('Doctor PhilHealth Accreditation Number (PAN) is missing.');
+    if (!prcValid) missing.push('Doctor PRC License number is required to sign encounters.');
+    if (!pinValid) missing.push('Patient PhilHealth PIN is invalid (must contain exactly 12 numeric digits).');
+    if (!atcValid) missing.push('Encounter ATC code is required.');
+    if (!hasSymptom) missing.push('At least one statutory complaint/symptom is required.');
+    if (hasPainCode && !painSiteValid) missing.push("Mandatory pain site description is missing for chief complaint code '38' (PAIN).");
+    if (hasOtherCode && !otherValid) missing.push("Mandatory complaint description is missing for code 'X'.");
+    if (!peComplete) missing.push('9-system physical examination and general survey must be completed.');
+    if (!primaryDiagPresent) missing.push('At least one diagnosis must be designated Primary ICD-10.');
+    if (!vitalsComp) missing.push('Complete triage vitals required (BP, HR, Temp, Height, Weight).');
+    if (!s2Valid) missing.push('Doctor S2 License number is required for PDEA controlled drugs.');
+
+    const ready =
+      panValid &&
+      prcValid &&
+      pinValid &&
+      atcValid &&
+      symptomsValid &&
+      peComplete &&
+      primaryDiagPresent &&
+      vitalsComp &&
+      medicinesValid &&
+      s2Valid;
+
+    return {
+      encounterId: signedConsultationId || selectedPatient?.id || '',
+      doctorPanValid: panValid,
+      doctorPrcValid: prcValid,
+      patientPinValid: pinValid,
+      atcValid,
+      symptomsValid,
+      physicalExamComplete: peComplete,
+      primaryDiagnosisPresent: primaryDiagPresent,
+      vitalsComplete: vitalsComp,
+      medicinesValid,
+      s2LicenseValid: s2Valid,
+      missingFields: missing,
+      warnings: [],
+      isReady: ready,
+    };
+  }, [
+    doctorPan,
+    doctorPrc,
+    doctorS2,
+    signerStaff,
+    patientRecord,
+    patientChart?.demographics?.philHealthNumber,
+    philHealthAtc,
+    selectedSymptomCodes,
+    symptomPainSite,
+    symptomOtherDesc,
+    subjective,
+    physicalExamFindings,
+    selectedDiagnoses,
+    vitals,
+    prescriptions,
+  ]);
+
+  const loadYakapReadiness = useCallback(async () => {
+    if (!signedConsultationId) return;
+    setIsValidatingReadiness(true);
+    const [res] = await clinicService.validateConsultationYakapReadiness(signedConsultationId);
+    if (res) {
+      setServerReadiness(res);
+    }
+    setIsValidatingReadiness(false);
+  }, [signedConsultationId]);
+
+  const isYakapReady = isYakapEligible
+    ? (serverReadiness ? serverReadiness.isReady : localEvaluation.isReady)
+    : true;
+
+  const latestExecutedProcedure = useMemo(() => {
+    const list = patientChart?.proceduresHistory || [];
+    return list.find((p) => p.status === 'Completed') || list[0] || null;
+  }, [patientChart?.proceduresHistory]);
+
+  const formatProcedureVitals = (jsonStr?: string) => {
+    if (!jsonStr) return 'Not recorded';
+    try {
+      const v = JSON.parse(jsonStr);
+      const items: string[] = [];
+      if (v.systolicBp && v.diastolicBp) items.push(`BP ${v.systolicBp}/${v.diastolicBp}`);
+      if (v.heartRateBpm || v.heartRate) items.push(`HR ${v.heartRateBpm || v.heartRate} bpm`);
+      if (v.respiratoryRateBreathsPerMin || v.respiratoryRate) items.push(`RR ${v.respiratoryRateBreathsPerMin || v.respiratoryRate} cpm`);
+      if (v.temperatureCelsius || v.temperature) items.push(`Temp ${v.temperatureCelsius || v.temperature}°C`);
+      if (v.oxygenSaturationPercent || v.oxygenSaturation) items.push(`SpO2 ${v.oxygenSaturationPercent || v.oxygenSaturation}%`);
+      return items.join(' • ') || 'Normal';
+    } catch {
+      return jsonStr;
+    }
+  };
+
+  const handleImportPostProcedureVitals = (proc?: ClinicalProcedureRecord | null) => {
+    if (!proc) return;
+    const postStr = `\nPost-${proc.procedureName} Vitals: ${formatProcedureVitals(proc.postProcedureVitalsJson)}. Nurse Notes: ${proc.clinicalNotes || 'Tolerated well'}. Complications: ${proc.complications || 'None'}.`;
+    setObjective((prev) => (prev ? `${prev.trim()}${postStr}` : postStr.trim()));
+    notify.success('Imported post-procedure findings into Objective notes.');
+  };
+
+  const handleHandoffToTreatmentRoom = async (procedureName: string) => {
+    if (!selectedPatient) return;
+    const doctor = requireSigner();
+    if (!doctor) return;
+    const procInfo = procedureCatalog.find((p) => p.name === procedureName);
+
+    const [proc, procErr] = await clinicService.orderProcedure({
+      patientId: selectedPatient.patientId,
+      patientName: selectedPatient.patientName,
+      queueItemId: selectedPatient.id,
+      consultationId: signedConsultationId || undefined,
+      procedureCode: procInfo?.code,
+      procedureName: procedureName,
+      category: procInfo?.category ?? 'Procedure',
+      orderedByDoctorId: doctor.id,
+      orderedByDoctorName: doctor.name,
+      clinicalNotes: `Ordered for in-clinic execution: ${assessment || 'Evaluation'}`,
+    });
+
+    if (procErr) {
+      notify.error(procErr.message || 'Could not hand off procedure to Treatment Room.');
+      return;
+    }
+
+    setSelectedPatient((prev) =>
+      prev ? { ...prev, status: 'PendingProcedure', roomOrStation: 'Treatment Room' } : null
+    );
+    notify.success(`${procedureName} ordered. Patient routed to Treatment Room.`);
+    loadQueue();
+  };
 
   const patientMeta = selectedPatient
     ? [
@@ -1424,132 +1685,127 @@ export default function ConsultationsScreen() {
     </Card>
   );
 
-  return (
-    <ResponsiveLayout headerTitle="Consultations">
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {/* Patient queue */}
-        <View style={styles.queueSection}>
-          <View style={styles.rowBetween}>
-            <ThemedText variant="h3">Patient queue</ThemedText>
-            <Button
-              title="Refresh"
-              icon="refresh"
-              variant="ghost"
-              size="sm"
-              loading={queueLoading}
-              onPress={loadQueue}
-            />
-          </View>
-          {queueLoading && patients.length === 0 ? (
-            <SkeletonList rows={2} rowHeight={theme.sizes.controlMd} />
-          ) : queueError ? (
-            <ErrorState title="Unable to load the patient queue" message={queueError} onRetry={loadQueue} />
-          ) : patients.length === 0 ? (
-            <EmptyState
-              icon="patients"
-              title="No patients in the queue"
-              description="Patients appear here once they are checked in at the front desk."
-            />
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.patientRow}>
-              {patients.map((p) => (
+  const renderLongitudinalChartContent = () => (
+    <View style={styles.longitudinalChartContainer}>
+      <Card>
+        <CardHeader
+          title="Longitudinal Chart"
+          subtitle="Comprehensive 7-tab historical record"
+          icon="folder"
+        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chartTabsRow}>
+          {[
+            { id: 'summary', label: 'Summary', icon: 'file' },
+            { id: 'encounters', label: 'Encounters', icon: 'clock' },
+            { id: 'diagnostics', label: 'Diagnostics', icon: 'lab' },
+            { id: 'procedures', label: 'Procedures', icon: 'activity' },
+            { id: 'immunizations', label: 'Immunizations', icon: 'shield' },
+            { id: 'profiles', label: 'Profiles', icon: 'user' },
+            { id: 'vault', label: 'Vault', icon: 'folder' },
+          ].map((tab) => {
+            const isActive = activeChartTab === tab.id;
+            return (
+              <Pressable
+                key={tab.id}
+                accessibilityRole="button"
+                onPress={() => setActiveChartTab(tab.id as ChartReviewTab)}
+                style={[styles.chartTabButton, isActive && styles.chartTabButtonActive]}
+              >
+                <Icon
+                  name={tab.icon as any}
+                  size={theme.sizes.iconSm}
+                  color={isActive ? theme.colors.primaryDark : theme.colors.textMuted}
+                />
+                <ThemedText
+                  variant="captionBold"
+                  color={isActive ? theme.colors.primaryDark : theme.colors.textSecondary}
+                >
+                  {tab.label}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </Card>
+
+      {activeChartTab === 'summary' && (
+        <ExecutiveSummaryTab
+          patient={patientRecord}
+          chart={patientChart}
+          onNavigateTab={(tab: any) => setActiveChartTab(tab)}
+          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+        />
+      )}
+      {activeChartTab === 'encounters' && (
+        <EncountersTimelineTab
+          patient={patientRecord}
+          patientId={selectedPatient?.patientId}
+          consultations={patientChart?.consultations || []}
+          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+        />
+      )}
+      {activeChartTab === 'diagnostics' && (
+        <DiagnosticLabTab
+          patient={patientRecord}
+          patientId={selectedPatient?.patientId}
+          labOrders={labOrders}
+          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+        />
+      )}
+      {activeChartTab === 'procedures' && (
+        <NursingProceduresTab
+          patient={patientRecord}
+          patientId={selectedPatient?.patientId}
+          procedures={patientChart?.proceduresHistory || []}
+          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+        />
+      )}
+      {activeChartTab === 'immunizations' && (
+        <StatutoryImmunizationsTab
+          patient={patientRecord}
+          patientId={selectedPatient?.patientId}
+          demographics={patientChart?.demographics}
+          immunizations={patientChart?.immunizations || []}
+          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+        />
+      )}
+      {activeChartTab === 'profiles' && (
+        <HealthProfilesTab
+          patient={patientRecord || ({} as any)}
+          surgicalHistories={patientChart?.surgicalHistories || []}
+          socialHistory={patientChart?.socialHistory}
+          reproductiveHistory={patientChart?.reproductiveHistory}
+          latestNcdAssessment={patientChart?.latestNcdAssessment}
+          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+        />
+      )}
+      {activeChartTab === 'vault' && (
+        <ExternalDocumentVaultTab
+          patient={patientRecord}
+          patientId={selectedPatient?.patientId}
+          attachments={patientChart?.attachments || []}
+          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+        />
+      )}
+    </View>
+  );
+
+  const renderSoapDocumentationContent = () => (
+    <View style={styles.soapContentColumn}>
+            {recordError && !contextLoading ? (
+              <View style={[styles.rowBetween, { marginTop: theme.spacing.sm }]}>
+                <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex}>
+                  {recordError}
+                </ThemedText>
                 <Button
-                  key={p.id}
-                  title={`${p.queueNumber}  ${p.patientName}`}
+                  title="Retry"
+                  icon="refresh"
+                  variant="ghost"
                   size="sm"
-                  variant={selectedPatient?.id === p.id ? 'primary' : 'outline'}
-                  onPress={() => handleSelectPatient(p)}
+                  onPress={() => selectedPatient && loadPatientContext(selectedPatient)}
                 />
-              ))}
-            </ScrollView>
-          )}
-        </View>
-
-        {!selectedPatient && patients.length > 0 ? (
-          <EmptyState
-            icon="consultations"
-            title="Select a patient"
-            description="Choose a patient from the queue above to start the consultation."
-          />
-        ) : null}
-
-        {selectedPatient ? (
-          <>
-            {/* Selected patient */}
-            <Card>
-              <View style={styles.rowBetween}>
-                <View style={styles.flex}>
-                  <ThemedText variant="h2">{selectedPatient.patientName}</ThemedText>
-                  <ThemedText variant="small" color={theme.colors.textSecondary}>
-                    {patientMeta}
-                  </ThemedText>
-                </View>
-                <Badge label={selectedPatient.priority} variant={priorityVariant(selectedPatient.priority)} />
               </View>
-
-              {allergiesText ? <Badge icon="alert" label={`Allergies: ${allergiesText}`} variant="warning" /> : null}
-              {recordError && !contextLoading ? (
-                <View style={styles.rowBetween}>
-                  <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex}>
-                    {recordError}
-                  </ThemedText>
-                  <Button
-                    title="Retry"
-                    icon="refresh"
-                    variant="ghost"
-                    size="sm"
-                    onPress={() => loadPatientContext(selectedPatient)}
-                  />
-                </View>
-              ) : null}
-
-              {/* Triage vitals */}
-              {contextLoading && !vitals ? (
-                <SkeletonList rows={1} rowHeight={theme.sizes.controlLg} />
-              ) : vitalsError ? (
-                <ErrorState
-                  compact
-                  title="Unable to load triage vitals"
-                  message={vitalsError}
-                  onRetry={() => loadPatientContext(selectedPatient)}
-                />
-              ) : vitals ? (
-                <View style={styles.vitalsBox}>
-                  <View style={styles.rowBetween}>
-                    <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
-                      Triage vitals
-                    </ThemedText>
-                    {vitals.recordedByNurseName ? (
-                      <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Recorded by {vitals.recordedByNurseName}
-                      </ThemedText>
-                    ) : null}
-                  </View>
-                  <View style={styles.rowWrap}>
-                    {vitalItems.map((v) => (
-                      <View key={v.label} style={styles.vitalItem}>
-                        <ThemedText variant="caption" color={theme.colors.textMuted}>
-                          {v.label}
-                        </ThemedText>
-                        <ThemedText variant="bodyBold">{v.value}</ThemedText>
-                      </View>
-                    ))}
-                  </View>
-                  {vitals.notes ? (
-                    <ThemedText variant="small" color={theme.colors.textSecondary}>
-                      {vitals.notes}
-                    </ThemedText>
-                  ) : null}
-                </View>
-              ) : (
-                <View style={styles.row}>
-                  <Icon name="hourglass" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-                  <ThemedText variant="small" color={theme.colors.textMuted}>
-                    Triage vitals have not been recorded for this patient yet.
-                  </ThemedText>
-                </View>
-              )}
-            </Card>
+            ) : null}
 
             {/* Critical lab value banner */}
             {activePanicAlert
@@ -1646,263 +1902,279 @@ export default function ConsultationsScreen() {
             {/* Dual-Mode Consultation Workstation Header */}
             {!isYakapEligible ? (
               /* Standard Clinical Encounter: 100% Free of PhilHealth Bureaucracy */
-              <Card>
-                <View style={styles.dualModeSwitcher}>
-                  <View style={styles.flex}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
-                      <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                      <ThemedText variant="bodyBold">Standard Clinical Encounter</ThemedText>
-                      <Badge label="Cash / Private / HMO" variant="neutral" size="sm" />
-                    </View>
-                    <ThemedText variant="small" color={theme.colors.textMuted} style={{ marginTop: theme.spacing.xs }}>
-                      Standard clinical documentation. Zero PhilHealth bureaucracy (no ATC prompts, Case/Trans numbers, or statutory questionnaires).
-                    </ThemedText>
-                  </View>
-                  {!isSigned ? (
-                    <Button
-                      title="Switch to PhilHealth Konsulta"
-                      size="sm"
-                      variant="outline"
-                      icon="shield"
-                      onPress={() => setIsYakapEligible(true)}
-                    />
-                  ) : null}
-                </View>
-              </Card>
-            ) : (
-              /* PhilHealth Konsulta Encounter: Guided Statutory Mode with Encounter ATC Header Banner */
-              <Card style={styles.atcBannerCard}>
-                <View style={styles.atcHeaderRow}>
-                  <View style={styles.atcTitleGroup}>
-                    <Icon name="shield" size={theme.sizes.iconMd} color={theme.colors.primary} />
+              <View onLayout={(e) => { sectionOffsets.current['atc'] = e.nativeEvent.layout.y; }}>
+                <Card>
+                  <View style={styles.dualModeSwitcher}>
                     <View style={styles.flex}>
-                      <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-                        PhilHealth Konsulta Encounter Active
-                      </ThemedText>
-                      <ThemedText variant="small" color={theme.colors.primary}>
-                        Statutory keys (pHciCaseNo, pHciTransNo, pSoapTransNo) auto-generated & linked on save/sign
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+                        <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                        <ThemedText variant="bodyBold">Standard Clinical Encounter</ThemedText>
+                        <Badge label="Cash / Private / HMO" variant="neutral" size="sm" />
+                      </View>
+                      <ThemedText variant="small" color={theme.colors.textMuted} style={{ marginTop: theme.spacing.xs }}>
+                        Standard clinical documentation. Zero PhilHealth bureaucracy (no ATC prompts, Case/Trans numbers, or statutory questionnaires).
                       </ThemedText>
                     </View>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
-                    <Badge label={yakapReady ? 'Claim Ready' : 'Incomplete'} variant={yakapReady ? 'success' : 'warning'} />
                     {!isSigned ? (
                       <Button
-                        title="Switch to Standard"
+                        title="Switch to PhilHealth Konsulta"
                         size="sm"
-                        variant="ghost"
-                        onPress={() => setIsYakapEligible(false)}
+                        variant="outline"
+                        icon="shield"
+                        onPress={() => setIsYakapEligible(true)}
                       />
                     ) : null}
                   </View>
-                </View>
-
-                {/* Encounter ATC Header Banner Input */}
-                <View style={{ marginTop: theme.spacing.xs }}>
-                  <Input
-                    label="Authorization Transaction Code (ATC)"
-                    placeholder="e.g. ATC-2026-99214"
-                    value={philHealthAtc}
-                    onChangeText={setPhilHealthAtc}
-                    editable={!isSigned}
-                  />
-                </View>
-
-                {/* Automated Doctor PAN Snapshotting Display */}
-                <View style={styles.panSnapshotCard}>
-                  <View style={styles.rowBetween}>
-                    <ThemedText variant="smallBold" color={theme.colors.text}>
-                      Attending Physician PhilHealth PAN (Accreditation #)
-                    </ThemedText>
-                    {doctorPan || signerStaff?.philHealthPan ? (
-                      <Badge label="PAN Auto-Snapshotted" variant="success" size="sm" />
-                    ) : (
-                      <Badge label="PAN Missing" variant="warning" size="sm" />
-                    )}
+                </Card>
+              </View>
+            ) : (
+              /* PhilHealth Konsulta Encounter: Guided Statutory Mode with Encounter ATC Header Banner */
+              <View onLayout={(e) => { sectionOffsets.current['atc'] = e.nativeEvent.layout.y; }}>
+                <Card style={styles.atcBannerCard}>
+                  <View style={styles.atcHeaderRow}>
+                    <View style={styles.atcTitleGroup}>
+                      <Icon name="shield" size={theme.sizes.iconMd} color={theme.colors.primary} />
+                      <View style={styles.flex}>
+                        <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+                          PhilHealth Konsulta Encounter Active
+                        </ThemedText>
+                        <ThemedText variant="small" color={theme.colors.primary}>
+                          Statutory keys (pHciCaseNo, pHciTransNo, pSoapTransNo) auto-generated & linked on save/sign
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                      <Badge label={isYakapReady ? 'Claim Ready' : 'Incomplete'} variant={isYakapReady ? 'success' : 'warning'} />
+                      {!isSigned ? (
+                        <Button
+                          title="Switch to Standard"
+                          size="sm"
+                          variant="ghost"
+                          onPress={() => setIsYakapEligible(false)}
+                        />
+                      ) : null}
+                    </View>
                   </View>
-                  <Input
-                    placeholder="Doctor PhilHealth PAN (e.g. 123456789012)"
-                    value={doctorPan}
-                    onChangeText={setDoctorPan}
-                    editable={!isSigned}
-                  />
-                </View>
-              </Card>
+
+                  {/* Encounter ATC Header Banner Input */}
+                  <View style={{ marginTop: theme.spacing.xs }}>
+                    <Input
+                      label="Authorization Transaction Code (ATC)"
+                      placeholder="e.g. ATC-2026-99214"
+                      value={philHealthAtc}
+                      onChangeText={setPhilHealthAtc}
+                      editable={!isSigned}
+                    />
+                  </View>
+
+                  {/* Automated Doctor PAN Snapshotting Display */}
+                  <View style={styles.panSnapshotCard}>
+                    <View style={styles.rowBetween}>
+                      <ThemedText variant="smallBold" color={theme.colors.text}>
+                        Attending Physician PhilHealth PAN (Accreditation #)
+                      </ThemedText>
+                      {doctorPan.trim() || signerStaff?.philHealthPan?.trim() ? (
+                        <Badge label="PAN Auto-Snapshotted" variant="success" size="sm" />
+                      ) : (
+                        <Badge label="PAN Missing" variant="warning" size="sm" />
+                      )}
+                    </View>
+                    <Input
+                      placeholder="Doctor PhilHealth PAN (e.g. 123456789012)"
+                      value={doctorPan}
+                      onChangeText={setDoctorPan}
+                      editable={!isSigned}
+                    />
+                  </View>
+                </Card>
+              </View>
             )}
 
             {/* S - Subjective */}
-            <Card>
-              <CardHeader
-                title="Subjective"
-                subtitle="Chief complaint and history of present illness"
-                rightAction={
-                  isYakapEligible ? <Badge label="PhilHealth complaint required" variant="info" /> : undefined
-                }
-              />
-              {isYakapEligible ? (
-                <View style={styles.stack}>
-                  <ThemedText variant="small" color={theme.colors.textMuted}>
-                    Select the PhilHealth complaint(s) for this visit. Each selection is added to the narrative below.
-                  </ThemedText>
-                  {symptomLibrary.loading && symptoms.length === 0 ? (
-                    <SkeletonList rows={1} rowHeight={theme.sizes.controlMd} />
-                  ) : symptomLibrary.error && symptoms.length === 0 ? (
-                    <ErrorState compact title="Unable to load PhilHealth complaints" message={symptomLibrary.error.message} onRetry={symptomLibrary.reload} />
-                  ) : null}
-                  <View style={styles.chipsRow}>
-                    {symptoms.map((symp) => (
-                      <ToggleChip
-                        key={symp.code}
-                        label={symp.name}
-                        meta={symp.code}
-                        selected={selectedSymptomCodes.includes(symp.code)}
-                        disabled={isSigned}
-                        onPress={() => handleToggleSymptom(symp)}
+            <View onLayout={(e) => { sectionOffsets.current['symptoms'] = e.nativeEvent.layout.y; }}>
+              <Card>
+                <CardHeader
+                  title="Subjective"
+                  subtitle="Chief complaint and history of present illness"
+                  rightAction={
+                    isYakapEligible ? <Badge label="PhilHealth complaint required" variant="info" /> : undefined
+                  }
+                />
+                {isYakapEligible ? (
+                  <View style={styles.stack}>
+                    <ThemedText variant="small" color={theme.colors.textMuted}>
+                      Select the PhilHealth complaint(s) for this visit. Each selection is added to the narrative below.
+                    </ThemedText>
+                    {symptomLibrary.loading && symptoms.length === 0 ? (
+                      <SkeletonList rows={1} rowHeight={theme.sizes.controlMd} />
+                    ) : symptomLibrary.error && symptoms.length === 0 ? (
+                      <ErrorState compact title="Unable to load PhilHealth complaints" message={symptomLibrary.error.message} onRetry={symptomLibrary.reload} />
+                    ) : null}
+                    <View style={styles.chipsRow}>
+                      {symptoms.map((symp) => (
+                        <ToggleChip
+                          key={symp.code}
+                          label={symp.name}
+                          meta={symp.code}
+                          selected={selectedSymptomCodes.includes(symp.code)}
+                          disabled={isSigned}
+                          onPress={() => handleToggleSymptom(symp)}
+                        />
+                      ))}
+                    </View>
+                    {painSymptomSelected ? (
+                      <Input
+                        label="Pain site (required by PhilHealth)"
+                        placeholder="e.g. Epigastric area, right shoulder, lumbar spine"
+                        value={symptomPainSite}
+                        onChangeText={setSymptomPainSite}
+                        editable={!isSigned}
                       />
-                    ))}
+                    ) : null}
+                    {otherSymptomSelected ? (
+                      <Input
+                        label="Other complaint (required by PhilHealth)"
+                        placeholder="Describe the complaint"
+                        value={symptomOtherDesc}
+                        onChangeText={setSymptomOtherDesc}
+                        editable={!isSigned}
+                      />
+                    ) : null}
                   </View>
-                  {painSymptomSelected ? (
-                    <Input
-                      label="Pain site (required by PhilHealth)"
-                      placeholder="e.g. Epigastric area, right shoulder, lumbar spine"
-                      value={symptomPainSite}
-                      onChangeText={setSymptomPainSite}
-                      editable={!isSigned}
-                    />
-                  ) : null}
-                  {otherSymptomSelected ? (
-                    <Input
-                      label="Other complaint (required by PhilHealth)"
-                      placeholder="Describe the complaint"
-                      value={symptomOtherDesc}
-                      onChangeText={setSymptomOtherDesc}
-                      editable={!isSigned}
-                    />
-                  ) : null}
-                </View>
-              ) : null}
-              <Input
-                multiline
-                placeholder="Patient narrative, symptoms, onset and duration"
-                accessibilityLabel="Subjective notes"
-                value={subjective}
-                onChangeText={setSubjective}
-                editable={!isSigned}
-                inputStyle={styles.textArea}
-              />
-            </Card>
+                ) : null}
+                <Input
+                  multiline
+                  placeholder="Patient narrative, symptoms, onset and duration"
+                  accessibilityLabel="Subjective notes"
+                  value={subjective}
+                  onChangeText={setSubjective}
+                  editable={!isSigned}
+                  inputStyle={styles.textArea}
+                />
+              </Card>
+            </View>
 
             {/* O - Objective */}
-            <Card>
-              <CardHeader title="Objective" subtitle="Physical findings, auscultation and examination" />
-              <Input
-                multiline
-                placeholder="Physical examination and clinical observations"
-                accessibilityLabel="Objective notes"
-                value={objective}
-                onChangeText={setObjective}
-                editable={!isSigned}
-                inputStyle={styles.textArea}
-              />
-            </Card>
+            <View onLayout={(e) => {
+              if (!isYakapEligible) {
+                sectionOffsets.current['physical-exam'] = e.nativeEvent.layout.y;
+              }
+            }}>
+              <Card>
+                <CardHeader title="Objective" subtitle="Physical findings, auscultation and examination" />
+                <Input
+                  multiline
+                  placeholder="Physical examination and clinical observations"
+                  accessibilityLabel="Objective notes"
+                  value={objective}
+                  onChangeText={setObjective}
+                  editable={!isSigned}
+                  inputStyle={styles.textArea}
+                />
+              </Card>
+            </View>
 
             {/* Inline Physical Examination (PhilHealth Konsulta 9-System Findings) */}
             {isYakapEligible && (
-              <InlinePhysicalExamCard
-                findings={physicalExamFindings}
-                onChange={setPhysicalExamFindings}
-                disabled={isSigned}
-              />
+              <View onLayout={(e) => { sectionOffsets.current['physical-exam'] = e.nativeEvent.layout.y; }}>
+                <InlinePhysicalExamCard
+                  findings={physicalExamFindings}
+                  onChange={setPhysicalExamFindings}
+                  disabled={isSigned}
+                />
+              </View>
             )}
 
             {/* A - Assessment & ICD-10 */}
-            <Card>
-              <CardHeader
-                title="Assessment"
-                subtitle="Clinical impression and ICD-10 diagnoses"
-                rightAction={isYakapEligible ? <Badge label="ICD-10 linked to PhilHealth" variant="info" /> : undefined}
-              />
+            <View onLayout={(e) => { sectionOffsets.current['primary-diagnosis'] = e.nativeEvent.layout.y; }}>
+              <Card>
+                <CardHeader
+                  title="Assessment"
+                  subtitle="Clinical impression and ICD-10 diagnoses"
+                  rightAction={isYakapEligible ? <Badge label="ICD-10 linked to PhilHealth" variant="info" /> : undefined}
+                />
 
-              <Input
-                placeholder="Primary impression"
-                accessibilityLabel="Assessment"
-                value={assessment}
-                onChangeText={setAssessment}
-                editable={!isSigned}
-              />
+                <Input
+                  placeholder="Primary impression"
+                  accessibilityLabel="Assessment"
+                  value={assessment}
+                  onChangeText={setAssessment}
+                  editable={!isSigned}
+                />
 
-              {selectedDiagnoses.length > 0 ? (
-                <View style={styles.chipsRow}>
-                  {selectedDiagnoses.map((d) => (
-                    <View key={d.icd10Code} style={styles.diagBadge}>
-                      <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
-                        {d.icd10Code}
-                      </ThemedText>
-                      <ThemedText variant="small" color={theme.colors.primaryDark} numberOfLines={1} style={styles.diagDesc}>
-                        {d.description}
-                      </ThemedText>
-                      {d.isPrimary ? <Badge label="Primary" variant="primary" size="sm" /> : null}
-                      {!isSigned ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Remove ${d.icd10Code}`}
-                          onPress={() => handleRemoveDiagnosis(d.icd10Code)}
-                          hitSlop={theme.spacing.sm}
-                        >
-                          <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-                        </Pressable>
-                      ) : null}
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-
-              {!isSigned ? (
-                <View style={styles.stack}>
-                  <Input
-                    leftIcon="search"
-                    placeholder="Search ICD-10 codes (e.g. I10, diabetes, cold)"
-                    accessibilityLabel="Search ICD-10 codes"
-                    value={icdQuery}
-                    onChangeText={handleSearchIcd10}
-                    onFocus={() => setShowIcdDropdown(true)}
-                  />
-                  {showIcdDropdown ? (
-                    <View style={styles.icdDropdown}>
-                      {icdNotice ? (
-                        <ThemedText variant="caption" color={theme.colors.warningText} style={styles.icdNotice}>
-                          {icdNotice}
+                {selectedDiagnoses.length > 0 ? (
+                  <View style={styles.chipsRow}>
+                    {selectedDiagnoses.map((d) => (
+                      <View key={d.icd10Code} style={styles.diagBadge}>
+                        <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                          {d.icd10Code}
                         </ThemedText>
-                      ) : null}
-                      {icdResults.length === 0 ? (
-                        <ThemedText variant="small" color={theme.colors.textMuted} style={styles.icdNotice}>
-                          {icdQuery.trim() ? 'No matching codes in the PhilHealth ICD-10 catalog.' : 'Type a code or a diagnosis to search the PhilHealth ICD-10 catalog.'}
+                        <ThemedText variant="small" color={theme.colors.primaryDark} numberOfLines={1} style={styles.diagDesc}>
+                          {d.description}
                         </ThemedText>
-                      ) : (
-                        icdResults.map((item) => (
-                          <Pressable key={item.code} style={styles.icdItem} onPress={() => handleAddDiagnosis(item)}>
-                            <ThemedText variant="smallBold" color={theme.colors.primary} style={styles.icdItemCode}>
-                              {item.code}
-                            </ThemedText>
-                            <ThemedText variant="small" style={styles.flex}>
-                              {item.description}
-                            </ThemedText>
+                        {d.isPrimary ? <Badge label="Primary" variant="primary" size="sm" /> : null}
+                        {!isSigned ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${d.icd10Code}`}
+                            onPress={() => handleRemoveDiagnosis(d.icd10Code)}
+                            hitSlop={theme.spacing.sm}
+                          >
+                            <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
                           </Pressable>
-                        ))
-                      )}
-                      <View style={styles.icdFooter}>
-                        <Button
-                          title="Close suggestions"
-                          variant="ghost"
-                          size="sm"
-                          onPress={() => setShowIcdDropdown(false)}
-                        />
+                        ) : null}
                       </View>
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-            </Card>
+                    ))}
+                  </View>
+                ) : null}
+
+                {!isSigned ? (
+                  <View style={styles.stack}>
+                    <Input
+                      leftIcon="search"
+                      placeholder="Search ICD-10 codes (e.g. I10, diabetes, cold)"
+                      accessibilityLabel="Search ICD-10 codes"
+                      value={icdQuery}
+                      onChangeText={handleSearchIcd10}
+                      onFocus={() => setShowIcdDropdown(true)}
+                    />
+                    {showIcdDropdown ? (
+                      <View style={styles.icdDropdown}>
+                        {icdNotice ? (
+                          <ThemedText variant="caption" color={theme.colors.warningText} style={styles.icdNotice}>
+                            {icdNotice}
+                          </ThemedText>
+                        ) : null}
+                        {icdResults.length === 0 ? (
+                          <ThemedText variant="small" color={theme.colors.textMuted} style={styles.icdNotice}>
+                            {icdQuery.trim() ? 'No matching codes in the PhilHealth ICD-10 catalog.' : 'Type a code or a diagnosis to search the PhilHealth ICD-10 catalog.'}
+                          </ThemedText>
+                        ) : (
+                          icdResults.map((item) => (
+                            <Pressable key={item.code} style={styles.icdItem} onPress={() => handleAddDiagnosis(item)}>
+                              <ThemedText variant="smallBold" color={theme.colors.primary} style={styles.icdItemCode}>
+                                {item.code}
+                              </ThemedText>
+                              <ThemedText variant="small" style={styles.flex}>
+                                {item.description}
+                              </ThemedText>
+                            </Pressable>
+                          ))
+                        )}
+                        <View style={styles.icdFooter}>
+                          <Button
+                            title="Close suggestions"
+                            variant="ghost"
+                            size="sm"
+                            onPress={() => setShowIcdDropdown(false)}
+                          />
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+              </Card>
+            </View>
 
             {/* Laboratory orders */}
             <Card>
@@ -1969,6 +2241,20 @@ export default function ConsultationsScreen() {
                   ))}
                 </View>
               )}
+              {orderedProcedures.length > 0 && !isSigned ? (
+                <View style={styles.procedureHandoffRow}>
+                  <Button
+                    title="Send to Treatment Room (Nurse Handoff)"
+                    variant="primary"
+                    icon="syringe"
+                    size="sm"
+                    onPress={() => {
+                      const first = orderedProcedures[0];
+                      if (first) handleHandoffToTreatmentRoom(first);
+                    }}
+                  />
+                </View>
+              ) : null}
             </Card>
 
             {/* P - Plan */}
@@ -1986,8 +2272,9 @@ export default function ConsultationsScreen() {
             </Card>
 
             {/* Electronic prescriptions */}
-            <Card>
-              <CardHeader
+            <View onLayout={(e) => { sectionOffsets.current['medicines'] = e.nativeEvent.layout.y; }}>
+              <Card>
+                <CardHeader
                 title={`Electronic prescriptions (${prescriptions.length})`}
                 icon="pill"
                 rightAction={
@@ -2255,8 +2542,10 @@ export default function ConsultationsScreen() {
                 </Card>
               ) : null}
             </Card>
+            </View>
 
-            {/* Attending physician credentials */}
+            {/* Attending physician credentials (Feature 18) */}
+            <View onLayout={(e) => { sectionOffsets.current['doctor-pan'] = sectionOffsets.current['doctor-prc'] = sectionOffsets.current['doctor-s2'] = e.nativeEvent.layout.y; }}>
             <Card>
               <CardHeader
                 title="Attending physician"
@@ -2268,6 +2557,28 @@ export default function ConsultationsScreen() {
                 }
                 rightAction={!signerName ? <Badge label="No one selected" variant="warning" /> : undefined}
               />
+              <View style={styles.credentialBadgesRow}>
+                <Badge
+                  label={doctorPan.trim() || signerStaff?.philHealthPan?.trim() ? 'PAN [Auto-Snapshotted]' : 'PAN [Missing]'}
+                  variant={doctorPan.trim() || signerStaff?.philHealthPan?.trim() ? 'success' : 'warning'}
+                  size="sm"
+                />
+                <Badge
+                  label={doctorPrc.trim() || signerStaff?.prcLicenseNumber?.trim() ? 'PRC [Auto-Snapshotted]' : 'PRC [Missing]'}
+                  variant={doctorPrc.trim() || signerStaff?.prcLicenseNumber?.trim() ? 'success' : 'emergency'}
+                  size="sm"
+                />
+                <Badge
+                  label={doctorPtr.trim() || signerStaff?.ptrNumber?.trim() ? 'PTR [Snapshotted]' : 'PTR [Optional]'}
+                  variant="neutral"
+                  size="sm"
+                />
+                <Badge
+                  label={doctorS2.trim() || signerStaff?.s2LicenseNumber?.trim() ? 'S2 [Active]' : 'S2 [Needed for PDEA]'}
+                  variant={doctorS2.trim() || signerStaff?.s2LicenseNumber?.trim() ? 'neutral' : 'warning'}
+                  size="sm"
+                />
+              </View>
               <View style={styles.fieldRow}>
                 <Input
                   label="PRC license #"
@@ -2301,7 +2612,29 @@ export default function ConsultationsScreen() {
                   />
                 ) : null}
               </View>
+              {signerStaff && !isSigned && (
+                <View style={styles.updateProfileRow}>
+                  <Button
+                    title="Save to My Staff Profile"
+                    variant="ghost"
+                    size="sm"
+                    icon="save"
+                    onPress={async () => {
+                      await clinicService.updateMyProfile({
+                        firstName: signerStaff.firstName,
+                        lastName: signerStaff.lastName,
+                        prcLicenseNumber: doctorPrc,
+                        ptrNumber: doctorPtr,
+                        s2LicenseNumber: doctorS2,
+                        philHealthPan: doctorPan,
+                      });
+                      notify.success('Updated credentials in your staff profile.');
+                    }}
+                  />
+                </View>
+              )}
             </Card>
+            </View>
 
             {/* Clinical documents */}
             <Card>
@@ -2373,6 +2706,18 @@ export default function ConsultationsScreen() {
               ) : null}
             </Card>
 
+            {/* PhilHealth Yakap Claim Readiness Card (Feature 17) */}
+            {isYakapEligible ? (
+              <YakapClaimReadinessCard
+                serverReadiness={serverReadiness}
+                localEvaluation={localEvaluation}
+                isValidating={isValidatingReadiness}
+                consultationId={signedConsultationId}
+                onJumpToSection={handleJumpToSection}
+                onRevalidate={loadYakapReadiness}
+              />
+            ) : null}
+
             {/* Signing */}
             {isSigned ? (
               <Card style={styles.signedCard}>
@@ -2410,24 +2755,265 @@ export default function ConsultationsScreen() {
                     title="Forward to cashier"
                     icon="billing"
                     variant="success"
-                    onPress={() =>
+                    onPress={() => {
+                      if (!selectedPatient) return;
                       navigation.navigate('Billing', {
                         patientId: selectedPatient.patientId,
                         patientName: selectedPatient.patientName,
-                      })
-                    }
+                      });
+                    }}
                   />
                 </View>
               </Card>
             ) : (
               <Button
-                title="Sign & sync encounter"
-                icon="check"
+                title={
+                  isYakapEligible && !isYakapReady
+                    ? `Signing locked (${(serverReadiness || localEvaluation).missingFields.length} statutory requirements pending)`
+                    : 'Sign & sync encounter'
+                }
+                icon={isYakapEligible && !isYakapReady ? 'lock' : 'check'}
                 size="lg"
+                variant={isYakapEligible && !isYakapReady ? 'outline' : 'primary'}
                 loading={isSigning}
-                disabled={isSigning}
+                disabled={isSigning || (isYakapEligible && !isYakapReady)}
                 onPress={handleSignAndSync}
               />
+            )}
+    </View>
+  );
+
+  return (
+    <ResponsiveLayout headerTitle="Consultations">
+      <ScrollView ref={scrollViewRef} style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {/* Patient queue */}
+        <View style={styles.queueSection}>
+          <View style={styles.rowBetween}>
+            <View style={styles.row}>
+              <ThemedText variant="h3">Patient queue</ThemedText>
+              <Badge label={`${patients.length}`} variant="neutral" size="sm" />
+            </View>
+            <Button
+              title="Refresh"
+              icon="refresh"
+              variant="ghost"
+              size="sm"
+              loading={queueLoading}
+              onPress={loadQueue}
+            />
+          </View>
+
+          {/* Queue View Fast Filters & Station Pills */}
+          <View style={{ gap: theme.spacing.sm }}>
+            <SegmentedControl
+              value={queueViewFilter}
+              onChange={(v) => setQueueViewFilter(v as QueueView)}
+              options={[
+                { value: 'WaitingForDoctor', label: 'Waiting for Doctor' },
+                { value: 'MyRoom', label: 'My Room' },
+                { value: 'PendingProcedure', label: 'Pending Procedure' },
+                { value: 'All', label: 'All Queue' },
+              ]}
+            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stationFilterScroll}>
+              {(['ALL', 'Room 1', 'Room 2', 'Triage Station', 'Treatment Room'] as const).map((station) => (
+                <Pressable
+                  key={station}
+                  accessibilityRole="button"
+                  onPress={() => setSelectedStationFilter(station)}
+                  style={[
+                    styles.stationFilterPill,
+                    selectedStationFilter === station && styles.stationFilterPillActive,
+                  ]}
+                >
+                  <ThemedText
+                    variant="captionBold"
+                    color={selectedStationFilter === station ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  >
+                    {station === 'ALL' ? 'All Stations' : station}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+
+          {queueLoading && patients.length === 0 ? (
+            <SkeletonList rows={2} rowHeight={theme.sizes.controlMd} />
+          ) : queueError ? (
+            <ErrorState title="Unable to load the patient queue" message={queueError} onRetry={loadQueue} />
+          ) : patients.length === 0 ? (
+            <EmptyState
+              icon="patients"
+              title="No patients in the queue"
+              description="Patients appear here once they are checked in at the front desk."
+            />
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.patientRow}>
+              {patients.map((p) => {
+                const isSelected = selectedPatient?.id === p.id;
+                const statusBadge = p.status === 'PendingProcedure' ? ' [Procedure]' : p.status === 'ReEvaluation' ? ' [Re-Eval]' : '';
+                return (
+                  <Button
+                    key={p.id}
+                    title={`${p.queueNumber}  ${p.patientName}${statusBadge}`}
+                    size="sm"
+                    variant={isSelected ? 'primary' : 'outline'}
+                    onPress={() => handleSelectPatient(p)}
+                  />
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
+
+        {!selectedPatient && patients.length > 0 ? (
+          <EmptyState
+            icon="consultations"
+            title="Select a patient"
+            description="Choose a patient from the queue above to start the consultation."
+          />
+        ) : null}
+
+        {selectedPatient ? (
+          <>
+            {/* Selected patient (PatientSummarySpine Workstation Header) */}
+            <View
+              onLayout={(e) => {
+                sectionOffsets.current['patient-pin'] = e.nativeEvent.layout.y;
+                sectionOffsets.current['vitals'] = e.nativeEvent.layout.y;
+              }}
+            >
+              <PatientSummarySpine
+                variant="workstation"
+                patient={patientRecord || {
+                  id: selectedPatient.patientId,
+                  clinicId: selectedPatient.clinicId,
+                  tenantId: selectedPatient.tenantId,
+                  patientCode: '',
+                  fullName: selectedPatient.patientName,
+                  firstName: selectedPatient.patientName.split(' ')[0] || '',
+                  lastName: selectedPatient.patientName.split(' ').slice(1).join(' ') || '',
+                  age: 0,
+                  contactNumber: '',
+                  dateOfBirth: '',
+                  gender: '',
+                  createdAt: '',
+                }}
+                chart={patientChart}
+                vitals={vitals}
+                queueTicket={selectedPatient.queueNumber}
+                queuePriority={selectedPatient.priority}
+                chiefComplaint={selectedPatient.chiefComplaint}
+                activeAtc={philHealthAtc}
+                loading={contextLoading}
+                onPressRefresh={() => loadPatientContext(selectedPatient)}
+              />
+            </View>
+
+            {/* Doctor Re-Evaluation Alert Banner (Closed-Loop In-Clinic Procedures Feature 20) */}
+            {(selectedPatient.status === 'ReEvaluation' || latestExecutedProcedure?.status === 'Completed') ? (
+              <Card style={styles.reEvalBanner}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.row}>
+                    <Icon name="activity" size={theme.sizes.iconMd} color={theme.colors.info} />
+                    <View>
+                      <ThemedText variant="bodyBold" color={theme.colors.infoText}>
+                        In-Clinic Procedure Completed — Re-Evaluation Required
+                      </ThemedText>
+                      <ThemedText variant="small" color={theme.colors.textSecondary}>
+                        {latestExecutedProcedure
+                          ? `${latestExecutedProcedure.procedureName} executed by ${latestExecutedProcedure.performedByStaffName || 'Treatment Room Nurse'}`
+                          : 'Treatment room nurse completed in-clinic procedure handoff'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <Badge label="Re-Evaluation" variant="warning" size="sm" />
+                </View>
+
+                {latestExecutedProcedure ? (
+                  <View style={styles.reEvalDetailsBox}>
+                    <View style={styles.rowWrap}>
+                      <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                        Pre-Procedure Vitals:
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.text}>
+                        {formatProcedureVitals(latestExecutedProcedure.preProcedureVitalsJson)}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.rowWrap}>
+                      <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                        Post-Procedure Vitals:
+                      </ThemedText>
+                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                        {formatProcedureVitals(latestExecutedProcedure.postProcedureVitalsJson)}
+                      </ThemedText>
+                    </View>
+                    {latestExecutedProcedure.lotNumber ? (
+                      <View style={styles.rowWrap}>
+                        <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                          Med/Lot Batch:
+                        </ThemedText>
+                        <ThemedText variant="caption" color={theme.colors.text}>
+                          {latestExecutedProcedure.medicationAdministered || ''} (Lot #{latestExecutedProcedure.lotNumber}{latestExecutedProcedure.expirationDate ? ` exp ${latestExecutedProcedure.expirationDate}` : ''})
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                    {latestExecutedProcedure.clinicalNotes ? (
+                      <ThemedText variant="small" color={theme.colors.textSecondary}>
+                        Nurse notes: {latestExecutedProcedure.clinicalNotes}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                <View style={styles.actionRow}>
+                  <Button
+                    title="Import Post-Procedure Vitals into Objective"
+                    icon="plus"
+                    variant="primary"
+                    size="sm"
+                    onPress={() => handleImportPostProcedureVitals(latestExecutedProcedure)}
+                  />
+                </View>
+              </Card>
+            ) : null}
+
+            {/* Responsive Workstation Layout (Desktop Dual-Pane >= 1024px vs Mobile Stacked) */}
+            {isDesktopWorkstation ? (
+              <View
+                style={styles.splitScreenContainer}
+                onLayout={(e) => {
+                  soapPaneOffsetY.current = e.nativeEvent.layout.y;
+                }}
+              >
+                <View style={styles.leftChartPane}>
+                  {renderLongitudinalChartContent()}
+                </View>
+                <View style={styles.rightSoapPane}>
+                  {renderSoapDocumentationContent()}
+                </View>
+              </View>
+            ) : (
+              <View
+                style={styles.mobileWorkstationContainer}
+                onLayout={(e) => {
+                  soapPaneOffsetY.current = e.nativeEvent.layout.y;
+                }}
+              >
+                <View style={styles.mobileViewSwitcherContainer}>
+                  <SegmentedControl
+                    value={mobileWorkstationView}
+                    onChange={(v) => setMobileWorkstationView(v as 'soap' | 'chart')}
+                    options={[
+                      { value: 'soap', label: 'Documentation (SOAP)' },
+                      { value: 'chart', label: 'Longitudinal Chart (7 Tabs)' },
+                    ]}
+                  />
+                </View>
+                {mobileWorkstationView === 'soap'
+                  ? renderSoapDocumentationContent()
+                  : renderLongitudinalChartContent()}
+              </View>
             )}
           </>
         ) : null}
@@ -3144,5 +3730,103 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+  },
+  stationFilterScroll: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+  },
+  stationFilterPill: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+  },
+  stationFilterPillActive: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+  },
+  reEvalBanner: {
+    backgroundColor: theme.colors.infoBg,
+    borderColor: theme.colors.infoBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  reEvalDetailsBox: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  splitScreenContainer: {
+    flexDirection: 'row',
+    gap: theme.spacing.lg,
+    alignItems: 'flex-start',
+    width: '100%',
+  },
+  leftChartPane: {
+    flex: 0.42,
+    minWidth: 360,
+    gap: theme.spacing.md,
+  },
+  rightSoapPane: {
+    flex: 0.58,
+    minWidth: 440,
+    gap: theme.spacing.md,
+  },
+  soapContentColumn: {
+    gap: theme.spacing.md,
+    width: '100%',
+  },
+  mobileWorkstationContainer: {
+    gap: theme.spacing.md,
+    width: '100%',
+  },
+  mobileViewSwitcherContainer: {
+    marginBottom: theme.spacing.xs,
+  },
+  longitudinalChartContainer: {
+    gap: theme.spacing.md,
+    width: '100%',
+  },
+  chartTabsRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+  },
+  chartTabButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+  },
+  chartTabButtonActive: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+  },
+  credentialBadgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+  },
+  updateProfileRow: {
+    marginTop: theme.spacing.xs,
+    alignItems: 'flex-start',
+  },
+  procedureHandoffRow: {
+    marginTop: theme.spacing.sm,
+    alignItems: 'flex-start',
   },
 });

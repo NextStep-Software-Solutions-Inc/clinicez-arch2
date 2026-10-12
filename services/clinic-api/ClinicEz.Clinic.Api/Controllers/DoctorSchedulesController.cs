@@ -59,6 +59,17 @@ public sealed class DoctorSchedulesController : ControllerBase
         return Ok(ApiResponse<DoctorScheduleTemplateDto>.Success(result, "Doctor schedule template saved successfully."));
     }
 
+    [HttpDelete("templates/{templateId:guid}")]
+    [HasPermission(ClinicPermissions.SchedulesManage)]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteTemplate(
+        Guid doctorId,
+        Guid templateId,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new DeleteDoctorScheduleTemplateCommand(doctorId, templateId), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Doctor schedule template removed successfully."));
+    }
+
     [HttpGet("availability")]
     [HasPermission(ClinicPermissions.SchedulesRead)]
     public async Task<ActionResult<ApiResponse<DoctorAvailabilityDto>>> GetAvailability(

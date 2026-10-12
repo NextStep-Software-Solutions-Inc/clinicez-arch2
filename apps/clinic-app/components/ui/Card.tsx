@@ -112,11 +112,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
     paddingBottom: theme.spacing.md,
+    flexWrap: 'wrap',
+    rowGap: theme.spacing.sm,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    minWidth: 200,
     gap: theme.spacing.md,
   },
   headerIcon: {

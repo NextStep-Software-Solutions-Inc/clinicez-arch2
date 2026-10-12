@@ -1267,7 +1267,7 @@ export default function DashboardScreen() {
                   Weight-for-Age (WAZ)
                 </ThemedText>
                 <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  {zScorePreview.weightForAgeZScore !== undefined ? `${zScorePreview.weightForAgeZScore} SD` : '—'}
+                  {zScorePreview.weightForAgeZScore != null ? `${zScorePreview.weightForAgeZScore} SD` : '—'}
                 </ThemedText>
               </View>
               <View style={styles.zScorePill}>
@@ -1275,7 +1275,7 @@ export default function DashboardScreen() {
                   Length/Height-for-Age (HAZ)
                 </ThemedText>
                 <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  {zScorePreview.heightForAgeZScore !== undefined ? `${zScorePreview.heightForAgeZScore} SD` : '—'}
+                  {zScorePreview.heightForAgeZScore != null ? `${zScorePreview.heightForAgeZScore} SD` : '—'}
                 </ThemedText>
               </View>
               <View style={styles.zScorePill}>
@@ -1283,7 +1283,7 @@ export default function DashboardScreen() {
                   Weight-for-Length (WHZ)
                 </ThemedText>
                 <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  {zScorePreview.weightForHeightZScore !== undefined ? `${zScorePreview.weightForHeightZScore} SD` : '—'}
+                  {zScorePreview.weightForHeightZScore != null ? `${zScorePreview.weightForHeightZScore} SD` : '—'}
                 </ThemedText>
               </View>
             </View>

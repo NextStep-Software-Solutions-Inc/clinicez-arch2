@@ -418,6 +418,7 @@ export default function StaffManagementTab({
                   title="Doctor Rosters & Schedules"
                   icon="calendar"
                   variant="outline"
+                  size="sm"
                   onPress={() => {
                     setRosterDoctorId(doctors[0]?.id);
                     setRosterModalVisible(true);
@@ -427,6 +428,7 @@ export default function StaffManagementTab({
               <Button
                 title="Add staff member"
                 icon="plus"
+                size="sm"
                 onPress={handleOpenAddModal}
                 disabled={maxStaffSeats != null && activeStaffCount >= maxStaffSeats}
               />
