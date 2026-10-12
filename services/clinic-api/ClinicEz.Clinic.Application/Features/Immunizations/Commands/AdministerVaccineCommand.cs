@@ -1,8 +1,11 @@
 using System;
+using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Immunizations.DTOs;
+using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
@@ -127,6 +130,7 @@ public sealed class AdministerVaccineCommandHandler : IRequestHandler<Administer
             immunization.SynchronizedAtUtc = DateTime.UtcNow;
         }
 
+        TrySyncToPhilHealthProfile(patient, request.PhilHealthLibrary, request.PhilHealthCode);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new PatientImmunizationDto(
@@ -159,5 +163,67 @@ public sealed class AdministerVaccineCommandHandler : IRequestHandler<Administer
             immunization.IsSynchronizedToPatientApp,
             immunization.SynchronizedAtUtc
         );
+    }
+
+    private static void TrySyncToPhilHealthProfile(ClinicPatient patient, string philHealthLibrary, string philHealthCode)
+    {
+        if (patient.CustomFields == null || !patient.CustomFields.TryGetValue("philhealth_profile", out var profObj) || profObj == null)
+            return;
+
+        PhilHealthPatientProfileDto? prof = null;
+        if (profObj is PhilHealthPatientProfileDto typed)
+        {
+            prof = typed;
+        }
+        else
+        {
+            try
+            {
+                var json = profObj.ToString();
+                if (!string.IsNullOrWhiteSpace(json))
+                {
+                    prof = JsonSerializer.Deserialize<PhilHealthPatientProfileDto>(json,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+            }
+            catch
+            {
+                return;
+            }
+        }
+
+        if (prof == null) return;
+
+        var lib = philHealthLibrary.ToLowerInvariant();
+        var code = philHealthCode.Trim();
+        if (string.IsNullOrWhiteSpace(code) || code.Equals("999", StringComparison.OrdinalIgnoreCase)) return;
+
+        if (lib.Contains("child"))
+        {
+            if (!prof.ChildImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
+                prof = prof with { ChildImmunizations = [..prof.ChildImmunizations, code] };
+        }
+        else if (lib.Contains("young"))
+        {
+            if (!prof.YoungWomanImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
+                prof = prof with { YoungWomanImmunizations = [..prof.YoungWomanImmunizations, code] };
+        }
+        else if (lib.Contains("preg"))
+        {
+            if (!prof.PregnantWomanImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
+                prof = prof with { PregnantWomanImmunizations = [..prof.PregnantWomanImmunizations, code] };
+        }
+        else if (lib.Contains("elderly"))
+        {
+            if (!prof.ElderlyImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
+                prof = prof with { ElderlyImmunizations = [..prof.ElderlyImmunizations, code] };
+        }
+        else
+        {
+            if (!prof.OtherImmunizations.Contains(code, StringComparer.OrdinalIgnoreCase))
+                prof = prof with { OtherImmunizations = [..prof.OtherImmunizations, code] };
+        }
+
+        patient.CustomFields["philhealth_profile"] = prof;
     }
 }

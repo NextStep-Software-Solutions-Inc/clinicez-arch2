@@ -623,7 +623,7 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
         })
       );
       expect(fullMarkup).toContain('Breastfeeding Counseling &amp; Guidance');
-      expect(fullMarkup).toContain('lib_management: 1');
+      expect(fullMarkup).toContain('PhilHealth Covered');
 
       // Empty procedures render
       const emptyMarkup = renderToStaticMarkup(

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -24,6 +26,8 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
     private readonly IRepository<PatientSocialHistory> _socialRepo;
     private readonly IRepository<PatientReproductiveHistory> _reproductiveRepo;
     private readonly IRepository<NcdRiskAssessment> _ncdRepo;
+    private readonly IRepository<PatientImmunization>? _immunizationRepo;
+    private readonly IPhilHealthCatalogLookup? _catalogLookup;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
@@ -34,7 +38,9 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
         IRepository<PatientReproductiveHistory> reproductiveRepo,
         IRepository<NcdRiskAssessment> ncdRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<PatientImmunization>? immunizationRepo = null,
+        IPhilHealthCatalogLookup? catalogLookup = null)
     {
         _patientRepo = patientRepo;
         _surgicalRepo = surgicalRepo;
@@ -43,6 +49,8 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
         _ncdRepo = ncdRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _immunizationRepo = immunizationRepo;
+        _catalogLookup = catalogLookup;
     }
 
     public async Task SyncFromProfileAsync(Guid patientId, PhilHealthPatientProfileDto profile, CancellationToken ct = default)
@@ -139,61 +147,127 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
 
         // 2. Social History
         var existingSocial = await _socialRepo.Query(s => s.PatientId == patientId).FirstOrDefaultAsync(ct);
+        int? cigsPerDay = null;
+        if (int.TryParse(legacyProfile.CigarettesPerDay, out var c)) cigsPerDay = c;
+        else if (decimal.TryParse(legacyProfile.PacksPerDay, out var parsedPpd)) cigsPerDay = (int)(parsedPpd * 20);
+
+        int? bottlesPerDay = null;
+        if (int.TryParse(legacyProfile.BottlesPerDay, out var b)) bottlesPerDay = b;
+
+        decimal? packs = decimal.TryParse(legacyProfile.PacksPerDay, out var parsedPacks)
+            ? parsedPacks
+            : (cigsPerDay.HasValue ? Math.Round((decimal)cigsPerDay.Value / 20m, 2) : null);
+
+        DateOnly? stoppedDate = null;
+        if (DateOnly.TryParse(legacyProfile.SmokingStoppedDate, out var sDate)) stoppedDate = sDate;
+
+        bool isSmoker = legacyProfile.IsSmoker;
+        if (legacyProfile.SmokingStatus is "quit" or "former" or "X" or "x")
+        {
+            isSmoker = false;
+            stoppedDate ??= DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+        else if (legacyProfile.SmokingStatus is "current" or "Y" or "y")
+        {
+            isSmoker = true;
+            stoppedDate = null;
+        }
+
+        bool isDrinker = legacyProfile.IsAlcoholDrinker;
+        string? alcFreq = legacyProfile.AlcoholFrequency;
+        if (legacyProfile.AlcoholStatus is "quit" or "former" or "X" or "x")
+        {
+            isDrinker = false;
+            alcFreq = "Quit";
+        }
+        else if (legacyProfile.AlcoholStatus is "current" or "Y" or "y")
+        {
+            isDrinker = true;
+        }
+
         if (existingSocial == null)
         {
-            int? cigsPerDay = null;
-            if (int.TryParse(legacyProfile.CigarettesPerDay, out var c)) cigsPerDay = c;
-
-            int? bottlesPerDay = null;
-            if (int.TryParse(legacyProfile.BottlesPerDay, out var b)) bottlesPerDay = b;
-
             var social = new PatientSocialHistory
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 ClinicId = clinicId,
                 PatientId = patientId,
-                IsSmoker = legacyProfile.IsSmoker,
+                IsSmoker = isSmoker,
                 CigarettesPerDay = cigsPerDay,
-                PacksPerDay = cigsPerDay.HasValue ? Math.Round((decimal)cigsPerDay.Value / 20m, 2) : null,
-                IsAlcoholDrinker = legacyProfile.IsAlcoholDrinker,
+                PacksPerDay = packs,
+                SmokingStoppedDate = stoppedDate,
+                YearsSmoking = int.TryParse(legacyProfile.YearsSmoking, out var ys) ? ys : null,
+                SmokingPackYears = decimal.TryParse(legacyProfile.SmokingPackYears, out var spy) ? spy : null,
+                IsAlcoholDrinker = isDrinker,
                 AlcoholBottlesPerDay = bottlesPerDay,
+                AlcoholDrinksPerWeek = int.TryParse(legacyProfile.AlcoholDrinksPerWeek, out var dpw) ? dpw : null,
+                AlcoholFrequency = alcFreq,
                 UsesIllicitDrugs = legacyProfile.IllDrugUser,
+                DrugTypes = legacyProfile.DrugTypes,
+                SubstanceUseHistory = legacyProfile.SubstanceUseHistory,
                 IsSexuallyActive = legacyProfile.IsSexuallyActive,
+                PhysicalActivityFrequency = legacyProfile.PhysicalActivityFrequency,
+                DietaryHabits = legacyProfile.DietaryHabits,
+                Remarks = legacyProfile.Remarks,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "LegacyProfileIngestion"
             };
             await _socialRepo.AddAsync(social, ct);
             modified = true;
         }
+        else
+        {
+            existingSocial.IsSmoker = isSmoker;
+            existingSocial.CigarettesPerDay = cigsPerDay;
+            existingSocial.PacksPerDay = packs;
+            existingSocial.SmokingStoppedDate = stoppedDate;
+            if (int.TryParse(legacyProfile.YearsSmoking, out var ys)) existingSocial.YearsSmoking = ys;
+            if (decimal.TryParse(legacyProfile.SmokingPackYears, out var spy)) existingSocial.SmokingPackYears = spy;
+            existingSocial.IsAlcoholDrinker = isDrinker;
+            existingSocial.AlcoholBottlesPerDay = bottlesPerDay;
+            if (int.TryParse(legacyProfile.AlcoholDrinksPerWeek, out var dpw)) existingSocial.AlcoholDrinksPerWeek = dpw;
+            existingSocial.AlcoholFrequency = alcFreq;
+            existingSocial.UsesIllicitDrugs = legacyProfile.IllDrugUser;
+            if (!string.IsNullOrWhiteSpace(legacyProfile.DrugTypes)) existingSocial.DrugTypes = legacyProfile.DrugTypes;
+            if (!string.IsNullOrWhiteSpace(legacyProfile.SubstanceUseHistory)) existingSocial.SubstanceUseHistory = legacyProfile.SubstanceUseHistory;
+            existingSocial.IsSexuallyActive = legacyProfile.IsSexuallyActive;
+            if (!string.IsNullOrWhiteSpace(legacyProfile.PhysicalActivityFrequency)) existingSocial.PhysicalActivityFrequency = legacyProfile.PhysicalActivityFrequency;
+            if (!string.IsNullOrWhiteSpace(legacyProfile.DietaryHabits)) existingSocial.DietaryHabits = legacyProfile.DietaryHabits;
+            if (!string.IsNullOrWhiteSpace(legacyProfile.Remarks)) existingSocial.Remarks = legacyProfile.Remarks;
+            existingSocial.UpdatedAt = DateTime.UtcNow;
+            existingSocial.UpdatedBy = "LegacyProfileIngestion";
+            _socialRepo.Update(existingSocial);
+            modified = true;
+        }
 
         // 3. Reproductive History
         var existingReproductive = await _reproductiveRepo.Query(r => r.PatientId == patientId).FirstOrDefaultAsync(ct);
+        int? menarcheAge = null;
+        if (int.TryParse(legacyProfile.MenarcheAge, out var ma)) menarcheAge = ma;
+
+        DateOnly? lmp = null;
+        if (!string.IsNullOrWhiteSpace(legacyProfile.LastMensPeriod) && DateOnly.TryParse(legacyProfile.LastMensPeriod, out var parsedLmp))
+        {
+            lmp = parsedLmp;
+        }
+
+        int? periodDuration = null;
+        if (int.TryParse(legacyProfile.PeriodDurationDays, out var pd)) periodDuration = pd;
+
+        int? cycleInterval = null;
+        if (int.TryParse(legacyProfile.CycleIntervalDays, out var ci)) cycleInterval = ci;
+
+        int? padsPerDay = null;
+        if (int.TryParse(legacyProfile.PadsPerDay, out var parsedPads)) padsPerDay = parsedPads;
+
+        int? menopauseAge = null;
+        if (int.TryParse(legacyProfile.MenopauseAge, out var mpa)) menopauseAge = mpa;
+
+        var isMale = patient.Gender.Equals("Male", StringComparison.OrdinalIgnoreCase);
+
         if (existingReproductive == null)
         {
-            int? menarcheAge = null;
-            if (int.TryParse(legacyProfile.MenarcheAge, out var ma)) menarcheAge = ma;
-
-            DateOnly? lmp = null;
-            if (!string.IsNullOrWhiteSpace(legacyProfile.LastMensPeriod) && DateOnly.TryParse(legacyProfile.LastMensPeriod, out var parsedLmp))
-            {
-                lmp = parsedLmp;
-            }
-
-            int? periodDuration = null;
-            if (int.TryParse(legacyProfile.PeriodDurationDays, out var pd)) periodDuration = pd;
-
-            int? cycleInterval = null;
-            if (int.TryParse(legacyProfile.CycleIntervalDays, out var ci)) cycleInterval = ci;
-
-            int? padsPerDay = null;
-            if (int.TryParse(legacyProfile.PadsPerDay, out var ppd)) padsPerDay = ppd;
-
-            int? menopauseAge = null;
-            if (int.TryParse(legacyProfile.MenopauseAge, out var mpa)) menopauseAge = mpa;
-
-            var isMale = patient.Gender.Equals("Male", StringComparison.OrdinalIgnoreCase);
-
             var repro = new PatientReproductiveHistory
             {
                 Id = Guid.NewGuid(),
@@ -224,10 +298,35 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
             await _reproductiveRepo.AddAsync(repro, ct);
             modified = true;
         }
+        else
+        {
+            existingReproductive.IsApplicable = !isMale && (legacyProfile.MenstrualApplicable || legacyProfile.PregnancyApplicable);
+            existingReproductive.MenarcheAge = menarcheAge ?? existingReproductive.MenarcheAge;
+            existingReproductive.LastMenstrualPeriod = lmp ?? existingReproductive.LastMenstrualPeriod;
+            existingReproductive.PeriodDurationDays = periodDuration ?? existingReproductive.PeriodDurationDays;
+            existingReproductive.CycleIntervalDays = cycleInterval ?? existingReproductive.CycleIntervalDays;
+            existingReproductive.PadsPerDay = padsPerDay ?? existingReproductive.PadsPerDay;
+            existingReproductive.IsMenopausal = legacyProfile.IsMenopause;
+            existingReproductive.MenopauseAge = menopauseAge ?? existingReproductive.MenopauseAge;
+            if (!string.IsNullOrWhiteSpace(legacyProfile.BirthControlMethod)) existingReproductive.ContraceptiveMethod = legacyProfile.BirthControlMethod;
+            existingReproductive.Gravidity = legacyProfile.Gravida;
+            existingReproductive.Parity = legacyProfile.Para;
+            existingReproductive.TermBirths = legacyProfile.FullTermCount;
+            existingReproductive.PretermBirths = legacyProfile.PrematureCount;
+            existingReproductive.Abortions = legacyProfile.AbortionCount;
+            existingReproductive.LivingChildren = legacyProfile.LivingChildrenCount;
+            if (!string.IsNullOrWhiteSpace(legacyProfile.DeliveryType)) existingReproductive.DeliveryType = legacyProfile.DeliveryType == "V" ? "Vaginal" : legacyProfile.DeliveryType == "C" ? "Cesarean" : "NotApplicable";
+            existingReproductive.HadPreEclampsiaHypertension = legacyProfile.PreEclampsiaHypertension;
+            existingReproductive.ReceivedFamilyPlanningCounseling = legacyProfile.FamilyPlanningCounseling;
+            existingReproductive.UpdatedAt = DateTime.UtcNow;
+            existingReproductive.UpdatedBy = "LegacyProfileIngestion";
+            _reproductiveRepo.Update(existingReproductive);
+            modified = true;
+        }
 
         // 4. NCD Answers
-        var hasNcd = await _ncdRepo.Query(n => n.PatientId == patientId).AnyAsync(ct);
-        if (!hasNcd && legacyProfile.NcdAnswers != null)
+        var existingNcd = await _ncdRepo.Query(n => n.PatientId == patientId).FirstOrDefaultAsync(ct);
+        if (existingNcd == null && legacyProfile.NcdAnswers != null)
         {
             var a = legacyProfile.NcdAnswers;
             var ncd = new NcdRiskAssessment
@@ -245,6 +344,7 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
                 DiagnosedDiabetes = string.IsNullOrWhiteSpace(a.Qid5Ynx) ? "N" : a.Qid5Ynx,
                 HasPolyphagia = a.Qid6Yn == "Y",
                 HasPolydipsia = a.Qid7Yn == "Y",
+
                 HasPolyuria = a.Qid8Yn == "Y",
                 HasChestPain = a.Qid9Yn == "Y",
                 PainInCenterOfChestOrLeftArm = a.Qid10Yn == "Y",
@@ -287,9 +387,128 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
             modified = true;
         }
 
+        // 5. Immunizations
+        if (_immunizationRepo != null)
+        {
+            var existingImms = await _immunizationRepo.Query(i => i.PatientId == patientId).ToListAsync(ct);
+            var existingKeys = new HashSet<string>(
+                existingImms.Select(i => $"{i.PhilHealthLibrary}:{i.PhilHealthCode}".ToLowerInvariant())
+            );
+
+            async Task IngestCohort(List<string>? codes, string library)
+            {
+                if (codes == null || codes.Count == 0) return;
+                foreach (var code in codes)
+                {
+                    if (string.IsNullOrWhiteSpace(code) || code.Equals("999", StringComparison.OrdinalIgnoreCase)) continue;
+                    var key = $"{library}:{code}".ToLowerInvariant();
+                    if (!existingKeys.Contains(key))
+                    {
+                        var vaccineName = _catalogLookup?.Find(library, code)?.Description
+                            ?? ResolveStatutoryVaccineName(library, code);
+                        var imm = new PatientImmunization
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            PatientId = patientId,
+                            PatientName = $"{patient.FirstName} {patient.LastName}".Trim(),
+                            PhilHealthLibrary = library,
+                            PhilHealthCode = code,
+                            VaccineName = vaccineName,
+                            LotBatchNumber = "HISTORICAL",
+                            ExpirationDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                            DoseSequence = 1,
+                            IsSeriesCompleted = true,
+                            Route = "Intramuscular",
+                            InjectionSite = "Left Deltoid",
+                            AdministeredAtUtc = DateTime.UtcNow,
+                            AdministeredByStaffName = "PhilHealth Profile Ingestion",
+                            IsHistorical = true,
+                            HistoricalFacilityName = "Historical Provider",
+                            Remarks = "Ingested from PhilHealth patient profile",
+                            HasAdverseReaction = false,
+                            AdverseReactionSeverity = "None"
+                        };
+                        await _immunizationRepo.AddAsync(imm, ct);
+                        existingKeys.Add(key);
+                        modified = true;
+                    }
+                }
+            }
+
+            await IngestCohort(legacyProfile.ChildImmunizations, "lib_immchild");
+            await IngestCohort(legacyProfile.YoungWomanImmunizations, "lib_immyoungw");
+            await IngestCohort(legacyProfile.PregnantWomanImmunizations, "lib_immpregw");
+            await IngestCohort(legacyProfile.ElderlyImmunizations, "lib_immelderly");
+            await IngestCohort(legacyProfile.OtherImmunizations, "OtherImm");
+        }
+
         if (modified)
         {
             await _unitOfWork.SaveChangesAsync(ct);
         }
+    }
+
+    public static string ResolveStatutoryVaccineName(string library, string code)
+    {
+        var lib = library.ToLowerInvariant();
+        var c = code.Trim().ToUpperInvariant();
+
+        if (lib.Contains("young"))
+        {
+            return c switch
+            {
+                "Y01" => "Human Papillomavirus Vaccine (HPV)",
+                "Y02" => "MMR Booster (Young Women)",
+                _ => $"Young Woman Vaccine ({code})"
+            };
+        }
+
+        if (lib.Contains("child"))
+        {
+            return c switch
+            {
+                "C01" => "BCG (Bacillus Calmette-Guérin)",
+                "C02" => "OPV 1 (Oral Polio Vaccine 1)",
+                "C03" => "OPV 2 (Oral Polio Vaccine 2)",
+                "C04" => "OPV 3 (Oral Polio Vaccine 3)",
+                "C05" => "DPT-HepB-Hib 1 (Pentavalent 1)",
+                "C06" => "DPT-HepB-Hib 2 (Pentavalent 2)",
+                "C07" => "DPT-HepB-Hib 3 (Pentavalent 3)",
+                "C08" => "Measles Vaccine (MCV1)",
+                "C09" => "Hepatitis B (Birth Dose)",
+                "C10" => "Rotavirus Vaccine 1",
+                "C11" => "Rotavirus Vaccine 2",
+                "C12" => "Inactivated Polio Vaccine (IPV)",
+                "C13" => "MMR 1 (Measles, Mumps, Rubella)",
+                _ => $"Child Vaccine ({code})"
+            };
+        }
+
+        if (lib.Contains("preg"))
+        {
+            return c switch
+            {
+                "P01" => "Tetanus Toxoid / Td 1",
+                "P02" => "Tetanus Toxoid / Td 2",
+                "P03" => "Tetanus Toxoid / Td 3",
+                "P04" => "Tetanus Toxoid / Td 4",
+                "P05" => "Tetanus Toxoid / Td 5",
+                _ => $"Maternal Vaccine ({code})"
+            };
+        }
+
+        if (lib.Contains("elderly"))
+        {
+            return c switch
+            {
+                "E01" => "Pneumococcal Polysaccharide Vaccine (PPSV23 / PCV13)",
+                "E02" => "Seasonal Influenza Vaccine (Quadrivalent)",
+                _ => $"Senior Citizen Vaccine ({code})"
+            };
+        }
+
+        return $"Vaccine ({code})";
     }
 }

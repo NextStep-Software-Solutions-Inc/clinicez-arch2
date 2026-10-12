@@ -510,11 +510,24 @@ public sealed record PhilHealthPatientProfileDto
 
     // Social History
     public bool IsSmoker { get; init; }
+    public string? SmokingStatus { get; init; } // "never", "current", "quit" / "N", "Y", "X"
     public string? CigarettesPerDay { get; init; }
+    public string? PacksPerDay { get; init; }
+    public string? YearsSmoking { get; init; }
+    public string? SmokingPackYears { get; init; }
+    public string? SmokingStoppedDate { get; init; }
     public bool IsAlcoholDrinker { get; init; }
+    public string? AlcoholStatus { get; init; } // "never", "current", "quit" / "N", "Y", "X"
     public string? BottlesPerDay { get; init; }
+    public string? AlcoholDrinksPerWeek { get; init; }
+    public string? AlcoholFrequency { get; init; }
     public bool IllDrugUser { get; init; }
+    public string? DrugTypes { get; init; }
+    public string? SubstanceUseHistory { get; init; }
     public bool IsSexuallyActive { get; init; }
+    public string? PhysicalActivityFrequency { get; init; }
+    public string? DietaryHabits { get; init; }
+    public string? Remarks { get; init; }
 
     // Immunizations
     public List<string> ChildImmunizations { get; init; } = [];

@@ -139,7 +139,7 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
     {
       key: 'symptoms',
       sectionKey: 'symptoms',
-      label: 'Statutory Symptoms (lib_signs_symptoms)',
+      label: 'Chief Complaints / Symptoms',
       dtdReference: 'pSignSympCode',
       isValid: symptomsValid,
       missingReason: 'Chief complaint code and required descriptions missing',

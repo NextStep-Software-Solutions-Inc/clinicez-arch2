@@ -1005,12 +1005,14 @@ export interface PatientSocialHistory {
   clinicId: string;
   patientId: string;
   isSmoker: boolean;
+  smokingStatus?: 'never' | 'current' | 'quit' | string;
   packsPerDay?: number;
   cigarettesPerDay?: number;
   yearsSmoking?: number;
   smokingPackYears?: number;
   smokingStoppedDate?: string;
   isAlcoholDrinker: boolean;
+  alcoholStatus?: 'never' | 'current' | 'quit' | string;
   alcoholDrinksPerWeek?: number;
   alcoholBottlesPerDay?: number;
   alcoholFrequency?: string;
@@ -1027,12 +1029,14 @@ export interface PatientSocialHistory {
 
 export interface UpdatePatientSocialHistoryPayload {
   isSmoker: boolean;
+  smokingStatus?: 'never' | 'current' | 'quit' | string;
   packsPerDay?: number;
   cigarettesPerDay?: number;
   yearsSmoking?: number;
   smokingPackYears?: number;
   smokingStoppedDate?: string;
   isAlcoholDrinker: boolean;
+  alcoholStatus?: 'never' | 'current' | 'quit' | string;
   alcoholDrinksPerWeek?: number;
   alcoholBottlesPerDay?: number;
   alcoholFrequency?: string;
@@ -2867,11 +2871,24 @@ export interface PhilHealthPatientProfile {
   familyHistoryNotes?: string;
 
   isSmoker: boolean;
+  smokingStatus?: 'never' | 'current' | 'quit' | string;
   cigarettesPerDay?: string;
+  packsPerDay?: string;
+  yearsSmoking?: string;
+  smokingPackYears?: string;
+  smokingStoppedDate?: string;
   isAlcoholDrinker: boolean;
+  alcoholStatus?: 'never' | 'current' | 'quit' | string;
   bottlesPerDay?: string;
+  alcoholDrinksPerWeek?: string;
+  alcoholFrequency?: string;
   illDrugUser: boolean;
+  drugTypes?: string;
+  substanceUseHistory?: string;
   isSexuallyActive: boolean;
+  physicalActivityFrequency?: string;
+  dietaryHabits?: string;
+  remarks?: string;
 
   childImmunizations: string[];
   youngWomanImmunizations: string[];

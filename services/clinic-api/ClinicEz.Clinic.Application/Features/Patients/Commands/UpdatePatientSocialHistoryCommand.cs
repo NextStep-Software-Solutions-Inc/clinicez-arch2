@@ -30,7 +30,9 @@ public sealed record UpdatePatientSocialHistoryCommand(
     int? CoitarcheAge = null,
     string? PhysicalActivityFrequency = null,
     string? DietaryHabits = null,
-    string? Remarks = null) : IRequest<PatientSocialHistoryDto>;
+    string? Remarks = null,
+    string? SmokingStatus = null,
+    string? AlcoholStatus = null) : IRequest<PatientSocialHistoryDto>;
 
 public sealed class UpdatePatientSocialHistoryCommandValidator : AbstractValidator<UpdatePatientSocialHistoryCommand>
 {
@@ -83,6 +85,61 @@ public sealed class UpdatePatientSocialHistoryCommandHandler : IRequestHandler<U
             calculatedPackYears = Math.Round((decimal)request.CigarettesPerDay.Value / 20m * request.YearsSmoking.Value, 2);
         }
 
+        // Tri-state smoking resolution
+        bool isSmoker;
+        DateOnly? stoppedDate = request.SmokingStoppedDate;
+        var smkStatus = request.SmokingStatus?.ToLowerInvariant();
+        if (smkStatus is "current" or "y")
+        {
+            isSmoker = true;
+            stoppedDate = null;
+        }
+        else if (smkStatus is "quit" or "former" or "x")
+        {
+            isSmoker = false;
+            stoppedDate ??= entry?.SmokingStoppedDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+        else if (smkStatus is "never" or "n")
+        {
+            isSmoker = false;
+            stoppedDate = null;
+        }
+        else
+        {
+            isSmoker = request.IsSmoker;
+            if (!isSmoker && request.SmokingStoppedDate.HasValue)
+            {
+                stoppedDate = request.SmokingStoppedDate;
+            }
+        }
+
+        // Tri-state alcohol resolution
+        bool isDrinker;
+        string? alcFreq = request.AlcoholFrequency?.Trim();
+        var alcStatus = request.AlcoholStatus?.ToLowerInvariant();
+        if (alcStatus is "current" or "y")
+        {
+            isDrinker = true;
+            if (string.Equals(alcFreq, "Quit", StringComparison.OrdinalIgnoreCase) || string.Equals(alcFreq, "Never", StringComparison.OrdinalIgnoreCase))
+            {
+                alcFreq = "Occasional";
+            }
+        }
+        else if (alcStatus is "quit" or "former" or "x")
+        {
+            isDrinker = false;
+            alcFreq = "Quit";
+        }
+        else if (alcStatus is "never" or "n")
+        {
+            isDrinker = false;
+            alcFreq = null;
+        }
+        else
+        {
+            isDrinker = request.IsAlcoholDrinker;
+        }
+
         if (entry == null)
         {
             entry = new PatientSocialHistory
@@ -91,16 +148,16 @@ public sealed class UpdatePatientSocialHistoryCommandHandler : IRequestHandler<U
                 TenantId = patient.TenantId ?? _clinicContext.TenantId,
                 ClinicId = _clinicContext.ClinicId,
                 PatientId = request.PatientId,
-                IsSmoker = request.IsSmoker,
-                PacksPerDay = request.PacksPerDay,
-                CigarettesPerDay = request.CigarettesPerDay,
+                IsSmoker = isSmoker,
+                PacksPerDay = isSmoker ? request.PacksPerDay : null,
+                CigarettesPerDay = isSmoker ? request.CigarettesPerDay : null,
                 YearsSmoking = request.YearsSmoking,
                 SmokingPackYears = calculatedPackYears,
-                SmokingStoppedDate = request.SmokingStoppedDate,
-                IsAlcoholDrinker = request.IsAlcoholDrinker,
-                AlcoholDrinksPerWeek = request.AlcoholDrinksPerWeek,
-                AlcoholBottlesPerDay = request.AlcoholBottlesPerDay,
-                AlcoholFrequency = request.AlcoholFrequency?.Trim(),
+                SmokingStoppedDate = stoppedDate,
+                IsAlcoholDrinker = isDrinker,
+                AlcoholDrinksPerWeek = isDrinker ? request.AlcoholDrinksPerWeek : null,
+                AlcoholBottlesPerDay = isDrinker ? request.AlcoholBottlesPerDay : null,
+                AlcoholFrequency = alcFreq,
                 UsesIllicitDrugs = request.UsesIllicitDrugs,
                 SubstanceUseHistory = request.SubstanceUseHistory?.Trim(),
                 DrugTypes = request.DrugTypes?.Trim(),
@@ -116,16 +173,16 @@ public sealed class UpdatePatientSocialHistoryCommandHandler : IRequestHandler<U
         }
         else
         {
-            entry.IsSmoker = request.IsSmoker;
-            entry.PacksPerDay = request.PacksPerDay;
-            entry.CigarettesPerDay = request.CigarettesPerDay;
+            entry.IsSmoker = isSmoker;
+            entry.PacksPerDay = isSmoker ? request.PacksPerDay : null;
+            entry.CigarettesPerDay = isSmoker ? request.CigarettesPerDay : null;
             entry.YearsSmoking = request.YearsSmoking;
             entry.SmokingPackYears = calculatedPackYears;
-            entry.SmokingStoppedDate = request.SmokingStoppedDate;
-            entry.IsAlcoholDrinker = request.IsAlcoholDrinker;
-            entry.AlcoholDrinksPerWeek = request.AlcoholDrinksPerWeek;
-            entry.AlcoholBottlesPerDay = request.AlcoholBottlesPerDay;
-            entry.AlcoholFrequency = request.AlcoholFrequency?.Trim();
+            entry.SmokingStoppedDate = stoppedDate;
+            entry.IsAlcoholDrinker = isDrinker;
+            entry.AlcoholDrinksPerWeek = isDrinker ? request.AlcoholDrinksPerWeek : null;
+            entry.AlcoholBottlesPerDay = isDrinker ? request.AlcoholBottlesPerDay : null;
+            entry.AlcoholFrequency = alcFreq;
             entry.UsesIllicitDrugs = request.UsesIllicitDrugs;
             entry.SubstanceUseHistory = request.SubstanceUseHistory?.Trim();
             entry.DrugTypes = request.DrugTypes?.Trim();
@@ -138,6 +195,12 @@ public sealed class UpdatePatientSocialHistoryCommandHandler : IRequestHandler<U
             entry.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Clinician";
 
             _socialRepo.Update(entry);
+        }
+
+        // Clean up legacy CustomFields["philhealth_profile"] if present
+        if (patient.CustomFields != null && patient.CustomFields.ContainsKey("philhealth_profile"))
+        {
+            patient.CustomFields.Remove("philhealth_profile");
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -162,6 +225,8 @@ public sealed class UpdatePatientSocialHistoryCommandHandler : IRequestHandler<U
             entry.CoitarcheAge,
             entry.PhysicalActivityFrequency,
             entry.DietaryHabits,
-            entry.Remarks);
+            entry.Remarks,
+            entry.SmokingStatus,
+            entry.AlcoholStatus);
     }
 }

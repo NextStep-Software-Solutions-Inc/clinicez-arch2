@@ -304,3 +304,79 @@ In `HealthProfilesTab.tsx` and `ClinicalHistoryTab.tsx`, add interactive statuto
 - [ ] All automated test suites (`dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests` and `bun test apps/clinic-app/tests`) pass with 0 failures.
 - [ ] Strict design token audit passes with 0 violations (`node apps/clinic-app/scripts/check-tokens.mjs --strict`).
 - [ ] TypeScript compilation passes with 0 errors (`bun run typecheck:clinic`).
+
+
+## 2026-10-12T18:55:51Z
+
+Build an extensible, generic Entity Custom Metadata Engine in ClinicEZ that allows clinic administrators to define, arrange/reorder, and mark custom fields as mandatory/required with conditional visibility rules, cascading dropdown options, and pre-built suggested templates, initially implemented and fully integrated across all Patient intake, registration, and profile touchpoints in accordance with the @clinicez/design-tokens UI/UX standards.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Generic Entity Metadata Engine Architecture
+Design a modular, generic metadata layer where custom field definitions are scoped by EntityType (e.g. ClinicPatient today, extensible to ClinicConsultation or ClinicAppointment later). Each field definition must support:
+- Machine key (FieldKey), UI label (Label), category (Category), display order (DisplayOrder), mandatory flag (IsRequired), and data types (Text, Number, Date, Boolean, Select).
+- Mandatory / Required Rules: Support marking fields as required (IsRequired: true), which is dynamically enforced only when the field is visible on the intake form.
+- Ordering & Arrangement: Persistent ordering (DisplayOrder) with a bulk reorder endpoint (PUT /api/v1/custom-fields/reorder) to allow clinic administrators to arrange the visual sequence of fields.
+- Conditional Visibility Rules (VisibilityRuleJson): Determines when a field is visible based on answers to either static entity properties (e.g., gender, civilStatus, age) or preceding custom field values (e.g., affiliation == 'Student').
+- Conditional Select Options (ConditionalOptionsJson): Enables cascading/dependent dropdowns where available choices are determined by the selected value of a parent field (e.g., selecting College updates Program choices; selecting Campus updates Dormitory choices).
+- CRUD operations (Create, Read, Update, Delete, Reorder) and active toggling via API and repository layers without requiring legacy backward-compatibility constraints.
+
+### R2. Clinic Admin Intake Fields Management, Arrangement & Template Library (Settings)
+In apps/clinic-app under Settings & Configuration -> Intake Fields, implement an administrative workstation interface adhering to @clinicez/design-tokens:
+- Mandatory Toggle: Add a clear switch/toggle in the Add/Edit Field Modal for "Mark field as mandatory / required", reflected by a badge in the list.
+- Arranging / Reordering Controls: Up / Down movement controls (or drag arrangement) allowing clinic administrators to intuitively arrange question sequence, saving changes via the reorder API.
+- Interactive modal to add/edit custom fields with live rule builder for visibility conditions (parent field selector, operator, expected value) and cascading dropdown options mapper.
+- Suggested Common Templates Library: Provide 1-click installable bundles so clinics can immediately adopt standard setups:
+  - University / School Clinic Preset (USTP): Affiliation (Student, Employee/Faculty, Dependent, Guest), Student ID (conditional on Student, required), College, Program (cascading on College), Year Level, Employee ID (conditional on Employee, required), Department, Campus Location.
+  - Workplace / Corporate Health Preset: Employment Type (Regular, Probationary, Contractor), Department, Employee ID, HMO Provider.
+  - General Clinical Demographics Preset: Religion, Mother's Maiden Name, Spouse Information (conditional on Civil Status = Married).
+
+### R3. Dynamic Patient Intake & Registration Form Integration
+Refactor the patient registration and editing flows to replace hardcoded silos with a reactive DynamicCustomFieldsRenderer:
+- Render fields strictly in their configured DisplayOrder so conditional rules flow logically (e.g., asking Affiliation first, then dependent details).
+- Display a red asterisk * for mandatory fields.
+- Defensive Validation: Form submission must validate that any visible custom field marked as isRequired is not left blank, highlighting the field with error messaging if omitted.
+- Render appropriate UI components for each data type (Input, ValidatedDateInput, SegmentedControl/Toggle for Boolean, and dynamic Select pills/dropdowns).
+- Dynamically evaluate visibility rules in real-time as the user fills in the form.
+- Dynamically derive cascading choices for dependent select fields.
+- Cleanly reset/strip values of hidden fields so invisible data is not erroneously persisted or validated.
+- Persist custom metadata uniformly into ClinicPatient.CustomFields dictionary.
+- Ensure integration across:
+  - Patient Registration modal in apps/clinic-app/navigation/screens/Patients.screen.tsx
+  - Patient Edit modal in apps/clinic-app/components/patient/EditPatientModal.tsx
+  - Patient detail / longitudinal chart view in apps/clinic-app
+  - Public Student Intake portal in apps/portal-web/src/app/student-intake/[tenantSlug]/StudentIntakeClient.tsx
+
+### R4. UI/UX Design System Compliance (clinicez-ui-ux-expert)
+Every modified and newly created UI screen and component must strictly comply with the clinicez-ui-ux-expert guidelines:
+- Strictly consume semantic tokens from @clinicez/design-tokens (lightColors.primary #0D6963, lightColors.border, semantic typography scales, radii, and spacing). No raw hex codes or direct imports from palette.ts.
+- Explicitly implement all 4 core UX states: Loading (structural Skeletons), Empty (illustration/icon + clear CTA), Error (actionable message + retry), and Active/Success (toast feedback).
+- Responsive workstation density supporting desktop workstation (>=1024px), tablet (768px-1023px), and mobile viewports.
+
+## Acceptance Criteria
+
+### Schema & Backend API
+- [ ] Backend tests for custom field CRUD, IsRequired persistence, and bulk reorder (PUT /api/v1/custom-fields/reorder) pass.
+- [ ] Query returns fields sorted deterministically by DisplayOrder.
+- [ ] Template installation endpoint successfully persists the University / School Clinic bundle with correct condition, display order, required flags, and cascading mappings.
+- [ ] Patient registration and update commands correctly accept and persist dynamic custom field dictionaries.
+
+### Conditional Evaluation, Validation & Cascading Logic
+- [ ] Fields render in the exact sequence specified by DisplayOrder.
+- [ ] Required fields (isRequired: true) display a mandatory asterisk * and block form submission with an inline validation alert if visible but empty.
+- [ ] If a required field is currently hidden due to an unmet condition, it does NOT block form submission.
+- [ ] A custom field configured with a static condition (e.g. gender == 'Female') is visible only when the condition is met, and immediately hides when the condition ceases to hold.
+- [ ] A custom field configured with a custom field condition (e.g. affiliation == 'Student') is visible only when affiliation is set to Student.
+- [ ] A cascading select field dynamically updates its available options when the parent field value changes, and gracefully handles unknown or unselected parent values.
+- [ ] Hidden fields do not pollute or submit stale data to the backend.
+
+### User Interface & Token Standards
+- [ ] Settings modal includes an explicit toggle for "Mark field as mandatory / required", and the list displays Required vs Optional badges.
+- [ ] Settings tab displays custom fields categorized clearly, with Move Up / Move Down reordering controls and badges indicating condition rules and cascading dependencies.
+- [ ] Admin modal allows adding, editing, and deleting fields, with visual preview of condition and cascading options.
+- [ ] Suggested template library allows 1-click installation of the University Preset into the clinic's active custom fields.
+- [ ] Patient registration, edit modal, and patient chart display custom fields reactively and cleanly in configured order with inline validation.
+- [ ] bun test packages/design-tokens/src/tokens.test.ts passes with 0 failures, and no forbidden raw hex color literals exist in touched frontend files.

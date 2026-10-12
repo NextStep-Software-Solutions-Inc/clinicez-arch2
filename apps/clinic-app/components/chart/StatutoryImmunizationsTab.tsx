@@ -57,6 +57,13 @@ export const PHILHEALTH_STATUTORY_VACCINES = {
   ],
 };
 
+export const COHORT_CATEGORY_NAMES: Record<string, string> = {
+  lib_immchild: 'Childhood',
+  lib_immyoungw: 'Young Women',
+  lib_immpregw: 'Maternal',
+  lib_immelderly: 'Senior Citizen',
+};
+
 export default function StatutoryImmunizationsTab({
   patient,
   patientId,
@@ -81,7 +88,7 @@ export default function StatutoryImmunizationsTab({
   const gender = (demoProp?.gender || patient?.gender || '').toLowerCase();
 
   const isChild = age < 18;
-  const isYoungWoman = gender === 'female' && age >= 9 && age <= 26;
+  const isYoungWoman = gender === 'female' && age >= 9 && age <= 49;
   const isSenior = age >= 60 || demoProp?.isSenior;
 
   const filteredImmunizations = useMemo(() => {
@@ -248,8 +255,11 @@ export default function StatutoryImmunizationsTab({
                     ) : null}
                   </View>
                   <View style={styles.libraryRow}>
-                    <Badge label={imm.philHealthLibrary} variant="purple" size="sm" />
-                    <Badge label={`Code: ${imm.philHealthCode}`} variant="routine" size="sm" />
+                    <Badge
+                      label={COHORT_CATEGORY_NAMES[imm.philHealthLibrary] || 'Routine'}
+                      variant="purple"
+                      size="sm"
+                    />
                     <Badge
                       label={`Dose ${imm.doseSequence}${imm.isSeriesCompleted ? ' (Completed)' : ''}`}
                       variant={imm.isSeriesCompleted ? 'success' : 'info'}
@@ -344,7 +354,7 @@ export default function StatutoryImmunizationsTab({
           title="No immunizations recorded"
           description={
             hasAnyRecorded
-              ? `Zero vaccines recorded for ${selectedCohort}.`
+              ? `Zero vaccines recorded for ${COHORT_CATEGORY_NAMES[selectedCohort] || 'this category'}.`
               : 'Zero statutory vaccines documented for this patient. Fallback code 999 will be automatically used for PhilHealth claims.'
           }
         />
@@ -364,7 +374,7 @@ export default function StatutoryImmunizationsTab({
             </View>
 
             <ThemedText variant="body" color={theme.colors.textSecondary}>
-              Vaccine: {targetAefiImm?.vaccineName} ({targetAefiImm?.philHealthCode})
+              Vaccine: {targetAefiImm?.vaccineName}
             </ThemedText>
 
             <View style={styles.severityPickerRow}>

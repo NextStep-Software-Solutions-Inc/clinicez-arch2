@@ -38,4 +38,17 @@ public sealed class PatientSocialHistory : BaseEntity
     public string? PhysicalActivityFrequency { get; set; }
     public string? DietaryHabits { get; set; }
     public string? Remarks { get; set; }
+
+    [NotMapped]
+    public string SmokingStatus
+    {
+        get => IsSmoker ? "current" : (SmokingStoppedDate.HasValue ? "quit" : "never");
+    }
+
+    [NotMapped]
+    public string AlcoholStatus
+    {
+        get => IsAlcoholDrinker ? "current" : (string.Equals(AlcoholFrequency, "Quit", StringComparison.OrdinalIgnoreCase) || string.Equals(AlcoholFrequency, "Former", StringComparison.OrdinalIgnoreCase) ? "quit" : "never");
+    }
 }
+

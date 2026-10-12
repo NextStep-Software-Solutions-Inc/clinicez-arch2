@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
 import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString } from '@ui';
 import { Alert } from '@utils/feedback';
@@ -9,6 +9,30 @@ import {
   PatientSocialHistory,
   UpdatePatientSocialHistoryPayload,
 } from '../../services/clinicService';
+
+export const PHYSICAL_ACTIVITY_OPTIONS = [
+  'Sedentary (<30 mins/week)',
+  'Lightly Active (<150 mins/week)',
+  'Moderate Activity (≥150 mins/week)',
+  'Vigorous / Highly Active',
+];
+
+export const DIETARY_HABIT_OPTIONS = [
+  'Standard Balanced Diet',
+  'High-Sodium / Salty Food',
+  'High-Fat / Fried Food',
+  'High-Fiber / Fruit & Vegetable Rich',
+  'Low-Sodium / DASH Diet',
+  'Diabetic / Low-Glycemic Diet',
+  'Vegetarian / Plant-Based',
+];
+
+export const ALCOHOL_FREQUENCY_OPTIONS = [
+  'Occasional / Social',
+  '1-2x Weekly',
+  '3-5x Weekly',
+  'Daily',
+];
 
 interface LifestyleSocialTabProps {
   patient: ClinicPatient;
@@ -27,17 +51,17 @@ export default function LifestyleSocialTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Smoking Fields
-  const [isSmoker, setIsSmoker] = useState(false);
+  // Smoking Fields (Tri-state: 'never' | 'current' | 'quit')
+  const [smokingStatus, setSmokingStatus] = useState<'never' | 'current' | 'quit'>('never');
   const [packsPerDay, setPacksPerDay] = useState('');
   const [yearsSmoking, setYearsSmoking] = useState('');
   const [smokingStoppedDate, setSmokingStoppedDate] = useState('');
 
-  // Alcohol Fields
-  const [isAlcoholDrinker, setIsAlcoholDrinker] = useState(false);
+  // Alcohol Fields (Tri-state: 'never' | 'current' | 'quit')
+  const [alcoholStatus, setAlcoholStatus] = useState<'never' | 'current' | 'quit'>('never');
   const [alcoholDrinksPerWeek, setAlcoholDrinksPerWeek] = useState('');
   const [alcoholBottlesPerDay, setAlcoholBottlesPerDay] = useState('');
-  const [alcoholFrequency, setAlcoholFrequency] = useState('Occasional');
+  const [alcoholFrequency, setAlcoholFrequency] = useState('Occasional / Social');
 
   // Substance Use
   const [usesIllicitDrugs, setUsesIllicitDrugs] = useState(false);
@@ -48,21 +72,42 @@ export default function LifestyleSocialTab({
   const [isSexuallyActive, setIsSexuallyActive] = useState(false);
   const [coitarcheAge, setCoitarcheAge] = useState('');
 
-  // Lifestyle & Diet
-  const [physicalActivityFrequency, setPhysicalActivityFrequency] = useState('Moderate (>=150 mins/week)');
-  const [dietaryHabits, setDietaryHabits] = useState('Standard Diet');
+  // Standardized Lifestyle & Diet
+  const [physicalActivityFrequency, setPhysicalActivityFrequency] = useState(PHYSICAL_ACTIVITY_OPTIONS[2]);
+  const [selectedDietaryHabits, setSelectedDietaryHabits] = useState<string[]>([DIETARY_HABIT_OPTIONS[0]]);
   const [remarks, setRemarks] = useState('');
 
   const populateForm = (data: PatientSocialHistory) => {
-    setIsSmoker(data.isSmoker);
+    // Smoking Tri-State resolution
+    let smk: 'never' | 'current' | 'quit' = 'never';
+    const statusVal = data.smokingStatus?.toLowerCase();
+    if (statusVal === 'current' || statusVal === 'y') {
+      smk = 'current';
+    } else if (statusVal === 'quit' || statusVal === 'former' || statusVal === 'x' || data.smokingStoppedDate) {
+      smk = 'quit';
+    } else if (data.isSmoker) {
+      smk = 'current';
+    }
+    setSmokingStatus(smk);
     setPacksPerDay(data.packsPerDay != null ? String(data.packsPerDay) : '');
     setYearsSmoking(data.yearsSmoking != null ? String(data.yearsSmoking) : '');
     setSmokingStoppedDate(data.smokingStoppedDate ? data.smokingStoppedDate.split('T')[0] : '');
 
-    setIsAlcoholDrinker(data.isAlcoholDrinker);
+    // Alcohol Tri-State resolution
+    let alc: 'never' | 'current' | 'quit' = 'never';
+    const alcVal = data.alcoholStatus?.toLowerCase();
+    const freqVal = data.alcoholFrequency?.trim().toLowerCase();
+    if (alcVal === 'current' || alcVal === 'y') {
+      alc = 'current';
+    } else if (alcVal === 'quit' || alcVal === 'former' || alcVal === 'x' || freqVal === 'quit') {
+      alc = 'quit';
+    } else if (data.isAlcoholDrinker) {
+      alc = 'current';
+    }
+    setAlcoholStatus(alc);
     setAlcoholDrinksPerWeek(data.alcoholDrinksPerWeek != null ? String(data.alcoholDrinksPerWeek) : '');
     setAlcoholBottlesPerDay(data.alcoholBottlesPerDay != null ? String(data.alcoholBottlesPerDay) : '');
-    setAlcoholFrequency(data.alcoholFrequency || 'Occasional');
+    setAlcoholFrequency(data.alcoholFrequency && data.alcoholFrequency.toLowerCase() !== 'quit' ? data.alcoholFrequency : 'Occasional / Social');
 
     setUsesIllicitDrugs(data.usesIllicitDrugs);
     setDrugTypes(data.drugTypes || '');
@@ -71,8 +116,39 @@ export default function LifestyleSocialTab({
     setIsSexuallyActive(data.isSexuallyActive);
     setCoitarcheAge(data.coitarcheAge != null ? String(data.coitarcheAge) : '');
 
-    setPhysicalActivityFrequency(data.physicalActivityFrequency || 'Moderate (>=150 mins/week)');
-    setDietaryHabits(data.dietaryHabits || 'Standard Diet');
+    // Standardized Physical Activity resolution
+    if (data.physicalActivityFrequency && data.physicalActivityFrequency.trim()) {
+      const match = PHYSICAL_ACTIVITY_OPTIONS.find((opt) =>
+        opt.toLowerCase().includes(data.physicalActivityFrequency!.trim().toLowerCase()) ||
+        data.physicalActivityFrequency!.trim().toLowerCase().includes(opt.split(' ')[0].toLowerCase())
+      );
+      setPhysicalActivityFrequency(match || data.physicalActivityFrequency);
+    } else {
+      setPhysicalActivityFrequency(PHYSICAL_ACTIVITY_OPTIONS[2]);
+    }
+
+    // Standardized Dietary Habits resolution
+    if (data.dietaryHabits && data.dietaryHabits.trim()) {
+      const habits = data.dietaryHabits
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      const matched: string[] = [];
+      habits.forEach((h) => {
+        const found = DIETARY_HABIT_OPTIONS.find(
+          (opt) => opt.toLowerCase().includes(h.toLowerCase()) || h.toLowerCase().includes(opt.toLowerCase())
+        );
+        if (found && !matched.includes(found)) {
+          matched.push(found);
+        } else if (!matched.includes(h)) {
+          matched.push(h);
+        }
+      });
+      setSelectedDietaryHabits(matched.length > 0 ? matched : [DIETARY_HABIT_OPTIONS[0]]);
+    } else {
+      setSelectedDietaryHabits([DIETARY_HABIT_OPTIONS[0]]);
+    }
+
     setRemarks(data.remarks || '');
   };
 
@@ -107,8 +183,18 @@ export default function LifestyleSocialTab({
   const calcYears = parseFloat(yearsSmoking) || 0;
   const packYears = calcPacks > 0 && calcYears > 0 ? (calcPacks * calcYears).toFixed(1) : '0';
 
+  const toggleDietaryHabit = (habit: string) => {
+    if (selectedDietaryHabits.includes(habit)) {
+      if (selectedDietaryHabits.length > 1) {
+        setSelectedDietaryHabits(selectedDietaryHabits.filter((h) => h !== habit));
+      }
+    } else {
+      setSelectedDietaryHabits([...selectedDietaryHabits, habit]);
+    }
+  };
+
   const handleSave = async () => {
-    if (smokingStoppedDate && smokingStoppedDate.trim()) {
+    if (smokingStatus === 'quit' && smokingStoppedDate && smokingStoppedDate.trim()) {
       const stopDateValidation = validateDateString(smokingStoppedDate, { boundaryMode: 'pastOrToday' });
       if (!stopDateValidation.isValid) {
         Alert.alert('Invalid Date Stopped', stopDateValidation.errorMessage || 'Please enter a valid smoking cessation date not in the future.');
@@ -117,18 +203,23 @@ export default function LifestyleSocialTab({
     }
     setSaving(true);
     try {
+      const isSmoker = smokingStatus === 'current';
+      const isAlcoholDrinker = alcoholStatus === 'current';
+
       const payload: UpdatePatientSocialHistoryPayload = {
         isSmoker,
-        packsPerDay: isSmoker && calcPacks > 0 ? calcPacks : undefined,
-        cigarettesPerDay: isSmoker && calcPacks > 0 ? Math.round(calcPacks * 20) : undefined,
-        yearsSmoking: isSmoker && calcYears > 0 ? Math.round(calcYears) : undefined,
-        smokingPackYears: isSmoker ? parseFloat(packYears) : undefined,
-        smokingStoppedDate: isSmoker && smokingStoppedDate.trim() ? smokingStoppedDate.trim() : undefined,
+        smokingStatus,
+        packsPerDay: (smokingStatus === 'current' || smokingStatus === 'quit') && calcPacks > 0 ? calcPacks : undefined,
+        cigarettesPerDay: (smokingStatus === 'current' || smokingStatus === 'quit') && calcPacks > 0 ? Math.round(calcPacks * 20) : undefined,
+        yearsSmoking: (smokingStatus === 'current' || smokingStatus === 'quit') && calcYears > 0 ? Math.round(calcYears) : undefined,
+        smokingPackYears: (smokingStatus === 'current' || smokingStatus === 'quit') && parseFloat(packYears) > 0 ? parseFloat(packYears) : undefined,
+        smokingStoppedDate: smokingStatus === 'quit' && smokingStoppedDate.trim() ? smokingStoppedDate.trim() : undefined,
 
         isAlcoholDrinker,
+        alcoholStatus,
         alcoholDrinksPerWeek: isAlcoholDrinker && parseFloat(alcoholDrinksPerWeek) ? parseFloat(alcoholDrinksPerWeek) : undefined,
         alcoholBottlesPerDay: isAlcoholDrinker && parseFloat(alcoholBottlesPerDay) ? parseFloat(alcoholBottlesPerDay) : undefined,
-        alcoholFrequency: isAlcoholDrinker ? alcoholFrequency : undefined,
+        alcoholFrequency: alcoholStatus === 'quit' ? 'Quit' : (isAlcoholDrinker ? alcoholFrequency : undefined),
 
         usesIllicitDrugs,
         drugTypes: usesIllicitDrugs && drugTypes.trim() ? drugTypes.trim() : undefined,
@@ -138,7 +229,7 @@ export default function LifestyleSocialTab({
         coitarcheAge: isSexuallyActive && parseInt(coitarcheAge, 10) ? parseInt(coitarcheAge, 10) : undefined,
 
         physicalActivityFrequency: physicalActivityFrequency.trim() || undefined,
-        dietaryHabits: dietaryHabits.trim() || undefined,
+        dietaryHabits: selectedDietaryHabits.join(', ') || undefined,
         remarks: remarks.trim() || undefined,
       };
 
@@ -200,36 +291,44 @@ export default function LifestyleSocialTab({
         <View style={styles.sectionHeader}>
           <ThemedText variant="h3">Tobacco & Smoking History</ThemedText>
           <Badge
-            label={isSmoker ? 'Smoker' : 'Non-Smoker'}
-            variant={isSmoker ? 'warning' : 'outline'}
+            label={smokingStatus === 'current' ? 'Current Smoker' : smokingStatus === 'quit' ? 'Former Smoker (Quit)' : 'Non-Smoker'}
+            variant={smokingStatus === 'current' ? 'warning' : 'outline'}
           />
         </View>
 
-        <View style={styles.switchRow}>
+        <View style={styles.fieldBlock}>
           <ThemedText variant="bodyBold" color={theme.colors.text}>
-            Does the patient smoke tobacco / cigarettes?
+            Tobacco Smoking Status
           </ThemedText>
-          <View style={styles.toggleRow}>
+          <View style={styles.segmentedRow}>
             <Pressable
-              style={[styles.toggleBtn, !isSmoker && styles.toggleBtnActive]}
-              onPress={() => setIsSmoker(false)}
+              style={[styles.segmentBtn, smokingStatus === 'never' && styles.segmentBtnActive]}
+              onPress={() => setSmokingStatus('never')}
             >
-              <ThemedText variant="smallBold" color={!isSmoker ? theme.colors.onPrimary : theme.colors.textSecondary}>
-                No
+              <ThemedText variant="smallBold" color={smokingStatus === 'never' ? theme.colors.onPrimary : theme.colors.textSecondary}>
+                Non-Smoker
               </ThemedText>
             </Pressable>
             <Pressable
-              style={[styles.toggleBtn, isSmoker && styles.toggleBtnActiveWarning]}
-              onPress={() => setIsSmoker(true)}
+              style={[styles.segmentBtn, smokingStatus === 'current' && styles.segmentBtnActiveWarning]}
+              onPress={() => setSmokingStatus('current')}
             >
-              <ThemedText variant="smallBold" color={isSmoker ? theme.colors.onPrimary : theme.colors.textSecondary}>
-                Yes
+              <ThemedText variant="smallBold" color={smokingStatus === 'current' ? theme.colors.onPrimary : theme.colors.textSecondary}>
+                Current Smoker
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.segmentBtn, smokingStatus === 'quit' && styles.segmentBtnActiveQuit]}
+              onPress={() => setSmokingStatus('quit')}
+            >
+              <ThemedText variant="smallBold" color={smokingStatus === 'quit' ? theme.colors.primaryDark : theme.colors.textSecondary}>
+                Former Smoker (Quit)
               </ThemedText>
             </Pressable>
           </View>
         </View>
 
-        {isSmoker && (
+        {smokingStatus === 'current' && (
           <View style={styles.conditionalForm}>
             <View style={styles.formGrid}>
               <View style={styles.gridItem}>
@@ -258,14 +357,46 @@ export default function LifestyleSocialTab({
                 Calculated Smoking Pack-Years: {packYears} pack-years
               </ThemedText>
             </View>
+          </View>
+        )}
 
+        {smokingStatus === 'quit' && (
+          <View style={styles.conditionalForm}>
             <ValidatedDateInput
-              label="Date Stopped (if former smoker)"
+              label="Date Stopped (Smoking Cessation Date)"
               placeholder="YYYY-MM-DD"
               value={smokingStoppedDate}
               onChangeText={setSmokingStoppedDate}
               boundaryMode="pastOrToday"
             />
+            <View style={styles.formGrid}>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Prior Packs per Day (optional)"
+                  placeholder="e.g. 1"
+                  value={packsPerDay}
+                  onChangeText={setPacksPerDay}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Prior Years Smoking (optional)"
+                  placeholder="e.g. 5"
+                  value={yearsSmoking}
+                  onChangeText={setYearsSmoking}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+            {calcPacks > 0 && calcYears > 0 && (
+              <View style={styles.packYearsCallout}>
+                <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                <ThemedText variant="smallBold" color={theme.colors.primary}>
+                  Calculated Cumulative Pack-Years: {packYears} pack-years
+                </ThemedText>
+              </View>
+            )}
           </View>
         )}
       </View>
@@ -275,36 +406,44 @@ export default function LifestyleSocialTab({
         <View style={styles.sectionHeader}>
           <ThemedText variant="h3">Alcohol Consumption</ThemedText>
           <Badge
-            label={isAlcoholDrinker ? 'Drinker' : 'Non-Drinker'}
-            variant={isAlcoholDrinker ? 'warning' : 'outline'}
+            label={alcoholStatus === 'current' ? 'Current Drinker' : alcoholStatus === 'quit' ? 'Former Drinker (Quit)' : 'Non-Drinker'}
+            variant={alcoholStatus === 'current' ? 'warning' : 'outline'}
           />
         </View>
 
-        <View style={styles.switchRow}>
+        <View style={styles.fieldBlock}>
           <ThemedText variant="bodyBold" color={theme.colors.text}>
-            Does the patient consume alcoholic beverages?
+            Alcohol Intake Status
           </ThemedText>
-          <View style={styles.toggleRow}>
+          <View style={styles.segmentedRow}>
             <Pressable
-              style={[styles.toggleBtn, !isAlcoholDrinker && styles.toggleBtnActive]}
-              onPress={() => setIsAlcoholDrinker(false)}
+              style={[styles.segmentBtn, alcoholStatus === 'never' && styles.segmentBtnActive]}
+              onPress={() => setAlcoholStatus('never')}
             >
-              <ThemedText variant="smallBold" color={!isAlcoholDrinker ? theme.colors.onPrimary : theme.colors.textSecondary}>
-                No
+              <ThemedText variant="smallBold" color={alcoholStatus === 'never' ? theme.colors.onPrimary : theme.colors.textSecondary}>
+                Non-Drinker
               </ThemedText>
             </Pressable>
             <Pressable
-              style={[styles.toggleBtn, isAlcoholDrinker && styles.toggleBtnActiveWarning]}
-              onPress={() => setIsAlcoholDrinker(true)}
+              style={[styles.segmentBtn, alcoholStatus === 'current' && styles.segmentBtnActiveWarning]}
+              onPress={() => setAlcoholStatus('current')}
             >
-              <ThemedText variant="smallBold" color={isAlcoholDrinker ? theme.colors.onPrimary : theme.colors.textSecondary}>
-                Yes
+              <ThemedText variant="smallBold" color={alcoholStatus === 'current' ? theme.colors.onPrimary : theme.colors.textSecondary}>
+                Current Drinker
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.segmentBtn, alcoholStatus === 'quit' && styles.segmentBtnActiveQuit]}
+              onPress={() => setAlcoholStatus('quit')}
+            >
+              <ThemedText variant="smallBold" color={alcoholStatus === 'quit' ? theme.colors.primaryDark : theme.colors.textSecondary}>
+                Former Drinker (Quit)
               </ThemedText>
             </Pressable>
           </View>
         </View>
 
-        {isAlcoholDrinker && (
+        {alcoholStatus === 'current' && (
           <View style={styles.conditionalForm}>
             <View style={styles.formGrid}>
               <View style={styles.gridItem}>
@@ -327,12 +466,38 @@ export default function LifestyleSocialTab({
               </View>
             </View>
 
-            <Input
-              label="Drinking Frequency"
-              placeholder="e.g. Daily, 2-3x Weekly, Occasional / Social"
-              value={alcoholFrequency}
-              onChangeText={setAlcoholFrequency}
-            />
+            <View style={styles.fieldBlock}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                Drinking Frequency
+              </ThemedText>
+              <View style={styles.chipsWrap}>
+                {ALCOHOL_FREQUENCY_OPTIONS.map((freq) => {
+                  const active = alcoholFrequency === freq;
+                  return (
+                    <Pressable
+                      key={freq}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => setAlcoholFrequency(freq)}
+                    >
+                      <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
+                        {freq}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {alcoholStatus === 'quit' && (
+          <View style={styles.conditionalForm}>
+            <View style={styles.statusCallout}>
+              <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.success} />
+              <ThemedText variant="small" color={theme.colors.textSecondary}>
+                Patient has ceased alcohol consumption (Former Drinker).
+              </ThemedText>
+            </View>
           </View>
         )}
       </View>
@@ -436,27 +601,65 @@ export default function LifestyleSocialTab({
         )}
       </View>
 
-      {/* SECTION 5: Physical Activity & Diet */}
+      {/* SECTION 5: Standardized Physical Activity & Nutrition */}
       <View style={styles.sectionCard}>
         <ThemedText variant="h3">Physical Activity & Nutrition</ThemedText>
 
-        <Input
-          label="Physical Activity Frequency"
-          placeholder="e.g. Sedentary, Moderate (>=150m/wk), Heavy Athletics"
-          value={physicalActivityFrequency}
-          onChangeText={setPhysicalActivityFrequency}
-        />
+        <View style={styles.fieldBlock}>
+          <ThemedText variant="bodyBold" color={theme.colors.text}>
+            Physical Activity Level
+          </ThemedText>
+          <ThemedText variant="small" color={theme.colors.textMuted}>
+            Select standard cardiovascular and metabolic activity level
+          </ThemedText>
+          <View style={styles.chipsWrap}>
+            {PHYSICAL_ACTIVITY_OPTIONS.map((opt) => {
+              const active = physicalActivityFrequency === opt;
+              return (
+                <Pressable
+                  key={opt}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => setPhysicalActivityFrequency(opt)}
+                >
+                  {active && <Icon name="check" size={theme.sizes.iconXs} color={theme.colors.primary} />}
+                  <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
+                    {opt}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.fieldBlock}>
+          <ThemedText variant="bodyBold" color={theme.colors.text}>
+            Dietary Habits & Nutrition
+          </ThemedText>
+          <ThemedText variant="small" color={theme.colors.textMuted}>
+            Select all applicable nutrition profiles (multi-select)
+          </ThemedText>
+          <View style={styles.chipsWrap}>
+            {DIETARY_HABIT_OPTIONS.map((opt) => {
+              const active = selectedDietaryHabits.includes(opt);
+              return (
+                <Pressable
+                  key={opt}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => toggleDietaryHabit(opt)}
+                >
+                  <Icon name={active ? 'check' : 'plus'} size={theme.sizes.iconXs} color={active ? theme.colors.primary : theme.colors.textMuted} />
+                  <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
+                    {opt}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
 
         <Input
-          label="Dietary Habits"
-          placeholder="e.g. Standard Filipino diet, High-sodium, Low-carb"
-          value={dietaryHabits}
-          onChangeText={setDietaryHabits}
-        />
-
-        <Input
-          label="Clinical Remarks / Notes"
-          placeholder="Additional lifestyle annotations"
+          label="Clinical Remarks / Lifestyle Notes"
+          placeholder="Additional dietary restrictions or clinical remarks"
           value={remarks}
           onChangeText={setRemarks}
         />
@@ -511,6 +714,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: theme.spacing.xs,
   },
+  fieldBlock: {
+    gap: theme.spacing.xs,
+  },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -535,11 +741,55 @@ const styles = StyleSheet.create({
   toggleBtnActivePrimary: {
     backgroundColor: theme.colors.primary,
   },
-  toggleBtnActiveWarning: {
-    backgroundColor: theme.colors.warning,
-  },
   toggleBtnActiveEmergency: {
     backgroundColor: theme.colors.emergency,
+  },
+  segmentedRow: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  segmentBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
+  },
+  segmentBtnActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  segmentBtnActiveWarning: {
+    backgroundColor: theme.colors.warning,
+  },
+  segmentBtnActiveQuit: {
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  chipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  chipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
   },
   conditionalForm: {
     gap: theme.spacing.sm,
@@ -561,6 +811,16 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primaryBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+  },
+  statusCallout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.border,
     borderWidth: 1,
     borderRadius: theme.radii.md,
     padding: theme.spacing.sm,

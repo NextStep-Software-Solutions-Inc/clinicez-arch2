@@ -287,7 +287,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
       );
 
       expect(html).toContain('Administer Vaccine');
-      expect(html).toContain('PhilHealth Konsulta Statutory In-Clinic Administration');
+      expect(html).toContain('Document In-Clinic Administration');
       for (const cohort of COHORTS) {
         expect(html).toContain(cohort.label);
       }

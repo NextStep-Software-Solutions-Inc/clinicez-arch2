@@ -510,6 +510,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
   const handlePhilHealthProfileSaved = () => {
     fetchPatients();
+    if (selectedPatient && chartVisible) {
+      handleOpenChart(selectedPatient, activeChartTab);
+    }
   };
 
   const handleOpenEditDemographics = (patient: ClinicPatient) => {

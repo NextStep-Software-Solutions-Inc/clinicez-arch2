@@ -276,10 +276,13 @@ public sealed class PatientsController : ControllerBase
             request.CoitarcheAge,
             request.PhysicalActivityFrequency,
             request.DietaryHabits,
-            request.Remarks);
+            request.Remarks,
+            request.SmokingStatus,
+            request.AlcoholStatus);
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<PatientSocialHistoryDto>.Success(result, "Social history updated successfully."));
     }
+
 
     // --- Past Medical History Endpoints ---
 

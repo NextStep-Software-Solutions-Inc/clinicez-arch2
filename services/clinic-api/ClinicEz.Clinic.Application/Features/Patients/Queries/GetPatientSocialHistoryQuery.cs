@@ -57,6 +57,9 @@ public sealed class GetPatientSocialHistoryQueryHandler : IRequestHandler<GetPat
             entry.CoitarcheAge,
             entry.PhysicalActivityFrequency,
             entry.DietaryHabits,
-            entry.Remarks);
+            entry.Remarks,
+            entry.SmokingStatus,
+            entry.AlcoholStatus);
     }
 }
+

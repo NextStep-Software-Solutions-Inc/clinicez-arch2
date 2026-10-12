@@ -67,7 +67,7 @@ export default function AdministerVaccineModal({
 
   const getInitialCohort = (): 'lib_immchild' | 'lib_immyoungw' | 'lib_immpregw' | 'lib_immelderly' => {
     if (age < 18) return 'lib_immchild';
-    if (gender === 'female' && age >= 9 && age <= 26) return 'lib_immyoungw';
+    if (gender === 'female' && age >= 9 && age <= 49) return 'lib_immyoungw';
     if (age >= 60 || demographics?.isSenior) return 'lib_immelderly';
     return 'lib_immchild';
   };
@@ -194,7 +194,7 @@ export default function AdministerVaccineModal({
                   Administer Vaccine
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  PhilHealth Konsulta Statutory In-Clinic Administration
+                  Document In-Clinic Administration
                 </ThemedText>
               </View>
             </View>
@@ -214,10 +214,10 @@ export default function AdministerVaccineModal({
               </View>
             ) : null}
 
-            {/* Statutory Cohort Selector */}
+            {/* Vaccine Category Selector */}
             <View style={styles.fieldSection}>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                1. PhilHealth Statutory Cohort *
+                1. Vaccine Category *
               </ThemedText>
               <View style={styles.chipRow}>
                 {COHORTS.map((c) => (
@@ -240,32 +240,40 @@ export default function AdministerVaccineModal({
             {/* Vaccine Selection */}
             <View style={styles.fieldSection}>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                2. Select Statutory Vaccine ({currentVaccineList.length} available) *
+                2. Select Vaccine ({currentVaccineList.length} available) *
               </ThemedText>
-              <View style={styles.vaccineList}>
-                {currentVaccineList.map((vac) => {
-                  const isSelected = selectedVaccineCode === vac.code;
-                  return (
-                    <Pressable
-                      key={vac.code}
-                      onPress={() => setSelectedVaccineCode(vac.code)}
-                      style={[styles.vaccineItem, isSelected && styles.vaccineItem_active]}
-                    >
-                      <Badge
-                        label={vac.code}
-                        variant={isSelected ? 'routine' : 'neutral'}
-                        size="sm"
-                      />
-                      <ThemedText
-                        variant="captionBold"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                        style={{ flex: 1 }}
+              <View style={styles.vaccineListContainer}>
+                <ScrollView
+                  style={styles.vaccineListScroll}
+                  contentContainerStyle={styles.vaccineListContent}
+                  nestedScrollEnabled={true}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={true}
+                >
+                  {currentVaccineList.map((vac) => {
+                    const isSelected = selectedVaccineCode === vac.code;
+                    return (
+                      <Pressable
+                        key={vac.code}
+                        onPress={() => setSelectedVaccineCode(vac.code)}
+                        style={[styles.vaccineItem, isSelected && styles.vaccineItem_active]}
                       >
-                        {vac.name}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
+                        {isSelected ? (
+                          <Icon name="check" size={14} color={theme.colors.primaryDark} />
+                        ) : (
+                          <View style={{ width: 14 }} />
+                        )}
+                        <ThemedText
+                          variant="captionBold"
+                          color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                          style={{ flex: 1 }}
+                        >
+                          {vac.name}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
               </View>
             </View>
 
@@ -571,12 +579,19 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
-  vaccineList: {
-    maxHeight: 140,
+  vaccineListContainer: {
+    maxHeight: 180,
     borderWidth: 1,
     borderColor: theme.colors.borderLight,
     borderRadius: theme.radii.sm,
     backgroundColor: theme.colors.surfaceSubtle,
+    overflow: 'hidden',
+  },
+  vaccineListScroll: {
+    maxHeight: 180,
+  },
+  vaccineListContent: {
+    flexGrow: 0,
   },
   vaccineItem: {
     flexDirection: 'row',

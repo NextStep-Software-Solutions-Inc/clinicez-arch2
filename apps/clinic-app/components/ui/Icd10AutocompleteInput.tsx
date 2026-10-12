@@ -175,7 +175,7 @@ export function Icd10AutocompleteInput({
             onFocus={() => setIsOpen(true)}
             error={error}
             editable={!disabled}
-            helperText="Enter at least 2 characters to search the PhilHealth lib_icd catalog."
+            helperText="Enter at least 2 characters to search the PhilHealth diagnosis catalog."
           />
 
           {isOpen && (query.trim().length >= 2 || loading || notice || results.length > 0) ? (

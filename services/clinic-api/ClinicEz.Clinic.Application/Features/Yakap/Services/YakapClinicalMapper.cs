@@ -683,22 +683,67 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
 
         if (relSocial != null)
         {
+            string isSmokerCode;
+            if (relSocial.IsSmoker)
+            {
+                isSmokerCode = "Y";
+            }
+            else if (relSocial.SmokingStoppedDate.HasValue)
+            {
+                isSmokerCode = "X";
+            }
+            else
+            {
+                isSmokerCode = "N";
+            }
+
+            string isDrinkerCode;
+            if (relSocial.IsAlcoholDrinker)
+            {
+                isDrinkerCode = "Y";
+            }
+            else if (string.Equals(relSocial.AlcoholFrequency, "Quit", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(relSocial.AlcoholFrequency, "Former", StringComparison.OrdinalIgnoreCase))
+            {
+                isDrinkerCode = "X";
+            }
+            else
+            {
+                isDrinkerCode = "N";
+            }
+
             return new YakapSocialHistoryDto(
-                IsSmoker: relSocial.IsSmoker ? "Y" : "N",
-                NoCigpk: relSocial.CigarettesPerDay?.ToString() ?? (relSocial.PacksPerDay?.ToString() ?? string.Empty),
-                IsAdrinker: relSocial.IsAlcoholDrinker ? "Y" : "N",
-                NoBottles: relSocial.AlcoholBottlesPerDay?.ToString() ?? string.Empty,
+                IsSmoker: isSmokerCode,
+                NoCigpk: isSmokerCode == "Y" ? (relSocial.CigarettesPerDay?.ToString() ?? (relSocial.PacksPerDay?.ToString() ?? string.Empty)) : string.Empty,
+                IsAdrinker: isDrinkerCode,
+                NoBottles: isDrinkerCode == "Y" ? (relSocial.AlcoholBottlesPerDay?.ToString() ?? string.Empty) : string.Empty,
                 IllDrugUser: relSocial.UsesIllicitDrugs ? "Y" : "N",
                 IsSexuallyActive: relSocial.IsSexuallyActive ? "Y" : "N");
         }
 
         if (customProfile != null)
         {
+            var smokerCode = customProfile.SmokingStatus?.ToLowerInvariant() switch
+            {
+                "current" or "y" => "Y",
+                "quit" or "former" or "x" => "X",
+                "never" or "n" => "N",
+                _ => customProfile.IsSmoker ? "Y" : (!string.IsNullOrWhiteSpace(customProfile.SmokingStoppedDate) ? "X" : "N")
+            };
+
+            var drinkerCode = customProfile.AlcoholStatus?.ToLowerInvariant() switch
+            {
+                "current" or "y" => "Y",
+                "quit" or "former" or "x" => "X",
+                "never" or "n" => "N",
+                _ => customProfile.IsAlcoholDrinker ? "Y" : (string.Equals(customProfile.AlcoholFrequency, "Quit", StringComparison.OrdinalIgnoreCase) ? "X" : "N")
+            };
+
             return new YakapSocialHistoryDto(
-                IsSmoker: customProfile.IsSmoker ? "Y" : "N",
-                NoCigpk: customProfile.CigarettesPerDay ?? string.Empty,
-                IsAdrinker: customProfile.IsAlcoholDrinker ? "Y" : "N",
-                NoBottles: customProfile.BottlesPerDay ?? string.Empty,
+                IsSmoker: smokerCode,
+                NoCigpk: smokerCode == "Y" ? (customProfile.CigarettesPerDay ?? (customProfile.PacksPerDay ?? string.Empty)) : string.Empty,
+                IsAdrinker: drinkerCode,
+                NoBottles: drinkerCode == "Y" ? (customProfile.BottlesPerDay ?? string.Empty) : string.Empty,
                 IllDrugUser: customProfile.IllDrugUser ? "Y" : "N",
                 IsSexuallyActive: customProfile.IsSexuallyActive ? "Y" : "N");
         }

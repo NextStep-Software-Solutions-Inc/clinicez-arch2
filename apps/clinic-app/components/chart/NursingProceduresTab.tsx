@@ -162,7 +162,7 @@ export default function NursingProceduresTab({
                       <ThemedText variant="bodyBold" color={theme.colors.text}>
                         {proc.procedureName}
                       </ThemedText>
-                      <Badge label={`lib_management: ${statMgmt.code}`} variant="purple" size="sm" />
+                      <Badge label="PhilHealth Covered" variant="purple" size="sm" />
                     </View>
                     <ThemedText variant="caption" color={theme.colors.textMuted}>
                       Scheduled: {new Date(proc.scheduledAt).toLocaleDateString()} • {new Date(proc.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

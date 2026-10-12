@@ -245,6 +245,11 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             )).ToList();
         }
 
+        if (_legacyIngestion != null)
+        {
+            await _legacyIngestion.EnsureIngestedAsync(request.PatientId, cancellationToken);
+        }
+
         // Immunizations
         var immunizationDtos = new List<PatientImmunizationDto>();
         if (_immunizationRepo != null)
@@ -488,8 +493,10 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                     social.YearsSmoking, social.SmokingPackYears, social.SmokingStoppedDate, social.IsAlcoholDrinker,
                     social.AlcoholDrinksPerWeek, social.AlcoholBottlesPerDay, social.AlcoholFrequency, social.UsesIllicitDrugs,
                     social.SubstanceUseHistory, social.DrugTypes, social.IsSexuallyActive, social.CoitarcheAge,
-                    social.PhysicalActivityFrequency, social.DietaryHabits, social.Remarks);
+                    social.PhysicalActivityFrequency, social.DietaryHabits, social.Remarks,
+                    social.SmokingStatus, social.AlcoholStatus);
             }
+
         }
 
         if (_reproductiveRepo != null)

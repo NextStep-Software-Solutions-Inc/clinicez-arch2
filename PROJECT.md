@@ -1,98 +1,106 @@
-# Project: Clinic EZ Comprehensive Clinic Features & PhilHealth-Case1 Yakap Alignment
+# Project: ClinicEZ Generic Entity Custom Metadata Engine
 
 ## Architecture
-Clinic EZ is a multi-tenant clinical workstation and healthcare platform composed of Clean Architecture .NET microservices (`services/clinic-api`, `services/patient-api`, `services/interop-hub`, `services/philhealth-proxy`) backed by PostgreSQL, alongside a cross-platform React Native Expo mobile/tablet application (`apps/clinic-app`).
-- **Domain Layer (`ClinicEz.Clinic.Domain`)**: Rich domain aggregates, entities, value objects, and domain events.
-- **Application Layer (`ClinicEz.Clinic.Application`)**: CQRS with MediatR, command validators, domain service contracts, transactional outbox message producers.
-- **Infrastructure Layer (`ClinicEz.Clinic.Infrastructure`)**: EF Core DbContext, PostgreSQL GiST exclusion constraints (`btree_gist`), multi-tenant query filters (`ClinicId == CurrentClinicId`), sequence generators, statutory seed catalogs.
-- **API Layer (`ClinicEz.Clinic.Api`)**: REST API controllers with standard `ApiResponse<T>`, exception middleware mapping PostgreSQL error codes (e.g. 23P01 -> 409 Conflict).
-- **Client Layer (`apps/clinic-app`)**: React Native Expo screens, components adhering to `@clinicez/design-tokens` (teal `#0D6963` palette), interactive slot picker, native clinical chart tabs, dual-mode consultation ergonomics.
-- **Interop Hub**: Transactional outbox event bus ensuring reliable asynchronous messaging between `clinic-api` and `patient-api` via ECDSA P-256 signed envelopes.
-- **Statutory Claims**: Direct relational aggregation in `YakapClinicalMapper.cs` producing 100% compliant XML transmittals verified against `KonsultaData_v1.14.dtd`.
+ClinicEZ is a multi-tenant clinical workstation and healthcare platform composed of Clean Architecture .NET microservices (`services/clinic-api`, `services/patient-api`, `services/interop-hub`) backed by PostgreSQL, alongside a cross-platform React Native Expo mobile/tablet application (`apps/clinic-app`) and Next.js portal (`apps/portal-web`).
+- **Domain Layer (`ClinicEz.Clinic.Domain`)**: `ClinicCustomFieldDefinition` with `EntityType` scoping, `FieldKey`, `Label`, `Category`, `DisplayOrder`, `IsRequired`, `DataType`, `VisibilityRuleJson`, `ConditionalOptionsJson`, and `ClinicPatient.CustomFields` dictionary.
+- **Application Layer (`ClinicEz.Clinic.Application`)**: CQRS with MediatR, command validators, `UpdateCustomFieldDefinitionCommand`, `ReorderCustomFieldsCommand`, `InstallCustomFieldTemplateCommand`, `GetCustomFieldTemplatesQuery`, and `GetClinicCustomFieldsQuery`.
+- **Infrastructure Layer (`ClinicEz.Clinic.Infrastructure`)**: EF Core DbContext, PostgreSQL text columns with JSON serialization, idempotent migrations, multi-tenant query filters (`ClinicId == CurrentClinicId`).
+- **API Layer (`ClinicEz.Clinic.Api`)**: `CustomFieldsController` exposing CRUD, `PUT /api/v1/custom-fields/reorder`, and template installation.
+- **Client Settings Layer (`apps/clinic-app/components/settings/`)**: `CustomFieldsTab.tsx` and `AddEditFieldModal.tsx` providing mandatory toggles, Move Up/Down reordering controls, live condition rule builder, cascading mapper, and 1-click template library presets.
+- **Client Intake Layer (`apps/clinic-app/components/custom-fields/`)**: `DynamicCustomFieldsRenderer.tsx` evaluating visibility rules in real-time, deriving cascading dropdown choices, enforcing mandatory validation only when visible, resetting hidden fields, and integrating into `Patients.screen.tsx`, `EditPatientModal.tsx`, and `StudentIntakeClient.tsx`.
+- **Design Tokens (`@clinicez/design-tokens`)**: Strict adherence to semantic tokens (`lightColors.primary #0D6963`, `lightColors.emergencyText`, `lightColors.border`, etc.), 4 core UX states (Loading, Empty, Error, Active/Success), and responsive workstation density.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Doctor Schedule Templates & Breaks | Recurring weekly shift schedules, break intervals, slot durations (15/30/60m) | M1 | R1 |
-| 2 | Doctor Leaves & Blackouts | Blackout leave calendar preventing appointment booking during time-off | M1 | R1 |
-| 3 | Slot Availability Engine | Calculation of available booking slots considering shifts, breaks, leaves, and booked appointments | M1 | R1 |
-| 4 | PostgreSQL GiST Concurrency Guarding | Database-level double-booking collision prevention with `btree_gist` and `tstzrange` GiST exclusion constraint | M1 | R1 |
-| 5 | Scheduling Exception Mapping | PostgreSQL 23P01 exclusion violation mapped to HTTP 409 Conflict | M1 | R1 |
-| 6 | SlotPicker & Roster UI Components | React Native Expo SlotPicker and DoctorRosterCalendarModal with teal `#0D6963` styling | M1 | R1 |
-| 7 | Relational Patient Surgical History | Clean Architecture `PatientSurgicalHistory` entity replacing untyped JSON CustomFields | M2 | R2 |
-| 8 | Relational Patient Social History | Clean Architecture `PatientSocialHistory` entity (tobacco, alcohol) replacing untyped JSON | M2 | R2 |
-| 9 | Relational Patient Reproductive History | Clean Architecture `PatientReproductiveHistory` entity replacing untyped JSON | M2 | R2 |
-| 10 | Deprecation of PhilHealthProfileModal | Removal of disconnected 1,184-line modal in favor of integrated workspace tabs | M2 | R2 |
-| 11 | Native Clinical Chart Tabs | Embedding `ClinicalHistoryTab`, `LifestyleSocialTab`, `ReproductiveHealthTab`, and `CardiometabolicRiskTab` in `Patients.screen.tsx` | M2 | R2 |
-| 12 | Extended Triage Vitals | Respiratory Rate (`pRr`), Snellen visual acuity (Left/Right), Head Circumference, MUAC | M2 | R2 |
-| 13 | WHO Pediatric Z-Score Calculator | Age-bracket percentile and z-score computation with `"7..9"` typo sanitization and Under-5 boundary checking | M2 | R2 |
-| 14 | Dual-Mode Consultation Ergonomics | Complete bifurcation between standard clinical encounters (0% PhilHealth fields) and Konsulta encounters | M3 | R3 |
-| 15 | Inline 9-System Physical Exam Card | `InlinePhysicalExamCard.tsx` with 1-click "All Essentially Normal" button and abnormal remarks | M3 | R3 |
-| 16 | ATC Header & Doctor PAN Snapshotting | Encounter ATC banner and auto-snapshotting of physician's PhilHealth PAN on signing | M3 | R3 |
-| 17 | Statutory Key Auto-Generation | Automatic derivation and linking of `pHciCaseNo`, `pHciTransNo`, `pSoapTransNo`, `pHciAccreNo`, `pPMCCNo` | M3 | R3 |
-| 18 | Patient Immunization Entity | Batch/lot tracking, expiration guarding, dose sequence numbers, injection sites, adverse reactions, cold-chain | M4 | R4 |
-| 19 | Statutory Vaccine Library Mapping | 1:1 mapping against `lib_immchild`, `lib_immyoungw`, `lib_immpregw`, `lib_immelderly`, `OtherImm` | M4 | R4 |
-| 20 | Statutory Immunization Fallback 999 | Fallback code `999` ("None / Not Given") ensuring valid `<!ELEMENT IMMUNIZATIONS (IMMUNIZATION)+>` in DTD v1.14 | M4 | R4 |
-| 21 | Immunization Outbox Synchronization | Outbox event `clinical.immunization.administered` published via Interop Hub and ingested by `patient-api` | M4 | R4 |
-| 22 | Structured Problem List | `PatientProblem` entity with active/resolved lifecycle, onset dates, ICD-10 and `lib_mdiseases` linkage | M5 | R5 |
-| 23 | Structured Patient Allergies | `PatientAllergy` entity with classifications (drug/food/env), reaction manifestations, and anaphylaxis severity flag | M5 | R5 |
-| 24 | Enhanced CDS Evaluator | Drug-allergy cross-reactivity (Penicillins to Cephalosporins, Aspirin to NSAIDs) and Drug-Disease Interactions (NSAIDs in PUD/CKD, Beta-blockers in Asthma/COPD) | M5 | R5 |
-| 25 | PhilPEN 24-Question Risk Scorer | WHO/ISH Western Pacific Region B 10-year CVD risk score (Bands A-E) with non-laboratory BMI fallback and crisis overrides | M5 | R5 |
-| 26 | Relational Yakap Transmittal Aggregation | Updating `YakapClinicalMapper.cs` and commands to query strongly-typed relational repositories | M6 | R6 |
-| 27 | DTD v1.14 Automated XML Verification | 100% compliance against `KonsultaData_v1.14.dtd` verified by automated test suites in `ClinicEz.PhilHealthProxy.Tests` and `ClinicEz.Clinic.Application.Tests` | M6 | R6 |
-| 28 | Comprehensive E2E Testing Suite | Opaque-box Tier 1-4 tests and adversarial Tier 5 coverage hardening covering all 27 features | M7 | Dual Track |
+| 1 | CustomField Schema & EF Core Model | `VisibilityRuleJson` and `ConditionalOptionsJson` columns on `ClinicCustomFieldDefinition` | M1 | R1 |
+| 2 | CQRS CustomField CRUD & Query | Create, Update (`PUT /api/v1/custom-fields/{id}`), Delete, and deterministic ordering by `DisplayOrder` | M1 | R1 |
+| 3 | Bulk Reorder Custom Fields Endpoint | `PUT /api/v1/custom-fields/reorder` for visual arrangement persistence | M1 | R1 |
+| 4 | Template Catalog & Install Backend | `InstallCustomFieldTemplateCommand` (`POST /api/v1/custom-fields/templates/install`) with USTP, Workplace, Demographics presets | M1 | R1 |
+| 5 | Admin Mandatory Toggle & Badges | Toggle in field modal and `Required` (emergency) vs `Optional` (neutral) badges in `CustomFieldsTab.tsx` | M2 | R2 |
+| 6 | Admin Move Up/Down Sequence Controls | Interactive movement controls calling reorder API with minimum 44px touch target | M2 | R2 |
+| 7 | Live Visibility Condition Rule Builder | Modal rule builder selecting parent field, operator, and expected value with live preview badge | M2 | R2 |
+| 8 | Cascading Dropdown Options Mapper | Modal mapper binding parent select value to child choices with fallback | M2 | R2 |
+| 9 | 1-Click Suggested Templates Library UI | Administrative preset library toolbar with 1-click install for USTP, Workplace, Demographics | M2 | R2 |
+| 10 | Reusable DynamicCustomFieldsRenderer | Component rendering fields in `DisplayOrder`, red asterisk `*`, data type UI variants | M3 | R3 |
+| 11 | Dynamic Visibility Evaluation Engine | Real-time rule evaluation supporting static patient properties (`gender`, `civilStatus`, `age`) and custom fields | M3 | R3 |
+| 12 | Cascading Select Choices Engine | Dynamic dropdown choice derivation based on selected parent field, clearing stale child selections | M3 | R3 |
+| 13 | Defensive Submission Validation | Blocks submission if a visible required field is empty; does NOT block for hidden fields | M3 | R3 |
+| 14 | Hidden Field Value Sanitization | Strips hidden/empty values before persistence to prevent dirty state | M3 | R3 |
+| 15 | Patient Registration Integration | Replaces hardcoded silos in `Patients.screen.tsx` registration modal with `DynamicCustomFieldsRenderer` | M3 | R3 |
+| 16 | Patient Demographic Edit Integration | Replaces hardcoded inputs in `EditPatientModal.tsx` with dynamic fields support | M3 | R3 |
+| 17 | Patient Chart View Integration | Renders dynamic custom metadata on patient cards and chart workstation views | M3 | R3 |
+| 18 | Public Student Intake Cascading | Enforces college-to-program cascading and dynamic field binding in `StudentIntakeClient.tsx` | M3 | R3 |
+| 19 | UI/UX Design System Compliance | 100% semantic token usage, zero raw hex colors, 4 core UX states, responsive density | M1, M2, M3 | R4 |
+| 20 | Comprehensive E2E Testing Suite | Opaque-box Tier 1-4 tests and adversarial Tier 5 coverage hardening covering all features | M4 | Dual Track |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Doctor Schedule, Rostering & Availability Engine | Features 1-6 (R1: Shift templates, breaks, leaves, btree_gist GiST exclusion, 23P01 mapping, SlotPicker UI) | none | DONE |
-| M2 | Native Patient Ingestion & Relational Chart Profiling | Features 7-13 (R2: Relational surgical/social/reproductive/NCD entities, chart tabs, extended triage vitals, WHO Z-scores) | none | DONE |
-| M3 | Dual-Mode Consultation Workstation & Inline Physical Exam | Features 14-17 (R3: Standard vs Konsulta ergonomics, 9-system physical exam card, Doctor PAN snapshot, statutory key auto-gen) | M2 | DONE |
-| M4 | PhilHealth-Case1 Immunization Management & Interop Hub Synchronization | Features 18-21 (R4: PatientImmunization, statutory libraries, fallback 999, outbox event & patient-api sync) | none | DONE |
-| M5 | Structured Problem List, Allergies & CDS Decision Support | Features 22-25 (R5: PatientProblem, PatientAllergy, enhanced CDS evaluator with cross-reactivity & DDIs, PhilPEN risk scorer) | M2 | DONE |
-| M6 | Claims Transmittal Engine & DTD v1.14 Verification | Features 26-27 (R6: YakapClinicalMapper relational migration, 100% KonsultaData_v1.14.dtd compliance) | M2, M4, M5 | DONE |
-| M7 | Final Milestone: 100% E2E Test Suite Pass & Adversarial Hardening | Feature 28 (Pass 100% E2E test suite Tiers 1-4, then Tier 5 adversarial hardening) | M1, M3, M6 | DONE |
+| M1 | Generic Entity Metadata Engine Architecture (Backend) | Features 1-4, 19 (Domain schema, EF Core migration, DTOs, CQRS commands/queries, reorder API, template install, tests) | none | PLANNED |
+| M2 | Clinic Admin Intake Fields Management & Template Library | Features 5-9, 19 (CustomFieldsTab, Move Up/Down controls, Add/Edit modal with rule builder & cascading mapper, 1-click templates) | M1 | PLANNED |
+| M3 | Dynamic Patient Intake, Registration & Chart Integration | Features 10-18, 19 (DynamicCustomFieldsRenderer, Patients.screen.tsx, EditPatientModal.tsx, chart view, StudentIntakeClient.tsx) | M1, M2 | PLANNED |
+| M4 | Final Milestone: 100% E2E Test Suite Pass & Adversarial Hardening | Feature 20 (Pass 100% E2E test suite Tiers 1-4, then Tier 5 adversarial hardening) | M1, M2, M3 | PLANNED |
 
 ## Interface Contracts
-### Appointments ↔ Doctor Schedules (M1)
-- `ISlotAvailabilityService.GetAvailableSlotsAsync(Guid clinicId, Guid doctorId, DateOnly date, CancellationToken ct)` -> `Task<IReadOnlyList<TimeSlotDto>>`
-- `Appointment`: `EndTimeUtc = ScheduledAt.AddMinutes(DurationMinutes)`
-- Database constraint: `EXCLUDE USING gist ("ClinicId" WITH =, "DoctorId" WITH =, tstzrange("ScheduledAt", "EndTimeUtc", '[)') WITH &&) WHERE ("Status" != 'Cancelled' AND "IsDeleted" = false AND "DoctorId" IS NOT NULL)`
-- Exception handling: Catch `PostgresException { SqlState: "23P01" }`, throw `ConflictException("The selected doctor already has an appointment during this time window.")`.
+### Custom Fields Backend ↔ Frontend Client (M1 ↔ M2 & M3)
+- `ClinicCustomFieldDefinitionDto`:
+  - `Id: Guid`, `TenantId: string`, `ClinicId: Guid`, `EntityType: string`, `FieldKey: string`, `Label: string`, `DataType: CustomFieldDataType` (`Text`, `Number`, `Date`, `Select`, `Boolean`), `Category: string?`, `IsRequired: bool`, `DisplayOrder: int`, `OptionsJson: string?`, `Placeholder: string?`, `IsActive: bool`, `VisibilityRuleJson: string?`, `ConditionalOptionsJson: string?`
+- Endpoints:
+  - `GET /api/v1/custom-fields?entityType=ClinicPatient` -> sorted by `DisplayOrder` then `Label`
+  - `POST /api/v1/custom-fields` -> creates field
+  - `PUT /api/v1/custom-fields/{id}` -> updates field definition
+  - `DELETE /api/v1/custom-fields/{id}` -> soft-deletes field
+  - `PUT /api/v1/custom-fields/reorder` -> payload `{ items?: [{ id, displayOrder }], orderedIds?: [id] }` -> returns updated sorted list
+  - `GET /api/v1/custom-fields/templates` -> list of available preset bundles
+  - `POST /api/v1/custom-fields/templates/install` -> payload `{ templateKey: string }` -> installs bundle and returns active fields
 
-### Relational Patient Charts ↔ Consultations (M2 ↔ M3)
-- `ConsultationEncounter`:
-  - `IsYakapEligible: bool`
-  - `DoctorPhilHealthPan: string?`
-  - `PhilHealthAtc: string?`
-  - `HciCaseNo: string?`, `HciTransNo: string?`, `SoapTransNo: string?`
-- `InlinePhysicalExamCard`: Emits structured 9-system findings matching PhilHealth `<PEPERT>` elements (`Skin`, `Heent`, `Chest`, `Heart`, `Abdomen`, `Neuro`, `Rectal`, `Gu`, `Musculoskeletal`).
+### VisibilityRuleJson Specification
+```json
+{
+  "source": "custom_field", // or "static"
+  "field": "affiliation",    // or "gender", "civilStatus", "dateOfBirth"
+  "operator": "equals",      // "equals", "not_equals", "in", "contains", "not_empty"
+  "value": "Student"
+}
+```
 
-### Immunization ↔ Interop Hub ↔ Patient API (M4)
-- Event Topic: `clinical.immunization.administered`
-- Envelope: Signed ECDSA P-256 payload with `PatientId`, `ClinicId`, `VaccineCode`, `VaccineName`, `LotNumber`, `DoseNumber`, `AdministeredAtUtc`, `AdministeredByStaffId`.
-- Idempotent Ingestion: `ClinicalImmunizationAdministeredInteropHandler` in `services/patient-api` updates `PatientImmunizationSelf` by `InteropMessageId`.
-- DTD Fallback: If 0 vaccines recorded for patient, emit `<IMMUNIZATION pOtherImm="999" pVaccineDate="1900-01-01" />`.
+### ConditionalOptionsJson Specification
+```json
+{
+  "parentField": "college",
+  "mapping": {
+    "College of Engineering": ["BS Civil Engineering", "BS Mechanical Engineering"],
+    "College of Information Technology": ["BS Computer Science", "BS Information Technology"]
+  },
+  "defaultOptions": []
+}
+```
 
-### CDS Decision Support ↔ Consultations & Transmittals (M5 ↔ M3 & M6)
-- `ICdsEvaluator.EvaluateOrderSafetyAsync(Guid patientId, IReadOnlyList<PrescriptionItemDto> newMedications, CancellationToken ct)` -> `Task<CdsEvaluationResult>`
-  - Checks `PatientAllergy` for drug class cross-reactivity (Penicillins <-> Cephalosporins, NSAIDs <-> Aspirin).
-  - Checks `PatientProblem` for DDI contraindications (NSAIDs in PUD `K25-K28` / CKD `N18`, Non-selective beta-blockers in Asthma `J45` / COPD `J44`).
-- `IPhilPenRiskScorer.CalculateRiskScore(PhilPenAnswersDto answers, TriageVitals vitals)` -> `PhilPenRiskResult { RiskBand: BandA..BandE, ScorePercentage: decimal, OverridesApplied: bool }`.
-
-### Relational Repositories ↔ Yakap Transmittal Engine (M6)
-- `IYakapClinicalMapper.MapToYakapReportDocument(ClinicPatient patient, IEnumerable<PatientProblem> problems, IEnumerable<PatientAllergy> allergies, IEnumerable<PatientImmunization> immunizations, NcdRiskAssessment? ncd, IEnumerable<PediatricGrowthMeasurement> growth, ConsultationEncounter encounter, ...)` -> `YakapReportDocument`.
-- Output must pass `KonsultaXmlValidator.ValidateReportXml(xml)` against `KonsultaData_v1.14.dtd` with 0 warnings or errors.
+### Dynamic Custom Fields ↔ Patient Registration / Edit (M3)
+- Input: `definitions: ClinicCustomFieldDefinition[]`, `values: Record<string, any>`, `staticValues: { gender?: string, civilStatus?: string, dateOfBirth?: string }`, `onChange: (key, value) => void`
+- Submission:
+  - Validates `isRequired && isVisible && !value` -> blocks submission with inline error.
+  - Hidden fields stripped from submission payload.
+  - Submits cleaned dictionary to `RegisterClinicPatientCommand.CustomFields` or `UpdateClinicPatientCommand.CustomFields`.
 
 ## Code Layout
 ### Backend (`services/clinic-api/`)
-- Domain: `ClinicEz.Clinic.Domain/Entities/` (`DoctorScheduleTemplate.cs`, `DoctorBreakTime.cs`, `DoctorLeave.cs`, `PatientSurgicalHistory.cs`, `PatientSocialHistory.cs`, `PatientReproductiveHistory.cs`, `PatientImmunization.cs`, `PatientProblem.cs`, `PatientAllergy.cs`, `NcdRiskAssessment.cs`)
-- Persistence: `ClinicEz.Clinic.Infrastructure/Persistence/ApplicationDbContext.cs` & `Configurations/`
-- Migrations: `ClinicEz.Clinic.Infrastructure/Migrations/`
-- Features: `ClinicEz.Clinic.Application/Features/` (`Schedules/`, `Patients/`, `Consultations/`, `Immunizations/`, `Problems/`, `Allergies/`, `Cds/`, `Yakap/`)
-- Controllers: `ClinicEz.Clinic.Api/Controllers/` (`DoctorSchedulesController.cs`, `PatientsController.cs`, `ConsultationsController.cs`, `ImmunizationsController.cs`, `ProblemsController.cs`, `AllergiesController.cs`, `YakapTransmittalController.cs`)
+- Domain: `ClinicEz.Clinic.Domain/Entities/ClinicCustomFieldDefinition.cs`
+- Infrastructure: `ClinicEz.Clinic.Infrastructure/Persistence/ApplicationDbContext.cs`, `ClinicEz.Clinic.Infrastructure/Migrations/`
+- Application:
+  - Features: `ClinicEz.Clinic.Application/Features/CustomFields/Commands/` (`CreateCustomFieldDefinitionCommand.cs`, `UpdateCustomFieldDefinitionCommand.cs`, `ReorderCustomFieldsCommand.cs`, `InstallCustomFieldTemplateCommand.cs`)
+  - Queries: `ClinicEz.Clinic.Application/Features/CustomFields/Queries/` (`GetClinicCustomFieldsQuery.cs`, `GetCustomFieldTemplatesQuery.cs`)
+  - DTOs: `ClinicEz.Clinic.Application/Features/CustomFields/Dtos/ClinicCustomFieldDefinitionDto.cs`
+- Controllers: `ClinicEz.Clinic.Api/Controllers/CustomFieldsController.cs`
+- Tests: `services/clinic-api/ClinicEz.Clinic.Application.Tests/TenantCustomFieldsAndVerificationTests.cs`
 
 ### Frontend (`apps/clinic-app/`)
-- Components: `components/roster/SlotPicker.tsx`, `components/roster/DoctorRosterCalendarModal.tsx`, `components/chart/ClinicalHistoryTab.tsx`, `components/chart/LifestyleSocialTab.tsx`, `components/chart/ReproductiveHealthTab.tsx`, `components/chart/CardiometabolicRiskTab.tsx`, `components/consultation/InlinePhysicalExamCard.tsx`
-- Navigation/Screens: `navigation/screens/Appointments.screen.tsx`, `navigation/screens/Patients.screen.tsx`, `navigation/screens/Consultations.screen.tsx`
+- Settings: `components/settings/CustomFieldsTab.tsx`, `components/settings/AddEditFieldModal.tsx`
+- Intake / Dynamic Rendering: `components/custom-fields/DynamicCustomFieldsRenderer.tsx`
+- Screens: `navigation/screens/Patients.screen.tsx`, `components/patient/EditPatientModal.tsx`
 - Services: `services/clinicService.ts`
+- Tests: `tests/customFieldsTab.test.ts`, `tests/dynamicCustomFieldsRenderer.test.ts`
+
+### Portal Web (`apps/portal-web/`)
+- Intake: `src/app/student-intake/[tenantSlug]/StudentIntakeClient.tsx`

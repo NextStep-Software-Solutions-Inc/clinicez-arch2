@@ -170,7 +170,7 @@ export default function ExternalDocumentVaultTab({
                       </ThemedText>
                       <Badge label={att.recordType} variant="neutral" size="sm" />
                       {isCxr ? (
-                        <Badge label="lib_chestxray" variant="purple" size="sm" />
+                        <Badge label="Chest X-Ray" variant="purple" size="sm" />
                       ) : null}
                     </View>
                     <ThemedText variant="caption" color={theme.colors.textMuted}>
@@ -186,17 +186,17 @@ export default function ExternalDocumentVaultTab({
                   />
                 </View>
 
-                {/* Outside Chest X-Ray Statutory Mapping Box */}
+                {/* Outside Chest X-Ray Conformance Box */}
                 {isCxr ? (
                   <View style={styles.cxrStatutoryBox}>
                     <View style={styles.cxrStatutoryTop}>
                       <Icon name="scan" size={14} color={theme.colors.purpleText} />
                       <ThemedText variant="captionBold" color={theme.colors.purpleText}>
-                        PhilHealth Statutory Chest X-Ray Catalog Conformance
+                        PhilHealth Chest X-Ray Conformance
                       </ThemedText>
                     </View>
                     <ThemedText variant="caption" color={theme.colors.text}>
-                      Findings (lib_chestxray_findings): Code 1 (Essentially Normal) • Observation (lib_chestxray_observation): Code 99 (None / No acute infiltrate)
+                      Findings: Essentially Normal • Observation: No acute infiltrate
                     </ThemedText>
                   </View>
                 ) : null}

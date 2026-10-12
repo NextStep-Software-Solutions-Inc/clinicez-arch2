@@ -1,158 +1,173 @@
-# ClinicEZ E2E Testing Infrastructure (`TEST_INFRA.md`)
+# ClinicEZ Custom Metadata Engine — Test Infrastructure Specification (TEST_INFRA.md)
 
-## 1. Overview & Testing Philosophy
-
-ClinicEZ operates as a mission-critical clinical management platform and PhilHealth Konsulta EMR gateway. To guarantee clinical patient safety, data integrity, regulatory compliance (PhilHealth Yakap DTD v1.14, DOH, WHO Under-5 growth standards, PhilPEN CVD risk assessment), and robust multi-tenant scheduling, the testing framework enforces a **4-Tier Testing Hierarchy**.
-
-Every feature undergoes evaluation across:
-1. **Tier 1: Feature Coverage** — Primary happy path execution, command/query validation, domain rule verification, and explicit contract schemas (>=5 tests per feature).
-2. **Tier 2: Boundary & Corner Cases** — Edge conditions, extreme boundary values, empty/null handling, concurrent collision boundaries, statutory date fallbacks (`1900-01-01`), and defensive input sanitization (>=5 tests per feature).
-3. **Tier 3: Cross-Feature Interactions** — Pairwise and multi-module integration testing verifying cross-cutting transactional integrity, clinical decision support (CDS) interaction cascades, outbox synchronization, and transmittal aggregation (>=10 integration tests).
-4. **Tier 4: Real-World Clinical Scenarios** — End-to-end multi-step clinical workflows simulating realistic outpatient encounters from patient check-in to consultation, clinical decision alerts, vaccination, and final regulatory XML transmittal (>=5 comprehensive scenarios).
-
-### Core Testing Principles
-- **Genuine Logic Execution**: Zero dummy facades or hardcoded mock assertions. Tests exercise real computational logic, mathematical formulas (LMS Z-score calculation, PhilPEN 10-year risk tables), GiST exclusion range collision models, outbox transactional dispatch, and DTD v1.14 XML schemas.
-- **Progressive Testability & Isolation**: Tests are self-contained, idempotent, and isolated. Test state is initialized per test with clean domain fixtures.
-- **Statutory Regulatory Adherence**: Test assertions strictly mirror PhilHealth statutory catalogs (`lib_immchild`, `lib_immyoungw`, `lib_immpregw`, `lib_immelderly`, `OtherImm`, `lib_icd`, `lib_mdiseases`, `lib_ncdq`) and PhilHealth Yakap DTD v1.14 element sequencing (`TRANS`, `ENCOUNTER`, `DIAGNOSIS`, `MEDICATION`, etc.).
+**Document Version:** 1.0.0  
+**Target Milestone:** Dual-Track E2E Quality Assurance (Generic Entity Custom Metadata Engine)  
+**Applicable Services:** `apps/clinic-app`, `services/clinic-api`, `apps/portal-web`  
+**Authoritative Specifications:** `PROJECT.md`, `ORIGINAL_REQUEST.md` (## 2026-10-12T18:55:51Z)  
 
 ---
 
-## 2. Feature Inventory Matrix (Features 1 – 27)
+## 1. Executive Summary & Testing Philosophy
 
-The comprehensive E2E test suite spans all 27 features inventoried across Milestones M1 through M6:
+The ClinicEZ Generic Entity Custom Metadata Engine provides a dynamic, tenant-scoped, and schema-flexible mechanism for clinical administrators to define custom questions, enforce conditional visibility rules, orchestrate cascading select dropdowns, and install pre-built template bundles across all patient intake, registration, and chart workflows.
 
-| # | Feature Name | Milestone | Tier 1 Tests | Tier 2 Tests | Primary Test Suites | Key Verifications |
-|---|--------------|-----------|:------------:|:------------:|---------------------|-------------------|
-| 1 | Doctor Schedule Template Management | M1 | 5 | 5 | `Tier1_DoctorSchedulingTests.cs`<br>`Tier2_DoctorSchedulingBoundaryTests.cs` | Recurring weekly schedules, active date windows, day-of-week validation, duplicate day collision prevention. |
-| 2 | Shift Breaks Configuration | M1 | 5 | 5 | `Tier1_DoctorSchedulingTests.cs`<br>`Tier2_DoctorSchedulingBoundaryTests.cs` | Multiple intra-shift breaks, sub-hour breaks, break window subtraction, slot exclusion during lunch/coffee breaks. |
-| 3 | Doctor Leave Management | M1 | 5 | 5 | `Tier1_DoctorSchedulingTests.cs`<br>`Tier2_DoctorSchedulingBoundaryTests.cs` | Full-day leaves, partial-day emergency leaves, overlapping leave rejection, past leave boundaries. |
-| 4 | Slot Availability Calculation Engine | M1 | 5 | 5 | `Tier1_DoctorSchedulingTests.cs`<br>`Tier2_DoctorSchedulingBoundaryTests.cs` | Dynamic slot generation (15/30/60m), break subtraction, leave blocking, already-booked slot exclusion. |
-| 5 | Postgres GiST Exclusion Collision Prevention | M1 | 5 | 5 | `Tier1_DoctorSchedulingTests.cs`<br>`Tier2_DoctorSchedulingBoundaryTests.cs` | `tsrange` overlapping collision detection, exact-boundary adjacency (`10:30-11:00` next to `11:00-11:30`), SQLSTATE `23P01` mapping. |
-| 6 | SlotPicker Frontend UX Contract | M1 | 5 | 5 | `Tier1_DoctorSchedulingTests.cs`<br>`Tier2_DoctorSchedulingBoundaryTests.cs` | Slot status payload (`Available`, `Booked`, `LeaveBlocked`), timezone normalization, rapid slot re-querying. |
-| 7 | Structured Surgical History | M2 | 5 | 5 | `Tier1_RelationalProfilingVitalsTests.cs`<br>`Tier2_RelationalProfilingVitalsBoundaryTests.cs` | Procedure name, year/date, hospital/institution, complications, relational aggregation. |
-| 8 | Structured Social History | M2 | 5 | 5 | `Tier1_RelationalProfilingVitalsTests.cs`<br>`Tier2_RelationalProfilingVitalsBoundaryTests.cs` | Tobacco smoking (pack-years, packs/day), alcohol consumption, illicit substance screening, occupational exposures. |
-| 9 | Structured Reproductive History | M2 | 5 | 5 | `Tier1_RelationalProfilingVitalsTests.cs`<br>`Tier2_RelationalProfilingVitalsBoundaryTests.cs` | Menarche age, LMP, gravidity, parity, abortion, living children (`G-P-A-L`), menopause, sex applicability check. |
-| 10 | Profile Navigation UX (Modal Deprecation) | M2 | 5 | 5 | `Tier1_RelationalProfilingVitalsTests.cs`<br>`Tier2_RelationalProfilingVitalsBoundaryTests.cs` | Native tabbed sub-views replacing modals, deep-linkable URLs, unsaved edit state preservation. |
-| 11 | Extended Triage Vitals | M2 | 5 | 5 | `Tier1_RelationalProfilingVitalsTests.cs`<br>`Tier2_RelationalProfilingVitalsBoundaryTests.cs` | Respiratory rate (RR), Snellen visual acuity (OD/OS/OU), oxygen saturation (SpO2), systolic/diastolic blood pressure. |
-| 12 | Under-5 WHO Z-Score Growth Calculator | M2 | 5 | 5 | `Tier1_RelationalProfilingVitalsTests.cs`<br>`Tier2_RelationalProfilingVitalsBoundaryTests.cs` | Weight-for-Age, Length/Height-for-Age, Weight-for-Length/Height Z-scores, WHO LMS reference tables, 0–60 month boundary. |
-| 13 | Vitals Input Typo Sanitizer | M2 | 5 | 5 | `Tier1_RelationalProfilingVitalsTests.cs`<br>`Tier2_RelationalProfilingVitalsBoundaryTests.cs` | Double-dot decimal correction (`7..9` -> `7.9`), non-numeric stripping, range capping (temperatures 30–45°C, pulse 20–300 bpm). |
-| 14 | Dual-Mode Consultation Ergonomics | M3 | 5 | 5 | `Tier1_ConsultationErgonomicsTests.cs`<br>`Tier2_ConsultationErgonomicsBoundaryTests.cs` | Fast-track acute mode vs comprehensive chronic mode, keyboard shortcut persistence, section collapse/expand. |
-| 15 | 1-Click 9-System Physical Exam Card | M3 | 5 | 5 | `Tier1_ConsultationErgonomicsTests.cs`<br>`Tier2_ConsultationErgonomicsBoundaryTests.cs` | "Mark All Normal" default populator across all 9 PhilHealth organ systems (Skin, HEENT, Chest, Heart, Abdomen, Neuro, Rectal, GU, Musculoskeletal), abnormal finding overrides with remarks. |
-| 16 | Doctor PhilHealth Accreditation (PAN) Snapshot | M3 | 5 | 5 | `Tier1_ConsultationErgonomicsTests.cs`<br>`Tier2_ConsultationErgonomicsBoundaryTests.cs` | Immutable consultation-level snapshotting of Doctor's Accreditation Number (`PAN`), validity window check, historical immutability. |
-| 17 | Statutory Key Auto-Generation | M3 | 5 | 5 | `Tier1_ConsultationErgonomicsTests.cs`<br>`Tier2_ConsultationErgonomicsBoundaryTests.cs` | Deterministic PhilHealth transmittal keys (`pHciCaseNo`, `pHciTransNo`, `pSoapTransNo`) formatting and rollover validation. |
-| 18 | Immunization Lot & Expiry Batch Tracking | M4 | 5 | 5 | `Tier1_ImmunizationOutboxTests.cs`<br>`Tier2_ImmunizationOutboxBoundaryTests.cs` | Batch/lot number, manufacturer, vial expiry date verification, expired batch rejection for point-of-care administration. |
-| 19 | Statutory Vaccine Catalogs Integration | M4 | 5 | 5 | `Tier1_ImmunizationOutboxTests.cs`<br>`Tier2_ImmunizationOutboxBoundaryTests.cs` | Strict category mapping across PhilHealth statutory libraries: `lib_immchild`, `lib_immyoungw`, `lib_immpregw`, `lib_immelderly`. |
-| 20 | Non-Standard Vaccine Fallback (Code 999) | M4 | 5 | 5 | `Tier1_ImmunizationOutboxTests.cs`<br>`Tier2_ImmunizationOutboxBoundaryTests.cs` | PhilHealth statutory fallback code `999` with mandatory non-empty `OtherImm` descriptive brand name. |
-| 21 | Transactional Outbox Pattern for Immunization | M4 | 5 | 5 | `Tier1_ImmunizationOutboxTests.cs`<br>`Tier2_ImmunizationOutboxBoundaryTests.cs` | Atomicity of vaccine administration and outbox record (`clinical.immunization.administered`), GUID envelope idempotency, retry safety. |
-| 22 | Structured Problem List Management | M5 | 5 | 5 | `Tier1_ProblemsAllergiesCdsPhilPenTests.cs`<br>`Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests.cs` | ICD-10 diagnosis coding, active/resolved/chronic status, clinical onset date, chronicity progression. |
-| 23 | Structured Allergies & Adverse Reactions | M5 | 5 | 5 | `Tier1_ProblemsAllergiesCdsPhilPenTests.cs`<br>`Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests.cs` | Substance classification, reaction severity (`Mild`, `Moderate`, `Severe`, `Anaphylaxis`), verification status (`Confirmed`, `Suspected`). |
-| 24 | Enhanced Clinical Decision Support (CDS) Rules | M5 | 5 | 5 | `Tier1_ProblemsAllergiesCdsPhilPenTests.cs`<br>`Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests.cs` | Cross-reactivity alerts (Penicillin <-> Cephalosporin), Drug-Disease contraindications (NSAID with Ulcer/CKD), severity overrides. |
-| 25 | PhilPEN 24-Question CVD Risk Assessment | M5 | 5 | 5 | `Tier1_ProblemsAllergiesCdsPhilPenTests.cs`<br>`Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests.cs` | 24-question survey parsing, WHO/ISH 10-year CVD risk score calculation (Bands A: <10%, B: 10-<20%, C: 20-<30%, D: 30-<40%, E: >=40%), SBP crisis override (>180 mmHg). |
-| 26 | Relational PhilHealth Yakap Transmittal Aggregator | M6 | 5 | 5 | `Tier1_YakapTransmittalDtdTests.cs`<br>`Tier2_YakapTransmittalDtdBoundaryTests.cs` | Multi-encounter aggregation, relational joining of patient, vitals, consultation, diagnosis, medication, and immunization. |
-| 27 | PhilHealth DTD v1.14 Schema Validation | M6 | 5 | 5 | `Tier1_YakapTransmittalDtdTests.cs`<br>`Tier2_YakapTransmittalDtdBoundaryTests.cs` | Element order compliance (`TRANS` -> `ENCOUNTER` -> `DIAGNOSIS` -> `MEDICATION`), mandatory attribute verification, XML entity escaping. |
+To assure absolute system integrity without coupling tests to implementation internals, the Quality Assurance track employs a **Dual-Track, Requirement-Driven, Opaque-Box Testing Strategy** founded on a **4-Tier Testing Methodology** (with Tier 5 Adversarial Hardening):
 
-**Total Tier 1 Tests**: 135  
-**Total Tier 2 Tests**: 135  
-**Total Tier 3 Tests**: 10  
-**Total Tier 4 Tests**: 5  
-**Grand Total E2E Tests**: **285 Tests** (100% Pass Rate)
+1. **Opaque-Box Verification:** Tests assert strictly against public API contracts, DOM/React-Native behavioral events, and CQRS request/response boundaries. Tests never access private variables or internal implementation details.
+2. **Deterministic Output Derivation:** Every expected outcome is directly derived from the documented specifications in `PROJECT.md` and `ORIGINAL_REQUEST.md`.
+3. **Progressive Testability:** Suites are engineered to validate interface contracts cleanly, enabling independent execution across frontend (`bun test`) and backend (`dotnet test`).
+4. **Zero Regressions & Escaping Integrity:** Full verification across boundary conditions, cross-tenant isolation, Unicode/escaping fidelity, and malformed inputs.
 
 ---
 
-## 3. Directory Layout & Architecture
-
-The E2E test framework resides within `services/clinic-api/ClinicEz.Clinic.Application.Tests/E2E/`:
+## 2. 4-Tier (+ Tier 5) Testing Methodology
 
 ```
-services/clinic-api/ClinicEz.Clinic.Application.Tests/E2E/
-├── Fixtures/
-│   ├── E2EContracts.cs                  # Common domain transfer objects and contract definitions
-│   └── E2ETestHarness.cs                # Deterministic calculation engines, validators, and rules
-├── Tier1_FeatureCoverage/
-│   ├── Tier1_DoctorSchedulingTests.cs            # Features 1–6 (30 tests)
-│   ├── Tier1_RelationalProfilingVitalsTests.cs    # Features 7–13 (35 tests)
-│   ├── Tier1_ConsultationErgonomicsTests.cs      # Features 14–17 (20 tests)
-│   ├── Tier1_ImmunizationOutboxTests.cs          # Features 18–21 (20 tests)
-│   ├── Tier1_ProblemsAllergiesCdsPhilPenTests.cs  # Features 22–25 (20 tests)
-│   └── Tier1_YakapTransmittalDtdTests.cs         # Features 26–27 (10 tests)
-├── Tier2_BoundaryAndCornerCases/
-│   ├── Tier2_DoctorSchedulingBoundaryTests.cs    # Features 1–6 (30 tests)
-│   ├── Tier2_RelationalProfilingVitalsBoundaryTests.cs # Features 7–13 (35 tests)
-│   ├── Tier2_ConsultationErgonomicsBoundaryTests.cs    # Features 14–17 (20 tests)
-│   ├── Tier2_ImmunizationOutboxBoundaryTests.cs  # Features 18–21 (20 tests)
-│   ├── Tier2_ProblemsAllergiesCdsPhilPenBoundaryTests.cs # Features 22–25 (20 tests)
-│   └── Tier2_YakapTransmittalDtdBoundaryTests.cs # Features 26–27 (10 tests)
-├── Tier3_CrossFeatureInteractions/
-│   └── Tier3_CrossFeatureInteractionTests.cs     # Cross-feature pairwise integrations (10 tests)
-└── Tier4_RealWorldClinicalScenarios/
-    └── Tier4_RealWorldClinicalScenarioTests.cs   # End-to-end clinical workflow scenarios (5 tests)
+┌────────────────────────────────────────────────────────────────────────┐
+│             Tier 5: Adversarial Hardening & Security Stress             │
+│   (JSON injection, cyclicity detection, extreme payload stress, tokens) │
+├────────────────────────────────────────────────────────────────────────┤
+│             Tier 4: Real-World Clinical & Educational Scenarios        │
+│   (USTP Student Onboarding, Corporate Health Exam, Specialty OB-GYN)   │
+├────────────────────────────────────────────────────────────────────────┤
+│             Tier 3: Cross-Feature Integration & Cascade Chains         │
+│   (Reordering -> Rendering -> Visibility -> Cascading -> Sanitization)  │
+├────────────────────────────────────────────────────────────────────────┤
+│             Tier 2: Boundary & Corner Cases (>= 5 per Feature)         │
+│   (Nulls, empty strings, max lengths, missing parent keys, rapid taps) │
+├────────────────────────────────────────────────────────────────────────┤
+│             Tier 1: Feature Coverage (>= 5 per Feature)                │
+│   (Primary happy-path behavioral verification for Features 1 through 19)│
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
+### Tier 1: Feature Coverage (>= 5 Tests per Feature)
+- Verifies the foundational happy path and contractual obligations of each feature.
+- Guarantees minimum 5 distinct tests per feature across all 19 defined features ($\ge 95$ core unit/integration tests).
+
+### Tier 2: Boundary, Extreme & Corner Cases (>= 5 Tests per Feature)
+- Validates system resilience at boundaries: zero items, single item, maximum string lengths, special symbols, whitespace trimming, missing parents, unknown operators.
+- Guarantees minimum 5 distinct tests per feature across all 19 defined features ($\ge 95$ boundary tests).
+
+### Tier 3: Cross-Feature Interactions
+- Tests multi-stage interactions where the output or state of one feature drives another:
+  - Sequence reordering in Settings immediately alters question rendering order in Patient Registration.
+  - Toggling a parent visibility condition dynamically shows child fields while evaluating child cascading options.
+  - Hiding a parent field cascades into hiding dependent fields, triggering automatic value reset and payload sanitization.
+  - Template bundle installation automatically seeds custom fields, updates order, and configures cascading dependencies.
+
+### Tier 4: Real-World Application Scenarios
+- End-to-end journey tests simulating realistic organizational deployments:
+  - **Scenario A (University USTP Onboarding):** Intake of 1,000 freshmen students with student ID, college selection, dynamic program choices, and dorm allocation.
+  - **Scenario B (Corporate Health Annual Exam):** Employee occupational checkup toggling employment types (Regular, Probationary, Contractor) and dynamic HMO details.
+  - **Scenario C (Demographic & Clinical Specialty):** General clinical registration with conditional marital/spousal rules and age-based pediatric/geriatric flags.
+  - **Scenario D (Clinic Admin Hot-Reloading):** Admin creates a mandatory field, reorders to the top, installs template, and verifies patient registration reflects it immediately.
+
+### Tier 5: Adversarial Hardening & Integrity Guarding
+- Fuzz testing and adversarial attack vectors:
+  - Malformed or corrupted `VisibilityRuleJson` and `ConditionalOptionsJson`.
+  - Infinite circular visibility loops (Field A depends on Field B, which depends on Field A).
+  - Malicious script or format strings in field labels, machine keys, and option items.
+  - Memory and layout stability under 1,000 select dropdown options.
+  - Strict design token enforcement (`@clinicez/design-tokens`, zero raw hex codes).
+
 ---
 
-## 4. Test Harness & Domain Calculators (`E2ETestHarness.cs`)
+## 3. Feature Traceability & Coverage Matrix
 
-To ensure realistic and reproducible testing without brittle mock dependencies, `E2ETestHarness.cs` provides verified reference algorithms:
-
-1. **`CalculateAvailableSlots` & `HasGiSTCollision`**:
-   - Emulates PostgreSQL `tsrange` exclusion constraints (`[start, end)` half-open intervals).
-   - Generates exact slot intervals based on doctor weekly templates, removes scheduled breaks, and flags existing bookings and approved leaves.
-2. **`CalculateZScore`**:
-   - Implements the Box-Cox Power Exponential (LMS) algorithm based on WHO Under-5 reference data:
-     $$Z = \frac{(\frac{y}{M})^L - 1}{L \times S}$$
-   - Evaluates Weight-for-Age, Length/Height-for-Age, and Weight-for-Length/Height for children aged 0 to 60 months.
-3. **`SanitizeVitalsInput`**:
-   - Cleans erroneous keystrokes (e.g. `7..9` -> `7.9`) and enforces physiological boundary sanity checks.
-4. **`CalculatePhilPenRisk`**:
-   - Western Pacific Region B risk chart algorithm evaluating age, gender, smoking status, systolic blood pressure, total cholesterol, or BMI fallback.
-   - Assigns CVD risk bands (Band A through Band E) and applies emergency clinical overrides when SBP >= 180 mmHg or DBP >= 110 mmHg.
-5. **`EvaluateCdsRules`**:
-   - Evaluates drug-allergy cross-reactivities (e.g., Penicillins with Cephalosporins) and drug-disease contraindications (e.g., NSAIDs with Peptic Ulcer Disease or Chronic Kidney Disease).
-6. **`ValidateYakapDtdXml`**:
-   - Inspects XML transmittal structure against PhilHealth Yakap DTD v1.14 element ordering, statutory key formatting (`pHciCaseNo`, `pHciTransNo`, `pSoapTransNo`), and escaping of XML control characters.
+| Feature ID | Feature Name | Test Suite Location | Tier 1 (Min 5) | Tier 2 (Min 5) | Tier 3 (Cross) | Tier 4/5 | Total Tests |
+|---|---|---|---|---|---|---|---|
+| **F1** | CustomField Schema & EF Core Model | `CustomFieldsE2ETests.cs` | 5 | 5 | Yes | Yes | 12 |
+| **F2** | CQRS CustomField CRUD & Query | `CustomFieldsE2ETests.cs` | 5 | 5 | Yes | Yes | 14 |
+| **F3** | Bulk Reorder Custom Fields Endpoint | `CustomFieldsE2ETests.cs` | 5 | 5 | Yes | Yes | 12 |
+| **F4** | Template Catalog & Install Backend | `CustomFieldsE2ETests.cs` | 5 | 5 | Yes | Yes | 12 |
+| **F5** | Admin Mandatory Toggle & Badges | `customFieldsTab.test.ts` | 5 | 5 | Yes | Yes | 14 |
+| **F6** | Admin Move Up/Down Sequence Controls | `customFieldsTab.test.ts` | 5 | 5 | Yes | Yes | 14 |
+| **F7** | Live Visibility Condition Rule Builder | `customFieldsTab.test.ts` | 5 | 5 | Yes | Yes | 15 |
+| **F8** | Cascading Dropdown Options Mapper | `customFieldsTab.test.ts` | 5 | 5 | Yes | Yes | 15 |
+| **F9** | 1-Click Suggested Templates Library UI | `customFieldsTab.test.ts` | 5 | 5 | Yes | Yes | 14 |
+| **F10** | Reusable DynamicCustomFieldsRenderer | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 16 |
+| **F11** | Dynamic Visibility Evaluation Engine | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 18 |
+| **F12** | Cascading Select Choices Engine | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 16 |
+| **F13** | Defensive Submission Validation | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 14 |
+| **F14** | Hidden Field Value Sanitization | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 14 |
+| **F15** | Patient Registration Integration | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 12 |
+| **F16** | Patient Demographic Edit Integration | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 12 |
+| **F17** | Patient Chart View Integration | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 10 |
+| **F18** | Public Student Intake Cascading | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 12 |
+| **F19** | UI/UX Design System Compliance | `customFieldsTab.test.ts`, `tokens.test.ts` | 5 | 5 | Yes | Yes | 14 |
+| **Total** | **All 19 Features** | **Frontend + Backend Suites** | **95** | **95** | **18** | **30** | **238+** |
 
 ---
 
-## 5. Execution Commands & Runner Instructions
+## 4. Test Suite Implementation Blueprint
 
-### Run Only E2E Test Suites
+### 4.1 Frontend Settings & Template Management (`apps/clinic-app/tests/customFieldsTab.test.ts`)
+- **Target Component:** `components/settings/CustomFieldsTab.tsx`, `components/settings/AddEditFieldModal.tsx`
+- **Scope:**
+  - Feature 5: Mandatory toggle in Add/Edit modal, `Required` (emergency badge) vs `Optional` (neutral badge) in list.
+  - Feature 6: Move Up and Move Down buttons with touch targets $\ge 44\text{px}$, boundary guards at index 0 and index $N-1$, bulk reorder API dispatch.
+  - Feature 7: Rule builder form binding parent field, operator (`equals`, `not_equals`, `in`, `contains`, `not_empty`), target value, and generating `VisibilityRuleJson`.
+  - Feature 8: Cascading options mapper mapping parent values to child array choices, fallback handling, generating `ConditionalOptionsJson`.
+  - Feature 9: 1-Click Template presets toolbar (USTP, Workplace, Demographics), modal confirmation, installation dispatch, list refresh.
+  - Feature 19: Four core UX states (SkeletonList loading, EmptyState when 0 fields, ErrorState with retry, active cards with badges).
+
+### 4.2 Frontend Dynamic Intake & Rendering Engine (`apps/clinic-app/tests/dynamicCustomFieldsRenderer.test.ts`)
+- **Target Component:** `components/custom-fields/DynamicCustomFieldsRenderer.tsx`, Integration in `Patients.screen.tsx`, `EditPatientModal.tsx`
+- **Scope:**
+  - Feature 10: Deterministic rendering sorted by `DisplayOrder`, red asterisk `*` for `isRequired: true`, input widgets for Text, Number, Date (`ValidatedDateInput`), Boolean, and Select.
+  - Feature 11: Visibility engine evaluating static patient properties (`gender`, `civilStatus`, `dateOfBirth`) and custom fields (`affiliation == 'Student'`), supporting all 5 comparison operators.
+  - Feature 12: Cascading choices engine deriving available choices from parent selections, clearing stale child choices if invalid under new parent.
+  - Feature 13: Submission validation requiring visible mandatory fields to have non-empty values; hidden mandatory fields bypass validation.
+  - Feature 14: Hidden field value sanitization stripping invisible keys from output payload before submission.
+  - Feature 15 & 16: Registration and Demographic Edit workflows with custom fields dictionary persistence.
+  - Feature 18: Public Student Intake cascading workflow (College -> Program).
+
+### 4.3 Backend Application & CQRS E2E Suite (`services/clinic-api/ClinicEz.Clinic.Application.Tests/CustomFieldsE2ETests.cs`)
+- **Target Layer:** `ClinicEz.Clinic.Application`, `ClinicEz.Clinic.Domain`
+- **Scope:**
+  - Feature 1 & 2: Entity definition, CRUD operations, query deterministic sorting by `DisplayOrder` then `Label`, category filtering.
+  - Feature 3: Bulk reordering persistence, verifying new display order indexes and retrieval consistency.
+  - Feature 4: Preset bundle validation (USTP, Workplace, Demographics) with strongly-typed field definitions and rules.
+  - Feature 15 & 16: Patient entity persistence with dynamic `CustomFields` dictionary, multi-tenant isolation, and bulk patient registration.
+
+---
+
+## 5. Test Execution Protocols
+
+### 5.1 Frontend Test Execution
 ```bash
-dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~E2E"
+# Run Settings & Template Management tests
+bun test apps/clinic-app/tests/customFieldsTab.test.ts
+
+# Run Dynamic Intake & Rendering Engine tests
+bun test apps/clinic-app/tests/dynamicCustomFieldsRenderer.test.ts
+
+# Run all clinic-app automated tests
+bun test apps/clinic-app/tests
+
+# Verify Design Token Compliance
+node apps/clinic-app/scripts/check-tokens.mjs --strict
 ```
 
-### Run by Specific Tier
+### 5.2 Backend Test Execution
 ```bash
-# Tier 1: Feature Coverage (135 tests)
-dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Tier1"
+# Run Custom Fields Backend E2E Suite
+dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~CustomFields"
 
-# Tier 2: Boundary & Corner Cases (135 tests)
-dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Tier2"
-
-# Tier 3: Cross-Feature Interactions (10 tests)
-dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Tier3"
-
-# Tier 4: Real-World Clinical Scenarios (5 tests)
-dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Tier4"
-```
-
-### Run Complete Solution Test Suite
-```bash
-# Clinic Application Suite (867 tests)
+# Run all Clinic Application Tests
 dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj
-
-# PhilHealth Proxy Suite (126 tests)
-dotnet test services/philhealth-proxy/ClinicEz.PhilHealthProxy.Application.Tests/ClinicEz.PhilHealthProxy.Application.Tests.csproj
 ```
 
 ---
 
-## 6. Coverage Thresholds & Quality Metrics
+## 6. Defect Escalation & QA Protocol
 
-- **Required Pass Rate**: **100.0%** (Zero failing or skipped tests permitted).
-- **Test Count Requirement**:
-  - Minimum 5 Tier 1 tests per feature $\times$ 27 features = 135 tests.
-  - Minimum 5 Tier 2 tests per feature $\times$ 27 features = 135 tests.
-  - Minimum 10 Tier 3 cross-feature interaction tests.
-  - Minimum 5 Tier 4 realistic patient clinical journey tests.
-  - **Actual Realized**: **285 E2E Tests Passing**.
-- **Assertion Strictness**: All tests assert actual calculation results, status codes, object invariants, and schema validity.
+When test execution detects an anomaly:
+1. **Test Defect vs Implementation Defect Assessment:**
+   - If the test expectation deviates from `PROJECT.md` or `ORIGINAL_REQUEST.md`, correct the test.
+   - If the implementation violates documented specifications, escalate immediately to the implementing agent. Never modify implementation code from the QA/Test Writer role.
+2. **Document in Handoff Report:**
+   - Record exact observation (command, exit code, line number, verbatim stack trace).
+   - Document logic chain and discrepancy against specification.
+   - Propose actionable remediation for the developer agent.

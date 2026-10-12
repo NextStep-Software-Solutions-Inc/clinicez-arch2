@@ -277,17 +277,15 @@ export default function DiagnosticLabTab({
                   </View>
                 </View>
 
-                {/* Test Items & PhilHealth lib_diagnostic Statutory Code */}
+                {/* Test Items */}
                 <View style={styles.itemsBlock}>
                   <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                    Ordered Diagnostics (Mapped to PhilHealth lib_diagnostic):
+                    Ordered Diagnostics:
                   </ThemedText>
                   <View style={styles.testChipsRow}>
                     {(order.items || []).map((item: any) => {
-                      const stat = lookupStatutoryDiagnosticCode(item.testName);
                       return (
                         <View key={item.id || item.testName} style={styles.testChip}>
-                          <Badge label={`Code ${stat.code}`} variant="purple" size="sm" />
                           <ThemedText variant="captionBold" color={theme.colors.text}>
                             {item.testName}
                           </ThemedText>

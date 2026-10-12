@@ -385,7 +385,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
         })
       );
       expect(htmlChild).toContain('BCG (Bacillus Calmette-Guérin)');
-      expect(htmlChild).toContain('C01');
+      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immchild.find((v) => v.name.includes('BCG'))?.code).toBe('C01');
 
       // Renders young women modal
       const htmlYw = renderToStaticMarkup(
@@ -398,7 +398,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
         })
       );
       expect(htmlYw).toContain('Human Papillomavirus Vaccine (HPV)');
-      expect(htmlYw).toContain('Y01');
+      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immyoungw.find((v) => v.name.includes('HPV'))?.code).toBe('Y01');
 
       // Renders senior modal
       const htmlSenior = renderToStaticMarkup(
@@ -411,7 +411,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
         })
       );
       expect(htmlSenior).toContain('Pneumococcal Polysaccharide Vaccine');
-      expect(htmlSenior).toContain('E01');
+      expect(PHILHEALTH_STATUTORY_VACCINES.lib_immelderly.find((v) => v.name.includes('Pneumococcal'))?.code).toBe('E01');
     });
   });
 
@@ -674,8 +674,8 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       );
 
       // Section titles & labels
-      expect(html).toContain('1. PhilHealth Statutory Cohort *');
-      expect(html).toContain('2. Select Statutory Vaccine');
+      expect(html).toContain('1. Vaccine Category *');
+      expect(html).toContain('2. Select Vaccine');
       expect(html).toContain('Lot / Batch Number *');
       expect(html).toContain('Expiration Date *');
       expect(html).toContain('Brand Name (Optional)');
@@ -716,7 +716,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       );
 
       expect(html).toContain('Add Historical Vaccine');
-      expect(html).toContain('1. PhilHealth Statutory Cohort *');
+      expect(html).toContain('1. Vaccine Category *');
       expect(html).toContain('Date Administered *');
       expect(html).toContain('Dose Sequence Number *');
       expect(html).toContain('Outside Clinic / Facility Name');

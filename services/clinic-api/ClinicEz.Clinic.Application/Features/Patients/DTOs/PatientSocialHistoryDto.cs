@@ -22,7 +22,9 @@ public sealed record PatientSocialHistoryDto(
     int? CoitarcheAge,
     string? PhysicalActivityFrequency,
     string? DietaryHabits,
-    string? Remarks);
+    string? Remarks,
+    string? SmokingStatus = null,
+    string? AlcoholStatus = null);
 
 public sealed record UpdatePatientSocialHistoryRequest(
     bool IsSmoker,
@@ -42,4 +44,7 @@ public sealed record UpdatePatientSocialHistoryRequest(
     int? CoitarcheAge = null,
     string? PhysicalActivityFrequency = null,
     string? DietaryHabits = null,
-    string? Remarks = null);
+    string? Remarks = null,
+    string? SmokingStatus = null,
+    string? AlcoholStatus = null);
+

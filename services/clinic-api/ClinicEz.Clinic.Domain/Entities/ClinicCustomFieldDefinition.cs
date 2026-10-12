@@ -49,4 +49,30 @@ public sealed class ClinicCustomFieldDefinition : BaseEntity
 
     public string? Placeholder { get; set; }
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// JSON structure defining dynamic visibility rules based on static entity fields or preceding custom fields.
+    /// Format:
+    /// {
+    ///   "source": "custom_field", // or "static"
+    ///   "field": "affiliation",    // or "gender", "civilStatus", "dateOfBirth"
+    ///   "operator": "equals",      // "equals", "not_equals", "in", "contains", "not_empty"
+    ///   "value": "Student"
+    /// }
+    /// </summary>
+    public string? VisibilityRuleJson { get; set; }
+
+    /// <summary>
+    /// JSON structure defining cascading/dependent select options based on parent field selection.
+    /// Format:
+    /// {
+    ///   "parentField": "college",
+    ///   "mapping": {
+    ///     "College of Engineering": ["BS Civil Engineering", "BS Mechanical Engineering"],
+    ///     "College of Information Technology": ["BS Computer Science", "BS Information Technology"]
+    ///   },
+    ///   "defaultOptions": []
+    /// }
+    /// </summary>
+    public string? ConditionalOptionsJson { get; set; }
 }

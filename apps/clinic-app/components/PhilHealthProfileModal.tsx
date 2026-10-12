@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
-import { Modal, Input, Button, Badge, Icon, ErrorState, SkeletonList, ThemedText } from '@ui';
+import { Modal, Input, Button, Badge, Icon, ErrorState, SkeletonList, ThemedText, ValidatedDateInput, validateDateString } from '@ui';
 import { Alert } from '@utils/feedback';
 import { usePhilHealthCatalog } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthLibraryName } from '@services/philHealthCatalogService';
@@ -11,6 +11,11 @@ import {
   PhilHealthConditionEntry,
   ClinicPatient,
 } from '../services/clinicService';
+import {
+  PHYSICAL_ACTIVITY_OPTIONS,
+  DIETARY_HABIT_OPTIONS,
+  ALCOHOL_FREQUENCY_OPTIONS,
+} from './chart/LifestyleSocialTab';
 
 interface PhilHealthProfileModalProps {
   visible: boolean;
@@ -26,7 +31,7 @@ const TABS: { key: TabType; label: string }[] = [
   { key: 'medical', label: 'Medical and family' },
   { key: 'lifestyle', label: 'Social and vaccines' },
   { key: 'reproductive', label: "Women's health" },
-  { key: 'ncd', label: 'PhilPEN (24)' },
+  { key: 'ncd', label: 'Cardiometabolic risk' },
 ];
 
 type ChipTone = 'primary' | 'success' | 'warning';
@@ -272,7 +277,7 @@ function NcdQuestionnaire({
         return (
           <View key={item.code} style={styles.ncdRow}>
             <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.ncdText}>
-              {`${item.code}: ${item.description}`}
+              {item.description}
             </ThemedText>
             <View style={styles.chipRow}>
               {ncdAnswerOptions(item.code).map((option) => (
@@ -302,6 +307,7 @@ export default function PhilHealthProfileModal({
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [profile, setProfile] = useState<PhilHealthPatientProfile | null>(null);
+  const [showAllVaccines, setShowAllVaccines] = useState(false);
 
   const isFemale = patient?.gender?.toLowerCase().startsWith('f') ?? false;
   const age = patient?.age ?? 0;
@@ -310,6 +316,7 @@ export default function PhilHealthProfileModal({
 
   useEffect(() => {
     if (visible && patient) {
+      setShowAllVaccines(false);
       loadProfile(patient.id);
     }
   }, [visible, patient]);
@@ -356,9 +363,35 @@ export default function PhilHealthProfileModal({
       }
     }
 
+    const smkStatus = (profile.smokingStatus?.toLowerCase() ||
+      (profile.smokingStoppedDate ? 'quit' : (profile.isSmoker ? 'current' : 'never'))) as 'never' | 'current' | 'quit';
+    const isSmoker = smkStatus === 'current';
+
+    if (smkStatus === 'quit' && profile.smokingStoppedDate && profile.smokingStoppedDate.trim()) {
+      const stopDateValidation = validateDateString(profile.smokingStoppedDate, { boundaryMode: 'pastOrToday' });
+      if (!stopDateValidation.isValid) {
+        Alert.alert('Invalid Date Stopped', stopDateValidation.errorMessage || 'Please enter a valid smoking cessation date not in the future.');
+        return;
+      }
+    }
+
+    const alcStatus = (profile.alcoholStatus?.toLowerCase() ||
+      (profile.alcoholFrequency?.toLowerCase() === 'quit' ? 'quit' : (profile.isAlcoholDrinker ? 'current' : 'never'))) as 'never' | 'current' | 'quit';
+    const isAlcoholDrinker = alcStatus === 'current';
+
+    const normalizedProfile: PhilHealthPatientProfile = {
+      ...profile,
+      isSmoker,
+      smokingStatus: smkStatus,
+      smokingStoppedDate: smkStatus === 'quit' && profile.smokingStoppedDate?.trim() ? profile.smokingStoppedDate.trim() : undefined,
+      isAlcoholDrinker,
+      alcoholStatus: alcStatus,
+      alcoholFrequency: alcStatus === 'quit' ? 'Quit' : (isAlcoholDrinker ? profile.alcoholFrequency : undefined),
+    };
+
     setSaving(true);
     try {
-      const [data, err] = await clinicService.updatePhilHealthPatientProfile(patient.id, profile);
+      const [data, err] = await clinicService.updatePhilHealthPatientProfile(patient.id, normalizedProfile);
       if (data) {
         Alert.alert('Success', 'PhilHealth patient profile saved.');
         onSaved?.(data);
@@ -686,7 +719,16 @@ export default function PhilHealthProfileModal({
         )}
 
         {/* TAB 3: Social and vaccines */}
-        {activeTab === 'lifestyle' && (
+        {activeTab === 'lifestyle' && (() => {
+          const currentSmk = (profile.smokingStatus?.toLowerCase() ||
+            (profile.smokingStoppedDate ? 'quit' : (profile.isSmoker ? 'current' : 'never'))) as 'never' | 'current' | 'quit';
+          const currentAlc = (profile.alcoholStatus?.toLowerCase() ||
+            (profile.alcoholFrequency?.toLowerCase() === 'quit' ? 'quit' : (profile.isAlcoholDrinker ? 'current' : 'never'))) as 'never' | 'current' | 'quit';
+          const calcPacks = parseFloat(profile.packsPerDay || '0') || 0;
+          const calcYears = parseFloat(profile.yearsSmoking || '0') || 0;
+          const packYears = calcPacks > 0 && calcYears > 0 ? (calcPacks * calcYears).toFixed(1) : '0';
+
+          return (
           <View>
             <SectionTitle>Social and behavioral history</SectionTitle>
             {isPediatric ? (
@@ -697,55 +739,398 @@ export default function PhilHealthProfileModal({
                 </ThemedText>
               </View>
             ) : (
-              <View style={styles.behavioralGrid}>
-                <View style={styles.behavioralRow}>
-                  <ThemedText variant="bodyBold" color={theme.colors.textSecondary}>
-                    Tobacco / cigarette smoker?
-                  </ThemedText>
-                  <YesNo value={!!profile.isSmoker} onChange={(v) => setProfile({ ...profile, isSmoker: v })} />
+              <View style={styles.behavioralSection}>
+                {/* Tobacco & Smoking */}
+                <View style={styles.behavioralCard}>
+                  <View style={styles.behavioralHeader}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      Tobacco & Smoking History
+                    </ThemedText>
+                    <Badge
+                      label={currentSmk === 'current' ? 'Current Smoker' : currentSmk === 'quit' ? 'Former Smoker (Quit)' : 'Non-Smoker'}
+                      variant={currentSmk === 'current' ? 'warning' : 'outline'}
+                    />
+                  </View>
+                  <View style={styles.chipRow}>
+                    <Chip
+                      label="Non-Smoker"
+                      active={currentSmk === 'never'}
+                      onPress={() => setProfile({
+                        ...profile,
+                        smokingStatus: 'never',
+                        isSmoker: false,
+                        smokingStoppedDate: undefined,
+                        packsPerDay: undefined,
+                        cigarettesPerDay: undefined,
+                        yearsSmoking: undefined,
+                        smokingPackYears: undefined,
+                      })}
+                    />
+                    <Chip
+                      label="Current Smoker"
+                      active={currentSmk === 'current'}
+                      tone="warning"
+                      onPress={() => setProfile({
+                        ...profile,
+                        smokingStatus: 'current',
+                        isSmoker: true,
+                        smokingStoppedDate: undefined,
+                      })}
+                    />
+                    <Chip
+                      label="Former Smoker (Quit)"
+                      active={currentSmk === 'quit'}
+                      tone="primary"
+                      onPress={() => setProfile({
+                        ...profile,
+                        smokingStatus: 'quit',
+                        isSmoker: false,
+                      })}
+                    />
+                  </View>
+
+                  {currentSmk === 'current' && (
+                    <View style={styles.conditionalForm}>
+                      <View style={styles.formRow}>
+                        <Input
+                          containerStyle={styles.fieldCol}
+                          label="Packs per Day"
+                          placeholder="e.g. 0.5 or 1"
+                          value={profile.packsPerDay || ''}
+                          onChangeText={(v) => {
+                            const p = parseFloat(v) || 0;
+                            setProfile({
+                              ...profile,
+                              packsPerDay: v,
+                              cigarettesPerDay: p > 0 ? String(Math.round(p * 20)) : undefined,
+                            });
+                          }}
+                          keyboardType="numeric"
+                        />
+                        <Input
+                          containerStyle={styles.fieldCol}
+                          label="Years Smoking"
+                          placeholder="e.g. 10"
+                          value={profile.yearsSmoking || ''}
+                          onChangeText={(v) => setProfile({ ...profile, yearsSmoking: v })}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      {calcPacks > 0 && calcYears > 0 && (
+                        <View style={styles.packYearsCallout}>
+                          <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                          <ThemedText variant="smallBold" color={theme.colors.primary}>
+                            Calculated Smoking Pack-Years: {packYears} pack-years
+                          </ThemedText>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {currentSmk === 'quit' && (
+                    <View style={styles.conditionalForm}>
+                      <ValidatedDateInput
+                        label="Date Stopped (Smoking Cessation Date)"
+                        placeholder="YYYY-MM-DD"
+                        value={profile.smokingStoppedDate || ''}
+                        onChangeText={(v) => setProfile({ ...profile, smokingStoppedDate: v })}
+                        boundaryMode="pastOrToday"
+                      />
+                      <View style={styles.formRow}>
+                        <Input
+                          containerStyle={styles.fieldCol}
+                          label="Prior Packs per Day (optional)"
+                          placeholder="e.g. 1"
+                          value={profile.packsPerDay || ''}
+                          onChangeText={(v) => setProfile({ ...profile, packsPerDay: v })}
+                          keyboardType="numeric"
+                        />
+                        <Input
+                          containerStyle={styles.fieldCol}
+                          label="Prior Years Smoking (optional)"
+                          placeholder="e.g. 5"
+                          value={profile.yearsSmoking || ''}
+                          onChangeText={(v) => setProfile({ ...profile, yearsSmoking: v })}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      {calcPacks > 0 && calcYears > 0 && (
+                        <View style={styles.packYearsCallout}>
+                          <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                          <ThemedText variant="smallBold" color={theme.colors.primary}>
+                            Calculated Cumulative Pack-Years: {packYears} pack-years
+                          </ThemedText>
+                        </View>
+                      )}
+                    </View>
+                  )}
                 </View>
 
-                <View style={styles.behavioralRow}>
-                  <ThemedText variant="bodyBold" color={theme.colors.textSecondary}>
-                    Alcohol drinker?
+                {/* Alcohol Consumption */}
+                <View style={styles.behavioralCard}>
+                  <View style={styles.behavioralHeader}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      Alcohol Consumption
+                    </ThemedText>
+                    <Badge
+                      label={currentAlc === 'current' ? 'Current Drinker' : currentAlc === 'quit' ? 'Former Drinker (Quit)' : 'Non-Drinker'}
+                      variant={currentAlc === 'current' ? 'warning' : 'outline'}
+                    />
+                  </View>
+                  <View style={styles.chipRow}>
+                    <Chip
+                      label="Non-Drinker"
+                      active={currentAlc === 'never'}
+                      onPress={() => setProfile({
+                        ...profile,
+                        alcoholStatus: 'never',
+                        isAlcoholDrinker: false,
+                        alcoholFrequency: undefined,
+                        bottlesPerDay: undefined,
+                        alcoholDrinksPerWeek: undefined,
+                      })}
+                    />
+                    <Chip
+                      label="Current Drinker"
+                      active={currentAlc === 'current'}
+                      tone="warning"
+                      onPress={() => setProfile({
+                        ...profile,
+                        alcoholStatus: 'current',
+                        isAlcoholDrinker: true,
+                        alcoholFrequency: profile.alcoholFrequency && profile.alcoholFrequency.toLowerCase() !== 'quit' ? profile.alcoholFrequency : 'Occasional / Social',
+                      })}
+                    />
+                    <Chip
+                      label="Former Drinker (Quit)"
+                      active={currentAlc === 'quit'}
+                      tone="primary"
+                      onPress={() => setProfile({
+                        ...profile,
+                        alcoholStatus: 'quit',
+                        isAlcoholDrinker: false,
+                        alcoholFrequency: 'Quit',
+                      })}
+                    />
+                  </View>
+
+                  {currentAlc === 'current' && (
+                    <View style={styles.conditionalForm}>
+                      <View style={styles.formRow}>
+                        <Input
+                          containerStyle={styles.fieldCol}
+                          label="Drinks per Week"
+                          placeholder="e.g. 3"
+                          value={profile.alcoholDrinksPerWeek || ''}
+                          onChangeText={(v) => setProfile({ ...profile, alcoholDrinksPerWeek: v })}
+                          keyboardType="numeric"
+                        />
+                        <Input
+                          containerStyle={styles.fieldCol}
+                          label="Bottles per Day"
+                          placeholder="e.g. 1"
+                          value={profile.bottlesPerDay || ''}
+                          onChangeText={(v) => setProfile({ ...profile, bottlesPerDay: v })}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <FieldLabel>Drinking Frequency</FieldLabel>
+                      <View style={styles.chipRow}>
+                        {ALCOHOL_FREQUENCY_OPTIONS.map((freq) => (
+                          <Chip
+                            key={freq}
+                            label={freq}
+                            active={profile.alcoholFrequency === freq}
+                            onPress={() => setProfile({ ...profile, alcoholFrequency: freq })}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {currentAlc === 'quit' && (
+                    <View style={styles.conditionalForm}>
+                      <ThemedText variant="small" color={theme.colors.textMuted}>
+                        Patient has ceased alcohol consumption (Former Drinker).
+                      </ThemedText>
+                    </View>
+                  )}
+                </View>
+
+                {/* Illicit Substance Use */}
+                <View style={styles.behavioralCard}>
+                  <View style={styles.behavioralRow}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      History of illicit substance or narcotic use?
+                    </ThemedText>
+                    <YesNo
+                      value={!!profile.illDrugUser}
+                      yesTone="warning"
+                      onChange={(v) => setProfile({ ...profile, illDrugUser: v })}
+                    />
+                  </View>
+                  {profile.illDrugUser && (
+                    <View style={styles.conditionalForm}>
+                      <Input
+                        label="Substance Types"
+                        placeholder="e.g. Methamphetamine, Cannabis, Opioids"
+                        value={profile.drugTypes || ''}
+                        onChangeText={(v) => setProfile({ ...profile, drugTypes: v })}
+                      />
+                      <Input
+                        label="Substance Use History / Treatment"
+                        placeholder="e.g. Past user, completed rehabilitation 2020"
+                        value={profile.substanceUseHistory || ''}
+                        onChangeText={(v) => setProfile({ ...profile, substanceUseHistory: v })}
+                      />
+                    </View>
+                  )}
+                </View>
+
+                {/* Sexual Activity */}
+                <View style={styles.behavioralCard}>
+                  <View style={styles.behavioralRow}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      Sexually active?
+                    </ThemedText>
+                    <YesNo
+                      value={!!profile.isSexuallyActive}
+                      onChange={(v) => setProfile({ ...profile, isSexuallyActive: v })}
+                    />
+                  </View>
+                  {profile.isSexuallyActive && (
+                    <View style={styles.conditionalForm}>
+                      <Input
+                        label="Age at Coitarche (First Intercourse)"
+                        placeholder="e.g. 18"
+                        value={profile.coitarcheAge || ''}
+                        onChangeText={(v) => setProfile({ ...profile, coitarcheAge: v })}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  )}
+                </View>
+
+                {/* Standardized Physical Activity */}
+                <View style={styles.behavioralCard}>
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Physical Activity Level
                   </ThemedText>
-                  <YesNo
-                    value={!!profile.isAlcoholDrinker}
-                    onChange={(v) => setProfile({ ...profile, isAlcoholDrinker: v })}
+                  <Helper>Select cardiovascular & metabolic activity level</Helper>
+                  <View style={styles.chipRow}>
+                    {PHYSICAL_ACTIVITY_OPTIONS.map((opt) => (
+                      <Chip
+                        key={opt}
+                        label={opt}
+                        active={profile.physicalActivityFrequency === opt}
+                        onPress={() => setProfile({ ...profile, physicalActivityFrequency: opt })}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                {/* Standardized Dietary Habits */}
+                <View style={styles.behavioralCard}>
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Dietary Habits & Nutrition
+                  </ThemedText>
+                  <Helper>Select all applicable dietary profiles (multi-select)</Helper>
+                  <View style={styles.chipRow}>
+                    {DIETARY_HABIT_OPTIONS.map((opt) => {
+                      const currentHabits = (profile.dietaryHabits || '')
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter((s) => s.length > 0);
+                      const isSelected = currentHabits.some((h) => h.toLowerCase() === opt.toLowerCase());
+                      return (
+                        <Chip
+                          key={opt}
+                          label={opt}
+                          marker
+                          tone="success"
+                          active={isSelected}
+                          onPress={() => {
+                            let nextHabits: string[];
+                            if (isSelected) {
+                              nextHabits = currentHabits.filter((h) => h.toLowerCase() !== opt.toLowerCase());
+                            } else {
+                              nextHabits = [...currentHabits, opt];
+                            }
+                            setProfile({
+                              ...profile,
+                              dietaryHabits: nextHabits.join(', '),
+                            });
+                          }}
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Clinical Remarks / Notes */}
+                <View style={styles.behavioralCard}>
+                  <Input
+                    label="Clinical Remarks / Lifestyle Notes"
+                    placeholder="Additional clinical remarks or lifestyle annotations"
+                    value={profile.remarks || ''}
+                    onChangeText={(v) => setProfile({ ...profile, remarks: v })}
                   />
                 </View>
               </View>
             )}
 
             <SectionTitle spaced>Immunizations (vaccines)</SectionTitle>
-            {isPediatric && (
+            <Helper>
+              Vaccines documented here synchronize directly with the patient&apos;s Medical Chart vaccine registry.
+            </Helper>
+
+            {(isPediatric || (profile.childImmunizations && profile.childImmunizations.length > 0) || showAllVaccines) && (
               <ImmunizationChips
-                title="Child vaccines (EPI)"
+                title={isPediatric ? 'Child vaccines (EPI)' : 'Childhood vaccines (EPI • Historical)'}
                 library="lib_immchild"
-                selected={profile.childImmunizations}
+                selected={profile.childImmunizations || []}
                 onToggle={(code) => toggleImmunization('child', code)}
               />
             )}
 
-            {isFemale && age >= 10 && age <= 49 && (
+            {((isFemale && age >= 9 && age <= 49) || (profile.youngWomanImmunizations && profile.youngWomanImmunizations.length > 0) || showAllVaccines) && (
               <ImmunizationChips
                 title="Young woman vaccines"
                 library="lib_immyoungw"
-                selected={profile.youngWomanImmunizations}
+                selected={profile.youngWomanImmunizations || []}
                 onToggle={(code) => toggleImmunization('youngWoman', code)}
               />
             )}
 
-            {isSenior && (
+            {((isFemale && age >= 9 && age <= 49) || (profile.pregnantWomanImmunizations && profile.pregnantWomanImmunizations.length > 0) || showAllVaccines) && (
+              <ImmunizationChips
+                title="Maternal vaccines (Td / Tdap)"
+                library="lib_immpregw"
+                selected={profile.pregnantWomanImmunizations || []}
+                onToggle={(code) => toggleImmunization('pregnantWoman', code)}
+              />
+            )}
+
+            {(isSenior || (profile.elderlyImmunizations && profile.elderlyImmunizations.length > 0) || showAllVaccines) && (
               <ImmunizationChips
                 title="Senior citizen vaccines"
                 library="lib_immelderly"
-                selected={profile.elderlyImmunizations}
+                selected={profile.elderlyImmunizations || []}
                 onToggle={(code) => toggleImmunization('elderly', code)}
               />
             )}
+
+            <Pressable
+              onPress={() => setShowAllVaccines((prev) => !prev)}
+              style={styles.showAllVaccinesBtn}
+            >
+              <ThemedText variant="smallBold" color={theme.colors.primary}>
+                {showAllVaccines ? 'Show only recommended / recorded categories' : '+ Show all vaccine categories'}
+              </ThemedText>
+            </Pressable>
           </View>
-        )}
+        );
+        })()}
 
         {/* TAB 4: Reproductive (women's health) */}
         {activeTab === 'reproductive' && (
@@ -949,11 +1334,11 @@ export default function PhilHealthProfileModal({
           </View>
         )}
 
-        {/* TAB 5: PhilPEN 24 questions */}
+        {/* TAB 5: Cardiometabolic risk questionnaire */}
         {activeTab === 'ncd' && (
           <View>
-            <SectionTitle>PhilPEN non-communicable disease risk assessment</SectionTitle>
-            <Helper>PhilHealth standard 24 questions for cardiovascular and metabolic risk profiling.</Helper>
+            <SectionTitle>Cardiometabolic & lifestyle risk assessment</SectionTitle>
+            <Helper>Cardiovascular and metabolic risk profiling assessment.</Helper>
 
             <NcdQuestionnaire
               answers={profile.ncdAnswers}
@@ -1130,6 +1515,34 @@ const styles = StyleSheet.create({
   behavioralGrid: {
     gap: theme.spacing.lg,
   },
+  behavioralSection: {
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.sm,
+  },
+  behavioralCard: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  behavioralHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  packYearsCallout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primaryBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+  },
   behavioralRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1179,5 +1592,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
+  },
+  showAllVaccinesBtn: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
+    alignSelf: 'flex-start',
   },
 });
