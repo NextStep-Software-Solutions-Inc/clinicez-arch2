@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { theme } from '@constants/theme';
 import { ThemedText, Button, Input, Icon, EmptyState, ErrorState, SkeletonList, Modal, Badge, ValidatedDateInput, Icd10AutocompleteInput, validateDateString } from '@ui';
@@ -184,11 +184,13 @@ export default function ClinicalHistoryTab({
 
   // Catalog for past medical conditions (lib_mdiseases)
   const { items: diseaseCatalog } = usePhilHealthCatalog('lib_mdiseases');
-  const activeCatalogConditions = diseaseCatalog && diseaseCatalog.length > 0
-    ? diseaseCatalog
-        .filter((item) => item.code !== '999' && item.description.toLowerCase() !== 'none')
-        .map((item) => ({ code: item.code, description: item.description }))
-    : PHILHEALTH_MDISEASES_CONDITIONS;
+  const activeCatalogConditions = useMemo(() => {
+    return diseaseCatalog && diseaseCatalog.length > 0
+      ? diseaseCatalog
+          .filter((item) => item.code !== '999' && item.description.toLowerCase() !== 'none')
+          .map((item) => ({ code: item.code, description: item.description }))
+      : PHILHEALTH_MDISEASES_CONDITIONS;
+  }, [diseaseCatalog]);
   const availableConditions = activeCatalogConditions;
 
   const seedFromProfile = useCallback((data: PhilHealthPatientProfile) => {
@@ -198,11 +200,13 @@ export default function ClinicalHistoryTab({
       const otherMed = data.medicalHistories.find((m) => m.code === '998');
       if (otherMed?.specificDesc) {
         setMedicalOtherDesc(otherMed.specificDesc);
+      } else {
+        setMedicalOtherDesc('');
       }
     } else if (patient.chronicConditions) {
       const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
       const codes = new Set<string>();
-      for (const item of activeCatalogConditions) {
+      for (const item of PHILHEALTH_MDISEASES_CONDITIONS) {
         if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
           codes.add(item.code);
         }
@@ -218,6 +222,8 @@ export default function ClinicalHistoryTab({
       const otherFam = data.familyHistories.find((f) => f.code === '998');
       if (otherFam?.specificDesc) {
         setFamilyOtherDesc(otherFam.specificDesc);
+      } else {
+        setFamilyOtherDesc('');
       }
     }
 
@@ -227,20 +233,20 @@ export default function ClinicalHistoryTab({
     if (data.familyHistoryNotes) {
       setFamilyNotes(data.familyHistoryNotes);
     }
-  }, [patient.chronicConditions, activeCatalogConditions]);
+  }, [patient.chronicConditions]);
 
   const fetchProfile = useCallback(async () => {
     setLoadingProfile(true);
     setProfileError(null);
     try {
-      const [data, err] = await clinicService.getPhilHealthPatientProfile(patient.id);
+      const [data] = await clinicService.getPhilHealthPatientProfile(patient.id);
       if (data) {
         setProfile(data);
         seedFromProfile(data);
       } else if (patient.chronicConditions) {
         const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
         const codes = new Set<string>();
-        for (const item of activeCatalogConditions) {
+        for (const item of PHILHEALTH_MDISEASES_CONDITIONS) {
           if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
             codes.add(item.code);
           }
@@ -253,7 +259,7 @@ export default function ClinicalHistoryTab({
       if (patient.chronicConditions) {
         const parsed = patient.chronicConditions.split(',').map((s) => s.trim().toLowerCase());
         const codes = new Set<string>();
-        for (const item of activeCatalogConditions) {
+        for (const item of PHILHEALTH_MDISEASES_CONDITIONS) {
           if (parsed.some((p) => p === item.code.toLowerCase() || p === item.description.toLowerCase())) {
             codes.add(item.code);
           }
@@ -265,16 +271,29 @@ export default function ClinicalHistoryTab({
     } finally {
       setLoadingProfile(false);
     }
-  }, [patient.id, patient.chronicConditions, seedFromProfile, activeCatalogConditions]);
+  }, [patient.id, patient.chronicConditions, seedFromProfile]);
+
+  const isInitializedRef = useRef(false);
+  const prevPatientIdRef = useRef(patient.id);
+  const prevInitialProfileRef = useRef(initialProfile);
 
   useEffect(() => {
-    if (initialProfile) {
-      setProfile(initialProfile);
-      seedFromProfile(initialProfile);
-    } else {
-      fetchProfile();
+    const patientChanged = prevPatientIdRef.current !== patient.id;
+    const initialProfileChanged = prevInitialProfileRef.current !== initialProfile;
+
+    if (!isInitializedRef.current || patientChanged || initialProfileChanged) {
+      isInitializedRef.current = true;
+      prevPatientIdRef.current = patient.id;
+      prevInitialProfileRef.current = initialProfile;
+
+      if (initialProfile) {
+        setProfile(initialProfile);
+        seedFromProfile(initialProfile);
+      } else {
+        fetchProfile();
+      }
     }
-  }, [fetchProfile, initialProfile, seedFromProfile]);
+  }, [patient.id, initialProfile, fetchProfile, seedFromProfile]);
 
   const toggleMedicalCondition = (code: string) => {
     setSelectedMedicalCodes((prev) => {
@@ -849,6 +868,7 @@ export default function ClinicalHistoryTab({
                 onPress={() => toggleMedicalCondition(cond.code)}
                 accessibilityRole="button"
                 accessibilityLabel={`Toggle personal ${cond.description}`}
+                accessibilityState={{ selected: isSelected }}
                 style={[
                   styles.toggleChip,
                   isSelected && styles.toggleChip_active,
@@ -919,6 +939,7 @@ export default function ClinicalHistoryTab({
                 onPress={() => toggleFamilyCondition(cond.code)}
                 accessibilityRole="button"
                 accessibilityLabel={`Toggle family ${cond.description}`}
+                accessibilityState={{ selected: isSelected }}
                 style={[
                   styles.toggleChip,
                   isSelected && styles.toggleChip_active,

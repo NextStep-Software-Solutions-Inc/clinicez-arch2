@@ -416,5 +416,38 @@ describe('Milestone M4 — Personal and Family Medical History Integration (lib_
       expect(selected.has('998')).toBe(false);
       expect(otherDesc).toBe('');
     });
+
+    test('5.4 Condition chips render accessibility labels and toggle targets for personal and family history', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(ClinicalHistoryTab, {
+          patient: mockPatient,
+          initialProfile: sampleProfile,
+        })
+      );
+
+      // Verify personal and family toggle button accessibility labels
+      expect(markup).toContain('aria-label="Toggle personal Hypertension"');
+      expect(markup).toContain('aria-label="Toggle family Cancer"');
+      expect(markup).toContain('aria-label="Toggle family Coronary Artery Disease"');
+      expect(markup).toContain('aria-label="Toggle personal Asthma"');
+    });
+
+    test('5.5 Medical history condition options render with correct selected states matching profile', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(ClinicalHistoryTab, {
+          patient: mockPatient,
+          initialProfile: sampleProfile,
+        })
+      );
+
+      // Personal: 3 selected (011 Hypertension, 006 Diabetes Mellitus, 998 Others)
+      expect(markup).toContain('3 Selected');
+      // Both sections should render 19 conditions each
+      const personalMatches = markup.match(/aria-label="Toggle personal /g) || [];
+      const familyMatches = markup.match(/aria-label="Toggle family /g) || [];
+      expect(personalMatches.length).toBe(19);
+      expect(familyMatches.length).toBe(19);
+    });
   });
 });
+
