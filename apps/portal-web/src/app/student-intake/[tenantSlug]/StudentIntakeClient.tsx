@@ -62,6 +62,39 @@ export default function StudentIntakeClient({
   const [emergencyContactRelationship, setEmergencyContactRelationship] = useState("Parent / Guardian");
 
   // Form State: Academic & Institutional
+  const COLLEGE_PROGRAMS_MAP: Record<string, string[]> = {
+    "College of Computer Studies": [
+      "BS Computer Science",
+      "BS Information Technology",
+      "BS Information Systems",
+    ],
+    "College of Engineering": [
+      "BS Civil Engineering",
+      "BS Mechanical Engineering",
+      "BS Electrical Engineering",
+      "BS Chemical Engineering",
+    ],
+    "College of Business Administration": [
+      "BS Business Administration",
+      "BS Accountancy",
+      "BS Marketing",
+    ],
+    "College of Nursing & Allied Health": [
+      "BS Nursing",
+      "BS Medical Technology",
+      "BS Physical Therapy",
+    ],
+    "College of Education": [
+      "Bachelor of Elementary Education",
+      "Bachelor of Secondary Education",
+    ],
+    "College of Arts & Sciences": [
+      "BA Communication",
+      "BS Psychology",
+      "BS Biology",
+    ],
+  };
+
   const [studentId, setStudentId] = useState("");
   const [college, setCollege] = useState("College of Computer Studies");
   const [program, setProgram] = useState("BS Computer Science");
@@ -69,6 +102,14 @@ export default function StudentIntakeClient({
   const [bloodType, setBloodType] = useState("");
   const [allergies, setAllergies] = useState("None known");
   const [chronicConditions, setChronicConditions] = useState("None");
+
+  const handleCollegeChange = (newCollege: string) => {
+    setCollege(newCollege);
+    const available = COLLEGE_PROGRAMS_MAP[newCollege] || [];
+    if (available.length > 0 && !available.includes(program)) {
+      setProgram(available[0]);
+    }
+  };
 
   // Form State: Documents
   const [documents, setDocuments] = useState<UploadedDocItem[]>([
@@ -534,7 +575,7 @@ export default function StudentIntakeClient({
               <select
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                 value={college}
-                onChange={(e) => setCollege(e.target.value)}
+                onChange={(e) => handleCollegeChange(e.target.value)}
               >
                 <option value="College of Computer Studies">College of Computer Studies</option>
                 <option value="College of Engineering">College of Engineering</option>
@@ -548,13 +589,17 @@ export default function StudentIntakeClient({
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Degree Program / Major
               </label>
-              <input
-                type="text"
+              <select
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                placeholder="e.g. BS Computer Science"
                 value={program}
                 onChange={(e) => setProgram(e.target.value)}
-              />
+              >
+                {(COLLEGE_PROGRAMS_MAP[college] || ["BS Computer Science", "BS Information Technology", "General Studies"]).map((prog) => (
+                  <option key={prog} value={prog}>
+                    {prog}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

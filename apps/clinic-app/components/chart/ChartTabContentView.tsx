@@ -107,7 +107,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           onRecordAefi={onRecordAefi}
         />
       )}
-      {activeTab === 'profiles' && (
+      {activeTab === 'profiles' && patient && (
         <HealthProfilesTab
           patient={patient}
           surgicalHistories={patientChart?.surgicalHistories}

@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge, { BadgeVariant } from '../ui/Badge';
-import Input from '../ui/Input';
-import Modal from '../ui/Modal';
 import EmptyState from '../ui/EmptyState';
 import ErrorState from '../ui/ErrorState';
 import { SkeletonList } from '../ui/Skeleton';
@@ -12,8 +10,14 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
-import { clinicService, ClinicCustomFieldDefinition } from '../../services/clinicService';
-import { Chip, FieldGroup } from './common';
+import {
+  clinicService,
+  ClinicCustomFieldDefinition,
+  VisibilityRule,
+  ConditionalOptionsConfig,
+} from '../../services/clinicService';
+import { Chip } from './common';
+import AddEditFieldModal from './AddEditFieldModal';
 
 const FIELD_TYPE_BADGE: Record<ClinicCustomFieldDefinition['dataType'], BadgeVariant> = {
   Text: 'neutral',
@@ -22,6 +26,38 @@ const FIELD_TYPE_BADGE: Record<ClinicCustomFieldDefinition['dataType'], BadgeVar
   Boolean: 'success',
   Select: 'purple',
 };
+
+export interface TemplateBundlePreset {
+  key: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  icon: 'graduation' | 'briefcase' | 'patients';
+}
+
+const TEMPLATE_BUNDLES: TemplateBundlePreset[] = [
+  {
+    key: 'ustp',
+    title: 'University / School Clinic (USTP)',
+    subtitle: '8 Fields · Affiliation, Student/Employee IDs, cascading College & Program dropdowns',
+    badge: '8 Fields · Cascading',
+    icon: 'graduation',
+  },
+  {
+    key: 'workplace',
+    title: 'Workplace / Corporate Health',
+    subtitle: '4 Fields · Employment Type, Department, Corporate Employee ID, HMO Provider',
+    badge: '4 Fields · Corporate',
+    icon: 'briefcase',
+  },
+  {
+    key: 'demographics',
+    title: 'General Clinical Demographics',
+    subtitle: '3 Fields · Religion, Mother’s Maiden Name, conditional Spouse Name',
+    badge: '3 Fields · Conditional',
+    icon: 'patients',
+  },
+];
 
 interface CustomFieldsTabProps {
   fields: ClinicCustomFieldDefinition[];
@@ -39,79 +75,64 @@ export default function CustomFieldsTab({
   onRefreshFields,
 }: CustomFieldsTabProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [editingField, setEditingField] = useState<ClinicCustomFieldDefinition | null>(null);
+  const [showTemplatesSection, setShowTemplatesSection] = useState(false);
+  const [installingBundle, setInstallingBundle] = useState<string | null>(null);
 
-  // Form State
-  const [fieldLabel, setFieldLabel] = useState('');
-  const [fieldDataType, setFieldDataType] = useState<ClinicCustomFieldDefinition['dataType']>('Text');
-  const [fieldCategory, setFieldCategory] = useState('Demographics');
-  const [fieldPlaceholder, setFieldPlaceholder] = useState('');
-  const [fieldRequired, setFieldRequired] = useState(false);
-  const [fieldOptions, setFieldOptions] = useState('');
-  const [savingField, setSavingField] = useState(false);
-  const [fieldError, setFieldError] = useState<string | null>(null);
+  // Sorted fields by displayOrder
+  const sortedFields = [...fields].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
 
   const visibleFields =
     selectedCategory === 'All'
-      ? fields
-      : fields.filter((f) => f.category?.toLowerCase() === selectedCategory.toLowerCase());
+      ? sortedFields
+      : sortedFields.filter((f) => f.category?.toLowerCase() === selectedCategory.toLowerCase());
 
   const handleOpenAdd = () => {
-    setFieldLabel('');
-    setFieldDataType('Text');
-    setFieldCategory('Demographics');
-    setFieldPlaceholder('');
-    setFieldRequired(false);
-    setFieldOptions('');
-    setFieldError(null);
-    setShowAddModal(true);
+    setEditingField(null);
+    setShowModal(true);
   };
 
-  const handleCreateField = async () => {
-    if (!fieldLabel.trim()) {
-      setFieldError('Field label is required.');
-      return;
+  const handleOpenEdit = (field: ClinicCustomFieldDefinition) => {
+    setEditingField(field);
+    setShowModal(true);
+  };
+
+  const handleSaveField = async (payload: Partial<ClinicCustomFieldDefinition>): Promise<boolean> => {
+    if (editingField) {
+      // Update existing
+      const [updated, err] = await clinicService.updateCustomField(editingField.id, payload);
+      if (err || !updated) {
+        notify.error(err?.message || 'Could not update custom field.');
+        return false;
+      }
+      setFields((prev) =>
+        prev.map((f) => (f.id === editingField.id ? { ...f, ...updated } : f))
+      );
+      notify.success(`Custom field "${updated.label}" updated.`);
+      return true;
+    } else {
+      // Create new
+      const nextDisplayOrder =
+        fields.length > 0
+          ? Math.max(...fields.map((f) => f.displayOrder ?? 0)) + 1
+          : 1;
+
+      const [created, err] = await clinicService.createCustomField({
+        entityType: 'ClinicPatient',
+        displayOrder: nextDisplayOrder,
+        ...payload,
+      });
+
+      if (err || !created) {
+        notify.error(err?.message || 'Could not create custom field.');
+        return false;
+      }
+
+      setFields((prev) => [...prev, created]);
+      notify.success(`Custom field "${created.label}" added.`);
+      return true;
     }
-
-    setSavingField(true);
-    setFieldError(null);
-
-    const generatedKey = fieldLabel
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '');
-
-    const [created, err] = await clinicService.createCustomField({
-      entityType: 'ClinicPatient',
-      fieldKey: generatedKey || `field_${Date.now()}`,
-      label: fieldLabel.trim(),
-      dataType: fieldDataType,
-      category: fieldCategory,
-      placeholder: fieldPlaceholder.trim() || undefined,
-      isRequired: fieldRequired,
-      displayOrder: fields.length + 1,
-      optionsJson:
-        fieldDataType === 'Select'
-          ? JSON.stringify(
-              fieldOptions
-                .split(',')
-                .map((o) => o.trim())
-                .filter(Boolean)
-            )
-          : undefined,
-    });
-
-    setSavingField(false);
-
-    if (err || !created) {
-      setFieldError(err?.message || 'Could not save the custom intake field.');
-      return;
-    }
-
-    setFields((prev) => [...prev, created]);
-    setShowAddModal(false);
-    notify.success(`Custom field "${created.label}" added.`);
   };
 
   const handleDeleteField = async (id: string) => {
@@ -124,19 +145,139 @@ export default function CustomFieldsTab({
     notify.success('Custom field deleted.');
   };
 
+  const handleMoveUp = async (index: number) => {
+    if (index <= 0 || index >= sortedFields.length) return;
+    const current = sortedFields[index];
+    const prev = sortedFields[index - 1];
+
+    // Optimistically swap display orders
+    const prevOrder = prev.displayOrder ?? index;
+    prev.displayOrder = current.displayOrder ?? index + 1;
+    current.displayOrder = prevOrder;
+
+    const newSorted = [...sortedFields].sort((a, b) => a.displayOrder - b.displayOrder);
+    setFields(newSorted);
+    notify.success(`Moved "${current.label}" up.`);
+
+    // Persist reorder to backend
+    const orderedIds = newSorted.map((f) => f.id);
+    const [_, err] = await clinicService.reorderCustomFields(orderedIds);
+    if (err) {
+      notify.error(err.message || 'Could not persist reordered sequence.');
+      await onRefreshFields();
+    }
+  };
+
+  const handleMoveDown = async (index: number) => {
+    if (index < 0 || index >= sortedFields.length - 1) return;
+    const current = sortedFields[index];
+    const next = sortedFields[index + 1];
+
+    // Optimistically swap display orders
+    const nextOrder = next.displayOrder ?? index + 2;
+    next.displayOrder = current.displayOrder ?? index + 1;
+    current.displayOrder = nextOrder;
+
+    const newSorted = [...sortedFields].sort((a, b) => a.displayOrder - b.displayOrder);
+    setFields(newSorted);
+    notify.success(`Moved "${current.label}" down.`);
+
+    // Persist reorder to backend
+    const orderedIds = newSorted.map((f) => f.id);
+    const [_, err] = await clinicService.reorderCustomFields(orderedIds);
+    if (err) {
+      notify.error(err.message || 'Could not persist reordered sequence.');
+      await onRefreshFields();
+    }
+  };
+
+  const handleInstallBundle = async (templateKey: string) => {
+    setInstallingBundle(templateKey);
+    const [installed, err] = await clinicService.installTemplateBundle(templateKey);
+    setInstallingBundle(null);
+
+    if (err || !installed) {
+      notify.error(err?.message || `Could not install template bundle ${templateKey}.`);
+      return;
+    }
+
+    setFields(installed);
+    notify.success(`Installed template bundle: ${templateKey.toUpperCase()}.`);
+    await onRefreshFields();
+  };
+
   return (
     <View style={styles.container}>
+      {/* Suggested Common Templates Library Toolbar Card */}
+      <Card>
+        <CardHeader
+          title="Intake Template Library"
+          subtitle="Adopt standard clinic setups with 1-click installable bundles"
+          rightAction={
+            <Button
+              title={showTemplatesSection ? 'Hide Templates' : 'Browse Templates'}
+              variant="outline"
+              size="sm"
+              icon="scroll"
+              onPress={() => setShowTemplatesSection((prev) => !prev)}
+            />
+          }
+        />
+        {showTemplatesSection && (
+          <CardContent>
+            <View style={styles.templatesGrid}>
+              {TEMPLATE_BUNDLES.map((bundle) => {
+                const isInstalling = installingBundle === bundle.key;
+                return (
+                  <View key={bundle.key} style={styles.templateCard}>
+                    <View style={styles.templateHeaderRow}>
+                      <View style={styles.rowAlign}>
+                        <Icon name={bundle.icon} size={theme.sizes.iconMd} color={theme.colors.primary} />
+                        <ThemedText variant="bodyBold">{bundle.title}</ThemedText>
+                      </View>
+                      <Badge label={bundle.badge} variant="purple" size="sm" />
+                    </View>
+                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                      {bundle.subtitle}
+                    </ThemedText>
+                    <Button
+                      title={isInstalling ? 'Installing...' : '1-Click Install'}
+                      variant="primary"
+                      size="sm"
+                      loading={isInstalling}
+                      onPress={() => handleInstallBundle(bundle.key)}
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* Patient Intake Custom Fields Card */}
       <Card>
         <CardHeader
           title="Patient Intake & Custom Fields"
-          subtitle="Custom clinical and demographic questions asked during patient registration"
+          subtitle="Configure questions, arrange display sequence, and mark required fields"
           rightAction={
             <Button title="Add intake field" icon="plus" onPress={handleOpenAdd} />
           }
         />
         <CardContent>
+          {/* Category Filter Chips */}
           <View style={styles.chipRow}>
-            {(['All', 'Demographics', 'MedicalHistory', 'Insurance', 'Clinical'] as const).map((cat) => {
+            {(
+              [
+                'All',
+                'Demographics',
+                'Academic',
+                'Employment',
+                'Clinical',
+                'Insurance',
+                'MedicalHistory',
+              ] as const
+            ).map((cat) => {
               const count =
                 cat === 'All'
                   ? fields.length
@@ -152,21 +293,28 @@ export default function CustomFieldsTab({
             })}
           </View>
 
+          {/* 4 Core UX States */}
           {showSkeletons ? (
-            <SkeletonList rows={3} />
+            <SkeletonList rows={4} />
           ) : fieldsLoadError ? (
-            <ErrorState compact title="Could not load custom fields" message={fieldsLoadError} onRetry={onRefreshFields} />
+            <ErrorState
+              compact
+              title="Could not load custom fields"
+              message={fieldsLoadError}
+              onRetry={onRefreshFields}
+            />
           ) : visibleFields.length === 0 ? (
             <EmptyState
               icon="clipboard"
               title="No custom fields defined"
-              description="Add custom intake questions to collect specific details from patients during registration."
-              actionTitle="Add first field"
-              onAction={handleOpenAdd}
+              description="Add custom intake questions or install a 1-click template bundle."
+              actionTitle="Install USTP Preset"
+              onAction={() => handleInstallBundle('ustp')}
             />
           ) : (
             <View style={styles.fieldList}>
-              {visibleFields.map((field) => {
+              {visibleFields.map((field, index) => {
+                // Parse options
                 let options: string[] = [];
                 if (field.optionsJson) {
                   try {
@@ -176,35 +324,141 @@ export default function CustomFieldsTab({
                   }
                 }
 
+                // Parse visibility rule safely
+                let visibilityRule: VisibilityRule | null = null;
+                if (field.visibilityRuleJson) {
+                  try {
+                    visibilityRule = JSON.parse(field.visibilityRuleJson);
+                  } catch {
+                    visibilityRule = null;
+                  }
+                }
+
+                // Parse cascading options safely
+                let conditionalOptions: ConditionalOptionsConfig | null = null;
+                if (field.conditionalOptionsJson) {
+                  try {
+                    conditionalOptions = JSON.parse(field.conditionalOptionsJson);
+                  } catch {
+                    conditionalOptions = null;
+                  }
+                }
+
+                const isFirst = index === 0;
+                const isLast = index === visibleFields.length - 1;
+
                 return (
                   <View key={field.id} style={styles.fieldItem}>
+                    {/* Sequence and Reordering Arrangement Controls */}
+                    <View style={styles.reorderControlsCol}>
+                      <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.sequenceIndexText}>
+                        #{index + 1}
+                      </ThemedText>
+                      <View style={styles.reorderButtonPair}>
+                        <Pressable
+                          onPress={() => handleMoveUp(index)}
+                          disabled={isFirst}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Move "${field.label}" up`}
+                          style={[
+                            styles.reorderButton,
+                            isFirst && styles.reorderButtonDisabled,
+                          ]}
+                        >
+                          <Icon
+                            name="arrowUp"
+                            size={theme.sizes.iconSm}
+                            color={isFirst ? theme.colors.textLight : theme.colors.primary}
+                          />
+                        </Pressable>
+                        <Pressable
+                          onPress={() => handleMoveDown(index)}
+                          disabled={isLast}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Move "${field.label}" down`}
+                          style={[
+                            styles.reorderButton,
+                            isLast && styles.reorderButtonDisabled,
+                          ]}
+                        >
+                          <Icon
+                            name="arrowDown"
+                            size={theme.sizes.iconSm}
+                            color={isLast ? theme.colors.textLight : theme.colors.primary}
+                          />
+                        </Pressable>
+                      </View>
+                    </View>
+
+                    {/* Field Info & Semantic Badges */}
                     <View style={styles.fieldInfoCol}>
                       <View style={styles.fieldTitleRow}>
                         <ThemedText variant="bodyBold">{field.label}</ThemedText>
-                        <Badge label={field.dataType} variant={FIELD_TYPE_BADGE[field.dataType] || 'neutral'} size="sm" />
+                        <Badge
+                          label={field.dataType}
+                          variant={FIELD_TYPE_BADGE[field.dataType] || 'neutral'}
+                          size="sm"
+                        />
                         <Badge
                           label={field.isRequired ? 'Required' : 'Optional'}
                           variant={field.isRequired ? 'emergency' : 'neutral'}
                           size="sm"
                         />
+                        {visibilityRule ? (
+                          <Badge
+                            label={`If ${visibilityRule.field} ${
+                              visibilityRule.operator === 'equals'
+                                ? '=='
+                                : visibilityRule.operator === 'not_equals'
+                                ? '!='
+                                : visibilityRule.operator
+                            } '${
+                              Array.isArray(visibilityRule.value)
+                                ? visibilityRule.value.join(', ')
+                                : visibilityRule.value ?? ''
+                            }'`}
+                            variant="warning"
+                            size="sm"
+                          />
+                        ) : null}
+                        {conditionalOptions ? (
+                          <Badge
+                            label={`Cascades on ${conditionalOptions.parentField}`}
+                            variant="purple"
+                            size="sm"
+                          />
+                        ) : null}
                       </View>
+
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
                         Key: {field.fieldKey} · Category: {field.category || 'General'}
                         {field.placeholder ? ` · Hint: "${field.placeholder}"` : ''}
                       </ThemedText>
+
                       {options.length > 0 && (
                         <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                          Options: {options.join(', ')}
+                          Choices: {options.join(', ')}
                         </ThemedText>
                       )}
                     </View>
 
-                    <Button
-                      title="Delete"
-                      variant="ghost"
-                      size="sm"
-                      onPress={() => handleDeleteField(field.id)}
-                    />
+                    {/* Actions: Edit & Delete */}
+                    <View style={styles.actionButtonGroup}>
+                      <Button
+                        title="Edit"
+                        variant="outline"
+                        size="sm"
+                        icon="edit"
+                        onPress={() => handleOpenEdit(field)}
+                      />
+                      <Button
+                        title="Delete"
+                        variant="ghost"
+                        size="sm"
+                        icon="trash"
+                        onPress={() => handleDeleteField(field.id)}
+                      />
+                    </View>
                   </View>
                 );
               })}
@@ -213,79 +467,14 @@ export default function CustomFieldsTab({
         </CardContent>
       </Card>
 
-      {/* Add Custom Field Modal */}
-      <Modal
-        visible={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        title="Add patient intake field"
-        subtitle="Specify question prompt and data format for patient registration."
-        maxWidth={500}
-        footer={
-          <View style={styles.modalFooter}>
-            <Button title="Cancel" variant="ghost" onPress={() => setShowAddModal(false)} disabled={savingField} />
-            <Button title="Save field" onPress={handleCreateField} loading={savingField} />
-          </View>
-        }
-      >
-        {fieldError ? (
-          <View style={styles.errorBox}>
-            <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
-            <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
-              {fieldError}
-            </ThemedText>
-          </View>
-        ) : null}
-
-        <Input
-          label="Field display label"
-          required
-          value={fieldLabel}
-          onChangeText={setFieldLabel}
-          placeholder="e.g. Religion, Employer Name, Mother's Maiden Name"
-        />
-
-        <FieldGroup label="Field Type">
-          <View style={styles.chipRow}>
-            {(['Text', 'Number', 'Date', 'Boolean', 'Select'] as const).map((type) => (
-              <Chip
-                key={type}
-                label={type}
-                active={fieldDataType === type}
-                onPress={() => setFieldDataType(type)}
-              />
-            ))}
-          </View>
-        </FieldGroup>
-
-        <FieldGroup label="Category">
-          <View style={styles.chipRow}>
-            {['Demographics', 'MedicalHistory', 'Insurance', 'Clinical'].map((cat) => (
-              <Chip
-                key={cat}
-                label={cat}
-                active={fieldCategory === cat}
-                onPress={() => setFieldCategory(cat)}
-              />
-            ))}
-          </View>
-        </FieldGroup>
-
-        <Input
-          label="Placeholder hint (optional)"
-          value={fieldPlaceholder}
-          onChangeText={setFieldPlaceholder}
-          placeholder="e.g. Enter employer address"
-        />
-
-        {fieldDataType === 'Select' && (
-          <Input
-            label="Dropdown choices (comma separated)"
-            value={fieldOptions}
-            onChangeText={setFieldOptions}
-            placeholder="e.g. Roman Catholic, Christian, Muslim, Others"
-          />
-        )}
-      </Modal>
+      {/* Add & Edit Modal */}
+      <AddEditFieldModal
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+        fieldToEdit={editingField}
+        existingFields={fields}
+        onSave={handleSaveField}
+      />
     </View>
   );
 }
@@ -299,6 +488,29 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: theme.spacing.xs,
     marginBottom: theme.spacing.md,
+  },
+  templatesGrid: {
+    gap: theme.spacing.md,
+  },
+  templateCard: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSubtle,
+    gap: theme.spacing.sm,
+  },
+  templateHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  rowAlign: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   fieldList: {
     gap: theme.spacing.sm,
@@ -314,6 +526,34 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: theme.spacing.md,
   },
+  reorderControlsCol: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    minWidth: 48,
+  },
+  sequenceIndexText: {
+    textAlign: 'center',
+  },
+  reorderButtonPair: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  reorderButton: {
+    minWidth: theme.sizes.touchTarget,
+    minHeight: theme.sizes.touchTarget,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  reorderButtonDisabled: {
+    opacity: 0.35,
+    borderColor: theme.colors.borderLight,
+  },
   fieldInfoCol: {
     flex: 1,
     minWidth: 240,
@@ -325,21 +565,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
   },
-  modalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: theme.spacing.sm,
-  },
-  flex1: {
-    flex: 1,
-  },
-  errorBox: {
+  actionButtonGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.sm,
-    backgroundColor: theme.colors.emergencySubtle,
-    borderRadius: theme.radii.md,
-    marginBottom: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
 });

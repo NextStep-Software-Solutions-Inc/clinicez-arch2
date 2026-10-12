@@ -133,7 +133,7 @@ export default function BloodTypeSelect({
                     {bt}
                   </ThemedText>
                   <ThemedText
-                    variant="micro"
+                    variant="caption"
                     color={selected ? theme.colors.primaryLight : theme.colors.textMuted}
                   >
                     {BLOOD_TYPE_METADATA[bt]?.antigen ?? ''} RhD+
@@ -165,7 +165,7 @@ export default function BloodTypeSelect({
                     {bt}
                   </ThemedText>
                   <ThemedText
-                    variant="micro"
+                    variant="caption"
                     color={selected ? theme.colors.primaryLight : theme.colors.textMuted}
                   >
                     {BLOOD_TYPE_METADATA[bt]?.antigen ?? ''} RhD-

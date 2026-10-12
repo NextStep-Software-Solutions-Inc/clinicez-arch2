@@ -156,7 +156,7 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                   <View key={i} style={styles.allergyItem}>
                     <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
                     <ThemedText variant="caption" color={theme.colors.emergencyText} style={styles.allergyText}>
-                      ALLERGY: {all.allergenName || all.allergen}
+                      ALLERGY: {all.allergen}
                     </ThemedText>
                   </View>
                 ))

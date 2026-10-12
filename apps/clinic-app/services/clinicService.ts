@@ -1438,6 +1438,19 @@ export interface RegisterPatientPayload {
   chiefComplaint?: string;
 }
 
+export interface VisibilityRule {
+  source: 'custom_field' | 'static';
+  field: string;
+  operator: 'equals' | 'not_equals' | 'in' | 'contains' | 'not_empty';
+  value?: any;
+}
+
+export interface ConditionalOptionsConfig {
+  parentField: string;
+  mapping: Record<string, string[]>;
+  defaultOptions?: string[];
+}
+
 export interface ClinicCustomFieldDefinition {
   id: string;
   tenantId: string;
@@ -1452,7 +1465,9 @@ export interface ClinicCustomFieldDefinition {
   optionsJson?: string;
   placeholder?: string;
   isActive: boolean;
-  createdAt: string;
+  createdAt?: string;
+  visibilityRuleJson?: string;
+  conditionalOptionsJson?: string;
 }
 
 export interface MedicalCertificateRecord {
@@ -2476,8 +2491,45 @@ export const clinicService = {
     return clinicApiClient.post<ClinicCustomFieldDefinition>('/custom-fields', payload);
   },
 
+  async updateCustomField(id: string, payload: Partial<ClinicCustomFieldDefinition>) {
+    return clinicApiClient.put<ClinicCustomFieldDefinition>(`/custom-fields/${id}`, payload);
+  },
+
   async deleteCustomField(id: string) {
     return clinicApiClient.delete<boolean>(`/custom-fields/${id}`);
+  },
+
+  async reorderCustomFields(
+    payload: string[] | { orderedIds?: string[]; items?: { id: string; displayOrder: number }[]; entityType?: string }
+  ) {
+    const body = Array.isArray(payload)
+      ? { orderedIds: payload, entityType: 'ClinicPatient' }
+      : payload;
+    return clinicApiClient.put<ClinicCustomFieldDefinition[]>('/custom-fields/reorder', body);
+  },
+
+  async installTemplateBundle(templateKey: string, entityType = 'ClinicPatient') {
+    const normalizedKey = templateKey.toLowerCase();
+    let backendKey = templateKey;
+    if (normalizedKey === 'ustp' || normalizedKey === 'university_ustp') {
+      backendKey = 'university_ustp';
+    } else if (normalizedKey === 'workplace' || normalizedKey === 'workplace_corporate') {
+      backendKey = 'workplace_corporate';
+    } else if (normalizedKey === 'demographics' || normalizedKey === 'general_demographics') {
+      backendKey = 'general_demographics';
+    }
+    return clinicApiClient.post<ClinicCustomFieldDefinition[]>('/custom-fields/templates/install', {
+      templateKey: backendKey,
+      entityType,
+    });
+  },
+
+  async installCustomFieldTemplate(templateKey: string, entityType = 'ClinicPatient') {
+    return this.installTemplateBundle(templateKey, entityType);
+  },
+
+  async getCustomFieldTemplates(entityType = 'ClinicPatient') {
+    return clinicApiClient.get<any[]>(`/custom-fields/templates?entityType=${encodeURIComponent(entityType)}`);
   },
 
   // Clinic Preferences / Settings

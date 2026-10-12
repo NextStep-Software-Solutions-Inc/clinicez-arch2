@@ -92,6 +92,15 @@ mock.module('../services/apiClient', () => ({
   clinicApiUrl: (p: string) => `http://localhost:5000/api/v1${p}`,
 }));
 
+mock.module('../constants/fonts', () => ({
+  applyFontFamily: (s: any) => s,
+  fontAssets: {},
+}));
+
+const { clinicService } = await import('../services/clinicService');
+const { default: CustomFieldsTab } = await import('../components/settings/CustomFieldsTab');
+const { default: AddEditFieldModal } = await import('../components/settings/AddEditFieldModal');
+
 export interface VisibilityRule {
   source: 'custom_field' | 'static';
   field: string;
@@ -1133,6 +1142,116 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
           // Handled safely
         }
       }).not.toThrow();
+    });
+  });
+
+  // =========================================================================
+  // DIRECT SERVICE & COMPONENT VERIFICATION
+  // =========================================================================
+
+  describe('Direct Service Layer Verification: clinicService Custom Fields', () => {
+    test('SVC-1: updateCustomField issues PUT /custom-fields/:id with payload', async () => {
+      mockApiResponse = { id: 'cf-1', label: 'Updated Label', isRequired: true };
+      const [res, err] = await clinicService.updateCustomField('cf-1', {
+        label: 'Updated Label',
+        isRequired: true,
+      });
+
+      expect(err).toBeNull();
+      expect(res?.label).toBe('Updated Label');
+      expect(lastApiCall?.method).toBe('PUT');
+      expect(lastApiCall?.url).toBe('/custom-fields/cf-1');
+      expect(lastApiCall?.data).toEqual({ label: 'Updated Label', isRequired: true });
+    });
+
+    test('SVC-2: reorderCustomFields with array of IDs maps to orderedIds payload', async () => {
+      mockApiResponse = [{ id: 'cf-2', displayOrder: 1 }, { id: 'cf-1', displayOrder: 2 }];
+      const [res, err] = await clinicService.reorderCustomFields(['cf-2', 'cf-1']);
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('PUT');
+      expect(lastApiCall?.url).toBe('/custom-fields/reorder');
+      expect(lastApiCall?.data).toEqual({
+        orderedIds: ['cf-2', 'cf-1'],
+        entityType: 'ClinicPatient',
+      });
+    });
+
+    test('SVC-3: reorderCustomFields with object payload passes body directly', async () => {
+      mockApiResponse = true;
+      const customPayload = {
+        items: [{ id: 'cf-1', displayOrder: 10 }],
+        entityType: 'ClinicConsultation',
+      };
+      const [res, err] = await clinicService.reorderCustomFields(customPayload);
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('PUT');
+      expect(lastApiCall?.url).toBe('/custom-fields/reorder');
+      expect(lastApiCall?.data).toEqual(customPayload);
+    });
+
+    test('SVC-4: installTemplateBundle normalizes USTP to university_ustp backend key', async () => {
+      mockApiResponse = [{ id: 'new-1', fieldKey: 'affiliation' }];
+      const [res, err] = await clinicService.installTemplateBundle('ustp');
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('POST');
+      expect(lastApiCall?.url).toBe('/custom-fields/templates/install');
+      expect(lastApiCall?.data).toEqual({
+        templateKey: 'university_ustp',
+        entityType: 'ClinicPatient',
+      });
+    });
+
+    test('SVC-5: installTemplateBundle normalizes Workplace to workplace_corporate backend key', async () => {
+      mockApiResponse = [{ id: 'new-2', fieldKey: 'employment_type' }];
+      const [res, err] = await clinicService.installTemplateBundle('Workplace');
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('POST');
+      expect(lastApiCall?.url).toBe('/custom-fields/templates/install');
+      expect(lastApiCall?.data).toEqual({
+        templateKey: 'workplace_corporate',
+        entityType: 'ClinicPatient',
+      });
+    });
+
+    test('SVC-6: installTemplateBundle normalizes Demographics to general_demographics backend key', async () => {
+      mockApiResponse = [{ id: 'new-3', fieldKey: 'religion' }];
+      const [res, err] = await clinicService.installTemplateBundle('demographics');
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('POST');
+      expect(lastApiCall?.url).toBe('/custom-fields/templates/install');
+      expect(lastApiCall?.data).toEqual({
+        templateKey: 'general_demographics',
+        entityType: 'ClinicPatient',
+      });
+    });
+
+    test('SVC-7: installCustomFieldTemplate is an alias for installTemplateBundle', async () => {
+      mockApiResponse = [{ id: 'new-1' }];
+      const [res, err] = await clinicService.installCustomFieldTemplate('USTP');
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('POST');
+      expect(lastApiCall?.url).toBe('/custom-fields/templates/install');
+      expect(lastApiCall?.data?.templateKey).toBe('university_ustp');
+    });
+
+    test('SVC-8: getCustomFieldTemplates queries GET /custom-fields/templates', async () => {
+      mockApiResponse = [{ key: 'university_ustp', name: 'USTP' }];
+      const [res, err] = await clinicService.getCustomFieldTemplates('ClinicPatient');
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('GET');
+      expect(lastApiCall?.url).toBe('/custom-fields/templates?entityType=ClinicPatient');
+    });
+
+    test('COMP-1: CustomFieldsTab and AddEditFieldModal components are exported and valid', () => {
+      expect(typeof CustomFieldsTab).toBe('function');
+      expect(typeof AddEditFieldModal).toBe('function');
     });
   });
 });

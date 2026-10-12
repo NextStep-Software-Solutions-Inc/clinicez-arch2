@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { ThemedText, TextInput, Icon, Button, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect } from '../ui';
 import { theme } from '../../constants/theme';
-import { clinicService, type ClinicPatient, type RegisterPatientPayload } from '../../services/clinicService';
+import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition } from '../../services/clinicService';
+import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
 
 export interface EditPatientModalProps {
@@ -58,8 +59,23 @@ export function EditPatientModal({
   const [employeeId, setEmployeeId] = useState('');
   const [department, setDepartment] = useState('');
 
+  // Dynamic Custom Metadata state
+  const [tenantCustomFields, setTenantCustomFields] = useState<ClinicCustomFieldDefinition[]>([]);
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
+  const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+
   const [saving, setSaving] = useState(false);
   const [isPinValid, setIsPinValid] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      clinicService.getCustomFields('ClinicPatient').then(([fields]) => {
+        if (fields && fields.length > 0) {
+          setTenantCustomFields(fields);
+        }
+      });
+    }
+  }, [visible]);
 
   useEffect(() => {
     if (!patient) return;
@@ -99,7 +115,9 @@ export function EditPatientModal({
     setAlerts(patient.alerts || '');
 
     const cf = patient.customFields || {};
-    const cls = cf['classification'];
+    setCustomFieldValues({ ...cf });
+    setCustomFieldErrors({});
+    const cls = cf['classification'] || (cf['affiliation'] === 'Student' ? 'Student' : cf['affiliation'] === 'Employee/Faculty' ? 'Employee' : 'General');
     if (cls === 'Student') {
       setClassification('Student');
       setStudentId(cf['student_id'] || '');
@@ -155,40 +173,56 @@ export function EditPatientModal({
       return;
     }
 
+    // Defensive validation for dynamic custom fields
+    const staticValues = { gender, civilStatus, dateOfBirth };
+    if (tenantCustomFields.length > 0) {
+      const { isValid, errors } = validateCustomFields(tenantCustomFields, customFieldValues, staticValues);
+      if (!isValid) {
+        setCustomFieldErrors(errors);
+        Alert.alert('Missing Required Custom Fields', Object.values(errors).join('\n'));
+        return;
+      }
+    }
+
     setSaving(true);
 
     const mergedCustomFields: Record<string, any> = {
       ...(patient.customFields || {}),
     };
 
-    mergedCustomFields['classification'] = classification;
-    if (classification === 'Student') {
-      if (studentId.trim()) mergedCustomFields['student_id'] = studentId.trim();
-      else delete mergedCustomFields['student_id'];
-      if (college.trim()) mergedCustomFields['college'] = college.trim();
-      else delete mergedCustomFields['college'];
-      if (program.trim()) mergedCustomFields['program'] = program.trim();
-      else delete mergedCustomFields['program'];
-      if (yearLevel.trim()) mergedCustomFields['year_level'] = yearLevel.trim();
-      else delete mergedCustomFields['year_level'];
-      delete mergedCustomFields['employee_id'];
-      delete mergedCustomFields['department'];
-    } else if (classification === 'Employee') {
-      if (employeeId.trim()) mergedCustomFields['employee_id'] = employeeId.trim();
-      else delete mergedCustomFields['employee_id'];
-      if (department.trim()) mergedCustomFields['department'] = department.trim();
-      else delete mergedCustomFields['department'];
-      delete mergedCustomFields['student_id'];
-      delete mergedCustomFields['college'];
-      delete mergedCustomFields['program'];
-      delete mergedCustomFields['year_level'];
+    if (tenantCustomFields.length > 0) {
+      const cleanCustom = sanitizeCustomFieldsPayload(tenantCustomFields, customFieldValues, staticValues);
+      Object.assign(mergedCustomFields, cleanCustom);
     } else {
-      delete mergedCustomFields['student_id'];
-      delete mergedCustomFields['college'];
-      delete mergedCustomFields['program'];
-      delete mergedCustomFields['year_level'];
-      delete mergedCustomFields['employee_id'];
-      delete mergedCustomFields['department'];
+      mergedCustomFields['classification'] = classification;
+      if (classification === 'Student') {
+        if (studentId.trim()) mergedCustomFields['student_id'] = studentId.trim();
+        else delete mergedCustomFields['student_id'];
+        if (college.trim()) mergedCustomFields['college'] = college.trim();
+        else delete mergedCustomFields['college'];
+        if (program.trim()) mergedCustomFields['program'] = program.trim();
+        else delete mergedCustomFields['program'];
+        if (yearLevel.trim()) mergedCustomFields['year_level'] = yearLevel.trim();
+        else delete mergedCustomFields['year_level'];
+        delete mergedCustomFields['employee_id'];
+        delete mergedCustomFields['department'];
+      } else if (classification === 'Employee') {
+        if (employeeId.trim()) mergedCustomFields['employee_id'] = employeeId.trim();
+        else delete mergedCustomFields['employee_id'];
+        if (department.trim()) mergedCustomFields['department'] = department.trim();
+        else delete mergedCustomFields['department'];
+        delete mergedCustomFields['student_id'];
+        delete mergedCustomFields['college'];
+        delete mergedCustomFields['program'];
+        delete mergedCustomFields['year_level'];
+      } else {
+        delete mergedCustomFields['student_id'];
+        delete mergedCustomFields['college'];
+        delete mergedCustomFields['program'];
+        delete mergedCustomFields['year_level'];
+        delete mergedCustomFields['employee_id'];
+        delete mergedCustomFields['department'];
+      }
     }
 
     const payload: RegisterPatientPayload = {
@@ -555,120 +589,139 @@ export function EditPatientModal({
               </View>
             </View>
 
-            {/* Institutional Classification */}
+            {/* Institutional & Custom Metadata */}
             <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-              Institutional Classification
+              Additional Intake & Institutional Details
             </ThemedText>
 
-            <View style={styles.pillRow}>
-              {(['General', 'Student', 'Employee'] as const).map((cat) => (
-                <Pressable
-                  key={cat}
-                  style={[styles.pill, classification === cat && styles.pillActive]}
-                  onPress={() => setClassification(cat)}
-                >
-                  <ThemedText
-                    variant="smallBold"
-                    color={classification === cat ? theme.colors.textInverted : theme.colors.textSecondary}
-                  >
-                    {cat}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
+            {tenantCustomFields.length > 0 ? (
+              <DynamicCustomFieldsRenderer
+                fields={tenantCustomFields}
+                values={customFieldValues}
+                onChange={(key, val) => {
+                  setCustomFieldValues((prev) => ({ ...prev, [key]: val }));
+                  setCustomFieldErrors((prev) => {
+                    const next = { ...prev };
+                    delete next[key];
+                    return next;
+                  });
+                }}
+                errors={customFieldErrors}
+                staticValues={{ gender, civilStatus, dateOfBirth }}
+              />
+            ) : (
+              <>
+                <View style={styles.pillRow}>
+                  {(['General', 'Student', 'Employee'] as const).map((cat) => (
+                    <Pressable
+                      key={cat}
+                      style={[styles.pill, classification === cat && styles.pillActive]}
+                      onPress={() => setClassification(cat)}
+                    >
+                      <ThemedText
+                        variant="smallBold"
+                        color={classification === cat ? theme.colors.textInverted : theme.colors.textSecondary}
+                      >
+                        {cat}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
 
-            {classification === 'Student' && (
-              <View style={styles.institutionalBox}>
-                <ThemedText variant="captionBold" color={theme.colors.infoText}>
-                  School Clinic: Student Details
-                </ThemedText>
-                <View style={styles.formRow}>
-                  <View style={styles.formCol}>
-                    <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                      Student ID / LRN *
+                {classification === 'Student' && (
+                  <View style={styles.institutionalBox}>
+                    <ThemedText variant="captionBold" color={theme.colors.infoText}>
+                      School Clinic: Student Details
                     </ThemedText>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="e.g. 2026-10492"
-                      placeholderTextColor={theme.colors.textMuted}
-                      value={studentId}
-                      onChangeText={setStudentId}
-                    />
+                    <View style={styles.formRow}>
+                      <View style={styles.formCol}>
+                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                          Student ID / LRN *
+                        </ThemedText>
+                        <TextInput
+                          style={styles.textInput}
+                          placeholder="e.g. 2026-10492"
+                          placeholderTextColor={theme.colors.textMuted}
+                          value={studentId}
+                          onChangeText={setStudentId}
+                        />
+                      </View>
+                      <View style={styles.formCol}>
+                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                          Year Level
+                        </ThemedText>
+                        <TextInput
+                          style={styles.textInput}
+                          placeholder="e.g. 1st Year"
+                          placeholderTextColor={theme.colors.textMuted}
+                          value={yearLevel}
+                          onChangeText={setYearLevel}
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.formRow}>
+                      <View style={styles.formCol}>
+                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                          College / Faculty
+                        </ThemedText>
+                        <TextInput
+                          style={styles.textInput}
+                          placeholder="e.g. College of Science"
+                          placeholderTextColor={theme.colors.textMuted}
+                          value={college}
+                          onChangeText={setCollege}
+                        />
+                      </View>
+                      <View style={styles.formCol}>
+                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                          Program / Course
+                        </ThemedText>
+                        <TextInput
+                          style={styles.textInput}
+                          placeholder="e.g. BS Nursing"
+                          placeholderTextColor={theme.colors.textMuted}
+                          value={program}
+                          onChangeText={setProgram}
+                        />
+                      </View>
+                    </View>
                   </View>
-                  <View style={styles.formCol}>
-                    <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                      Year Level
-                    </ThemedText>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="e.g. 1st Year"
-                      placeholderTextColor={theme.colors.textMuted}
-                      value={yearLevel}
-                      onChangeText={setYearLevel}
-                    />
-                  </View>
-                </View>
-                <View style={styles.formRow}>
-                  <View style={styles.formCol}>
-                    <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                      College / Faculty
-                    </ThemedText>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="e.g. College of Science"
-                      placeholderTextColor={theme.colors.textMuted}
-                      value={college}
-                      onChangeText={setCollege}
-                    />
-                  </View>
-                  <View style={styles.formCol}>
-                    <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                      Program / Course
-                    </ThemedText>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="e.g. BS Nursing"
-                      placeholderTextColor={theme.colors.textMuted}
-                      value={program}
-                      onChangeText={setProgram}
-                    />
-                  </View>
-                </View>
-              </View>
-            )}
+                )}
 
-            {classification === 'Employee' && (
-              <View style={styles.institutionalBox}>
-                <ThemedText variant="captionBold" color={theme.colors.infoText}>
-                  School Clinic: Employee Details
-                </ThemedText>
-                <View style={styles.formRow}>
-                  <View style={styles.formCol}>
-                    <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                      Employee ID *
+                {classification === 'Employee' && (
+                  <View style={styles.institutionalBox}>
+                    <ThemedText variant="captionBold" color={theme.colors.infoText}>
+                      School Clinic: Employee Details
                     </ThemedText>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="e.g. EMP-2026-042"
-                      placeholderTextColor={theme.colors.textMuted}
-                      value={employeeId}
-                      onChangeText={setEmployeeId}
-                    />
+                    <View style={styles.formRow}>
+                      <View style={styles.formCol}>
+                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                          Employee ID *
+                        </ThemedText>
+                        <TextInput
+                          style={styles.textInput}
+                          placeholder="e.g. EMP-2026-042"
+                          placeholderTextColor={theme.colors.textMuted}
+                          value={employeeId}
+                          onChangeText={setEmployeeId}
+                        />
+                      </View>
+                      <View style={styles.formCol}>
+                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                          Department / Unit
+                        </ThemedText>
+                        <TextInput
+                          style={styles.textInput}
+                          placeholder="e.g. Department of Pediatrics"
+                          placeholderTextColor={theme.colors.textMuted}
+                          value={department}
+                          onChangeText={setDepartment}
+                        />
+                      </View>
+                    </View>
                   </View>
-                  <View style={styles.formCol}>
-                    <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                      Department / Unit
-                    </ThemedText>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="e.g. Department of Pediatrics"
-                      placeholderTextColor={theme.colors.textMuted}
-                      value={department}
-                      onChangeText={setDepartment}
-                    />
-                  </View>
-                </View>
-              </View>
+                )}
+              </>
             )}
 
             {/* Clinical Summary & Alerts */}

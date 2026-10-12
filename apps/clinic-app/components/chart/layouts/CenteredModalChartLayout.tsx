@@ -18,6 +18,7 @@ export default function CenteredModalChartLayout(props: ChartLayoutProps) {
   const {
     patient,
     patientChart,
+    loadingChart,
     activeTab,
     onTabChange,
     onClose,
@@ -147,8 +148,10 @@ export default function CenteredModalChartLayout(props: ChartLayoutProps) {
           <View style={styles.spineWrapper}>
             <PatientSummarySpine
               patient={patient}
-              patientChart={patientChart}
-              onTabSelect={onTabChange}
+              chart={patientChart}
+              vitals={patientChart?.vitalsHistory?.[0]}
+              loading={loadingChart}
+              onPressRefresh={onRefreshChart}
             />
           </View>
         ) : null}
