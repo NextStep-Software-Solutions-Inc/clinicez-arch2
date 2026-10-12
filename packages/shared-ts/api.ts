@@ -111,12 +111,22 @@ function isDatabaseOrOrmLeak(message: string): boolean {
     lower.includes('an error occurred while saving the entity changes') ||
     lower.includes('see the inner exception for details') ||
     lower.includes('microsoft.entityframeworkcore') ||
-    lower.includes('npgsql.postgresexception') ||
+    lower.includes('npgsql') ||
     lower.includes('postgresexception') ||
-    lower.includes('duplicate key value violates unique constraint') ||
+    lower.includes('duplicate key value') ||
+    lower.includes('violates unique constraint') ||
+    lower.includes('unique constraint') ||
+    lower.includes('foreign key constraint') ||
     lower.includes('violates foreign key constraint') ||
+    lower.includes('foreign key violation') ||
+    lower.includes('not-null constraint') ||
     lower.includes('violates not-null constraint') ||
+    lower.includes('not-null violation') ||
     lower.includes('value too long for type character varying') ||
+    lower.includes('string data right truncation') ||
+    lower.includes('exclusion violation') ||
+    lower.includes('exclusion constraint') ||
+    /(?:error:\s*|sqlstate\s*|postgres.*?\s*|\b)(23505|23503|23502|22001|23p01)\s*:/i.test(message) ||
     /at\s+(microsoft\.entityframeworkcore|npgsql|system\.data)/i.test(message) ||
     /exception\s+while\s+executing\s+database\s+command/i.test(message)
   );
@@ -187,9 +197,13 @@ export function extractApiError(error: unknown, defaultFallback = 'Request faile
       rawMsg.toLowerCase().includes('network') ||
       rawMsg.toLowerCase().includes('econnrefused') ||
       rawMsg.toLowerCase().includes('failed to fetch');
-    const msg = isNetwork
+    let msg = isNetwork
       ? 'Cannot reach the clinic server. Check your connection and the server address.'
       : (rawMsg || defaultFallback);
+    if (isDatabaseOrOrmLeak(msg) || isDatabaseOrOrmLeak(rawMsg)) {
+      msg = `A database error occurred while saving changes. Please contact support with reference ID: ${traceId || 'N/A'}`;
+      return new ApiError(msg, 0, [], 'DATABASE_ERROR', traceId);
+    }
     return new ApiError(msg, 0, [], 'NETWORK_ERROR', traceId);
   }
 
@@ -249,14 +263,18 @@ export function extractApiError(error: unknown, defaultFallback = 'Request faile
   let finalMessage = extractedMessage || axiosErr?.message || defaultFallback;
 
   // Client-side safety net: inspect derived message for raw ORM or database exception leakage
+  const dbErrorMessage = `A database error occurred while saving changes. Please contact support with reference ID: ${traceId || 'N/A'}`;
+
   if (isDatabaseOrOrmLeak(finalMessage)) {
-    finalMessage = `A database error occurred while saving changes. Please contact support with reference ID: ${traceId || 'N/A'}`;
+    finalMessage = dbErrorMessage;
     errorCode = errorCode || 'DATABASE_ERROR';
-    for (const fe of fieldErrors) {
-      if (isDatabaseOrOrmLeak(fe.message)) {
-        fe.message = finalMessage;
-        fe.code = errorCode;
-      }
+  }
+
+  // Unconditionally inspect and sanitize each individual field error if it leaks ORM/database text
+  for (const fe of fieldErrors) {
+    if (isDatabaseOrOrmLeak(fe.message)) {
+      fe.message = dbErrorMessage;
+      fe.code = 'DATABASE_ERROR';
     }
   }
 

@@ -7,7 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { ThemedText, TextInput, Icon, Button, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect } from '../ui';
+import { ThemedText, TextInput, Input, Icon, Button, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect } from '../ui';
 import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition } from '../../services/clinicService';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../custom-fields';
@@ -63,6 +63,16 @@ export function EditPatientModal({
   const [tenantCustomFields, setTenantCustomFields] = useState<ClinicCustomFieldDefinition[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
   const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const clearFieldError = (field: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
 
   const [saving, setSaving] = useState(false);
   const [isPinValid, setIsPinValid] = useState<boolean | null>(null);
@@ -117,6 +127,7 @@ export function EditPatientModal({
     const cf = patient.customFields || {};
     setCustomFieldValues({ ...cf });
     setCustomFieldErrors({});
+    setFieldErrors({});
     const cls = cf['classification'] || (cf['affiliation'] === 'Student' ? 'Student' : cf['affiliation'] === 'Employee/Faculty' ? 'Employee' : 'General');
     if (cls === 'Student') {
       setClassification('Student');
@@ -258,10 +269,45 @@ export function EditPatientModal({
 
     if (updated) {
       notify.success(`${updated.fullName || firstName} updated successfully.`);
+      setFieldErrors({});
       onSaved(updated);
       onClose();
     } else {
-      notify.error(err?.message || 'Failed to update patient demographics.');
+      const fieldErrorsMap: Record<string, string> = {};
+      if (err) {
+        if (typeof err.getFieldErrorsMap === 'function') {
+          Object.assign(fieldErrorsMap, err.getFieldErrorsMap());
+        }
+        const fnErr = err.getFieldError?.('firstName');
+        if (fnErr) fieldErrorsMap.firstName = fnErr;
+
+        const lnErr = err.getFieldError?.('lastName');
+        if (lnErr) fieldErrorsMap.lastName = lnErr;
+
+        const mnErr = err.getFieldError?.('middleName');
+        if (mnErr) fieldErrorsMap.middleName = mnErr;
+
+        const dobErr = err.getFieldError?.('dateOfBirth') || err.getFieldError?.('dob');
+        if (dobErr) fieldErrorsMap.dateOfBirth = dobErr;
+
+        const phoneErr = err.getFieldError?.('contactNumber') || err.getFieldError?.('phone');
+        if (phoneErr) fieldErrorsMap.contactNumber = phoneErr;
+
+        const philErr = err.getFieldError?.('philHealthId') || err.getFieldError?.('philHealthPin') || err.getFieldError?.('philHealthNumber');
+        if (philErr) {
+          fieldErrorsMap.philHealthId = philErr;
+          fieldErrorsMap.philHealthPin = philErr;
+          fieldErrorsMap.philHealthNumber = philErr;
+        }
+
+        const emailErr = err.getFieldError?.('email');
+        if (emailErr) fieldErrorsMap.email = emailErr;
+      }
+      setFieldErrors(fieldErrorsMap);
+
+      notify.error(err?.message || 'Failed to update patient demographics.', {
+        traceId: err?.traceId,
+      });
     }
   };
 
@@ -302,54 +348,56 @@ export function EditPatientModal({
 
             <View style={styles.formRow}>
               <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  First Name *
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
+                <Input
+                  label="First Name"
+                  required
                   placeholder="First Name"
-                  placeholderTextColor={theme.colors.textMuted}
                   value={firstName}
-                  onChangeText={setFirstName}
+                  onChangeText={(val) => {
+                    setFirstName(val);
+                    clearFieldError('firstName');
+                  }}
+                  error={fieldErrors.firstName}
                 />
               </View>
               <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Middle Name
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
+                <Input
+                  label="Middle Name"
                   placeholder="Middle Name"
-                  placeholderTextColor={theme.colors.textMuted}
                   value={middleName}
-                  onChangeText={setMiddleName}
+                  onChangeText={(val) => {
+                    setMiddleName(val);
+                    clearFieldError('middleName');
+                  }}
+                  error={fieldErrors.middleName}
                 />
               </View>
             </View>
 
             <View style={styles.formRow}>
               <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Last Name *
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
+                <Input
+                  label="Last Name"
+                  required
                   placeholder="Last Name"
-                  placeholderTextColor={theme.colors.textMuted}
                   value={lastName}
-                  onChangeText={setLastName}
+                  onChangeText={(val) => {
+                    setLastName(val);
+                    clearFieldError('lastName');
+                  }}
+                  error={fieldErrors.lastName}
                 />
               </View>
               <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Suffix
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
+                <Input
+                  label="Suffix"
                   placeholder="e.g. Jr., Sr., III"
-                  placeholderTextColor={theme.colors.textMuted}
                   value={suffix}
-                  onChangeText={setSuffix}
+                  onChangeText={(val) => {
+                    setSuffix(val);
+                    clearFieldError('suffix');
+                  }}
+                  error={fieldErrors.suffix}
                 />
               </View>
             </View>
@@ -361,8 +409,13 @@ export function EditPatientModal({
                   required
                   placeholder="YYYY-MM-DD"
                   value={dateOfBirth}
-                  onChangeText={setDateOfBirth}
+                  onChangeText={(val) => {
+                    setDateOfBirth(val);
+                    clearFieldError('dateOfBirth');
+                    clearFieldError('dob');
+                  }}
                   boundaryMode="pastOrToday"
+                  error={fieldErrors.dateOfBirth || fieldErrors.dob}
                 />
               </View>
               <View style={styles.formCol}>
@@ -426,27 +479,29 @@ export function EditPatientModal({
 
             <View style={styles.formRow}>
               <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Contact Phone Number *
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
+                <Input
+                  label="Contact Phone Number"
+                  required
                   placeholder="0917-123-4567"
-                  placeholderTextColor={theme.colors.textMuted}
                   value={contactNumber}
-                  onChangeText={setContactNumber}
+                  onChangeText={(val) => {
+                    setContactNumber(val);
+                    clearFieldError('contactNumber');
+                    clearFieldError('phone');
+                  }}
+                  error={fieldErrors.contactNumber || fieldErrors.phone}
                 />
               </View>
               <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Email Address
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
+                <Input
+                  label="Email Address"
                   placeholder="patient@example.com"
-                  placeholderTextColor={theme.colors.textMuted}
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(val) => {
+                    setEmail(val);
+                    clearFieldError('email');
+                  }}
+                  error={fieldErrors.email}
                 />
               </View>
             </View>
@@ -558,8 +613,14 @@ export function EditPatientModal({
             <PhilHealthPinInput
               label="PhilHealth PIN (RA 11223)"
               value={philHealthNumber}
-              onChangeText={setPhilHealthNumber}
+              onChangeText={(val) => {
+                setPhilHealthNumber(val);
+                clearFieldError('philHealthId');
+                clearFieldError('philHealthPin');
+                clearFieldError('philHealthNumber');
+              }}
               onValidityChange={setIsPinValid}
+              error={fieldErrors.philHealthId || fieldErrors.philHealthPin || fieldErrors.philHealthNumber}
             />
 
             <View style={styles.formRow}>
@@ -590,137 +651,25 @@ export function EditPatientModal({
             </View>
 
             {/* Institutional & Custom Metadata */}
-            <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-              Additional Intake & Institutional Details
-            </ThemedText>
-
-            {tenantCustomFields.length > 0 ? (
-              <DynamicCustomFieldsRenderer
-                fields={tenantCustomFields}
-                values={customFieldValues}
-                onChange={(key, val) => {
-                  setCustomFieldValues((prev) => ({ ...prev, [key]: val }));
-                  setCustomFieldErrors((prev) => {
-                    const next = { ...prev };
-                    delete next[key];
-                    return next;
-                  });
-                }}
-                errors={customFieldErrors}
-                staticValues={{ gender, civilStatus, dateOfBirth }}
-              />
-            ) : (
+            {tenantCustomFields.length > 0 && (
               <>
-                <View style={styles.pillRow}>
-                  {(['General', 'Student', 'Employee'] as const).map((cat) => (
-                    <Pressable
-                      key={cat}
-                      style={[styles.pill, classification === cat && styles.pillActive]}
-                      onPress={() => setClassification(cat)}
-                    >
-                      <ThemedText
-                        variant="smallBold"
-                        color={classification === cat ? theme.colors.textInverted : theme.colors.textSecondary}
-                      >
-                        {cat}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-
-                {classification === 'Student' && (
-                  <View style={styles.institutionalBox}>
-                    <ThemedText variant="captionBold" color={theme.colors.infoText}>
-                      School Clinic: Student Details
-                    </ThemedText>
-                    <View style={styles.formRow}>
-                      <View style={styles.formCol}>
-                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                          Student ID / LRN *
-                        </ThemedText>
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="e.g. 2026-10492"
-                          placeholderTextColor={theme.colors.textMuted}
-                          value={studentId}
-                          onChangeText={setStudentId}
-                        />
-                      </View>
-                      <View style={styles.formCol}>
-                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                          Year Level
-                        </ThemedText>
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="e.g. 1st Year"
-                          placeholderTextColor={theme.colors.textMuted}
-                          value={yearLevel}
-                          onChangeText={setYearLevel}
-                        />
-                      </View>
-                    </View>
-                    <View style={styles.formRow}>
-                      <View style={styles.formCol}>
-                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                          College / Faculty
-                        </ThemedText>
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="e.g. College of Science"
-                          placeholderTextColor={theme.colors.textMuted}
-                          value={college}
-                          onChangeText={setCollege}
-                        />
-                      </View>
-                      <View style={styles.formCol}>
-                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                          Program / Course
-                        </ThemedText>
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="e.g. BS Nursing"
-                          placeholderTextColor={theme.colors.textMuted}
-                          value={program}
-                          onChangeText={setProgram}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                )}
-
-                {classification === 'Employee' && (
-                  <View style={styles.institutionalBox}>
-                    <ThemedText variant="captionBold" color={theme.colors.infoText}>
-                      School Clinic: Employee Details
-                    </ThemedText>
-                    <View style={styles.formRow}>
-                      <View style={styles.formCol}>
-                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                          Employee ID *
-                        </ThemedText>
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="e.g. EMP-2026-042"
-                          placeholderTextColor={theme.colors.textMuted}
-                          value={employeeId}
-                          onChangeText={setEmployeeId}
-                        />
-                      </View>
-                      <View style={styles.formCol}>
-                        <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                          Department / Unit
-                        </ThemedText>
-                        <TextInput
-                          style={styles.textInput}
-                          placeholder="e.g. Department of Pediatrics"
-                          placeholderTextColor={theme.colors.textMuted}
-                          value={department}
-                          onChangeText={setDepartment}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                )}
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
+                  Additional Intake & Institutional Details
+                </ThemedText>
+                <DynamicCustomFieldsRenderer
+                  fields={tenantCustomFields}
+                  values={customFieldValues}
+                  onChange={(key, val) => {
+                    setCustomFieldValues((prev) => ({ ...prev, [key]: val }));
+                    setCustomFieldErrors((prev) => {
+                      const next = { ...prev };
+                      delete next[key];
+                      return next;
+                    });
+                  }}
+                  errors={customFieldErrors}
+                  staticValues={{ gender, civilStatus, dateOfBirth }}
+                />
               </>
             )}
 

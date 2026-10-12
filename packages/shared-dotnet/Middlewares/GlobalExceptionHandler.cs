@@ -26,12 +26,11 @@ public class GlobalExceptionHandler : IExceptionHandler
         Exception exception,
         CancellationToken cancellationToken)
     {
-        var traceId = Activity.Current?.Id;
-        if (string.IsNullOrWhiteSpace(traceId))
+        var traceId = ResolveTraceId(httpContext);
+
+        if (!httpContext.Response.HasStarted)
         {
-            traceId = !string.IsNullOrWhiteSpace(httpContext.TraceIdentifier)
-                ? httpContext.TraceIdentifier
-                : (httpContext.TraceIdentifier = Guid.NewGuid().ToString("N"));
+            httpContext.Response.Headers["X-Correlation-ID"] = traceId;
         }
 
         // ── 1. Unwrap Clerk SDK Errors ─────────────────────────────────────────
@@ -141,5 +140,60 @@ public class GlobalExceptionHandler : IExceptionHandler
             cancellationToken);
 
         return true;
+    }
+
+    /// <summary>
+    /// Resolves a meaningful, traceable correlation ID following standard observability hierarchy:
+    /// 1. W3C distributed trace context (OpenTelemetry / System.Diagnostics.Activity)
+    /// 2. Ingress/client-propagated correlation headers (X-Correlation-ID, X-Request-ID)
+    /// 3. ASP.NET Core request/connection TraceIdentifier
+    /// 4. Synchronized fallback ID for isolated unit test contexts
+    /// </summary>
+    public static string ResolveTraceId(HttpContext httpContext)
+    {
+        // 1. W3C Distributed Trace Context (OpenTelemetry / Activity)
+        if (Activity.Current is { } activity)
+        {
+            var activityTraceId = !string.IsNullOrWhiteSpace(activity.Id)
+                ? activity.Id
+                : (activity.TraceId != default ? activity.TraceId.ToHexString() : null);
+
+            if (!string.IsNullOrWhiteSpace(activityTraceId))
+            {
+                if (string.IsNullOrWhiteSpace(httpContext.TraceIdentifier))
+                {
+                    httpContext.TraceIdentifier = activityTraceId;
+                }
+                return activityTraceId;
+            }
+        }
+
+        // 2. Client / Ingress correlation headers (X-Correlation-ID, X-Request-ID)
+        if (httpContext.Request.Headers.TryGetValue("X-Correlation-ID", out var correlationHeader) &&
+            !string.IsNullOrWhiteSpace(correlationHeader))
+        {
+            var correlationId = correlationHeader.ToString().Trim();
+            httpContext.TraceIdentifier = correlationId;
+            return correlationId;
+        }
+
+        if (httpContext.Request.Headers.TryGetValue("X-Request-ID", out var requestHeader) &&
+            !string.IsNullOrWhiteSpace(requestHeader))
+        {
+            var requestId = requestHeader.ToString().Trim();
+            httpContext.TraceIdentifier = requestId;
+            return requestId;
+        }
+
+        // 3. ASP.NET Core per-request connection trace identifier
+        if (!string.IsNullOrWhiteSpace(httpContext.TraceIdentifier))
+        {
+            return httpContext.TraceIdentifier;
+        }
+
+        // 4. Safe fallback for uninitialized test/mock contexts; synchronize back to HttpContext
+        var fallback = Guid.NewGuid().ToString("N");
+        httpContext.TraceIdentifier = fallback;
+        return fallback;
     }
 }

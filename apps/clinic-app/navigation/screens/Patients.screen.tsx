@@ -140,6 +140,17 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [allergyModalVisible, setAllergyModalVisible] = useState(false);
   const [formChiefComplaint, setFormChiefComplaint] = useState('');
   const [formTriagePriority, setFormTriagePriority] = useState<'Routine' | 'Urgent' | 'Emergency'>('Routine');
+  const [formPatientCode, setFormPatientCode] = useState('');
+  const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>({});
+
+  const clearFieldError = (field: string) => {
+    setFormFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
 
   // Chart Modal state
   const [chartVisible, setChartVisible] = useState(false);
@@ -335,6 +346,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       sendToTriage,
       priority: sendToTriage ? formTriagePriority : 'Routine',
       chiefComplaint: sendToTriage && formChiefComplaint.trim() ? formChiefComplaint.trim() : undefined,
+      ...(formPatientCode.trim() ? ({ patientCode: formPatientCode.trim() } as any) : {}),
     };
 
     const [newPat, err] = await clinicService.registerPatient(payload);
@@ -342,6 +354,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
     if (newPat) {
       setPatients((prev) => [newPat, ...(prev ?? [])]);
+      setFormFieldErrors({});
       if (sendToTriage) {
         const ticketText = newPat.activeQueueTicket ? ` (${newPat.activeQueueTicket})` : '';
         notify.success(`${newPat.fullName} registered & queued for triage${ticketText}.`);
@@ -358,8 +371,41 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         `${offlinePat.fullName} was saved locally because the server could not be reached. It will sync automatically${triageNote}.${err?.message ? `\n\n${err.message}` : ''}`
       );
     } else {
-      // The server answered and refused: the user has to fix the form, so keep it open.
-      Alert.alert('Could not register patient', err?.message || 'The server rejected this registration.');
+      // The server answered and refused: extract field errors and bind to form inputs
+      const fieldErrorsMap: Record<string, string> = {};
+      if (err) {
+        if (typeof err.getFieldErrorsMap === 'function') {
+          Object.assign(fieldErrorsMap, err.getFieldErrorsMap());
+        }
+        const pcErr = err.getFieldError?.('patientCode');
+        if (pcErr) fieldErrorsMap.patientCode = pcErr;
+
+        const fnErr = err.getFieldError?.('firstName');
+        if (fnErr) fieldErrorsMap.firstName = fnErr;
+
+        const lnErr = err.getFieldError?.('lastName');
+        if (lnErr) fieldErrorsMap.lastName = lnErr;
+
+        const mnErr = err.getFieldError?.('middleName');
+        if (mnErr) fieldErrorsMap.middleName = mnErr;
+
+        const dobErr = err.getFieldError?.('dateOfBirth') || err.getFieldError?.('dob');
+        if (dobErr) fieldErrorsMap.dateOfBirth = dobErr;
+
+        const phoneErr = err.getFieldError?.('contactNumber') || err.getFieldError?.('phone');
+        if (phoneErr) fieldErrorsMap.contactNumber = phoneErr;
+
+        const philErr = err.getFieldError?.('philHealthId') || err.getFieldError?.('philHealthPin') || err.getFieldError?.('philHealthNumber');
+        if (philErr) {
+          fieldErrorsMap.philHealthId = philErr;
+          fieldErrorsMap.philHealthPin = philErr;
+          fieldErrorsMap.philHealthNumber = philErr;
+        }
+      }
+      setFormFieldErrors(fieldErrorsMap);
+
+      const errorMessage = err?.message || 'The server rejected this registration.';
+      notify.error(errorMessage, { traceId: err?.traceId });
       return;
     }
 
@@ -367,6 +413,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     // Reset form
     setDynamicFieldValues({});
     setDynamicFieldErrors({});
+    setFormFieldErrors({});
+    setFormPatientCode('');
     setFormClassification('General');
     setFormStudentId('');
     setFormCollege('');
@@ -1089,7 +1137,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               />
 
               {/* Institutional & Custom Metadata Section */}
-              {tenantCustomFields.length > 0 ? (
+              {tenantCustomFields.length > 0 && (
                 <View style={{ marginBottom: theme.spacing.sm }}>
                   <ThemedText style={styles.inputLabel}>Institutional & Additional Details</ThemedText>
                   <DynamicCustomFieldsRenderer
@@ -1111,140 +1159,63 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     }}
                   />
                 </View>
-              ) : (
-                <>
-                  {/* Classification Selector */}
-                  <View>
-                    <ThemedText style={styles.inputLabel}>Patient Classification / Profile Type</ThemedText>
-                    <View style={styles.categoryRow}>
-                      {(['General', 'Student', 'Employee'] as const).map((cat) => (
-                        <Pressable
-                          key={cat}
-                          style={[styles.categoryPill, formClassification === cat && styles.categoryPillActive]}
-                          onPress={() => setFormClassification(cat)}
-                        >
-                          <ThemedText style={[styles.categoryPillText, formClassification === cat && styles.categoryPillTextActive]}>
-                            {cat === 'General' ? 'General' : cat === 'Student' ? 'Student' : 'Employee'}
-                          </ThemedText>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Student-specific Institutional Fields */}
-                  {formClassification === 'Student' && (
-                    <View style={styles.institutionalBox}>
-                      <ThemedText style={styles.institutionalBoxTitle}>School Clinic: Student Details</ThemedText>
-                      <View style={styles.formRow}>
-                        <View style={{ flex: 1 }}>
-                          <ThemedText style={styles.inputLabel}>Student ID / LRN *</ThemedText>
-                          <TextInput
-                            style={styles.textInput}
-                            placeholder="e.g. 2026-10492"
-                            placeholderTextColor={theme.colors.textMuted}
-                            value={formStudentId}
-                            onChangeText={setFormStudentId}
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <ThemedText style={styles.inputLabel}>Year Level</ThemedText>
-                          <TextInput
-                            style={styles.textInput}
-                            placeholder="e.g. 1st Year"
-                            placeholderTextColor={theme.colors.textMuted}
-                            value={formYearLevel}
-                            onChangeText={setFormYearLevel}
-                          />
-                        </View>
-                      </View>
-                      <View style={styles.formRow}>
-                        <View style={{ flex: 1 }}>
-                          <ThemedText style={styles.inputLabel}>College / Faculty</ThemedText>
-                          <TextInput
-                            style={styles.textInput}
-                            placeholder="e.g. College of Computer Studies"
-                            placeholderTextColor={theme.colors.textMuted}
-                            value={formCollege}
-                            onChangeText={setFormCollege}
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <ThemedText style={styles.inputLabel}>Program / Course</ThemedText>
-                          <TextInput
-                            style={styles.textInput}
-                            placeholder="e.g. BS Computer Science"
-                            placeholderTextColor={theme.colors.textMuted}
-                            value={formProgram}
-                            onChangeText={setFormProgram}
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Employee-specific Institutional Fields */}
-                  {formClassification === 'Employee' && (
-                    <View style={styles.institutionalBox}>
-                      <ThemedText style={styles.institutionalBoxTitle}>School Clinic: Employee Details</ThemedText>
-                      <View style={styles.formRow}>
-                        <View style={{ flex: 1 }}>
-                          <ThemedText style={styles.inputLabel}>Employee ID *</ThemedText>
-                          <TextInput
-                            style={styles.textInput}
-                            placeholder="e.g. EMP-2026-042"
-                            placeholderTextColor={theme.colors.textMuted}
-                            value={formEmployeeId}
-                            onChangeText={setFormEmployeeId}
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <ThemedText style={styles.inputLabel}>Department / Unit</ThemedText>
-                          <TextInput
-                            style={styles.textInput}
-                            placeholder="e.g. Registrar / Faculty of Sciences"
-                            placeholderTextColor={theme.colors.textMuted}
-                            value={formDepartment}
-                            onChangeText={setFormDepartment}
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  )}
-                </>
               )}
 
               <View style={styles.formRow}>
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.inputLabel}>First Name *</ThemedText>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="e.g. Maria"
-                    placeholderTextColor={theme.colors.textMuted}
-                    value={formFirstName}
-                    onChangeText={setFormFirstName}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.inputLabel}>Last Name *</ThemedText>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="e.g. Santos"
-                    placeholderTextColor={theme.colors.textMuted}
-                    value={formLastName}
-                    onChangeText={setFormLastName}
+                  <Input
+                    label="Patient Code"
+                    placeholder="Auto-generated if left blank"
+                    value={formPatientCode}
+                    onChangeText={(val) => {
+                      setFormPatientCode(val);
+                      clearFieldError('patientCode');
+                    }}
+                    error={formFieldErrors.patientCode}
                   />
                 </View>
               </View>
 
               <View style={styles.formRow}>
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.inputLabel}>Middle Name</ThemedText>
-                  <TextInput
-                    style={styles.textInput}
+                  <Input
+                    label="First Name"
+                    required
+                    placeholder="e.g. Maria"
+                    value={formFirstName}
+                    onChangeText={(val) => {
+                      setFormFirstName(val);
+                      clearFieldError('firstName');
+                    }}
+                    error={formFieldErrors.firstName}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Last Name"
+                    required
+                    placeholder="e.g. Santos"
+                    value={formLastName}
+                    onChangeText={(val) => {
+                      setFormLastName(val);
+                      clearFieldError('lastName');
+                    }}
+                    error={formFieldErrors.lastName}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Middle Name"
                     placeholder="e.g. Delos"
-                    placeholderTextColor={theme.colors.textMuted}
                     value={formMiddleName}
-                    onChangeText={setFormMiddleName}
+                    onChangeText={(val) => {
+                      setFormMiddleName(val);
+                      clearFieldError('middleName');
+                    }}
+                    error={formFieldErrors.middleName}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -1252,9 +1223,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     label="Date of Birth (YYYY-MM-DD)"
                     required
                     value={formDob}
-                    onChangeText={setFormDob}
+                    onChangeText={(val) => {
+                      setFormDob(val);
+                      clearFieldError('dateOfBirth');
+                      clearFieldError('dob');
+                    }}
                     boundaryMode="pastOrToday"
                     placeholder="YYYY-MM-DD"
+                    error={formFieldErrors.dateOfBirth || formFieldErrors.dob}
                   />
                 </View>
               </View>
@@ -1297,13 +1273,17 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
               <View style={styles.formRow}>
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.inputLabel}>Contact Phone *</ThemedText>
-                  <TextInput
-                    style={styles.textInput}
+                  <Input
+                    label="Contact Phone"
+                    required
                     placeholder="0917-123-4567"
-                    placeholderTextColor={theme.colors.textMuted}
                     value={formPhone}
-                    onChangeText={setFormPhone}
+                    onChangeText={(val) => {
+                      setFormPhone(val);
+                      clearFieldError('contactNumber');
+                      clearFieldError('phone');
+                    }}
+                    error={formFieldErrors.contactNumber || formFieldErrors.phone}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -1318,8 +1298,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               <PhilHealthPinInput
                 label="PhilHealth PIN (RA 11223)"
                 value={formPhilHealth}
-                onChangeText={setFormPhilHealth}
+                onChangeText={(val) => {
+                  setFormPhilHealth(val);
+                  clearFieldError('philHealthId');
+                  clearFieldError('philHealthPin');
+                  clearFieldError('philHealthNumber');
+                }}
                 onValidityChange={setIsPinValid}
+                error={formFieldErrors.philHealthId || formFieldErrors.philHealthPin || formFieldErrors.philHealthNumber}
               />
 
               <View style={styles.formRow}>

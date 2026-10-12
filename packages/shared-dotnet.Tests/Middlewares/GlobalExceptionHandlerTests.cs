@@ -238,5 +238,73 @@ public class GlobalExceptionHandlerTests
         var payload = await ReadResponseAsync(stream);
         payload.Should().NotBeNull();
         payload!.TraceId.Should().Be(activity.Id);
+        context.Response.Headers["X-Correlation-ID"].ToString().Should().Be(activity.Id);
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_XCorrelationIdHeader_PreferredOverTraceIdentifier()
+    {
+        var handler = new GlobalExceptionHandler();
+        var (context, stream) = CreateHttpContext("kestrel-internal-001");
+        context.Request.Headers["X-Correlation-ID"] = "client-correlation-789";
+
+        var ex = new BadRequestException("Invalid format");
+        var handled = await handler.TryHandleAsync(context, ex, CancellationToken.None);
+
+        handled.Should().BeTrue();
+
+        var payload = await ReadResponseAsync(stream);
+        payload.Should().NotBeNull();
+        payload!.TraceId.Should().Be("client-correlation-789");
+        context.TraceIdentifier.Should().Be("client-correlation-789");
+        context.Response.Headers["X-Correlation-ID"].ToString().Should().Be("client-correlation-789");
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_XRequestIdHeader_PreferredOverTraceIdentifier()
+    {
+        var handler = new GlobalExceptionHandler();
+        var (context, stream) = CreateHttpContext("kestrel-internal-002");
+        context.Request.Headers["X-Request-ID"] = "gateway-req-456";
+
+        var ex = new NotFoundException("Not found");
+        var handled = await handler.TryHandleAsync(context, ex, CancellationToken.None);
+
+        handled.Should().BeTrue();
+
+        var payload = await ReadResponseAsync(stream);
+        payload.Should().NotBeNull();
+        payload!.TraceId.Should().Be("gateway-req-456");
+        context.TraceIdentifier.Should().Be("gateway-req-456");
+        context.Response.Headers["X-Correlation-ID"].ToString().Should().Be("gateway-req-456");
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_TraceIdentifier_UsedWhenNoHeadersOrActivity()
+    {
+        var handler = new GlobalExceptionHandler();
+        var (context, stream) = CreateHttpContext("standalone-trace-123");
+
+        var ex = new ConflictException("Conflict occurred");
+        var handled = await handler.TryHandleAsync(context, ex, CancellationToken.None);
+
+        handled.Should().BeTrue();
+
+        var payload = await ReadResponseAsync(stream);
+        payload.Should().NotBeNull();
+        payload!.TraceId.Should().Be("standalone-trace-123");
+        context.Response.Headers["X-Correlation-ID"].ToString().Should().Be("standalone-trace-123");
+    }
+
+    [Fact]
+    public void ResolveTraceId_WhenTraceIdentifierEmpty_SynchronizesFallbackId()
+    {
+        var context = new DefaultHttpContext();
+        context.TraceIdentifier = "";
+
+        var resolved = GlobalExceptionHandler.ResolveTraceId(context);
+
+        resolved.Should().NotBeNullOrWhiteSpace();
+        context.TraceIdentifier.Should().Be(resolved);
     }
 }

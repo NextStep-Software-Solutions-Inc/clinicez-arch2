@@ -21,11 +21,24 @@ export interface AlertRequest {
 
 export type ToastKind = 'success' | 'error' | 'info';
 
+export interface ToastAction {
+  label: string;
+  onPress: () => void;
+}
+
+export interface ToastOptions {
+  durationMs?: number;
+  traceId?: string;
+  action?: ToastAction;
+}
+
 export interface ToastRequest {
   id: number;
   kind: ToastKind;
   message: string;
   durationMs: number;
+  traceId?: string;
+  action?: ToastAction;
 }
 
 type FeedbackState = { alerts: AlertRequest[]; toasts: ToastRequest[] };
@@ -58,16 +71,48 @@ export function dismissToast(id: number) {
   emit({ ...state, toasts: state.toasts.filter((t) => t.id !== id) });
 }
 
-function showToast(kind: ToastKind, message: string, durationMs = 4000) {
+export function resetFeedbackState() {
+  state = { alerts: [], toasts: [] };
+  emit(state);
+}
+
+function showToast(
+  kind: ToastKind,
+  message: string,
+  options?: number | ToastOptions | string
+) {
   const id = nextId++;
-  emit({ ...state, toasts: [...state.toasts.slice(-2), { id, kind, message, durationMs }] });
+  let durationMs = kind === 'error' ? 10000 : 4000;
+  let traceId: string | undefined;
+  let action: ToastAction | undefined;
+
+  if (typeof options === 'number') {
+    durationMs = options;
+  } else if (typeof options === 'string') {
+    traceId = options;
+  } else if (options && typeof options === 'object') {
+    if (typeof options.durationMs === 'number') durationMs = options.durationMs;
+    if (typeof options.traceId === 'string') traceId = options.traceId;
+    if (options.action) action = options.action;
+  }
+
+  emit({
+    ...state,
+    toasts: [
+      ...state.toasts.slice(-2),
+      { id, kind, message, durationMs, traceId, action },
+    ],
+  });
   return id;
 }
 
 export const notify = {
-  success: (message: string) => showToast('success', message),
-  error: (message: string) => showToast('error', message, 6000),
-  info: (message: string) => showToast('info', message),
+  success: (message: string, options?: number | ToastOptions) =>
+    showToast('success', message, options),
+  error: (message: string, options?: number | ToastOptions | string) =>
+    showToast('error', message, options ?? 10000),
+  info: (message: string, options?: number | ToastOptions) =>
+    showToast('info', message, options),
 };
 
 export const Alert = {

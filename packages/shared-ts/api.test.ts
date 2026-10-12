@@ -406,6 +406,169 @@ describe('extractApiError with structured responses and safety net', () => {
       expect(result.errorCode).toBe('VALIDATION_ERROR');
       expect(result.traceId).toBe('trace-clean-1');
     });
+
+    it('intercepts Postgres driver error string "23505: duplicate key value" with reference ID', () => {
+      const err = {
+        response: {
+          status: 500,
+          headers: { 'x-trace-id': 'trace-pg-23505' },
+          data: '23505: duplicate key value',
+        },
+      };
+      const result = extractApiError(err);
+      expect(result.message).toBe(
+        'A database error occurred while saving changes. Please contact support with reference ID: trace-pg-23505'
+      );
+      expect(result.errorCode).toBe('DATABASE_ERROR');
+      expect(result.traceId).toBe('trace-pg-23505');
+      expect(result.errors[0].message).toBe(
+        'A database error occurred while saving changes. Please contact support with reference ID: trace-pg-23505'
+      );
+    });
+
+    it('intercepts various Postgres driver and constraint violation strings', () => {
+      const variations = [
+        'ERROR: 23505: duplicate key value',
+        'duplicate key value',
+        '23503: foreign key violation',
+        '23502: not-null violation',
+        '22001: string data right truncation',
+        '23P01: exclusion violation',
+        'NpgsqlException: Operation timed out',
+      ];
+
+      for (const variant of variations) {
+        const err = {
+          response: {
+            status: 500,
+            data: variant,
+          },
+        };
+        const result = extractApiError(err);
+        expect(result.message).toBe(
+          'A database error occurred while saving changes. Please contact support with reference ID: N/A'
+        );
+        expect(result.errorCode).toBe('DATABASE_ERROR');
+      }
+    });
+
+    it('intercepts JavaScript Error containing an ORM leak string when status === 0', () => {
+      const jsErr = new Error('An error occurred while saving the entity changes. See the inner exception for details.');
+      const result = extractApiError(jsErr);
+      expect(result.message).toBe(
+        'A database error occurred while saving changes. Please contact support with reference ID: N/A'
+      );
+      expect(result.errorCode).toBe('DATABASE_ERROR');
+      expect(result.status).toBe(0);
+    });
+
+    it('unconditionally sanitizes individual field errors containing database leaks', () => {
+      const err = {
+        response: {
+          status: 400,
+          headers: { 'x-trace-id': 'trace-field-leak' },
+          data: {
+            message: 'Validation failed for registration',
+            errors: [
+              { field: 'patientCode', code: 'VALIDATION_ERROR', message: '23505: duplicate key value' },
+              { field: 'firstName', code: 'REQUIRED', message: 'First name is required' },
+            ],
+          },
+        },
+      };
+
+      const result = extractApiError(err);
+      expect(result.message).toBe('Validation failed for registration');
+      expect(result.getFieldErrors('patientCode')).toEqual([
+        'A database error occurred while saving changes. Please contact support with reference ID: trace-field-leak',
+      ]);
+      expect(result.getFieldErrors('firstName')).toEqual(['First name is required']);
+      const patientCodeErr = result.errors.find((e) => e.field === 'patientCode');
+      expect(patientCodeErr?.code).toBe('DATABASE_ERROR');
+      expect(patientCodeErr?.message).toBe(
+        'A database error occurred while saving changes. Please contact support with reference ID: trace-field-leak'
+      );
+    });
+
+    it('preserves valid clinical messages containing numbers matching error codes (no false positive masking)', () => {
+      const clinicalCases = [
+        'Patient PAT-2026-23505 is not enrolled in Yakap.',
+        'Invoice INV-22001 has already been paid.',
+        'Postal code 23505 is outside the catchment area.',
+        'Platelet count 23502 /uL is critically low.',
+        'Sample bar code 23503 was already scanned.',
+        'Bed 23502 in Ward 3 is currently occupied.',
+        'Doctor license PRC-22001 expired on 2025-12-31.',
+        'Batch 23505 of BCG vaccine is quarantined.',
+      ];
+
+      for (const clinicalMessage of clinicalCases) {
+        const err = {
+          response: {
+            status: 400,
+            data: {
+              errorCode: 'VALIDATION_ERROR',
+              message: clinicalMessage,
+              traceId: 'trace-clin-123',
+            },
+          },
+        };
+
+        const result = extractApiError(err);
+        expect(result.message).toBe(clinicalMessage);
+        expect(result.errorCode).toBe('VALIDATION_ERROR');
+        expect(result.traceId).toBe('trace-clin-123');
+      }
+    });
+
+    it('preserves field errors containing clinical identifiers matching code numbers', () => {
+      const err = {
+        response: {
+          status: 400,
+          data: {
+            message: 'Validation failed',
+            errors: [
+              { field: 'patientCode', code: 'NOT_FOUND', message: 'Patient PAT-2026-23505 not found.' },
+              { field: 'invoiceId', code: 'ALREADY_PAID', message: 'Invoice INV-22001 has already been paid.' },
+            ],
+          },
+        },
+      };
+
+      const result = extractApiError(err);
+      expect(result.message).toBe('Validation failed');
+      expect(result.getFieldErrors('patientCode')).toEqual(['Patient PAT-2026-23505 not found.']);
+      expect(result.getFieldErrors('invoiceId')).toEqual(['Invoice INV-22001 has already been paid.']);
+    });
+
+    it('intercepts and masks PostgreSQL driver error strings with driver prefixes or trailing colons', () => {
+      const driverErrors = [
+        '23505: duplicate key value',
+        'ERROR: 23505: duplicate key value',
+        'error: 23503: foreign key violation',
+        'sqlstate 23502: not-null violation',
+        'postgres: 22001: string data right truncation',
+        '23p01: exclusion violation',
+      ];
+
+      for (const driverError of driverErrors) {
+        const err = {
+          response: {
+            status: 500,
+            headers: { 'x-trace-id': 'trace-driver-test' },
+            data: driverError,
+          },
+        };
+
+        const result = extractApiError(err);
+        expect(result.message).toBe(
+          'A database error occurred while saving changes. Please contact support with reference ID: trace-driver-test'
+        );
+        expect(result.errorCode).toBe('DATABASE_ERROR');
+        expect(result.traceId).toBe('trace-driver-test');
+      }
+    });
   });
 });
+
 

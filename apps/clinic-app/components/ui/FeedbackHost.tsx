@@ -1,4 +1,4 @@
-import React, { useEffect, useSyncExternalStore } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { View, StyleSheet, Pressable, Platform } from 'react-native';
 import ThemedText from './ThemedText';
 import Icon, { IconName } from './Icon';
@@ -36,23 +36,91 @@ const TOAST_STYLE: Record<ToastKind, { icon: IconName; color: string; bg: string
 };
 
 function Toast({ toast }: { toast: ToastRequest }) {
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     const timer = setTimeout(() => dismissToast(toast.id), toast.durationMs);
     return () => clearTimeout(timer);
   }, [toast.id, toast.durationMs]);
 
+  const handleCopyRef = async () => {
+    if (!toast.traceId) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(toast.traceId);
+      }
+    } catch {}
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const look = TOAST_STYLE[toast.kind];
   return (
-    <Pressable
-      onPress={() => dismissToast(toast.id)}
+    <View
       accessibilityRole="alert"
       style={[styles.toast, { backgroundColor: look.bg, borderColor: look.border }]}
     >
-      <Icon name={look.icon} size={theme.sizes.iconMd} color={look.color} />
-      <ThemedText variant="bodyBold" color={look.color} style={styles.toastText}>
-        {toast.message}
-      </ThemedText>
-    </Pressable>
+      <View style={styles.toastHeaderRow}>
+        <Icon name={look.icon} size={theme.sizes.iconMd} color={look.color} />
+        <View style={styles.toastBody}>
+          <ThemedText variant="bodyBold" color={look.color} style={styles.toastText}>
+            {toast.message}
+          </ThemedText>
+
+          {toast.traceId ? (
+            <View style={styles.traceRow}>
+              <ThemedText variant="caption" color={look.color} style={styles.traceText} numberOfLines={1}>
+                Ref ID: {toast.traceId}
+              </ThemedText>
+              <Pressable
+                onPress={handleCopyRef}
+                style={[styles.copyBtn, copied && styles.copyBtnSuccess]}
+                accessibilityRole="button"
+                accessibilityLabel="Copy Ref ID"
+              >
+                <Icon
+                  name={copied ? 'check' : 'copy'}
+                  size={theme.fontSizes.xs}
+                  color={copied ? theme.colors.successText : look.color}
+                />
+                <ThemedText
+                  variant="captionBold"
+                  color={copied ? theme.colors.successText : look.color}
+                >
+                  {copied ? 'Copied' : 'Copy Ref ID'}
+                </ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {toast.action ? (
+            <Pressable
+              onPress={() => {
+                toast.action?.onPress();
+                dismissToast(toast.id);
+              }}
+              style={styles.actionBtn}
+              accessibilityRole="button"
+              accessibilityLabel={toast.action.label}
+            >
+              <ThemedText variant="captionBold" color={look.color}>
+                {toast.action.label}
+              </ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <Pressable
+          onPress={() => dismissToast(toast.id)}
+          accessibilityLabel="Close notification"
+          accessibilityRole="button"
+          style={styles.closeBtn}
+          hitSlop={theme.spacing.sm}
+        >
+          <Icon name="close" size={theme.sizes.iconSm} color={look.color} />
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -157,10 +225,8 @@ const styles = StyleSheet.create({
     pointerEvents: 'box-none',
   },
   toast: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    maxWidth: 520,
+    maxWidth: 540,
+    width: '100%',
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
     borderRadius: theme.radii.md,
@@ -168,7 +234,57 @@ const styles = StyleSheet.create({
     ...theme.shadows.lg,
     pointerEvents: 'auto',
   },
+  toastHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    width: '100%',
+  },
+  toastBody: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
   toastText: {
     flexShrink: 1,
+  },
+  traceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginTop: 2,
+    flexWrap: 'wrap',
+  },
+  traceText: {
+    opacity: 0.9,
+    flexShrink: 1,
+  },
+  copyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  copyBtnSuccess: {
+    borderColor: theme.colors.successBorder,
+    backgroundColor: theme.colors.successBg,
+  },
+  actionBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 2,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    marginTop: 2,
+  },
+  closeBtn: {
+    padding: theme.spacing.xs,
+    marginLeft: theme.spacing.xs,
   },
 });
