@@ -306,7 +306,7 @@ public sealed class YakapPatientProfileController : ControllerBase
                     existing.SpecificDescription = code == "998" ? desc : null;
                     existing.UpdatedAt = DateTime.UtcNow;
                     existing.UpdatedBy = updatedProfile.UpdatedBy;
-                    await _medicalRepo.UpdateAsync(existing, ct);
+                    _medicalRepo.Update(existing);
                 }
                 else
                 {
@@ -333,7 +333,7 @@ public sealed class YakapPatientProfileController : ControllerBase
                     : $"title:{existing.ConditionTitle}";
                 if (!incomingKeys.Contains(key))
                 {
-                    await _medicalRepo.DeleteAsync(existing, ct);
+                    _medicalRepo.Remove(existing);
                 }
             }
         }
@@ -362,7 +362,7 @@ public sealed class YakapPatientProfileController : ControllerBase
                     existing.SpecificDescription = code == "998" ? desc : null;
                     existing.UpdatedAt = DateTime.UtcNow;
                     existing.UpdatedBy = updatedProfile.UpdatedBy;
-                    await _familyRepo.UpdateAsync(existing, ct);
+                    _familyRepo.Update(existing);
                 }
                 else
                 {
@@ -389,7 +389,7 @@ public sealed class YakapPatientProfileController : ControllerBase
                     : $"title:{existing.ConditionTitle}";
                 if (!incomingKeys.Contains(key))
                 {
-                    await _familyRepo.DeleteAsync(existing, ct);
+                    _familyRepo.Remove(existing);
                 }
             }
         }
