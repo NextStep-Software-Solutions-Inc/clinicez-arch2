@@ -47,6 +47,7 @@ mock.module('react-native', () => ({
   Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
   AppState: { addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
   NativeModules: {},

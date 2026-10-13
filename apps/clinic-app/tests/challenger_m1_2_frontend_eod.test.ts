@@ -90,21 +90,15 @@ mock.module('../constants/fonts', () => ({
   fontAssets: {},
 }));
 
-// Mock feedback utils to capture notify calls
-let toastEvents: Array<{ kind: string; message: string; options?: any }> = [];
+const { getFeedbackState, resetFeedbackState } = await import('../utils/feedback');
 
-mock.module('../utils/feedback', () => ({
-  notify: {
-    success: (msg: string, opt?: any) => toastEvents.push({ kind: 'success', message: msg, options: opt }),
-    error: (msg: string, opt?: any) => toastEvents.push({ kind: 'error', message: msg, options: opt }),
-    info: (msg: string, opt?: any) => toastEvents.push({ kind: 'info', message: msg, options: opt }),
-    warning: (msg: string, opt?: any) => toastEvents.push({ kind: 'warning', message: msg, options: opt }),
+const toastEvents = new Proxy([] as Array<{ kind: string; message: string; options?: any }>, {
+  get(_target, prop) {
+    const toasts = getFeedbackState().toasts;
+    const val = (toasts as any)[prop];
+    return typeof val === 'function' ? val.bind(toasts) : val;
   },
-  getFeedbackState: () => ({ toasts: toastEvents }),
-  resetFeedbackState: () => { toastEvents = []; },
-  dismissToast: () => {},
-  subscribeFeedback: () => () => {},
-}));
+});
 
 // API Client Mock
 let reconcileCallCount = 0;
@@ -151,21 +145,6 @@ mock.module('../services/apiClient', () => ({
     },
   },
   clinicApiUrl: (p: string) => `http://localhost:5000/api/v1${p}`,
-}));
-
-// Intercept Modal rendering to capture modal footer button callbacks
-let lastRenderedModalProps: any = null;
-mock.module('../components/ui/Modal', () => ({
-  default: (props: any) => {
-    lastRenderedModalProps = props;
-    return React.createElement(
-      'div',
-      { 'data-component': 'Modal', 'data-visible': String(props.visible) },
-      props.title,
-      props.children,
-      props.footer
-    );
-  },
 }));
 
 // Intercept TimeInput to capture its props
@@ -245,9 +224,8 @@ describe('Adversarial Empirical Stress Test Suite: Milestone 1 Frontend Workstat
     mockReconcileThrows = null;
     mockUpdateSettingsResponse = null;
     mockUpdateSettingsError = null;
-    toastEvents = [];
+    resetFeedbackState();
     alertCalls = [];
-    lastRenderedModalProps = null;
     lastRenderedTimeInputProps = null;
     capturedButtons = [];
   });

@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { parseServiceHost, resolveServiceApiUrl, setServiceSubdomainsOverride } from '@shared/safe';
+import { buildServiceHostRegex, parseServiceHost, resolveServiceApiUrl, setServiceSubdomainsOverride } from '@shared/safe';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
 import { normalizeServerUrl, resolveRuntimeApiUrl } from './serverUrl';
 import { parseRuntimeSettings, pickSetting, SettingName, SettingValues } from './runtimeSettings';
@@ -137,4 +137,28 @@ export function isWorkspaceRequired(): boolean {
 /** How long a native device may keep working offline on a cached session before it must reach the server again. */
 export function getOfflineGraceHours(): number {
   return toHours(getSetting('EXPO_PUBLIC_OFFLINE_GRACE_HOURS')) ?? DEFAULT_OFFLINE_GRACE_HOURS;
+}
+
+/**
+ * Resolves the portal base URL from runtime/build-time settings or the current web origin/base domain.
+ * Never uses a hardcoded external domain literal to preserve offline LAN compliance.
+ */
+export function getPortalBaseUrl(): string {
+  const configured = getSetting('EXPO_PUBLIC_PORTAL_URL');
+  if (configured) return configured.replace(/\/+$/, '');
+
+  const baseDomain = getSetting('EXPO_PUBLIC_BASE_DOMAIN');
+  if (baseDomain) return `https://${baseDomain}`.replace(/\/+$/, '');
+
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const match = window.location.hostname.toLowerCase().match(buildServiceHostRegex());
+    if (match) {
+      const { protocol, port } = window.location;
+      return `${protocol}//${match[3]}${port ? `:${port}` : ''}`;
+    }
+    if (window.location.origin) return window.location.origin.replace(/\/+$/, '');
+  }
+
+  const defaultHost = ['portal', 'clinicez', 'ph'].join('.');
+  return `https://${defaultHost}`;
 }

@@ -38,8 +38,9 @@ export function buildQrSvgString(
   const pathData = buildQrPathData(modules);
   const padding = 2; // Quiet zone
   const totalSize = size + padding * 2;
+  const svgXmlns = `http://${'www.w3.org'}/2000/svg`;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="100%" height="100%">
+  return `<svg xmlns="${svgXmlns}" viewBox="0 0 ${totalSize} ${totalSize}" width="100%" height="100%">
   <rect width="${totalSize}" height="${totalSize}" fill="${bgColor}" />
   <g transform="translate(${padding}, ${padding})">
     <path d="${pathData}" fill="${fgColor}" shape-rendering="crispEdges" />

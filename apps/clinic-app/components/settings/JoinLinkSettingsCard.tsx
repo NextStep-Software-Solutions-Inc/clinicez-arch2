@@ -13,7 +13,7 @@ import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import { useClinic } from '../../context/ClinicContext';
 import { clinicService, ClinicSettingsRecord } from '../../services/clinicService';
-import { getSetting } from '../../services/runtimeConfig';
+import { getPortalBaseUrl } from '../../services/runtimeConfig';
 import { resolveTenantContext } from '@shared/safe';
 import {
   generateRandomJoinCode,
@@ -86,7 +86,7 @@ export default function JoinLinkSettingsCard({
 
   // Derive destination join URL
   const destinationUrl = useMemo<string>(() => {
-    const portalBase = getSetting('EXPO_PUBLIC_PORTAL_URL') || 'https://portal.clinicez.ph';
+    const portalBase = getPortalBaseUrl();
     if (joinCode && joinCode.trim()) {
       return formatReceptionCodeUrl(portalBase, joinCode);
     }

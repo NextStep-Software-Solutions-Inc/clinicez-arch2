@@ -27,7 +27,7 @@ import { useClinic } from '@context/ClinicContext';
 import { useStaff } from '@context/StaffContext';
 import { Alert, notify } from '@utils/feedback';
 import { printReceiptDialog } from '@utils/printHelper';
-import { getSetting } from '../../services/runtimeConfig';
+import { getPortalBaseUrl } from '../../services/runtimeConfig';
 import { resolveTenantContext } from '@shared/safe';
 import {
   clinicService,
@@ -183,7 +183,7 @@ export default function DashboardScreen() {
   const { current: currentStaff, currentName } = useStaff();
 
   const handleOpenTvDisplay = useCallback(() => {
-    const portalBase = getSetting('EXPO_PUBLIC_PORTAL_URL') || 'https://portal.clinicez.ph';
+    const portalBase = getPortalBaseUrl();
     const ctx = resolveTenantContext();
     const tenantSlug = ctx.tenantSlug || settings?.tenantSlug || settings?.tenantId || 'clinic';
     const facilitySlug = ctx.facilitySlug || settings?.facilitySlug || 'main';

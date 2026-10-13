@@ -10,7 +10,7 @@ import { ToggleSwitch } from './AddEditFieldModal';
 import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import { clinicService, ClinicSettingsRecord } from '../../services/clinicService';
-import { getSetting } from '../../services/runtimeConfig';
+import { getPortalBaseUrl } from '../../services/runtimeConfig';
 import { resolveTenantContext } from '@shared/safe';
 
 export interface WaitingAreaTvSettingsCardProps {
@@ -35,7 +35,7 @@ export default function WaitingAreaTvSettingsCard({
   }, [settings]);
 
   const tvDisplayUrl = useMemo<string>(() => {
-    const portalBase = getSetting('EXPO_PUBLIC_PORTAL_URL') || 'https://portal.clinicez.ph';
+    const portalBase = getPortalBaseUrl();
     const ctx = resolveTenantContext();
     const tenantSlug = ctx.tenantSlug || settings?.tenantSlug || settings?.tenantId || 'clinic';
     const facilitySlug = ctx.facilitySlug || settings?.facilitySlug || 'main';

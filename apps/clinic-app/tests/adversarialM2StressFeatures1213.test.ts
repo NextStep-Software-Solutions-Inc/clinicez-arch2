@@ -4,7 +4,7 @@ import { describe, expect, test, mock, beforeEach } from 'bun:test';
 
 // Mock React Native modules before any component imports
 mock.module('react-native', () => ({
-  StyleSheet: { create: (s: any) => s },
+  StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
   View: 'View',
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',
@@ -13,8 +13,19 @@ mock.module('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
   Modal: 'Modal',
   KeyboardAvoidingView: 'KeyboardAvoidingView',
-  Dimensions: { get: () => ({ width: 1200, height: 800 }) },
+  FlatList: 'FlatList',
+  SectionList: 'SectionList',
+  Switch: 'Switch',
+  TouchableOpacity: 'TouchableOpacity',
+  TouchableHighlight: 'TouchableHighlight',
+  Image: 'Image',
+  RefreshControl: 'RefreshControl',
+  Dimensions: { get: () => ({ width: 1200, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
+  useWindowDimensions: () => ({ width: 1200, height: 800 }),
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
   NativeModules: {},
@@ -27,10 +38,12 @@ mock.module('react-native', () => ({
     timing: () => ({ start: (cb?: any) => cb && cb() }),
     sequence: () => ({ start: (cb?: any) => cb && cb() }),
     loop: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
     View: 'Animated.View',
     Text: 'Animated.Text',
   },
   Alert: { alert: () => {} },
+  processColor: (c: any) => c,
 }));
 
 mock.module('expo-crypto', () => ({
