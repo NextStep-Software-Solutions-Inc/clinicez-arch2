@@ -17,7 +17,7 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -2588,6 +2588,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("last_name");
 
+                    b.Property<Guid?>("ManagedByPatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("managed_by_patient_id");
+
                     b.Property<string>("MessengerHandle")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -2616,6 +2620,11 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("primary_language");
+
+                    b.Property<string>("RelationshipToManager")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("relationship_to_manager");
 
                     b.Property<string>("Religion")
                         .HasMaxLength(80)
@@ -2658,6 +2667,9 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.HasIndex("ClinicEzId")
                         .IsUnique()
                         .HasDatabaseName("ix_patients_clinic_ez_id");
+
+                    b.HasIndex("ManagedByPatientId")
+                        .HasDatabaseName("ix_patients_managed_by_patient_id");
 
                     b.ToTable("patients", (string)null);
                 });
@@ -6639,6 +6651,17 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("Organization");
                 });
 
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.Patient", b =>
+                {
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "ManagedByPatient")
+                        .WithMany("ManagedDependents")
+                        .HasForeignKey("ManagedByPatientId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_patients_patients_managed_by_patient_id");
+
+                    b.Navigation("ManagedByPatient");
+                });
+
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientAccessGrant", b =>
                 {
                     b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
@@ -7151,6 +7174,8 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("LabResults");
 
                     b.Navigation("MaleReproductive");
+
+                    b.Navigation("ManagedDependents");
 
                     b.Navigation("Medications");
 

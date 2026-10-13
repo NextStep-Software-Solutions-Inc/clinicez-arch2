@@ -290,4 +290,33 @@ public class PublicJoinEndpointsTests : IDisposable
         var statusCodeResult = Assert.IsAssignableFrom<IStatusCodeHttpResult>(result);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, statusCodeResult.StatusCode);
     }
+
+    [Fact]
+    public void MapApiEndpoints_BuildsAllEndpointRequestDelegatesWithoutThrow()
+    {
+        var builder = Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder();
+        builder.Configuration["ConnectionStrings:DefaultConnection"] = "Host=localhost;Database=test;Username=postgres;Password=postgres";
+        builder.Configuration["Clerk:Authority"] = "https://clerk.example.test";
+        builder.Configuration["Clerk:SecretKey"] = "sk_test_dummy";
+        builder.Configuration["Xendit:SecretKey"] = "xnd_test_dummy";
+        builder.Configuration["Xendit:CallbackToken"] = "cb_test_dummy";
+
+        ClinicEz.Portal.Api.DependencyInjection.AddApiServices(builder.Services);
+        ClinicEz.Portal.Application.DependencyInjection.AddApplicationServices(builder.Services);
+        ClinicEz.Portal.Infrastructure.DependencyInjection.AddInfrastructureServices(
+            builder.Services,
+            builder.Configuration,
+            builder.Environment);
+
+        using var app = builder.Build();
+        ClinicEz.Portal.Api.Extensions.WebApplicationEndpointExtensions.MapApiEndpoints(app);
+
+        var endpoints = ((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)app)
+            .DataSources
+            .SelectMany(ds => ds.Endpoints)
+            .ToList();
+
+        Assert.NotEmpty(endpoints);
+        Assert.Contains(endpoints, e => e.DisplayName?.Contains("/api/v1/public/join") == true);
+    }
 }

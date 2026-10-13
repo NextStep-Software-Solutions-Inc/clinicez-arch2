@@ -100,6 +100,7 @@ public static class DependencyInjection
 
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseSigner, ClinicEz.Shared.Licensing.FacilityLicenseSigner>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
+        ClinicEz.Shared.Security.ClaimTokens.ClaimTokenServiceExtensions.AddClaimTokenService(services);
         services.AddHttpContextAccessor();
 
         // Register Xendit Typed HTTP Client with Resilience
