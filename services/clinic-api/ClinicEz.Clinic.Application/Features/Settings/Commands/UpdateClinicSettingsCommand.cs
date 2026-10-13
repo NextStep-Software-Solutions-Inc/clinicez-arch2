@@ -28,7 +28,12 @@ public sealed record UpdateClinicSettingsCommand(
     string? PrimaryColorHex = null,
     string? PrimaryLogoUrl = null,
     string? PaperSize = null,
-    string? PreferredChartLayout = null) : IRequest<ClinicSettingsDto>;
+    string? PreferredChartLayout = null,
+    bool? IsJoinEnabled = null,
+    string? JoinCode = null,
+    DateTime? JoinCodeExpiresAt = null,
+    bool ClearJoinCode = false,
+    string? PatientSearchDisplayFieldsJson = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -119,6 +124,26 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (!string.IsNullOrWhiteSpace(request.PreferredChartLayout))
             settings.PreferredChartLayout = request.PreferredChartLayout.Trim();
 
+        if (request.IsJoinEnabled.HasValue)
+            settings.IsJoinEnabled = request.IsJoinEnabled.Value;
+
+        if (request.ClearJoinCode)
+        {
+            settings.JoinCode = null;
+            settings.JoinCodeExpiresAt = null;
+        }
+        else
+        {
+            if (request.JoinCode != null)
+                settings.JoinCode = string.IsNullOrWhiteSpace(request.JoinCode) ? null : request.JoinCode.Trim().ToUpperInvariant();
+
+            if (request.JoinCodeExpiresAt.HasValue)
+                settings.JoinCodeExpiresAt = request.JoinCodeExpiresAt.Value;
+        }
+
+        if (request.PatientSearchDisplayFieldsJson != null)
+            settings.PatientSearchDisplayFieldsJson = string.IsNullOrWhiteSpace(request.PatientSearchDisplayFieldsJson) ? null : request.PatientSearchDisplayFieldsJson.Trim();
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -153,7 +178,11 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.PrimaryColorHex,
             settings.PrimaryLogoUrl,
             settings.PaperSize,
-            settings.PreferredChartLayout);
+            settings.PreferredChartLayout,
+            settings.IsJoinEnabled,
+            settings.JoinCode,
+            settings.JoinCodeExpiresAt,
+            settings.PatientSearchDisplayFieldsJson);
     }
 }
 

@@ -54,4 +54,12 @@ public sealed class ClinicSettings : BaseEntity
     public string? PrimaryLogoUrl { get; set; }
     public string PaperSize { get; set; } = "Letter";
     public string PreferredChartLayout { get; set; } = "modal";
+
+    // Secured Clinic Join Link Settings
+    public bool IsJoinEnabled { get; set; } = true;
+    public string? JoinCode { get; set; }
+    public DateTime? JoinCodeExpiresAt { get; set; }
+
+    // Configurable Patient Search Result Display Fields
+    public string? PatientSearchDisplayFieldsJson { get; set; }
 }

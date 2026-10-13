@@ -16,8 +16,11 @@ import { theme } from '../../constants/theme';
 import { DailyEodReport, ClinicSettingsRecord } from '../../services/clinicService';
 import { CHART_LAYOUT_OPTIONS, type ChartLayoutMode } from '../chart/types';
 import { InfoRow } from './common';
+import JoinLinkSettingsCard from './JoinLinkSettingsCard';
+import PatientSearchConfigSection from './PatientSearchConfigSection';
 
 interface GeneralSettingsTabProps {
+  onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
   preferredChartLayout?: string;
   setPreferredChartLayout?: (v: ChartLayoutMode) => void;
   clinicName: string;
@@ -48,6 +51,7 @@ interface GeneralSettingsTabProps {
 }
 
 export default function GeneralSettingsTab({
+  onSettingsUpdated,
   preferredChartLayout = 'modal',
   setPreferredChartLayout,
   clinicName,
@@ -161,6 +165,13 @@ export default function GeneralSettingsTab({
           )}
         </CardContent>
       </Card>
+
+      {/* Patient Self-Enlistment Join Link & QR Placard */}
+      <JoinLinkSettingsCard
+        settings={settings}
+        showSkeletons={showSkeletons}
+        onSettingsUpdated={onSettingsUpdated}
+      />
 
       {/* Preferred Medical Chart Workstation Layout */}
       <Card>
@@ -317,6 +328,9 @@ export default function GeneralSettingsTab({
           )}
         </CardContent>
       </Card>
+
+      {/* Patient Search Results Display Configuration */}
+      <PatientSearchConfigSection settings={settings} onSettingsUpdated={onSettingsUpdated} />
 
       {/* Security PIN for offline devices */}
       <SecuritySection />

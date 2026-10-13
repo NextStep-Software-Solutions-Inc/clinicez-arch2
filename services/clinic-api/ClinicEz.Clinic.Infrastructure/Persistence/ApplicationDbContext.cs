@@ -53,6 +53,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<YakapTransmittal> YakapTransmittals { get; set; } = null!;
     public DbSet<YakapTransmittalItem> YakapTransmittalItems { get; set; } = null!;
     public DbSet<PhilHealthSequenceTracker> PhilHealthSequenceTrackers { get; set; } = null!;
+    public DbSet<PatientCodeSequenceTracker> PatientCodeSequenceTrackers { get; set; } = null!;
     public DbSet<PhilHealthCatalogItem> PhilHealthCatalogItems { get; set; } = null!;
     public DbSet<PhilHealthCatalogImportLog> PhilHealthCatalogImportLogs { get; set; } = null!;
     public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; } = null!;
@@ -222,7 +223,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantId).HasMaxLength(100);
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
-            entity.Property(e => e.ServiceType).HasMaxLength(100);
+            entity.Property(e => e.ServiceType).HasMaxLength(255);
             entity.Property(e => e.Reason).HasMaxLength(255);
             entity.Property(e => e.EndTimeUtc).IsRequired();
             entity.Property(e => e.Version).IsRowVersion();
@@ -549,6 +550,15 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasIndex(e => new { e.ClinicId, e.SyncPatientId });
         });
 
+        modelBuilder.Entity<PatientCodeSequenceTracker>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Year).IsRequired();
+            entity.Property(e => e.CurrentSequence).IsRequired();
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.Year }).IsUnique();
+        });
+
         modelBuilder.Entity<PatientSurgicalHistory>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -816,6 +826,10 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.DefaultConsultationFee).HasPrecision(18, 2);
             entity.Property(e => e.VatRate).HasPrecision(5, 4);
             entity.Property(e => e.PreferredChartLayout).HasMaxLength(50).HasDefaultValue("modal");
+            entity.Property(e => e.IsJoinEnabled).HasDefaultValue(true);
+            entity.Property(e => e.JoinCode).HasMaxLength(50);
+            entity.Property(e => e.JoinCodeExpiresAt);
+            entity.Property(e => e.PatientSearchDisplayFieldsJson).HasColumnType("text");
             entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
         });
 
@@ -899,5 +913,90 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.ApplyWorkspaceProfileModel();
 
         base.OnModelCreating(modelBuilder);
+    }
+
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        if (!Database.IsRelational())
+        {
+            EnforceInMemoryUniqueConstraints();
+        }
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void EnforceInMemoryUniqueConstraints()
+    {
+        var addedPatients = ChangeTracker.Entries<ClinicPatient>()
+            .Where(e => e.State == EntityState.Added)
+            .Select(e => e.Entity)
+            .ToList();
+
+        if (addedPatients.Count > 0)
+        {
+            var duplicateInBatch = addedPatients
+                .GroupBy(p => (p.TenantId, p.ClinicId, p.PatientCode))
+                .FirstOrDefault(g => g.Count() > 1);
+
+            if (duplicateInBatch != null)
+            {
+                var sample = duplicateInBatch.First();
+                throw new DbUpdateException(
+                    $"23505: duplicate key value violates unique constraint \"IX_ClinicPatients_ClinicId_PatientCode\". Key (tenant_id, clinic_id, patient_code)=({sample.TenantId}, {sample.ClinicId}, {sample.PatientCode}) already exists.",
+                    new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_ClinicPatients_ClinicId_PatientCode\""));
+            }
+
+            foreach (var p in addedPatients)
+            {
+                if (p.PatientCode != null)
+                {
+                    var exists = Patients.Local.Any(existing =>
+                        existing != p &&
+                        existing.TenantId == p.TenantId &&
+                        existing.ClinicId == p.ClinicId &&
+                        string.Equals(existing.PatientCode, p.PatientCode, StringComparison.OrdinalIgnoreCase))
+                        || Patients.IgnoreQueryFilters().Any(existing =>
+                        existing.Id != p.Id &&
+                        existing.TenantId == p.TenantId &&
+                        existing.ClinicId == p.ClinicId &&
+                        existing.PatientCode == p.PatientCode);
+
+                    if (exists)
+                    {
+                        throw new DbUpdateException(
+                            $"23505: duplicate key value violates unique constraint \"IX_ClinicPatients_ClinicId_PatientCode\". Key (tenant_id, clinic_id, patient_code)=({p.TenantId}, {p.ClinicId}, {p.PatientCode}) already exists.",
+                            new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_ClinicPatients_ClinicId_PatientCode\""));
+                    }
+                }
+            }
+        }
+
+        var addedTrackers = ChangeTracker.Entries<PatientCodeSequenceTracker>()
+            .Where(e => e.State == EntityState.Added)
+            .Select(e => e.Entity)
+            .ToList();
+
+        if (addedTrackers.Count > 0)
+        {
+            foreach (var t in addedTrackers)
+            {
+                var exists = PatientCodeSequenceTrackers.Local.Any(existing =>
+                    existing != t &&
+                    existing.TenantId == t.TenantId &&
+                    existing.ClinicId == t.ClinicId &&
+                    existing.Year == t.Year)
+                    || PatientCodeSequenceTrackers.IgnoreQueryFilters().Any(existing =>
+                    existing.Id != t.Id &&
+                    existing.TenantId == t.TenantId &&
+                    existing.ClinicId == t.ClinicId &&
+                    existing.Year == t.Year);
+
+                if (exists)
+                {
+                    throw new DbUpdateException(
+                        $"23505: duplicate key value violates unique constraint \"IX_PatientCodeSequenceTrackers_TenantId_ClinicId_Year\". Key (tenant_id, clinic_id, year)=({t.TenantId}, {t.ClinicId}, {t.Year}) already exists.",
+                        new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_PatientCodeSequenceTrackers_TenantId_ClinicId_Year\""));
+                }
+            }
+        }
     }
 }

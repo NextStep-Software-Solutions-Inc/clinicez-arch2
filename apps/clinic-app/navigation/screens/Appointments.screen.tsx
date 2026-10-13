@@ -20,16 +20,23 @@ import {
   SkeletonList,
   ValidatedDateInput,
   validateDateString,
+  TimeInput,
+  ServiceSelect,
 } from '@ui';
 import type { BadgeVariant } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
+import { useClinic } from '../../context/ClinicContext';
+import PatientSearchResultRow, {
+  parseConfiguredSearchFields,
+} from '../../components/patient/PatientSearchResultRow';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import {
   clinicService,
   AppointmentItem,
   AppointmentStatus,
   ClinicPatient,
+  ClinicCustomFieldDefinition,
 } from '../../services/clinicService';
 import { SlotPicker } from '../../components/roster/SlotPicker';
 import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
@@ -88,7 +95,20 @@ function getStatusBadge(status: AppointmentStatus): { variant: BadgeVariant; lab
 
 export default function AppointmentsScreen() {
   const { staff } = useStaff();
+  const { settings } = useClinic();
   const doctors = staff.filter((s) => s.role === 'Doctor');
+  const [customFieldDefs, setCustomFieldDefs] = useState<ClinicCustomFieldDefinition[]>([]);
+
+  useEffect(() => {
+    clinicService.getCustomFields('ClinicPatient').then(([defs]) => {
+      if (defs) setCustomFieldDefs(defs);
+    });
+  }, []);
+
+  const configuredSearchFields = useMemo(
+    () => parseConfiguredSearchFields(settings?.patientSearchDisplayFieldsJson),
+    [settings?.patientSearchDisplayFieldsJson]
+  );
 
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,7 +128,7 @@ export default function AppointmentsScreen() {
   const [formDoctorId, setFormDoctorId] = useState<string | null>(null);
   const [formDate, setFormDate] = useState('');
   const [formTime, setFormTime] = useState('');
-  const [formServiceType, setFormServiceType] = useState('Consultation');
+  const [formServiceTypes, setFormServiceTypes] = useState<string[]>(['Consultation']);
   const [formReason, setFormReason] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
@@ -163,6 +183,7 @@ export default function AppointmentsScreen() {
     const slot = defaultSlot();
     setFormDate(slot.date);
     setFormTime(slot.time);
+    setFormServiceTypes(['Consultation']);
     setBookModalVisible(true);
   };
 
@@ -171,6 +192,7 @@ export default function AppointmentsScreen() {
     setPatientResults([]);
     setFormPatient(null);
     setFormDoctorId(null);
+    setFormServiceTypes(['Consultation']);
     setFormReason('');
     setFormNotes('');
   };
@@ -199,7 +221,7 @@ export default function AppointmentsScreen() {
       doctorId: doctor?.id,
       doctorName: doctor ? formatStaffName(doctor) : undefined,
       scheduledAt: scheduled.toISOString(),
-      serviceType: formServiceType.trim() || undefined,
+      serviceType: formServiceTypes.join(', ').trim() || undefined,
       reason: formReason.trim() || 'General Consultation',
       notes: formNotes.trim() || undefined,
     });
@@ -438,19 +460,16 @@ export default function AppointmentsScreen() {
               </ThemedText>
             ) : null}
             {patientResults.map((p) => (
-              <Pressable
+              <PatientSearchResultRow
                 key={p.id}
-                style={styles.resultRow}
+                patient={p}
+                configuredFieldKeys={configuredSearchFields}
+                customFieldDefs={customFieldDefs}
                 onPress={() => {
                   setFormPatient(p);
                   setPatientResults([]);
                 }}
-              >
-                <ThemedText variant="bodyBold">{p.fullName}</ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  {p.patientCode}
-                </ThemedText>
-              </Pressable>
+              />
             ))}
             {!searchingPatients && patientSearch.trim().length >= 2 && patientResults.length === 0 ? (
               <ThemedText variant="caption" color={theme.colors.textMuted}>
@@ -496,7 +515,7 @@ export default function AppointmentsScreen() {
             />
           </View>
           <View style={styles.flexFill}>
-            <Input label="Selected Time" placeholder="HH:MM" value={formTime} onChangeText={setFormTime} />
+            <TimeInput label="Selected Time" placeholder="HH:MM" value={formTime} onChangeText={setFormTime} />
           </View>
         </View>
 
@@ -513,11 +532,10 @@ export default function AppointmentsScreen() {
           />
         ) : null}
 
-        <Input
+        <ServiceSelect
           label="Service type"
-          placeholder="Consultation, Follow-up, Routine"
-          value={formServiceType}
-          onChangeText={setFormServiceType}
+          selectedServices={formServiceTypes}
+          onChangeServices={setFormServiceTypes}
         />
 
         <Input
@@ -563,6 +581,7 @@ const styles = StyleSheet.create({
   },
   flexFill: {
     flex: 1,
+    minWidth: 0,
   },
   filterRow: {
     flexDirection: 'row',

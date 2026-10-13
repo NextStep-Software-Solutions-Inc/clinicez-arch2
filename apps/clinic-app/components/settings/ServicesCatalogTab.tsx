@@ -56,6 +56,18 @@ export default function ServicesCatalogTab({
   const [savingItem, setSavingItem] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
 
+  // Edit Item Modal State
+  const [editingItem, setEditingItem] = useState<ClinicServiceItem | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editCategory, setEditCategory] = useState('Consultation');
+  const [editPrice, setEditPrice] = useState('500');
+  const [editDescription, setEditDescription] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
+  const [editPhilHealthCode, setEditPhilHealthCode] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
   const visibleServices =
     selectedCategory === 'All'
       ? services
@@ -104,6 +116,72 @@ export default function ServicesCatalogTab({
     setServices((prev) => [...prev, created]);
     setShowAddModal(false);
     notify.success(`Service "${created.name}" added to catalog.`);
+  };
+
+  const handleOpenEdit = (item: ClinicServiceItem) => {
+    setEditingItem(item);
+    setEditName(item.name);
+    setEditCategory(item.category);
+    setEditPrice(String(item.standardPrice));
+    setEditDescription(item.description || '');
+    setEditIsActive(item.isActive);
+    setEditPhilHealthCode(item.philHealthCode || '');
+    setEditError(null);
+    setShowEditModal(true);
+  };
+
+  const handleUpdateService = async () => {
+    if (!editingItem) return;
+    if (!editName.trim()) {
+      setEditError('Item name is required.');
+      return;
+    }
+    const priceNum = parseFloat(editPrice);
+    if (isNaN(priceNum) || priceNum < 0) {
+      setEditError('Enter a valid price in PHP.');
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+
+    const [updated, err] = await clinicService.updateService(editingItem.id, {
+      name: editName.trim(),
+      category: editCategory,
+      standardPrice: priceNum,
+      description: editDescription.trim() || undefined,
+      isActive: editIsActive,
+      philHealthCode: editPhilHealthCode.trim() || undefined,
+    });
+
+    setSavingEdit(false);
+
+    if (err || !updated) {
+      setEditError(err?.message || 'Could not update the service item.');
+      return;
+    }
+
+    setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    setShowEditModal(false);
+    notify.success(`Service "${updated.name}" updated successfully.`);
+  };
+
+  const handleToggleActive = async (item: ClinicServiceItem) => {
+    const nextActive = !item.isActive;
+    const [updated, err] = await clinicService.updateService(item.id, {
+      name: item.name,
+      category: item.category,
+      standardPrice: item.standardPrice,
+      description: item.description,
+      isActive: nextActive,
+      philHealthCode: item.philHealthCode,
+    });
+    if (err || !updated) {
+      notify.error(err?.message || 'Could not update service status.');
+      return;
+    }
+    setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    notify.success(`Service "${item.name}" ${nextActive ? 'activated' : 'deactivated'}.`);
   };
 
   return (
@@ -162,6 +240,7 @@ export default function ServicesCatalogTab({
                       <Badge label={item.code} variant="outline" size="sm" />
                       <Badge label={item.category} variant="neutral" size="sm" />
                       {!item.isActive && <Badge label="Inactive" variant="emergency" size="sm" />}
+                      {item.isPhilHealthFormulary && <Badge label="PhilHealth" variant="success" size="sm" />}
                     </View>
 
                     {item.description ? (
@@ -171,10 +250,25 @@ export default function ServicesCatalogTab({
                     ) : null}
                   </View>
 
-                  <View style={styles.priceCol}>
+                  <View style={styles.serviceRightCol}>
                     <ThemedText variant="bodyBold" color={theme.colors.primary}>
                       {formatPeso(item.standardPrice)}
                     </ThemedText>
+                    <View style={styles.itemActions}>
+                      <Button
+                        title="Edit"
+                        variant="secondary"
+                        size="sm"
+                        icon="edit"
+                        onPress={() => handleOpenEdit(item)}
+                      />
+                      <Button
+                        title={item.isActive ? 'Deactivate' : 'Activate'}
+                        variant={item.isActive ? 'outline' : 'primary'}
+                        size="sm"
+                        onPress={() => handleToggleActive(item)}
+                      />
+                    </View>
                   </View>
                 </View>
               ))}
@@ -256,6 +350,100 @@ export default function ServicesCatalogTab({
           multiline
         />
       </Modal>
+
+      {/* Edit Service Modal */}
+      <Modal
+        visible={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="Edit catalog service item"
+        subtitle={`Updating ${editingItem?.code || 'service'}`}
+        maxWidth={500}
+        footer={
+          <View style={styles.modalFooter}>
+            <Button title="Cancel" variant="ghost" onPress={() => setShowEditModal(false)} disabled={savingEdit} />
+            <Button title="Save changes" onPress={handleUpdateService} loading={savingEdit} />
+          </View>
+        }
+      >
+        {editError ? (
+          <View style={styles.errorBox}>
+            <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+            <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
+              {editError}
+            </ThemedText>
+          </View>
+        ) : null}
+
+        <View style={styles.formRow}>
+          <Input
+            containerStyle={styles.flexNarrow}
+            label="Item code"
+            disabled
+            value={editingItem?.code || ''}
+            placeholder="Code"
+          />
+          <Input
+            containerStyle={styles.flexNarrow}
+            label="Standard fee (₱)"
+            required
+            value={editPrice}
+            onChangeText={setEditPrice}
+            placeholder="500.00"
+            keyboardType="numeric"
+          />
+        </View>
+
+        <Input
+          label="Item description / name"
+          required
+          value={editName}
+          onChangeText={setEditName}
+          placeholder="e.g. Pediatric Consultation, Nebulization"
+        />
+
+        <FieldGroup label="Category">
+          <View style={styles.chipRow}>
+            {['Consultation', 'Procedure', 'Diagnostic', 'Medicine', 'NursingService'].map((cat) => (
+              <Chip
+                key={cat}
+                label={cat}
+                active={editCategory === cat}
+                onPress={() => setEditCategory(cat)}
+              />
+            ))}
+          </View>
+        </FieldGroup>
+
+        <Input
+          label="PhilHealth statutory code (optional)"
+          value={editPhilHealthCode}
+          onChangeText={setEditPhilHealthCode}
+          placeholder="e.g. 93000, 82947"
+        />
+
+        <Input
+          label="Notes or instructions (optional)"
+          value={editDescription}
+          onChangeText={setEditDescription}
+          placeholder="Optional notes or procedure prep instructions"
+          multiline
+        />
+
+        <FieldGroup label="Status">
+          <View style={styles.chipRow}>
+            <Chip
+              label="Active (Available in appointments & billing)"
+              active={editIsActive}
+              onPress={() => setEditIsActive(true)}
+            />
+            <Chip
+              label="Inactive (Archived from new bookings)"
+              active={!editIsActive}
+              onPress={() => setEditIsActive(false)}
+            />
+          </View>
+        </FieldGroup>
+      </Modal>
     </View>
   );
 }
@@ -263,6 +451,15 @@ export default function ServicesCatalogTab({
 const styles = StyleSheet.create({
   container: {
     gap: theme.spacing.lg,
+  },
+  serviceRightCol: {
+    alignItems: 'flex-end',
+    gap: theme.spacing.xs,
+  },
+  itemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   chipRow: {
     flexDirection: 'row',

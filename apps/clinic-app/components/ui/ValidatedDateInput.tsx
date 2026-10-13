@@ -407,25 +407,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: theme.sizes.borderWidth,
     borderRadius: theme.radii.md,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
     minHeight: theme.sizes.controlMd,
+    overflow: 'hidden',
   },
   disabledWrapper: {
     opacity: 0.6,
   },
   leftIcon: {
-    marginRight: theme.spacing.sm,
+    marginRight: theme.spacing.xs,
+    flexShrink: 0,
   },
   clearBtn: {
     padding: theme.spacing.xs,
     marginLeft: theme.spacing.xs,
+    flexShrink: 0,
   },
   rightIconBtn: {
     padding: theme.spacing.xs,
     marginLeft: theme.spacing.xs,
+    flexShrink: 0,
   },
   input: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     color: theme.colors.text,
     fontSize: theme.fontSizes.md,
     letterSpacing: 0.5,

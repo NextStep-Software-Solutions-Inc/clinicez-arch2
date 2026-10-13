@@ -40,6 +40,16 @@ export {
   type BloodTypeSelectProps,
 } from './BloodTypeSelect';
 export {
+  default as TimeInput,
+  type TimeInputProps,
+  formatTimeMask,
+  validateTimeString,
+} from './TimeInput';
+export {
+  default as ServiceSelect,
+  type ServiceSelectProps,
+} from './ServiceSelect';
+export {
   useModalStack,
   registerModal,
   attachPortalElement,

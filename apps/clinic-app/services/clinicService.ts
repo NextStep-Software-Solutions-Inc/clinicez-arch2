@@ -1630,6 +1630,7 @@ export interface ClinicSettingsRecord {
   joinCode?: string | null;
   joinCodeExpiresAt?: string | null;
   clearJoinCode?: boolean;
+  patientSearchDisplayFieldsJson?: string | null;
 }
 
 export interface CheckInRequest {

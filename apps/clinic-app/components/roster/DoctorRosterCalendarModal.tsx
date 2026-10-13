@@ -15,6 +15,7 @@ import {
   Badge,
   ValidatedDateInput,
   validateDateString,
+  TimeInput,
 } from '@ui';
 import { notify, Alert } from '@utils/feedback';
 import { theme } from '../../constants/theme';
@@ -563,7 +564,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                     {/* Shift Times */}
                     <View style={styles.formRow}>
                       <View style={styles.flexFill}>
-                        <Input
+                        <TimeInput
                           label="Shift Start Time"
                           placeholder="09:00"
                           value={startTime}
@@ -571,7 +572,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                         />
                       </View>
                       <View style={styles.flexFill}>
-                        <Input
+                        <TimeInput
                           label="Shift End Time"
                           placeholder="17:00"
                           value={endTime}
@@ -648,14 +649,14 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                             />
                           </View>
                           <View style={styles.breakTimeCol}>
-                            <Input
+                            <TimeInput
                               placeholder="12:00"
                               value={brk.startTime}
                               onChangeText={(v) => handleUpdateBreak(idx, 'startTime', v)}
                             />
                           </View>
                           <View style={styles.breakTimeCol}>
-                            <Input
+                            <TimeInput
                               placeholder="13:00"
                               value={brk.endTime}
                               onChangeText={(v) => handleUpdateBreak(idx, 'endTime', v)}
@@ -767,7 +768,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                 {isPartialDay ? (
                   <>
                     <View style={styles.flexFill}>
-                      <Input
+                      <TimeInput
                         label="From Time"
                         placeholder="13:00"
                         value={partialStartTime}
@@ -775,7 +776,7 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                       />
                     </View>
                     <View style={styles.flexFill}>
-                      <Input
+                      <TimeInput
                         label="To Time"
                         placeholder="17:00"
                         value={partialEndTime}

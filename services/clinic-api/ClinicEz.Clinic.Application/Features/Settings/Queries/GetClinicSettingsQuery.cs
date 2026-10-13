@@ -90,7 +90,11 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.PrimaryColorHex,
             settings.PrimaryLogoUrl,
             settings.PaperSize,
-            settings.PreferredChartLayout);
+            settings.PreferredChartLayout,
+            settings.IsJoinEnabled,
+            settings.JoinCode,
+            settings.JoinCodeExpiresAt,
+            settings.PatientSearchDisplayFieldsJson);
     }
 }
 

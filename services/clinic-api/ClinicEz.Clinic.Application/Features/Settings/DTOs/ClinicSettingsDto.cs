@@ -31,5 +31,9 @@ public sealed record ClinicSettingsDto(
     string PrimaryColorHex = "#0284C7",
     string? PrimaryLogoUrl = null,
     string PaperSize = "Letter",
-    string PreferredChartLayout = "modal");
+    string PreferredChartLayout = "modal",
+    bool IsJoinEnabled = true,
+    string? JoinCode = null,
+    DateTime? JoinCodeExpiresAt = null,
+    string? PatientSearchDisplayFieldsJson = null);
 
