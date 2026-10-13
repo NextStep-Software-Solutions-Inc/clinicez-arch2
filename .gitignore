@@ -104,3 +104,4 @@ migration_reports/
 configuration.txt
 keys/*
 .agents/teamwork/
+credentials.txt
