@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { calculateChronologicalAge, formatLongAge, getDaysInMonth } from '../utils/age';
+import { calculateChronologicalAge, formatLongAge, formatShortAge, formatCompressedLongAge, getDaysInMonth } from '../utils/age';
 
 describe('formatLongAge and calculateChronologicalAge', () => {
   describe('Adults and older pediatric patients (> 1 year)', () => {
@@ -194,4 +194,32 @@ describe('formatLongAge and calculateChronologicalAge', () => {
       expect(formatLongAge(dob, ref)).toBe('10 yrs');
     });
   });
+
+  describe('formatCompressedLongAge', () => {
+    it('formats adults into compressed long format 27Y6M2W1D', () => {
+      // 1999-04-01 to 2026-10-16: 27 yrs, 6 mos, 15 days = 2 wks, 1 day
+      const ref = new Date(2026, 9, 16); // Oct 16, 2026
+      expect(formatCompressedLongAge('1999-04-01', ref)).toBe('27Y6M2W1D');
+    });
+
+    it('formats infants into compressed long format 6M2W1D', () => {
+      // 2026-04-01 to 2026-10-16: 0 yrs, 6 mos, 15 days = 2 wks, 1 day
+      const ref = new Date(2026, 9, 16);
+      expect(formatCompressedLongAge('2026-04-01', ref)).toBe('6M2W1D');
+    });
+
+    it('formats newborns into compressed days or weeks', () => {
+      const ref = new Date(2026, 9, 16);
+      expect(formatCompressedLongAge('2026-10-10', ref)).toBe('6D');
+      expect(formatCompressedLongAge('2026-10-01', ref)).toBe('2W1D');
+    });
+
+    it('returns empty string for missing or invalid dates', () => {
+      expect(formatCompressedLongAge(null)).toBe('');
+      expect(formatCompressedLongAge(undefined)).toBe('');
+      expect(formatCompressedLongAge('')).toBe('');
+      expect(formatCompressedLongAge('not-a-date')).toBe('');
+    });
+  });
 });
+

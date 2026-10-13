@@ -13,7 +13,7 @@ import {
 } from '../../ui';
 import type { IconName } from '../../ui/Icon';
 import { useBreakpoint } from '../../../utils/useBreakpoint';
-import { formatShortAge } from '../../../utils/age';
+import { formatCompressedLongAge } from '../../../utils/age';
 import { formatPhilHealthPin } from '../PatientSummarySpine';
 import ChartLayoutSwitcher from '../ChartLayoutSwitcher';
 import ChartTabContentView from '../ChartTabContentView';
@@ -159,8 +159,8 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                       style={styles.identityValue}
                     >
                       {patient.dateOfBirth
-                        ? `${formatShortAge(patient.dateOfBirth)}, ${patient.gender}`
-                        : `${patient.age ? `${patient.age} yrs old, ` : ''}${patient.gender}`}
+                        ? `${formatCompressedLongAge(patient.dateOfBirth)}, ${patient.gender}`
+                        : `${patient.age ? `${patient.age}Y, ` : ''}${patient.gender}`}
                     </ThemedText>
                   </View>
 

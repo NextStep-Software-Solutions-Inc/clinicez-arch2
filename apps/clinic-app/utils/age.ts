@@ -213,3 +213,31 @@ export function formatShortAge(
 
   return `${age.years} ${age.years === 1 ? 'yr' : 'yrs'} old`;
 }
+
+/**
+ * Format chronological age into compressed long clinical format (e.g. "27Y6M2W1D", "6M2W1D", "12D"):
+ * - Adults / Children (>= 1 yr): e.g. `${years}Y${months}M${weeks}W${days}D`
+ * - Infants (1-12 mos): e.g. `${months}M${weeks}W${days}D`
+ * - Newborns (< 1 mo): e.g. `${weeks}W${days}D` or `${days}D`
+ */
+export function formatCompressedLongAge(
+  dateOfBirth: string | Date | undefined | null,
+  referenceDate?: Date
+): string {
+  const age = calculateChronologicalAge(dateOfBirth, referenceDate);
+  if (!age) return '';
+
+  if (age.isNewborn) {
+    if (age.weeks > 0) {
+      return `${age.weeks}W${age.days}D`;
+    }
+    return `${age.totalDays}D`;
+  }
+
+  if (age.isInfant) {
+    return `${age.months}M${age.weeks}W${age.days}D`;
+  }
+
+  return `${age.years}Y${age.months}M${age.weeks}W${age.days}D`;
+}
+
