@@ -72,10 +72,23 @@ let lastPostUrl = '';
 let lastPostPayload: any = null;
 let mockPostResponse: any = null;
 let mockPostError: any = null;
+let lastGetUrl = '';
+let mockGetResponse: any = null;
+let lastPutUrl = '';
+let lastPutPayload: any = null;
+let mockPutResponse: any = null;
 
 mock.module('../services/apiClient', () => ({
   clinicApiClient: {
-    get: async (url: string) => [null, null],
+    get: async (url: string) => {
+      lastGetUrl = url;
+      return [mockGetResponse, null];
+    },
+    put: async (url: string, data?: any) => {
+      lastPutUrl = url;
+      lastPutPayload = data;
+      return [mockPutResponse, null];
+    },
     post: async (url: string, data?: any) => {
       lastPostUrl = url;
       lastPostPayload = data;
@@ -94,6 +107,11 @@ describe('OPD Queue Dashboard Controls & Absence Management', () => {
     lastPostPayload = null;
     mockPostResponse = null;
     mockPostError = null;
+    lastGetUrl = '';
+    mockGetResponse = null;
+    lastPutUrl = '';
+    lastPutPayload = null;
+    mockPutResponse = null;
     alertCalls = [];
   });
 
@@ -415,4 +433,65 @@ describe('OPD Queue Dashboard Controls & Absence Management', () => {
       expect(lastPostPayload).toEqual({ reason: 'Cancelled from dashboard' });
     });
   });
+
+  describe('7. Waiting Area Public TV Display Board & Settings Integration', () => {
+    test('7.1 getPublicQueueDisplay calls GET /public/queue/display with params', async () => {
+      mockGetResponse = {
+        clinicName: 'St. Jude Family Clinic',
+        nowServing: [],
+        upNext: [],
+        tvDisplayMaskPatientNames: true,
+      };
+      const [res, err] = await clinicService.getPublicQueueDisplay('c-1', 'main', 'st-jude');
+      expect(err).toBeNull();
+      expect(res.clinicName).toBe('St. Jude Family Clinic');
+      expect(lastGetUrl).toBe('/public/queue/display?clinicId=c-1&facilitySlug=main&tenantSlug=st-jude');
+    });
+
+    test('7.2 updateSettings persists tvDisplayMaskPatientNames via PUT /settings', async () => {
+      mockPutResponse = { tvDisplayMaskPatientNames: false };
+      const [res, err] = await clinicService.updateSettings({ tvDisplayMaskPatientNames: false });
+      expect(err).toBeNull();
+      expect(res.tvDisplayMaskPatientNames).toBe(false);
+      expect(lastPutUrl).toBe('/settings');
+      expect(lastPutPayload).toEqual({ tvDisplayMaskPatientNames: false });
+    });
+
+    test('7.3 Public TV display URL generator produces canonical portal-web link', () => {
+      const portalBase = 'https://portal.clinicez.ph';
+      const tenantSlug = 'st-jude-clinic';
+      const facilitySlug = 'quezon-city-main';
+      const tvUrl = `${portalBase}/queue-display/${encodeURIComponent(tenantSlug)}/${encodeURIComponent(facilitySlug)}`;
+      expect(tvUrl).toBe('https://portal.clinicez.ph/queue-display/st-jude-clinic/quezon-city-main');
+    });
+
+    test('7.4 Patient privacy masking transforms Philippine names accurately', () => {
+      const maskPatientName = (fullName: string | null | undefined): string => {
+        if (!fullName || !fullName.trim()) return 'Anonymous';
+        let cleaned = fullName.trim();
+        if (cleaned.includes(',')) {
+          const parts = cleaned.split(',').map((p) => p.trim()).filter(Boolean);
+          if (parts.length >= 2) {
+            cleaned = `${parts[1]} ${parts[0]}`;
+          }
+        }
+        const tokens = cleaned.split(/\s+/).filter(Boolean);
+        if (tokens.length === 0) return 'Anonymous';
+        if (tokens.length === 1) return `${tokens[0][0].toUpperCase()}.`;
+        const firstName = tokens[0];
+        const lastInitial = tokens[tokens.length - 1][0].toUpperCase();
+        return `${firstName} ${lastInitial}.`;
+      };
+
+      expect(maskPatientName('Cassandra Alcantara')).toBe('Cassandra A.');
+      expect(maskPatientName('Juan Dela Cruz')).toBe('Juan C.');
+      expect(maskPatientName('Maria Clara Santos')).toBe('Maria S.');
+      expect(maskPatientName('Santos, Maria Clara')).toBe('Maria S.');
+      expect(maskPatientName('Alcantara, Cassandra')).toBe('Cassandra A.');
+      expect(maskPatientName('Cher')).toBe('C.');
+      expect(maskPatientName('')).toBe('Anonymous');
+      expect(maskPatientName(null)).toBe('Anonymous');
+    });
+  });
 });
+

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Linking } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
   ThemedText,
@@ -27,6 +27,8 @@ import { useClinic } from '@context/ClinicContext';
 import { useStaff } from '@context/StaffContext';
 import { Alert, notify } from '@utils/feedback';
 import { printReceiptDialog } from '@utils/printHelper';
+import { getSetting } from '../../services/runtimeConfig';
+import { resolveTenantContext } from '@shared/safe';
 import {
   clinicService,
   PatientQueueItem,
@@ -42,6 +44,7 @@ import {
   TaxDiscountAuditReport,
   DoctorSharesReport,
 } from '../../services/clinicService';
+import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
 
 type DashboardTab = 'QUEUE' | 'ANALYTICS' | 'REPORTS';
 type ReportType = 'DAILY_EOD' | 'MORBIDITY' | 'TAX_DISCOUNT' | 'DOCTOR_SHARES';
@@ -176,8 +179,24 @@ function LoadingBlock({ rows = 4 }: { rows?: number }) {
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
-  const { facilityName, letterhead } = useClinic();
+  const { facilityName, letterhead, settings } = useClinic();
   const { current: currentStaff, currentName } = useStaff();
+
+  const handleOpenTvDisplay = useCallback(() => {
+    const portalBase = getSetting('EXPO_PUBLIC_PORTAL_URL') || 'https://portal.clinicez.ph';
+    const ctx = resolveTenantContext();
+    const tenantSlug = ctx.tenantSlug || settings?.tenantSlug || settings?.tenantId || 'clinic';
+    const facilitySlug = ctx.facilitySlug || settings?.facilitySlug || 'main';
+    const tvUrl = `${portalBase}/queue-display/${encodeURIComponent(tenantSlug)}/${encodeURIComponent(facilitySlug)}`;
+
+    if (typeof window !== 'undefined' && window.open) {
+      window.open(tvUrl, '_blank');
+    } else {
+      Linking.openURL(tvUrl).catch(() => {
+        notify.error('Could not open TV display.');
+      });
+    }
+  }, [settings]);
 
   const [activeTab, setActiveTab] = useState<DashboardTab>('QUEUE');
   const [metrics, setMetrics] = useState<QueueMetrics | null>(null);
@@ -189,6 +208,7 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('ALL');
+  const [showForceEodModal, setShowForceEodModal] = useState(false);
 
   // Nurse triage modal state
   const [triageItem, setTriageItem] = useState<PatientQueueItem | null>(null);
@@ -714,19 +734,39 @@ export default function DashboardScreen() {
           </Card>
         ) : null}
 
-        <SegmentedControl<QueueFilter>
-          value={queueFilter}
-          onChange={setQueueFilter}
-          options={[
-            { value: 'ALL', label: 'All', count: queueCounts.ALL },
-            { value: 'Waiting', label: 'Waiting', count: queueCounts.Waiting },
-            { value: 'Triaged', label: 'Triaged', count: queueCounts.Triaged },
-            { value: 'InConsultation', label: 'In consultation', count: queueCounts.InConsultation },
-            { value: 'OnHold', label: 'On hold', count: queueCounts.OnHold },
-            { value: 'NoShow', label: 'No show', count: queueCounts.NoShow },
-            { value: 'Completed', label: 'Completed', count: queueCounts.Completed },
-          ]}
-        />
+        <View style={styles.queueActionsRow}>
+          <View style={styles.queueFilterWrap}>
+            <SegmentedControl<QueueFilter>
+              value={queueFilter}
+              onChange={setQueueFilter}
+              options={[
+                { value: 'ALL', label: 'All', count: queueCounts.ALL },
+                { value: 'Waiting', label: 'Waiting', count: queueCounts.Waiting },
+                { value: 'Triaged', label: 'Triaged', count: queueCounts.Triaged },
+                { value: 'InConsultation', label: 'In consultation', count: queueCounts.InConsultation },
+                { value: 'OnHold', label: 'On hold', count: queueCounts.OnHold },
+                { value: 'NoShow', label: 'No show', count: queueCounts.NoShow },
+                { value: 'Completed', label: 'Completed', count: queueCounts.Completed },
+              ]}
+            />
+          </View>
+          <View style={styles.queueButtonsWrap}>
+            <Button
+              title="Open TV Board"
+              variant="outline"
+              icon="maximize"
+              size="sm"
+              onPress={handleOpenTvDisplay}
+            />
+            <Button
+              title="Force EOD / Close Day"
+              variant="outline"
+              icon="clock"
+              size="sm"
+              onPress={() => setShowForceEodModal(true)}
+            />
+          </View>
+        </View>
 
         {showSkeleton ? (
           <LoadingBlock rows={4} />
@@ -1564,6 +1604,15 @@ export default function DashboardScreen() {
           </ThemedText>
         </View>
       </Modal>
+
+      <ForceEodConfirmationModal
+        visible={showForceEodModal}
+        onClose={() => setShowForceEodModal(false)}
+        activeTicketCount={
+          (queueCounts.Waiting ?? 0) + (queueCounts.Triaged ?? 0) + (queueCounts.OnHold ?? 0)
+        }
+        onSuccess={retry}
+      />
     </ResponsiveLayout>
   );
 }
@@ -1583,6 +1632,22 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: theme.spacing.lg,
+  },
+  queueActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  queueFilterWrap: {
+    flex: 1,
+    minWidth: 320,
+  },
+  queueButtonsWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   statRow: {
     flexDirection: 'row',

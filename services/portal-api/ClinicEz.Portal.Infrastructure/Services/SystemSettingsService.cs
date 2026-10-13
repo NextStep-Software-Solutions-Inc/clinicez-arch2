@@ -36,7 +36,10 @@ public sealed class SystemSettingsService(
         ("Mailer:SmtpFromEmail", "no-reply@clinicez.com", "Mailer", "Default sender email address for outgoing system emails."),
         ("Mailer:SmtpFromName", "ClinicEZ Support", "Mailer", "Default sender display name for outgoing system emails."),
         ("Mailer:SmtpReplyTo", "support@clinicez.com", "Mailer", "Default reply-to email address for system notifications."),
-        ("Mailer:ContactInbox", "contact@clinicez.com", "Mailer", "Inbox email address where contact/support inquiries are delivered.")
+        ("Mailer:ContactInbox", "contact@clinicez.com", "Mailer", "Inbox email address where contact/support inquiries are delivered."),
+        ("JoinClaim:TtlHours", "48", "JoinClaim", "Validity window in hours for progressive patient account claim tokens."),
+        ("PatientApp:AppleAppStoreUrl", "https://apps.apple.com/app/clinicez-patient/id000000000", "PatientApp", "Download URL for ClinicEZ Patient App on Apple App Store."),
+        ("PatientApp:GooglePlayStoreUrl", "https://play.google.com/store/apps/details?id=com.clinicez.patient", "PatientApp", "Download URL for ClinicEZ Patient App on Google Play Store.")
     ];
 
     public async Task<IReadOnlyList<SystemSettingDto>> GetAllSettingsAsync(CancellationToken ct = default)

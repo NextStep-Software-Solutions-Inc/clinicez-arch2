@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { CheckCircle2, Printer, RotateCcw, Clock, Building2, User, Ticket } from "lucide-react";
 import { type DigitalRegistrationPass } from "./types";
 import { generateQrMatrix, buildQrPathData } from "./qrGenerator";
+import { ProgressiveClaimCard } from "./ProgressiveClaimCard";
 
 interface DigitalPassCardProps {
   pass: DigitalRegistrationPass;
@@ -35,7 +36,10 @@ export function DigitalPassCard({ pass, onReset }: DigitalPassCardProps) {
       </div>
 
       {/* Printable Digital Pass Ticket Card */}
-      <div className="relative bg-card border-2 border-primary/30 rounded-3xl p-6 sm:p-8 max-w-lg mx-auto shadow-xl overflow-hidden print:shadow-none print:border-slate-800">
+      <div
+        data-section="queue-ticket"
+        className="relative bg-card border-2 border-primary/30 rounded-3xl p-6 sm:p-8 max-w-lg mx-auto shadow-xl overflow-hidden print:shadow-none print:border-slate-800"
+      >
         {/* Ticket punch hole cutouts */}
         <div className="absolute -left-4 top-1/2 w-8 h-8 rounded-full bg-background border-2 border-primary/30 -translate-y-1/2 print:hidden" />
         <div className="absolute -right-4 top-1/2 w-8 h-8 rounded-full bg-background border-2 border-primary/30 -translate-y-1/2 print:hidden" />
@@ -122,6 +126,11 @@ export function DigitalPassCard({ pass, onReset }: DigitalPassCardProps) {
         <div className="mt-5 p-3 bg-muted/50 rounded-xl text-center text-xs text-muted-foreground">
           Please present this digital pass or state token <strong className="text-foreground">{pass.queueToken}</strong> at the clinic reception desk when called.
         </div>
+      </div>
+
+      {/* Progressive Account Claim Card */}
+      <div className="max-w-lg mx-auto print:hidden">
+        <ProgressiveClaimCard pass={pass} />
       </div>
 
       {/* Action Buttons Toolbar */}

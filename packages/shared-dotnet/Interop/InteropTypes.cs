@@ -43,6 +43,8 @@ public static class InteropTypes
     public const string ClinicalImmunizationAdministered = "clinical.immunization.administered";
     /// <summary>Portal -> clinic. Payload: <c>PatientJoinRequestedPayload</c> (public join link registration request with document quarantine).</summary>
     public const string PatientJoinRequested = "patient.join.requested";
+    /// <summary>Clinic -> patient-api. Payload: <c>PatientQueueAlertPayload</c> (called to room or approaching turn queue alert).</summary>
+    public const string PatientQueueAlert = "patient.queue.alert";
 
     // Laboratory
     public const string LabOrderIssued = "lab.order.issued";

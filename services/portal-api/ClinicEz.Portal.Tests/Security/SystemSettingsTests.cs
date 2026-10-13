@@ -33,6 +33,9 @@ public class SystemSettingsTests
         Assert.Contains(settings, s => s.Key == "Licensing:TtlDays" && s.Value == "30");
         Assert.Contains(settings, s => s.Key == "Billing:TrialDays" && s.Value == "14");
         Assert.Contains(settings, s => s.Key == "Workspace:MaxOwnedPerUser" && s.Value == "1");
+        Assert.Contains(settings, s => s.Key == "JoinClaim:TtlHours" && s.Value == "48");
+        Assert.Contains(settings, s => s.Key == "PatientApp:AppleAppStoreUrl" && s.Value.Contains("apple.com"));
+        Assert.Contains(settings, s => s.Key == "PatientApp:GooglePlayStoreUrl" && s.Value.Contains("play.google.com"));
     }
 
     [Fact]

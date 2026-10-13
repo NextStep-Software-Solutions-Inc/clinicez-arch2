@@ -94,7 +94,12 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.IsJoinEnabled,
             settings.JoinCode,
             settings.JoinCodeExpiresAt,
-            settings.PatientSearchDisplayFieldsJson);
+            settings.PatientSearchDisplayFieldsJson,
+            settings.EodReconciliationTime,
+            settings.AutoEodEnabled,
+            settings.TvDisplayMaskPatientNames,
+            settings.EnableQueuePushNotifications,
+            settings.QueuePushNotificationThreshold);
     }
 }
 

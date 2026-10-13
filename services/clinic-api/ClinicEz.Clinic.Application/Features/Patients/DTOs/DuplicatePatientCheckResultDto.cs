@@ -10,7 +10,9 @@ public sealed record DuplicateMatchDto(
     DateOnly DateOfBirth,
     string? ContactNumber,
     string? PhilHealthNumber,
-    string MatchReason
+    string MatchReason,
+    double? SimilarityScore = null,
+    string? Confidence = null
 );
 
 public sealed record DuplicatePatientCheckResultDto(

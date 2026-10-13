@@ -30,6 +30,7 @@ import {
   ClinicalProcedureRecord,
 } from '../../services/clinicService';
 import { ProcedureExecutionModal } from '../../components/chart/NursingProceduresTab';
+import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
 
 const STATIONS = [
   { id: 'ALL', label: 'All Stations' },
@@ -144,6 +145,11 @@ export default function QueueScreen() {
 
   const waitingCount = useMemo(() => queue.filter((q) => q.status === 'Waiting').length, [queue]);
   const procedureBayCount = useMemo(() => queue.filter((q) => q.status === 'PendingProcedure').length, [queue]);
+  const activeEodCount = useMemo(
+    () => queue.filter((q) => q.status === 'Waiting' || q.status === 'Triaged' || q.status === 'OnHold').length,
+    [queue]
+  );
+  const [showForceEodModal, setShowForceEodModal] = useState(false);
 
   return (
     <ResponsiveLayout headerTitle="Queue & Stations">
@@ -222,18 +228,27 @@ export default function QueueScreen() {
           </ScrollView>
         </View>
 
-        {/* FAST VIEW SEGMENTED CONTROLS */}
+        {/* FAST VIEW SEGMENTED CONTROLS & FORCE EOD */}
         <View style={styles.viewSwitcherSection}>
-          <SegmentedControl<QueueView>
-            options={[
-              { value: 'All', label: 'All Queue' },
-              { value: 'MyRoom', label: 'My Room' },
-              { value: 'WaitingForDoctor', label: 'Waiting for Doctor' },
-              { value: 'Triage', label: 'Triage' },
-              { value: 'PendingProcedure', label: 'Procedure Bay' },
-            ]}
-            value={selectedView}
-            onChange={setSelectedView}
+          <View style={styles.segmentedWrap}>
+            <SegmentedControl<QueueView>
+              options={[
+                { value: 'All', label: 'All Queue' },
+                { value: 'MyRoom', label: 'My Room' },
+                { value: 'WaitingForDoctor', label: 'Waiting for Doctor' },
+                { value: 'Triage', label: 'Triage' },
+                { value: 'PendingProcedure', label: 'Procedure Bay' },
+              ]}
+              value={selectedView}
+              onChange={setSelectedView}
+            />
+          </View>
+          <Button
+            title="Force EOD / Close Day"
+            variant="outline"
+            icon="clock"
+            size="sm"
+            onPress={() => setShowForceEodModal(true)}
           />
         </View>
 
@@ -447,6 +462,14 @@ export default function QueueScreen() {
             loadData();
           }}
         />
+
+        {/* FORCE EOD MODAL */}
+        <ForceEodConfirmationModal
+          visible={showForceEodModal}
+          onClose={() => setShowForceEodModal(false)}
+          activeTicketCount={activeEodCount}
+          onSuccess={loadData}
+        />
       </ScrollView>
     </ResponsiveLayout>
   );
@@ -497,6 +520,15 @@ const styles = StyleSheet.create({
   },
   viewSwitcherSection: {
     marginVertical: 2,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  segmentedWrap: {
+    flex: 1,
+    minWidth: 280,
   },
   queueList: {
     gap: theme.spacing.sm,

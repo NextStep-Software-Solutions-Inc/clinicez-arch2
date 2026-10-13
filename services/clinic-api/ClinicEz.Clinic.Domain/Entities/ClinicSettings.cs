@@ -62,4 +62,29 @@ public sealed class ClinicSettings : BaseEntity
 
     // Configurable Patient Search Result Display Fields
     public string? PatientSearchDisplayFieldsJson { get; set; }
+
+    /// <summary>
+    /// 24-hour time format "HH:mm" (e.g. "21:00") when automated EOD reconciliation executes.
+    /// </summary>
+    public string EodReconciliationTime { get; set; } = "21:00";
+
+    /// <summary>
+    /// Controls whether the automated background worker reconciles remaining tickets.
+    /// </summary>
+    public bool AutoEodEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Controls whether patient names are privacy-masked (e.g. "Cassandra A.") on public waiting area TV displays.
+    /// </summary>
+    public bool TvDisplayMaskPatientNames { get; set; } = true;
+
+    /// <summary>
+    /// Controls whether mobile patient app push notifications are dispatched for queue events.
+    /// </summary>
+    public bool EnableQueuePushNotifications { get; set; } = true;
+
+    /// <summary>
+    /// The number of patients ahead in line (1 to 5) that triggers an approaching turn notification to the patient app.
+    /// </summary>
+    public int QueuePushNotificationThreshold { get; set; } = 2;
 }

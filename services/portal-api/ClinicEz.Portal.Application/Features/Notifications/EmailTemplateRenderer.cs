@@ -9,6 +9,7 @@ public static class EmailTemplateKeys
 {
     public const string StaffInvitation = "staff.invitation";
     public const string ContactMessage = "contact.message";
+    public const string PatientClaimInvitation = "patient.claim.invitation";
 }
 
 /// <param name="ReplyTo">Where a reply should go, when the template knows (for example the visitor of the contact form).</param>
@@ -45,6 +46,7 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
         {
             EmailTemplateKeys.StaffInvitation => RenderStaffInvitation(subject, model),
             EmailTemplateKeys.ContactMessage => RenderContactMessage(subject, model),
+            EmailTemplateKeys.PatientClaimInvitation => RenderPatientClaimInvitation(subject, model),
             _ => throw new EmailTemplateException($"Unknown email template '{templateKey}'.")
         };
     }
@@ -103,6 +105,40 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
 
         var replyTo = MailAddress.TryCreate(email, out var parsed) && parsed.Address == email.Trim() ? parsed.Address : null;
         return new RenderedEmail(html, text, replyTo);
+    }
+
+    private static RenderedEmail RenderPatientClaimInvitation(string subject, IReadOnlyDictionary<string, string> model)
+    {
+        var patientName = Required(model, "patientName");
+        var facilityName = Required(model, "facilityName");
+        var claimUrl = RequiredHttpUrl(model, "claimUrl");
+        var ttlHours = Optional(model, "ttlHours") ?? "48";
+        var expiresAt = Optional(model, "expiresAt") ?? "in 48 hours";
+
+        var html = Fill(PatientClaimInvitationHtml, new Dictionary<string, string>
+        {
+            ["subject"] = Encode(subject),
+            ["patientName"] = Encode(patientName),
+            ["facilityName"] = Encode(facilityName),
+            ["claimUrl"] = Encode(claimUrl),
+            ["ttlHours"] = Encode(ttlHours),
+            ["expiresAt"] = Encode(expiresAt)
+        });
+
+        var text = $"""
+            Hello {patientName},
+
+            Thank you for registering at {facilityName}.
+
+            You can claim your permanent ClinicEZ Patient Account in 1-click by visiting:
+            {claimUrl}
+
+            This link is cryptographically signed and expires {expiresAt} (in {ttlHours} hours).
+
+            Claiming your account allows you to track your queue status in real-time, access digital e-prescriptions and lab results, and check-in instantly at all ClinicEZ facilities.
+            """;
+
+        return new RenderedEmail(html, text);
     }
 
     private static string Required(IReadOnlyDictionary<string, string> model, string key) =>
@@ -221,6 +257,69 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
           <p>Name: {{name}}</p>
           <p>Email: {{email}}</p>
           <p>Message: {{message}}</p>
+        </body>
+        </html>
+        """;
+
+    private const string PatientClaimInvitationHtml = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>{{subject}}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <!-- Teal Header -->
+            <tr>
+              <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #0D6963 0%, #084c47 100%); text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Clinic EZ</h1>
+                <p style="color: #ccfbf1; margin: 6px 0 0 0; font-size: 13px; font-weight: 500;">Patient Health Records &amp; Clinic Portal</p>
+              </td>
+            </tr>
+
+            <!-- Content Body -->
+            <tr>
+              <td style="padding: 32px;">
+                <h2 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0;">Hello {{patientName}},</h2>
+                <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
+                  Your intake registration at <strong>{{facilityName}}</strong> was received. You can now claim your permanent ClinicEZ Patient Account to access test results, e-prescriptions, and fast-track future check-ins.
+                </p>
+
+                <!-- CTA -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 28px 0;">
+                  <tr>
+                    <td align="center">
+                      <a href="{{claimUrl}}" target="_blank" style="display: inline-block; background-color: #0D6963; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 10px; box-shadow: 0 2px 4px rgba(13, 105, 99, 0.3);">
+                        Claim My Patient Account &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Link Fallback -->
+                <p style="font-size: 12px; color: #94a3b8; line-height: 18px; margin: 24px 0 0 0; word-break: break-all;">
+                  Or copy and paste this link into your browser:<br />
+                  <a href="{{claimUrl}}" style="color: #0D6963; text-decoration: underline;">{{claimUrl}}</a>
+                </p>
+
+                <!-- Notice -->
+                <p style="font-size: 12px; color: #64748b; line-height: 18px; margin: 24px 0 0 0; text-align: center;">
+                  This secure claim link expires in <strong>{{ttlHours}} hours</strong> ({{expiresAt}}).
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
+                <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                  If you did not register at {{facilityName}}, you can safely ignore this email.
+                </p>
+              </td>
+            </tr>
+          </table>
         </body>
         </html>
         """;

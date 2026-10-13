@@ -286,6 +286,46 @@ public class EmailTemplateRendererTests
         model["facilityName"] = "BGC Lab";
         Assert.Contains("Branch Assignment:</strong> BGC Lab", _renderer.Render(EmailTemplateKeys.StaffInvitation, "S", model).Html);
     }
+
+    [Fact]
+    public void PatientClaimInvitation_RendersTealBrandingAndClaimLink()
+    {
+        var model = new Dictionary<string, string>
+        {
+            ["patientName"] = "Maria Clara",
+            ["facilityName"] = "St. Jude Clinic",
+            ["claimUrl"] = "https://portal.clinicez.ph/join/claim?token=sample.token",
+            ["ttlHours"] = "48",
+            ["expiresAt"] = "2026-10-15 12:00 UTC"
+        };
+
+        var mail = _renderer.Render(EmailTemplateKeys.PatientClaimInvitation, "Your Claim Link", model);
+
+        Assert.Contains("Hello Maria Clara", mail.Html);
+        Assert.Contains("St. Jude Clinic", mail.Html);
+        Assert.Contains("#0D6963", mail.Html);
+        Assert.Contains("https://portal.clinicez.ph/join/claim?token=sample.token", mail.Html);
+        Assert.Contains("48 hours", mail.Html);
+        Assert.Contains("2026-10-15 12:00 UTC", mail.Html);
+
+        Assert.Contains("Maria Clara", mail.Text);
+        Assert.Contains("https://portal.clinicez.ph/join/claim?token=sample.token", mail.Text);
+    }
+
+    [Fact]
+    public void PatientClaimInvitation_RejectsNonHttpUrl()
+    {
+        var model = new Dictionary<string, string>
+        {
+            ["patientName"] = "Maria Clara",
+            ["facilityName"] = "St. Jude Clinic",
+            ["claimUrl"] = "javascript:alert(1)",
+            ["ttlHours"] = "48"
+        };
+
+        Assert.Throws<EmailTemplateException>(() =>
+            _renderer.Render(EmailTemplateKeys.PatientClaimInvitation, "Subject", model));
+    }
 }
 
 public class StaffInvitationEmailTests : IDisposable

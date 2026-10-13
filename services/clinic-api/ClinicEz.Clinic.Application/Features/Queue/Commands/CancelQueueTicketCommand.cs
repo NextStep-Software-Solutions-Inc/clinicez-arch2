@@ -18,15 +18,18 @@ public sealed class CancelQueueTicketCommandHandler : IRequestHandler<CancelQueu
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly Features.Queue.Services.IQueueNotificationDispatcher? _notificationDispatcher;
 
     public CancelQueueTicketCommandHandler(
         IRepository<QueueItem> queueRepository,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null)
     {
         _queueRepository = queueRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _notificationDispatcher = notificationDispatcher;
     }
 
     public async Task<QueueItemDto> Handle(CancelQueueTicketCommand request, CancellationToken cancellationToken)
@@ -44,6 +47,11 @@ public sealed class CancelQueueTicketCommandHandler : IRequestHandler<CancelQueu
         item.CompletedTime = DateTime.UtcNow;
         item.UpdatedAt = DateTime.UtcNow;
         item.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Staff";
+
+        if (_notificationDispatcher != null)
+        {
+            await _notificationDispatcher.EvaluateAndDispatchApproachingAlertsAsync(item.ClinicId, item.QueueDate, cancellationToken);
+        }
 
         _queueRepository.Update(item);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

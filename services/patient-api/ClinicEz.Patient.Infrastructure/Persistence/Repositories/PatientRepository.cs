@@ -15,13 +15,29 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
         => Context.Patients
             .FirstOrDefaultAsync(p => p.ClerkUserId == clerkUserId, cancellationToken);
 
+    public Task<Patient?> GetByClerkUserIdWithDetailsAsync(string clerkUserId, CancellationToken cancellationToken = default)
+        => Context.Patients
+            .Include(p => p.GovernmentIds)
+            .Include(p => p.Allergies)
+            .Include(p => p.ClinicMemberships)
+            .Include(p => p.ManagedDependents)
+                .ThenInclude(d => d.GovernmentIds)
+            .Include(p => p.ManagedDependents)
+                .ThenInclude(d => d.Allergies)
+            .Include(p => p.ManagedDependents)
+                .ThenInclude(d => d.ClinicMemberships)
+            .FirstOrDefaultAsync(p => p.ClerkUserId == clerkUserId, cancellationToken);
+
     public Task<Patient?> GetByClinicEzIdAsync(string clinicEzId, CancellationToken cancellationToken = default)
         => Context.Patients
             .FirstOrDefaultAsync(p => p.ClinicEzId == clinicEzId, cancellationToken);
 
     public Task<bool> IsOwnedByAsync(Guid patientId, string clerkUserId, CancellationToken cancellationToken = default)
         => Context.Patients
-            .AnyAsync(p => p.Id == patientId && p.ClerkUserId == clerkUserId, cancellationToken);
+            .AnyAsync(p => p.Id == patientId && (
+                p.ClerkUserId == clerkUserId ||
+                (p.ManagedByPatientId != null && p.ManagedByPatient!.ClerkUserId == clerkUserId)
+            ), cancellationToken);
 
     public Task<Patient?> GetWithProfileAsync(Guid id, CancellationToken cancellationToken = default)
         => Context.Patients

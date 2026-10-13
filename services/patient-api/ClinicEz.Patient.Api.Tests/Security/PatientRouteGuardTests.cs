@@ -27,6 +27,7 @@ public sealed class PatientRouteGuardTests : IAsyncLifetime
     [InlineData("/clinics/{clinicId:guid}/providers/{providerId:guid}/slots", null)]
     [InlineData("/clinics", null)]
     [InlineData("/patients", null)]
+    [InlineData("/patients/claim-intake", null)]
     [InlineData("/webhooks/clerk", null)]
     public void ResolveGuardedParameter_ClassifiesRouteShapes(string template, string? expected)
     {
@@ -36,10 +37,11 @@ public sealed class PatientRouteGuardTests : IAsyncLifetime
     }
 
     [Fact]
-    public void EveryRouteUnderPatients_ExceptCreate_IsOwnershipGuarded()
+    public void EveryRouteUnderPatients_ExceptCreateAndClaimIntake_IsOwnershipGuarded()
     {
         var patientRoutes = Routes()
             .Where(r => r.RoutePattern.RawText!.StartsWith("/api/v1/patients/", StringComparison.Ordinal))
+            .Where(r => !string.Equals(r.RoutePattern.RawText, "/api/v1/patients/claim-intake", StringComparison.Ordinal))
             .ToList();
 
         patientRoutes.Should().NotBeEmpty();

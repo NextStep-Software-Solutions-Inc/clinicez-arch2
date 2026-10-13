@@ -4,6 +4,7 @@ using ClinicEz.Patient.Domain.Enums;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
@@ -315,6 +316,45 @@ public sealed class PatientInteropFlowTests
     }
 
     [Fact]
+    public async Task Patient_queue_alert_creates_notification_and_is_idempotent()
+    {
+        using var h = new PatientInteropHarness();
+        var patientId = Guid.NewGuid();
+        var clinicId = Guid.NewGuid();
+        var ticketId = Guid.NewGuid();
+
+        await h.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Patient
+            {
+                Id = patientId, ClerkUserId = "clerk_queue_1", FirstName = "Maria", LastName = "Santos",
+                Mobile = "+639171234568", Email = "maria@example.test", DateOfBirth = new DateOnly(1992, 5, 10)
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var payload = new PatientQueueAlertPayload(
+            ticketId, "Q-005", "called_to_room", "Ticket Q-005 has been called to Room 2.", "Dr. Reyes", "Room 2", 0, DateTime.UtcNow);
+
+        var envelope = InteropEnvelope.Create(
+            InteropTypes.PatientQueueAlert,
+            PatientInteropHarness.Clinic(clinicId),
+            PatientInteropHarness.Patient(patientId),
+            ticketId,
+            payload);
+
+        await h.Dispatcher.DispatchAsync(envelope, default);
+        // Duplicate delivery should be idempotent
+        await h.Dispatcher.DispatchAsync(envelope with { MessageId = Guid.NewGuid() }, default);
+
+        var notifications = await h.WithDbAsync(db => db.Notifications.AsNoTracking().Where(n => n.PatientId == patientId).ToListAsync());
+        notifications.Should().ContainSingle();
+        notifications[0].Title.Should().Be("Called: Ticket Q-005");
+        notifications[0].Body.Should().Be("Ticket Q-005 has been called to Room 2.");
+        notifications[0].SourceId.Should().Be($"{ticketId}:called_to_room");
+    }
+
+    [Fact]
     public void Every_message_type_patient_api_receives_has_a_handler()
     {
         using var h = new PatientInteropHarness();
@@ -322,6 +362,7 @@ public sealed class PatientInteropFlowTests
         h.Provider.GetRequiredService<InteropHandlerRegistry>().RegisteredTypes.Should().BeEquivalentTo(
             InteropTypes.FacilityDirectoryUpdated, InteropTypes.ClinicRecordVerified, InteropTypes.ClinicAppointmentUpdated,
             InteropTypes.PatientShareRedeem, InteropTypes.PatientDocumentIssued, InteropTypes.LabOrderStatusChanged,
-            InteropTypes.RxStatusChanged, InteropTypes.LabResultReviewed, InteropTypes.ClinicalImmunizationAdministered);
+            InteropTypes.RxStatusChanged, InteropTypes.LabResultReviewed, InteropTypes.ClinicalImmunizationAdministered,
+            InteropTypes.PatientQueueAlert);
     }
 }

@@ -33,7 +33,12 @@ public sealed record UpdateClinicSettingsCommand(
     string? JoinCode = null,
     DateTime? JoinCodeExpiresAt = null,
     bool ClearJoinCode = false,
-    string? PatientSearchDisplayFieldsJson = null) : IRequest<ClinicSettingsDto>;
+    string? PatientSearchDisplayFieldsJson = null,
+    string? EodReconciliationTime = null,
+    bool? AutoEodEnabled = null,
+    bool? TvDisplayMaskPatientNames = null,
+    bool? EnableQueuePushNotifications = null,
+    int? QueuePushNotificationThreshold = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -144,6 +149,21 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.PatientSearchDisplayFieldsJson != null)
             settings.PatientSearchDisplayFieldsJson = string.IsNullOrWhiteSpace(request.PatientSearchDisplayFieldsJson) ? null : request.PatientSearchDisplayFieldsJson.Trim();
 
+        if (!string.IsNullOrWhiteSpace(request.EodReconciliationTime))
+            settings.EodReconciliationTime = request.EodReconciliationTime.Trim();
+
+        if (request.AutoEodEnabled.HasValue)
+            settings.AutoEodEnabled = request.AutoEodEnabled.Value;
+
+        if (request.TvDisplayMaskPatientNames.HasValue)
+            settings.TvDisplayMaskPatientNames = request.TvDisplayMaskPatientNames.Value;
+
+        if (request.EnableQueuePushNotifications.HasValue)
+            settings.EnableQueuePushNotifications = request.EnableQueuePushNotifications.Value;
+
+        if (request.QueuePushNotificationThreshold.HasValue)
+            settings.QueuePushNotificationThreshold = Math.Clamp(request.QueuePushNotificationThreshold.Value, 1, 5);
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -182,7 +202,12 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.IsJoinEnabled,
             settings.JoinCode,
             settings.JoinCodeExpiresAt,
-            settings.PatientSearchDisplayFieldsJson);
+            settings.PatientSearchDisplayFieldsJson,
+            settings.EodReconciliationTime,
+            settings.AutoEodEnabled,
+            settings.TvDisplayMaskPatientNames,
+            settings.EnableQueuePushNotifications,
+            settings.QueuePushNotificationThreshold);
     }
 }
 

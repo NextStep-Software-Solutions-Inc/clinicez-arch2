@@ -5,6 +5,7 @@ namespace ClinicEz.Patient.Domain.Interfaces;
 public interface IPatientRepository : IBaseRepository<ClinicEz.Patient.Domain.Entities.Patient>
 {
     Task<ClinicEz.Patient.Domain.Entities.Patient?> GetByClerkUserIdAsync(string clerkUserId, CancellationToken cancellationToken = default);
+    Task<ClinicEz.Patient.Domain.Entities.Patient?> GetByClerkUserIdWithDetailsAsync(string clerkUserId, CancellationToken cancellationToken = default);
 
     /// <summary>The patient with this ClinicEzId (as stored, e.g. <c>CE-AB12-CD34</c>), or null.</summary>
     Task<ClinicEz.Patient.Domain.Entities.Patient?> GetByClinicEzIdAsync(string clinicEzId, CancellationToken cancellationToken = default);

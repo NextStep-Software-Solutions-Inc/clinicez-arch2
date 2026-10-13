@@ -127,4 +127,27 @@
   &::-webkit-scrollbar {
     display: none;
   }
-}
+}
+
+@keyframes servingPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(45, 212, 191, 0);
+    border-color: rgba(45, 212, 191, 0.4);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 45px rgba(45, 212, 191, 0.75);
+    border-color: rgba(45, 212, 191, 1);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(45, 212, 191, 0);
+    border-color: rgba(45, 212, 191, 0.4);
+  }
+}
+
+.animate-serving-pulse {
+  animation: servingPulse 1.2s ease-in-out 3;
+}
+

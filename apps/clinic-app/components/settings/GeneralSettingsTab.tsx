@@ -18,6 +18,9 @@ import { CHART_LAYOUT_OPTIONS, type ChartLayoutMode } from '../chart/types';
 import { InfoRow } from './common';
 import JoinLinkSettingsCard from './JoinLinkSettingsCard';
 import PatientSearchConfigSection from './PatientSearchConfigSection';
+import EodReconciliationSettingsCard from './EodReconciliationSettingsCard';
+import WaitingAreaTvSettingsCard from './WaitingAreaTvSettingsCard';
+import QueuePushNotificationSettingsCard from './QueuePushNotificationSettingsCard';
 
 interface GeneralSettingsTabProps {
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
@@ -328,6 +331,28 @@ export default function GeneralSettingsTab({
           )}
         </CardContent>
       </Card>
+
+      {/* End-of-Day (EOD) Reconciliation & Day Closure */}
+      <EodReconciliationSettingsCard
+        settings={settings}
+        onSettingsUpdated={onSettingsUpdated}
+        showSkeletons={showSkeletons}
+        onForceEodSuccess={onRefreshEod}
+      />
+
+      {/* Waiting Area Public TV Display Board */}
+      <WaitingAreaTvSettingsCard
+        settings={settings}
+        onSettingsUpdated={onSettingsUpdated}
+        showSkeletons={showSkeletons}
+      />
+
+      {/* Patient Queue Push Notifications */}
+      <QueuePushNotificationSettingsCard
+        settings={settings}
+        onSettingsUpdated={onSettingsUpdated}
+        showSkeletons={showSkeletons}
+      />
 
       {/* Patient Search Results Display Configuration */}
       <PatientSearchConfigSection settings={settings} onSettingsUpdated={onSettingsUpdated} />

@@ -174,7 +174,20 @@ public sealed class QueueController : ControllerBase
         var result = await _sender.Send(new CancelQueueTicketCommand(id, request?.Reason), ct);
         return Ok(ApiResponse<QueueItemDto>.Success(result, "Queue ticket cancelled."));
     }
+
+    [HttpPost("reconcile-eod")]
+    [HasPermission(ClinicPermissions.QueueComplete)]
+    public async Task<ActionResult<ApiResponse<ReconcileEodResultDto>>> ReconcileEod(
+        [FromBody] ReconcileEodRequest? request,
+        CancellationToken ct)
+    {
+        var command = new ReconcileEodCommand(request?.Date, TriggerType: "Manual", Reason: request?.Reason);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<ReconcileEodResultDto>.Success(result, result.Summary));
+    }
 }
+
+public sealed record ReconcileEodRequest(DateOnly? Date = null, string? Reason = null);
 
 public sealed record CancelQueueTicketRequest(string? Reason = null);
 

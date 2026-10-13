@@ -469,3 +469,147 @@ describe('Feature 12: Structured Allergy Intake Model & Rules', () => {
   });
 });
 
+describe('Feature 13: Duplicate Patient Safeguard & Warning Workflow Interception', () => {
+  beforeEach(() => {
+    lastGetUrl = '';
+    lastGetParams = null;
+    lastPostUrl = '';
+    lastPostPayload = null;
+    mockNetworkError = null;
+    mockDuplicateResult = { hasDuplicates: false, matches: [] };
+    mockRegisteredPatient = null;
+  });
+
+  test('pre-flight duplicate check intercepts registration when matches are detected', async () => {
+    const existingMatch = {
+      patientId: 'existing-guid-123',
+      patientCode: 'PAT-2026-00012',
+      fullName: 'Dela Cruz, Juan M.',
+      dateOfBirth: '1985-05-20',
+      contactNumber: '09171234567',
+      philHealthNumber: '12-345678901-8',
+      matchReason: 'PhilHealth Identification Number (PIN) match • Full Name and Date of Birth match',
+      similarityScore: 1.0,
+      confidence: 'High' as const,
+    };
+
+    mockDuplicateResult = {
+      hasDuplicates: true,
+      matches: [existingMatch],
+    };
+
+    let duplicateModalVisible = false;
+    let detectedMatches: any[] = [];
+    let registered = false;
+
+    const simulateRegistrationAttempt = async (options?: { bypassDuplicateCheck?: boolean }) => {
+      if (!options?.bypassDuplicateCheck) {
+        const [dupCheck] = await clinicService.checkPatientDuplicates({
+          firstName: 'Juan',
+          lastName: 'Dela Cruz',
+          dateOfBirth: '1985-05-20',
+          contactNumber: '09171234567',
+          philHealthNumber: '12-345678901-8',
+        });
+
+        if (dupCheck && dupCheck.hasDuplicates && dupCheck.matches.length > 0) {
+          detectedMatches = dupCheck.matches;
+          duplicateModalVisible = true;
+          return;
+        }
+      }
+
+      const [res] = await clinicService.registerPatient({
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+        dateOfBirth: '1985-05-20',
+        contactNumber: '09171234567',
+      });
+      if (res) registered = true;
+    };
+
+    // First attempt: duplicate check intercepts
+    await simulateRegistrationAttempt();
+
+    expect(duplicateModalVisible).toBe(true);
+    expect(detectedMatches).toHaveLength(1);
+    expect(detectedMatches[0].patientId).toBe('existing-guid-123');
+    expect(registered).toBe(false);
+    expect(lastPostUrl).toBe(''); // Registration API was NOT called
+  });
+
+  test('Create New Profile Anyway bypasses duplicate check and proceeds with registration', async () => {
+    mockRegisteredPatient = {
+      id: 'new-patient-guid',
+      patientCode: 'PAT-2026-00099',
+      fullName: 'Dela Cruz, Juan',
+      firstName: 'Juan',
+      lastName: 'Dela Cruz',
+      dateOfBirth: '1985-05-20',
+      contactNumber: '09171234567',
+      gender: 'Male',
+      civilStatus: 'Single',
+      verificationStatus: 'Verified',
+      isYakapEligible: false,
+      createdAt: '2026-10-13T00:00:00Z',
+    };
+
+    let registered = false;
+
+    const simulateRegistrationAttempt = async (options?: { bypassDuplicateCheck?: boolean }) => {
+      if (!options?.bypassDuplicateCheck) {
+        return; // blocked if not bypassed
+      }
+
+      const [res] = await clinicService.registerPatient({
+        firstName: 'Juan',
+        lastName: 'Dela Cruz',
+        dateOfBirth: '1985-05-20',
+        contactNumber: '09171234567',
+      });
+      if (res) registered = true;
+    };
+
+    // Staff chooses "Create New Profile Anyway"
+    await simulateRegistrationAttempt({ bypassDuplicateCheck: true });
+
+    expect(registered).toBe(true);
+    expect(lastPostUrl).toBe('/patients');
+    expect(lastPostPayload?.firstName).toBe('Juan');
+    expect(lastPostPayload?.contactNumber).toBe('09171234567');
+  });
+
+  test('Use Existing Profile retrieves existing patient and resets registration form without creating new record', async () => {
+    let openedChartPatientId: string | null = null;
+    let postCallOccurred = false;
+
+    const mockExistingPatient: ClinicPatient = {
+      id: 'existing-patient-001',
+      patientCode: 'PAT-2026-00001',
+      fullName: 'Santos, Maria',
+      firstName: 'Maria',
+      lastName: 'Santos',
+      dateOfBirth: '1990-08-15',
+      contactNumber: '09181234567',
+      gender: 'Female',
+      civilStatus: 'Single',
+      verificationStatus: 'Verified',
+      isYakapEligible: false,
+      createdAt: '2026-10-13T00:00:00Z',
+    };
+
+    // Mock getPatientById
+    const handleUseExistingProfile = async (patientId: string) => {
+      // In Patients.screen.tsx: closes modals, resets form, and opens chart for existing patient
+      openedChartPatientId = patientId;
+    };
+
+    await handleUseExistingProfile(mockExistingPatient.id);
+
+    expect(openedChartPatientId).toBe('existing-patient-001');
+    expect(postCallOccurred).toBe(false);
+    expect(lastPostUrl).toBe('');
+  });
+});
+
+

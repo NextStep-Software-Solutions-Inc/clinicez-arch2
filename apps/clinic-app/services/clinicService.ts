@@ -1412,6 +1412,8 @@ export interface DuplicateMatch {
   contactNumber?: string | null;
   philHealthNumber?: string | null;
   matchReason: string;
+  similarityScore?: number | null;
+  confidence?: 'High' | 'Medium' | 'Low' | null;
 }
 
 export interface DuplicatePatientCheckResult {
@@ -1633,6 +1635,21 @@ export interface ClinicSettingsRecord {
   joinCodeExpiresAt?: string | null;
   clearJoinCode?: boolean;
   patientSearchDisplayFieldsJson?: string | null;
+  eodReconciliationTime?: string | null;
+  autoEodEnabled?: boolean;
+  tvDisplayMaskPatientNames?: boolean;
+  enableQueuePushNotifications?: boolean;
+  queuePushNotificationThreshold?: number;
+  tenantSlug?: string;
+  facilitySlug?: string;
+}
+
+export interface ReconcileEodResult {
+  reconciledCount: number;
+  reconciliationDate: string;
+  reconciledAt: string;
+  affectedTicketNumbers: string[];
+  summary: string;
 }
 
 export interface CheckInRequest {
@@ -1788,6 +1805,10 @@ export const clinicService = {
 
   async reactivateQueueItem(id: string) {
     return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/reactivate`);
+  },
+
+  async reconcileEod(date?: string, reason?: string) {
+    return clinicApiClient.post<ReconcileEodResult>('/queue/reconcile-eod', { date, reason });
   },
 
   // Nurse Triage
@@ -2626,6 +2647,15 @@ export const clinicService = {
 
   async updateSettings(payload: Partial<ClinicSettingsRecord>) {
     return clinicApiClient.put<ClinicSettingsRecord>('/settings', payload);
+  },
+
+  async getPublicQueueDisplay(clinicId?: string, facilitySlug?: string, tenantSlug?: string) {
+    const params = new URLSearchParams();
+    if (clinicId) params.append('clinicId', clinicId);
+    if (facilitySlug) params.append('facilitySlug', facilitySlug);
+    if (tenantSlug) params.append('tenantSlug', tenantSlug);
+    const query = params.toString();
+    return clinicApiClient.get<any>(`/public/queue/display${query ? `?${query}` : ''}`);
   },
 
   // PhilHealth Yakap (formerly Konsulta)

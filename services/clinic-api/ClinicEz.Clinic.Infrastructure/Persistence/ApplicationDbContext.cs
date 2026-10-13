@@ -50,6 +50,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<ClinicRecordAttachment> RecordAttachments { get; set; } = null!;
     public DbSet<ClinicCustomFieldDefinition> CustomFieldDefinitions { get; set; } = null!;
     public DbSet<ClinicSettings> ClinicSettings { get; set; } = null!;
+    public DbSet<EodReconciliationAudit> EodReconciliationAudits { get; set; } = null!;
     public DbSet<YakapTransmittal> YakapTransmittals { get; set; } = null!;
     public DbSet<YakapTransmittalItem> YakapTransmittalItems { get; set; } = null!;
     public DbSet<PhilHealthSequenceTracker> PhilHealthSequenceTrackers { get; set; } = null!;
@@ -130,6 +131,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<ClinicRecordAttachment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ClinicCustomFieldDefinition>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ClinicSettings>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<EodReconciliationAudit>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<YakapTransmittal>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<YakapTransmittalItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ClinicLabResult>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
@@ -280,6 +282,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.DoctorName).HasMaxLength(150);
             entity.Property(e => e.ChiefComplaint).HasMaxLength(255);
             entity.Property(e => e.RoomOrStation).HasMaxLength(100);
+            entity.Property(e => e.ApproachingNotificationSent).HasDefaultValue(false);
+            entity.Property(e => e.CalledNotificationSent).HasDefaultValue(false);
 
             entity.HasOne(e => e.Appointment)
                 .WithMany()
@@ -830,7 +834,25 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.JoinCode).HasMaxLength(50);
             entity.Property(e => e.JoinCodeExpiresAt);
             entity.Property(e => e.PatientSearchDisplayFieldsJson).HasColumnType("text");
+            entity.Property(e => e.EodReconciliationTime).HasMaxLength(10).HasDefaultValue("21:00");
+            entity.Property(e => e.AutoEodEnabled).HasDefaultValue(true);
+            entity.Property(e => e.TvDisplayMaskPatientNames).HasDefaultValue(true);
+            entity.Property(e => e.EnableQueuePushNotifications).HasDefaultValue(true);
+            entity.Property(e => e.QueuePushNotificationThreshold).HasDefaultValue(2);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
+        });
+
+        modelBuilder.Entity<EodReconciliationAudit>(entity =>
+        {
+            entity.ToTable("EodReconciliationAudits", "clinic_dashboard");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TriggerType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.ReconciledBy).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.AffectedTicketNumbersJson).HasColumnType("text");
+            entity.Property(e => e.Notes).HasMaxLength(500);
+
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.ReconciliationDate });
         });
 
 

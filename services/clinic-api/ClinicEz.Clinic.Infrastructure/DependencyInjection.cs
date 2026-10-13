@@ -77,6 +77,7 @@ public static class DependencyInjection
         services.AddSingleton<ClinicEz.Clinic.Application.Common.Interfaces.IWhoZScoreCalculator, ClinicEz.Clinic.Infrastructure.PhilHealth.Services.WhoZScoreCalculator>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogSeedHostedService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyCleanupHostedService>();
+        services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.EodReconciliationBackgroundService>();
 
         // Workspace brand/regional defaults: fed by workspace.profile.updated messages and held in this service's own database
         services.AddWorkspaceProfile<ApplicationDbContext>();

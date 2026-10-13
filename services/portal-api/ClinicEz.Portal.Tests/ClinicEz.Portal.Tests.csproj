@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ClinicEz.Portal.Infrastructure\ClinicEz.Portal.Infrastructure.csproj" />
+    <ProjectReference Include="..\ClinicEz.Portal.Api\ClinicEz.Portal.Api.csproj" />
   </ItemGroup>
 
 </Project>

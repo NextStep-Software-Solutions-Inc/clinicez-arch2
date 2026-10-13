@@ -18,15 +18,18 @@ public sealed class ReactivateQueueItemCommandHandler : IRequestHandler<Reactiva
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly Features.Queue.Services.IQueueNotificationDispatcher? _notificationDispatcher;
 
     public ReactivateQueueItemCommandHandler(
         IRepository<QueueItem> queueRepository,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null)
     {
         _queueRepository = queueRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _notificationDispatcher = notificationDispatcher;
     }
 
     public async Task<QueueItemDto> Handle(ReactivateQueueItemCommand request, CancellationToken cancellationToken)
@@ -57,6 +60,11 @@ public sealed class ReactivateQueueItemCommandHandler : IRequestHandler<Reactiva
         item.CompletedTime = null;
         item.UpdatedAt = DateTime.UtcNow;
         item.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Staff";
+
+        if (_notificationDispatcher != null)
+        {
+            await _notificationDispatcher.EvaluateAndDispatchApproachingAlertsAsync(item.ClinicId, item.QueueDate, cancellationToken);
+        }
 
         _queueRepository.Update(item);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

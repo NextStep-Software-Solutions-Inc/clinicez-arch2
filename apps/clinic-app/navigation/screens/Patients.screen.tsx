@@ -44,6 +44,7 @@ import RecordExternalDispenseModal from '../../components/RecordExternalDispense
 import PhilHealthProfileModal from '../../components/PhilHealthProfileModal';
 import PhilHealthPinInput from '../../components/ui/PhilHealthPinInput';
 import DebouncedDuplicateChecker from '../../components/patient/DebouncedDuplicateChecker';
+import DuplicatePatientWarningModal from '../../components/patient/DuplicatePatientWarningModal';
 import StructuredAllergyIntakeModal, {
   AllergyPillList,
   CreateAllergyRequest,
@@ -78,6 +79,7 @@ import {
   ConsultationRecord,
   ClinicRecordAttachmentRecord,
   ClinicCustomFieldDefinition,
+  DuplicateMatch,
 } from '../../services/clinicService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { getSetting } from '../../services/runtimeConfig';
@@ -163,6 +165,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formTriagePriority, setFormTriagePriority] = useState<'Routine' | 'Urgent' | 'Emergency'>('Routine');
   const [formPatientCode, setFormPatientCode] = useState('');
   const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>({});
+
+  // Duplicate Patient Warning Modal Safeguard states
+  const [duplicateWarningVisible, setDuplicateWarningVisible] = useState(false);
+  const [detectedDuplicates, setDetectedDuplicates] = useState<DuplicateMatch[]>([]);
+  const [pendingRegisterOptions, setPendingRegisterOptions] = useState<{ sendToTriage?: boolean } | null>(null);
 
   const toggleQuickCondition = (code: string, title: string) => {
     setFormMedicalHistories((prev) => {
@@ -334,7 +341,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setRefreshing(false);
   }, [fetchPatients]);
 
-  const handleRegisterPatient = async (options?: { sendToTriage?: boolean }) => {
+  const handleRegisterPatient = async (options?: { sendToTriage?: boolean; bypassDuplicateCheck?: boolean }) => {
     if (isRegisteringRef.current || savingPatient) return;
     isRegisteringRef.current = true;
     try {
@@ -381,6 +388,24 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           Alert.alert('Invalid Date of Birth', pDobCheck.errorMessage || 'Principal Date of Birth cannot be in the future.');
           return;
         }
+      }
+    }
+
+    // Pre-flight duplicate check safeguard: surface warning modal if duplicate candidates detected
+    if (!options?.bypassDuplicateCheck) {
+      const [dupCheck] = await clinicService.checkPatientDuplicates({
+        firstName: formFirstName.trim(),
+        lastName: formLastName.trim(),
+        dateOfBirth: formDob.trim(),
+        contactNumber: formPhone.trim(),
+        philHealthNumber: formPhilHealth.trim() || undefined,
+      });
+
+      if (dupCheck && dupCheck.hasDuplicates && dupCheck.matches.length > 0) {
+        setDetectedDuplicates(dupCheck.matches);
+        setPendingRegisterOptions(options ?? null);
+        setDuplicateWarningVisible(true);
+        return;
       }
     }
 
@@ -522,7 +547,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
 
     setRegisterVisible(false);
-    // Reset form
+    resetRegistrationForm();
+    } finally {
+      isRegisteringRef.current = false;
+    }
+  };
+
+  const resetRegistrationForm = () => {
     setDynamicFieldValues({});
     setDynamicFieldErrors({});
     setFormFieldErrors({});
@@ -555,7 +586,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormMedicalHistories([]);
     setMedicalHistoryModalVisible(false);
     setFormAlerts('');
-    setDynamicFieldValues({});
     setStructuredAllergies([]);
     setIsPinValid(null);
     setFormChiefComplaint('');
@@ -566,9 +596,29 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormPrincipalRelationship('C');
     setFormPrincipalDob('');
     setIsPrincipalPinValid(null);
-    } finally {
-      isRegisteringRef.current = false;
-    }
+  };
+
+  const handleUseExistingProfile = async (patientId: string) => {
+    setDuplicateWarningVisible(false);
+    setPendingRegisterOptions(null);
+    setRegisterVisible(false);
+    resetRegistrationForm();
+    await handleViewExistingPatient(patientId);
+  };
+
+  const handleCreateProfileAnyway = async () => {
+    setDuplicateWarningVisible(false);
+    const options = pendingRegisterOptions;
+    setPendingRegisterOptions(null);
+    await handleRegisterPatient({
+      sendToTriage: options?.sendToTriage ?? false,
+      bypassDuplicateCheck: true,
+    });
+  };
+
+  const handleCloseDuplicateWarning = () => {
+    setDuplicateWarningVisible(false);
+    setPendingRegisterOptions(null);
   };
 
   const handleViewExistingPatient = async (patientId: string) => {
@@ -1716,6 +1766,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           </View>
         </View>
       </Modal>
+
+      {/* Duplicate Patient Warning Modal Safeguard */}
+      <DuplicatePatientWarningModal
+        visible={duplicateWarningVisible}
+        matches={detectedDuplicates}
+        onUseExistingProfile={handleUseExistingProfile}
+        onCreateNewProfileAnyway={handleCreateProfileAnyway}
+        onClose={handleCloseDuplicateWarning}
+        isRegistering={savingPatient}
+      />
 
       {/* Structured Allergy Intake Sub-Modal */}
       <StructuredAllergyIntakeModal

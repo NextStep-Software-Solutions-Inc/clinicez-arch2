@@ -65,6 +65,8 @@ internal sealed class PatientInteropHarness : IDisposable
         services.AddScoped<IShareCodeRepository, ShareCodeRepository>();
         services.AddScoped<IPatientDocumentRepository, PatientDocumentRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<IDeviceSessionRepository, DeviceSessionRepository>();
+        services.AddSingleton<IPushNotificationService>(Substitute.For<IPushNotificationService>());
         services.AddSingleton(Storage);
         services.Configure<SharingOptions>(o => o.SigningKey = SigningKey);
         services.AddApplicationServices();

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   User,
   Shield,
@@ -19,7 +19,9 @@ import {
   Loader2,
   Sparkles,
   UserCheck,
+  Smartphone,
 } from "lucide-react";
+import { useUser, SignInButton } from "@clerk/nextjs";
 import {
   type PatientJoinRequestedPayload,
   type PatientJoinAllergyItem,
@@ -212,6 +214,113 @@ export default function JoinClient({
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmedPass, setConfirmedPass] = useState<DigitalRegistrationPass | null>(null);
 
+  // Clerk Authentication & Autofill State
+  let clerkUser: ReturnType<typeof useUser>["user"] = null;
+  let isSignedIn = false;
+  let isInsideClerk = false;
+  try {
+    const userHook = useUser();
+    clerkUser = userHook.user;
+    isSignedIn = Boolean(userHook.isSignedIn);
+    isInsideClerk = true;
+  } catch {
+    // Graceful fallback outside ClerkProvider (e.g. testing)
+    isInsideClerk = false;
+  }
+
+  const [isAutofilled, setIsAutofilled] = useState(false);
+  const [isHydratingProfile, setIsHydratingProfile] = useState(false);
+  const hasAutoHydratedRef = useRef(false);
+
+  // Profile Hydration from patient-api or BFF proxy
+  const hydrateProfileFromPatientRecord = useCallback(async () => {
+    if (!isSignedIn || !clerkUser) return;
+    setIsHydratingProfile(true);
+
+    try {
+      const response = await fetch("/api/v1/patients/me", {
+        headers: { Accept: "application/json" },
+      });
+
+      if (response.ok) {
+        const payload = await response.json();
+        const data = payload.data || payload;
+
+        if (data.firstName) setFirstName(data.firstName);
+        if (data.middleName) setMiddleName(data.middleName);
+        if (data.lastName) setLastName(data.lastName);
+        if (data.suffix) setSuffix(data.suffix);
+        if (data.dateOfBirth) setDateOfBirth(data.dateOfBirth);
+        if (data.sex) setSex(data.sex);
+        if (data.civilStatus) setCivilStatus(data.civilStatus);
+        if (data.contactNumber || data.mobile) setContactNumber(data.contactNumber || data.mobile);
+        if (data.email) setEmail(data.email);
+        if (data.address) setAddress(data.address);
+
+        const pin = data.philHealthPin || data.governmentIds?.find((g: any) => g.idType === "PHILHEALTH")?.idNumber;
+        if (pin) {
+          setPhilHealthPin(formatPhilHealthPin(pin));
+        }
+
+        if (Array.isArray(data.allergies) && data.allergies.length > 0) {
+          const mappedAllergies: PatientJoinAllergyItem[] = data.allergies.map((a: any) => ({
+            allergen: a.allergen || a.allergenName,
+            category: a.category || a.allergyType || "Medication",
+            severity: a.severity || "Moderate",
+            isAnaphylactic: Boolean(a.isAnaphylactic),
+            reactionManifestation: a.reactionManifestation || a.reaction || "",
+          }));
+          setAllergies(mappedAllergies);
+          setNoKnownAllergies(false);
+        }
+
+        setIsAutofilled(true);
+        setIsHydratingProfile(false);
+        return;
+      }
+    } catch {
+      // Fall through to Clerk user profile fallback
+    }
+
+    // Fallback: Populate basic info from Clerk user profile
+    if (clerkUser.firstName) setFirstName(clerkUser.firstName);
+    if (clerkUser.lastName) setLastName(clerkUser.lastName);
+    const primaryEmail = clerkUser.primaryEmailAddress?.emailAddress;
+    if (primaryEmail) setEmail(primaryEmail);
+    const primaryPhone = clerkUser.primaryPhoneNumber?.phoneNumber;
+    if (primaryPhone) setContactNumber(primaryPhone);
+
+    setIsAutofilled(true);
+    setIsHydratingProfile(false);
+  }, [isSignedIn, clerkUser]);
+
+  useEffect(() => {
+    if (isSignedIn) {
+      if (!hasAutoHydratedRef.current) {
+        hasAutoHydratedRef.current = true;
+        hydrateProfileFromPatientRecord();
+      }
+    } else {
+      hasAutoHydratedRef.current = false;
+    }
+  }, [isSignedIn, hydrateProfileFromPatientRecord]);
+
+  const handleClearAutofill = () => {
+    setFirstName("");
+    setMiddleName("");
+    setLastName("");
+    setSuffix("");
+    setDateOfBirth("2000-01-01");
+    setSex("Male");
+    setCivilStatus("Single");
+    setContactNumber("");
+    setEmail("");
+    setAddress("");
+    setPhilHealthPin("");
+    setAllergies([]);
+    setIsAutofilled(false);
+  };
+
   // PhilHealth Mod-11 Validations
   const patientPinValidation = useMemo(
     () => (philHealthPin.trim() ? validatePhilHealthPinMod11(philHealthPin) : null),
@@ -391,29 +500,36 @@ export default function JoinClient({
         throw new Error(result.message || `Submission failed with status ${response.status}`);
       }
 
-      if (result.data) {
-        setConfirmedPass(result.data);
-      } else {
-        // Synthesize pass from response
-        const fallbackPass: DigitalRegistrationPass = {
-          trackingId: result.trackingId || payload.joinRequestId!,
-          registrationPassId: `PASS-${(result.trackingId || payload.joinRequestId!).slice(0, 8).toUpperCase()}`,
-          queueToken: result.queueToken || "Q-105",
-          patientCode: result.patientCode || `PAT-${new Date().getFullYear()}-00042`,
-          fullName: `${payload.lastName}, ${payload.firstName}${payload.middleName ? ` ${payload.middleName[0]}.` : ""}`,
-          facilityName,
-          facilitySlug,
-          tenantSlug,
-          estimatedWaitMinutes: 15,
-          issuedAt: new Date().toISOString(),
-          qrDataString: JSON.stringify({
-            code: result.patientCode || `PAT-${new Date().getFullYear()}-00042`,
-            queue: result.queueToken || "Q-105",
-            issued: new Date().toISOString(),
-          }),
-        };
-        setConfirmedPass(fallbackPass);
-      }
+      const basePass: DigitalRegistrationPass = result.data || {
+        trackingId: result.trackingId || payload.joinRequestId!,
+        registrationPassId: `PASS-${(result.trackingId || payload.joinRequestId!).slice(0, 8).toUpperCase()}`,
+        queueToken: result.queueToken || "Q-105",
+        patientCode: result.patientCode || `PAT-${new Date().getFullYear()}-00042`,
+        fullName: `${payload.lastName}, ${payload.firstName}${payload.middleName ? ` ${payload.middleName[0]}.` : ""}`,
+        facilityName,
+        facilitySlug,
+        tenantSlug,
+        estimatedWaitMinutes: 15,
+        issuedAt: new Date().toISOString(),
+        qrDataString: JSON.stringify({
+          code: result.patientCode || `PAT-${new Date().getFullYear()}-00042`,
+          queue: result.queueToken || "Q-105",
+          issued: new Date().toISOString(),
+        }),
+      };
+
+      const extendedPass = {
+        ...basePass,
+        claimToken: result.claimToken || result.data?.claimToken || "claim-token-ephemeral",
+        expiresAt: result.expiresAt || result.data?.expiresAt || "48h",
+        email: payload.email,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        dateOfBirth: payload.dateOfBirth,
+        memberType: payload.memberType,
+      };
+
+      setConfirmedPass(extendedPass);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setFormError(`Registration relay error: ${msg}`);
@@ -493,6 +609,126 @@ export default function JoinClient({
             </p>
           </div>
         </div>
+
+        {/* Mobile Universal Link Smart App Banner */}
+        {joinCode && (
+          <div
+            className="p-3.5 bg-muted/60 border border-border rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
+            data-testid="deep-link-smart-banner"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-primary/10 text-primary shrink-0">
+                <Smartphone className="w-4 h-4" />
+              </span>
+              <div>
+                <span className="font-bold text-foreground block">
+                  Have the ClinicEZ Patient App?
+                </span>
+                <span className="text-muted-foreground text-[11px]">
+                  Open on mobile for 1-Tap Fast Check-In without retyping your information.
+                </span>
+              </div>
+            </div>
+            <a
+              href={`clinicez://join/${encodeURIComponent(joinCode)}`}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl text-xs transition-colors shrink-0 shadow-sm"
+            >
+              1-Tap Mobile Check-In
+            </a>
+          </div>
+        )}
+
+        {/* Existing User Fast-Track & Web Autofill Banner */}
+        {!isSignedIn ? (
+          <div
+            className="p-4 sm:p-5 bg-primary/5 border border-primary/25 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-sm"
+            data-testid="autofill-banner-unauthenticated"
+          >
+            <div className="flex items-start gap-3">
+              <span className="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
+                <Sparkles className="w-5 h-5" />
+              </span>
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-bold text-foreground">
+                  Already have a ClinicEZ account? Sign in to Autofill
+                </h3>
+                <p className="text-muted-foreground text-xs leading-relaxed max-w-lg">
+                  Sign in with your ClinicEZ account to pre-populate demographics, 12-digit PhilHealth PIN, contact info, and structured allergies in 1 click.
+                </p>
+              </div>
+            </div>
+            {isInsideClerk ? (
+              <SignInButton mode="modal">
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl text-xs transition-all shadow-md shadow-primary/15 shrink-0 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Sign In to Autofill
+                </button>
+              </SignInButton>
+            ) : (
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl text-xs transition-all shadow-md shadow-primary/15 shrink-0 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Sign In to Autofill
+              </button>
+            )}
+          </div>
+        ) : (
+          <div
+            className="p-4 sm:p-5 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-sm"
+            data-testid="autofill-banner-authenticated"
+          >
+            <div className="flex items-start gap-3">
+              <span className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 shrink-0 mt-0.5">
+                <UserCheck className="w-5 h-5" />
+              </span>
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-bold text-foreground">
+                  Signed in as {clerkUser?.fullName || clerkUser?.firstName || "ClinicEZ User"} ({clerkUser?.primaryEmailAddress?.emailAddress})
+                </h3>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  {isAutofilled
+                    ? "Form autofilled from your ClinicEZ patient profile. You can review or edit any field below."
+                    : "ClinicEZ account active. Click below to hydrate your profile data."}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={hydrateProfileFromPatientRecord}
+                disabled={isHydratingProfile}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                {isHydratingProfile ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Re-sync Profile
+                  </>
+                )}
+              </button>
+              {isAutofilled && (
+                <button
+                  type="button"
+                  onClick={handleClearAutofill}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground font-medium rounded-xl text-xs transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Clear Autofill
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Global Error Banner */}
         {formError && (

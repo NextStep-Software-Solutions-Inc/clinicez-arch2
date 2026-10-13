@@ -35,5 +35,10 @@ public sealed record ClinicSettingsDto(
     bool IsJoinEnabled = true,
     string? JoinCode = null,
     DateTime? JoinCodeExpiresAt = null,
-    string? PatientSearchDisplayFieldsJson = null);
+    string? PatientSearchDisplayFieldsJson = null,
+    string EodReconciliationTime = "21:00",
+    bool AutoEodEnabled = true,
+    bool TvDisplayMaskPatientNames = true,
+    bool EnableQueuePushNotifications = true,
+    int QueuePushNotificationThreshold = 2);
 

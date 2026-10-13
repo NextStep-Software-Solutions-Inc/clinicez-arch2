@@ -1,106 +1,92 @@
-# Project: ClinicEZ Generic Entity Custom Metadata Engine
+# Project: OPD Queue, Display, Notification & Intake Suite
 
 ## Architecture
-ClinicEZ is a multi-tenant clinical workstation and healthcare platform composed of Clean Architecture .NET microservices (`services/clinic-api`, `services/patient-api`, `services/interop-hub`) backed by PostgreSQL, alongside a cross-platform React Native Expo mobile/tablet application (`apps/clinic-app`) and Next.js portal (`apps/portal-web`).
-- **Domain Layer (`ClinicEz.Clinic.Domain`)**: `ClinicCustomFieldDefinition` with `EntityType` scoping, `FieldKey`, `Label`, `Category`, `DisplayOrder`, `IsRequired`, `DataType`, `VisibilityRuleJson`, `ConditionalOptionsJson`, and `ClinicPatient.CustomFields` dictionary.
-- **Application Layer (`ClinicEz.Clinic.Application`)**: CQRS with MediatR, command validators, `UpdateCustomFieldDefinitionCommand`, `ReorderCustomFieldsCommand`, `InstallCustomFieldTemplateCommand`, `GetCustomFieldTemplatesQuery`, and `GetClinicCustomFieldsQuery`.
-- **Infrastructure Layer (`ClinicEz.Clinic.Infrastructure`)**: EF Core DbContext, PostgreSQL text columns with JSON serialization, idempotent migrations, multi-tenant query filters (`ClinicId == CurrentClinicId`).
-- **API Layer (`ClinicEz.Clinic.Api`)**: `CustomFieldsController` exposing CRUD, `PUT /api/v1/custom-fields/reorder`, and template installation.
-- **Client Settings Layer (`apps/clinic-app/components/settings/`)**: `CustomFieldsTab.tsx` and `AddEditFieldModal.tsx` providing mandatory toggles, Move Up/Down reordering controls, live condition rule builder, cascading mapper, and 1-click template library presets.
-- **Client Intake Layer (`apps/clinic-app/components/custom-fields/`)**: `DynamicCustomFieldsRenderer.tsx` evaluating visibility rules in real-time, deriving cascading dropdown choices, enforcing mandatory validation only when visible, resetting hidden fields, and integrating into `Patients.screen.tsx`, `EditPatientModal.tsx`, and `StudentIntakeClient.tsx`.
-- **Design Tokens (`@clinicez/design-tokens`)**: Strict adherence to semantic tokens (`lightColors.primary #0D6963`, `lightColors.emergencyText`, `lightColors.border`, etc.), 4 core UX states (Loading, Empty, Error, Active/Success), and responsive workstation density.
+ClinicEZ Outpatient Department (OPD) queue modernization spanning:
+- `services/clinic-api`: ASP.NET Core Clean Architecture Web API hosting Queue and Patient domain logic, EF Core PostgreSQL storage, multi-tenant ambient scoping (`IClinicScopeSetter`), background services, and MediatR commands/queries.
+- `apps/clinic-app`: Expo React Native clinical workstation app hosting Queue dashboard, General Settings, and Patient Intake.
+- `apps/portal-web`: Next.js 16 public web portal hosting the dedicated unauthenticated Waiting Area Public TV Display Board (`/queue-display/[tenantSlug]/[facilitySlug]`).
+- `packages/shared-dotnet`: Interop Hub message envelopes (`patient.queue.alert`) and routing parties (`Party.ForFacility`, `Party.ForPatient`).
+- `services/patient-api`: Interop message handlers receiving queue notifications, saving records, and triggering FCM mobile push.
+- `packages/design-tokens`: Single source of truth for semantic design tokens (Teal `#0D6963` palette, high-contrast dark display tokens).
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | CustomField Schema & EF Core Model | `VisibilityRuleJson` and `ConditionalOptionsJson` columns on `ClinicCustomFieldDefinition` | M1 | R1 |
-| 2 | CQRS CustomField CRUD & Query | Create, Update (`PUT /api/v1/custom-fields/{id}`), Delete, and deterministic ordering by `DisplayOrder` | M1 | R1 |
-| 3 | Bulk Reorder Custom Fields Endpoint | `PUT /api/v1/custom-fields/reorder` for visual arrangement persistence | M1 | R1 |
-| 4 | Template Catalog & Install Backend | `InstallCustomFieldTemplateCommand` (`POST /api/v1/custom-fields/templates/install`) with USTP, Workplace, Demographics presets | M1 | R1 |
-| 5 | Admin Mandatory Toggle & Badges | Toggle in field modal and `Required` (emergency) vs `Optional` (neutral) badges in `CustomFieldsTab.tsx` | M2 | R2 |
-| 6 | Admin Move Up/Down Sequence Controls | Interactive movement controls calling reorder API with minimum 44px touch target | M2 | R2 |
-| 7 | Live Visibility Condition Rule Builder | Modal rule builder selecting parent field, operator, and expected value with live preview badge | M2 | R2 |
-| 8 | Cascading Dropdown Options Mapper | Modal mapper binding parent select value to child choices with fallback | M2 | R2 |
-| 9 | 1-Click Suggested Templates Library UI | Administrative preset library toolbar with 1-click install for USTP, Workplace, Demographics | M2 | R2 |
-| 10 | Reusable DynamicCustomFieldsRenderer | Component rendering fields in `DisplayOrder`, red asterisk `*`, data type UI variants | M3 | R3 |
-| 11 | Dynamic Visibility Evaluation Engine | Real-time rule evaluation supporting static patient properties (`gender`, `civilStatus`, `age`) and custom fields | M3 | R3 |
-| 12 | Cascading Select Choices Engine | Dynamic dropdown choice derivation based on selected parent field, clearing stale child selections | M3 | R3 |
-| 13 | Defensive Submission Validation | Blocks submission if a visible required field is empty; does NOT block for hidden fields | M3 | R3 |
-| 14 | Hidden Field Value Sanitization | Strips hidden/empty values before persistence to prevent dirty state | M3 | R3 |
-| 15 | Patient Registration Integration | Replaces hardcoded silos in `Patients.screen.tsx` registration modal with `DynamicCustomFieldsRenderer` | M3 | R3 |
-| 16 | Patient Demographic Edit Integration | Replaces hardcoded inputs in `EditPatientModal.tsx` with dynamic fields support | M3 | R3 |
-| 17 | Patient Chart View Integration | Renders dynamic custom metadata on patient cards and chart workstation views | M3 | R3 |
-| 18 | Public Student Intake Cascading | Enforces college-to-program cascading and dynamic field binding in `StudentIntakeClient.tsx` | M3 | R3 |
-| 19 | UI/UX Design System Compliance | 100% semantic token usage, zero raw hex colors, 4 core UX states, responsive density | M1, M2, M3 | R4 |
-| 20 | Comprehensive E2E Testing Suite | Opaque-box Tier 1-4 tests and adversarial Tier 5 coverage hardening covering all features | M4 | Dual Track |
+| F1.1 | Clinic Settings EOD Properties | Add `EodReconciliationTime` and `AutoEodEnabled` to `ClinicSettings`, DTOs, and migration | M1 | Survey / R1 |
+| F1.2 | Reconcile EOD Command & Endpoint | `POST /api/v1/queue/reconcile-eod` transitioning active `Waiting`, `Triaged`, `OnHold` to `NoShow` with `CompletedTime`, preserving `InConsultation` & `Completed` | M1 | Survey / R1 |
+| F1.3 | EOD Audit Logging | Entity and table `EodReconciliationAudit` in `clinic_dashboard` tracking processed counts, trigger type, and affected tickets | M1 | Survey / R1 |
+| F1.4 | EOD Scheduled Background Service | `EodReconciliationBackgroundService : BackgroundService` evaluating clinic local time and triggering automated EOD closure | M1 | Survey / R1 |
+| F1.5 | Workstation General Settings EOD Card | Operational card in `GeneralSettingsTab.tsx` with `TimeInput`, `ToggleSwitch`, and "Force EOD / Close Clinic Day" action | M1 | Survey / R1 |
+| F1.6 | Force EOD Confirmation Modal | `<ForceEodConfirmationModal />` displaying active ticket warning and count before executing day closure | M1 | Survey / R1 |
+| F2.1 | Public Queue Display Endpoint | `GET /api/v1/public/queue/display` returning non-PHI serving and upcoming tickets with optional privacy masking | M2 | Survey / R2 |
+| F2.2 | Dedicated Public TV Display Route | Next.js route in `apps/portal-web` (`/queue-display/[tenantSlug]/[facilitySlug]` and `/queue-tv/[facilitySlug]`) | M2 | Survey / R2 |
+| F2.3 | High-Contrast 1080p/4K TV Layout | Large-format responsive layout using `@clinicez/design-tokens` dark mode tokens and CSS `clamp()` | M2 | Survey / R2 |
+| F2.4 | NOW SERVING Card with Pulse Animation | Prominent display of current ticket, doctor, room/station with visual CSS pulse on changes | M2 | Survey / R2 |
+| F2.5 | Audible Chime Alert with Mute Control | Client-side two-tone chime via Web Audio API with on-screen mute/unmute control | M2 | Survey / R2 |
+| F2.6 | UP NEXT with Patient Privacy Masking | Masked names (e.g. "Cassandra A.") when `TvDisplayMaskPatientNames` is enabled | M2 | Survey / R2 |
+| F2.7 | Display Board Real-Time Auto-Refresh | Polling synchronization (every 4s) keeping the TV monitor continuously updated without reload | M2 | Survey / R2 |
+| F2.8 | 1-Click TV Display Launcher | Workstation button in `Queue.screen.tsx` and `Dashboard.screen.tsx` opening the public TV board | M2 | Survey / R2 |
+| F3.1 | Interop Hub Alert Message Envelopes | Define `InteropTypes.PatientQueueAlert = "patient.queue.alert"` and `PatientQueueAlertPayload` in `packages/shared-dotnet` | M3 | Survey / R3 |
+| F3.2 | Push Notification Settings Persistence | Add `EnableQueuePushNotifications` and `QueuePushNotificationThreshold` (1-5) to `ClinicSettings` | M3 | Survey / R3 |
+| F3.3 | Queue Notification Dispatcher | Dispatch "called to room" and "approaching turn" alert messages via transactional outbox | M3 | Survey / R3 |
+| F3.4 | Patient API Interop Handler | `PatientQueueAlertInteropHandler` creating `Notification` entity and triggering FCM push | M3 | Survey / R3 |
+| F3.5 | Notification Deduplication Safeguards | `ApproachingNotificationSent` and `CalledNotificationSent` flags on `QueueItem` preventing duplicate spam | M3 | Survey / R3 |
+| F3.6 | Push Notification Settings UI | General Settings controls for push alerts toggle and threshold stepper/slider (1 to 5) | M3 | Survey / R3 |
+| F4.1 | Algorithmic Fuzzy Matcher | `FuzzyMatcher.cs` providing Levenshtein distance, Soundex phonetic matching, phone normalizer, and PIN normalizer | M4 | Survey / R4 |
+| F4.2 | Enhanced Duplicate Check Query | `GET /api/v1/patients/check-duplicates` computing similarity scores and returning rich match reasons | M4 | Survey / R4 |
+| F4.3 | Duplicate Patient Warning Modal | `<DuplicatePatientWarningModal />` in `apps/clinic-app` with matched profiles, similarity reasons, and action choices | M4 | Survey / R4 |
+| F4.4 | Intake Interception & Routing | Intake form interception offering "Use Existing Profile" (navigates to existing chart) vs "Create New Profile Anyway" | M4 | Survey / R4 |
+| F5.1 | End-to-End Test Suite Execution | Full execution of Tiers 1-4 tests covering all 24 features (316 tests) | M5 | Acceptance / Quality |
+| F5.2 | Adversarial Hardening (Tier 5) | White-box stress testing, concurrency guards, boundary checks | M5 | Acceptance / Quality |
+| F5.3 | Design Token Compliance Verification | `check-tokens.mjs --strict` passing with 0 violations | M5 | Acceptance / Quality |
+| F5.4 | TypeScript Compilation Verification | `tsc --noEmit` passing with 0 errors across all apps | M5 | Acceptance / Quality |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Generic Entity Metadata Engine Architecture (Backend) | Features 1-4, 19 (Domain schema, EF Core migration, DTOs, CQRS commands/queries, reorder API, template install, tests) | none | DONE |
-| M2 | Clinic Admin Intake Fields Management & Template Library | Features 5-9, 19 (CustomFieldsTab, Move Up/Down controls, Add/Edit modal with rule builder & cascading mapper, 1-click templates) | M1 | DONE |
-| M3 | Dynamic Patient Intake, Registration & Chart Integration | Features 10-18, 19 (DynamicCustomFieldsRenderer, Patients.screen.tsx, EditPatientModal.tsx, chart view, StudentIntakeClient.tsx) | M1, M2 | DONE |
-| M4 | Final Milestone: 100% E2E Test Suite Pass & Adversarial Hardening | Feature 20 (Pass 100% E2E test suite Tiers 1-4, then Tier 5 adversarial hardening) | M1, M2, M3 | DONE |
+| 1 | M1: Configurable EOD Reconciliation & Force EOD | F1.1, F1.2, F1.3, F1.4, F1.5, F1.6 | none | DONE (ReconcileEodCommand, EodReconciliationAudit, EodReconciliationBackgroundService, ForceEodConfirmationModal, EodReconciliationSettingsCard; 24 .NET tests + 21 frontend tests pass; Gate PASS) |
+| 2 | M2: Waiting Area Public TV Display Board | F2.1, F2.2, F2.3, F2.4, F2.5, F2.6, F2.7, F2.8 | M1 | DONE (PublicQueueController, GetPublicQueueDisplayQuery with privacy masking, Portal-Web TV route with Web Audio chime, 1080p/4K layout, 4s polling; 293 .NET tests + 149 portal tests pass) |
+| 3 | M3: Patient App Push Notifications with Configurable Threshold | F3.1, F3.2, F3.3, F3.4, F3.5, F3.6 | M1 | DONE (InteropTypes.PatientQueueAlert, QueueNotificationDispatcher with transactional outbox, PatientQueueAlertInteropHandler in patient-api, QueuePushNotificationSettingsCard; 228 .NET tests + 241 patient-api tests pass) |
+| 4 | M4: Fuzzy Duplicate Patient Detection & Warning Safeguards | F4.1, F4.2, F4.3, F4.4 | none | DONE (FuzzyMatcher, CheckPatientDuplicatesQuery with similarity scoring, DuplicatePatientWarningModal with Use Existing vs Create New Anyway; 1841 .NET tests + 27 frontend tests pass) |
+| 5 | M5: E2E Test Suite Pass (Tiers 1-4) & Adversarial Coverage Hardening (Tier 5) | F5.1, F5.2, F5.3, F5.4 | M1, M2, M3, M4 | DONE (317 OpdSuite E2E tests pass, 1891 full clinic tests pass, 241 patient tests pass, 36 frontend E2E tests pass; Tier 5 adversarial stress passed; Forensic Audit CLEAN; 0 token violations; 0 typecheck errors; Gate PASS) |
 
 ## Interface Contracts
-### Custom Fields Backend ↔ Frontend Client (M1 ↔ M2 & M3)
-- `ClinicCustomFieldDefinitionDto`:
-  - `Id: Guid`, `TenantId: string`, `ClinicId: Guid`, `EntityType: string`, `FieldKey: string`, `Label: string`, `DataType: CustomFieldDataType` (`Text`, `Number`, `Date`, `Select`, `Boolean`), `Category: string?`, `IsRequired: bool`, `DisplayOrder: int`, `OptionsJson: string?`, `Placeholder: string?`, `IsActive: bool`, `VisibilityRuleJson: string?`, `ConditionalOptionsJson: string?`
-- Endpoints:
-  - `GET /api/v1/custom-fields?entityType=ClinicPatient` -> sorted by `DisplayOrder` then `Label`
-  - `POST /api/v1/custom-fields` -> creates field
-  - `PUT /api/v1/custom-fields/{id}` -> updates field definition
-  - `DELETE /api/v1/custom-fields/{id}` -> soft-deletes field
-  - `PUT /api/v1/custom-fields/reorder` -> payload `{ items?: [{ id, displayOrder }], orderedIds?: [id] }` -> returns updated sorted list
-  - `GET /api/v1/custom-fields/templates` -> list of available preset bundles
-  - `POST /api/v1/custom-fields/templates/install` -> payload `{ templateKey: string }` -> installs bundle and returns active fields
+### Clinic Settings Extensions (M1, M2, M3)
+- `ClinicSettings` in `services/clinic-api/ClinicEz.Clinic.Domain/Entities/ClinicSettings.cs`:
+  - `string EodReconciliationTime { get; set; } = "21:00";` (M1 DONE)
+  - `bool AutoEodEnabled { get; set; } = true;` (M1 DONE)
+  - `bool TvDisplayMaskPatientNames { get; set; } = true;` (M2)
+  - `bool EnableQueuePushNotifications { get; set; } = true;` (M3)
+  - `int QueuePushNotificationThreshold { get; set; } = 2;` (M3)
 
-### VisibilityRuleJson Specification
-```json
-{
-  "source": "custom_field", // or "static"
-  "field": "affiliation",    // or "gender", "civilStatus", "dateOfBirth"
-  "operator": "equals",      // "equals", "not_equals", "in", "contains", "not_empty"
-  "value": "Student"
-}
-```
+### Queue Reconcile EOD (M1 - DONE)
+- `POST /api/v1/queue/reconcile-eod`
+- Request: `{ TargetDate?: string, Reason?: string }`
+- Response: `ApiResponse<ReconcileEodResultDto>`
 
-### ConditionalOptionsJson Specification
-```json
-{
-  "parentField": "college",
-  "mapping": {
-    "College of Engineering": ["BS Civil Engineering", "BS Mechanical Engineering"],
-    "College of Information Technology": ["BS Computer Science", "BS Information Technology"]
-  },
-  "defaultOptions": []
-}
-```
+### Public TV Display (M2)
+- `GET /api/v1/public/queue/display?clinicId={id}` or `?facilitySlug={f}&tenantSlug={t}`
+- Response: `ApiResponse<PublicQueueDisplayDto>`
+  - `NowServing`: `IReadOnlyList<ServingTicketDto>` (`TicketNumber`, `DoctorName`, `RoomOrStation`, `CalledTime`)
+  - `UpNext`: `IReadOnlyList<UpcomingTicketDto>` (`TicketNumber`, `DisplayName`)
 
-### Dynamic Custom Fields ↔ Patient Registration / Edit (M3)
-- Input: `definitions: ClinicCustomFieldDefinition[]`, `values: Record<string, any>`, `staticValues: { gender?: string, civilStatus?: string, dateOfBirth?: string }`, `onChange: (key, value) => void`
-- Submission:
-  - Validates `isRequired && isVisible && !value` -> blocks submission with inline error.
-  - Hidden fields stripped from submission payload.
-  - Submits cleaned dictionary to `RegisterClinicPatientCommand.CustomFields` or `UpdateClinicPatientCommand.CustomFields`.
+### Interop Message (M3)
+- Topic / Message Type: `patient.queue.alert`
+- Sender: `Party.ForFacility(facilityId)`
+- Recipient: `Party.ForPatient(syncPatientId)`
+- Payload: `PatientQueueAlertPayload(Guid QueueTicketId, string TicketNumber, string AlertKind, string Message, string? DoctorName, string? RoomOrStation, int? AheadInLine, DateTime TimestampUtc)`
+
+### Duplicate Detection (M4)
+- `GET /api/v1/patients/check-duplicates?firstName=...&lastName=...&dateOfBirth=...&contactNumber=...&philHealthNumber=...`
+- Response: `ApiResponse<DuplicatePatientCheckResultDto>`
+  - `DuplicateMatchDto(Guid PatientId, string PatientCode, string FullName, DateOnly DateOfBirth, string? ContactNumber, string? PhilHealthNumber, string MatchReason, double? SimilarityScore, string? Confidence)`
 
 ## Code Layout
-### Backend (`services/clinic-api/`)
-- Domain: `ClinicEz.Clinic.Domain/Entities/ClinicCustomFieldDefinition.cs`
-- Infrastructure: `ClinicEz.Clinic.Infrastructure/Persistence/ApplicationDbContext.cs`, `ClinicEz.Clinic.Infrastructure/Migrations/`
-- Application:
-  - Features: `ClinicEz.Clinic.Application/Features/CustomFields/Commands/` (`CreateCustomFieldDefinitionCommand.cs`, `UpdateCustomFieldDefinitionCommand.cs`, `ReorderCustomFieldsCommand.cs`, `InstallCustomFieldTemplateCommand.cs`)
-  - Queries: `ClinicEz.Clinic.Application/Features/CustomFields/Queries/` (`GetClinicCustomFieldsQuery.cs`, `GetCustomFieldTemplatesQuery.cs`)
-  - DTOs: `ClinicEz.Clinic.Application/Features/CustomFields/Dtos/ClinicCustomFieldDefinitionDto.cs`
-- Controllers: `ClinicEz.Clinic.Api/Controllers/CustomFieldsController.cs`
-- Tests: `services/clinic-api/ClinicEz.Clinic.Application.Tests/TenantCustomFieldsAndVerificationTests.cs`
-
-### Frontend (`apps/clinic-app/`)
-- Settings: `components/settings/CustomFieldsTab.tsx`, `components/settings/AddEditFieldModal.tsx`
-- Intake / Dynamic Rendering: `components/custom-fields/DynamicCustomFieldsRenderer.tsx`
-- Screens: `navigation/screens/Patients.screen.tsx`, `components/patient/EditPatientModal.tsx`
-- Services: `services/clinicService.ts`
-- Tests: `tests/customFieldsTab.test.ts`, `tests/dynamicCustomFieldsRenderer.test.ts`
-
-### Portal Web (`apps/portal-web/`)
-- Intake: `src/app/student-intake/[tenantSlug]/StudentIntakeClient.tsx`
+- Backend Domain: `services/clinic-api/ClinicEz.Clinic.Domain/Entities/`, `Enums/`, `Interfaces/`
+- Backend Application: `services/clinic-api/ClinicEz.Clinic.Application/Features/Queue/`, `Features/Patients/`, `Features/Settings/`, `Common/Helpers/`
+- Backend Infrastructure: `services/clinic-api/ClinicEz.Clinic.Infrastructure/Persistence/`, `Migrations/`, `BackgroundServices/`
+- Backend Tests: `services/clinic-api/ClinicEz.Clinic.Application.Tests/`
+- Shared Contracts: `packages/shared-dotnet/Interop/`, `packages/design-tokens/`
+- Patient Service: `services/patient-api/ClinicEz.Patient.Infrastructure/Interop/`
+- Workstation Frontend: `apps/clinic-app/components/queue/`, `components/patient/`, `components/settings/`, `navigation/screens/`, `services/clinicService.ts`
+- Web Portal Frontend: `apps/portal-web/src/app/queue-display/[tenantSlug]/[facilitySlug]/`, `src/components/queue/`

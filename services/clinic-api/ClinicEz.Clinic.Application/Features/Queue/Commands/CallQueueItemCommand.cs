@@ -18,15 +18,18 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly Features.Queue.Services.IQueueNotificationDispatcher? _notificationDispatcher;
 
     public CallQueueItemCommandHandler(
         IRepository<QueueItem> queueRepository,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null)
     {
         _queueRepository = queueRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _notificationDispatcher = notificationDispatcher;
     }
 
     public async Task<QueueItemDto> Handle(CallQueueItemCommand request, CancellationToken cancellationToken)
@@ -47,6 +50,12 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
         if (!string.IsNullOrWhiteSpace(request.RoomOrStation)) item.RoomOrStation = request.RoomOrStation.Trim();
         item.UpdatedAt = DateTime.UtcNow;
         item.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Doctor";
+
+        if (_notificationDispatcher != null)
+        {
+            await _notificationDispatcher.DispatchCalledAlertAsync(item, item.DoctorName, item.RoomOrStation, cancellationToken);
+            await _notificationDispatcher.EvaluateAndDispatchApproachingAlertsAsync(item.ClinicId, item.QueueDate, cancellationToken);
+        }
 
         _queueRepository.Update(item);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -86,15 +95,18 @@ public sealed class CompleteQueueItemCommandHandler : IRequestHandler<CompleteQu
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly Features.Queue.Services.IQueueNotificationDispatcher? _notificationDispatcher;
 
     public CompleteQueueItemCommandHandler(
         IRepository<QueueItem> queueRepository,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null)
     {
         _queueRepository = queueRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _notificationDispatcher = notificationDispatcher;
     }
 
     public async Task<bool> Handle(CompleteQueueItemCommand request, CancellationToken cancellationToken)
@@ -111,6 +123,11 @@ public sealed class CompleteQueueItemCommandHandler : IRequestHandler<CompleteQu
         item.CompletedTime = DateTime.UtcNow;
         item.UpdatedAt = DateTime.UtcNow;
         item.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Staff";
+
+        if (_notificationDispatcher != null)
+        {
+            await _notificationDispatcher.EvaluateAndDispatchApproachingAlertsAsync(item.ClinicId, item.QueueDate, cancellationToken);
+        }
 
         _queueRepository.Update(item);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

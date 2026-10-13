@@ -20,6 +20,14 @@ public sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
         builder.Property(p => p.ClinicEzId).HasMaxLength(20).IsRequired();
         builder.HasIndex(p => p.ClinicEzId).IsUnique();
 
+        builder.HasOne(p => p.ManagedByPatient)
+            .WithMany(m => m.ManagedDependents)
+            .HasForeignKey(p => p.ManagedByPatientId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.Property(p => p.RelationshipToManager).HasMaxLength(50);
+        builder.HasIndex(p => p.ManagedByPatientId);
+
         builder.Property(p => p.FirstName).HasMaxLength(100).IsRequired();
         builder.Property(p => p.MiddleName).HasMaxLength(100);
         builder.Property(p => p.LastName).HasMaxLength(100).IsRequired();

@@ -4,6 +4,11 @@ export {
 } from './DebouncedDuplicateChecker';
 
 export {
+  default as DuplicatePatientWarningModal,
+  DuplicatePatientWarningModalProps,
+} from './DuplicatePatientWarningModal';
+
+export {
   default as StructuredAllergyIntakeModal,
   AllergyPillList,
   CreateAllergyRequest,

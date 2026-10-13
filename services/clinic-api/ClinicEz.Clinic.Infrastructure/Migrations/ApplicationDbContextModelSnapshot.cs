@@ -1100,6 +1100,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<bool>("AutoEodEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");
 
@@ -1130,6 +1135,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<int>("EntitlementVersion")
                         .HasColumnType("integer");
+
+                    b.Property<string>("EodReconciliationTime")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("21:00");
 
                     b.Property<string>("FacilitySlug")
                         .HasMaxLength(100)
@@ -1243,6 +1255,21 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
+
+                    b.Property<bool>("TvDisplayMaskPatientNames")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EnableQueuePushNotifications")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("QueuePushNotificationThreshold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2);
 
                     b.Property<decimal>("VatRate")
                         .HasPrecision(5, 4)
@@ -1923,6 +1950,79 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("ConsultationEncounterId");
 
                     b.ToTable("Diagnoses", "clinic_dashboard");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.EodReconciliationAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AffectedTicketNumbersJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("ReconciledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReconciledBy")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateOnly>("ReconciliationDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("StaffId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("TotalTicketsProcessed")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TriggerType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ClinicId", "ReconciliationDate");
+
+                    b.ToTable("EodReconciliationAudits", "clinic_dashboard");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.IdempotencyRecord", b =>
@@ -3913,6 +4013,19 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("ApproachingNotificationSent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("CalledNotificationSent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid?>("SyncPatientId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");

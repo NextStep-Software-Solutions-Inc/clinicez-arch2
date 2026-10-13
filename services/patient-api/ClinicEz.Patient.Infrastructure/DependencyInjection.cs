@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interfaces;
+using ClinicEz.Shared.Security.ClaimTokens;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
@@ -104,6 +105,7 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IBackgroundJobEnqueuer, HangfireJobEnqueuer>();
         services.AddSingleton<IPushNotificationService, FirebasePushNotificationService>();
+        services.AddClaimTokenService();
 
         // ── Sync entity processors ────────────────────────────────────────────
         // Core
@@ -175,7 +177,8 @@ public static class DependencyInjection
             .Handle<LabOrderStatusChangedPayload, LabOrderStatusChangedInteropHandler>(InteropTypes.LabOrderStatusChanged)
             .Handle<RxStatusChangedPayload, RxStatusChangedInteropHandler>(InteropTypes.RxStatusChanged)
             .Handle<LabResultReviewedPayload, LabResultReviewedInteropHandler>(InteropTypes.LabResultReviewed)
-            .Handle<ClinicalImmunizationAdministeredPayload, ClinicalImmunizationAdministeredInteropHandler>(InteropTypes.ClinicalImmunizationAdministered));
+            .Handle<ClinicalImmunizationAdministeredPayload, ClinicalImmunizationAdministeredInteropHandler>(InteropTypes.ClinicalImmunizationAdministered)
+            .Handle<PatientQueueAlertPayload, PatientQueueAlertInteropHandler>(InteropTypes.PatientQueueAlert));
 
     public static IServiceCollection AddClerkAuthentication(
         this IServiceCollection services,

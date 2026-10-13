@@ -46,6 +46,21 @@ public sealed class QueueItem : BaseEntity
 
     public string? ChiefComplaint { get; set; }
 
+    /// <summary>
+    /// Optional linkage to cloud Patient App ID if patient has synchronized.
+    /// </summary>
+    public Guid? SyncPatientId { get; set; }
+
+    /// <summary>
+    /// Indicates whether an approaching-turn alert notification has already been sent to the patient.
+    /// </summary>
+    public bool ApproachingNotificationSent { get; set; } = false;
+
+    /// <summary>
+    /// Indicates whether a called-to-room alert notification has already been sent to the patient.
+    /// </summary>
+    public bool CalledNotificationSent { get; set; } = false;
+
     // Navigations
     public TriageVitals? TriageVitals { get; set; }
     public ConsultationEncounter? Consultation { get; set; }

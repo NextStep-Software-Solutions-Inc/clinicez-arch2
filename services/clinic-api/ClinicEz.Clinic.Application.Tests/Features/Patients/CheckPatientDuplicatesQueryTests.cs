@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Patients.Queries;
 using ClinicEz.Clinic.Application.Tests;
 using ClinicEz.Clinic.Domain.Entities;
@@ -221,6 +222,222 @@ public class CheckPatientDuplicatesQueryTests
         // Assert
         result.HasDuplicates.Should().BeFalse();
         result.Matches.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_FuzzyNameWithMatchingDateOfBirth_LevenshteinMatch_ReturnsMatchWithScoreAndReason()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+
+        var existing = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-00006",
+            FirstName = "Maria",
+            LastName = "Santos",
+            DateOfBirth = new DateOnly(1990, 8, 15),
+            ContactNumber = "09181112233"
+        };
+        await repo.AddAsync(existing, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new CheckPatientDuplicatesQueryHandler(repo);
+
+        // Act - search with typo "Marie" instead of "Maria"
+        var result = await handler.Handle(new CheckPatientDuplicatesQuery(
+            FirstName: "Marie",
+            LastName: "Santos",
+            DateOfBirth: new DateOnly(1990, 8, 15)
+        ), CancellationToken.None);
+
+        // Assert
+        result.HasDuplicates.Should().BeTrue();
+        result.Matches.Should().HaveCount(1);
+        result.Matches[0].PatientId.Should().Be(existing.Id);
+        result.Matches[0].SimilarityScore.Should().BeGreaterThanOrEqualTo(0.85);
+        result.Matches[0].Confidence.Should().Be("High");
+        result.Matches[0].MatchReason.Should().Contain("similar name");
+    }
+
+    [Fact]
+    public async Task Handle_FuzzyNameWithMatchingDateOfBirth_PhoneticSoundexMatch_ReturnsPhoneticReason()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+
+        var existing = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-00007",
+            FirstName = "Carlos",
+            LastName = "Gonzalez",
+            DateOfBirth = new DateOnly(1988, 4, 12),
+            ContactNumber = "09192223344"
+        };
+        await repo.AddAsync(existing, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new CheckPatientDuplicatesQueryHandler(repo);
+
+        // Act - search with phonetic variant "Gonzales" vs "Gonzalez"
+        var result = await handler.Handle(new CheckPatientDuplicatesQuery(
+            FirstName: "Carlos",
+            LastName: "Gonzales",
+            DateOfBirth: new DateOnly(1988, 4, 12)
+        ), CancellationToken.None);
+
+        // Assert
+        result.HasDuplicates.Should().BeTrue();
+        result.Matches.Should().HaveCount(1);
+        result.Matches[0].PatientId.Should().Be(existing.Id);
+        result.Matches[0].SimilarityScore.Should().BeGreaterThanOrEqualTo(0.85);
+        result.Matches[0].Confidence.Should().Be("High");
+    }
+
+    [Fact]
+    public async Task Handle_ContactNumberCountryCodeVariations_NormalizedMatch_ReturnsContactMatch()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+
+        var existing = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-00008",
+            FirstName = "Lucia",
+            LastName = "Joaquin",
+            DateOfBirth = new DateOnly(1995, 12, 5),
+            ContactNumber = "09171234567"
+        };
+        await repo.AddAsync(existing, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new CheckPatientDuplicatesQueryHandler(repo);
+
+        // Act - search with country code +639171234567
+        var result = await handler.Handle(new CheckPatientDuplicatesQuery(
+            ContactNumber: "+639171234567"
+        ), CancellationToken.None);
+
+        // Assert
+        result.HasDuplicates.Should().BeTrue();
+        result.Matches.Should().HaveCount(1);
+        result.Matches[0].PatientId.Should().Be(existing.Id);
+        result.Matches[0].SimilarityScore.Should().Be(0.95);
+        result.Matches[0].Confidence.Should().Be("High");
+        result.Matches[0].MatchReason.Should().Contain("Contact Number match");
+    }
+
+    [Fact]
+    public async Task Handle_SortedBySimilarityScoreDescending()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+
+        // Candidate 1: Exact PIN match (Score = 1.00)
+        var patient1 = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-00009",
+            FirstName = "Target",
+            LastName = "Patient",
+            DateOfBirth = new DateOnly(1980, 1, 1),
+            ContactNumber = "09170000001",
+            PhilHealthNumber = "12-345678901-8"
+        };
+
+        // Candidate 2: Fuzzy Name match with matching DOB (Score ~ 0.88)
+        var patient2 = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-00010",
+            FirstName = "Jon",
+            LastName = "Doe",
+            DateOfBirth = new DateOnly(1990, 5, 20),
+            ContactNumber = "09170000002"
+        };
+
+        await repo.AddAsync(patient1, CancellationToken.None);
+        await repo.AddAsync(patient2, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new CheckPatientDuplicatesQueryHandler(repo);
+
+        // Act: search with PIN matching patient 1, and Name/DOB matching patient 2 with typo
+        var result = await handler.Handle(new CheckPatientDuplicatesQuery(
+            PhilHealthNumber: "12-345678901-8",
+            FirstName: "John",
+            LastName: "Doe",
+            DateOfBirth: new DateOnly(1990, 5, 20)
+        ), CancellationToken.None);
+
+        // Assert: Patient 1 (exact PIN) must be sorted before Patient 2 (fuzzy name)
+        result.HasDuplicates.Should().BeTrue();
+        result.Matches.Should().HaveCount(2);
+        result.Matches[0].PatientId.Should().Be(patient1.Id);
+        result.Matches[0].SimilarityScore.Should().Be(1.00);
+        result.Matches[1].PatientId.Should().Be(patient2.Id);
+        result.Matches[1].SimilarityScore.Should().BeLessThan(1.00);
+    }
+
+    [Fact]
+    public void FuzzyMatcher_LevenshteinDistance_ComputesCorrectly()
+    {
+        FuzzyMatcher.LevenshteinDistance("", "").Should().Be(0);
+        FuzzyMatcher.LevenshteinDistance("kitten", "sitting").Should().Be(3);
+        FuzzyMatcher.LevenshteinDistance("Jon", "John").Should().Be(1);
+        FuzzyMatcher.LevenshteinDistance("Dela Cruz", "De La Cruz").Should().Be(1);
+    }
+
+    [Fact]
+    public void FuzzyMatcher_CalculateSimilarity_BoundsAndNormalized()
+    {
+        FuzzyMatcher.CalculateSimilarity("Maria", "Maria").Should().Be(1.0);
+        FuzzyMatcher.CalculateSimilarity("", "").Should().Be(1.0);
+        FuzzyMatcher.CalculateSimilarity("Maria", null).Should().Be(0.0);
+        FuzzyMatcher.CalculateSimilarity("Maria", "Marie").Should().BeGreaterThan(0.75);
+    }
+
+    [Fact]
+    public void FuzzyMatcher_ToSoundex_EncodesPhoneticsCorrectly()
+    {
+        FuzzyMatcher.ToSoundex("Smith").Should().Be("S530");
+        FuzzyMatcher.ToSoundex("Smyth").Should().Be("S530");
+        FuzzyMatcher.ToSoundex("Gonzalez").Should().Be("G524");
+        FuzzyMatcher.ToSoundex("Gonzales").Should().Be("G524");
+    }
+
+    [Fact]
+    public void FuzzyMatcher_NormalizePhone_HandlesPhilippineFormats()
+    {
+        FuzzyMatcher.NormalizePhone("+639171234567").Should().Be("9171234567");
+        FuzzyMatcher.NormalizePhone("639171234567").Should().Be("9171234567");
+        FuzzyMatcher.NormalizePhone("09171234567").Should().Be("9171234567");
+        FuzzyMatcher.NormalizePhone("0917-123-4567").Should().Be("9171234567");
+        FuzzyMatcher.NormalizePhone("9171234567").Should().Be("9171234567");
+    }
+
+    [Fact]
+    public void FuzzyMatcher_NormalizePhilHealthPin_StripsFormatting()
+    {
+        FuzzyMatcher.NormalizePhilHealthPin("12-345678901-8").Should().Be("123456789018");
+        FuzzyMatcher.NormalizePhilHealthPin(" 12 3456 78901 8 ").Should().Be("123456789018");
+        FuzzyMatcher.NormalizePhilHealthPin("").Should().Be("");
     }
 
     [Fact]

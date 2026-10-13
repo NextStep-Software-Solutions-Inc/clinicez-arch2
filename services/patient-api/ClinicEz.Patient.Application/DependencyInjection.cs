@@ -29,6 +29,7 @@ public static class DependencyInjection
         services.AddScoped<PatientShareSnapshotBuilder>();
         services.AddScoped<PatientDocumentMapper>();
         services.AddScoped<PatientDocumentNotifier>();
+        services.AddSingleton<ClinicEz.Patient.Application.Features.Patients.Commands.ClaimIntake.IPatientClaimConflictResolver, ClinicEz.Patient.Application.Features.Patients.Commands.ClaimIntake.PatientClaimConflictResolver>();
 
         return services;
     }

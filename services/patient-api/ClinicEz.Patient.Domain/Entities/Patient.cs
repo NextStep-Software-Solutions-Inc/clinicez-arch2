@@ -11,6 +11,12 @@ public sealed class Patient : BaseEntity, ISyncable
     /// <summary>Human-friendly global id (e.g. CE-7K2M-9QX4) that facilities use to recognise the patient. Generated on creation, never reused.</summary>
     public string ClinicEzId { get; set; } = string.Empty;
 
+    // Managed Dependents (Parent/Guardian Proxy)
+    public Guid? ManagedByPatientId { get; set; }
+    public Patient? ManagedByPatient { get; set; }
+    public ICollection<Patient> ManagedDependents { get; set; } = [];
+    public string? RelationshipToManager { get; set; }
+
     // A1 — Personal Demographics
     public string FirstName { get; set; } = string.Empty;
     public string? MiddleName { get; set; }

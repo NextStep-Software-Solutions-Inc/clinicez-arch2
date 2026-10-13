@@ -23,6 +23,7 @@ public static class ErrorCodes
     // ── Patient ───────────────────────────────────────────────────────────────
     public const string PatientNotFound         = "PATIENT_NOT_FOUND";
     public const string PatientAlreadyExists    = "PATIENT_ALREADY_EXISTS";
+    public const string MedicalPrivacyGuardrailBlocked = "MEDICAL_PRIVACY_GUARDRAIL_BLOCKED";
 
     // ── Sync ─────────────────────────────────────────────────────────────────
     public const string SyncPayloadInvalid      = "SYNC_PAYLOAD_INVALID";

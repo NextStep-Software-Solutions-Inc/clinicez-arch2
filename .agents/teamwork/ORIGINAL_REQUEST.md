@@ -629,3 +629,146 @@ Ensure clinic operational metrics and encounters reflect actual patient flow.
 - [ ] Patients waiting > 60 minutes display a `Waiting > 60m` warning badge.
 - [ ] Signing a consultation in `Consultations.screen.tsx` transitions the queue ticket to `Completed`.
 - [ ] All new and modified backend commands have unit tests in `ClinicEz.Clinic.Application.Tests` and pass cleanly.
+
+
+## 2026-10-13T11:39:58Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Launched
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Requested team: Full team
+
+Implement Progressive Patient Account Claiming (Option A) across the ClinicEZ ecosystem: enable patients who register via the public secured join link (`/join/{code}`) to effortlessly convert their guest intake registration into a persistent ClinicEZ Patient Account (`patient-app` / PHR) without retyping their demographics, PhilHealth credentials, or allergies. Implement platform settings for configurable claim token expiration (default 48h) and App Store / Google Play links, automated email confirmation delivery (no SMS), fast-track onboarding for existing ClinicEZ users, and a robust multi-identity conflict resolution engine (family/dependent proxies, alternate email linking, and medical privacy guardrails) strictly compliant with `@clinicez/design-tokens` (Teal `#0D6963`) and the Philippine Data Privacy Act (RA 10173).
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Progressive Account Claim Card & Digital Pass UI (`clinicez-ui-ux-expert`)
+On the Digital Registration Pass screen (`DigitalPassCard.tsx`) in `apps/portal-web`, render an engaging, high-trust Progressive Account Claim Card directly below the queue ticket:
+- Surface key patient benefits: real-time queue call notifications, access to digital e-prescriptions & lab results, and 1-click check-in at all ClinicEZ facilities without retyping.
+- Provide a primary "Claim My Patient Account in 1-Click" action button styled with `@clinicez/design-tokens` primary Teal (`#0D6963`), supporting all 4 core UI states (loading skeleton, empty, error with retry, and active/success pass).
+- Render downloadable mobile badges for Apple App Store and Google Play Store, dynamically populated from platform settings.
+- Automatically hide the claim card during print mode (`@media print`).
+
+### R2. Existing User Fast-Track & Web Autofill
+- On the `/join/{code}` web form, provide a prominent "Already have a ClinicEZ account? Sign in to Autofill" action that uses Clerk authentication to pre-populate all form fields (demographics, PhilHealth PIN, contact info, allergies) from the patient's existing `patient-api` profile.
+- Support Universal Link / Deep Link handling (`clinicez://join/{code}`) so opening a join link or scanning the reception placard on a device with `patient-app` installed triggers a 1-Tap Fast Check-In modal (`"Check in at [Facility] as [User]"`), bypassing manual entry.
+- When an existing user claims an account from a guest submission, the backend must enroll their existing `PatientId` into the clinic's `ClinicMembership` and display their active queue token (`Q-105`) on their home screen without creating a duplicate `Patient` profile.
+
+### R3. Multi-Identity Conflict Resolution Engine
+In `patient-api` and `portal-web`, handle identity divergence safely during the claim process:
+- **Parent / Dependent Proxy**: When an authenticated parent claims an intake pass for a minor or PhilHealth dependent (`DD`), provide an option to create a managed dependent profile under the parent's account, preventing email and identity collisions.
+- **Alternate Email Linking**: When name and date of birth match an existing user but the email differs (e.g. work vs. personal), prompt the user to link the clinic record to their authenticated personal account without creating an orphaned record.
+- **Medical Privacy Guardrail**: When an authenticated adult attempts to claim a registration pass belonging to an unrelated adult, block merging with an actionable warning ("For medical privacy, foreign health records cannot be merged into your personal account") and provide options to sign out or add as an authorized legal ward.
+
+### R4. Cryptographically Signed Claim Tokens & Platform Settings
+- Implement `ClaimTokenService` in `packages/shared-dotnet` utilizing HMAC-SHA256 (or AES-GCM) with tamper detection, encoding `JoinRequestId`, `TenantSlug`, `FacilitySlug`, `Email`, `FirstName`, `LastName`, `DateOfBirth`, `MemberType`, and `ExpiresAt`.
+- Integrate `JoinClaim:TtlHours` (defaulting to 48 hours) into `SystemSettingsService` in `portal-api`, allowing platform administrators to adjust the claim token validity window.
+- Store configurable store links in `SystemSettingsService` (`PatientApp:AppleAppStoreUrl` and `PatientApp:GooglePlayStoreUrl`).
+- When a patient submits `/public/join` with an email address, `portal-api` must enqueue a `notification.email.requested` envelope containing the digital queue pass summary and direct claim link (`/join/claim?token=...`). No SMS gateway is used.
+
+### R5. Profile Hydration Endpoint & Central Patient Ingestion
+In `services/patient-api`:
+- Expose an authenticated endpoint `POST /api/v1/patients/claim-intake` requiring Clerk Bearer JWT.
+- Validate token authenticity and expiration.
+- Implement `ClaimIntakeCommandHandler` to hydrate `Patient` demographics, PhilHealth credentials (`ConsentToShareInfo = true`), and structured `PatientAllergy` entities.
+- Transactionally create or activate `ClinicMembership` for the referenced clinic facility.
+- Return the updated `PatientSummary` with `ClinicEzId` and assigned relationship type (`Self` vs `Dependent`).
+
+## Acceptance Criteria
+
+### Security & Token Signing
+- [ ] `ClaimTokenService` in `packages/shared-dotnet` generates and verifies tamper-proof HMAC-SHA256 tokens and rejects expired or altered tokens.
+- [ ] `portal-api`'s `PublicJoinEndpoints` issues `claimToken` and `expiresAt` in the `202 Accepted` response.
+- [ ] `JoinClaim:TtlHours` defaults to 48 and is configurable via platform settings.
+
+### Email Confirmation Delivery
+- [ ] When an email is supplied on `/join/{code}`, `portal-api` enqueues a `notification.email.requested` envelope to Interop Hub with the digital pass details and direct claim link.
+- [ ] No SMS notifications are dispatched.
+
+### UI/UX & Design Token Compliance (`@clinicez/design-tokens`)
+- [ ] Progressive Account Claim card is rendered on `DigitalPassCard.tsx` consuming semantic tokens (Teal `#0D6963`, zero raw hex values).
+- [ ] All 4 core UX states (Skeleton loading, Empty, Error with retry, Active/Success pass) are explicitly implemented.
+- [ ] Apple App Store and Google Play store badges are rendered with configurable platform URLs.
+- [ ] Claim card and action buttons are cleanly hidden during `@media print`.
+
+### Central Patient Hydration & Identity Resolution
+- [ ] `POST /api/v1/patients/claim-intake` successfully hydrates demographics, PhilHealth PIN, and allergies into `patient-api` for authenticated users.
+- [ ] Existing users receive a `ClinicMembership` without duplicate `Patient` creation.
+- [ ] Dependent / Minor passes can be claimed as a managed dependent under a parent's account.
+- [ ] Unrelated adult identity mismatches are blocked with a clear privacy warning.
+
+### Build & Verification
+- [ ] Full solution build (`dotnet build CLINICEZ.sln`) passes with 0 errors and 0 warnings.
+- [ ] Backend test suites (`ClinicEz.Portal.Tests` and `ClinicEz.Patient.Application.Tests`) pass with 100% success.
+- [ ] `bun --cwd apps/portal-web run test` and `bun --cwd apps/portal-web run build` pass with 0 errors.
+
+
+## 2026-10-13T11:45:59Z
+
+Deliver a comprehensive OPD Queue, Display, Notification & Intake Suite for ClinicEZ: configurable End-of-Day (EOD) reconciliation with manual force-close, a dedicated waiting area public TV display board, configurable patient app push notifications with queue threshold alerts, and fuzzy duplicate patient detection with interactive warning safeguards.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Configurable End-of-Day (EOD) Reconciliation & Force EOD
+Support automated and manual clinic day closure.
+- Add configurable EOD auto-reconciliation time (`EodReconciliationTime`, e.g. 21:00, 24h format) and an enable/disable toggle in clinic settings.
+- Implement an on-demand "Force EOD / Close Clinic Day" action in settings and dashboard that transitions all remaining active waiting tickets (`Waiting`, `Triaged`, `OnHold`) for today to `NoShow`, stamps the completion timestamp, and records an EOD reconciliation audit entry.
+- Implement an automated background job that checks the clinic's local time against `EodReconciliationTime` and auto-reconciles leftover tickets.
+
+### R2. Waiting Area Public TV Display Board
+Deliver a public display mode tailored for lobby TV monitors.
+- High-contrast, responsive display board layout designed for 1080p/4K lobby screens.
+- Prominent "NOW SERVING" section displaying ticket numbers, assigned doctor, and room/station with visual pulse animation upon changes.
+- Audible chime alert when a ticket is called (enabled by default with an on-screen mute/unmute control).
+- Upcoming "UP NEXT" list with patient privacy masking support (e.g. "Cassandra A.") configurable in settings.
+- Real-time auto-refresh mechanism (polling / live sync) so the display runs continuously without manual intervention.
+
+### R3. Patient App Push Notifications with Configurable Threshold
+Automate queue alerts to the mobile patient app with configurable thresholds.
+- Provide clinic settings to toggle queue push notifications and configure the "patients ahead" threshold (default: 2 patients ahead, range 1 to 5).
+- Automatically dispatch notification messages via the Interop Hub to the patient app when a patient reaches the configured queue threshold ("You are 2 patients away in line...") and when called ("Ticket Q-003 has been called to Room 1").
+
+### R4. Fuzzy Duplicate Patient Detection & Warning Safeguards
+Prevent duplicate patient profile creation at intake.
+- Analyze existing patient records using normalized names (Levenshtein distance / phonetic match), Date of Birth, contact number, and PhilHealth ID.
+- When registering a new patient, surface an interactive warning modal if potential duplicates are detected:
+  - Display matched profiles with similarity reasons (e.g. matching name + birthdate).
+  - Allow staff to choose "Use Existing Profile" (navigates to existing chart) or "Create New Profile Anyway" (proceeds with registration).
+
+## Acceptance Criteria
+
+### EOD Reconciliation
+- [ ] Updating clinic settings successfully saves `EodReconciliationTime` and `AutoEodEnabled`.
+- [ ] Executing `POST /api/v1/queue/reconcile-eod` (Force EOD) transitions all active `Waiting`, `Triaged`, and `OnHold` tickets to `NoShow` and records `CompletedTime`.
+- [ ] Tickets already `Completed` or `InConsultation` are not corrupted or invalidated by EOD reconciliation.
+- [ ] The General Settings tab provides an operational card with EOD time picker, toggle, and "Force EOD / Close Clinic Day" button with confirmation.
+
+### Public TV Display Board
+- [ ] Navigating to the queue display board route renders the current serving ticket, doctor name, and room/station.
+- [ ] Calling a patient from the clinic dashboard triggers a visual pulse and audio chime on the display board.
+- [ ] When patient name masking is enabled in settings, public display masks patient names (e.g. "Cassandra A.") while showing full ticket numbers.
+- [ ] Display board updates automatically without page reloads as the queue changes.
+
+### Patient App Push Notifications
+- [ ] Calling a patient triggers an immediate "called to room" push notification payload via Interop Hub.
+- [ ] Advancing the queue triggers an "approaching turn" notification for the patient at the configured threshold (default 2 ahead).
+- [ ] Clinic settings correctly toggle push alerts on/off and persist the ahead-of-line threshold.
+
+### Fuzzy Duplicate Patient Detection
+- [ ] Querying `GET /api/v1/patients/check-duplicates` with a name and matching DOB of an existing patient returns the matching profile.
+- [ ] Exact phone or PhilHealth matches are identified with high confidence.
+- [ ] In "+ New patient" intake, detecting a duplicate displays `<DuplicatePatientWarningModal />`.
+- [ ] Selecting "Use Existing Profile" opens the existing chart without creating a duplicate; selecting "Create New Profile Anyway" completes the registration.
+
+### Quality & Test Suite Integrity
+- [ ] All new backend commands, queries, and background jobs have unit tests in `ClinicEz.Clinic.Application.Tests` and pass cleanly.
+- [ ] Frontend unit tests for TV display, EOD settings, duplicate warning modal, and push threshold controls pass cleanly.
+- [ ] Design token checks (`check-tokens.mjs`) pass with 0 violations.
+- [ ] TypeScript compilation (`tsc --noEmit`) passes with 0 errors.
