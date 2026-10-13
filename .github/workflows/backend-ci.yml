@@ -8,6 +8,7 @@ on:
     paths:
       - 'services/**'
       - 'packages/shared-dotnet/**'
+      - 'tests/**'
       - 'CLINICEZ.sln'
       - 'Directory.Build.props'
       - 'scripts/check-no-broker.ps1'
@@ -19,6 +20,7 @@ on:
     paths:
       - 'services/**'
       - 'packages/shared-dotnet/**'
+      - 'tests/**'
       - 'CLINICEZ.sln'
       - 'Directory.Build.props'
       - 'scripts/check-no-broker.ps1'
