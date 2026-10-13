@@ -267,7 +267,7 @@ public class TenantCustomFieldsAndVerificationTests
     }
 
     [Fact]
-    public async Task CustomFields_GetTemplates_ShouldReturnThreePresetBundlesWithExactMetadata()
+    public async Task CustomFields_GetTemplates_ShouldReturnPresetBundlesWithExactMetadata()
     {
         // Arrange
         var queryHandler = new GetCustomFieldTemplatesQueryHandler();
@@ -277,7 +277,7 @@ public class TenantCustomFieldsAndVerificationTests
 
         // Assert
         templates.Should().NotBeNull();
-        templates.Should().HaveCount(3);
+        templates.Should().HaveCount(6);
 
         var ustp = templates.FirstOrDefault(t => t.Key == "university_ustp");
         ustp.Should().NotBeNull();
@@ -297,6 +297,12 @@ public class TenantCustomFieldsAndVerificationTests
         demo.Should().NotBeNull();
         demo!.FieldCount.Should().Be(3);
         demo.Fields.Should().Contain(f => f.FieldKey == "spouse_information" && f.VisibilityRuleJson != null);
+
+        var intake = templates.FirstOrDefault(t => t.Key == "patient_intake_contacts");
+        intake.Should().NotBeNull();
+        intake!.FieldCount.Should().Be(14);
+        intake.Fields.Should().Contain(f => f.FieldKey == "primary_address_line" && f.IsRequired && f.Category == "Address");
+        intake.Fields.Should().Contain(f => f.FieldKey == "emergency_contact_name" && f.IsRequired && f.Category == "Emergency Contacts");
     }
 
     [Fact]

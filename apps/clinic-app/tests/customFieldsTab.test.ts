@@ -1353,6 +1353,47 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
       });
     });
 
+    test('SVC-6b: installTemplateBundle normalizes Intake aliases to patient_intake_contacts backend key', async () => {
+      mockApiResponse = [{ id: 'new-4', fieldKey: 'primary_address_line' }];
+      const [res, err] = await clinicService.installTemplateBundle('intake');
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('POST');
+      expect(lastApiCall?.url).toBe('/custom-fields/templates/install');
+      expect(lastApiCall?.data).toEqual({
+        templateKey: 'patient_intake_contacts',
+        entityType: 'ClinicPatient',
+      });
+
+      // Test alias "contacts"
+      await clinicService.installTemplateBundle('contacts');
+      expect(lastApiCall?.data?.templateKey).toBe('patient_intake_contacts');
+
+      // Test alias "address_emergency"
+      await clinicService.installTemplateBundle('address_emergency');
+      expect(lastApiCall?.data?.templateKey).toBe('patient_intake_contacts');
+    });
+
+    test('SVC-6c: installTemplateBundle normalizes Address to patient_intake_address backend key', async () => {
+      mockApiResponse = [{ id: 'new-5', fieldKey: 'primary_address_line' }];
+      const [res, err] = await clinicService.installTemplateBundle('address');
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('POST');
+      expect(lastApiCall?.url).toBe('/custom-fields/templates/install');
+      expect(lastApiCall?.data?.templateKey).toBe('patient_intake_address');
+    });
+
+    test('SVC-6d: installTemplateBundle normalizes Emergency to patient_intake_emergency backend key', async () => {
+      mockApiResponse = [{ id: 'new-6', fieldKey: 'emergency_contact_name' }];
+      const [res, err] = await clinicService.installTemplateBundle('emergency');
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('POST');
+      expect(lastApiCall?.url).toBe('/custom-fields/templates/install');
+      expect(lastApiCall?.data?.templateKey).toBe('patient_intake_emergency');
+    });
+
     test('SVC-7: installCustomFieldTemplate is an alias for installTemplateBundle', async () => {
       mockApiResponse = [{ id: 'new-1' }];
       const [res, err] = await clinicService.installCustomFieldTemplate('USTP');

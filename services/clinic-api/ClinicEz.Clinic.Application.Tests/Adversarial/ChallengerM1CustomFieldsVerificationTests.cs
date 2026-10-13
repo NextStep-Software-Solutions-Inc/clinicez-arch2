@@ -378,6 +378,92 @@ public class ChallengerM1CustomFieldsVerificationTests
         restoredYearLevel.DeletedAt.Should().BeNull();
     }
 
+    [Fact]
+    public async Task Task2_5_TemplateInstall_PatientIntakeAddressAndEmergency_MustBeIdempotentAndAccurate()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var installHandler = new InstallCustomFieldTemplateCommandHandler(repo, uow, _clinicContext);
+
+        // Act - Run 1
+        var run1 = await installHandler.Handle(new InstallCustomFieldTemplateCommand(ClinicCustomFieldTemplatesCatalog.PatientIntakeContactsKey), CancellationToken.None);
+        run1.Should().HaveCount(14);
+
+        // Act - Run 2 & 3 (Idempotency)
+        var run2 = await installHandler.Handle(new InstallCustomFieldTemplateCommand(ClinicCustomFieldTemplatesCatalog.PatientIntakeContactsKey), CancellationToken.None);
+        run2.Should().HaveCount(14);
+        var run3 = await installHandler.Handle(new InstallCustomFieldTemplateCommand("intake"), CancellationToken.None); // alias
+        run3.Should().HaveCount(14);
+
+        // Assert - Physical DB record count must remain exactly 14
+        var allInDb = await repo.Query().ToListAsync();
+        allInDb.Should().HaveCount(14);
+
+        // Verify Address Fields
+        var primaryAddr = allInDb.First(f => f.FieldKey == "primary_address_line");
+        primaryAddr.Label.Should().Be("Primary Address (House/Unit/Street)");
+        primaryAddr.Category.Should().Be("Address");
+        primaryAddr.IsRequired.Should().BeTrue();
+        primaryAddr.DisplayOrder.Should().Be(1);
+
+        var primaryCity = allInDb.First(f => f.FieldKey == "primary_city");
+        primaryCity.Category.Should().Be("Address");
+        primaryCity.IsRequired.Should().BeTrue();
+        primaryCity.DisplayOrder.Should().Be(2);
+
+        var secondaryAddr = allInDb.First(f => f.FieldKey == "secondary_address_line");
+        secondaryAddr.Category.Should().Be("Address");
+        secondaryAddr.IsRequired.Should().BeFalse();
+        secondaryAddr.DisplayOrder.Should().Be(5);
+
+        // Verify Emergency Contact Fields
+        var emergencyName = allInDb.First(f => f.FieldKey == "emergency_contact_name");
+        emergencyName.Category.Should().Be("Emergency Contacts");
+        emergencyName.IsRequired.Should().BeTrue();
+        emergencyName.DisplayOrder.Should().Be(7);
+
+        var emergencyRel = allInDb.First(f => f.FieldKey == "emergency_contact_relationship");
+        emergencyRel.Category.Should().Be("Emergency Contacts");
+        emergencyRel.DataType.Should().Be(CustomFieldDataType.Select);
+        emergencyRel.IsRequired.Should().BeTrue();
+        emergencyRel.OptionsJson.Should().Contain("Parent");
+        emergencyRel.OptionsJson.Should().Contain("Spouse");
+
+        var emergencyPhone = allInDb.First(f => f.FieldKey == "emergency_contact_phone");
+        emergencyPhone.Category.Should().Be("Emergency Contacts");
+        emergencyPhone.IsRequired.Should().BeTrue();
+
+        var emergencyAddr = allInDb.First(f => f.FieldKey == "emergency_contact_address");
+        emergencyAddr.Category.Should().Be("Emergency Contacts");
+        emergencyAddr.IsRequired.Should().BeFalse();
+
+        var secEmergencyName = allInDb.First(f => f.FieldKey == "secondary_emergency_contact_name");
+        secEmergencyName.Category.Should().Be("Emergency Contacts");
+        secEmergencyName.IsRequired.Should().BeFalse();
+
+        var secEmergencyAddr = allInDb.First(f => f.FieldKey == "secondary_emergency_contact_address");
+        secEmergencyAddr.Category.Should().Be("Emergency Contacts");
+        secEmergencyAddr.IsRequired.Should().BeFalse();
+
+        // Verify Catalog aliases
+        ClinicCustomFieldTemplatesCatalog.GetTemplate("intake").Should().NotBeNull();
+        ClinicCustomFieldTemplatesCatalog.GetTemplate("patient_intake").Should().NotBeNull();
+        ClinicCustomFieldTemplatesCatalog.GetTemplate("contacts").Should().NotBeNull();
+        ClinicCustomFieldTemplatesCatalog.GetTemplate("address_emergency").Should().NotBeNull();
+        ClinicCustomFieldTemplatesCatalog.GetTemplate("address").Should().NotBeNull();
+        ClinicCustomFieldTemplatesCatalog.GetTemplate("emergency").Should().NotBeNull();
+
+        // Verify Standalone presets
+        var addrTemplate = ClinicCustomFieldTemplatesCatalog.GetTemplate(ClinicCustomFieldTemplatesCatalog.PatientIntakeAddressKey);
+        addrTemplate.Should().NotBeNull();
+        addrTemplate!.FieldCount.Should().Be(6);
+
+        var emergTemplate = ClinicCustomFieldTemplatesCatalog.GetTemplate(ClinicCustomFieldTemplatesCatalog.PatientIntakeEmergencyKey);
+        emergTemplate.Should().NotBeNull();
+        emergTemplate!.FieldCount.Should().Be(8);
+    }
+
     // =========================================================================
     // TASK 3: Validation of VisibilityRuleJson and ConditionalOptionsJson
     // =========================================================================

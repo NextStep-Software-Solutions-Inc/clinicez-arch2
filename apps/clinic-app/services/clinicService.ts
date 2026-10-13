@@ -1626,6 +1626,10 @@ export interface ClinicSettingsRecord {
   letterheadContact?: string;
   letterheadFooter?: string;
   preferredChartLayout?: 'modal' | 'split' | 'drawer';
+  isJoinEnabled?: boolean;
+  joinCode?: string | null;
+  joinCodeExpiresAt?: string | null;
+  clearJoinCode?: boolean;
 }
 
 export interface CheckInRequest {
@@ -2568,6 +2572,19 @@ export const clinicService = {
       backendKey = 'workplace_corporate';
     } else if (normalizedKey === 'demographics' || normalizedKey === 'general_demographics') {
       backendKey = 'general_demographics';
+    } else if (
+      normalizedKey === 'intake' ||
+      normalizedKey === 'patient_intake' ||
+      normalizedKey === 'patient_intake_contacts' ||
+      normalizedKey === 'contacts' ||
+      normalizedKey === 'address_emergency' ||
+      normalizedKey === 'intake_contacts'
+    ) {
+      backendKey = 'patient_intake_contacts';
+    } else if (normalizedKey === 'address' || normalizedKey === 'addresses' || normalizedKey === 'patient_intake_address') {
+      backendKey = 'patient_intake_address';
+    } else if (normalizedKey === 'emergency' || normalizedKey === 'emergency_contacts' || normalizedKey === 'patient_intake_emergency') {
+      backendKey = 'patient_intake_emergency';
     }
     return clinicApiClient.post<ClinicCustomFieldDefinition[]>('/custom-fields/templates/install', {
       templateKey: backendKey,

@@ -11,12 +11,18 @@ public static class ClinicCustomFieldTemplatesCatalog
     public const string UniversityUstpKey = "university_ustp";
     public const string WorkplaceCorporateKey = "workplace_corporate";
     public const string GeneralDemographicsKey = "general_demographics";
+    public const string PatientIntakeContactsKey = "patient_intake_contacts";
+    public const string PatientIntakeAddressKey = "patient_intake_address";
+    public const string PatientIntakeEmergencyKey = "patient_intake_emergency";
 
     private static readonly IReadOnlyList<CustomFieldTemplateDto> _templates = new List<CustomFieldTemplateDto>
     {
         CreateUniversityUstpTemplate(),
         CreateWorkplaceCorporateTemplate(),
-        CreateGeneralDemographicsTemplate()
+        CreateGeneralDemographicsTemplate(),
+        CreatePatientIntakeContactsTemplate(),
+        CreatePatientIntakeAddressTemplate(),
+        CreatePatientIntakeEmergencyTemplate()
     };
 
     public static IReadOnlyList<CustomFieldTemplateDto> AllTemplates => _templates;
@@ -37,6 +43,34 @@ public static class ClinicCustomFieldTemplatesCatalog
             string.Equals(trimmed, "school_clinic", StringComparison.OrdinalIgnoreCase))
         {
             trimmed = UniversityUstpKey;
+        }
+        else if (string.Equals(trimmed, "workplace", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(trimmed, "corporate", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = WorkplaceCorporateKey;
+        }
+        else if (string.Equals(trimmed, "demographics", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(trimmed, "general", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = GeneralDemographicsKey;
+        }
+        else if (string.Equals(trimmed, "intake", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(trimmed, "patient_intake", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(trimmed, "contacts", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(trimmed, "address_emergency", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(trimmed, "intake_contacts", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = PatientIntakeContactsKey;
+        }
+        else if (string.Equals(trimmed, "address", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(trimmed, "addresses", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = PatientIntakeAddressKey;
+        }
+        else if (string.Equals(trimmed, "emergency", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(trimmed, "emergency_contacts", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = PatientIntakeEmergencyKey;
         }
         return _templates.FirstOrDefault(t => string.Equals(t.Key, trimmed, StringComparison.OrdinalIgnoreCase));
     }
@@ -263,6 +297,393 @@ public static class ClinicCustomFieldTemplatesCatalog
             Key: GeneralDemographicsKey,
             Name: "General Clinical Demographics",
             Description: "Extended clinical intake demographics covering cultural/faith beliefs, maternal lineage for identification/validation, and spouse contact conditional on marital status.",
+            EntityType: "ClinicPatient",
+            FieldCount: fields.Count,
+            Fields: fields
+        );
+    }
+
+    private static CustomFieldTemplateDto CreatePatientIntakeContactsTemplate()
+    {
+        var fields = new List<CustomFieldTemplateFieldDto>
+        {
+            // Address (Primary, Secondary)
+            new(
+                FieldKey: "primary_address_line",
+                Label: "Primary Address (House/Unit/Street)",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: true,
+                DisplayOrder: 1,
+                OptionsJson: null,
+                Placeholder: "House/Unit No., Street, Subdivision/Barangay",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "primary_city",
+                Label: "Primary City / Municipality",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: true,
+                DisplayOrder: 2,
+                OptionsJson: null,
+                Placeholder: "e.g. Cagayan de Oro City, Manila, Cebu City",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "primary_province",
+                Label: "Primary Province / Region",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: false,
+                DisplayOrder: 3,
+                OptionsJson: null,
+                Placeholder: "e.g. Misamis Oriental, Metro Manila, Cebu",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "primary_postal_code",
+                Label: "Primary Postal / ZIP Code",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: false,
+                DisplayOrder: 4,
+                OptionsJson: null,
+                Placeholder: "e.g. 9000, 1100",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_address_line",
+                Label: "Secondary / Alternative Address",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: false,
+                DisplayOrder: 5,
+                OptionsJson: null,
+                Placeholder: "Dormitory, Boarding House, Provincial, or Work Address",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_city_province",
+                Label: "Secondary City & Province",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: false,
+                DisplayOrder: 6,
+                OptionsJson: null,
+                Placeholder: "City / Municipality, Province",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+
+            // Emergency Contacts (with phone number, relationship, and address)
+            new(
+                FieldKey: "emergency_contact_name",
+                Label: "Primary Emergency Contact Name",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: true,
+                DisplayOrder: 7,
+                OptionsJson: null,
+                Placeholder: "Full name of primary emergency contact",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "emergency_contact_relationship",
+                Label: "Relationship to Patient",
+                DataType: CustomFieldDataType.Select,
+                Category: "Emergency Contacts",
+                IsRequired: true,
+                DisplayOrder: 8,
+                OptionsJson: "[\"Parent\",\"Spouse\",\"Child\",\"Sibling\",\"Guardian\",\"Relative\",\"Friend\",\"Workplace Colleague\",\"Other\"]",
+                Placeholder: "Select relationship",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "emergency_contact_phone",
+                Label: "Emergency Contact Phone Number",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: true,
+                DisplayOrder: 9,
+                OptionsJson: null,
+                Placeholder: "e.g. 0917-123-4567 or (02) 8123-4567",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "emergency_contact_address",
+                Label: "Emergency Contact Address",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: false,
+                DisplayOrder: 10,
+                OptionsJson: null,
+                Placeholder: "Complete residential or workplace address",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_emergency_contact_name",
+                Label: "Secondary Emergency Contact Name",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: false,
+                DisplayOrder: 11,
+                OptionsJson: null,
+                Placeholder: "Full name of secondary / backup contact",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_emergency_contact_relationship",
+                Label: "Secondary Contact Relationship",
+                DataType: CustomFieldDataType.Select,
+                Category: "Emergency Contacts",
+                IsRequired: false,
+                DisplayOrder: 12,
+                OptionsJson: "[\"Parent\",\"Spouse\",\"Child\",\"Sibling\",\"Guardian\",\"Relative\",\"Friend\",\"Workplace Colleague\",\"Other\"]",
+                Placeholder: "Select relationship",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_emergency_contact_phone",
+                Label: "Secondary Contact Phone Number",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: false,
+                DisplayOrder: 13,
+                OptionsJson: null,
+                Placeholder: "e.g. 0918-987-6543",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_emergency_contact_address",
+                Label: "Secondary Contact Address",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: false,
+                DisplayOrder: 14,
+                OptionsJson: null,
+                Placeholder: "Complete residential or workplace address",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            )
+        };
+
+        return new CustomFieldTemplateDto(
+            Key: PatientIntakeContactsKey,
+            Name: "Patient Intake: Address & Emergency Contacts",
+            Description: "Standard patient intake template with Primary and Secondary Addresses, plus Primary and Secondary Emergency Contacts including phone number, relationship, and physical address.",
+            EntityType: "ClinicPatient",
+            FieldCount: fields.Count,
+            Fields: fields
+        );
+    }
+
+    private static CustomFieldTemplateDto CreatePatientIntakeAddressTemplate()
+    {
+        var fields = new List<CustomFieldTemplateFieldDto>
+        {
+            new(
+                FieldKey: "primary_address_line",
+                Label: "Primary Address (House/Unit/Street)",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: true,
+                DisplayOrder: 1,
+                OptionsJson: null,
+                Placeholder: "House/Unit No., Street, Subdivision/Barangay",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "primary_city",
+                Label: "Primary City / Municipality",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: true,
+                DisplayOrder: 2,
+                OptionsJson: null,
+                Placeholder: "e.g. Cagayan de Oro City, Manila, Cebu City",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "primary_province",
+                Label: "Primary Province / Region",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: false,
+                DisplayOrder: 3,
+                OptionsJson: null,
+                Placeholder: "e.g. Misamis Oriental, Metro Manila, Cebu",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "primary_postal_code",
+                Label: "Primary Postal / ZIP Code",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: false,
+                DisplayOrder: 4,
+                OptionsJson: null,
+                Placeholder: "e.g. 9000, 1100",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_address_line",
+                Label: "Secondary / Alternative Address",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: false,
+                DisplayOrder: 5,
+                OptionsJson: null,
+                Placeholder: "Dormitory, Boarding House, Provincial, or Work Address",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_city_province",
+                Label: "Secondary City & Province",
+                DataType: CustomFieldDataType.Text,
+                Category: "Address",
+                IsRequired: false,
+                DisplayOrder: 6,
+                OptionsJson: null,
+                Placeholder: "City / Municipality, Province",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            )
+        };
+
+        return new CustomFieldTemplateDto(
+            Key: PatientIntakeAddressKey,
+            Name: "Patient Intake: Addresses (Primary & Secondary)",
+            Description: "Intake addresses template providing primary and secondary address lines, city/municipality, province, and postal code.",
+            EntityType: "ClinicPatient",
+            FieldCount: fields.Count,
+            Fields: fields
+        );
+    }
+
+    private static CustomFieldTemplateDto CreatePatientIntakeEmergencyTemplate()
+    {
+        var fields = new List<CustomFieldTemplateFieldDto>
+        {
+            new(
+                FieldKey: "emergency_contact_name",
+                Label: "Primary Emergency Contact Name",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: true,
+                DisplayOrder: 1,
+                OptionsJson: null,
+                Placeholder: "Full name of primary emergency contact",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "emergency_contact_relationship",
+                Label: "Relationship to Patient",
+                DataType: CustomFieldDataType.Select,
+                Category: "Emergency Contacts",
+                IsRequired: true,
+                DisplayOrder: 2,
+                OptionsJson: "[\"Parent\",\"Spouse\",\"Child\",\"Sibling\",\"Guardian\",\"Relative\",\"Friend\",\"Workplace Colleague\",\"Other\"]",
+                Placeholder: "Select relationship",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "emergency_contact_phone",
+                Label: "Emergency Contact Phone Number",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: true,
+                DisplayOrder: 3,
+                OptionsJson: null,
+                Placeholder: "e.g. 0917-123-4567 or (02) 8123-4567",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "emergency_contact_address",
+                Label: "Emergency Contact Address",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: false,
+                DisplayOrder: 4,
+                OptionsJson: null,
+                Placeholder: "Complete residential or workplace address",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_emergency_contact_name",
+                Label: "Secondary Emergency Contact Name",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: false,
+                DisplayOrder: 5,
+                OptionsJson: null,
+                Placeholder: "Full name of backup contact person",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_emergency_contact_relationship",
+                Label: "Secondary Contact Relationship",
+                DataType: CustomFieldDataType.Select,
+                Category: "Emergency Contacts",
+                IsRequired: false,
+                DisplayOrder: 6,
+                OptionsJson: "[\"Parent\",\"Spouse\",\"Child\",\"Sibling\",\"Guardian\",\"Relative\",\"Friend\",\"Workplace Colleague\",\"Other\"]",
+                Placeholder: "Select relationship",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_emergency_contact_phone",
+                Label: "Secondary Contact Phone Number",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: false,
+                DisplayOrder: 7,
+                OptionsJson: null,
+                Placeholder: "e.g. 0918-987-6543",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            ),
+            new(
+                FieldKey: "secondary_emergency_contact_address",
+                Label: "Secondary Contact Address",
+                DataType: CustomFieldDataType.Text,
+                Category: "Emergency Contacts",
+                IsRequired: false,
+                DisplayOrder: 8,
+                OptionsJson: null,
+                Placeholder: "Complete residential or workplace address",
+                VisibilityRuleJson: null,
+                ConditionalOptionsJson: null
+            )
+        };
+
+        return new CustomFieldTemplateDto(
+            Key: PatientIntakeEmergencyKey,
+            Name: "Patient Intake: Emergency Contacts",
+            Description: "Intake emergency contacts template capturing primary and secondary emergency contacts with phone numbers, relationships, and physical addresses.",
             EntityType: "ClinicPatient",
             FieldCount: fields.Count,
             Fields: fields

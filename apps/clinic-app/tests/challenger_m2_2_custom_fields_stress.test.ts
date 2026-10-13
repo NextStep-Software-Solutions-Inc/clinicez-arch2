@@ -636,6 +636,67 @@ describe('Challenger M2_2: Adversarial Stress Test Suite', () => {
       expect(err).toBeDefined();
       expect(err.message).toBe('Tenant subscription limit reached');
     });
+
+    test('ADV-TMPL-6: Patient Intake Address & Emergency Contacts bundle contains 14 fields with strict sequence and validation', async () => {
+      const intakeFields = [
+        { id: 'cf-in-1', fieldKey: 'primary_address_line', label: 'Primary Address (House/Unit/Street)', dataType: 'Text' as const, category: 'Address', isRequired: true, displayOrder: 1, isActive: true },
+        { id: 'cf-in-2', fieldKey: 'primary_city', label: 'Primary City / Municipality', dataType: 'Text' as const, category: 'Address', isRequired: true, displayOrder: 2, isActive: true },
+        { id: 'cf-in-3', fieldKey: 'primary_province', label: 'Primary Province / Region', dataType: 'Text' as const, category: 'Address', isRequired: false, displayOrder: 3, isActive: true },
+        { id: 'cf-in-4', fieldKey: 'primary_postal_code', label: 'Primary Postal / ZIP Code', dataType: 'Text' as const, category: 'Address', isRequired: false, displayOrder: 4, isActive: true },
+        { id: 'cf-in-5', fieldKey: 'secondary_address_line', label: 'Secondary / Alternative Address', dataType: 'Text' as const, category: 'Address', isRequired: false, displayOrder: 5, isActive: true },
+        { id: 'cf-in-6', fieldKey: 'secondary_city_province', label: 'Secondary City & Province', dataType: 'Text' as const, category: 'Address', isRequired: false, displayOrder: 6, isActive: true },
+        { id: 'cf-in-7', fieldKey: 'emergency_contact_name', label: 'Primary Emergency Contact Name', dataType: 'Text' as const, category: 'Emergency Contacts', isRequired: true, displayOrder: 7, isActive: true },
+        { id: 'cf-in-8', fieldKey: 'emergency_contact_relationship', label: 'Relationship to Patient', dataType: 'Select' as const, category: 'Emergency Contacts', isRequired: true, displayOrder: 8, optionsJson: '["Parent","Spouse","Child","Sibling","Guardian","Relative","Friend","Workplace Colleague","Other"]', isActive: true },
+        { id: 'cf-in-9', fieldKey: 'emergency_contact_phone', label: 'Emergency Contact Phone Number', dataType: 'Text' as const, category: 'Emergency Contacts', isRequired: true, displayOrder: 9, isActive: true },
+        { id: 'cf-in-10', fieldKey: 'emergency_contact_address', label: 'Emergency Contact Address', dataType: 'Text' as const, category: 'Emergency Contacts', isRequired: false, displayOrder: 10, isActive: true },
+        { id: 'cf-in-11', fieldKey: 'secondary_emergency_contact_name', label: 'Secondary Emergency Contact Name', dataType: 'Text' as const, category: 'Emergency Contacts', isRequired: false, displayOrder: 11, isActive: true },
+        { id: 'cf-in-12', fieldKey: 'secondary_emergency_contact_relationship', label: 'Secondary Contact Relationship', dataType: 'Select' as const, category: 'Emergency Contacts', isRequired: false, displayOrder: 12, optionsJson: '["Parent","Spouse","Child","Sibling","Guardian","Relative","Friend","Workplace Colleague","Other"]', isActive: true },
+        { id: 'cf-in-13', fieldKey: 'secondary_emergency_contact_phone', label: 'Secondary Contact Phone Number', dataType: 'Text' as const, category: 'Emergency Contacts', isRequired: false, displayOrder: 13, isActive: true },
+        { id: 'cf-in-14', fieldKey: 'secondary_emergency_contact_address', label: 'Secondary Contact Address', dataType: 'Text' as const, category: 'Emergency Contacts', isRequired: false, displayOrder: 14, isActive: true },
+      ];
+
+      mockApiResponse = intakeFields;
+      const [res, err] = await clinicService.installTemplateBundle('intake');
+
+      expect(err).toBeNull();
+      expect(res).toBeDefined();
+      expect(res!.length).toBe(14);
+      expect(res!.map((f) => f.displayOrder)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+
+      // Verify category distribution
+      const addressFields = res!.filter((f) => f.category === 'Address');
+      expect(addressFields).toHaveLength(6);
+      const emergencyFields = res!.filter((f) => f.category === 'Emergency Contacts');
+      expect(emergencyFields).toHaveLength(8);
+
+      // Verify Select options resolution
+      const relField = res!.find((f) => f.fieldKey === 'emergency_contact_relationship')!;
+      const relOptions = getAvailableOptions(relField as any, {});
+      expect(relOptions).toContain('Parent');
+      expect(relOptions).toContain('Spouse');
+      expect(relOptions).toContain('Guardian');
+
+      // Verify form validation behavior
+      const incompleteValues = {
+        primary_address_line: '123 Main St',
+        // missing primary_city, emergency_contact_name, relationship, phone
+      };
+      const invalidValidation = validateCustomFields(res as any, incompleteValues);
+      expect(invalidValidation.isValid).toBe(false);
+      expect(invalidValidation.errors['primary_city']).toBeDefined();
+      expect(invalidValidation.errors['emergency_contact_name']).toBeDefined();
+
+      const completeValues = {
+        primary_address_line: '123 Main St',
+        primary_city: 'Cagayan de Oro City',
+        emergency_contact_name: 'Maria Santos',
+        emergency_contact_relationship: 'Parent',
+        emergency_contact_phone: '0917-111-2222',
+      };
+      const validValidation = validateCustomFields(res as any, completeValues);
+      expect(validValidation.isValid).toBe(true);
+      expect(Object.keys(validValidation.errors)).toHaveLength(0);
+    });
   });
 
   // =========================================================================

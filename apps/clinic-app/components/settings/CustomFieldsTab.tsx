@@ -34,10 +34,17 @@ export interface TemplateBundlePreset {
   title: string;
   subtitle: string;
   badge: string;
-  icon: 'graduation' | 'briefcase' | 'patients';
+  icon: 'graduation' | 'briefcase' | 'patients' | 'emergency';
 }
 
 const TEMPLATE_BUNDLES: TemplateBundlePreset[] = [
+  {
+    key: 'intake',
+    title: 'Patient Intake: Address & Emergency Contacts',
+    subtitle: '14 Fields · Primary & Secondary Addresses + Emergency Contacts with phone, relationship, and address',
+    badge: '14 Fields · Intake Standard',
+    icon: 'emergency',
+  },
   {
     key: 'university',
     title: 'University / School Clinic',
