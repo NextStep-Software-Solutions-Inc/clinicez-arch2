@@ -107,7 +107,7 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                   </ThemedText>
                 </View>
 
-                <ThemedText variant="bodyBold" color={theme.colors.text} numberOfLines={2}>
+                <ThemedText variant="h3" color={theme.colors.text} numberOfLines={2} style={styles.patientName}>
                   {patient.fullName}
                 </ThemedText>
 
@@ -174,24 +174,28 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
 
             {/* Critical Allergy & Alert Banner */}
             <View style={styles.sectionHeader}>
+              <Icon name="alertCircle" size={14} color={theme.colors.emergencyText} />
               <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.sectionTitle}>
                 CLINICAL ALERTS
               </ThemedText>
             </View>
-            <View style={styles.alertBox}>
+            <View style={allergies.length > 0 ? styles.alertBox : styles.nkdaBox}>
               {allergies.length > 0 ? (
                 allergies.map((all, i) => (
                   <View key={i} style={styles.allergyItem}>
                     <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                    <ThemedText variant="caption" color={theme.colors.emergencyText} style={styles.allergyText}>
+                    <ThemedText variant="captionBold" color={theme.colors.emergencyText} style={styles.allergyText}>
                       ALLERGY: {all.allergen}
                     </ThemedText>
                   </View>
                 ))
               ) : (
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  No known drug allergies (NKDA)
-                </ThemedText>
+                <View style={styles.allergyItem}>
+                  <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.successText} />
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    No known drug allergies (NKDA)
+                  </ThemedText>
+                </View>
               )}
             </View>
 
@@ -199,6 +203,7 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
             {latestVitals ? (
               <>
                 <View style={styles.sectionHeader}>
+                  <Icon name="heartPulse" size={14} color={theme.colors.primary} />
                   <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.sectionTitle}>
                     LATEST VITALS
                   </ThemedText>
@@ -236,6 +241,7 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
 
             {/* Vertical Tab Navigation Rail */}
             <View style={styles.sectionHeader}>
+              <Icon name="folder" size={14} color={theme.colors.textSecondary} />
               <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.sectionTitle}>
                 CHART NAVIGATION
               </ThemedText>
@@ -399,42 +405,58 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   sidebarRail: {
-    width: 290,
-    backgroundColor: theme.colors.surfaceHighlight,
+    width: 310,
+    backgroundColor: theme.colors.surfaceSubtle,
     borderRightWidth: 1,
-    borderRightColor: theme.colors.border,
+    borderRightColor: theme.colors.borderLight,
     display: 'flex',
     flexDirection: 'column',
   },
   sidebarRailCompact: {
-    width: 240,
+    width: 260,
   },
   sidebarScroll: {
     flex: 1,
   },
   sidebarContent: {
     padding: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
   patientProfileCard: {
     alignItems: 'center',
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderLight,
-    marginBottom: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
+    ...theme.shadows.sm,
   },
   avatarContainer: {
-    width: 52,
-    height: 52,
+    width: 56,
+    height: 56,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.primaryDark,
+    borderWidth: 2,
+    borderColor: theme.colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: theme.spacing.sm,
   },
+  patientName: {
+    textAlign: 'center',
+    marginBottom: theme.spacing.xs,
+  },
   identityDetails: {
     width: '100%',
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    gap: 4,
     marginTop: theme.spacing.xs,
-    gap: theme.spacing.xs,
   },
   identityRow: {
     flexDirection: 'row',
@@ -455,8 +477,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.xs,
   },
   sectionTitle: {
     fontWeight: '700',
@@ -469,6 +495,13 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.emergencyBorder,
     padding: theme.spacing.sm,
     gap: theme.spacing.xs,
+  },
+  nkdaBox: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.sm,
   },
   allergyItem: {
     flexDirection: 'row',
@@ -486,13 +519,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.borderLight,
     padding: theme.spacing.sm,
+    ...theme.shadows.sm,
   },
   vitalMetric: {
     alignItems: 'center',
+    flex: 1,
   },
   navList: {
     gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
   },
   navItem: {
     flexDirection: 'row',
@@ -502,15 +536,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     borderRadius: theme.radii.md,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: theme.colors.transparent,
   },
   navItemActive: {
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.primaryBorder,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.primary,
+    ...theme.shadows.sm,
   },
   navItemPressed: {
-    backgroundColor: theme.colors.borderLight,
-    opacity: 0.8,
+    backgroundColor: theme.colors.surfaceHighlight,
+    opacity: 0.85,
   },
   navItemLeft: {
     flexDirection: 'row',
@@ -522,7 +559,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   navBadge: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.surfaceHighlight,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 2,
     borderRadius: theme.radii.full,
@@ -530,7 +567,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderLight,
   },
   navBadgeActive: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primaryBorder,
   },
   navBadgeText: {
@@ -539,20 +576,29 @@ const styles = StyleSheet.create({
   sidebarFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    padding: theme.spacing.sm,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
     backgroundColor: theme.colors.surface,
   },
   footerBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: theme.spacing.xs,
-    padding: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs + 2,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surfaceSubtle,
   },
   footerBtnPressed: {
-    opacity: 0.7,
+    backgroundColor: theme.colors.surfaceHighlight,
+    opacity: 0.85,
   },
   footerBtnText: {
     fontWeight: '600',
