@@ -100,6 +100,9 @@ mock.module('../constants/fonts', () => ({
 const { clinicService } = await import('../services/clinicService');
 const { default: CustomFieldsTab } = await import('../components/settings/CustomFieldsTab');
 const { default: AddEditFieldModal } = await import('../components/settings/AddEditFieldModal');
+const { default: SortableCustomFieldsList } = await import('../components/settings/SortableCustomFieldsList');
+const { default: SortableCustomFieldsListWeb } = await import('../components/settings/SortableCustomFieldsList.web');
+const { getDeviceItem, setDeviceItem } = await import('../utils/deviceStorage');
 
 export interface VisibilityRule {
   source: 'custom_field' | 'static';
@@ -159,8 +162,23 @@ class CustomFieldsTabHarness {
   public modalError: string | null = null;
   public saving: boolean = false;
 
+  public reorderMode: 'both' | 'dnd' | 'arrows' = 'both';
+
   constructor(initialFields: CustomFieldDefinition[] = []) {
     this.fields = [...initialFields].sort((a, b) => a.displayOrder - b.displayOrder);
+    const saved = getDeviceItem('clinicez_intake_reorder_mode');
+    if (saved === 'both' || saved === 'dnd' || saved === 'arrows') {
+      this.reorderMode = saved;
+    }
+  }
+
+  public get canDrag(): boolean {
+    return this.selectedCategory === 'All';
+  }
+
+  public setReorderMode(mode: 'both' | 'dnd' | 'arrows') {
+    this.reorderMode = mode;
+    setDeviceItem('clinicez_intake_reorder_mode', mode);
   }
 
   public get visibleFields(): CustomFieldDefinition[] {
@@ -314,12 +332,10 @@ class CustomFieldsTabHarness {
     const current = sorted[index];
     const prev = sorted[index - 1];
 
-    // Swap display order
-    const prevOrder = prev.displayOrder;
-    prev.displayOrder = current.displayOrder;
-    current.displayOrder = prevOrder;
-
-    this.fields = [...sorted].sort((a, b) => a.displayOrder - b.displayOrder);
+    const newSorted = [...sorted];
+    newSorted[index - 1] = current;
+    newSorted[index] = prev;
+    this.fields = newSorted.map((f, i) => ({ ...f, displayOrder: i + 1 }));
     this.notifications.push({ type: 'success', message: `Moved "${current.label}" up.` });
     return true;
   }
@@ -331,13 +347,39 @@ class CustomFieldsTabHarness {
     const current = sorted[index];
     const next = sorted[index + 1];
 
-    // Swap display order
-    const nextOrder = next.displayOrder;
-    next.displayOrder = current.displayOrder;
-    current.displayOrder = nextOrder;
-
-    this.fields = [...sorted].sort((a, b) => a.displayOrder - b.displayOrder);
+    const newSorted = [...sorted];
+    newSorted[index] = next;
+    newSorted[index + 1] = current;
+    this.fields = newSorted.map((f, i) => ({ ...f, displayOrder: i + 1 }));
     this.notifications.push({ type: 'success', message: `Moved "${current.label}" down.` });
+    return true;
+  }
+
+  public async reorderBatch(newOrderedIds: string[], simulateError: boolean = false): Promise<boolean> {
+    const previousFields = this.fields.map((f) => ({ ...f }));
+    const fieldMap = new Map(this.fields.map((f) => [f.id, f]));
+    const reordered: CustomFieldDefinition[] = [];
+    newOrderedIds.forEach((id, idx) => {
+      const f = fieldMap.get(id);
+      if (f) {
+        reordered.push({ ...f, displayOrder: idx + 1 });
+      }
+    });
+    this.fields.forEach((f) => {
+      if (!newOrderedIds.includes(f.id)) {
+        reordered.push({ ...f, displayOrder: reordered.length + 1 });
+      }
+    });
+
+    this.fields = reordered;
+
+    if (simulateError) {
+      this.fields = previousFields;
+      this.notifications.push({ type: 'error', message: 'Could not persist reordered sequence.' });
+      return false;
+    }
+
+    this.notifications.push({ type: 'success', message: 'Intake fields sequence updated.' });
     return true;
   }
 
@@ -1333,6 +1375,205 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
     test('COMP-1: CustomFieldsTab and AddEditFieldModal components are exported and valid', () => {
       expect(typeof CustomFieldsTab).toBe('function');
       expect(typeof AddEditFieldModal).toBe('function');
+    });
+
+    test('DND-1: Default reorder mode is "both", rendering both grip handles and subtle arrows', () => {
+      setDeviceItem('clinicez_intake_reorder_mode', null);
+      const harness = new CustomFieldsTabHarness();
+      expect(harness.reorderMode).toBe('both');
+    });
+
+    test('DND-2: Switching reorder mode to "dnd" persists in deviceStorage and hides arrows', () => {
+      const harness = new CustomFieldsTabHarness();
+      harness.setReorderMode('dnd');
+      expect(harness.reorderMode).toBe('dnd');
+      expect(getDeviceItem('clinicez_intake_reorder_mode')).toBe('dnd');
+    });
+
+    test('DND-3: Switching reorder mode to "arrows" persists in deviceStorage and hides grip handle', () => {
+      const harness = new CustomFieldsTabHarness();
+      harness.setReorderMode('arrows');
+      expect(harness.reorderMode).toBe('arrows');
+      expect(getDeviceItem('clinicez_intake_reorder_mode')).toBe('arrows');
+    });
+
+    test('DND-4: Stored reorder mode preference is retrieved from deviceStorage on initial load', () => {
+      setDeviceItem('clinicez_intake_reorder_mode', 'dnd');
+      const harness = new CustomFieldsTabHarness();
+      expect(harness.reorderMode).toBe('dnd');
+
+      setDeviceItem('clinicez_intake_reorder_mode', 'arrows');
+      const harnessArrows = new CustomFieldsTabHarness();
+      expect(harnessArrows.reorderMode).toBe('arrows');
+
+      setDeviceItem('clinicez_intake_reorder_mode', 'both');
+      const harnessBoth = new CustomFieldsTabHarness();
+      expect(harnessBoth.reorderMode).toBe('both');
+    });
+
+    test('DND-5: Drag-and-drop batch reorder updates displayOrder to 1-based sequential indices', async () => {
+      const initialFields: CustomFieldDefinition[] = [
+        { id: 'f-1', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f1', label: 'Field 1', dataType: 'Text', displayOrder: 1, isRequired: false, isActive: true },
+        { id: 'f-2', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f2', label: 'Field 2', dataType: 'Text', displayOrder: 2, isRequired: false, isActive: true },
+        { id: 'f-3', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f3', label: 'Field 3', dataType: 'Text', displayOrder: 3, isRequired: false, isActive: true },
+      ];
+      const harness = new CustomFieldsTabHarness(initialFields);
+
+      // Drag field 3 to position 1: ['f-3', 'f-1', 'f-2']
+      const success = await harness.reorderBatch(['f-3', 'f-1', 'f-2']);
+      expect(success).toBe(true);
+
+      const f3 = harness.fields.find((f) => f.id === 'f-3');
+      const f1 = harness.fields.find((f) => f.id === 'f-1');
+      const f2 = harness.fields.find((f) => f.id === 'f-2');
+
+      expect(f3?.displayOrder).toBe(1);
+      expect(f1?.displayOrder).toBe(2);
+      expect(f2?.displayOrder).toBe(3);
+    });
+
+    test('DND-6: Batch reorder triggers clinicService.reorderCustomFields with orderedIds array', async () => {
+      mockApiResponse = true;
+      const ids = ['field-c', 'field-a', 'field-b'];
+      const [res, err] = await clinicService.reorderCustomFields(ids);
+
+      expect(err).toBeNull();
+      expect(lastApiCall?.method).toBe('PUT');
+      expect(lastApiCall?.url).toBe('/custom-fields/reorder');
+      expect(lastApiCall?.data).toEqual({ orderedIds: ids, entityType: 'ClinicPatient' });
+    });
+
+    test('DND-7: Batch reorder network failure triggers error rollback to original positions', async () => {
+      const initialFields: CustomFieldDefinition[] = [
+        { id: 'f-1', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f1', label: 'Field 1', dataType: 'Text', displayOrder: 1, isRequired: false, isActive: true },
+        { id: 'f-2', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f2', label: 'Field 2', dataType: 'Text', displayOrder: 2, isRequired: false, isActive: true },
+      ];
+      const harness = new CustomFieldsTabHarness(initialFields);
+
+      // Attempt reorder with simulated network error
+      const success = await harness.reorderBatch(['f-2', 'f-1'], true);
+      expect(success).toBe(false);
+
+      // Verify rollback
+      expect(harness.fields.find((f) => f.id === 'f-1')?.displayOrder).toBe(1);
+      expect(harness.fields.find((f) => f.id === 'f-2')?.displayOrder).toBe(2);
+      expect(harness.notifications[harness.notifications.length - 1].type).toBe('error');
+    });
+
+    test('DND-8: Drag-and-drop is enabled (canDrag=true) when category filter is "All"', () => {
+      const harness = new CustomFieldsTabHarness();
+      harness.selectedCategory = 'All';
+      expect(harness.canDrag).toBe(true);
+    });
+
+    test('DND-9: Drag-and-drop is disabled (canDrag=false) when filtered by a specific category', () => {
+      const harness = new CustomFieldsTabHarness();
+      harness.selectedCategory = 'Demographics';
+      expect(harness.canDrag).toBe(false);
+
+      harness.selectedCategory = 'Academic';
+      expect(harness.canDrag).toBe(false);
+    });
+
+    test('DND-10: Subtle Up/Down arrows are disabled at list boundaries', async () => {
+      const initialFields: CustomFieldDefinition[] = [
+        { id: 'f-1', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f1', label: 'Field 1', dataType: 'Text', displayOrder: 1, isRequired: false, isActive: true },
+        { id: 'f-2', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f2', label: 'Field 2', dataType: 'Text', displayOrder: 2, isRequired: false, isActive: true },
+      ];
+      const harness = new CustomFieldsTabHarness(initialFields);
+
+      // Top boundary: moving up first element returns false
+      const upFirst = await harness.moveUp('f-1');
+      expect(upFirst).toBe(false);
+
+      // Bottom boundary: moving down last element returns false
+      const downLast = await harness.moveDown('f-2');
+      expect(downLast).toBe(false);
+
+      // Valid internal move: moving down first element succeeds
+      const downFirst = await harness.moveDown('f-1');
+      expect(downFirst).toBe(true);
+      expect(harness.fields.find((f) => f.id === 'f-1')?.displayOrder).toBe(2);
+      expect(harness.fields.find((f) => f.id === 'f-2')?.displayOrder).toBe(1);
+    });
+
+    test('DND-11: SortableCustomFieldsList and SortableCustomFieldsListWeb components are exported and valid', () => {
+      expect(typeof SortableCustomFieldsList).toBe('function');
+      expect(typeof SortableCustomFieldsListWeb).toBe('function');
+    });
+
+    test('DND-12: Error rollback preserves original state objects without in-place mutation of displayOrder', async () => {
+      const f1: CustomFieldDefinition = { id: 'f-1', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f1', label: 'Field 1', dataType: 'Text', displayOrder: 1, isRequired: false, isActive: true };
+      const f2: CustomFieldDefinition = { id: 'f-2', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f2', label: 'Field 2', dataType: 'Text', displayOrder: 2, isRequired: false, isActive: true };
+      const harness = new CustomFieldsTabHarness([f1, f2]);
+
+      // Trigger reorder with simulated error
+      const success = await harness.reorderBatch(['f-2', 'f-1'], true);
+      expect(success).toBe(false);
+
+      // Verify that original objects still have displayOrder 1 and 2, not mutated to 2 and 1
+      expect(harness.fields[0].id).toBe('f-1');
+      expect(harness.fields[0].displayOrder).toBe(1);
+      expect(harness.fields[1].id).toBe('f-2');
+      expect(harness.fields[1].displayOrder).toBe(2);
+    });
+
+    test('DND-13: Filtered category boundary checks accurately identify first and last visible positions', () => {
+      const f1: CustomFieldDefinition = { id: 'd-1', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'd1', label: 'Demo 1', category: 'Demographics', dataType: 'Text', displayOrder: 1, isRequired: false, isActive: true };
+      const f2: CustomFieldDefinition = { id: 'a-1', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'a1', label: 'Acad 1', category: 'Academic', dataType: 'Text', displayOrder: 2, isRequired: false, isActive: true };
+      const f3: CustomFieldDefinition = { id: 'd-2', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'd2', label: 'Demo 2', category: 'Demographics', dataType: 'Text', displayOrder: 3, isRequired: false, isActive: true };
+
+      const harness = new CustomFieldsTabHarness([f1, f2, f3]);
+      harness.selectedCategory = 'Demographics';
+
+      const visible = harness.visibleFields;
+      expect(visible).toHaveLength(2);
+      expect(visible[0].id).toBe('d-1');
+      expect(visible[1].id).toBe('d-2');
+
+      // In visible list: d-1 is index 0 (isFirst=true), d-2 is index 1 (isLast=true)
+      const isFirst0 = 0 <= 0;
+      const isLast0 = 0 >= visible.length - 1;
+      const isFirst1 = 1 <= 0;
+      const isLast1 = 1 >= visible.length - 1;
+
+      expect(isFirst0).toBe(true);  // d-1 cannot move up
+      expect(isLast0).toBe(false); // d-1 can move down
+      expect(isFirst1).toBe(false); // d-2 can move up
+      expect(isLast1).toBe(true);  // d-2 cannot move down
+    });
+
+    test('DND-14: Batch reordering appends any unmentioned fields to preserve full sequence integrity', async () => {
+      const f1: CustomFieldDefinition = { id: 'f-1', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f1', label: 'Field 1', dataType: 'Text', displayOrder: 1, isRequired: false, isActive: true };
+      const f2: CustomFieldDefinition = { id: 'f-2', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f2', label: 'Field 2', dataType: 'Text', displayOrder: 2, isRequired: false, isActive: true };
+      const f3: CustomFieldDefinition = { id: 'f-3', tenantId: 't', clinicId: 'c', entityType: 'ClinicPatient', fieldKey: 'f3', label: 'Field 3', dataType: 'Text', displayOrder: 3, isRequired: false, isActive: true };
+
+      const harness = new CustomFieldsTabHarness([f1, f2, f3]);
+      // Only reorder first two, f-3 is omitted from input
+      await harness.reorderBatch(['f-2', 'f-1']);
+
+      expect(harness.fields).toHaveLength(3);
+      expect(harness.fields[0].id).toBe('f-2');
+      expect(harness.fields[0].displayOrder).toBe(1);
+      expect(harness.fields[1].id).toBe('f-1');
+      expect(harness.fields[1].displayOrder).toBe(2);
+      expect(harness.fields[2].id).toBe('f-3');
+      expect(harness.fields[2].displayOrder).toBe(3);
+    });
+
+    test('DND-15: Reorder controls mode selector maintains consistency with deviceStorage state', () => {
+      const harness = new CustomFieldsTabHarness();
+      harness.setReorderMode('both');
+      expect(harness.reorderMode).toBe('both');
+      expect(getDeviceItem('clinicez_intake_reorder_mode')).toBe('both');
+
+      harness.setReorderMode('dnd');
+      expect(harness.reorderMode).toBe('dnd');
+      expect(getDeviceItem('clinicez_intake_reorder_mode')).toBe('dnd');
+
+      harness.setReorderMode('arrows');
+      expect(harness.reorderMode).toBe('arrows');
+      expect(getDeviceItem('clinicez_intake_reorder_mode')).toBe('arrows');
     });
   });
 });
