@@ -1,37 +1,129 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState } from '../ui';
-import type {
-  ClinicPatient,
-  PatientChart,
-  PatientProblemRecord,
-  PatientAllergyRecord,
-  ConsultationRecord,
-  ClinicLabOrderRecord,
-  TriageVitals,
+import {
+  ORGAN_SYSTEMS,
+  type OrganSystemDef,
+} from './OrganSystemsExamSection';
+import { usePhilHealthCatalog } from '../../utils/usePhilHealthCatalog';
+import {
+  clinicService,
+  type ClinicPatient,
+  type PatientChart,
+  type PatientProblemRecord,
+  type PatientAllergyRecord,
+  type ConsultationRecord,
+  type ClinicLabOrderRecord,
+  type TriageVitals,
+  type PhilHealthPatientProfile,
 } from '../../services/clinicService';
 
 export interface ExecutiveSummaryTabProps {
   patient?: ClinicPatient | null;
   chart?: PatientChart | null;
   patientChart?: PatientChart | null;
+  profile?: PhilHealthPatientProfile | null;
   onNavigateTab: (tab: any) => void;
   onRefreshChart?: () => void;
   onOpenAddProblemModal?: () => void;
   onOpenAddAllergyModal?: () => void;
 }
 
+interface OrganSystemSummaryCardProps {
+  system: OrganSystemDef;
+  code?: string;
+  remarks?: string;
+  onPress?: () => void;
+}
+
+function OrganSystemSummaryCard({ system, code, remarks, onPress }: OrganSystemSummaryCardProps) {
+  const { items } = usePhilHealthCatalog(system.library);
+  const selectedItem = items.find((i) => i.code === code);
+  const isNormal = code ? code === system.defaultNormalCode : true;
+  const displayLabel = selectedItem?.description || (isNormal ? 'Essentially normal' : `Code: ${code}`);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${system.label}: ${displayLabel}`}
+      style={[styles.organSummaryCard, !isNormal && styles.organSummaryCard_abnormal]}
+    >
+      <View style={styles.organSummaryCardTop}>
+        <ThemedText variant="captionBold" color={theme.colors.textSecondary} numberOfLines={1}>
+          {system.label}
+        </ThemedText>
+        <Badge
+          label={isNormal ? 'Normal' : 'Abnormal'}
+          variant={isNormal ? 'routine' : 'warning'}
+          size="sm"
+        />
+      </View>
+      <ThemedText
+        variant="bodyBold"
+        color={isNormal ? theme.colors.text : theme.colors.warningText}
+        numberOfLines={1}
+        style={{ marginTop: 2 }}
+      >
+        {displayLabel}
+      </ThemedText>
+      {remarks ? (
+        <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1} style={{ marginTop: 2 }}>
+          {remarks}
+        </ThemedText>
+      ) : null}
+    </Pressable>
+  );
+}
+
 export default function ExecutiveSummaryTab({
   patient,
   chart: chartProp,
   patientChart,
+  profile: profileProp,
   onNavigateTab,
   onRefreshChart,
   onOpenAddProblemModal,
   onOpenAddAllergyModal,
 }: ExecutiveSummaryTabProps) {
   const chart = chartProp || patientChart;
+
+  // PhilHealth Patient Profile & Organ Systems Examination findings
+  const [organProfile, setOrganProfile] = useState<PhilHealthPatientProfile | null>(profileProp || null);
+
+  useEffect(() => {
+    if (profileProp) {
+      setOrganProfile(profileProp);
+      return;
+    }
+    const pid = patient?.id || chart?.patientId;
+    if (!pid) return;
+
+    let isMounted = true;
+    clinicService
+      .getPhilHealthPatientProfile(pid)
+      .then(([data]) => {
+        if (isMounted && data) {
+          setOrganProfile(data);
+        }
+      })
+      .catch(() => {
+        // Fallback gracefully without breaking view
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [patient?.id, chart?.patientId, profileProp]);
+
+  const abnormalOrganCount = useMemo(() => {
+    if (!organProfile) return 0;
+    return ORGAN_SYSTEMS.filter((sys) => {
+      const val = organProfile[sys.key as keyof PhilHealthPatientProfile] as string | undefined;
+      return val && val !== sys.defaultNormalCode;
+    }).length;
+  }, [organProfile]);
 
   const activeProblems: PatientProblemRecord[] = useMemo(() => {
     if (chart?.problems && chart.problems.length > 0) {
@@ -427,6 +519,69 @@ export default function ExecutiveSummaryTab({
           </View>
         </View>
       </View>
+
+      {/* ========================================================================= */}
+      {/* ORGAN SYSTEMS EXAMINATION (PHILHEALTH PHYSICAL EXAM)                       */}
+      {/* ========================================================================= */}
+      <View style={styles.organExamSectionCard}>
+        <View style={styles.quadrantHeader}>
+          <View style={styles.headerTitleGroup}>
+            <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
+            <ThemedText variant="h3" color={theme.colors.text}>
+              Organ Systems Examination
+            </ThemedText>
+            <Badge
+              label={
+                abnormalOrganCount > 0
+                  ? `${abnormalOrganCount} Abnormal Finding${abnormalOrganCount > 1 ? 's' : ''}`
+                  : 'All Essentially Normal'
+              }
+              variant={abnormalOrganCount > 0 ? 'warning' : 'routine'}
+              size="sm"
+            />
+          </View>
+          <Pressable
+            onPress={() => onNavigateTab('profiles')}
+            accessibilityRole="button"
+            accessibilityLabel="Review and edit organ systems examination in health profiles"
+            style={styles.actionLink}
+          >
+            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+              Review &amp; Edit
+            </ThemedText>
+            <Icon name="arrowRight" size={12} color={theme.colors.primaryDark} />
+          </Pressable>
+        </View>
+
+        <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: theme.spacing.sm }}>
+          PhilHealth statutory physical examination findings across 8 organ systems. Scroll horizontally to inspect each system.
+        </ThemedText>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.organScroll}
+          contentContainerStyle={styles.organScrollContent}
+        >
+          {ORGAN_SYSTEMS.map((sys) => {
+            const code =
+              (organProfile?.[sys.key as keyof PhilHealthPatientProfile] as string) ||
+              sys.defaultNormalCode;
+            const remarks = organProfile?.[sys.remarksKey as keyof PhilHealthPatientProfile] as
+              | string
+              | undefined;
+            return (
+              <OrganSystemSummaryCard
+                key={sys.key}
+                system={sys}
+                code={code}
+                remarks={remarks}
+                onPress={() => onNavigateTab('profiles')}
+              />
+            );
+          })}
+        </ScrollView>
+      </View>
     </ScrollView>
   );
 }
@@ -604,5 +759,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.borderLight,
     marginTop: 2,
+  },
+  organExamSectionCard: {
+    marginTop: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  organScroll: {
+    marginHorizontal: -theme.spacing.xs,
+  },
+  organScrollContent: {
+    paddingHorizontal: theme.spacing.xs,
+    gap: theme.spacing.sm,
+  },
+  organSummaryCard: {
+    minWidth: 175,
+    maxWidth: 220,
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    gap: 2,
+  },
+  organSummaryCard_abnormal: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+  },
+  organSummaryCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.xs,
+    marginBottom: 2,
   },
 });

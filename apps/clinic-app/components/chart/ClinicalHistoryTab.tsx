@@ -16,6 +16,10 @@ import {
   PhilHealthPatientProfile,
   PhilHealthConditionEntry,
 } from '../../services/clinicService';
+import OrganSystemsExamSection, {
+  DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+  type OrganSystemsExamValues,
+} from './OrganSystemsExamSection';
 
 export const PHILHEALTH_MDISEASES_CONDITIONS: { code: string; description: string }[] = [
   { code: '001', description: 'Allergy' },
@@ -182,6 +186,26 @@ export default function ClinicalHistoryTab({
     return initialProfile?.familyHistoryNotes || '';
   });
 
+  // Organ Systems Examination State
+  const [organSystems, setOrganSystems] = useState<OrganSystemsExamValues>(() => ({
+    skinId: initialProfile?.skinId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.skinId,
+    heentId: initialProfile?.heentId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.heentId,
+    chestId: initialProfile?.chestId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.chestId,
+    heartId: initialProfile?.heartId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.heartId,
+    abdomenId: initialProfile?.abdomenId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.abdomenId,
+    neuroId: initialProfile?.neuroId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.neuroId,
+    guId: initialProfile?.guId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.guId,
+    rectalId: initialProfile?.rectalId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.rectalId,
+    skinRemarks: initialProfile?.skinRemarks || '',
+    heentRemarks: initialProfile?.heentRemarks || '',
+    chestRemarks: initialProfile?.chestRemarks || '',
+    heartRemarks: initialProfile?.heartRemarks || '',
+    abdomenRemarks: initialProfile?.abdomenRemarks || '',
+    neuroRemarks: initialProfile?.neuroRemarks || '',
+    guRemarks: initialProfile?.guRemarks || '',
+    rectalRemarks: initialProfile?.rectalRemarks || '',
+  }));
+
   // Catalog for past medical conditions (lib_mdiseases)
   const { items: diseaseCatalog } = usePhilHealthCatalog('lib_mdiseases');
   const activeCatalogConditions = useMemo(() => {
@@ -232,6 +256,27 @@ export default function ClinicalHistoryTab({
     }
     if (data.familyHistoryNotes) {
       setFamilyNotes(data.familyHistoryNotes);
+    }
+
+    if (data.skinId || data.heentId || data.chestId || data.heartId || data.abdomenId) {
+      setOrganSystems({
+        skinId: data.skinId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.skinId,
+        heentId: data.heentId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.heentId,
+        chestId: data.chestId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.chestId,
+        heartId: data.heartId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.heartId,
+        abdomenId: data.abdomenId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.abdomenId,
+        neuroId: data.neuroId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.neuroId,
+        guId: data.guId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.guId,
+        rectalId: data.rectalId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.rectalId,
+        skinRemarks: data.skinRemarks || '',
+        heentRemarks: data.heentRemarks || '',
+        chestRemarks: data.chestRemarks || '',
+        heartRemarks: data.heartRemarks || '',
+        abdomenRemarks: data.abdomenRemarks || '',
+        neuroRemarks: data.neuroRemarks || '',
+        guRemarks: data.guRemarks || '',
+        rectalRemarks: data.rectalRemarks || '',
+      });
     }
   }, [patient.chronicConditions]);
 
@@ -352,6 +397,7 @@ export default function ClinicalHistoryTab({
 
     const updatedProfile: PhilHealthPatientProfile = {
       ...(profile || defaultPhilHealthProfile),
+      ...organSystems,
       medicalHistories,
       familyHistories,
       medicalHistoryNotes: personalNotes.trim() || undefined,
@@ -984,7 +1030,25 @@ export default function ClinicalHistoryTab({
         </View>
       </View>
 
-      {/* SECTION 5: Save Profile Persistence Action */}
+      {/* SECTION 5: Interactive Organ Systems Examination */}
+      <View style={styles.sectionCard}>
+        <OrganSystemsExamSection
+          values={organSystems}
+          onChange={(key, code) => {
+            setOrganSystems((prev) => ({ ...prev, [key]: code }));
+            setProfileSuccess(false);
+          }}
+          onSetAllNormal={() => {
+            setOrganSystems((prev) => ({
+              ...prev,
+              ...DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+            }));
+            setProfileSuccess(false);
+          }}
+        />
+      </View>
+
+      {/* SECTION 6: Save Profile Persistence Action */}
       <View style={styles.persistenceCard}>
         {profileError ? (
           <View style={styles.formErrorBanner}>
