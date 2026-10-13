@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
   ThemedText,
   Badge,
@@ -45,7 +45,7 @@ import {
 
 type DashboardTab = 'QUEUE' | 'ANALYTICS' | 'REPORTS';
 type ReportType = 'DAILY_EOD' | 'MORBIDITY' | 'TAX_DISCOUNT' | 'DOCTOR_SHARES';
-type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'Completed';
+type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'OnHold' | 'NoShow' | 'Completed';
 
 const PRIORITY_OPTIONS: QueuePriority[] = ['Routine', 'Urgent', 'Emergency'];
 
@@ -79,7 +79,7 @@ const priorityVariant = (priority: QueuePriority): BadgeVariant => {
   }
 };
 
-const statusBadge = (status: QueueStatus): { label: string; variant: BadgeVariant } => {
+const statusBadge = (status: QueueStatus): { label: string; variant: BadgeVariant; icon?: string } => {
   switch (status) {
     case 'Waiting':
       return { label: 'Waiting', variant: 'warning' };
@@ -87,12 +87,18 @@ const statusBadge = (status: QueueStatus): { label: string; variant: BadgeVarian
       return { label: 'Triaged', variant: 'success' };
     case 'InConsultation':
       return { label: 'In consultation', variant: 'purple' };
+    case 'OnHold':
+      return { label: 'On hold', variant: 'warning', icon: 'clock' };
+    case 'NoShow':
+      return { label: 'No show', variant: 'neutral', icon: 'alertCircle' };
+    case 'Cancelled':
+      return { label: 'Cancelled', variant: 'neutral', icon: 'close' };
+    case 'PendingProcedure':
+      return { label: 'Procedure bay', variant: 'urgent' };
+    case 'ReEvaluation':
+      return { label: 'Re-evaluation', variant: 'emergency' };
     case 'Completed':
       return { label: 'Completed', variant: 'neutral' };
-    case 'Cancelled':
-      return { label: 'Cancelled', variant: 'neutral' };
-    case 'NoShow':
-      return { label: 'No show', variant: 'neutral' };
     default:
       return { label: status, variant: 'neutral' };
   }
@@ -239,6 +245,17 @@ export default function DashboardScreen() {
     loadData().finally(() => setLoading(false));
   }, [loadData]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const loadMetrics = useCallback(async () => {
+    const [metricsData] = await clinicService.getQueueMetrics();
+    if (metricsData) setMetrics(metricsData);
+  }, []);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadData();
@@ -301,6 +318,108 @@ export default function DashboardScreen() {
         setTriage((prev) => ({ ...prev, posture: 'RECUMBENT' }));
       }
     }
+  };
+
+  const handlePutOnHold = async (item: PatientQueueItem) => {
+    setActioningId(item.id);
+    const [, err] = await clinicService.putOnHold(item.id);
+    setActioningId(null);
+    if (err) {
+      notify.error(err.message || 'Could not put patient on hold.');
+      return;
+    }
+    notify.info(`${item.patientName} put on hold.`);
+    setQueue((prev) =>
+      (prev ?? []).map((q) => (q.id === item.id ? { ...q, status: 'OnHold' as QueueStatus } : q))
+    );
+    loadMetrics();
+  };
+
+  const handleMarkNoShow = (item: PatientQueueItem) => {
+    Alert.alert(
+      'Mark as No-Show?',
+      `Mark ${item.patientName} (Ticket ${item.queueNumber}) as no-show? This records their departure timestamp.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark No-Show',
+          style: 'destructive',
+          onPress: async () => {
+            setActioningId(item.id);
+            const [, err] = await clinicService.markNoShow(item.id);
+            setActioningId(null);
+            if (err) {
+              notify.error(err.message || 'Could not mark patient as no-show.');
+              return;
+            }
+            notify.info(`${item.patientName} marked as no-show.`);
+            setQueue((prev) =>
+              (prev ?? []).map((q) =>
+                q.id === item.id
+                  ? {
+                      ...q,
+                      status: 'NoShow' as QueueStatus,
+                      completedTime: new Date().toISOString(),
+                    }
+                  : q
+              )
+            );
+            loadMetrics();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleCancelVisit = (item: PatientQueueItem) => {
+    Alert.alert(
+      'Cancel Visit?',
+      `Cancel queue visit for ${item.patientName} (Ticket ${item.queueNumber})? This marks the patient as Left Without Being Seen (LWBS).`,
+      [
+        { text: 'Keep In Line', style: 'cancel' },
+        {
+          text: 'Cancel Visit',
+          style: 'destructive',
+          onPress: async () => {
+            setActioningId(item.id);
+            const [, err] = await clinicService.cancelQueueTicket(item.id, 'Patient left / LWBS');
+            setActioningId(null);
+            if (err) {
+              notify.error(err.message || 'Could not cancel queue visit.');
+              return;
+            }
+            notify.info(`Visit cancelled for ${item.patientName}.`);
+            setQueue((prev) =>
+              (prev ?? []).map((q) =>
+                q.id === item.id
+                  ? {
+                      ...q,
+                      status: 'Cancelled' as QueueStatus,
+                      completedTime: new Date().toISOString(),
+                    }
+                  : q
+              )
+            );
+            loadMetrics();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReactivate = async (item: PatientQueueItem) => {
+    setActioningId(item.id);
+    const [, err] = await clinicService.reactivateQueueItem(item.id);
+    setActioningId(null);
+    if (err) {
+      notify.error(err.message || 'Could not reactivate queue ticket.');
+      return;
+    }
+    notify.success(`${item.patientName} restored to waiting line.`);
+    setQueue((prev) =>
+      (prev ?? []).map((q) => (q.id === item.id ? { ...q, status: 'Waiting' as QueueStatus } : q))
+    );
+    loadMetrics();
   };
 
   const isPediatric = useMemo(() => {
@@ -463,6 +582,8 @@ export default function DashboardScreen() {
       Waiting: count('Waiting'),
       Triaged: count('Triaged'),
       InConsultation: count('InConsultation'),
+      OnHold: count('OnHold'),
+      NoShow: count('NoShow'),
       Completed: count('Completed'),
     };
   }, [queue]);
@@ -601,6 +722,8 @@ export default function DashboardScreen() {
             { value: 'Waiting', label: 'Waiting', count: queueCounts.Waiting },
             { value: 'Triaged', label: 'Triaged', count: queueCounts.Triaged },
             { value: 'InConsultation', label: 'In consultation', count: queueCounts.InConsultation },
+            { value: 'OnHold', label: 'On hold', count: queueCounts.OnHold },
+            { value: 'NoShow', label: 'No show', count: queueCounts.NoShow },
             { value: 'Completed', label: 'Completed', count: queueCounts.Completed },
           ]}
         />
@@ -630,7 +753,17 @@ export default function DashboardScreen() {
             const canCall = item.status === 'Waiting' || item.status === 'Triaged';
             const isCompleted = item.status === 'Completed';
             const canTriage = !isCompleted && item.status !== 'Cancelled' && item.status !== 'NoShow';
-            const waited = item.status === 'Waiting' ? waitingMinutes(item.checkInTime) : null;
+
+            // Wait time calculation for all active waiting patients
+            const isWaitingState = item.status === 'Waiting' || item.status === 'Triaged' || item.status === 'OnHold';
+            const waited = isWaitingState ? waitingMinutes(item.checkInTime) : null;
+            const isOverdueWait = waited !== null && waited > 60;
+
+            // Direct action eligibility
+            const canHold = item.status === 'Waiting' || item.status === 'Triaged';
+            const canNoShow = item.status === 'Waiting' || item.status === 'Triaged' || item.status === 'OnHold';
+            const canCancel = item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'NoShow';
+            const canReactivate = item.status === 'OnHold' || item.status === 'NoShow';
 
             return (
               <Card key={item.id}>
@@ -639,13 +772,21 @@ export default function DashboardScreen() {
                     <Badge label={item.queueNumber} variant={priorityVariant(item.priority)} />
                     <View style={styles.queueTitle}>
                       <ThemedText variant="bodyBold">{item.patientName}</ThemedText>
-                      <ThemedText variant="small" color={theme.colors.textSecondary}>
+                      <ThemedText
+                        variant="small"
+                        color={isOverdueWait ? theme.colors.emergencyText : theme.colors.textSecondary}
+                      >
                         {item.doctorName ? item.doctorName : 'Unassigned'}
                         {item.priority !== 'Routine' ? ` • ${item.priority}` : ''}
                         {waited !== null ? ` • waiting ${waited} min` : ''}
                       </ThemedText>
                     </View>
-                    <Badge label={badge.label} variant={badge.variant} />
+                    <View style={styles.badgeRow}>
+                      {isOverdueWait ? (
+                        <Badge label="Waiting > 60m" variant="emergency" icon="alert" />
+                      ) : null}
+                      <Badge label={badge.label} variant={badge.variant} icon={badge.icon} />
+                    </View>
                   </View>
 
                   {item.chiefComplaint ? (
@@ -702,6 +843,50 @@ export default function DashboardScreen() {
                             queueId: item.id,
                           })
                         }
+                      />
+                    ) : null}
+                    {canHold ? (
+                      <Button
+                        title="Put on hold"
+                        variant="outline"
+                        size="sm"
+                        icon="clock"
+                        loading={isActioning}
+                        disabled={isActioning}
+                        onPress={() => handlePutOnHold(item)}
+                      />
+                    ) : null}
+                    {canReactivate ? (
+                      <Button
+                        title="Re-activate"
+                        variant="primary"
+                        size="sm"
+                        icon="refresh"
+                        loading={isActioning}
+                        disabled={isActioning}
+                        onPress={() => handleReactivate(item)}
+                      />
+                    ) : null}
+                    {canNoShow ? (
+                      <Button
+                        title="No-show"
+                        variant="outline"
+                        size="sm"
+                        icon="alertCircle"
+                        loading={isActioning}
+                        disabled={isActioning}
+                        onPress={() => handleMarkNoShow(item)}
+                      />
+                    ) : null}
+                    {canCancel ? (
+                      <Button
+                        title="Cancel visit"
+                        variant="ghost"
+                        size="sm"
+                        icon="trash"
+                        loading={isActioning}
+                        disabled={isActioning}
+                        onPress={() => handleCancelVisit(item)}
                       />
                     ) : null}
                     {isCompleted ? (
@@ -1428,6 +1613,11 @@ const styles = StyleSheet.create({
   },
   queueTitle: {
     flex: 1,
+    gap: theme.spacing.xs,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: theme.spacing.xs,
   },
   vitalsStrip: {

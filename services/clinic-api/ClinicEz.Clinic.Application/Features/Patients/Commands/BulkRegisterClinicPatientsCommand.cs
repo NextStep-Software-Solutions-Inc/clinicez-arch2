@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
@@ -56,15 +57,41 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
     private readonly IRepository<ClinicPatient> _patientRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IPatientCodeGenerator _codeGenerator;
 
     public BulkRegisterClinicPatientsCommandHandler(
         IRepository<ClinicPatient> patientRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IPatientCodeGenerator? codeGenerator = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _codeGenerator = codeGenerator ?? ResolveFallbackCodeGenerator(patientRepo, unitOfWork);
+    }
+
+    private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
+        IRepository<ClinicPatient> patientRepo,
+        IUnitOfWork unitOfWork)
+    {
+        var dbContext = (patientRepo.GetType().GetProperty("DbContext")?.GetValue(patientRepo)
+            ?? unitOfWork.GetType().GetProperty("DbContext")?.GetValue(unitOfWork)) as DbContext;
+
+        if (dbContext != null)
+        {
+            var genType = Type.GetType("ClinicEz.Clinic.Infrastructure.Services.PatientCodeGenerator, ClinicEz.Clinic.Infrastructure")
+                ?? AppDomain.CurrentDomain.GetAssemblies()
+                    .Select(a => a.GetType("ClinicEz.Clinic.Infrastructure.Services.PatientCodeGenerator"))
+                    .FirstOrDefault(t => t != null);
+
+            if (genType != null)
+            {
+                return (IPatientCodeGenerator)Activator.CreateInstance(genType, dbContext, null)!;
+            }
+        }
+
+        throw new InvalidOperationException("IPatientCodeGenerator must be provided or registered in DI.");
     }
 
     public async Task<BulkRegisterPatientsResultDto> Handle(
@@ -77,34 +104,22 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
         }
 
         var year = DateTime.UtcNow.Year;
-        var prefix = $"PAT-{year}-";
-        var existingCodes = await _patientRepo.Query(
-            p => p.ClinicId == _clinicContext.ClinicId && p.PatientCode != null && p.PatientCode.StartsWith(prefix),
-            ignoreQueryFilters: true)
-            .Select(p => p.PatientCode)
-            .ToListAsync(ct);
+        const int maxAttempts = 3;
 
-        var maxSeq = 0;
-        foreach (var code in existingCodes)
-        {
-            if (!string.IsNullOrEmpty(code) && code.Length > prefix.Length)
-            {
-                var suffix = code.Substring(prefix.Length);
-                if (int.TryParse(suffix, out var parsed) && parsed > maxSeq)
-                {
-                    maxSeq = parsed;
-                }
-            }
-        }
+        var patientCodes = await _codeGenerator.ReserveBatchCodesAsync(
+            _clinicContext.TenantId,
+            _clinicContext.ClinicId,
+            request.Patients.Count,
+            year,
+            ct);
 
         var createdEntities = new List<ClinicPatient>();
         var resultDtos = new List<ClinicPatientDto>();
 
-        var seq = maxSeq;
-        foreach (var item in request.Patients)
+        for (int i = 0; i < request.Patients.Count; i++)
         {
-            seq++;
-            var patientCode = $"{prefix}{seq:D5}";
+            var item = request.Patients[i];
+            var patientCode = patientCodes[i];
 
             var patient = new ClinicPatient
             {
@@ -143,11 +158,35 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
 
             await _patientRepo.AddAsync(patient, ct);
             createdEntities.Add(patient);
-
-            resultDtos.Add(RegisterClinicPatientCommandHandler.MapToDto(patient));
         }
 
-        await _unitOfWork.SaveChangesAsync(ct);
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await _unitOfWork.SaveChangesAsync(ct);
+                break;
+            }
+            catch (DbUpdateException ex) when (attempt < maxAttempts && PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
+            {
+                var newCodes = await _codeGenerator.ReserveBatchCodesAsync(
+                    _clinicContext.TenantId,
+                    _clinicContext.ClinicId,
+                    createdEntities.Count,
+                    year,
+                    ct);
+
+                for (int i = 0; i < createdEntities.Count; i++)
+                {
+                    createdEntities[i].PatientCode = newCodes[i];
+                }
+            }
+        }
+
+        foreach (var p in createdEntities)
+        {
+            resultDtos.Add(RegisterClinicPatientCommandHandler.MapToDto(p));
+        }
 
         return new BulkRegisterPatientsResultDto(
             request.Patients.Count,

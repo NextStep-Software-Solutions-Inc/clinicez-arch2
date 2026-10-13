@@ -1,54 +1,52 @@
-# BRIEFING — 2026-10-13T03:02:15Z
+# BRIEFING — 2026-10-13T08:20:00Z
 
 ## Mission
-Fix tab-switching flicker in PatientChartModal and PhilHealthProfileModal in `apps/clinic-app` so switching tabs (Diagnostics, Procedures, Vaccines, Health Profiles, General/Vitals) remains visually seamless without backdrop flashing, DOM thrashing, or restarting CSS fade-in animations.
+Deliver a robust Outpatient Department (OPD) Queue Management System for ClinicEZ that prevents duplicate tickets, blocks check-in spam, enforces active queue uniqueness, introduces complete absence and hold controls (No-Show, On Hold, Cancel/Walkout, Re-activate), and establishes an automated visit completion lifecycle.
 
 ## 🔒 My Identity
 - Archetype: sentinel
 - Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\sentinel
-- Orchestrator: 94a3832b-ed30-4820-9f84-6d2e4c185702 (swe_2)
-- Victory Auditor: c9249d36-a8d7-4cb0-a250-7983079fd5b1 (victory_auditor_6)
-- Active SWE Orchestrator: 94a3832b-ed30-4820-9f84-6d2e4c185702 (swe_2)
+- Orchestrator: 4333d16c-80b9-428e-8d35-8a816a19b65e (orchestrator_12)
+- Victory Auditor: to be spawned on victory claim
+- Active Project Orchestrator: 4333d16c-80b9-428e-8d35-8a816a19b65e (orchestrator_12)
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
 - Victory Audit is MANDATORY before reporting completion
 - Keep context ultra-light
 - Route to SWE Light (`teamwork_preview_swe`) for single self-contained focused fix
-- Suppress dormant modal portal mounting when visible=false (R1)
-- Guard modal portal elevation against internal tab rerenders (R2)
-- Seamless tab transitions without backdrop flash or fade-in restarts (R3)
-- Preserve multi-level modal layering and z-index (R4)
-- Verification: modalStacking.test.ts passes, test:clinic passes, typecheck:clinic passes
+- Route to General (`teamwork_preview_orchestrator`) for multi-part OPD Queue Management System implementation
+- Active Queue Guardrail & Anti-Spam Check-In (R1)
+- Absence & Queue Exception Controls (No-Show, On Hold, Cancel, Re-activate) (R2)
+- Queue Metrics Integrity & Lifecycle Auto-Closure (R3)
 
 ## User Context
-- **Last user request**: Fix tab-switching flicker in PatientChartModal and PhilHealthProfileModal (single self-contained fix; keep it small and focused).
+- **Last user request**: Deliver a robust Outpatient Department (OPD) Queue Management System for ClinicEZ with duplicate prevention, absence controls, and visit lifecycle completion.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded user request to `ORIGINAL_REQUEST.md` (timestamp `## 2026-10-13T01:34:47Z`).
-  - Evaluated routing: SWE Light (`teamwork_preview_swe`).
-  - Dispatched `swe_2` (`94a3832b-ed30-4820-9f84-6d2e4c185702`).
-  - Completed implementation and 4 reviewer rounds with automated test pass.
-  - Received victory claim from `swe_2`.
-  - Dispatched independent blocking Victory Auditor `c9249d36-a8d7-4cb0-a250-7983079fd5b1` (`victory_auditor_6`).
-  - Victory Audit verdict: **VICTORY CONFIRMED**.
-  - Cancelled background crons (task-28, task-30).
-  - Cleaned up subagents via `kill_all`.
+  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` (timestamp `## 2026-10-13T06:46:20Z`).
+  - Evaluated routing: General path (`teamwork_preview_orchestrator`).
+  - Created working directory and dispatch spec `c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_12\DISPATCH.md`.
+  - Dispatched Project Orchestrator `4333d16c-80b9-428e-8d35-8a816a19b65e` (`orchestrator_12`).
+  - Started monitoring crons: Cron 1 (Progress Reporting, task-24) and Cron 2 (Liveness Check, task-26).
+  - Liveness check (08:20:00Z): Healthy (orchestrator actively coordinating multi-agent review, challenger, and auditor gates).
 
 ## Project Status
-- **Phase**: complete
-- **Route**: SWE Light -> teamwork_preview_swe (swe_2: `94a3832b-ed30-4820-9f84-6d2e4c185702`)
-- **Active Subagents**: none (cleanup complete)
-- **Active Tasks**: none (cleanup complete)
+- **Phase**: in progress (orchestrator_12 active, Phase 4 Review, Challenge & Forensic Audit gates underway)
+- **Route**: General -> teamwork_preview_orchestrator (orchestrator_12: `4333d16c-80b9-428e-8d35-8a816a19b65e`)
+- **Active Subagents**: `4333d16c-80b9-428e-8d35-8a816a19b65e`
+- **Active Tasks**: `task-24` (cron 1), `task-26` (cron 2)
 
 ## Victory Audit Status
-- **Triggered**: yes
-- **Verdict**: VICTORY CONFIRMED
+- **Triggered**: no
+- **Verdict**: pending
 - **Retry count**: 0
 
 ## Artifact Index
 - c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\ORIGINAL_REQUEST.md — Authoritative record of user requests
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\swe_2\DISPATCH.md — Dispatch instructions for SWE Light orchestrator
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\swe_2\handoff.md — Orchestrator completion handoff
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\victory_auditor_6\DISPATCH.md — Dispatch instructions for independent Victory Auditor
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\victory_auditor_6\handoff.md — Independent Victory Auditor full report (VICTORY CONFIRMED)
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_12\DISPATCH.md — Project Orchestrator dispatch instructions
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_12\PROJECT.md — Architecture & Feature Inventory
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_12\plan.md — Orchestrator project plan
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_12\progress.md — Orchestrator live progress log
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\teamwork_preview_worker_m1\handoff.md — Worker M1 backend handoff report (88/88 tests passing)
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\teamwork_preview_worker_m2\handoff.md — Worker M2 frontend handoff report (1253/1253 tests passing)

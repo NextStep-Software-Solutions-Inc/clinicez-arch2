@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
@@ -58,17 +59,43 @@ public sealed class PublicStudentSelfEnrollCommandHandler
     private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IPatientCodeGenerator _codeGenerator;
 
     public PublicStudentSelfEnrollCommandHandler(
         IRepository<ClinicPatient> patientRepo,
         IRepository<ClinicRecordAttachment> attachmentRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IPatientCodeGenerator? codeGenerator = null)
     {
         _patientRepo = patientRepo;
         _attachmentRepo = attachmentRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _codeGenerator = codeGenerator ?? ResolveFallbackCodeGenerator(patientRepo, unitOfWork);
+    }
+
+    private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
+        IRepository<ClinicPatient> patientRepo,
+        IUnitOfWork unitOfWork)
+    {
+        var dbContext = (patientRepo.GetType().GetProperty("DbContext")?.GetValue(patientRepo)
+            ?? unitOfWork.GetType().GetProperty("DbContext")?.GetValue(unitOfWork)) as DbContext;
+
+        if (dbContext != null)
+        {
+            var genType = Type.GetType("ClinicEz.Clinic.Infrastructure.Services.PatientCodeGenerator, ClinicEz.Clinic.Infrastructure")
+                ?? AppDomain.CurrentDomain.GetAssemblies()
+                    .Select(a => a.GetType("ClinicEz.Clinic.Infrastructure.Services.PatientCodeGenerator"))
+                    .FirstOrDefault(t => t != null);
+
+            if (genType != null)
+            {
+                return (IPatientCodeGenerator)Activator.CreateInstance(genType, dbContext, null)!;
+            }
+        }
+
+        throw new InvalidOperationException("IPatientCodeGenerator must be provided or registered in DI.");
     }
 
     public async Task<PublicStudentSelfEnrollResultDto> Handle(
@@ -76,29 +103,15 @@ public sealed class PublicStudentSelfEnrollCommandHandler
         CancellationToken ct)
     {
         var year = DateTime.UtcNow.Year;
-        var prefix = $"PAT-{year}-";
-        var existingCodes = await _patientRepo.Query(
-            p => p.ClinicId == _clinicContext.ClinicId && p.PatientCode != null && p.PatientCode.StartsWith(prefix),
-            ignoreQueryFilters: true)
-            .Select(p => p.PatientCode)
-            .ToListAsync(ct);
+        const int maxAttempts = 3;
+        var reservation = await _codeGenerator.ReserveNextAsync(
+            _clinicContext.TenantId,
+            _clinicContext.ClinicId,
+            year,
+            ct);
 
-        var maxSeq = 0;
-        foreach (var code in existingCodes)
-        {
-            if (!string.IsNullOrEmpty(code) && code.Length > prefix.Length)
-            {
-                var suffix = code.Substring(prefix.Length);
-                if (int.TryParse(suffix, out var parsed) && parsed > maxSeq)
-                {
-                    maxSeq = parsed;
-                }
-            }
-        }
-
-        var nextSeq = maxSeq + 1;
-        var patientCode = $"{prefix}{nextSeq:D5}";
-        var queueToken = $"Q-{((nextSeq - 1) % 500 + 1):D3}";
+        var patientCode = reservation.PatientCode;
+        var queueToken = $"Q-{((reservation.Sequence - 1) % 500 + 1):D3}";
 
         var customFields = request.AdditionalCustomFields ?? new Dictionary<string, object?>();
         customFields["classification"] = "Student";
@@ -167,7 +180,25 @@ public sealed class PublicStudentSelfEnrollCommandHandler
             }
         }
 
-        await _unitOfWork.SaveChangesAsync(ct);
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await _unitOfWork.SaveChangesAsync(ct);
+                break;
+            }
+            catch (DbUpdateException ex) when (attempt < maxAttempts && PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
+            {
+                var newReservation = await _codeGenerator.ReserveNextAsync(
+                    _clinicContext.TenantId,
+                    _clinicContext.ClinicId,
+                    year,
+                    ct);
+
+                patient.PatientCode = newReservation.PatientCode;
+                queueToken = $"Q-{((newReservation.Sequence - 1) % 500 + 1):D3}";
+            }
+        }
 
         var patientDto = RegisterClinicPatientCommandHandler.MapToDto(patient);
 

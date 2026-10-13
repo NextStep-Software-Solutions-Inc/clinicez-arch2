@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
@@ -55,6 +56,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     private readonly IRepository<PatientAllergy>? _allergyRepo;
     private readonly IRepository<QueueItem>? _queueRepo;
     private readonly IRepository<PatientPastMedicalHistory>? _medicalRepo;
+    private readonly IPatientCodeGenerator _codeGenerator;
 
     public RegisterClinicPatientCommandHandler(
         IRepository<ClinicPatient> patientRepo,
@@ -62,7 +64,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         IClinicContext clinicContext,
         IRepository<PatientAllergy>? allergyRepo = null,
         IRepository<QueueItem>? queueRepo = null,
-        IRepository<PatientPastMedicalHistory>? medicalRepo = null)
+        IRepository<PatientPastMedicalHistory>? medicalRepo = null,
+        IPatientCodeGenerator? codeGenerator = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
@@ -70,32 +73,36 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         _allergyRepo = allergyRepo;
         _queueRepo = queueRepo;
         _medicalRepo = medicalRepo;
+        _codeGenerator = codeGenerator ?? ResolveFallbackCodeGenerator(patientRepo, unitOfWork);
+    }
+
+    private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
+        IRepository<ClinicPatient> patientRepo,
+        IUnitOfWork unitOfWork)
+    {
+        var dbContext = (patientRepo.GetType().GetProperty("DbContext")?.GetValue(patientRepo)
+            ?? unitOfWork.GetType().GetProperty("DbContext")?.GetValue(unitOfWork)) as DbContext;
+
+        if (dbContext != null)
+        {
+            var genType = Type.GetType("ClinicEz.Clinic.Infrastructure.Services.PatientCodeGenerator, ClinicEz.Clinic.Infrastructure")
+                ?? AppDomain.CurrentDomain.GetAssemblies()
+                    .Select(a => a.GetType("ClinicEz.Clinic.Infrastructure.Services.PatientCodeGenerator"))
+                    .FirstOrDefault(t => t != null);
+
+            if (genType != null)
+            {
+                return (IPatientCodeGenerator)Activator.CreateInstance(genType, dbContext, null)!;
+            }
+        }
+
+        throw new InvalidOperationException("IPatientCodeGenerator must be provided or registered in DI.");
     }
 
     public async Task<ClinicPatientDto> Handle(RegisterClinicPatientCommand request, CancellationToken ct)
     {
         var year = DateTime.UtcNow.Year;
-        var prefix = $"PAT-{year}-";
-        var existingCodes = await _patientRepo.Query(
-            p => p.ClinicId == _clinicContext.ClinicId && p.PatientCode != null && p.PatientCode.StartsWith(prefix),
-            ignoreQueryFilters: true)
-            .Select(p => p.PatientCode)
-            .ToListAsync(ct);
-
-        var maxSeq = 0;
-        foreach (var code in existingCodes)
-        {
-            if (!string.IsNullOrEmpty(code) && code.Length > prefix.Length)
-            {
-                var suffix = code.Substring(prefix.Length);
-                if (int.TryParse(suffix, out var parsed) && parsed > maxSeq)
-                {
-                    maxSeq = parsed;
-                }
-            }
-        }
-
-        var patientCode = $"{prefix}{(maxSeq + 1):D5}";
+        var patientCode = await _codeGenerator.GenerateNextCodeAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
 
         var patient = new ClinicPatient
         {
@@ -282,9 +289,22 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             await _queueRepo.AddAsync(queueItem, ct);
         }
 
-        await _unitOfWork.SaveChangesAsync(ct);
+        const int maxAttempts = 3;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await _unitOfWork.SaveChangesAsync(ct);
+                return MapToDto(patient, queueItem?.QueueNumber, queueItem?.Id);
+            }
+            catch (DbUpdateException ex) when (attempt < maxAttempts && PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
+            {
+                var nextCode = await _codeGenerator.GenerateNextCodeAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
+                patient.PatientCode = nextCode;
+            }
+        }
 
-        return MapToDto(patient, queueItem?.QueueNumber, queueItem?.Id);
+        throw new InvalidOperationException("Failed to register patient after multiple sequence allocation attempts.");
     }
 
     public static ClinicPatientDto MapToDto(ClinicPatient p) => MapToDto(p, null, null);

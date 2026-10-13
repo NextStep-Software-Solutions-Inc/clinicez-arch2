@@ -226,7 +226,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ClinicId = clinicId,
-            PatientCode = $"PAT-{now:yyyyMMdd}-{patientPlaneId.ToString("N")[..6].ToUpperInvariant()}",
+            PatientCode = $"PAT-EXT-{now:yyyyMMdd}-{patientPlaneId.ToString("N")[..6].ToUpperInvariant()}",
             FirstName = first,
             LastName = last,
             DateOfBirth = ParseDate(demographics.DateOfBirth) ?? new DateOnly(2000, 1, 1),

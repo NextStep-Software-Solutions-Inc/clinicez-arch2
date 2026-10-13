@@ -42,6 +42,7 @@ Portal to hub. Handled inside the hub (`DirectoryService`), never stored in a ma
 | `patient.share.redeem` | clinic (`PatientRecordGateway`) | patient (`PatientShareRedeemInteropHandler`) | `PatientShareRedeemPayload` | From the clinic to the control-plane `patient` mailbox. Correlation = request id; the reply copies it. | OK |
 | `patient.share.snapshot` | patient (reply from `PatientShareRedeemInteropHandler`) | clinic (`PatientShareSnapshotHandler`) | `PatientShareSnapshotPayload` | To the redeeming facility. Correlation = the request's. | OK |
 | `patient.document.issued` | clinic (`PatientDocumentPublisher`), laboratory (`DiagnosticReportPublisher`, results), pharmacy (`PrescriptionDispensedPublisher`, dispense receipts) | patient (`PatientDocumentIssuedInteropHandler`) | `PatientDocumentIssuedPayload` (`Kind`, issuer, `Body`) | To the patient's mailbox, only when the patient has a patient-app account. Correlation = document id (clinic), requisition id (laboratory), order correlation id (pharmacy). | OK. Medical certificates travel as the `Body` of this message (`MedicalCertificateIssuedPayload`). |
+| `patient.join.requested` | portal (`PublicJoinEndpoints`) | clinic (`PatientJoinRequestedHandler`) | `PatientJoinRequestedPayload` | `Party.Portal` to the clinic facility mailbox. Correlation = tracking id. | OK |
 
 ## Laboratory
 
@@ -116,6 +117,7 @@ All payloads live in [`packages/shared-dotnet`](../../packages/shared-dotnet).
 | `GamotLookupRequestedPayload`, `GamotLookupRespondedPayload`, `PhilHealthRequestPayload`, `PhilHealthResponsePayload`, `PhilHealthConfigPayload`, `PhilHealthConfigRequestedPayload`, `PhilHealthConfigRespondedPayload`, `PhilHealthConfigUpsertRespondedPayload`, `PhilHealthOperations` | [`Interoperability/PlatformServiceContracts.cs`](../../packages/shared-dotnet/Interoperability/PlatformServiceContracts.cs) |
 | `ClinicAppointmentUpdatedEvent`, `PatientRecordSharedPayload`, `LabRequisitionIssuedEvent`, `DiagnosticReportFinalizedEvent`, `LabPanicResultAlertEvent`, `ExternalLabResultUploadedEvent`, `PrescriptionIssuedEvent`, `PrescriptionDispensedEvent`, `ExternalPrescriptionDispensedEvent` | one file per record in [`Interoperability/`](../../packages/shared-dotnet/Interoperability) |
 | `DirectoryCellUpsertedPayload`, `DirectoryFacilityUpsertedPayload`, `DirectoryLinkUpsertedPayload` | [`Interop/Contracts/DirectoryContracts.cs`](../../packages/shared-dotnet/Interop/Contracts/DirectoryContracts.cs) |
+| `PatientJoinRequestedPayload` | [`Interop/Contracts/PatientJoinContracts.cs`](../../packages/shared-dotnet/Interop/Contracts/PatientJoinContracts.cs) |
 
 ## Gaps found
 

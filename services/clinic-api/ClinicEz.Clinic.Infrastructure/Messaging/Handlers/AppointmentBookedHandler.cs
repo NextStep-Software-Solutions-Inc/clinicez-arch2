@@ -93,7 +93,7 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
                 SyncPatientId = message.PatientId,
                 TenantId = tenantId,
                 ClinicId = clinic.ClinicId,
-                PatientCode = $"PAT-{DateTime.UtcNow:yyyyMMdd}-{message.PatientId.ToString()[..6].ToUpper()}",
+                PatientCode = $"PAT-EXT-{DateTime.UtcNow:yyyyMMdd}-{message.PatientId.ToString("N")[..6].ToUpperInvariant()}",
                 FirstName = !string.IsNullOrWhiteSpace(message.PatientFirstName) ? message.PatientFirstName : "Patient",
                 LastName = !string.IsNullOrWhiteSpace(message.PatientLastName) ? message.PatientLastName : message.PatientId.ToString()[..8],
                 MiddleName = message.PatientMiddleName,

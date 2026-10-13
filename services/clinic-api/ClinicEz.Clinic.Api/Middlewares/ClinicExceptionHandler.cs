@@ -14,15 +14,34 @@ public sealed class ClinicExceptionHandler : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        if (exception is not PaidAtBillingCounterException)
+        if (exception is ActiveQueueTicketConflictException conflictEx)
         {
-            return false;
+            httpContext.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            var response = new ApiResponse<ActiveQueueTicketConflictData>
+            {
+                Succeeded = false,
+                Message = conflictEx.Message,
+                ErrorCode = ActiveQueueTicketConflictException.ErrorCode,
+                Data = new ActiveQueueTicketConflictData(
+                    conflictEx.TicketId,
+                    conflictEx.QueueNumber,
+                    conflictEx.Status,
+                    conflictEx.PatientName),
+                Errors = [new ApiFieldError(null, ActiveQueueTicketConflictException.ErrorCode, conflictEx.Message)]
+            };
+            await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+            return true;
         }
 
-        httpContext.Response.StatusCode = (int)HttpStatusCode.Conflict;
-        await httpContext.Response.WriteAsJsonAsync(
-            ApiResponse<object>.Fail(exception.Message, [new ApiFieldError(null, PaidAtBillingCounterException.ErrorCode, exception.Message)]),
-            cancellationToken);
-        return true;
+        if (exception is PaidAtBillingCounterException)
+        {
+            httpContext.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            await httpContext.Response.WriteAsJsonAsync(
+                ApiResponse<object>.Fail(exception.Message, [new ApiFieldError(null, PaidAtBillingCounterException.ErrorCode, exception.Message)]),
+                cancellationToken);
+            return true;
+        }
+
+        return false;
     }
 }

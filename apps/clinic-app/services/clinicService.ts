@@ -11,7 +11,8 @@ export type QueueStatus =
   | 'Cancelled'
   | 'NoShow'
   | 'PendingProcedure'
-  | 'ReEvaluation';
+  | 'ReEvaluation'
+  | 'OnHold';
 export type QueueView =
   | 'All'
   | 'MyRoom'
@@ -196,6 +197,7 @@ export interface QueueMetrics {
   urgentTriage: number;
   completedToday: number;
   totalCheckedIn: number;
+  averageWaitTimeMinutes?: number;
 }
 
 export interface TriageVitals {
@@ -1770,6 +1772,22 @@ export const clinicService = {
 
   async completeQueueItem(id: string) {
     return clinicApiClient.post<boolean>(`/queue/${id}/complete`);
+  },
+
+  async markNoShow(id: string) {
+    return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/no-show`);
+  },
+
+  async putOnHold(id: string) {
+    return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/hold`);
+  },
+
+  async cancelQueueTicket(id: string, reason?: string) {
+    return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/cancel`, { reason });
+  },
+
+  async reactivateQueueItem(id: string) {
+    return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/reactivate`);
   },
 
   // Nurse Triage

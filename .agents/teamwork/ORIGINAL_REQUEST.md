@@ -475,3 +475,157 @@ In `StatutoryImmunizationsTab.tsx`, update `contentContainerStyle` to `paddingBo
 - [ ] All `apps/clinic-app` unit & integration tests pass cleanly (`bun test apps/clinic-app/tests`).
 - [ ] TypeScript check passes with zero errors (`bun run typecheck:clinic`).
 - [ ] Production web bundle exports without build errors (`bun run build:web` in `apps/clinic-app`).
+
+
+## 2026-10-13T03:16:03Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Launched
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Requested team: Full team
+
+Implement the Secured Clinic Join Link (`/join/[tenantSlug]/[facilitySlug]`), asynchronously relayed via the Interop Hub (`patient.join.requested`) with external document quarantine, clinic administrator Join Code configuration with expiration, PhilHealth Member Type integration, and complete removal of the legacy `/student-intake` route.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Secured Join Link Route & Facility Pre-Selection
+Construct the public `/join/[tenantSlug]/[facilitySlug]` route in `apps/portal-web` that pre-selects and locks the destination clinic facility, alongside a `/join/[tenantSlug]` route that provides an intuitive campus/branch selector for multi-facility tenants. Completely remove the legacy `/student-intake/[tenantSlug]` route and associated files without redirection.
+
+### R2. Interop Hub Asynchronous Relay & Zero Technical Debt
+Replace all synchronous proxying with the platform's standard Interop Hub backbone. Submissions from `/join` must enqueue an envelope (`patient.join.requested`) from `Party.Portal` to `Party.ForFacility(Clinic)` via `IInteropPublisher`. The clinic facility must process this message asynchronously via an idempotent `IInteropHandler<PatientJoinRequestedPayload>`.
+
+### R3. External Document Review Quarantine
+Allow patients to attach outside diagnostic files (X-Rays, lab results, medical certificates) during registration. The clinic handler must persist these attachments in `ClinicRecordAttachments` under `VerificationStatus = "PendingVerification"`, enabling clinic staff in `clinic-app` to review and approve/reject them.
+
+### R4. Administrator Join Code & Expiration Configuration
+In `apps/clinic-app`, provide a settings card allowing clinic administrators to toggle join link availability, set an alphanumeric Join Code (or generate one), configure expiration windows (24h, 7d, 30d, custom date, or never), and display a printable reception QR code containing `?code=...`. The public join form must gate registration behind this code, enforcing valid, unexpired entry.
+
+### R5. Clinical Form Realignment & PhilHealth Member Type Integration
+Realign the join form to match the clinical workstation's patient registration modal (`Patients.screen.tsx`), supporting demographics, PhilHealth PIN with Mod-11 validation, Senior/PWD IDs, dynamic custom fields with real-time condition evaluation and cascading choices, structured allergies, medical history, and reason for visit. Add a PhilHealth Member Type selector (`Member (MM)` vs `Dependent (DD)` with principal member credentials when `DD`) across both the clinic-app registration modal and the public `/join` form.
+
+### R6. Design System Compliance (`clinicez-ui-ux-expert`)
+All modified and newly created UI screens in `portal-web` and `clinic-app` must strictly consume semantic tokens from `@clinicez/design-tokens` (Teal `#0D6963` primary, semantic borders, radii, typography) and explicitly implement all 4 core UX states (Skeleton loading, Empty, Error with retry, Active/Success digital pass) with full mobile and desktop responsiveness.
+
+## Acceptance Criteria
+
+### Interop Hub & Backend Ingestion
+- [ ] `InteropTypes.PatientJoinRequested` and contract payloads are registered and compile cleanly in `packages/shared-dotnet`.
+- [ ] Submitting the public join form enqueues `patient.join.requested` to the Interop Hub without direct synchronous HTTP calls to `clinic-api`.
+- [ ] `PatientJoinRequestedHandler` in `clinic-api` idempotently creates `ClinicPatient`, assigns `ClinicId`, records custom fields and allergies, and enqueues a `QueueToken`.
+- [ ] External document attachments are persisted with `VerificationStatus = "PendingVerification"`.
+
+### Join Code Security & Expiration
+- [ ] Clinic administrators can configure `JoinCode`, `JoinCodeExpiresAt`, and `IsJoinEnabled` from `clinic-app` settings.
+- [ ] Public `/join` blocks access when the code is expired or invalid, displaying an actionable error.
+- [ ] Opening `/join/.../?code=<validCode>` unlocks the registration form.
+
+### Route & Form Experience
+- [ ] `/student-intake/[tenantSlug]` is completely removed from `apps/portal-web`.
+- [ ] Accessing `/join/[tenantSlug]/[facilitySlug]` pre-selects the clinic facility.
+- [ ] PhilHealth Member Type (`MM` vs `DD`) is selectable in both `Patients.screen.tsx` and the public `/join` form, with principal credentials displayed when `DD`.
+- [ ] Successful submission renders a digital registration pass with a queue token (e.g. `Q-105`), patient code, and scannable QR ticket.
+
+### Build & Verification
+- [ ] `bun test packages/design-tokens/src/tokens.test.ts` passes with 0 failures.
+- [ ] `bun --cwd apps/portal-web run build` passes with 0 type or lint errors.
+- [ ] `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj` passes.
+
+## 2026-10-13T06:40:47Z
+
+This is a single self-contained fix; keep it small and focused.
+
+Refactor the ClinicEZ patient unique identifier (`PAT-`) generation in `services/clinic-api` into a centralized, atomic $O(1)$ collision-resistant sequence generator service with optimistic retry handling and standardized external intake prefixes (`PAT-EXT-`).
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Centralized Sequence Generator Service
+Provide an atomic sequence generation service (`IPatientCodeGenerator`) in the clinic API that replaces duplicated in-memory table scans across `RegisterClinicPatientCommand`, `BulkRegisterClinicPatientsCommand`, and `PublicStudentSelfEnrollCommand`.
+
+### R2. Atomic Sequence Tracker & O(1) Allocation
+Implement a persistent sequence tracker entity and database table scoped to clinic and year. Single patient intake and batch allocations must query only the tracker, supporting contiguous reservations without scanning existing patient rows.
+
+### R3. Concurrency Protection & Optimistic Retries
+Ensure concurrent intake requests cannot fail with unhandled database unique constraint collisions on `(TenantId, ClinicId, PatientCode)`. Wrap persistence with an optimistic retry mechanism that attempts allocation with the next sequence up to 3 times before erroring.
+
+### R4. Standardized Interop External Intake Prefix
+Update external auto-provisioning intake handlers (`AppointmentBookedHandler` and `PatientShareSnapshotHandler`) to use a dedicated external prefix `PAT-EXT-{yyyyMMdd}-{GUID_SHORT}` so unverified external intake is immediately distinct from clinic front-desk verified records.
+
+### R5. Test Verification & Zero Regressions
+Verify all changes with automated unit and integration tests, including concurrent intake simulation and full regression coverage of `ClinicEz.Clinic.Application.Tests`.
+
+## Acceptance Criteria
+
+### Scalability
+- [ ] No in-memory scans (`ToListAsync()` of all patient codes for a clinic/year) occur during patient registration.
+- [ ] Bulk registration of $K$ patients allocates a continuous range in a single sequence tracker operation.
+
+### Concurrency & Data Integrity
+- [ ] Parallel concurrent registrations (e.g. 10 simultaneous registration tasks) complete successfully without unhandled unique constraint violations (`23505` / `DbUpdateException`).
+- [ ] Sequence tracker initializes smoothly from pre-existing maximum numeric patient codes when existing records are present.
+
+### Pattern Adherence
+- [ ] Front-desk patient intake, bulk registration, and student self-enrollment generate `PAT-{YYYY}-{NNNNN}` with 5-digit zero-padding.
+- [ ] External Interop auto-provisioned intake generates `PAT-EXT-{yyyyMMdd}-{GUID_SHORT}`.
+
+### Automated Test Passing
+- [ ] `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "PatientCodeSequence"` passes with 0 failures.
+- [ ] All tests in `ClinicEz.Clinic.Application.Tests` build and pass.
+
+
+## 2026-10-13T06:46:20Z
+
+Deliver a robust Outpatient Department (OPD) Queue Management System for ClinicEZ that prevents duplicate tickets, blocks check-in spam, enforces active queue uniqueness, introduces complete absence and hold controls (No-Show, On Hold, Cancel/Walkout, Re-activate), and establishes an automated visit completion lifecycle.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Active Queue Guardrail & Anti-Spam Check-In
+Enforce active queue uniqueness per patient per clinic day.
+- Prevent duplicate active queue tickets for the same patient on the same day (`Waiting`, `Triaged`, `InConsultation`, `PendingProcedure`, `ReEvaluation`, `OnHold`). If a patient already has an active ticket, reject duplicate check-in with a conflict response containing the existing ticket reference.
+- Allow checking in for a second distinct visit if the patient's previous ticket today is already in a terminal state (`Completed`, `Cancelled`, `NoShow`).
+- Prevent rapid double-click submissions in front desk workstations (`Patients.screen.tsx`, `Appointments.screen.tsx`) via client debouncing and immediate loading state. Display an alert modal showing the current ticket details when a patient is already in line.
+
+### R2. Absence & Queue Exception Controls (No-Show, On Hold, Cancel, Re-activate)
+Provide reception and clinical staff with direct queue management controls on the Dashboard.
+- **Mark No-Show**: Transition unresponsive patients to `NoShow`, recording the departure timestamp and removing them from active waiting lists.
+- **Put On Hold (Skip)**: Move a patient who is temporarily away (restroom, lab, cafeteria) to `OnHold` status so the queue can advance.
+- **Cancel Visit (LWBS)**: Cancel a ticket if the patient leaves without being seen.
+- **Re-activate**: Allow staff to restore a ticket from `OnHold` or `NoShow` back to `Waiting` at the top of the line without re-registering.
+- Add corresponding filter views and visual badges on the Dashboard card for each status.
+
+### R3. Queue Metrics Integrity & Lifecycle Auto-Closure
+Ensure clinic operational metrics and encounters reflect actual patient flow.
+- Exclude `Cancelled` and `NoShow` tickets from average wait time KPI calculations.
+- Display a prominent warning tag for any patient waiting longer than 60 minutes.
+- Ensure that completing/signing an encounter in `Consultations.screen.tsx` reliably marks the corresponding queue ticket as `Completed`.
+
+## Acceptance Criteria
+
+### Duplicate Prevention & Anti-Spam
+- [ ] Attempting to check in a patient who already has an active ticket returns HTTP 409 Conflict with the existing ticket ID and status.
+- [ ] Attempting to check in a patient whose previous ticket today is `Completed` succeeds and generates a new ticket.
+- [ ] The workstation UI displays a clear modal: "Patient [Name] is already checked in as [TicketNumber] ([Status])" instead of creating a second ticket.
+- [ ] Rapid repeated clicks on check-in buttons create only a single ticket.
+
+### Absence & Queue Controls
+- [ ] Calling `POST /api/v1/queue/{id}/no-show` marks the ticket status as `NoShow` and records `CompletedTime`.
+- [ ] Calling `POST /api/v1/queue/{id}/hold` marks the ticket status as `OnHold`.
+- [ ] Calling `POST /api/v1/queue/{id}/reactivate` restores an `OnHold` or `NoShow` ticket back to `Waiting`.
+- [ ] Calling `POST /api/v1/queue/{id}/cancel` marks the ticket status as `Cancelled`.
+- [ ] Dashboard cards provide direct action buttons for No-Show, On Hold, and Cancel.
+- [ ] Segmented filter tabs on the Dashboard allow filtering by `On hold` and `No show`.
+
+### Analytics & Workflow Integrity
+- [ ] `GetQueueMetrics` excludes cancelled and no-show tickets from the average wait time computation.
+- [ ] Patients waiting > 60 minutes display a `Waiting > 60m` warning badge.
+- [ ] Signing a consultation in `Consultations.screen.tsx` transitions the queue ticket to `Completed`.
+- [ ] All new and modified backend commands have unit tests in `ClinicEz.Clinic.Application.Tests` and pass cleanly.

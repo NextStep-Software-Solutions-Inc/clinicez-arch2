@@ -13,6 +13,7 @@ using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Clinic.Infrastructure.Persistence.Repositories;
 using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Documents;
+using ClinicEz.Shared.Interop.Contracts;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
@@ -84,6 +85,7 @@ public static class DependencyInjection
         services.AddScoped<IPhilHealthProxyClient, PhilHealthProxyClient>();
         services.AddScoped<IPharmacyGamotGateway, PharmacyGamotGateway>();
         services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator, PhilHealthSequenceGenerator>();
+        services.AddScoped<ClinicEz.Clinic.Application.Common.Interfaces.IPatientCodeGenerator, PatientCodeGenerator>();
 
         // Interoperability: outbound messages are queued in the transactional interop outbox; inbound ones are
         // scoped to the clinic they are addressed to.
@@ -133,6 +135,7 @@ public static class DependencyInjection
             .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
             .HandleWorkspaceProfileUpdated()
             .Handle<AppointmentBookedEvent, AppointmentBookedHandler>(InteropTypes.PatientAppointmentBooked)
+            .Handle<PatientJoinRequestedPayload, PatientJoinRequestedHandler>(InteropTypes.PatientJoinRequested)
             .Handle<DiagnosticReportFinalizedEvent, DiagnosticReportFinalizedHandler>(InteropTypes.LabResultFinalized)
             .Handle<PrescriptionDispensedEvent, PrescriptionDispensedHandler>(InteropTypes.RxDispensed)
             .Handle<LabPanicResultAlertEvent, LabPanicResultAlertHandler>(InteropTypes.LabResultPanic)

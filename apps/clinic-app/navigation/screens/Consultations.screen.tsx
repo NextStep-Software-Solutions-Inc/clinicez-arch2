@@ -799,11 +799,12 @@ export default function ConsultationsScreen() {
   };
 
   useEffect(() => {
-    const params = route.params as { queueId?: string; patientId?: string } | undefined;
-    const key = `${params?.queueId ?? ''}|${params?.patientId ?? ''}`;
+    const params = route.params as { queueId?: string; queueItemId?: string; patientId?: string } | undefined;
+    const targetQueueId = params?.queueId ?? params?.queueItemId;
+    const key = `${targetQueueId ?? ''}|${params?.patientId ?? ''}`;
     if (key === '|' || appliedRouteKey.current === key) return;
-    const target = params?.queueId
-      ? patients.find((x) => x.id === params.queueId)
+    const target = targetQueueId
+      ? patients.find((x) => x.id === targetQueueId)
       : patients.find((x) => x.patientId === params?.patientId);
     if (target) {
       appliedRouteKey.current = key;
@@ -1355,6 +1356,13 @@ export default function ConsultationsScreen() {
     const [, completeErr] = await clinicService.completeQueueItem(selectedPatient.id);
     if (completeErr) followUpIssues.push('queue status update');
 
+    // Update local state immediately and refetch queue in background
+    setSelectedPatient((prev) => (prev ? { ...prev, status: 'Completed' } : null));
+    setPatients((prev) =>
+      prev.map((p) => (p.id === selectedPatient.id ? { ...p, status: 'Completed' } : p))
+    );
+    loadQueue().catch(() => {});
+
     setIsSigning(false);
     setIsSigned(true);
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1704,6 +1712,50 @@ export default function ConsultationsScreen() {
     </Card>
   );
 
+  const handleVerifyAttachment = async (
+    attachmentId: string,
+    isApproved: boolean,
+    userRejectionReason?: string
+  ) => {
+    const rejectionReason = !isApproved
+      ? (userRejectionReason?.trim() || 'Document illegible or missing official physician signature/stamp.')
+      : undefined;
+    const [, verifyErr] = await clinicService.verifyRecordAttachment(attachmentId, isApproved, rejectionReason);
+    if (verifyErr) {
+      notify.error(verifyErr.message || 'Could not update the document.');
+      return;
+    }
+
+    setPatientChart((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        attachments: (prev.attachments || []).map((att) =>
+          att.id === attachmentId
+            ? {
+                ...att,
+                verificationStatus: isApproved ? 'Verified' : 'Rejected',
+                rejectionReason,
+                verifiedAt: new Date().toISOString(),
+                verifiedByStaffName: signerName || 'Attending Physician',
+              }
+            : att
+        ),
+      };
+    });
+
+    notify.success(isApproved ? 'Document verified.' : 'Document rejected.');
+  };
+
+  const handleDownloadAttachment = async (attachmentId: string) => {
+    try {
+      const url = clinicService.getRecordAttachmentDownloadUrl(attachmentId);
+      if (!(await openDocument(url))) throw new Error('Could not open the document');
+    } catch (e: any) {
+      Alert.alert('Unable to open document', e.message || 'Network error');
+    }
+  };
+
   const renderLongitudinalChartContent = () => (
     <View style={styles.longitudinalChartContainer}>
       <Card>
@@ -1803,6 +1855,8 @@ export default function ConsultationsScreen() {
           patient={patientRecord}
           patientId={selectedPatient?.patientId}
           attachments={patientChart?.attachments || []}
+          onVerifyAttachment={handleVerifyAttachment}
+          onDownloadAttachment={handleDownloadAttachment}
           onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
         />
       )}

@@ -131,6 +131,13 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
     }
 }
 
+public sealed record QueueMetricsDto(
+    int InQueue,
+    int UrgentTriage,
+    int CompletedToday,
+    int TotalCheckedIn,
+    double AverageWaitTimeMinutes = 0);
+
 public sealed record GetQueueMetricsQuery(DateOnly? Date = null) : IRequest<QueueMetricsDto>;
 
 public sealed class GetQueueMetricsQueryHandler : IRequestHandler<GetQueueMetricsQuery, QueueMetricsDto>
@@ -159,11 +166,24 @@ public sealed class GetQueueMetricsQueryHandler : IRequestHandler<GetQueueMetric
                                        q.Status == QueueStatus.Triaged || 
                                        q.Status == QueueStatus.InConsultation ||
                                        q.Status == QueueStatus.PendingProcedure ||
-                                       q.Status == QueueStatus.ReEvaluation);
+                                       q.Status == QueueStatus.ReEvaluation ||
+                                       q.Status == QueueStatus.OnHold);
         var urgentTriage = items.Count(q => (q.Priority == QueuePriority.Urgent || q.Priority == QueuePriority.Emergency) && q.Status == QueueStatus.Waiting);
         var completedToday = items.Count(q => q.Status == QueueStatus.Completed);
         var total = items.Count;
 
-        return new QueueMetricsDto(inQueue, urgentTriage, completedToday, total);
+        // Strictly exclude Cancelled and NoShow tickets from the average wait calculation
+        var waitTimes = items
+            .Where(q => q.Status != QueueStatus.Cancelled && 
+                        q.Status != QueueStatus.NoShow && 
+                        q.CalledTime.HasValue && 
+                        q.CalledTime.Value >= q.CheckInTime)
+            .Select(q => (q.CalledTime!.Value - q.CheckInTime).TotalMinutes)
+            .ToList();
+
+        var avgWait = waitTimes.Any() ? Math.Round(waitTimes.Average(), 1) : 0;
+
+        return new QueueMetricsDto(inQueue, urgentTriage, completedToday, total, avgWait);
     }
 }
+

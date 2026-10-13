@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   RefreshControl,
   Pressable,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { notify } from '@utils/feedback';
 import {
   ThemedText,
@@ -40,6 +41,7 @@ import {
 } from '../../services/clinicService';
 import { SlotPicker } from '../../components/roster/SlotPicker';
 import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
+import QueueConflictModal from '../../components/queue/QueueConflictModal';
 
 const STATUS_FILTERS: Array<{ key: string; label: string }> = [
   { key: 'ALL', label: 'All' },
@@ -94,6 +96,13 @@ function getStatusBadge(status: AppointmentStatus): { variant: BadgeVariant; lab
 }
 
 export default function AppointmentsScreen() {
+  const navigation = useNavigation<any>();
+  const isCheckingInRef = useRef(false);
+  const [conflictModal, setConflictModal] = useState<{
+    visible: boolean;
+    error?: any;
+    patientName?: string;
+  } | null>(null);
   const { staff } = useStaff();
   const { settings } = useClinic();
   const doctors = staff.filter((s) => s.role === 'Doctor');
@@ -251,34 +260,51 @@ export default function AppointmentsScreen() {
   };
 
   const handleCheckIn = async (item: AppointmentItem) => {
+    if (isCheckingInRef.current || checkingInId) return;
+    isCheckingInRef.current = true;
     setCheckingInId(item.id);
 
-    const isUrgent = item.reason?.toLowerCase().includes('chest') || item.reason?.toLowerCase().includes('pain');
-    const [queueItem, err] = await clinicService.checkInPatient({
-      patientId: item.patientId,
-      patientName: item.patientName,
-      appointmentId: item.id,
-      doctorId: item.doctorId,
-      doctorName: item.doctorName,
-      priority: isUrgent ? 'Urgent' : 'Routine',
-      chiefComplaint: item.reason ?? 'General Consultation',
-    });
+    try {
+      const isUrgent = item.reason?.toLowerCase().includes('chest') || item.reason?.toLowerCase().includes('pain');
+      const [queueItem, err] = await clinicService.checkInPatient({
+        patientId: item.patientId,
+        patientName: item.patientName,
+        appointmentId: item.id,
+        doctorId: item.doctorId,
+        doctorName: item.doctorName,
+        priority: isUrgent ? 'Urgent' : 'Routine',
+        chiefComplaint: item.reason ?? 'General Consultation',
+      });
 
-    setCheckingInId(null);
+      if (err) {
+        if (
+          err.status === 409 ||
+          err.errorCode === 'CONFLICT' ||
+          err.errorCode === 'active_queue_ticket_exists'
+        ) {
+          setConflictModal({
+            visible: true,
+            error: err,
+            patientName: item.patientName,
+          });
+          return;
+        }
+        notify.error(err.message || `Could not check in ${item.patientName}. Please try again.`);
+        return;
+      }
 
-    if (err) {
-      notify.error(err.message || `Could not check in ${item.patientName}. Please try again.`);
-      return;
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === item.id ? { ...a, status: 'CheckedIn' as AppointmentStatus } : a))
+      );
+      notify.success(
+        queueItem?.queueNumber
+          ? `${item.patientName} checked in. Queue number ${queueItem.queueNumber}.`
+          : `${item.patientName} checked in.`
+      );
+    } finally {
+      isCheckingInRef.current = false;
+      setCheckingInId(null);
     }
-
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === item.id ? { ...a, status: 'CheckedIn' as AppointmentStatus } : a))
-    );
-    notify.success(
-      queueItem?.queueNumber
-        ? `${item.patientName} checked in. Queue number ${queueItem.queueNumber}.`
-        : `${item.patientName} checked in.`
-    );
   };
 
   const filteredAppointments = appointments.filter((item) => {
@@ -354,6 +380,7 @@ export default function AppointmentsScreen() {
                       variant="success"
                       title="Check in"
                       loading={isCheckingIn}
+                      disabled={!!checkingInId}
                       onPress={() => handleCheckIn(item)}
                     />
                     <Pressable
@@ -560,6 +587,18 @@ export default function AppointmentsScreen() {
         onClose={() => setRosterModalVisible(false)}
         doctors={doctors}
         initialDoctorId={formDoctorId || doctors[0]?.id}
+      />
+
+      {/* Active Queue Ticket Conflict Modal */}
+      <QueueConflictModal
+        visible={!!conflictModal?.visible}
+        onDismiss={() => setConflictModal(null)}
+        onViewInQueue={() => {
+          setConflictModal(null);
+          navigation.navigate('Dashboard');
+        }}
+        error={conflictModal?.error}
+        patientName={conflictModal?.patientName}
       />
     </ResponsiveLayout>
   );

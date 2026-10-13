@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -56,6 +56,7 @@ import StructuredMedicalHistoryModal, {
 } from '../../components/patient/StructuredMedicalHistoryModal';
 import ClinicalAlertsSection from '../../components/patient/ClinicalAlertsSection';
 import EditPatientModal from '../../components/patient/EditPatientModal';
+import QueueConflictModal from '../../components/queue/QueueConflictModal';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
 import { formatLongAge } from '../../utils/age';
 import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
@@ -242,6 +243,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
+  // Queue Check-In Anti-Spam & Concurrency Guard states
+  const isCheckingInRef = useRef(false);
+  const isRegisteringRef = useRef(false);
+  const [checkingInPatientId, setCheckingInPatientId] = useState<string | null>(null);
+  const [conflictModal, setConflictModal] = useState<{
+    visible: boolean;
+    error?: any;
+    patientName?: string;
+  } | null>(null);
+
   // Standalone PhilHealth Profile Modal state
   const [philHealthProfileModalVisible, setPhilHealthProfileModalVisible] = useState(false);
   const [selectedPatientForProfile, setSelectedPatientForProfile] = useState<ClinicPatient | null>(null);
@@ -324,7 +335,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   }, [fetchPatients]);
 
   const handleRegisterPatient = async (options?: { sendToTriage?: boolean }) => {
-    const sendToTriage = options?.sendToTriage ?? false;
+    if (isRegisteringRef.current || savingPatient) return;
+    isRegisteringRef.current = true;
+    try {
+      const sendToTriage = options?.sendToTriage ?? false;
 
     if (!formFirstName.trim() || !formLastName.trim() || !formPhone.trim() || !formDob.trim()) {
       Alert.alert('Missing details', 'First name, last name, date of birth and phone number are required.');
@@ -552,6 +566,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormPrincipalRelationship('C');
     setFormPrincipalDob('');
     setIsPrincipalPinValid(null);
+    } finally {
+      isRegisteringRef.current = false;
+    }
   };
 
   const handleViewExistingPatient = async (patientId: string) => {
@@ -944,18 +961,39 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   };
 
   const handleQueueCheckIn = async (patient: ClinicPatient) => {
-    const isUrgent = patient.alerts?.toLowerCase().includes('fall') || patient.alerts?.toLowerCase().includes('chest');
-    const [, checkInErr] = await clinicService.checkInPatient({
-      patientId: patient.id,
-      patientName: patient.fullName,
-      priority: isUrgent ? 'Urgent' : 'Routine',
-      chiefComplaint: patient.chronicConditions ? `Follow-up: ${patient.chronicConditions}` : 'General consultation',
-    });
-    if (checkInErr) {
-      notify.error(checkInErr.message || 'Could not add the patient to the queue.');
-      return;
+    if (isCheckingInRef.current || checkingInPatientId) return;
+    isCheckingInRef.current = true;
+    setCheckingInPatientId(patient.id);
+
+    try {
+      const isUrgent = patient.alerts?.toLowerCase().includes('fall') || patient.alerts?.toLowerCase().includes('chest');
+      const [, checkInErr] = await clinicService.checkInPatient({
+        patientId: patient.id,
+        patientName: patient.fullName,
+        priority: isUrgent ? 'Urgent' : 'Routine',
+        chiefComplaint: patient.chronicConditions ? `Follow-up: ${patient.chronicConditions}` : 'General consultation',
+      });
+      if (checkInErr) {
+        if (
+          checkInErr.status === 409 ||
+          checkInErr.errorCode === 'CONFLICT' ||
+          checkInErr.errorCode === 'active_queue_ticket_exists'
+        ) {
+          setConflictModal({
+            visible: true,
+            error: checkInErr,
+            patientName: patient.fullName,
+          });
+          return;
+        }
+        notify.error(checkInErr.message || 'Could not add the patient to the queue.');
+        return;
+      }
+      navigation.navigate('Dashboard');
+    } finally {
+      isCheckingInRef.current = false;
+      setCheckingInPatientId(null);
     }
-    navigation.navigate('Dashboard');
   };
 
   const filteredPatients = (patients ?? []).filter((p) => {
@@ -1216,6 +1254,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                     variant="primary"
                     size="sm"
                     icon="plus"
+                    loading={checkingInPatientId === item.id}
+                    disabled={!!checkingInPatientId}
                     onPress={() => handleQueueCheckIn(item)}
                   />
                 </View>
@@ -2116,6 +2156,18 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         }}
         patient={selectedPatientForProfile}
         onSaved={handlePhilHealthProfileSaved}
+      />
+
+      {/* Active Queue Ticket Conflict Modal */}
+      <QueueConflictModal
+        visible={!!conflictModal?.visible}
+        onDismiss={() => setConflictModal(null)}
+        onViewInQueue={() => {
+          setConflictModal(null);
+          navigation.navigate('Dashboard');
+        }}
+        error={conflictModal?.error}
+        patientName={conflictModal?.patientName}
       />
     </ScrollView>
   </ResponsiveLayout>

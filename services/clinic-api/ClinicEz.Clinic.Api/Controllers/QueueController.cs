@@ -14,6 +14,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using QueueMetricsDto = ClinicEz.Clinic.Application.Features.Queue.Queries.QueueMetricsDto;
 
 namespace ClinicEz.Clinic.Api.Controllers;
 
@@ -132,7 +133,50 @@ public sealed class QueueController : ControllerBase
         var result = await _sender.Send(new CompleteQueueItemCommand(id), ct);
         return Ok(ApiResponse<bool>.Success(result, "Queue item completed."));
     }
+
+    [HttpPost("{id:guid}/no-show")]
+    [HasPermission(ClinicPermissions.QueueCall)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> MarkNoShow(
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new MarkQueueItemNoShowCommand(id), ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Patient marked as no-show."));
+    }
+
+    [HttpPost("{id:guid}/hold")]
+    [HasPermission(ClinicPermissions.QueueCall)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> PutOnHold(
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new PutQueueItemOnHoldCommand(id), ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Patient put on hold."));
+    }
+
+    [HttpPost("{id:guid}/reactivate")]
+    [HasPermission(ClinicPermissions.QueueCall)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> Reactivate(
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new ReactivateQueueItemCommand(id), ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Queue ticket reactivated."));
+    }
+
+    [HttpPost("{id:guid}/cancel")]
+    [HasPermission(ClinicPermissions.QueueCall)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> CancelTicket(
+        Guid id,
+        [FromBody] CancelQueueTicketRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new CancelQueueTicketCommand(id, request?.Reason), ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Queue ticket cancelled."));
+    }
 }
+
+public sealed record CancelQueueTicketRequest(string? Reason = null);
 
 public sealed record RecordTriageRequest(
     Guid? NurseId,

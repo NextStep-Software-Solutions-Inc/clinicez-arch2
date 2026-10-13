@@ -10,6 +10,8 @@ namespace ClinicEz.Clinic.Infrastructure.Persistence.Repositories;
 
 public class Repository<T>(ApplicationDbContext context, ISieveProcessor sieveProcessor) : IRepository<T> where T : BaseEntity
 {
+    public ApplicationDbContext DbContext => context;
+
     public async Task AddAsync(T entity, CancellationToken cancellationToken = default)
     {
         await context.Set<T>().AddAsync(entity, cancellationToken);

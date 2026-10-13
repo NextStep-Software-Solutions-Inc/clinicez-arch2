@@ -34,6 +34,27 @@ public static class TestDbHelper
         return (context, uow, sieve);
     }
 
+    public static (ApplicationDbContext Context, IUnitOfWork UnitOfWork, ISieveProcessor SieveProcessor) CreateSharedTestContext(string dbName, IClinicContext clinicContext)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new[]
+            {
+                new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+            })
+            .Build();
+
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(databaseName: dbName)
+            .Options;
+
+        var context = new ApplicationDbContext(options, config, clinicContext);
+        var sieve = Substitute.For<ISieveProcessor>();
+        var productRepo = Substitute.For<IProductRepository>();
+        var uow = new UnitOfWork(context, sieve, productRepo);
+
+        return (context, uow, sieve);
+    }
+
     public static Repository<T> CreateRepository<T>(ApplicationDbContext context, ISieveProcessor sieve) where T : BaseEntity
     {
         return new Repository<T>(context, sieve);

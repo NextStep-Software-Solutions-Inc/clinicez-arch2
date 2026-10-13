@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState } from '../ui';
+import RejectionReasonModal from './RejectionReasonModal';
 import type {
   ClinicPatient,
   ClinicRecordAttachmentRecord,
@@ -13,7 +14,7 @@ export interface ExternalDocumentVaultTabProps {
   attachments?: ClinicRecordAttachmentRecord[];
   onUploadDocument?: () => void;
   onUploadDoc?: () => void;
-  onVerifyAttachment?: (attachmentId: string, isApproved: boolean) => Promise<void>;
+  onVerifyAttachment?: (attachmentId: string, isApproved: boolean, rejectionReason?: string) => Promise<void>;
   onDownloadAttachment?: (attachmentId: string) => Promise<void>;
   onRefreshChart?: () => void;
 }
@@ -38,6 +39,8 @@ export const PHILHEALTH_CHEST_XRAY_OBSERVATIONS: Record<string, string> = {
   '99': 'Other Observable Findings',
 };
 
+export type VaultStatusFilter = 'ALL' | 'PENDING' | 'VERIFIED' | 'REJECTED';
+
 export default function ExternalDocumentVaultTab({
   patient,
   patientId,
@@ -48,27 +51,68 @@ export default function ExternalDocumentVaultTab({
   onDownloadAttachment,
   onRefreshChart,
 }: ExternalDocumentVaultTabProps) {
+  const [statusFilter, setStatusFilter] = useState<VaultStatusFilter>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [rejectingAttachment, setRejectingAttachment] = useState<ClinicRecordAttachmentRecord | null>(null);
+
+  const pendingCount = useMemo(() => {
+    return attachments.filter((att) => {
+      const isVerified = att.verificationStatus === 'Verified';
+      const isRejected = att.verificationStatus === 'Rejected';
+      return !isVerified && !isRejected;
+    }).length;
+  }, [attachments]);
+
+  const verifiedCount = useMemo(() => {
+    return attachments.filter((att) => att.verificationStatus === 'Verified').length;
+  }, [attachments]);
+
+  const rejectedCount = useMemo(() => {
+    return attachments.filter((att) => att.verificationStatus === 'Rejected').length;
+  }, [attachments]);
 
   const handleUpload = () => {
     if (onUploadDocument) onUploadDocument();
     else if (onUploadDoc) onUploadDoc();
   };
 
-  const handleVerify = async (attachmentId: string, isApproved: boolean) => {
+  const handleVerify = async (attachmentId: string, isApproved: boolean, rejectionReason?: string) => {
     if (!onVerifyAttachment) return;
     setVerifyingId(attachmentId);
     try {
-      await onVerifyAttachment(attachmentId, isApproved);
+      await onVerifyAttachment(attachmentId, isApproved, rejectionReason);
       if (onRefreshChart) onRefreshChart();
     } finally {
       setVerifyingId(null);
     }
   };
 
+  const handleOpenRejectModal = (att: ClinicRecordAttachmentRecord) => {
+    setRejectingAttachment(att);
+  };
+
+  const handleConfirmReject = async (reason: string) => {
+    if (!rejectingAttachment) return;
+    const targetId = rejectingAttachment.id;
+    try {
+      await handleVerify(targetId, false, reason);
+      setRejectingAttachment(null);
+    } catch {
+      // Handled in verify callback
+    }
+  };
+
   const filteredAttachments = useMemo(() => {
     return attachments.filter((att) => {
+      const isVerified = att.verificationStatus === 'Verified';
+      const isRejected = att.verificationStatus === 'Rejected';
+      const isPending = !isVerified && !isRejected;
+
+      if (statusFilter === 'PENDING' && !isPending) return false;
+      if (statusFilter === 'VERIFIED' && !isVerified) return false;
+      if (statusFilter === 'REJECTED' && !isRejected) return false;
+
       if (selectedCategory === 'ALL') return true;
       if (selectedCategory === 'OutsideChestXRay') {
         return att.recordType === 'OutsideChestXRay' || att.title?.toLowerCase().includes('x-ray');
@@ -81,62 +125,127 @@ export default function ExternalDocumentVaultTab({
       }
       return att.recordType === selectedCategory;
     });
-  }, [attachments, selectedCategory]);
+  }, [attachments, selectedCategory, statusFilter]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* ========================================================================= */}
-      {/* TOP CONTROLS & CATEGORY FILTERS                                           */}
+      {/* TOP CONTROLS & STATUS / CATEGORY FILTERS                                  */}
       {/* ========================================================================= */}
       <View style={styles.topBar}>
-        <View style={styles.filterRow}>
-          <Pressable
-            onPress={() => setSelectedCategory('ALL')}
-            style={[styles.filterBtn, selectedCategory === 'ALL' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedCategory === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+        <View style={styles.filtersWrapper}>
+          {/* Status Filter Chips */}
+          <View style={styles.statusFilterRow}>
+            <Pressable
+              onPress={() => setStatusFilter('ALL')}
+              style={[styles.statusChip, statusFilter === 'ALL' && styles.statusChip_active]}
             >
-              All Records ({attachments.length})
-            </ThemedText>
-          </Pressable>
+              <ThemedText
+                variant="captionBold"
+                color={statusFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                All ({attachments.length})
+              </ThemedText>
+            </Pressable>
 
-          <Pressable
-            onPress={() => setSelectedCategory('OutsideChestXRay')}
-            style={[styles.filterBtn, selectedCategory === 'OutsideChestXRay' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedCategory === 'OutsideChestXRay' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            <Pressable
+              onPress={() => setStatusFilter('PENDING')}
+              style={[
+                styles.statusChip,
+                statusFilter === 'PENDING' && styles.statusChip_active,
+                pendingCount > 0 && styles.statusChip_pendingAlert,
+              ]}
             >
-              Outside Chest X-Ray
-            </ThemedText>
-          </Pressable>
+              {pendingCount > 0 && <Icon name="alert" size={12} color={theme.colors.warningText} />}
+              <ThemedText
+                variant="captionBold"
+                color={
+                  statusFilter === 'PENDING'
+                    ? theme.colors.primaryDark
+                    : pendingCount > 0
+                    ? theme.colors.warningText
+                    : theme.colors.textSecondary
+                }
+              >
+                Pending Review ({pendingCount})
+              </ThemedText>
+            </Pressable>
 
-          <Pressable
-            onPress={() => setSelectedCategory('COR')}
-            style={[styles.filterBtn, selectedCategory === 'COR' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedCategory === 'COR' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            <Pressable
+              onPress={() => setStatusFilter('VERIFIED')}
+              style={[styles.statusChip, statusFilter === 'VERIFIED' && styles.statusChip_active]}
             >
-              Cert of Registration (COR)
-            </ThemedText>
-          </Pressable>
+              <ThemedText
+                variant="captionBold"
+                color={statusFilter === 'VERIFIED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Verified ({verifiedCount})
+              </ThemedText>
+            </Pressable>
 
-          <Pressable
-            onPress={() => setSelectedCategory('OutsideLab')}
-            style={[styles.filterBtn, selectedCategory === 'OutsideLab' && styles.filterBtn_active]}
-          >
-            <ThemedText
-              variant="captionBold"
-              color={selectedCategory === 'OutsideLab' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            <Pressable
+              onPress={() => setStatusFilter('REJECTED')}
+              style={[styles.statusChip, statusFilter === 'REJECTED' && styles.statusChip_active]}
             >
-              Outside Labs
-            </ThemedText>
-          </Pressable>
+              <ThemedText
+                variant="captionBold"
+                color={statusFilter === 'REJECTED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Rejected ({rejectedCount})
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          {/* Record Category Filter Chips */}
+          <View style={styles.filterRow}>
+            <Pressable
+              onPress={() => setSelectedCategory('ALL')}
+              style={[styles.filterBtn, selectedCategory === 'ALL' && styles.filterBtn_active]}
+            >
+              <ThemedText
+                variant="captionBold"
+                color={selectedCategory === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                All Records ({attachments.length})
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setSelectedCategory('OutsideChestXRay')}
+              style={[styles.filterBtn, selectedCategory === 'OutsideChestXRay' && styles.filterBtn_active]}
+            >
+              <ThemedText
+                variant="captionBold"
+                color={selectedCategory === 'OutsideChestXRay' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Outside Chest X-Ray
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setSelectedCategory('COR')}
+              style={[styles.filterBtn, selectedCategory === 'COR' && styles.filterBtn_active]}
+            >
+              <ThemedText
+                variant="captionBold"
+                color={selectedCategory === 'COR' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Cert of Registration (COR)
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setSelectedCategory('OutsideLab')}
+              style={[styles.filterBtn, selectedCategory === 'OutsideLab' && styles.filterBtn_active]}
+            >
+              <ThemedText
+                variant="captionBold"
+                color={selectedCategory === 'OutsideLab' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Outside Labs
+              </ThemedText>
+            </Pressable>
+          </View>
         </View>
 
         <Pressable onPress={handleUpload} style={styles.uploadBtn}>
@@ -186,6 +295,21 @@ export default function ExternalDocumentVaultTab({
                   />
                 </View>
 
+                {/* Amber Quarantine Warning Banner for Pending Documents */}
+                {isPending ? (
+                  <View style={styles.quarantineBanner}>
+                    <View style={styles.quarantineBannerHeader}>
+                      <Icon name="alert" size={14} color={theme.colors.warningText} />
+                      <ThemedText variant="captionBold" color={theme.colors.warningText}>
+                        Self-Enrolled Outside Document - Requires Clinical Verification
+                      </ThemedText>
+                    </View>
+                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                      Uploaded by patient during registration. Review film/document clarity, patient identification, and clinical validity before approving into patient EMR chart.
+                    </ThemedText>
+                  </View>
+                ) : null}
+
                 {/* Outside Chest X-Ray Conformance Box */}
                 {isCxr ? (
                   <View style={styles.cxrStatutoryBox}>
@@ -198,6 +322,26 @@ export default function ExternalDocumentVaultTab({
                     <ThemedText variant="caption" color={theme.colors.text}>
                       Findings: Essentially Normal • Observation: No acute infiltrate
                     </ThemedText>
+                  </View>
+                ) : null}
+
+                {/* Rejection Details Callout */}
+                {isRejected ? (
+                  <View style={styles.rejectionNoticeBox}>
+                    <View style={styles.rejectionNoticeHeader}>
+                      <Icon name="alert" size={14} color={theme.colors.emergencyText} />
+                      <ThemedText variant="captionBold" color={theme.colors.emergencyText}>
+                        Rejected Document
+                      </ThemedText>
+                    </View>
+                    <ThemedText variant="caption" color={theme.colors.emergencyText}>
+                      Reason: {att.rejectionReason || 'Document did not meet clinical verification criteria.'}
+                    </ThemedText>
+                    {att.verifiedByStaffName ? (
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Reviewed by {att.verifiedByStaffName}
+                      </ThemedText>
+                    ) : null}
                   </View>
                 ) : null}
 
@@ -257,7 +401,7 @@ export default function ExternalDocumentVaultTab({
                         </ThemedText>
                       </Pressable>
                       <Pressable
-                        onPress={() => handleVerify(att.id, false)}
+                        onPress={() => handleOpenRejectModal(att)}
                         style={[styles.actionBtn, styles.actionBtn_danger]}
                         disabled={verifyingId === att.id}
                       >
@@ -280,6 +424,16 @@ export default function ExternalDocumentVaultTab({
           description="Zero uploaded medical clearances, outside films, or scanned certificates for this patient."
         />
       )}
+
+      {/* Rejection Reason Modal */}
+      <RejectionReasonModal
+        visible={Boolean(rejectingAttachment)}
+        onClose={() => setRejectingAttachment(null)}
+        onConfirm={handleConfirmReject}
+        documentTitle={rejectingAttachment?.title}
+        fileName={rejectingAttachment?.fileName}
+        loading={verifyingId === rejectingAttachment?.id}
+      />
     </ScrollView>
   );
 }
@@ -293,11 +447,39 @@ const styles = StyleSheet.create({
   },
   topBar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: theme.spacing.xs,
     marginBottom: theme.spacing.md,
+  },
+  filtersWrapper: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  statusFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  statusChip_active: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
+  },
+  statusChip_pendingAlert: {
+    borderColor: theme.colors.warningBorder,
+    backgroundColor: theme.colors.warningBg,
   },
   filterRow: {
     flexDirection: 'row',
@@ -421,4 +603,33 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.emergencyBg,
     borderColor: theme.colors.emergencyBorder,
   },
+  quarantineBanner: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.xs,
+    gap: 2,
+    marginVertical: 2,
+  },
+  quarantineBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  rejectionNoticeBox: {
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.xs,
+    gap: 2,
+    marginVertical: 2,
+  },
+  rejectionNoticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
 });
+

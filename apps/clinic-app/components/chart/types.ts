@@ -95,7 +95,7 @@ export interface ChartLayoutProps {
   onViewLabSlip?: (orderId: string) => void;
   onAttachExternalResult?: (orderId: string) => void;
   onUploadDocument?: () => void;
-  onVerifyAttachment?: (attachmentId: string, isApproved: boolean) => Promise<void>;
+  onVerifyAttachment?: (attachmentId: string, isApproved: boolean, rejectionReason?: string) => Promise<void>;
   onDownloadAttachment?: (attachmentId: string) => Promise<void>;
   onAdministerVaccine?: (payload: AdministerVaccinePayload) => Promise<void>;
   onRecordHistoricalVaccine?: (payload: RecordHistoricalImmunizationPayload) => Promise<void>;
@@ -125,7 +125,7 @@ export interface PatientChartModalProps {
   onViewLabSlip?: (orderId: string) => void;
   onAttachExternalResult?: (orderId: string) => void;
   onUploadDocument?: () => void;
-  onVerifyAttachment?: (attachmentId: string, isApproved: boolean) => Promise<void>;
+  onVerifyAttachment?: (attachmentId: string, isApproved: boolean, rejectionReason?: string) => Promise<void>;
   onDownloadAttachment?: (attachmentId: string) => Promise<void>;
   onAdministerVaccine?: (payload: AdministerVaccinePayload) => Promise<void>;
   onRecordHistoricalVaccine?: (payload: RecordHistoricalImmunizationPayload) => Promise<void>;

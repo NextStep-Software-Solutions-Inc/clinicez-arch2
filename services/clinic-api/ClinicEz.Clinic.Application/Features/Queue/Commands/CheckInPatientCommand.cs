@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.DTOs;
+using ClinicEz.Clinic.Application.Common.Exceptions;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
@@ -66,6 +67,34 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
     public async Task<QueueItemDto> Handle(CheckInPatientCommand request, CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // Enforce active queue day uniqueness: prevent duplicate active tickets today
+        QueueStatus[] activeStatuses =
+        [
+            QueueStatus.Waiting,
+            QueueStatus.Triaged,
+            QueueStatus.InConsultation,
+            QueueStatus.PendingProcedure,
+            QueueStatus.ReEvaluation,
+            QueueStatus.OnHold
+        ];
+
+        var activeTicket = await _queueRepository.Query(q =>
+            q.ClinicId == _clinicContext.ClinicId &&
+            q.QueueDate == today &&
+            q.PatientId == request.PatientId &&
+            activeStatuses.Contains(q.Status))
+            .OrderByDescending(q => q.CheckInTime)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (activeTicket != null)
+        {
+            throw new ActiveQueueTicketConflictException(
+                activeTicket.Id,
+                activeTicket.QueueNumber,
+                activeTicket.Status,
+                activeTicket.PatientName);
+        }
 
         // Sequence number generation for today in this clinic
         var lastSequence = await _queueRepository.Query(q => 

@@ -9,8 +9,12 @@ const isProtectedRoute = createRouteMatcher([
     '/admin(.*)'
 ]);
 
-// Anonymous pages (external labs / pharmacies upload through a link): no tenant resolution, no sign-in.
-const isPublicRoute = createRouteMatcher(['/upload(.*)']);
+// Anonymous pages (external labs / pharmacies upload through a link, public patient join link, public API relay): no tenant resolution, no sign-in.
+const isPublicRoute = createRouteMatcher([
+    '/upload(.*)',
+    '/join(.*)',
+    '/api/v1/public(.*)'
+]);
 
 // Generic reserved labels; service subdomains (clinic, lab, ...) are added from configuration
 // (NEXT_PUBLIC_SERVICE_SUBDOMAINS) so they are never treated as tenant slugs.

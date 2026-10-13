@@ -8,6 +8,7 @@ public sealed class UnitOfWork : IUnitOfWork, IDisposable
 {
     private readonly ApplicationDbContext _context;
 
+    public ApplicationDbContext DbContext => _context;
     public IProductRepository ProductRepository { get; }
 
     public UnitOfWork(

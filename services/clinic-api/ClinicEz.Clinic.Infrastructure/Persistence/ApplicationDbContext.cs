@@ -555,7 +555,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Year).IsRequired();
-            entity.Property(e => e.CurrentSequence).IsRequired();
+            entity.Property(e => e.CurrentSequence).IsRequired().IsConcurrencyToken();
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.Year }).IsUnique();
         });
 
@@ -915,11 +915,17 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         base.OnModelCreating(modelBuilder);
     }
 
+    private static readonly object _inMemoryUniqueLock = new();
+
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         if (!Database.IsRelational())
         {
-            EnforceInMemoryUniqueConstraints();
+            lock (_inMemoryUniqueLock)
+            {
+                EnforceInMemoryUniqueConstraints();
+                return base.SaveChangesAsync(cancellationToken).GetAwaiter().GetResult();
+            }
         }
         return await base.SaveChangesAsync(cancellationToken);
     }

@@ -28,6 +28,12 @@
       ],
       "@public/*": [
         "./public/*"
+      ],
+      "@clinicez/design-tokens": [
+        "../../packages/design-tokens/src/index.ts"
+      ],
+      "@clinicez/design-tokens/*": [
+        "../../packages/design-tokens/src/*"
       ]
     }
   },
@@ -39,6 +45,8 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "tests",
+    "tests/**/*"
   ]
 }

@@ -46,6 +46,7 @@ public class MessageCoverageTests
         new(InteropTypes.PatientShareSnapshot, [Patient], [Clinic]),
         new(InteropTypes.PatientDocumentIssued, [Clinic, Lab, Pharmacy], [Patient]),
         new(InteropTypes.ClinicalImmunizationAdministered, [Clinic], [Patient]),
+        new(InteropTypes.PatientJoinRequested, [Portal], [Clinic]),
 
         new(InteropTypes.LabOrderIssued, [Clinic], [Lab]),
         new(InteropTypes.LabOrderStatusChanged, [Lab], [Clinic, Patient]),

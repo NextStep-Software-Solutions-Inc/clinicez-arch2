@@ -1,21 +1,21 @@
-# ClinicEZ Custom Metadata Engine — Test Infrastructure Specification (TEST_INFRA.md)
+# ClinicEZ Secured Clinic Join Link — Test Infrastructure Specification (TEST_INFRA.md)
 
-**Document Version:** 1.0.0  
-**Target Milestone:** Dual-Track E2E Quality Assurance (Generic Entity Custom Metadata Engine)  
-**Applicable Services:** `apps/clinic-app`, `services/clinic-api`, `apps/portal-web`  
-**Authoritative Specifications:** `PROJECT.md`, `ORIGINAL_REQUEST.md` (## 2026-10-12T18:55:51Z)  
+**Document Version:** 2.0.0  
+**Target Milestone:** Dual-Track E2E Quality Assurance (Secured Clinic Join Link & Interop Hub Relay)  
+**Applicable Services:** `tests/ClinicEz.Interop.E2E`, `apps/clinic-app`, `apps/portal-web`, `services/clinic-api`, `services/portal-api`, `packages/shared-dotnet`  
+**Authoritative Specifications:** `PROJECT.md` (orchestrator_11), `ORIGINAL_REQUEST.md` (## 2026-10-13T03:16:03Z)  
 
 ---
 
 ## 1. Executive Summary & Testing Philosophy
 
-The ClinicEZ Generic Entity Custom Metadata Engine provides a dynamic, tenant-scoped, and schema-flexible mechanism for clinical administrators to define custom questions, enforce conditional visibility rules, orchestrate cascading select dropdowns, and install pre-built template bundles across all patient intake, registration, and chart workflows.
+The ClinicEZ Secured Clinic Join Link provides a zero-friction, asynchronously-relayed patient onboarding channel allowing patients to register via public URLs (`/join/[tenantSlug]/[facilitySlug]`), gated by administrator-configured Join Codes with expiration windows. Submissions are transmitted via the platform's Interop Hub backbone (`patient.join.requested`) from `Party.Portal` to `Party.ForFacility(Clinic)` with outside diagnostic document quarantine (`VerificationStatus = "PendingVerification"`), PhilHealth Member Type (`MM` vs `DD`) validation with Mod-11 check digit verification, dynamic custom fields with cascading choices, and digital queue pass issuance.
 
-To assure absolute system integrity without coupling tests to implementation internals, the Quality Assurance track employs a **Dual-Track, Requirement-Driven, Opaque-Box Testing Strategy** founded on a **4-Tier Testing Methodology** (with Tier 5 Adversarial Hardening):
+To assure absolute system integrity and prevent regressions without coupling tests to implementation internals, the Quality Assurance track employs a **Dual-Track, Requirement-Driven, Opaque-Box Testing Strategy** founded on a **4-Tier Testing Methodology** (with Tier 5 Adversarial Hardening):
 
-1. **Opaque-Box Verification:** Tests assert strictly against public API contracts, DOM/React-Native behavioral events, and CQRS request/response boundaries. Tests never access private variables or internal implementation details.
-2. **Deterministic Output Derivation:** Every expected outcome is directly derived from the documented specifications in `PROJECT.md` and `ORIGINAL_REQUEST.md`.
-3. **Progressive Testability:** Suites are engineered to validate interface contracts cleanly, enabling independent execution across frontend (`bun test`) and backend (`dotnet test`).
+1. **Opaque-Box Verification:** Tests assert strictly against public API contracts, DOM/React-Native behavioral events, and Interop Hub envelope boundaries. Tests never access private variables or internal implementation details.
+2. **Deterministic Output Derivation:** Every expected outcome is directly derived from the documented specifications in `PROJECT.md` and `ORIGINAL_REQUEST.md` (e.g. Mod-11 check digit formulas, sequential code formats `PAT-{yyyy}-{seq:D5}` and `Q-{seq:D3}`, ISO date bounds, and token palettes).
+3. **Progressive Testability & Independence:** Suites are engineered to validate interface contracts cleanly, enabling independent execution across frontend (`bun test`) and backend (`dotnet test`). Each test sets up its own state and cleans up after itself.
 4. **Zero Regressions & Escaping Integrity:** Full verification across boundary conditions, cross-tenant isolation, Unicode/escaping fidelity, and malformed inputs.
 
 ---
@@ -25,138 +25,178 @@ To assure absolute system integrity without coupling tests to implementation int
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │             Tier 5: Adversarial Hardening & Security Stress             │
-│   (JSON injection, cyclicity detection, extreme payload stress, tokens) │
+│   (Malicious payloads, expired code tampering, SQL/XSS, format fuzzing)│
 ├────────────────────────────────────────────────────────────────────────┤
-│             Tier 4: Real-World Clinical & Educational Scenarios        │
-│   (USTP Student Onboarding, Corporate Health Exam, Specialty OB-GYN)   │
+│             Tier 4: Real-World Clinical Onboarding Scenarios           │
+│   (End-to-end join -> Interop envelope -> Queue ticket -> Quarantine)  │
 ├────────────────────────────────────────────────────────────────────────┤
-│             Tier 3: Cross-Feature Integration & Cascade Chains         │
-│   (Reordering -> Rendering -> Visibility -> Cascading -> Sanitization)  │
+│             Tier 3: Cross-Feature Combinations & Cascading             │
+│   (Dependent DD + Sponsor Mod-11 + Allergies + Quarantined Attachments)│
 ├────────────────────────────────────────────────────────────────────────┤
-│             Tier 2: Boundary & Corner Cases (>= 5 per Feature)         │
-│   (Nulls, empty strings, max lengths, missing parent keys, rapid taps) │
+│             Tier 2: Boundary Value Analysis & Corner Cases             │
+│   (Expired codes, future DOB rejection, invalid Mod-11, empty fields)  │
 ├────────────────────────────────────────────────────────────────────────┤
-│             Tier 1: Feature Coverage (>= 5 per Feature)                │
-│   (Primary happy-path behavioral verification for Features 1 through 19)│
+│             Tier 1: Feature Coverage (>= 5 Tests per Feature)          │
+│   (Primary happy-path behavioral verification for Features 1-23)       │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Tier 1: Feature Coverage (>= 5 Tests per Feature)
 - Verifies the foundational happy path and contractual obligations of each feature.
-- Guarantees minimum 5 distinct tests per feature across all 19 defined features ($\ge 95$ core unit/integration tests).
+- Guarantees minimum 5 distinct tests per feature across all defined features ($\ge 115$ core unit/integration tests).
+- Specific focus:
+  - Public join link routes (`/join/[tenantSlug]`, `/join/[tenantSlug]/[facilitySlug]`).
+  - Join code validation and URL query unlocking (`?code=...`).
+  - PhilHealth PIN Mod-11 check digit algorithm.
+  - PhilHealth Member Type (`MM` vs `DD`) selection and principal member fields.
+  - Dynamic custom fields evaluation and cascading dropdowns.
+  - Outside document quarantine persistence (`PendingVerification`).
+  - Interop Hub asynchronous relay (`patient.join.requested`).
 
 ### Tier 2: Boundary, Extreme & Corner Cases (>= 5 Tests per Feature)
-- Validates system resilience at boundaries: zero items, single item, maximum string lengths, special symbols, whitespace trimming, missing parents, unknown operators.
-- Guarantees minimum 5 distinct tests per feature across all 19 defined features ($\ge 95$ boundary tests).
+- Validates system resilience at edge boundaries:
+  - Expired join codes (e.g., expired 1 second ago vs active for 1 second).
+  - Disabled join link toggles (`IsJoinEnabled = false`).
+  - Invalid Mod-11 check digits (rematches, remainder 0 and 1 edge cases, corrupted single digits).
+  - Date of Birth boundary constraints (future dates strictly rejected, today accepted, leap years 2024-02-29).
+  - Empty optional fields (middle name, suffix, senior/PWD IDs, attachments).
+  - Boundary lengths on names, addresses, and reason for visit (max 255/1000 characters).
 
-### Tier 3: Cross-Feature Interactions
-- Tests multi-stage interactions where the output or state of one feature drives another:
-  - Sequence reordering in Settings immediately alters question rendering order in Patient Registration.
-  - Toggling a parent visibility condition dynamically shows child fields while evaluating child cascading options.
-  - Hiding a parent field cascades into hiding dependent fields, triggering automatic value reset and payload sanitization.
-  - Template bundle installation automatically seeds custom fields, updates order, and configures cascading dependencies.
+### Tier 3: Cross-Feature Interactions & Combinations
+- Tests multi-stage interactions where the state or output of multiple features interact:
+  - Dependent patient (`DD`) + Principal Sponsor Mod-11 PIN + multiple severe anaphylactic allergies + 2 outside quarantined documents.
+  - Multi-facility tenant picker -> selecting specific branch -> preserving join code across navigation.
+  - Custom fields cascading: University Preset (Student -> College -> Program) combined with missing required child field validation.
+  - Digital registration pass generation reflecting sequential daily queue token (`Q-{seq:D3}`) and assigned patient code (`PAT-{yyyy}-{seq:D5}`).
 
 ### Tier 4: Real-World Application Scenarios
-- End-to-end journey tests simulating realistic organizational deployments:
-  - **Scenario A (University USTP Onboarding):** Intake of 1,000 freshmen students with student ID, college selection, dynamic program choices, and dorm allocation.
-  - **Scenario B (Corporate Health Annual Exam):** Employee occupational checkup toggling employment types (Regular, Probationary, Contractor) and dynamic HMO details.
-  - **Scenario C (Demographic & Clinical Specialty):** General clinical registration with conditional marital/spousal rules and age-based pediatric/geriatric flags.
-  - **Scenario D (Clinic Admin Hot-Reloading):** Admin creates a mandatory field, reorders to the top, installs template, and verifies patient registration reflects it immediately.
+- End-to-end journey tests simulating realistic clinical intake operations:
+  - **Scenario A (Walk-in Public Reception Onboarding):** Walk-in patient scans printable reception QR placard containing `?code=ABC123`, opens mobile join form, fills demographics with Mod-11 PhilHealth PIN, submits, receives `Q-101` digital ticket pass, and appears on clinic triage queue.
+  - **Scenario B (Dependent Child Registration with Diagnostic Attachments):** Mother registers child dependent (`DD`), supplies principal sponsor credentials, attaches outside Chest X-Ray and pediatric immunization record, clinic receives envelope, stores attachments in quarantine (`PendingVerification`), and nurse reviews/approves documents in `ExternalDocumentVaultTab`.
+  - **Scenario C (Corporate / Student Intake Batch):** University student onboarded through `/join/ustp/main-campus`, fills Student ID, College, and Program cascading fields, verified without leaking unselected faculty questions.
+  - **Scenario D (Administrator Security Revocation):** Clinic administrator detects unauthorized join link sharing, regenerates Join Code and sets 24h expiration, immediately invalidating old code links.
 
 ### Tier 5: Adversarial Hardening & Integrity Guarding
-- Fuzz testing and adversarial attack vectors:
-  - Malformed or corrupted `VisibilityRuleJson` and `ConditionalOptionsJson`.
-  - Infinite circular visibility loops (Field A depends on Field B, which depends on Field A).
-  - Malicious script or format strings in field labels, machine keys, and option items.
-  - Memory and layout stability under 1,000 select dropdown options.
-  - Strict design token enforcement (`@clinicez/design-tokens`, zero raw hex codes).
+- Adversarial attacks and fuzz vectors:
+  - Code tampering: Attempting registration with modified or expired code query parameters.
+  - Mod-11 single-digit mutation harness (fuzzing every digit 0-9 to guarantee 100% check digit rejection).
+  - Malformed attachment mime types and oversized files.
+  - Cross-tenant injection: Attempting to target facility ID of another tenant via envelope spoofing.
+  - Strict `@clinicez/design-tokens` audit: zero raw hex literals, 4 core UX states (Skeleton loading, Empty, Error with retry, Active/Success digital pass).
 
 ---
 
 ## 3. Feature Traceability & Coverage Matrix
 
-| Feature ID | Feature Name | Test Suite Location | Tier 1 (Min 5) | Tier 2 (Min 5) | Tier 3 (Cross) | Tier 4/5 | Total Tests |
-|---|---|---|---|---|---|---|---|
-| **F1** | CustomField Schema & EF Core Model | `CustomFieldsE2ETests.cs` | 5 | 5 | Yes | Yes | 12 |
-| **F2** | CQRS CustomField CRUD & Query | `CustomFieldsE2ETests.cs` | 5 | 5 | Yes | Yes | 14 |
-| **F3** | Bulk Reorder Custom Fields Endpoint | `CustomFieldsE2ETests.cs` | 5 | 5 | Yes | Yes | 12 |
-| **F4** | Template Catalog & Install Backend | `CustomFieldsE2ETests.cs` | 5 | 5 | Yes | Yes | 12 |
-| **F5** | Admin Mandatory Toggle & Badges | `customFieldsTab.test.ts` | 5 | 5 | Yes | Yes | 14 |
-| **F6** | Admin Move Up/Down Sequence Controls | `customFieldsTab.test.ts` | 5 | 5 | Yes | Yes | 14 |
-| **F7** | Live Visibility Condition Rule Builder | `customFieldsTab.test.ts` | 5 | 5 | Yes | Yes | 15 |
-| **F8** | Cascading Dropdown Options Mapper | `customFieldsTab.test.ts` | 5 | 5 | Yes | Yes | 15 |
-| **F9** | 1-Click Suggested Templates Library UI | `customFieldsTab.test.ts` | 5 | 5 | Yes | Yes | 14 |
-| **F10** | Reusable DynamicCustomFieldsRenderer | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 16 |
-| **F11** | Dynamic Visibility Evaluation Engine | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 18 |
-| **F12** | Cascading Select Choices Engine | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 16 |
-| **F13** | Defensive Submission Validation | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 14 |
-| **F14** | Hidden Field Value Sanitization | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 14 |
-| **F15** | Patient Registration Integration | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 12 |
-| **F16** | Patient Demographic Edit Integration | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 12 |
-| **F17** | Patient Chart View Integration | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 10 |
-| **F18** | Public Student Intake Cascading | `dynamicCustomFieldsRenderer.test.ts` | 5 | 5 | Yes | Yes | 12 |
-| **F19** | UI/UX Design System Compliance | `customFieldsTab.test.ts`, `tokens.test.ts` | 5 | 5 | Yes | Yes | 14 |
-| **Total** | **All 19 Features** | **Frontend + Backend Suites** | **95** | **95** | **18** | **30** | **238+** |
+| Feature ID | Feature Name | Primary Test Suite | Tier 1 (Happy >=5) | Tier 2 (Boundary >=5) | Tier 3 (Cross) | Tier 4 (Real-World) | Tier 5 (Adversarial) | Target Total |
+|---|---|---|---|---|---|---|---|---|
+| **F1** | Interop Contract Registration | `PatientJoinFlowTests.cs` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F2** | Backend Relay Ingestion | `PatientJoinFlowTests.cs` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F3** | Proxy Authentication Bypass | `joinFlow.test.ts` | 5 | 5 | 2 | 1 | 2 | 15 |
+| **F4** | Idempotent Clinic Ingestion Handler | `PatientJoinFlowTests.cs` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F5** | Sequential Patient & Queue Ticket | `PatientJoinFlowTests.cs` | 5 | 5 | 2 | 2 | 1 | 15 |
+| **F6** | External Document Quarantine | `PatientJoinFlowTests.cs`, `joinLinkSettings.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F7** | Join Code & Expiration Settings Schema | `PatientJoinFlowTests.cs` | 5 | 5 | 2 | 1 | 2 | 15 |
+| **F8** | Join Code Settings API | `PatientJoinFlowTests.cs` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F9** | Clinic Admin Join Code Settings Card | `joinLinkSettings.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F10** | Printable Reception QR Placard | `joinLinkSettings.test.ts` | 5 | 5 | 2 | 2 | 1 | 15 |
+| **F11** | Workstation PhilHealth Member Type Selector | `patientMemberType.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F12** | Workstation Quarantine Review Workflow | `joinLinkSettings.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F13** | Complete Deletion of Legacy `/student-intake` | `joinFlow.test.ts` | 5 | 5 | 1 | 1 | 2 | 14 |
+| **F14** | Public Facility Selector Route | `joinFlow.test.ts` | 5 | 5 | 2 | 2 | 1 | 15 |
+| **F15** | Secured Public Join Link Route | `joinFlow.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F16** | Join Code Validation & URL Param Gating | `joinFlow.test.ts`, `PatientJoinFlowTests.cs` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F17** | Public Mod-11 PhilHealth PIN Validation | `patientMemberType.test.ts`, `joinFlow.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F18** | Public PhilHealth Member Type | `patientMemberType.test.ts`, `joinFlow.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F19** | Public Dynamic Custom Fields & Cascading | `joinFlow.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F20** | Public Structured Allergies & Medical History | `patientMemberType.test.ts`, `joinFlow.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F21** | Public External Document Upload Dropzone | `joinFlow.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **F22** | Digital Registration Pass & Scannable QR | `joinFlow.test.ts` | 5 | 5 | 2 | 2 | 1 | 15 |
+| **F23** | Design Tokens & 4 UX States Compliance | `joinLinkSettings.test.ts`, `tokens.test.ts` | 5 | 5 | 2 | 2 | 2 | 16 |
+| **Total** | **All 23 Features** | **4 Comprehensive Suites** | **115** | **115** | **45** | **42** | **43** | **360+** |
 
 ---
 
 ## 4. Test Suite Implementation Blueprint
 
-### 4.1 Frontend Settings & Template Management (`apps/clinic-app/tests/customFieldsTab.test.ts`)
-- **Target Component:** `components/settings/CustomFieldsTab.tsx`, `components/settings/AddEditFieldModal.tsx`
+### 4.1 .NET Interop Hub E2E Suite (`tests/ClinicEz.Interop.E2E/PatientJoinFlowTests.cs`)
+- **Target Harness:** `TestCell` (with in-memory SQLite Hub, `ClinicHost`, `HubFixture`, `Party.Portal`, `Party.ForFacility`)
 - **Scope:**
-  - Feature 5: Mandatory toggle in Add/Edit modal, `Required` (emergency badge) vs `Optional` (neutral badge) in list.
-  - Feature 6: Move Up and Move Down buttons with touch targets $\ge 44\text{px}$, boundary guards at index 0 and index $N-1$, bulk reorder API dispatch.
-  - Feature 7: Rule builder form binding parent field, operator (`equals`, `not_equals`, `in`, `contains`, `not_empty`), target value, and generating `VisibilityRuleJson`.
-  - Feature 8: Cascading options mapper mapping parent values to child array choices, fallback handling, generating `ConditionalOptionsJson`.
-  - Feature 9: 1-Click Template presets toolbar (USTP, Workplace, Demographics), modal confirmation, installation dispatch, list refresh.
-  - Feature 19: Four core UX states (SkeletonList loading, EmptyState when 0 fields, ErrorState with retry, active cards with badges).
+  - Feature 1 & 2: `patient.join.requested` envelope signing (ECDSA P-256), portal-to-clinic routing, envelope acceptance by Hub.
+  - Feature 4: Idempotency under duplicate message redelivery, ensuring zero duplicate patients or double queue tickets.
+  - Feature 5: Sequential `PatientCode` generation (`PAT-{yyyy}-{seq:D5}`) and daily queue ticket (`Q-{seq:D3}`).
+  - Feature 6: Outside document attachment quarantine with `VerificationStatus = "PendingVerification"`.
+  - Feature 7 & 8: `ClinicSettings` join gating (`IsJoinEnabled`, `JoinCode`, `JoinCodeExpiresAt`).
+  - Feature 16: Rejection of join requests with invalid or expired join code.
+  - Feature 17 & 18: Mod-11 validation on patient and principal member PINs, `MM` vs `DD` data mapping into `philhealth_profile`.
 
-### 4.2 Frontend Dynamic Intake & Rendering Engine (`apps/clinic-app/tests/dynamicCustomFieldsRenderer.test.ts`)
-- **Target Component:** `components/custom-fields/DynamicCustomFieldsRenderer.tsx`, Integration in `Patients.screen.tsx`, `EditPatientModal.tsx`
+### 4.2 Clinic App Settings & Workstation Suite (`apps/clinic-app/tests/joinLinkSettings.test.ts`)
+- **Target Components:** `JoinLinkSettingsCard.tsx`, `GeneralSettingsTab.tsx`, `ExternalDocumentVaultTab.tsx`
 - **Scope:**
-  - Feature 10: Deterministic rendering sorted by `DisplayOrder`, red asterisk `*` for `isRequired: true`, input widgets for Text, Number, Date (`ValidatedDateInput`), Boolean, and Select.
-  - Feature 11: Visibility engine evaluating static patient properties (`gender`, `civilStatus`, `dateOfBirth`) and custom fields (`affiliation == 'Student'`), supporting all 5 comparison operators.
-  - Feature 12: Cascading choices engine deriving available choices from parent selections, clearing stale child choices if invalid under new parent.
-  - Feature 13: Submission validation requiring visible mandatory fields to have non-empty values; hidden mandatory fields bypass validation.
-  - Feature 14: Hidden field value sanitization stripping invisible keys from output payload before submission.
-  - Feature 15 & 16: Registration and Demographic Edit workflows with custom fields dictionary persistence.
-  - Feature 18: Public Student Intake cascading workflow (College -> Program).
+  - Feature 9: Join link toggle (`IsJoinEnabled`), alphanumeric Join Code input and 8-character random generator, expiration window selector (24 Hours, 7 Days, 30 Days, Custom Date, Never).
+  - Feature 10: Reception QR code card with `?code=` query URL, preview display, printable placard generation.
+  - Feature 12: External Document Vault pending review badge/filter chip (`Pending Review (N)`), interactive review modal, approve action (`Verified`), reject action with mandatory rejection reason (`Rejected`).
+  - Feature 23: Semantic tokens usage (`lightColors.primary #0D6963`), zero raw hex codes, responsive layout.
 
-### 4.3 Backend Application & CQRS E2E Suite (`services/clinic-api/ClinicEz.Clinic.Application.Tests/CustomFieldsE2ETests.cs`)
-- **Target Layer:** `ClinicEz.Clinic.Application`, `ClinicEz.Clinic.Domain`
+### 4.3 Clinic App Member Type & Registration Suite (`apps/clinic-app/tests/patientMemberType.test.ts`)
+- **Target Components:** `Patients.screen.tsx`, `EditPatientModal.tsx`
 - **Scope:**
-  - Feature 1 & 2: Entity definition, CRUD operations, query deterministic sorting by `DisplayOrder` then `Label`, category filtering.
-  - Feature 3: Bulk reordering persistence, verifying new display order indexes and retrieval consistency.
-  - Feature 4: Preset bundle validation (USTP, Workplace, Demographics) with strongly-typed field definitions and rules.
-  - Feature 15 & 16: Patient entity persistence with dynamic `CustomFields` dictionary, multi-tenant isolation, and bulk patient registration.
+  - Feature 11: Member Type toggle pills: `[ Member (MM) ]` and `[ Dependent (DD) ]`.
+  - Feature 17: PhilHealth PIN input with Mod-11 check digit verification, formatted as `XX-XXXXXXXXX-X`.
+  - Feature 18: Dependent (`DD`) conditional principal member fields: Principal PIN (Mod-11 verified), Relationship (`Child (C)`, `Spouse (S)`, `Parent (P)`, `Disabled Dependent (D)`), Principal Full Name, Principal Date of Birth.
+  - Feature 20: Structured allergies integration with categories (Medication, Food, Environmental) and anaphylaxis flags.
+  - Feature 23: 4 core UX states and token compliance.
+
+### 4.4 Portal Web Public Join Suite (`apps/portal-web/tests/joinFlow.test.ts`)
+- **Target Components & Routes:** `/join/[tenantSlug]`, `/join/[tenantSlug]/[facilitySlug]`, `JoinClient.tsx`, `JoinCodeModal.tsx`, `DigitalPassCard.tsx`, `OutsideDocumentDropzone.tsx`, `proxy.ts`
+- **Scope:**
+  - Feature 3: `proxy.ts` Clerk authentication bypass for `/join(.*)` paths.
+  - Feature 13: Complete removal of legacy `/student-intake` files and 404 behavior.
+  - Feature 14: Multi-facility campus/branch selector for `/join/[tenantSlug]`.
+  - Feature 15: Facility pre-selection and lock for `/join/[tenantSlug]/[facilitySlug]`.
+  - Feature 16: Join code gating, URL parameter `?code=...` auto-fill, modal prompt on missing code, expired code rejection.
+  - Feature 17 & 18: Public Mod-11 PIN validation and Member (`MM`) vs Dependent (`DD`) sponsor card.
+  - Feature 19: Dynamic custom fields condition evaluation and cascading select choices.
+  - Feature 20: Public structured allergy recording and visit reason.
+  - Feature 21: File dropzone supporting PDF, JPEG, PNG outside attachments with quarantine disclosure.
+  - Feature 22: Digital Registration Pass rendering queue token (`Q-105`), patient code, and scannable QR ticket.
+  - Feature 23: 4 UX states (Skeleton loading, Empty, Error with retry, Active/Success pass).
 
 ---
 
 ## 5. Test Execution Protocols
 
-### 5.1 Frontend Test Execution
+### 5.1 Backend Interop Hub E2E Suite Execution
 ```bash
-# Run Settings & Template Management tests
-bun test apps/clinic-app/tests/customFieldsTab.test.ts
+# Execute Secured Join Interop Hub E2E Suite
+dotnet test tests/ClinicEz.Interop.E2E/ClinicEz.Interop.E2E.csproj --filter "FullyQualifiedName~PatientJoinFlowTests" -p:TreatWarningsAsErrors=false
 
-# Run Dynamic Intake & Rendering Engine tests
-bun test apps/clinic-app/tests/dynamicCustomFieldsRenderer.test.ts
-
-# Run all clinic-app automated tests
-bun test apps/clinic-app/tests
-
-# Verify Design Token Compliance
-node apps/clinic-app/scripts/check-tokens.mjs --strict
+# Execute all Interop E2E Tests
+dotnet test tests/ClinicEz.Interop.E2E/ClinicEz.Interop.E2E.csproj -p:TreatWarningsAsErrors=false
 ```
 
-### 5.2 Backend Test Execution
+### 5.2 Frontend Clinic App Test Suites Execution
 ```bash
-# Run Custom Fields Backend E2E Suite
-dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~CustomFields"
+# Execute Join Link Settings & Placard Suite
+bun test apps/clinic-app/tests/joinLinkSettings.test.ts
 
-# Run all Clinic Application Tests
-dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj
+# Execute PhilHealth Member Type & Registration Suite
+bun test apps/clinic-app/tests/patientMemberType.test.ts
+
+# Execute all Clinic App automated tests
+bun test apps/clinic-app/tests
+```
+
+### 5.3 Frontend Portal Web Test Suite Execution
+```bash
+# Execute Portal Web Public Join Suite
+bun test apps/portal-web/tests/joinFlow.test.ts
+```
+
+### 5.4 Token Guard & Lint Verification
+```bash
+# Verify Design Token Compliance (0 raw hex codes)
+node apps/clinic-app/scripts/check-tokens.mjs --strict
 ```
 
 ---

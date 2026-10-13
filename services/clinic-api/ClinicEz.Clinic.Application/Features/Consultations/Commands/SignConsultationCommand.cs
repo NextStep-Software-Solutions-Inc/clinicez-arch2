@@ -133,18 +133,45 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         _consultationRepository.Update(encounter);
 
         // Update queue item to Completed
+        QueueItem? queueItem = null;
         if (encounter.QueueItemId.HasValue)
         {
-            var queueItem = await _queueRepository.Query(q => q.Id == encounter.QueueItemId.Value && q.ClinicId == _clinicContext.ClinicId)
+            queueItem = await _queueRepository.Query(q => q.Id == encounter.QueueItemId.Value && q.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        else
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            QueueStatus[] activeStatuses =
+            [
+                QueueStatus.Waiting,
+                QueueStatus.Triaged,
+                QueueStatus.InConsultation,
+                QueueStatus.PendingProcedure,
+                QueueStatus.ReEvaluation,
+                QueueStatus.OnHold
+            ];
+
+            queueItem = await _queueRepository.Query(q =>
+                q.ClinicId == _clinicContext.ClinicId &&
+                q.QueueDate == today &&
+                q.PatientId == encounter.PatientId &&
+                activeStatuses.Contains(q.Status))
+                .OrderByDescending(q => q.CheckInTime)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (queueItem != null)
             {
-                queueItem.Status = QueueStatus.Completed;
-                queueItem.CompletedTime = DateTime.UtcNow;
-                queueItem.UpdatedAt = DateTime.UtcNow;
-                _queueRepository.Update(queueItem);
+                encounter.QueueItemId = queueItem.Id;
             }
+        }
+
+        if (queueItem != null)
+        {
+            queueItem.Status = QueueStatus.Completed;
+            queueItem.CompletedTime = DateTime.UtcNow;
+            queueItem.UpdatedAt = DateTime.UtcNow;
+            _queueRepository.Update(queueItem);
         }
 
         // Update appointment to Completed

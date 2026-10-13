@@ -16,5 +16,6 @@ public enum QueueStatus
     Cancelled = 5,
     NoShow = 6,
     PendingProcedure = 7,
-    ReEvaluation = 8
+    ReEvaluation = 8,
+    OnHold = 9
 }
