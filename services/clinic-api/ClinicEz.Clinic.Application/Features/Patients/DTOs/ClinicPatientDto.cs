@@ -10,7 +10,8 @@ public sealed record MedicalHistoryEntryDto(
     string? SpecificDescription = null,
     DateOnly? OnsetDate = null,
     bool IsResolved = false,
-    string? ClinicalNotes = null);
+    string? ClinicalNotes = null,
+    Guid? Id = null);
 
 public sealed record ClinicPatientDto(
     Guid Id,

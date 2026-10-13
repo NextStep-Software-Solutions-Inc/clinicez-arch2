@@ -393,13 +393,11 @@ export function EditPatientModal({
       bloodType: bloodType.trim() || undefined,
       allergies: allergiesSummary,
       structuredAllergies: structuredAllergies.length > 0 ? structuredAllergies : undefined,
-      chronicConditions: structuredMedicalHistories.length > 0
-        ? formatMedicalHistoriesSummary(structuredMedicalHistories)
-        : chronicConditions.trim() || undefined,
+      chronicConditions: formatMedicalHistoriesSummary(structuredMedicalHistories) || undefined,
       alerts: alerts.trim() || undefined,
       customFields: Object.keys(mergedCustomFields).length > 0 ? mergedCustomFields : undefined,
       verificationStatus: patient.verificationStatus || 'Verified',
-      medicalHistories: structuredMedicalHistories.length > 0 ? structuredMedicalHistories : undefined,
+      medicalHistories: structuredMedicalHistories,
     };
 
     const [updated, err] = await clinicService.updatePatient(patient.id, payload);
@@ -1102,6 +1100,6 @@ const styles = StyleSheet.create({
   },
   quickChipActive: {
     borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight || '#e6f4f2',
+    backgroundColor: theme.colors.primaryLight,
   },
 });

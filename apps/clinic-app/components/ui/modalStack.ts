@@ -9,6 +9,8 @@ export interface ModalStackItem {
   zIndex: number;
   portalEl?: any;
   onClose?: () => void;
+  zIndexOverride?: number;
+  parentDepth?: number;
 }
 
 let modalIdCounter = 0;
@@ -33,7 +35,7 @@ function notifyListeners(): void {
  * In react-native-web, ModalPortal appends a `div` directly to document.body.
  */
 export function findPortalContainer(node: any): any {
-  if (!node || typeof document === 'undefined') return null;
+  if (!node || typeof document === 'undefined' || !document.body) return null;
   let curr = (node as any)?.node || node;
   while (curr && curr.parentNode && curr.parentNode !== document.body) {
     curr = curr.parentNode;
@@ -44,15 +46,28 @@ export function findPortalContainer(node: any): any {
 let isInternalDomMutation = false;
 
 function safeAppendChildToBody(el: any): void {
-  if (typeof document === 'undefined' || !document.body || !el) return;
+  if (
+    typeof document === 'undefined' ||
+    !document.body ||
+    typeof document.body.appendChild !== 'function' ||
+    !el
+  ) {
+    return;
+  }
   if (document.body.lastElementChild === el) return;
   isInternalDomMutation = true;
   try {
     document.body.appendChild(el);
   } finally {
-    queueMicrotask(() => {
-      isInternalDomMutation = false;
-    });
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(() => {
+        isInternalDomMutation = false;
+      });
+    } else {
+      setTimeout(() => {
+        isInternalDomMutation = false;
+      }, 0);
+    }
   }
 }
 
@@ -64,7 +79,9 @@ export function syncPortalZIndex(portalEl: any, zIndex: number): void {
   if (!portalEl || typeof portalEl !== 'object') return;
   try {
     if (portalEl.style) {
-      portalEl.style.position = 'relative';
+      if (portalEl.style.position !== 'relative') {
+        portalEl.style.position = 'relative';
+      }
       if (portalEl.style.zIndex !== String(zIndex)) {
         portalEl.style.zIndex = String(zIndex);
       }
@@ -105,18 +122,22 @@ export function registerModal(
 ): ModalStackItem {
   const existingIdx = activeModalStack.findIndex((m) => m.id === id);
   let priorElement = options?.element;
+  let priorZIndexOverride = options?.zIndexOverride;
+  let priorParentDepth = options?.parentDepth;
   if (existingIdx !== -1) {
     priorElement = priorElement || activeModalStack[existingIdx].portalEl;
+    priorZIndexOverride = priorZIndexOverride ?? activeModalStack[existingIdx].zIndexOverride;
+    priorParentDepth = priorParentDepth ?? activeModalStack[existingIdx].parentDepth;
     activeModalStack.splice(existingIdx, 1);
   }
 
   const minDepth =
-    options?.parentDepth !== undefined && options.parentDepth >= 0
-      ? options.parentDepth + 1
+    priorParentDepth !== undefined && priorParentDepth >= 0
+      ? priorParentDepth + 1
       : 0;
   const depth = Math.max(activeModalStack.length, minDepth);
   const zIndex =
-    options?.zIndexOverride ?? (BASE_MODAL_Z_INDEX + depth * MODAL_Z_INDEX_STEP);
+    priorZIndexOverride ?? (BASE_MODAL_Z_INDEX + depth * MODAL_Z_INDEX_STEP);
 
   const item: ModalStackItem = {
     id,
@@ -124,6 +145,8 @@ export function registerModal(
     zIndex,
     portalEl: priorElement,
     onClose: options?.onClose,
+    zIndexOverride: priorZIndexOverride,
+    parentDepth: priorParentDepth,
   };
 
   activeModalStack.push(item);
@@ -179,8 +202,13 @@ export function unregisterModal(id: string): void {
 
   // Recalculate depth and zIndex for remaining modals
   activeModalStack.forEach((item, index) => {
-    item.depth = index;
-    item.zIndex = BASE_MODAL_Z_INDEX + index * MODAL_Z_INDEX_STEP;
+    const minDepth =
+      item.parentDepth !== undefined && item.parentDepth >= 0
+        ? item.parentDepth + 1
+        : 0;
+    item.depth = Math.max(index, minDepth);
+    item.zIndex =
+      item.zIndexOverride ?? (BASE_MODAL_Z_INDEX + item.depth * MODAL_Z_INDEX_STEP);
     if (item.portalEl) {
       syncPortalZIndex(item.portalEl, item.zIndex);
     }
@@ -200,8 +228,13 @@ export function bringModalToFront(id: string): void {
   activeModalStack.push(item);
 
   activeModalStack.forEach((m, index) => {
-    m.depth = index;
-    m.zIndex = BASE_MODAL_Z_INDEX + index * MODAL_Z_INDEX_STEP;
+    const minDepth =
+      m.parentDepth !== undefined && m.parentDepth >= 0
+        ? m.parentDepth + 1
+        : 0;
+    m.depth = Math.max(index, minDepth);
+    m.zIndex =
+      m.zIndexOverride ?? (BASE_MODAL_Z_INDEX + m.depth * MODAL_Z_INDEX_STEP);
     if (m.portalEl) {
       syncPortalZIndex(m.portalEl, m.zIndex);
     }
@@ -339,12 +372,14 @@ export function useModalStack(
       const unsubscribe = subscribeModalStack(() => {
         const d = getModalStackDepth(modalId);
         if (d !== -1) {
+          const item = activeModalStack[d];
+          const actualDepth = item?.depth ?? d;
           const nextZIndex = options?.zIndex ?? getModalZIndex(modalId);
           const nextIsTop = isTopModal(modalId);
           const nextCount = activeModalStack.length;
           setState((prev) => {
             if (
-              prev.depth === d &&
+              prev.depth === actualDepth &&
               prev.zIndex === nextZIndex &&
               prev.isTop === nextIsTop &&
               prev.stackCount === nextCount
@@ -352,7 +387,7 @@ export function useModalStack(
               return prev;
             }
             return {
-              depth: d,
+              depth: actualDepth,
               zIndex: nextZIndex,
               isTop: nextIsTop,
               stackCount: nextCount,
@@ -418,11 +453,32 @@ let observerInitialized = false;
 let globalObserver: any = null;
 
 export function initModalStackObserver(): () => void {
+  const cleanup = () => {
+    if (globalObserver) {
+      globalObserver.disconnect();
+      globalObserver = null;
+    }
+    observerInitialized = false;
+  };
+
+  if (observerInitialized) {
+    return cleanup;
+  }
   if (
-    observerInitialized ||
     typeof document === 'undefined' ||
     typeof MutationObserver === 'undefined'
   ) {
+    return () => {};
+  }
+  if (!document.body) {
+    // If document.body is not yet ready, defer initialization until DOM is parsed
+    if (typeof document.addEventListener === 'function') {
+      const onReady = () => {
+        document.removeEventListener?.('DOMContentLoaded', onReady);
+        initModalStackObserver();
+      };
+      document.addEventListener('DOMContentLoaded', onReady);
+    }
     return () => {};
   }
   observerInitialized = true;
@@ -436,12 +492,13 @@ export function initModalStackObserver(): () => void {
       const hasDirectBodyChildChanges = mutationsList.some(
         (m) =>
           m.target === document.body &&
-          (m.addedNodes.length > 0 || m.removedNodes.length > 0)
+          ((m.addedNodes?.length ?? 0) > 0 || (m.removedNodes?.length ?? 0) > 0)
       );
 
       const hasUntrackedModalAddition = mutationsList.some((m) => {
-        for (let i = 0; i < m.addedNodes.length; i++) {
-          const node = m.addedNodes[i] as any;
+        const added = m.addedNodes || [];
+        for (let i = 0; i < added.length; i++) {
+          const node = added[i] as any;
           if (node && node.nodeType === 1) {
             if (
               node.getAttribute?.('aria-modal') === 'true' ||
@@ -469,7 +526,7 @@ export function initModalStackObserver(): () => void {
 
     // Scan for all active modal portals in document.body
     const ariaModalElements = Array.from(
-      document.querySelectorAll('[aria-modal="true"]')
+      document.querySelectorAll?.('[aria-modal="true"]') || []
     );
     if (ariaModalElements.length === 0) return;
 
@@ -496,8 +553,8 @@ export function initModalStackObserver(): () => void {
     // Cleanup untracked portals that were unmounted from document.body
     const currentPortals = new Set(
       Array.from(document.body?.children || []).filter((el) =>
-        (el as any).getAttribute?.('aria-modal') === 'true' ||
-        Boolean(el.querySelector?.('[aria-modal="true"]'))
+        (el as any)?.getAttribute?.('aria-modal') === 'true' ||
+        Boolean((el as any)?.querySelector?.('[aria-modal="true"]'))
       )
     );
 
@@ -529,5 +586,11 @@ export function initModalStackObserver(): () => void {
 
 // Auto-initialize in web browser environments
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  initModalStackObserver();
+  if (document.body) {
+    initModalStackObserver();
+  } else if (typeof document.addEventListener === 'function') {
+    document.addEventListener('DOMContentLoaded', () => {
+      initModalStackObserver();
+    });
+  }
 }

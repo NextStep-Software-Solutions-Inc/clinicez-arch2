@@ -1540,6 +1540,198 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
         (globalThis as any).document = originalDoc;
       }
     });
+
+    test('ADV-11: Custom zIndexOverride is preserved across out-of-order unregisterModal and bringModalToFront', () => {
+      const originalDoc = (globalThis as any).document;
+      const mockPortalA: any = {
+        style: { position: '', zIndex: '' },
+        firstElementChild: { style: { zIndex: '' } },
+        querySelector: () => null,
+      };
+      (globalThis as any).document = { body: { children: [], lastElementChild: null } };
+
+      try {
+        // Modal A registered with custom zIndexOverride = 25000
+        const mA = registerModal('modal-custom-z', {
+          zIndexOverride: 25000,
+          element: mockPortalA,
+        });
+        expect(mA.zIndex).toBe(25000);
+        expect(getModalZIndex('modal-custom-z')).toBe(25000);
+        expect(mockPortalA.style.zIndex).toBe('25000');
+
+        // Modal B opens on top (depth 1, zIndex 10100)
+        registerModal('modal-temp-b');
+        expect(getModalZIndex('modal-temp-b')).toBe(10100);
+
+        // Modal C opens on top (depth 2, zIndex 10200)
+        registerModal('modal-temp-c');
+        expect(getModalZIndex('modal-temp-c')).toBe(10200);
+
+        // Modal B unregisters: Modal A must NOT drop back to default 10000
+        unregisterModal('modal-temp-b');
+        expect(getModalZIndex('modal-custom-z')).toBe(25000);
+        expect(mockPortalA.style.zIndex).toBe('25000');
+
+        // Bring Modal A to front: custom zIndexOverride must be retained
+        bringModalToFront('modal-custom-z');
+        expect(getModalZIndex('modal-custom-z')).toBe(25000);
+        expect(mockPortalA.style.zIndex).toBe('25000');
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
+
+    test('ADV-12: parentDepth elevation floor constraint is preserved when intermediate modals close', () => {
+      // Modal 1 opens (level 1, depth 0)
+      registerModal('parent-lvl-1');
+      expect(getModalStackDepth('parent-lvl-1')).toBe(0);
+
+      // Modal 2 opens with parentDepth = 0 (depth 1)
+      registerModal('child-lvl-2', { parentDepth: 0 });
+      expect(getModalStackDepth('child-lvl-2')).toBe(1);
+
+      // Modal 3 opens with parentDepth = 1 (depth 2)
+      registerModal('grandchild-lvl-3', { parentDepth: 1 });
+      expect(getModalStackDepth('grandchild-lvl-3')).toBe(2);
+
+      // Modal 2 closes: Modal 3's minimum depth constraint (minDepth = 2) must be preserved
+      unregisterModal('child-lvl-2');
+      const item3 = getModalStack().find((m) => m.id === 'grandchild-lvl-3');
+      expect(item3).toBeDefined();
+      expect(item3!.depth).toBeGreaterThanOrEqual(2);
+      expect(item3!.zIndex).toBeGreaterThanOrEqual(10200);
+    });
+
+    test('ADV-13: initModalStackObserver safely handles unparsed DOM (document.body === null) without permanently breaking', () => {
+      const originalDoc = (globalThis as any).document;
+      const originalMO = (globalThis as any).MutationObserver;
+
+      let domContentLoadedListener: any = null;
+      let observerAttached = false;
+
+      class MockMO {
+        constructor(public cb: any) {}
+        observe(target: any) {
+          if (!target) throw new TypeError('Target cannot be null');
+          observerAttached = true;
+        }
+        disconnect() {
+          observerAttached = false;
+        }
+      }
+
+      // Step 1: Simulate script execution in <head> where document.body is null
+      (globalThis as any).document = {
+        body: null,
+        addEventListener: (event: string, fn: any) => {
+          if (event === 'DOMContentLoaded') domContentLoadedListener = fn;
+        },
+        removeEventListener: () => {},
+      };
+      (globalThis as any).MutationObserver = MockMO;
+
+      try {
+        const cleanup1 = initModalStackObserver();
+        expect(observerAttached).toBe(false);
+        expect(typeof domContentLoadedListener).toBe('function');
+        cleanup1();
+
+        // Step 2: Simulate document.body being ready on DOMContentLoaded
+        const mockBody = { children: [], lastElementChild: null };
+        (globalThis as any).document.body = mockBody;
+
+        // Trigger DOMContentLoaded listener
+        domContentLoadedListener();
+        expect(observerAttached).toBe(true);
+
+        // Cleanup observer after test
+        initModalStackObserver()();
+        expect(observerAttached).toBe(false);
+      } finally {
+        (globalThis as any).document = originalDoc;
+        (globalThis as any).MutationObserver = originalMO;
+      }
+    });
+
+    test('ADV-14: handleDomMutations safely handles minimal MutationRecord mocks with missing addedNodes/removedNodes', () => {
+      const originalDoc = (globalThis as any).document;
+      const originalMO = (globalThis as any).MutationObserver;
+
+      let observerCallback: any = null;
+      class MinimalMutationObserver {
+        constructor(public cb: any) {
+          observerCallback = cb;
+        }
+        observe() {}
+        disconnect() {}
+      }
+
+      const mockBody: any = { children: [], lastElementChild: null };
+      (globalThis as any).document = { body: mockBody, querySelectorAll: () => [] };
+      (globalThis as any).MutationObserver = MinimalMutationObserver;
+
+      try {
+        const cleanup = initModalStackObserver();
+        // Emit malformed / minimal mutation record without addedNodes or removedNodes
+        expect(() => {
+          observerCallback([
+            {
+              target: mockBody,
+              // missing addedNodes and removedNodes
+            },
+          ]);
+        }).not.toThrow();
+        cleanup();
+      } finally {
+        (globalThis as any).document = originalDoc;
+        (globalThis as any).MutationObserver = originalMO;
+      }
+    });
+
+    test('ADV-15: syncPortalZIndex does not redundantly re-assign style.position if already relative', () => {
+      let positionSetCount = 0;
+      let posValue = 'relative';
+
+      const mockStyle = {
+        get position() {
+          return posValue;
+        },
+        set position(v: string) {
+          positionSetCount++;
+          posValue = v;
+        },
+        zIndex: '10000',
+      };
+
+      const mockPortal = {
+        style: mockStyle,
+        firstElementChild: null,
+        querySelector: () => null,
+      };
+
+      syncPortalZIndex(mockPortal, 10000);
+      expect(positionSetCount).toBe(0);
+    });
+
+    test('ADV-16: Dormant modal suppression in DOM environment produces empty markup', () => {
+      const originalDoc = (globalThis as any).document;
+      try {
+        (globalThis as any).document = { body: { children: [], appendChild: () => {} } };
+
+        const markup = renderToStaticMarkup(
+          React.createElement(Modal, {
+            visible: false,
+            title: 'Dormant Modal',
+            children: React.createElement('div', null, 'Hidden Content'),
+          })
+        );
+        expect(markup).toBe('');
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
   });
 });
+
 

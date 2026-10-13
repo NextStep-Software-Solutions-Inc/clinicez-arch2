@@ -111,24 +111,50 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
             var clinicId = patient.ClinicId != Guid.Empty ? patient.ClinicId : (_clinicContext?.ClinicId ?? Guid.Empty);
             var staffName = _clinicContext?.StaffId?.ToString() ?? "ClinicStaff";
 
-            var incomingKeys = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var matchedExistingIds = new System.Collections.Generic.HashSet<Guid>();
             var updatedEntities = new System.Collections.Generic.List<PatientPastMedicalHistory>();
 
             foreach (var item in request.MedicalHistories)
             {
                 if (string.IsNullOrWhiteSpace(item.ConditionTitle)) continue;
 
-                var key = !string.IsNullOrWhiteSpace(item.PhilHealthMdiseaseCode)
-                    ? $"code:{item.PhilHealthMdiseaseCode.Trim()}"
-                    : $"title:{item.ConditionTitle.Trim()}";
-                incomingKeys.Add(key);
+                PatientPastMedicalHistory? existing = null;
 
-                var existing = existingEntries.FirstOrDefault(e =>
-                    (!string.IsNullOrWhiteSpace(item.PhilHealthMdiseaseCode) && string.Equals(e.PhilHealthMdiseaseCode, item.PhilHealthMdiseaseCode, StringComparison.OrdinalIgnoreCase)) ||
-                    (string.IsNullOrWhiteSpace(item.PhilHealthMdiseaseCode) && string.Equals(e.ConditionTitle, item.ConditionTitle, StringComparison.OrdinalIgnoreCase)));
+                // 1. Match by Id if provided
+                if (item.Id.HasValue && item.Id.Value != Guid.Empty)
+                {
+                    existing = existingEntries.FirstOrDefault(e => e.Id == item.Id.Value && !matchedExistingIds.Contains(e.Id));
+                }
+
+                // 2. If not matched by Id, match statutory code (001-018, excluding 998 Others)
+                if (existing == null && !string.IsNullOrWhiteSpace(item.PhilHealthMdiseaseCode) && item.PhilHealthMdiseaseCode.Trim() != "998")
+                {
+                    var code = item.PhilHealthMdiseaseCode.Trim();
+                    existing = existingEntries.FirstOrDefault(e =>
+                        !matchedExistingIds.Contains(e.Id) &&
+                        string.Equals(e.PhilHealthMdiseaseCode, code, StringComparison.OrdinalIgnoreCase));
+                }
+
+                // 3. If not matched, match by specific description or condition title (for 998 Others or custom diagnoses)
+                if (existing == null)
+                {
+                    var targetTitle = !string.IsNullOrWhiteSpace(item.SpecificDescription)
+                        ? item.SpecificDescription.Trim()
+                        : item.ConditionTitle.Trim();
+
+                    existing = existingEntries.FirstOrDefault(e =>
+                    {
+                        if (matchedExistingIds.Contains(e.Id)) return false;
+                        var existingTitle = !string.IsNullOrWhiteSpace(e.SpecificDescription)
+                            ? e.SpecificDescription.Trim()
+                            : e.ConditionTitle.Trim();
+                        return string.Equals(existingTitle, targetTitle, StringComparison.OrdinalIgnoreCase);
+                    });
+                }
 
                 if (existing != null)
                 {
+                    matchedExistingIds.Add(existing.Id);
                     existing.ConditionTitle = item.ConditionTitle.Trim();
                     existing.PhilHealthMdiseaseCode = item.PhilHealthMdiseaseCode?.Trim();
                     existing.Icd10Code = item.Icd10Code?.Trim();
@@ -145,7 +171,7 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
                 {
                     var newEntity = new PatientPastMedicalHistory
                     {
-                        Id = Guid.NewGuid(),
+                        Id = item.Id.HasValue && item.Id.Value != Guid.Empty ? item.Id.Value : Guid.NewGuid(),
                         TenantId = tenantId,
                         ClinicId = clinicId,
                         PatientId = patient.Id,
@@ -160,25 +186,22 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
                         CreatedBy = staffName
                     };
                     await _medicalRepo.AddAsync(newEntity, ct);
+                    matchedExistingIds.Add(newEntity.Id);
                     updatedEntities.Add(newEntity);
                 }
             }
 
             foreach (var existing in existingEntries)
             {
-                var key = !string.IsNullOrWhiteSpace(existing.PhilHealthMdiseaseCode)
-                    ? $"code:{existing.PhilHealthMdiseaseCode.Trim()}"
-                    : $"title:{existing.ConditionTitle.Trim()}";
-
-                if (!incomingKeys.Contains(key))
+                if (!matchedExistingIds.Contains(existing.Id))
                 {
                     _medicalRepo.Remove(existing);
                 }
             }
 
-            if (request.MedicalHistories.Count > 0)
+            if (updatedEntities.Count > 0)
             {
-                patient.ChronicConditions = string.Join(", ", request.MedicalHistories.Select(i =>
+                patient.ChronicConditions = string.Join(", ", updatedEntities.Select(i =>
                     !string.IsNullOrWhiteSpace(i.SpecificDescription) ? i.SpecificDescription : i.ConditionTitle));
             }
             else
@@ -186,7 +209,11 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
                 patient.ChronicConditions = null;
             }
 
-            patient.PastMedicalHistories = updatedEntities;
+            patient.PastMedicalHistories.Clear();
+            foreach (var entity in updatedEntities)
+            {
+                patient.PastMedicalHistories.Add(entity);
+            }
         }
         else
         {

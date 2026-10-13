@@ -77,6 +77,10 @@ const {
   evaluatePregnancyStatus,
   HIGH_FALL_RISK_REGEX,
   isHighFallRisk,
+  isLimbAlert,
+  isSeizurePrecautions,
+  isCombativeRisk,
+  isMobilityAssist,
 } = await import('../components/chart/PatientSummarySpine');
 
 import type {
@@ -778,6 +782,48 @@ describe('Challenger M3 Empirical Stress Tests — PatientSummarySpine Evaluatio
         ],
       });
       expect(result).toBe(false);
+    });
+  });
+
+  // =========================================================================
+  // 10. Clinical Safety Alert Engines (Limb, Seizure, Combative, Mobility)
+  // =========================================================================
+  describe('10. Clinical Safety Alert Evaluators', () => {
+    test('10.1 isLimbAlert detects Left Arm, Right Arm, Limb Alert, and No BP/IV', () => {
+      expect(isLimbAlert(null)).toBe(false);
+      expect(isLimbAlert('')).toBe(false);
+      expect(isLimbAlert('High Fall Risk')).toBe(false);
+      expect(isLimbAlert('Left Arm Alert (No BP/IV)')).toBe(true);
+      expect(isLimbAlert('Right Arm Alert (No BP/IV)')).toBe(true);
+      expect(isLimbAlert('Patient has limb alert on left side')).toBe(true);
+      expect(isLimbAlert('Strict no BP or IV on right arm')).toBe(true);
+      expect(isLimbAlert('No BP/IV left arm')).toBe(true);
+    });
+
+    test('10.2 isSeizurePrecautions detects seizure precautions', () => {
+      expect(isSeizurePrecautions(null)).toBe(false);
+      expect(isSeizurePrecautions('')).toBe(false);
+      expect(isSeizurePrecautions('High Fall Risk')).toBe(false);
+      expect(isSeizurePrecautions('Seizure Precautions')).toBe(true);
+      expect(isSeizurePrecautions('seizure precaution in effect')).toBe(true);
+    });
+
+    test('10.3 isCombativeRisk detects combative or aggressive behavior risk', () => {
+      expect(isCombativeRisk(null)).toBe(false);
+      expect(isCombativeRisk('')).toBe(false);
+      expect(isCombativeRisk('High Fall Risk')).toBe(false);
+      expect(isCombativeRisk('Combative Risk')).toBe(true);
+      expect(isCombativeRisk('Combative / Aggressive Risk')).toBe(true);
+      expect(isCombativeRisk('Patient has aggressive risk when agitated')).toBe(true);
+    });
+
+    test('10.4 isMobilityAssist detects wheelchair and mobility assist', () => {
+      expect(isMobilityAssist(null)).toBe(false);
+      expect(isMobilityAssist('')).toBe(false);
+      expect(isMobilityAssist('High Fall Risk')).toBe(false);
+      expect(isMobilityAssist('Wheelchair / Mobility Assist')).toBe(true);
+      expect(isMobilityAssist('Requires wheelchair')).toBe(true);
+      expect(isMobilityAssist('Mobility assistance needed')).toBe(true);
     });
   });
 });

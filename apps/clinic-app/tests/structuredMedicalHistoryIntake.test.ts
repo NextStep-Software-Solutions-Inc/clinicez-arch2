@@ -117,7 +117,13 @@ const {
   CLINICAL_ALERT_PRESETS,
 } = await import('../components/patient/ClinicalAlertsSection');
 
-const { isHighFallRisk } = await import('../components/chart/PatientSummarySpine');
+const {
+  isHighFallRisk,
+  isLimbAlert,
+  isSeizurePrecautions,
+  isCombativeRisk,
+  isMobilityAssist,
+} = await import('../components/chart/PatientSummarySpine');
 const { clinicService } = await import('../services/clinicService');
 type MedicalHistoryItem = import('../components/patient/StructuredMedicalHistoryModal').MedicalHistoryItem;
 type RegisterPatientPayload = import('../services/clinicService').RegisterPatientPayload;
@@ -262,6 +268,41 @@ describe('Structured Past Medical History & Clinical Safety Alerts Intake', () =
       expect(isHighFallRisk(alerts)).toBe(false);
     });
 
+    it('toggling Limb Alert presets activates isLimbAlert detector', () => {
+      let alerts = '';
+      expect(isLimbAlert(alerts)).toBe(false);
+
+      alerts = toggleAlertPreset(alerts, 'Left Arm Alert (No BP/IV)');
+      expect(isLimbAlert(alerts)).toBe(true);
+
+      alerts = toggleAlertPreset('', 'Right Arm Alert (No BP/IV)');
+      expect(isLimbAlert(alerts)).toBe(true);
+    });
+
+    it('toggling Seizure Precautions activates isSeizurePrecautions detector', () => {
+      let alerts = '';
+      expect(isSeizurePrecautions(alerts)).toBe(false);
+
+      alerts = toggleAlertPreset(alerts, 'Seizure Precautions');
+      expect(isSeizurePrecautions(alerts)).toBe(true);
+    });
+
+    it('toggling Combative Risk activates isCombativeRisk detector', () => {
+      let alerts = '';
+      expect(isCombativeRisk(alerts)).toBe(false);
+
+      alerts = toggleAlertPreset(alerts, 'Combative Risk');
+      expect(isCombativeRisk(alerts)).toBe(true);
+    });
+
+    it('toggling Wheelchair Assist activates isMobilityAssist detector', () => {
+      let alerts = '';
+      expect(isMobilityAssist(alerts)).toBe(false);
+
+      alerts = toggleAlertPreset(alerts, 'Wheelchair / Mobility Assist');
+      expect(isMobilityAssist(alerts)).toBe(true);
+    });
+
     it('covers all defined safety presets', () => {
       expect(CLINICAL_ALERT_PRESETS.length).toBeGreaterThanOrEqual(8);
       const tags = CLINICAL_ALERT_PRESETS.map((p) => p.tag);
@@ -360,6 +401,25 @@ describe('Structured Past Medical History & Clinical Safety Alerts Intake', () =
       expect(lastPutPayload.medicalHistories).toEqual(medicalHistories);
       expect(lastPutPayload.chronicConditions).toBe('Hypertension, Chronic Kidney Disease Stage 3');
       expect(lastPutPayload.alerts).toBe('High Fall Risk, Wheelchair / Mobility Assist');
+    });
+
+    it('transmits empty medicalHistories array and clears chronicConditions when all conditions removed', async () => {
+      const payload: RegisterPatientPayload = {
+        firstName: 'Maria',
+        lastName: 'Clara',
+        dateOfBirth: '1992-10-04',
+        gender: 'Female',
+        contactNumber: '09187654321',
+        medicalHistories: [],
+        chronicConditions: formatMedicalHistoriesSummary([]),
+        alerts: undefined,
+      };
+
+      const [res, err] = await clinicService.updatePatient('patient-uuid-123', payload);
+      expect(err).toBeNull();
+      expect(res).not.toBeNull();
+      expect(lastPutPayload.medicalHistories).toEqual([]);
+      expect(lastPutPayload.chronicConditions).toBe('');
     });
   });
 

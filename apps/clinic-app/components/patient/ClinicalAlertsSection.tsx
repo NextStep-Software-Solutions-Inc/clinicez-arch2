@@ -135,7 +135,7 @@ export default function ClinicalAlertsSection({
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
-          <Icon name="shield" size={16} color={theme.colors.emergencyText || '#b91c1c'} />
+          <Icon name="shield" size={16} color={theme.colors.emergencyText} />
           <ThemedText variant="captionBold" color={theme.colors.text}>
             Clinical & Safety Alerts
           </ThemedText>
@@ -231,8 +231,8 @@ export default function ClinicalAlertsSection({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff7ed', // Amber/warning tint background
-    borderColor: '#fed7aa',
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
     borderWidth: 1,
     borderRadius: theme.radii.md,
     padding: theme.spacing.sm,
@@ -249,7 +249,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   subtitle: {
-    fontSize: 12,
     marginBottom: 4,
   },
   presetsGrid: {
@@ -271,18 +270,17 @@ const styles = StyleSheet.create({
   },
   presetChipActive: {
     borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight || '#e6f4f2',
+    backgroundColor: theme.colors.primaryLight,
   },
   presetEmergencyActive: {
-    borderColor: theme.colors.emergencyBorder || '#fca5a5',
-    backgroundColor: theme.colors.emergencyBg || '#fef2f2',
+    borderColor: theme.colors.emergencyBorder,
+    backgroundColor: theme.colors.emergencyBg,
   },
   inputBox: {
     marginTop: 4,
   },
   inputLabel: {
     marginBottom: 4,
-    fontSize: 11,
   },
   textInput: {
     backgroundColor: theme.colors.surface,
@@ -291,7 +289,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 6,
-    fontSize: 13,
     color: theme.colors.text,
   },
 });

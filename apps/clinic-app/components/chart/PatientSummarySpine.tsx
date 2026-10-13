@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, Skeleton } from '../ui';
+import type { IconName } from '../ui/Icon';
 import type { BadgeVariant } from '../ui/Badge';
 import { formatLongAge } from '../../utils/age';
 import type {
@@ -247,6 +248,38 @@ export function isHighFallRisk(alertsStr?: string | null): boolean {
   return HIGH_FALL_RISK_REGEX.test(alertsStr);
 }
 
+/**
+ * Evaluates whether an alert string indicates a limb restriction alert (e.g. mastectomy, AV fistula).
+ */
+export function isLimbAlert(alertsStr?: string | null): boolean {
+  if (!alertsStr || typeof alertsStr !== 'string') return false;
+  return /\b(?:(?:left|right)\s+arm\s+alert|limb\s+alert|no\s+bp\s*(?:\/|\s+(?:and|or)\s+|,\s*)?iv)\b/i.test(alertsStr);
+}
+
+/**
+ * Evaluates whether an alert string indicates seizure precautions.
+ */
+export function isSeizurePrecautions(alertsStr?: string | null): boolean {
+  if (!alertsStr || typeof alertsStr !== 'string') return false;
+  return /\bseizure\s+precautions?\b/i.test(alertsStr);
+}
+
+/**
+ * Evaluates whether an alert string indicates combative or aggressive behavior risk.
+ */
+export function isCombativeRisk(alertsStr?: string | null): boolean {
+  if (!alertsStr || typeof alertsStr !== 'string') return false;
+  return /\b(?:combative(?:\s+risk)?|aggressive\s+risk)\b/i.test(alertsStr);
+}
+
+/**
+ * Evaluates whether an alert string indicates wheelchair or mobility assistance requirement.
+ */
+export function isMobilityAssist(alertsStr?: string | null): boolean {
+  if (!alertsStr || typeof alertsStr !== 'string') return false;
+  return /\b(?:wheelchair(?:\s*\/\s*mobility\s+assist)?|mobility\s+assist(?:ance)?)\b/i.test(alertsStr);
+}
+
 export default function PatientSummarySpine({
   patient,
   chart,
@@ -290,6 +323,7 @@ export default function PatientSummarySpine({
   const isSenior = demo?.isSenior || Boolean(seniorId) || age >= 60;
   const pwdId = demo?.pwdId || patient?.pwdId;
   const isPwd = demo?.isPwd || Boolean(pwdId);
+  const alertsStr = demo?.alerts || patient?.alerts || '';
 
   // Latest Vitals
   const latestVitals = vitalsProp || chart?.vitalsHistory?.[0] || null;
@@ -310,7 +344,7 @@ export default function PatientSummarySpine({
 
   // Red Alerts (Zone 4: Anaphylaxis, Fall Risk, Pregnancy)
   const redAlerts = useMemo(() => {
-    const alerts: { title: string; subtitle?: string; icon: 'emergency' | 'alert' }[] = [];
+    const alerts: { title: string; subtitle?: string; icon: IconName }[] = [];
 
     // 1. Anaphylactic & severe allergies
     const structuredAllergies = allergiesProp || chart?.allergies || [];
@@ -358,6 +392,38 @@ export default function PatientSummarySpine({
       alerts.push({
         title: 'PREGNANCY / OB ALERT',
         subtitle: 'Maternal care protocol active • Review teratogenic meds',
+        icon: 'alert',
+      });
+    }
+
+    // 4. Limb Alert (No BP / IV on affected arm)
+    if (isLimbAlert(alertsStr)) {
+      const isLeft = /left arm/i.test(alertsStr);
+      const isRight = /right arm/i.test(alertsStr);
+      let armTitle = 'LIMB ALERT (NO BP/IV)';
+      if (isLeft && !isRight) armTitle = 'LEFT ARM ALERT (NO BP/IV)';
+      else if (isRight && !isLeft) armTitle = 'RIGHT ARM ALERT (NO BP/IV)';
+      alerts.push({
+        title: armTitle,
+        subtitle: 'Do not use affected arm for blood pressure, venipuncture, or IV',
+        icon: 'alertCircle',
+      });
+    }
+
+    // 5. Seizure Precautions
+    if (isSeizurePrecautions(alertsStr)) {
+      alerts.push({
+        title: 'SEIZURE PRECAUTIONS',
+        subtitle: 'Seizure protocol active • Padded side rails / airway support ready',
+        icon: 'zap',
+      });
+    }
+
+    // 6. Combative / Aggressive Risk
+    if (isCombativeRisk(alertsStr)) {
+      alerts.push({
+        title: 'SAFETY ALERT: COMBATIVE RISK',
+        subtitle: 'Staff caution advised • De-escalation precautions in place',
         icon: 'alert',
       });
     }
@@ -554,6 +620,30 @@ export default function PatientSummarySpine({
             variant="info"
             size="sm"
             icon="accessibility"
+          />
+        ) : null}
+        {isMobilityAssist(alertsStr) && !isPwd ? (
+          <Badge
+            label="Wheelchair Assist"
+            variant="info"
+            size="sm"
+            icon="accessibility"
+          />
+        ) : null}
+        {/hearing\s+impaired/i.test(alertsStr) ? (
+          <Badge
+            label="Hearing Impaired"
+            variant="warning"
+            size="sm"
+            icon="info"
+          />
+        ) : null}
+        {/visually\s+impaired/i.test(alertsStr) ? (
+          <Badge
+            label="Visually Impaired"
+            variant="warning"
+            size="sm"
+            icon="eye"
           />
         ) : null}
       </View>

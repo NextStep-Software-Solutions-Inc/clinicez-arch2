@@ -2786,6 +2786,6 @@ const styles = StyleSheet.create({
   },
   quickChipActive: {
     borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight || '#e6f4f2',
+    backgroundColor: theme.colors.primaryLight,
   },
 });

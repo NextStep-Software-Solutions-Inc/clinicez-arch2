@@ -201,7 +201,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
 
                 var history = new PatientPastMedicalHistory
                 {
-                    Id = Guid.NewGuid(),
+                    Id = medReq.Id.HasValue && medReq.Id.Value != Guid.Empty ? medReq.Id.Value : Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,
                     PatientId = patient.Id,

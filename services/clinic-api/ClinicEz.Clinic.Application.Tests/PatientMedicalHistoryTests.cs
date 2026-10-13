@@ -453,4 +453,203 @@ public sealed class PatientMedicalHistoryTests
         dbHistories.Should().HaveCount(2);
         dbHistories.Should().NotContain(m => m.PhilHealthMdiseaseCode == "002");
     }
+
+    [Fact]
+    public async Task UpdateClinicPatient_WithMultipleCustomConditions_PersistsDistinctEntriesWithoutCollision()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+
+        var patientId = Guid.NewGuid();
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-0101",
+            FirstName = "Juan",
+            LastName = "Luna",
+            ContactNumber = "09171234567",
+            DateOfBirth = new DateOnly(1980, 1, 1),
+            Gender = "Male",
+            ChronicConditions = "Chronic Kidney Disease Stage 3, Gout"
+        };
+        await patientRepo.AddAsync(patient);
+
+        var ckd = new PatientPastMedicalHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ConditionTitle = "Others",
+            PhilHealthMdiseaseCode = "998",
+            SpecificDescription = "Chronic Kidney Disease Stage 3",
+            ClinicalNotes = "eGFR 45"
+        };
+        var gout = new PatientPastMedicalHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ConditionTitle = "Others",
+            PhilHealthMdiseaseCode = "998",
+            SpecificDescription = "Gout",
+            ClinicalNotes = "Uric acid 8.5"
+        };
+        await medicalRepo.AddAsync(ckd);
+        await medicalRepo.AddAsync(gout);
+        await uow.SaveChangesAsync();
+
+        var handler = new UpdateClinicPatientCommandHandler(
+            patientRepo,
+            uow,
+            medicalRepo: medicalRepo,
+            clinicContext: _clinicContext);
+
+        // Update: keep CKD with updated note, keep Gout, add Hypothyroidism (new custom condition, code 998)
+        var command = new UpdateClinicPatientCommand(
+            patientId,
+            "Juan",
+            "Luna",
+            null,
+            null,
+            new DateOnly(1980, 1, 1),
+            "Male",
+            "Single",
+            "09171234567",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            MedicalHistories: new List<MedicalHistoryEntryDto>
+            {
+                new("Others", "998", null, "Chronic Kidney Disease Stage 3", null, false, "Updated: eGFR 48 on SGLT2i", Id: ckd.Id),
+                new("Others", "998", null, "Gout", null, false, "Uric acid 8.5", Id: gout.Id),
+                new("Others", "998", null, "Hypothyroidism", null, false, "Levothyroxine 50mcg", Id: null)
+            });
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.PastMedicalHistories.Should().NotBeNull();
+        result.PastMedicalHistories.Should().HaveCount(3);
+        result.PastMedicalHistories!.Should().Contain(m => m.Id == ckd.Id && m.ClinicalNotes == "Updated: eGFR 48 on SGLT2i");
+        result.PastMedicalHistories!.Should().Contain(m => m.Id == gout.Id && m.SpecificDescription == "Gout");
+        result.PastMedicalHistories!.Should().Contain(m => m.SpecificDescription == "Hypothyroidism");
+
+        result.ChronicConditions.Should().Contain("Chronic Kidney Disease Stage 3");
+        result.ChronicConditions.Should().Contain("Gout");
+        result.ChronicConditions.Should().Contain("Hypothyroidism");
+
+        var dbHistories = medicalRepo.Query(m => m.PatientId == patientId).ToList();
+        dbHistories.Should().HaveCount(3);
+        dbHistories.Should().Contain(m => m.SpecificDescription == "Chronic Kidney Disease Stage 3");
+        dbHistories.Should().Contain(m => m.SpecificDescription == "Gout");
+        dbHistories.Should().Contain(m => m.SpecificDescription == "Hypothyroidism");
+    }
+
+    [Fact]
+    public async Task UpdateClinicPatient_ClearingAllConditions_DeletesRelationalRecordsAndNullsChronicConditionsSummary()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+
+        var patientId = Guid.NewGuid();
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-0102",
+            FirstName = "Clara",
+            LastName = "Reyes",
+            ContactNumber = "09170001122",
+            DateOfBirth = new DateOnly(1995, 2, 2),
+            Gender = "Female",
+            ChronicConditions = "Hypertension, Asthma"
+        };
+        await patientRepo.AddAsync(patient);
+
+        var htn = new PatientPastMedicalHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ConditionTitle = "Hypertension",
+            PhilHealthMdiseaseCode = "011"
+        };
+        var asthma = new PatientPastMedicalHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ConditionTitle = "Asthma",
+            PhilHealthMdiseaseCode = "002"
+        };
+        await medicalRepo.AddAsync(htn);
+        await medicalRepo.AddAsync(asthma);
+        await uow.SaveChangesAsync();
+
+        var handler = new UpdateClinicPatientCommandHandler(
+            patientRepo,
+            uow,
+            medicalRepo: medicalRepo,
+            clinicContext: _clinicContext);
+
+        // Cleared by clinician: empty list
+        var command = new UpdateClinicPatientCommand(
+            patientId,
+            "Clara",
+            "Reyes",
+            null,
+            null,
+            new DateOnly(1995, 2, 2),
+            "Female",
+            "Single",
+            "09170001122",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            MedicalHistories: new List<MedicalHistoryEntryDto>());
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.PastMedicalHistories.Should().NotBeNull();
+        result.PastMedicalHistories.Should().BeEmpty();
+        result.ChronicConditions.Should().BeNull();
+
+        var dbHistories = medicalRepo.Query(m => m.PatientId == patientId).ToList();
+        dbHistories.Should().BeEmpty();
+
+        var updatedPatient = patientRepo.Query(p => p.Id == patientId).First();
+        updatedPatient.ChronicConditions.Should().BeNull();
+    }
 }

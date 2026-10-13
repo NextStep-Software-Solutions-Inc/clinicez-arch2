@@ -290,12 +290,20 @@ export default function StructuredMedicalHistoryModal({
   };
 
   const handleAddCustomCondition = () => {
-    if (!customTitle.trim()) return;
+    const trimmedTitle = customTitle.trim();
+    if (!trimmedTitle) return;
+
+    const alreadyExists = selectedConditions.some(
+      (c) =>
+        (c.specificDescription || c.conditionTitle).trim().toLowerCase() ===
+        trimmedTitle.toLowerCase()
+    );
+    if (alreadyExists) return;
 
     const newCond: MedicalHistoryItem = {
-      conditionTitle: customTitle.trim(),
+      conditionTitle: trimmedTitle,
       philHealthMdiseaseCode: '998', // Others
-      specificDescription: customTitle.trim(),
+      specificDescription: trimmedTitle,
       icd10Code: customIcd10.trim() || undefined,
       clinicalNotes: customNotes.trim() || undefined,
     };
@@ -514,7 +522,7 @@ const styles = StyleSheet.create({
   },
   catalogItemActive: {
     borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight || '#e6f4f2',
+    backgroundColor: theme.colors.primaryLight,
   },
   catalogItemContent: {
     flexDirection: 'row',
@@ -524,7 +532,6 @@ const styles = StyleSheet.create({
   },
   catalogItemTitle: {
     flex: 1,
-    fontSize: 13,
   },
   customIntakeSection: {
     backgroundColor: theme.colors.surfaceMuted,
@@ -556,7 +563,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 6,
-    fontSize: 13,
     color: theme.colors.text,
   },
   notesInput: {
@@ -601,7 +607,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   notesText: {
-    fontSize: 11,
     maxWidth: 220,
   },
   pillRemoveBtn: {
