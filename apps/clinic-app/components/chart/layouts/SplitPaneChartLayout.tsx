@@ -268,9 +268,10 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                 CHART NAVIGATION
               </ThemedText>
             </View>
-            <View style={styles.navGroupContainer}>
+            <View style={styles.navCard}>
               {SPLIT_NAV_GROUPS.map((group, groupIdx) => (
-                <View key={group.groupTitle} style={[styles.navGroup, groupIdx > 0 && styles.navGroupSpaced]}>
+                <View key={group.groupTitle} style={styles.navGroup}>
+                  {groupIdx > 0 ? <View style={styles.navDivider} /> : null}
                   <View style={styles.navGroupHeader}>
                     <ThemedText
                       variant="captionBold"
@@ -563,17 +564,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  navGroupContainer: {
-    gap: theme.spacing.xs,
+  navCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.xs,
+    ...theme.shadows.sm,
   },
   navGroup: {
     gap: 2,
   },
-  navGroupSpaced: {
-    marginTop: theme.spacing.xs,
+  navDivider: {
+    height: 1,
+    backgroundColor: theme.colors.borderLight,
+    marginVertical: theme.spacing.xs,
+    marginHorizontal: theme.spacing.xs,
   },
   navGroupHeader: {
-    paddingHorizontal: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
     paddingTop: theme.spacing.xs,
     paddingBottom: 2,
   },
@@ -594,14 +603,13 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.transparent,
   },
   navItemActive: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primaryBorder,
     borderLeftWidth: 3,
     borderLeftColor: theme.colors.primary,
-    ...theme.shadows.sm,
   },
   navItemPressed: {
-    backgroundColor: theme.colors.surfaceHighlight,
+    backgroundColor: theme.colors.surfaceSubtle,
     opacity: 0.85,
   },
   navItemLeft: {
@@ -614,7 +622,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   navBadge: {
-    backgroundColor: theme.colors.surfaceHighlight,
+    backgroundColor: theme.colors.surfaceSubtle,
     paddingHorizontal: theme.spacing.xs + 2,
     paddingVertical: 1,
     borderRadius: theme.radii.full,
@@ -625,7 +633,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   navBadgeActive: {
-    backgroundColor: theme.colors.primaryLight,
+    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.primaryBorder,
   },
   navBadgeText: {
