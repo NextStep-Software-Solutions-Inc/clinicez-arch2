@@ -44,6 +44,14 @@ export function isJoinCodeActive(
   return expiry.getTime() > Date.now();
 }
 
+export function formatReceptionCodeUrl(
+  baseUrl: string,
+  code: string
+): string {
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  return `${cleanBase}/join/${encodeURIComponent(code.trim())}`;
+}
+
 export function formatReceptionQrUrl(
   baseUrl: string,
   tenantSlug: string,

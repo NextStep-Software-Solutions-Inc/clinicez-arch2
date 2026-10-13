@@ -15,7 +15,7 @@ export function resolveJoinRoute(
   searchParams: URLSearchParams
 ): {
   isJoinRoute: boolean;
-  routeType: "tenant-picker" | "locked-facility" | "unknown";
+  routeType: "code-join" | "tenant-picker" | "locked-facility" | "unknown";
   tenantSlug?: string;
   facilitySlug?: string;
   joinCode?: string;
@@ -37,6 +37,14 @@ export function resolveJoinRoute(
       isJoinRoute: true,
       routeType: "tenant-picker",
       tenantSlug: matchTenant[1],
+      joinCode: searchParams.get("code") || undefined,
+    };
+  }
+
+  if (pathname === "/join" || pathname === "/join/") {
+    return {
+      isJoinRoute: true,
+      routeType: "code-join",
       joinCode: searchParams.get("code") || undefined,
     };
   }

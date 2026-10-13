@@ -19,6 +19,7 @@ import {
   generateRandomJoinCode,
   computeJoinCodeExpiration,
   isJoinCodeActive,
+  formatReceptionCodeUrl,
   formatReceptionQrUrl,
   formatJoinCodeExpiration,
   ExpirationWindow,
@@ -86,10 +87,13 @@ export default function JoinLinkSettingsCard({
   // Derive destination join URL
   const destinationUrl = useMemo<string>(() => {
     const portalBase = getSetting('EXPO_PUBLIC_PORTAL_URL') || 'https://portal.clinicez.ph';
+    if (joinCode && joinCode.trim()) {
+      return formatReceptionCodeUrl(portalBase, joinCode);
+    }
     const ctx = resolveTenantContext();
     const tenantSlug = ctx.tenantSlug || settings?.tenantId || 'clinic';
     const facilitySlug = ctx.facilitySlug || 'main';
-    return formatReceptionQrUrl(portalBase, tenantSlug, facilitySlug, joinCode);
+    return formatReceptionQrUrl(portalBase, tenantSlug, facilitySlug);
   }, [settings, joinCode]);
 
   // Actions

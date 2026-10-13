@@ -22,7 +22,7 @@ import {
   buildQrPathData,
   buildQrSvgString,
 } from "../src/components/join/qrGenerator";
-import { INSTITUTIONAL_CUSTOM_FIELDS } from "../src/app/join/[tenantSlug]/[facilitySlug]/JoinClient";
+import { INSTITUTIONAL_CUSTOM_FIELDS } from "../src/components/join/JoinClient";
 
 describe("Adversarial Suite 1: PhilHealth Mod-11 Check Digit Exhaustion (All 11 Remainder Cases)", () => {
   /**

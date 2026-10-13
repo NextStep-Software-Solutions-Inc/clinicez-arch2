@@ -1,51 +1,71 @@
-# BRIEFING — 2026-10-13T08:39:35Z
+# BRIEFING — 2026-10-13T08:56:00Z
 
 ## Mission
-Deliver a robust Outpatient Department (OPD) Queue Management System for ClinicEZ that prevents duplicate tickets, blocks check-in spam, enforces active queue uniqueness, introduces complete absence and hold controls (No-Show, On Hold, Cancel/Walkout, Re-activate), and establishes an automated visit completion lifecycle.
+Refactor the ClinicEZ patient unique identifier (`PAT-`) generation in `services/clinic-api` into a centralized, atomic $O(1)$ collision-resistant sequence generator service with optimistic retry handling and standardized external intake prefixes (`PAT-EXT-`).
 
 ## 🔒 My Identity
 - Archetype: sentinel
 - Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\sentinel
-- Orchestrator: 4333d16c-80b9-428e-8d35-8a816a19b65e (orchestrator_12)
-- Victory Auditor: 850f9cab-ccf8-40ab-ac5c-f5ebeccdeea2 (victory_auditor_8)
-- Active Project Orchestrator: 4333d16c-80b9-428e-8d35-8a816a19b65e (orchestrator_12)
+- Orchestrator: 94a3832b-ed30-4820-9f84-6d2e4c185702 (swe_2)
+- Victory Auditor: c9249d36-a8d7-4cb0-a250-7983079fd5b1 (victory_auditor_6)
+- Active SWE Orchestrator: 94a3832b-ed30-4820-9f84-6d2e4c185702 (swe_2)
+- Active Project Orchestrator: a419699d-6150-4b80-b4d3-89c009c6cc39 (orchestrator_11)
+- Victory Auditor: to be spawned on victory claim
+- Active SWE Orchestrator (swe_3): 7d895f5c-242f-4646-b9c2-761f41034903
+- Victory Auditor (victory_auditor_9): e910a86e-47eb-4204-840a-f12e62fa1b6f
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
 - Victory Audit is MANDATORY before reporting completion
 - Keep context ultra-light
 - Route to SWE Light (`teamwork_preview_swe`) for single self-contained focused fix
-- Route to General (`teamwork_preview_orchestrator`) for multi-part OPD Queue Management System implementation
-- Active Queue Guardrail & Anti-Spam Check-In (R1)
-- Absence & Queue Exception Controls (No-Show, On Hold, Cancel, Re-activate) (R2)
-- Queue Metrics Integrity & Lifecycle Auto-Closure (R3)
+- Suppress dormant modal portal mounting when visible=false (R1)
+- Guard modal portal elevation against internal tab rerenders (R2)
+- Seamless tab transitions without backdrop flash or fade-in restarts (R3)
+- Preserve multi-level modal layering and z-index (R4)
+- Verification: modalStacking.test.ts passes, test:clinic passes, typecheck:clinic passes
+- Route to General (`teamwork_preview_orchestrator`) for multi-part secured clinic join link implementation
+- Asynchronous Interop Hub relay (`patient.join.requested`) from Party.Portal to Party.ForFacility(Clinic)
+- External document quarantine (`ClinicRecordAttachments` with PendingVerification)
+- Join Code configuration with expiration windows in clinic-app
+- PhilHealth Member Type integration (MM vs DD) and Mod-11 validation
+- Complete removal of `/student-intake` route
+- Design system compliance with `@clinicez/design-tokens`
+- Route to SWE Light (`teamwork_preview_swe`) for single self-contained patient code sequence generator refactor
+- Centralized sequence generator IPatientCodeGenerator replacing in-memory table scans
+- Persistent atomic sequence tracker entity/table scoped to clinic and year
+- Optimistic retry mechanism (up to 3 times) for concurrency protection
+- External Interop intake prefix PAT-EXT-{yyyyMMdd}-{GUID_SHORT}
+- Verification: dotnet test PatientCodeSequence passes with 0 failures, full ClinicEz.Clinic.Application.Tests pass
 
 ## User Context
-- **Last user request**: Deliver a robust Outpatient Department (OPD) Queue Management System for ClinicEZ with duplicate prevention, absence controls, and visit lifecycle completion.
+- **Last user request**: Refactor patient identifier (`PAT-`) generation in `services/clinic-api` to atomic $O(1)$ collision-resistant sequence generator service with optimistic retries and external prefix `PAT-EXT-`.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` (timestamp `## 2026-10-13T06:46:20Z`).
-  - Evaluated routing: General path (`teamwork_preview_orchestrator`).
-  - Created working directory and dispatch spec `c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_12\DISPATCH.md`.
-  - Dispatched Project Orchestrator `4333d16c-80b9-428e-8d35-8a816a19b65e` (`orchestrator_12`).
-  - Orchestrator reported victory claim following unanimous 5/5 verification gates.
-  - Dispatched independent Victory Auditor `850f9cab-ccf8-40ab-ac5c-f5ebeccdeea2` (`victory_auditor_8`).
+  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` (timestamp `## 2026-10-13T06:40:47Z`).
+  - Evaluated routing: SWE Light path (`teamwork_preview_swe`).
+  - Created working directory and dispatch spec `c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\swe_3\DISPATCH.md`.
+  - Dispatched SWE Light Orchestrator `7d895f5c-242f-4646-b9c2-761f41034903` (`swe_3`).
+  - Monitored execution across 17 iterations through Implementer R0, Reviewer R1, Reviewer R2, Reviewer R3, and internal auditor.
+  - Received formal victory claim from `swe_3`.
+  - Dispatched independent Sentinel Victory Auditor `victory_auditor_9` (`e910a86e-47eb-4204-840a-f12e62fa1b6f`).
+  - Independent post-victory audit concluded with **VICTORY CONFIRMED**.
+  - All background cron tasks cancelled and subagents cleaned up.
 
 ## Project Status
-- **Phase**: auditing
-- **Route**: General -> teamwork_preview_orchestrator (orchestrator_12: `4333d16c-80b9-428e-8d35-8a816a19b65e`)
-- **Active Subagents**: `850f9cab-ccf8-40ab-ac5c-f5ebeccdeea2` (Victory Auditor)
-- **Active Tasks**: `task-24` (cron 1), `task-26` (cron 2)
+- **Phase**: complete
+- **Route**: SWE Light -> teamwork_preview_swe (swe_3: `7d895f5c-242f-4646-b9c2-761f41034903`)
+- **Active Subagents**: none (cleaned up)
+- **Active Tasks**: none (cleaned up)
 
 ## Victory Audit Status
 - **Triggered**: yes
-- **Verdict**: pending
+- **Verdict**: VICTORY CONFIRMED
 - **Retry count**: 0
 
 ## Artifact Index
 - c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\ORIGINAL_REQUEST.md — Authoritative record of user requests
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_12\DISPATCH.md — Project Orchestrator dispatch instructions
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_12\PROJECT.md — Architecture & Feature Inventory
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_12\GATE_STATUS.md — Verification Gate tracker
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_12\handoff.md — Master completion handoff report
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\victory_auditor_8\DISPATCH.md — Victory Auditor dispatch specification
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\swe_3\DISPATCH.md — SWE Light Orchestrator dispatch instructions
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\swe_3\handoff.md — Orchestrator handoff report
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\victory_auditor_9\handoff.md — Independent Victory Auditor report
+- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\sentinel\handoff.md — Sentinel handoff report

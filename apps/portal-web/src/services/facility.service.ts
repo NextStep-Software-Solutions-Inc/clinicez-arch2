@@ -109,11 +109,6 @@ export const facilityService = {
     return parseWire(z.array(workspaceFacilitySchema), res.data, "facility list");
   },
 
-  getPublicClinicFacilities: async (tenantSlug: string): Promise<WorkspaceFacility[]> => {
-    const res = await apiClient.get<unknown>(`/public/join/${encodeURIComponent(tenantSlug)}/facilities`);
-    return parseWire(z.array(workspaceFacilitySchema), res.data, "public clinic facilities");
-  },
-
   createFacility: async (payload: CreateFacilityPayload): Promise<CreateFacilityResult> => {
     const res = await apiClient.post<unknown>("/facilities", payload);
     return parseWire(createFacilityResultSchema, res.data, "facility");
