@@ -48,6 +48,13 @@ import StructuredAllergyIntakeModal, {
   AllergyPillList,
   CreateAllergyRequest,
 } from '../../components/patient/StructuredAllergyIntakeModal';
+import StructuredMedicalHistoryModal, {
+  MedicalHistoryPillList,
+  MedicalHistoryItem,
+  PHILHEALTH_QUICK_CONDITIONS,
+  formatMedicalHistoriesSummary,
+} from '../../components/patient/StructuredMedicalHistoryModal';
+import ClinicalAlertsSection from '../../components/patient/ClinicalAlertsSection';
 import EditPatientModal from '../../components/patient/EditPatientModal';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
 import { formatLongAge } from '../../utils/age';
@@ -133,6 +140,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formBloodType, setFormBloodType] = useState('');
   const [formAllergies, setFormAllergies] = useState('');
   const [formChronicConditions, setFormChronicConditions] = useState('');
+  const [formMedicalHistories, setFormMedicalHistories] = useState<MedicalHistoryItem[]>([]);
+  const [medicalHistoryModalVisible, setMedicalHistoryModalVisible] = useState(false);
   const [formAlerts, setFormAlerts] = useState('');
   const [isPinValid, setIsPinValid] = useState<boolean | null>(null);
   const [structuredAllergies, setStructuredAllergies] = useState<CreateAllergyRequest[]>([]);
@@ -141,6 +150,25 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formTriagePriority, setFormTriagePriority] = useState<'Routine' | 'Urgent' | 'Emergency'>('Routine');
   const [formPatientCode, setFormPatientCode] = useState('');
   const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>({});
+
+  const toggleQuickCondition = (code: string, title: string) => {
+    setFormMedicalHistories((prev) => {
+      const exists = prev.some(
+        (c) =>
+          c.philHealthMdiseaseCode === code ||
+          c.conditionTitle.trim().toLowerCase() === title.trim().toLowerCase()
+      );
+      if (exists) {
+        return prev.filter(
+          (c) =>
+            c.philHealthMdiseaseCode !== code &&
+            c.conditionTitle.trim().toLowerCase() !== title.trim().toLowerCase()
+        );
+      } else {
+        return [...prev, { conditionTitle: title, philHealthMdiseaseCode: code }];
+      }
+    });
+  };
 
   const clearFieldError = (field: string) => {
     setFormFieldErrors((prev) => {
@@ -337,11 +365,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       pwdId: formPwdId.trim() || undefined,
       bloodType: formBloodType || undefined,
       allergies: allergiesSummary,
-      chronicConditions: formChronicConditions.trim() || undefined,
+      chronicConditions: formMedicalHistories.length > 0
+        ? formatMedicalHistoriesSummary(formMedicalHistories)
+        : formChronicConditions.trim() || undefined,
       alerts: formAlerts.trim() || undefined,
       customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
       verificationStatus: 'Verified',
       structuredAllergies: structuredAllergies.length > 0 ? structuredAllergies : undefined,
+      medicalHistories: formMedicalHistories.length > 0 ? formMedicalHistories : undefined,
       sendToTriage,
       priority: sendToTriage ? formTriagePriority : 'Routine',
       chiefComplaint: sendToTriage && formChiefComplaint.trim() ? formChiefComplaint.trim() : undefined,
@@ -439,6 +470,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormBloodType('');
     setFormAllergies('');
     setFormChronicConditions('');
+    setFormMedicalHistories([]);
+    setMedicalHistoryModalVisible(false);
     setFormAlerts('');
     setDynamicFieldValues({});
     setStructuredAllergies([]);
@@ -1355,16 +1388,64 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 />
               </View>
 
-              <View>
-                <ThemedText style={styles.inputLabel}>Chronic Conditions & Medical Alerts</ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. Hypertension, Diabetes, High fall risk"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={formChronicConditions}
-                  onChangeText={setFormChronicConditions}
+              {/* Section 1: Past Medical History & Chronic Conditions */}
+              <View style={styles.formSectionBox}>
+                <View style={styles.sectionHeaderBetween}>
+                  <View style={styles.sectionHeaderLeft}>
+                    <Icon name="medical" size={16} color={theme.colors.primary} />
+                    <ThemedText style={styles.inputLabel}>
+                      Past Medical History & Chronic Conditions
+                    </ThemedText>
+                  </View>
+                  <Button
+                    title="+ Add / Select Condition"
+                    variant="outline"
+                    size="sm"
+                    onPress={() => setMedicalHistoryModalVisible(true)}
+                  />
+                </View>
+
+                {/* Quick Chips Row */}
+                <View style={styles.quickChipsRow}>
+                  {PHILHEALTH_QUICK_CONDITIONS.map((qc) => {
+                    const isSelected = formMedicalHistories.some(
+                      (c) =>
+                        c.philHealthMdiseaseCode === qc.code ||
+                        c.conditionTitle.trim().toLowerCase() === qc.title.trim().toLowerCase()
+                    );
+                    return (
+                      <Pressable
+                        key={qc.code}
+                        style={[styles.quickChip, isSelected && styles.quickChipActive]}
+                        onPress={() => toggleQuickCondition(qc.code, qc.title)}
+                      >
+                        <ThemedText
+                          variant={isSelected ? 'captionBold' : 'caption'}
+                          color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
+                        >
+                          {qc.label}
+                        </ThemedText>
+                        {isSelected ? (
+                          <Icon name="check" size={12} color={theme.colors.primary} />
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <MedicalHistoryPillList
+                  items={formMedicalHistories}
+                  onRemove={(index) => {
+                    setFormMedicalHistories((prev) => prev.filter((_, i) => i !== index));
+                  }}
                 />
               </View>
+
+              {/* Section 2: Dedicated Clinical & Safety Alerts */}
+              <ClinicalAlertsSection
+                alerts={formAlerts}
+                onChangeAlerts={setFormAlerts}
+              />
 
               {/* Walk-in Triage Routing Box */}
               <View style={styles.triageRoutingBox}>
@@ -1417,6 +1498,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         onClose={() => setAllergyModalVisible(false)}
         allergies={structuredAllergies}
         onChange={setStructuredAllergies}
+      />
+
+      {/* Structured Medical History Intake Sub-Modal */}
+      <StructuredMedicalHistoryModal
+        visible={medicalHistoryModalVisible}
+        onClose={() => setMedicalHistoryModalVisible(false)}
+        conditions={formMedicalHistories}
+        onChange={setFormMedicalHistories}
       />
 
       {/* Patient Longitudinal Chart Workstation Modal */}
@@ -2663,5 +2752,40 @@ const styles = StyleSheet.create({
   },
   disabledBtn: {
     opacity: 0.6,
+  },
+  formSectionBox: {
+    gap: theme.spacing.xs,
+  },
+  sectionHeaderBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  quickChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 6,
+  },
+  quickChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: theme.radii.full || 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 4,
+  },
+  quickChipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight || '#e6f4f2',
   },
 });

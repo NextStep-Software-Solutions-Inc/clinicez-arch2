@@ -16,6 +16,7 @@ export interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
   helperText?: string;
+  disabled?: boolean;
   /** IconName (e.g. "search"). Legacy emoji glyphs are still resolved for old call sites. */
   leftIcon?: string;
   rightIcon?: string;
@@ -30,6 +31,7 @@ export default function Input({
   label,
   error,
   helperText,
+  disabled,
   leftIcon,
   rightIcon,
   onRightIconPress,
@@ -39,9 +41,11 @@ export default function Input({
   inputRef,
   onFocus,
   onBlur,
+  editable,
   ...rest
 }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const isEditable = disabled !== undefined ? !disabled : (editable ?? true);
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -56,6 +60,7 @@ export default function Input({
         style={[
           styles.inputWrapper,
           isFocused && styles.inputFocused,
+          disabled ? styles.inputDisabled : null,
           error ? styles.inputError : null,
           rest.multiline ? styles.inputMultiline : null,
         ]}
@@ -68,6 +73,7 @@ export default function Input({
 
         <TextInput
           ref={inputRef}
+          editable={isEditable}
           style={[styles.input, inputStyle]}
           placeholderTextColor={theme.colors.textLight}
           onFocus={(e) => {
@@ -129,6 +135,10 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.surface,
+  },
+  inputDisabled: {
+    opacity: 0.6,
+    backgroundColor: theme.colors.surfaceSubtle,
   },
   inputError: {
     borderColor: theme.colors.emergency,

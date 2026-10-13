@@ -1399,6 +1399,7 @@ export interface ClinicPatient {
   createdAt: string;
   activeQueueTicket?: string | null;
   activeQueueItemId?: string | null;
+  pastMedicalHistories?: MedicalHistoryItemPayload[];
 }
 
 export interface DuplicateMatch {
@@ -1435,6 +1436,17 @@ export interface CreateAllergyPayload {
   notes?: string | null;
 }
 
+export interface MedicalHistoryItemPayload {
+  id?: string;
+  conditionTitle: string;
+  philHealthMdiseaseCode?: string | null;
+  icd10Code?: string | null;
+  specificDescription?: string | null;
+  onsetDate?: string | null;
+  isResolved?: boolean;
+  clinicalNotes?: string | null;
+}
+
 export interface RegisterPatientPayload {
   firstName: string;
   lastName: string;
@@ -1462,6 +1474,7 @@ export interface RegisterPatientPayload {
   customFields?: Record<string, any>;
   verificationStatus?: string;
   structuredAllergies?: CreateAllergyPayload[];
+  medicalHistories?: MedicalHistoryItemPayload[];
   sendToTriage?: boolean;
   priority?: 'Routine' | 'Urgent' | 'Emergency' | 'Normal';
   chiefComplaint?: string;

@@ -31,7 +31,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
 
     public async Task<IReadOnlyList<ClinicPatientDto>> Handle(GetClinicPatientsQuery request, CancellationToken ct)
     {
-        var query = _patientRepo.Query().AsNoTracking();
+        IQueryable<ClinicPatient> query = _patientRepo.Query().AsNoTracking().Include(p => p.PastMedicalHistories);
 
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))
         {

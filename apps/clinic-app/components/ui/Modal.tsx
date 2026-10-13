@@ -80,6 +80,11 @@ export default function Modal({
     }
   };
 
+  // Suppress dormant modal portal mounting in DOM environments (R1)
+  if (!visible && typeof document !== 'undefined') {
+    return null;
+  }
+
   return (
     <RNModal
       visible={visible}

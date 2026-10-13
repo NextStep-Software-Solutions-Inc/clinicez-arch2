@@ -57,28 +57,37 @@ function safeAppendChildToBody(el: any): void {
 }
 
 /**
+ * Synchronizes zIndex styles across the portal container, the react-native-web
+ * animation container, and the inner aria-modal content element.
+ */
+export function syncPortalZIndex(portalEl: any, zIndex: number): void {
+  if (!portalEl || typeof portalEl !== 'object') return;
+  try {
+    if (portalEl.style) {
+      portalEl.style.position = 'relative';
+      if (portalEl.style.zIndex !== String(zIndex)) {
+        portalEl.style.zIndex = String(zIndex);
+      }
+    }
+    const animContainer = portalEl.firstElementChild;
+    if (animContainer?.style && animContainer.style.zIndex !== String(zIndex)) {
+      animContainer.style.zIndex = String(zIndex);
+    }
+    const modalContent = portalEl.querySelector?.('[aria-modal="true"]');
+    if (modalContent?.style && modalContent.style.zIndex !== String(zIndex)) {
+      modalContent.style.zIndex = String(zIndex);
+    }
+  } catch {}
+}
+
+/**
  * Ensures the modal portal DOM node is styled with the assigned zIndex
  * and moved to the end of document.body so it renders cleanly above prior modals.
  */
 export function bringPortalToFront(portalEl: any, zIndex: number): void {
   if (!portalEl || typeof document === 'undefined' || !document.body) return;
-  try {
-    portalEl.style.position = 'relative';
-    portalEl.style.zIndex = String(zIndex);
-
-    // react-native-web ModalAnimation container has position: fixed and hardcoded zIndex: 9999
-    const animContainer = portalEl.firstElementChild;
-    if (animContainer && animContainer.style) {
-      animContainer.style.zIndex = String(zIndex);
-    }
-
-    const modalContent = portalEl.querySelector?.('[aria-modal="true"]');
-    if (modalContent && modalContent.style) {
-      modalContent.style.zIndex = String(zIndex);
-    }
-
-    safeAppendChildToBody(portalEl);
-  } catch {}
+  syncPortalZIndex(portalEl, zIndex);
+  safeAppendChildToBody(portalEl);
 }
 
 /**
@@ -134,10 +143,15 @@ export function registerModal(
 
 /**
  * Attaches a DOM portal element to an already registered modal item.
+ * Guards against re-elevating or re-ordering portals that are already attached,
+ * preventing visual flicker, animation restarts, and DOM thrashing.
  */
 export function attachPortalElement(id: string, portalEl: any): void {
   const item = activeModalStack.find((m) => m.id === id);
   if (!item) return;
+  const isAlreadyAttached =
+    item.portalEl === portalEl &&
+    (typeof document === 'undefined' || !document.body || portalEl.parentNode === document.body);
   item.portalEl = portalEl;
   if (portalEl && typeof portalEl === 'object') {
     try {
@@ -145,7 +159,12 @@ export function attachPortalElement(id: string, portalEl: any): void {
         portalEl.dataset.clinicezModalId = id;
       }
     } catch {}
-    bringPortalToFront(portalEl, item.zIndex);
+    if (!isAlreadyAttached) {
+      bringPortalToFront(portalEl, item.zIndex);
+    } else {
+      // Synchronize zIndex styles without re-ordering or detaching from DOM
+      syncPortalZIndex(portalEl, item.zIndex);
+    }
   }
 }
 
@@ -163,12 +182,7 @@ export function unregisterModal(id: string): void {
     item.depth = index;
     item.zIndex = BASE_MODAL_Z_INDEX + index * MODAL_Z_INDEX_STEP;
     if (item.portalEl) {
-      try {
-        item.portalEl.style.zIndex = String(item.zIndex);
-        if (item.portalEl.firstElementChild?.style) {
-          item.portalEl.firstElementChild.style.zIndex = String(item.zIndex);
-        }
-      } catch {}
+      syncPortalZIndex(item.portalEl, item.zIndex);
     }
   });
 
@@ -189,12 +203,7 @@ export function bringModalToFront(id: string): void {
     m.depth = index;
     m.zIndex = BASE_MODAL_Z_INDEX + index * MODAL_Z_INDEX_STEP;
     if (m.portalEl) {
-      try {
-        m.portalEl.style.zIndex = String(m.zIndex);
-        if (m.portalEl.firstElementChild?.style) {
-          m.portalEl.firstElementChild.style.zIndex = String(m.zIndex);
-        }
-      } catch {}
+      syncPortalZIndex(m.portalEl, m.zIndex);
     }
   });
 
@@ -326,38 +335,69 @@ export function useModalStack(
         isTop: true,
         stackCount: activeModalStack.length,
       });
+
+      const unsubscribe = subscribeModalStack(() => {
+        const d = getModalStackDepth(modalId);
+        if (d !== -1) {
+          const nextZIndex = options?.zIndex ?? getModalZIndex(modalId);
+          const nextIsTop = isTopModal(modalId);
+          const nextCount = activeModalStack.length;
+          setState((prev) => {
+            if (
+              prev.depth === d &&
+              prev.zIndex === nextZIndex &&
+              prev.isTop === nextIsTop &&
+              prev.stackCount === nextCount
+            ) {
+              return prev;
+            }
+            return {
+              depth: d,
+              zIndex: nextZIndex,
+              isTop: nextIsTop,
+              stackCount: nextCount,
+            };
+          });
+        } else {
+          setState((prev) => {
+            if (!prev.isTop && prev.depth === 0 && prev.stackCount === activeModalStack.length) {
+              return prev;
+            }
+            return {
+              ...prev,
+              depth: 0,
+              isTop: false,
+              stackCount: activeModalStack.length,
+            };
+          });
+        }
+      });
+
+      return () => {
+        unregisterModal(modalId);
+        unsubscribe();
+      };
     } else {
       unregisterModal(modalId);
-      setState({
-        depth: 0,
-        zIndex: options?.zIndex ?? BASE_MODAL_Z_INDEX,
-        isTop: false,
-        stackCount: activeModalStack.length,
+      setState((prev) => {
+        const nextZIndex = options?.zIndex ?? BASE_MODAL_Z_INDEX;
+        const nextCount = activeModalStack.length;
+        if (
+          prev.depth === 0 &&
+          prev.zIndex === nextZIndex &&
+          !prev.isTop &&
+          prev.stackCount === nextCount
+        ) {
+          return prev;
+        }
+        return {
+          depth: 0,
+          zIndex: nextZIndex,
+          isTop: false,
+          stackCount: nextCount,
+        };
       });
     }
-
-    const unsubscribe = subscribeModalStack(() => {
-      const d = getModalStackDepth(modalId);
-      if (d !== -1) {
-        setState({
-          depth: d,
-          zIndex: options?.zIndex ?? getModalZIndex(modalId),
-          isTop: isTopModal(modalId),
-          stackCount: activeModalStack.length,
-        });
-      } else {
-        setState((prev) => ({
-          ...prev,
-          stackCount: activeModalStack.length,
-          isTop: false,
-        }));
-      }
-    });
-
-    return () => {
-      unregisterModal(modalId);
-      unsubscribe();
-    };
   }, [visible, modalId, options?.zIndex, context.parentDepth]);
 
   return {
@@ -387,8 +427,45 @@ export function initModalStackObserver(): () => void {
   }
   observerInitialized = true;
 
-  const handleDomMutations = () => {
+  const handleDomMutations = (mutationsList?: MutationRecord[]) => {
     if (isInternalDomMutation || !document.body) return;
+
+    if (mutationsList && mutationsList.length > 0) {
+      // Guard against internal subtree mutations within active modal portals (e.g. tab switching).
+      // Only elevate or re-order when direct body children change or an untracked modal is mounted.
+      const hasDirectBodyChildChanges = mutationsList.some(
+        (m) =>
+          m.target === document.body &&
+          (m.addedNodes.length > 0 || m.removedNodes.length > 0)
+      );
+
+      const hasUntrackedModalAddition = mutationsList.some((m) => {
+        for (let i = 0; i < m.addedNodes.length; i++) {
+          const node = m.addedNodes[i] as any;
+          if (node && node.nodeType === 1) {
+            if (
+              node.getAttribute?.('aria-modal') === 'true' ||
+              node.querySelector?.('[aria-modal="true"]')
+            ) {
+              const portal = findPortalContainer(node);
+              if (portal) {
+                const existingId = portal?.dataset?.clinicezModalId;
+                const isTracked = activeModalStack.some(
+                  (item) => item.portalEl === portal || (existingId && item.id === existingId)
+                );
+                if (!isTracked) return true;
+              }
+            }
+          }
+        }
+        return false;
+      });
+
+      if (!hasDirectBodyChildChanges && !hasUntrackedModalAddition) {
+        // Pure internal subtree mutation inside an active modal (e.g. tab switch) — guard against re-ordering/elevation
+        return;
+      }
+    }
 
     // Scan for all active modal portals in document.body
     const ariaModalElements = Array.from(
@@ -418,8 +495,9 @@ export function initModalStackObserver(): () => void {
 
     // Cleanup untracked portals that were unmounted from document.body
     const currentPortals = new Set(
-      Array.from(document.body.children).filter((el) =>
-        el.querySelector?.('[aria-modal="true"]')
+      Array.from(document.body?.children || []).filter((el) =>
+        (el as any).getAttribute?.('aria-modal') === 'true' ||
+        Boolean(el.querySelector?.('[aria-modal="true"]'))
       )
     );
 

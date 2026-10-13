@@ -1322,6 +1322,10 @@ export default function PhilHealthProfileModal({
     );
   };
 
+  if (!visible || !patient) {
+    return null;
+  }
+
   return (
     <Modal
       visible={visible}

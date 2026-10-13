@@ -44,7 +44,8 @@ public sealed record RegisterClinicPatientCommand(
     List<CreateAllergyRequest>? StructuredAllergies = null,
     bool SendToTriage = false,
     string? Priority = "Normal",
-    string? ChiefComplaint = null) : IRequest<ClinicPatientDto>;
+    string? ChiefComplaint = null,
+    List<MedicalHistoryEntryDto>? MedicalHistories = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
@@ -53,19 +54,22 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<PatientAllergy>? _allergyRepo;
     private readonly IRepository<QueueItem>? _queueRepo;
+    private readonly IRepository<PatientPastMedicalHistory>? _medicalRepo;
 
     public RegisterClinicPatientCommandHandler(
         IRepository<ClinicPatient> patientRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IRepository<PatientAllergy>? allergyRepo = null,
-        IRepository<QueueItem>? queueRepo = null)
+        IRepository<QueueItem>? queueRepo = null,
+        IRepository<PatientPastMedicalHistory>? medicalRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _allergyRepo = allergyRepo;
         _queueRepo = queueRepo;
+        _medicalRepo = medicalRepo;
     }
 
     public async Task<ClinicPatientDto> Handle(RegisterClinicPatientCommand request, CancellationToken ct)
@@ -186,7 +190,52 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             }
         }
 
-        // 2. 1-Click "Send to Triage" Flow
+        // 2. Ingest Structured Medical Histories
+        if (request.MedicalHistories != null && request.MedicalHistories.Count > 0 && _medicalRepo != null)
+        {
+            var recordedConditions = new List<string>();
+
+            foreach (var medReq in request.MedicalHistories)
+            {
+                if (string.IsNullOrWhiteSpace(medReq.ConditionTitle)) continue;
+
+                var history = new PatientPastMedicalHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = patient.Id,
+                    ConditionTitle = medReq.ConditionTitle.Trim(),
+                    PhilHealthMdiseaseCode = medReq.PhilHealthMdiseaseCode?.Trim(),
+                    Icd10Code = medReq.Icd10Code?.Trim(),
+                    SpecificDescription = medReq.SpecificDescription?.Trim(),
+                    OnsetDate = medReq.OnsetDate,
+                    IsResolved = medReq.IsResolved,
+                    ClinicalNotes = medReq.ClinicalNotes?.Trim(),
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicStaff"
+                };
+
+                await _medicalRepo.AddAsync(history, ct);
+                if (!patient.PastMedicalHistories.Any(x => x.Id == history.Id))
+                {
+                    patient.PastMedicalHistories.Add(history);
+                }
+
+                var desc = !string.IsNullOrWhiteSpace(history.SpecificDescription)
+                    ? history.SpecificDescription
+                    : history.ConditionTitle;
+                recordedConditions.Add(desc);
+            }
+
+            if (recordedConditions.Count > 0)
+            {
+                var summary = string.Join(", ", recordedConditions);
+                patient.ChronicConditions = summary;
+            }
+        }
+
+        // 3. 1-Click "Send to Triage" Flow
         QueueItem? queueItem = null;
         if (request.SendToTriage && _queueRepo != null)
         {
@@ -250,6 +299,21 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         var suffix = !string.IsNullOrWhiteSpace(p.Suffix) ? $" {p.Suffix}" : "";
         var fullName = $"{p.LastName}, {p.FirstName}{middleInitial}{suffix}";
 
+        var pastMedicalHistories = p.PastMedicalHistories?
+            .Where(m => !m.IsDeleted)
+            .DistinctBy(m => m.Id)
+            .Select(m => new PatientPastMedicalHistoryDto(
+                m.Id,
+                m.PatientId,
+                m.ConditionTitle,
+                m.PhilHealthMdiseaseCode,
+                m.Icd10Code,
+                m.SpecificDescription,
+                m.OnsetDate,
+                m.IsResolved,
+                m.ClinicalNotes,
+                m.CreatedAt)).ToList();
+
         return new ClinicPatientDto(
             p.Id,
             p.TenantId,
@@ -285,6 +349,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             p.CustomFields,
             p.VerificationStatus,
             activeQueueTicket,
-            activeQueueItemId);
+            activeQueueItemId,
+            pastMedicalHistories);
     }
 }

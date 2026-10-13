@@ -283,4 +283,174 @@ public sealed class PatientMedicalHistoryTests
         prof.MedicalHistories.Should().Contain(m => m.MdiseaseCode == "011");
         prof.FamilyHistories.Should().Contain(f => f.MdiseaseCode == "006");
     }
+
+    [Fact]
+    public async Task RegisterClinicPatient_WithStructuredMedicalHistories_PersistsToRelationalTableAndComputesChronicConditionsSummary()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+
+        var handler = new RegisterClinicPatientCommandHandler(
+            patientRepo,
+            uow,
+            _clinicContext,
+            allergyRepo: null,
+            queueRepo: null,
+            medicalRepo: medicalRepo);
+
+        var command = new RegisterClinicPatientCommand(
+            "Maria",
+            "Santos",
+            "Cruz",
+            null,
+            new DateOnly(1985, 3, 15),
+            "Female",
+            "Married",
+            "09179876543",
+            "maria.santos@example.com",
+            "123 Main St",
+            "Barangay 1",
+            "Makati",
+            "Metro Manila",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "O+",
+            null,
+            null,
+            "High Fall Risk",
+            MedicalHistories: new List<MedicalHistoryEntryDto>
+            {
+                new("Hypertension", "011", "I10", null, new DateOnly(2021, 1, 10), false, "On Maintenance"),
+                new("Diabetes Mellitus", "006", "E11", null, new DateOnly(2022, 6, 20), false, "Diet controlled"),
+                new("Others", "998", null, "Chronic Kidney Disease Stage 3", null, false, "eGFR 45")
+            });
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result.FirstName.Should().Be("Maria");
+        result.LastName.Should().Be("Santos");
+        result.Alerts.Should().Be("High Fall Risk");
+        result.ChronicConditions.Should().Contain("Hypertension");
+        result.ChronicConditions.Should().Contain("Diabetes Mellitus");
+        result.ChronicConditions.Should().Contain("Chronic Kidney Disease Stage 3");
+
+        result.PastMedicalHistories.Should().NotBeNull();
+        result.PastMedicalHistories.Should().HaveCount(3);
+        result.PastMedicalHistories!.Should().Contain(m => m.PhilHealthMdiseaseCode == "011" && m.ConditionTitle == "Hypertension");
+        result.PastMedicalHistories!.Should().Contain(m => m.PhilHealthMdiseaseCode == "006" && m.ConditionTitle == "Diabetes Mellitus");
+        result.PastMedicalHistories!.Should().Contain(m => m.PhilHealthMdiseaseCode == "998" && m.SpecificDescription == "Chronic Kidney Disease Stage 3");
+
+        var dbHistories = medicalRepo.Query(m => m.PatientId == result.Id).ToList();
+        dbHistories.Should().HaveCount(3);
+        dbHistories.Should().Contain(m => m.PhilHealthMdiseaseCode == "011" && m.ClinicalNotes == "On Maintenance");
+    }
+
+    [Fact]
+    public async Task UpdateClinicPatient_WithStructuredMedicalHistories_SyncsRelationalTableAndUpdatesDto()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var medicalRepo = TestDbHelper.CreateRepository<PatientPastMedicalHistory>(context, sieve);
+
+        var patientId = Guid.NewGuid();
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-0099",
+            FirstName = "Pedro",
+            LastName = "Penduko",
+            ContactNumber = "09181112233",
+            DateOfBirth = new DateOnly(1975, 5, 20),
+            Gender = "Male",
+            ChronicConditions = "Hypertension, Asthma",
+            Alerts = "High Fall Risk"
+        };
+        await patientRepo.AddAsync(patient);
+
+        var existingHtn = new PatientPastMedicalHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ConditionTitle = "Hypertension",
+            PhilHealthMdiseaseCode = "011",
+            ClinicalNotes = "Old note"
+        };
+        var existingAsthma = new PatientPastMedicalHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ConditionTitle = "Asthma",
+            PhilHealthMdiseaseCode = "002"
+        };
+        await medicalRepo.AddAsync(existingHtn);
+        await medicalRepo.AddAsync(existingAsthma);
+        await uow.SaveChangesAsync();
+
+        var handler = new UpdateClinicPatientCommandHandler(
+            patientRepo,
+            uow,
+            medicalRepo: medicalRepo,
+            clinicContext: _clinicContext);
+
+        // Update: update Hypertension notes, omit Asthma (should be deleted), add Diabetes Mellitus (new)
+        var command = new UpdateClinicPatientCommand(
+            patientId,
+            "Pedro",
+            "Penduko",
+            null,
+            null,
+            new DateOnly(1975, 5, 20),
+            "Male",
+            "Single",
+            "09181112233",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "High Fall Risk, Wheelchair Assist",
+            MedicalHistories: new List<MedicalHistoryEntryDto>
+            {
+                new("Hypertension", "011", "I10", null, null, false, "Updated: controlled on losartan"),
+                new("Diabetes Mellitus", "006", "E11", null, new DateOnly(2023, 1, 1), false, "Newly diagnosed")
+            });
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.Alerts.Should().Be("High Fall Risk, Wheelchair Assist");
+        result.ChronicConditions.Should().Contain("Hypertension");
+        result.ChronicConditions.Should().Contain("Diabetes Mellitus");
+        result.ChronicConditions.Should().NotContain("Asthma");
+
+        result.PastMedicalHistories.Should().NotBeNull();
+        result.PastMedicalHistories.Should().HaveCount(2);
+        result.PastMedicalHistories!.Should().Contain(m => m.PhilHealthMdiseaseCode == "011" && m.ClinicalNotes == "Updated: controlled on losartan");
+        result.PastMedicalHistories!.Should().Contain(m => m.PhilHealthMdiseaseCode == "006" && m.ConditionTitle == "Diabetes Mellitus");
+        result.PastMedicalHistories!.Should().NotContain(m => m.PhilHealthMdiseaseCode == "002");
+
+        var dbHistories = medicalRepo.Query(m => m.PatientId == patientId).ToList();
+        dbHistories.Should().HaveCount(2);
+        dbHistories.Should().NotContain(m => m.PhilHealthMdiseaseCode == "002");
+    }
 }

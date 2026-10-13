@@ -103,6 +103,14 @@ mock.module('../context/StaffContext', () => ({
   }),
 }));
 
+mock.module('../utils/usePhilHealthCatalog', () => ({
+  usePhilHealthCatalog: () => ({ items: [], loading: false, error: null, reload: () => {} }),
+}));
+
+mock.module('@utils/usePhilHealthCatalog', () => ({
+  usePhilHealthCatalog: () => ({ items: [], loading: false, error: null, reload: () => {} }),
+}));
+
 const {
   registerModal,
   attachPortalElement,
@@ -116,6 +124,7 @@ const {
   getActiveModalCount,
   clearModalStack,
   subscribeModalStack,
+  syncPortalZIndex,
   bringPortalToFront,
   findPortalContainer,
   initModalStackObserver,
@@ -126,6 +135,7 @@ const {
 
 const { default: Modal } = await import('../components/ui/Modal');
 const { default: PatientChartModal } = await import('../components/chart/PatientChartModal');
+const { default: PhilHealthProfileModal } = await import('../components/PhilHealthProfileModal');
 const { default: EditPatientModal } = await import('../components/patient/EditPatientModal');
 const { default: ActionMenu } = await import('../components/ui/ActionMenu');
 const { default: DiagnosticLabTab } = await import('../components/chart/DiagnosticLabTab');
@@ -652,4 +662,884 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
       expect(getActiveModalCount()).toBe(0);
     });
   });
+
+  describe('6. Tab-Switching Stability, Subtree Mutation Guards & Multi-Level Layering (R1-R4)', () => {
+    test('R1: Suppresses dormant modal portal mounting in DOM environments when visible is false', () => {
+      const originalDoc = (globalThis as any).document;
+      let mutationCount = 0;
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          this.children.push(child);
+          this.lastElementChild = child;
+          mutationCount++;
+          return child;
+        },
+      };
+      (globalThis as any).document = { body: mockBody };
+
+      try {
+        const markup = renderToStaticMarkup(
+          React.createElement(Modal, {
+            visible: false,
+            title: 'Dormant Dialog',
+            children: React.createElement('div', null, 'Dormant Content'),
+          })
+        );
+        expect(markup).toBe('');
+        expect(mockBody.children.length).toBe(0);
+        expect(mutationCount).toBe(0);
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
+
+    test('R2: attachPortalElement avoids re-appending or thrashing DOM when portal is already attached', () => {
+      const originalDoc = (globalThis as any).document;
+      let appendCallCount = 0;
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          if (child.parentNode) {
+            const idx = child.parentNode.children.indexOf(child);
+            if (idx !== -1) child.parentNode.children.splice(idx, 1);
+          }
+          child.parentNode = this;
+          this.children.push(child);
+          this.lastElementChild = child;
+          appendCallCount++;
+          return child;
+        },
+      };
+      (globalThis as any).document = { body: mockBody };
+
+      try {
+        registerModal('test-active-chart');
+        const mockPortal: any = {
+          style: { zIndex: '10000' },
+          dataset: {},
+          firstElementChild: { style: { zIndex: '10000' } },
+          querySelector: () => null,
+          parentNode: null,
+        };
+
+        // 1. Initial attach on opening
+        attachPortalElement('test-active-chart', mockPortal);
+        expect(appendCallCount).toBe(1);
+
+        // 2. Subsequent re-render or tab switch within same modal:
+        // Must NOT call safeAppendChildToBody or detach/re-attach from DOM
+        attachPortalElement('test-active-chart', mockPortal);
+        expect(appendCallCount).toBe(1);
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
+
+    test('R2: MutationObserver ignores internal subtree mutations within an active modal', () => {
+      const originalDoc = (globalThis as any).document;
+      const originalMO = (globalThis as any).MutationObserver;
+      let observerCallback: any = null;
+
+      class SubtreeMutationObserver {
+        constructor(public cb: any) {
+          observerCallback = cb;
+        }
+        observe() {}
+        disconnect() {}
+      }
+
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          this.children.push(child);
+          this.lastElementChild = child;
+          return child;
+        },
+      };
+
+      (globalThis as any).document = {
+        body: mockBody,
+        querySelectorAll: () => [],
+      };
+      (globalThis as any).MutationObserver = SubtreeMutationObserver;
+
+      try {
+        const cleanup = initModalStackObserver();
+        registerModal('active-tab-modal');
+        const mockPortal: any = {
+          style: {},
+          dataset: { clinicezModalId: 'active-tab-modal' },
+          firstElementChild: { style: {} },
+          querySelector: () => null,
+          parentNode: mockBody,
+        };
+        attachPortalElement('active-tab-modal', mockPortal);
+        const countBefore = getActiveModalCount();
+
+        // Simulate internal subtree mutation (e.g., clicking tabs inside modal)
+        const subtreeMutation: any = {
+          target: { parentNode: mockPortal },
+          addedNodes: [{ nodeType: 1, getAttribute: () => null, querySelector: () => null }],
+          removedNodes: [{ nodeType: 1 }],
+        };
+
+        observerCallback([subtreeMutation]);
+
+        // Modal stack remains undisturbed
+        expect(getActiveModalCount()).toBe(countBefore);
+        expect(isTopModal('active-tab-modal')).toBe(true);
+
+        cleanup();
+      } finally {
+        (globalThis as any).document = originalDoc;
+        (globalThis as any).MutationObserver = originalMO;
+      }
+    });
+
+    test('R3: Seamless tab switching in PatientChartModal across all clinical tabs', () => {
+      const mockPatient = {
+        id: 'pat-tabs-1',
+        fullName: 'Maria Santos',
+        patientCode: 'PAT-002',
+        gender: 'Female',
+        dateOfBirth: '1990-08-20',
+        age: 35,
+        contactNumber: '0918-765-4321',
+        address: 'Quezon City',
+        allergies: 'Penicillin',
+        bloodType: 'B+',
+        verificationStatus: 'Verified',
+      };
+
+      const tabsToTest = [
+        'summary',
+        'encounters',
+        'diagnostics',
+        'procedures',
+        'immunizations',
+        'profiles',
+        'vault',
+      ] as const;
+
+      for (const tab of tabsToTest) {
+        const markup = renderToStaticMarkup(
+          React.createElement(PatientChartModal, {
+            visible: true,
+            patient: mockPatient as any,
+            patientChart: null,
+            activeTab: tab as any,
+            onClose: () => {},
+          })
+        );
+        expect(markup).toContain('Maria Santos');
+        expect(markup).toContain('Medical chart');
+      }
+    });
+
+    test('R3: PhilHealthProfileModal renders cleanly and respects visible=false short-circuit', () => {
+      const mockPatient = {
+        id: 'pat-phil-1',
+        fullName: 'Elena Gomez',
+        patientCode: 'PAT-003',
+        gender: 'Female',
+        age: 28,
+        philHealthNumber: '12-345678901-2',
+      };
+
+      // 1. Dormant modal returns null
+      const closedMarkup = renderToStaticMarkup(
+        React.createElement(PhilHealthProfileModal, {
+          visible: false,
+          patient: mockPatient as any,
+          onClose: () => {},
+        })
+      );
+      expect(closedMarkup).toBe('');
+
+      // 2. Visible modal renders header and tabs
+      const openMarkup = renderToStaticMarkup(
+        React.createElement(PhilHealthProfileModal, {
+          visible: true,
+          patient: mockPatient as any,
+          onClose: () => {},
+        })
+      );
+      expect(openMarkup).toContain('PhilHealth patient profile');
+      expect(openMarkup).toContain('Elena Gomez');
+      expect(openMarkup).toContain('General and vitals');
+      expect(openMarkup).toContain('Medical and family');
+      expect(openMarkup).toContain('Social and vaccines');
+    });
+
+    test('R4: Multi-level sub-modals layer on top and preserve parent intact on close', () => {
+      // 1. Parent modal (Chart) opens at depth 0
+      registerModal('parent-chart-modal');
+      expect(getActiveModalCount()).toBe(1);
+      expect(getModalStackDepth('parent-chart-modal')).toBe(0);
+      expect(getModalZIndex('parent-chart-modal')).toBe(BASE_MODAL_Z_INDEX);
+      expect(isTopModal('parent-chart-modal')).toBe(true);
+
+      // 2. Sub-modal (e.g. Diagnostic panic verbal readback or AEFI reporting) opens with parentDepth: 0
+      registerModal('sub-panic-readback', { parentDepth: 0 });
+      expect(getActiveModalCount()).toBe(2);
+      expect(getModalStackDepth('sub-panic-readback')).toBe(1);
+      expect(getModalZIndex('sub-panic-readback')).toBe(BASE_MODAL_Z_INDEX + MODAL_Z_INDEX_STEP);
+      expect(isTopModal('sub-panic-readback')).toBe(true);
+      expect(isTopModal('parent-chart-modal')).toBe(false);
+
+      // 3. Third-level sub-modal (e.g. blood type selector or emergency override)
+      registerModal('sub-blood-type-picker', { parentDepth: 1 });
+      expect(getActiveModalCount()).toBe(3);
+      expect(getModalStackDepth('sub-blood-type-picker')).toBe(2);
+      expect(getModalZIndex('sub-blood-type-picker')).toBe(BASE_MODAL_Z_INDEX + 2 * MODAL_Z_INDEX_STEP);
+      expect(isTopModal('sub-blood-type-picker')).toBe(true);
+
+      // 4. Closing the 3rd-level modal restores 2nd-level modal as top
+      unregisterModal('sub-blood-type-picker');
+      expect(getActiveModalCount()).toBe(2);
+      expect(isTopModal('sub-panic-readback')).toBe(true);
+      expect(getModalZIndex('sub-panic-readback')).toBe(BASE_MODAL_Z_INDEX + MODAL_Z_INDEX_STEP);
+
+      // 5. Closing 2nd-level modal leaves parent modal intact at depth 0, base z-index, and isTop=true
+      unregisterModal('sub-panic-readback');
+      expect(getActiveModalCount()).toBe(1);
+      expect(isTopModal('parent-chart-modal')).toBe(true);
+      expect(getModalStackDepth('parent-chart-modal')).toBe(0);
+      expect(getModalZIndex('parent-chart-modal')).toBe(BASE_MODAL_Z_INDEX);
+
+      // 6. Closing parent modal clears stack
+      unregisterModal('parent-chart-modal');
+      expect(getActiveModalCount()).toBe(0);
+    });
+  });
+
+  describe('7. Adversarial Stress, Rapid Concurrent Tab Interleaving & Edge Cases', () => {
+    test('ADV-1: Rapid interleaved tab switching in Parent Modal while Sub-modal is active does not thrash DOM or dislodge child modal', () => {
+      const originalDoc = (globalThis as any).document;
+      const originalMO = (globalThis as any).MutationObserver;
+      let observerCallback: any = null;
+
+      class SubtreeMutationObserver {
+        constructor(public cb: any) {
+          observerCallback = cb;
+        }
+        observe() {}
+        disconnect() {}
+      }
+
+      let appendCallCount = 0;
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          if (child.parentNode) {
+            const idx = child.parentNode.children.indexOf(child);
+            if (idx !== -1) child.parentNode.children.splice(idx, 1);
+          }
+          child.parentNode = this;
+          this.children.push(child);
+          this.lastElementChild = child;
+          appendCallCount++;
+          return child;
+        },
+      };
+
+      (globalThis as any).document = {
+        body: mockBody,
+        querySelectorAll: () => [],
+      };
+      (globalThis as any).MutationObserver = SubtreeMutationObserver;
+
+      try {
+        const cleanup = initModalStackObserver();
+
+        // 1. Mount Parent Modal (e.g. PatientChartModal)
+        const parentPortal: any = {
+          style: { zIndex: '10000' },
+          dataset: { clinicezModalId: 'patient-chart-main' },
+          firstElementChild: { style: { zIndex: '10000' } },
+          querySelector: () => null,
+          parentNode: null,
+        };
+        registerModal('patient-chart-main');
+        attachPortalElement('patient-chart-main', parentPortal);
+
+        expect(mockBody.children.length).toBe(1);
+        expect(mockBody.lastElementChild).toBe(parentPortal);
+        expect(appendCallCount).toBe(1);
+
+        // 2. Open Sub-modal (e.g. EditPatientModal)
+        const childPortal: any = {
+          style: { zIndex: '10100' },
+          dataset: { clinicezModalId: 'edit-patient-sub' },
+          firstElementChild: { style: { zIndex: '10100' } },
+          querySelector: () => null,
+          parentNode: null,
+        };
+        registerModal('edit-patient-sub', { parentDepth: 0 });
+        attachPortalElement('edit-patient-sub', childPortal);
+
+        expect(mockBody.children.length).toBe(2);
+        expect(mockBody.lastElementChild).toBe(childPortal);
+        expect(appendCallCount).toBe(2);
+        expect(isTopModal('edit-patient-sub')).toBe(true);
+
+        // 3. User rapidly switches tabs in background parent modal while edit modal is open
+        for (let i = 0; i < 5; i++) {
+          // Subtree mutations fired inside parentPortal
+          observerCallback([
+            {
+              target: { parentNode: parentPortal },
+              addedNodes: [{ nodeType: 1, getAttribute: () => null, querySelector: () => null }],
+              removedNodes: [{ nodeType: 1 }],
+            },
+          ]);
+          // Child re-render synchronization
+          attachPortalElement('patient-chart-main', parentPortal);
+        }
+
+        // Parent modal MUST NOT re-append or leapfrog child modal
+        expect(appendCallCount).toBe(2);
+        expect(mockBody.lastElementChild).toBe(childPortal);
+        expect(mockBody.children[0]).toBe(parentPortal);
+        expect(mockBody.children[1]).toBe(childPortal);
+        expect(isTopModal('edit-patient-sub')).toBe(true);
+
+        // 4. Open 3rd-level modal (e.g. BloodTypeSelect dialog)
+        const bloodTypePortal: any = {
+          style: { zIndex: '10200' },
+          dataset: { clinicezModalId: 'blood-type-picker' },
+          firstElementChild: { style: { zIndex: '10200' } },
+          querySelector: () => null,
+          parentNode: null,
+        };
+        registerModal('blood-type-picker', { parentDepth: 1 });
+        attachPortalElement('blood-type-picker', bloodTypePortal);
+
+        expect(mockBody.children.length).toBe(3);
+        expect(mockBody.lastElementChild).toBe(bloodTypePortal);
+        expect(isTopModal('blood-type-picker')).toBe(true);
+        expect(appendCallCount).toBe(3);
+
+        // 5. Close 3rd-level modal
+        unregisterModal('blood-type-picker');
+        const bloodIdx = mockBody.children.indexOf(bloodTypePortal);
+        if (bloodIdx !== -1) mockBody.children.splice(bloodIdx, 1);
+        mockBody.lastElementChild = childPortal;
+
+        expect(isTopModal('edit-patient-sub')).toBe(true);
+        expect(mockBody.lastElementChild).toBe(childPortal);
+
+        // 6. Close 2nd-level modal
+        unregisterModal('edit-patient-sub');
+        const childIdx = mockBody.children.indexOf(childPortal);
+        if (childIdx !== -1) mockBody.children.splice(childIdx, 1);
+        mockBody.lastElementChild = parentPortal;
+
+        expect(isTopModal('patient-chart-main')).toBe(true);
+        expect(mockBody.lastElementChild).toBe(parentPortal);
+        expect(getModalStackDepth('patient-chart-main')).toBe(0);
+
+        // 7. More rapid tab switches in parent modal now that it is top again
+        for (let i = 0; i < 5; i++) {
+          attachPortalElement('patient-chart-main', parentPortal);
+        }
+        // Still no redundant appends
+        expect(appendCallCount).toBe(3);
+
+        cleanup();
+      } finally {
+        (globalThis as any).document = originalDoc;
+        (globalThis as any).MutationObserver = originalMO;
+      }
+    });
+
+    test('ADV-2: Untracked modal with aria-modal="true" directly on portal element is preserved in currentPortals cleanup', () => {
+      const originalDoc = (globalThis as any).document;
+      const originalMO = (globalThis as any).MutationObserver;
+      let observerCallback: any = null;
+
+      class CleanupMutationObserver {
+        constructor(public cb: any) {
+          observerCallback = cb;
+        }
+        observe() {}
+        disconnect() {}
+      }
+
+      // Portal element where aria-modal is on the portal element itself
+      const directAriaPortal: any = {
+        nodeType: 1,
+        getAttribute: (attr: string) => (attr === 'aria-modal' ? 'true' : null),
+        querySelector: () => null, // No descendant has aria-modal, only the root
+        dataset: { clinicezModalId: 'rnw-modal-direct' },
+        style: {},
+        firstElementChild: { style: {} },
+        parentNode: null,
+      };
+
+      const mockBody: any = {
+        children: [directAriaPortal],
+        lastElementChild: directAriaPortal,
+        appendChild(child: any) {
+          child.parentNode = this;
+          this.children.push(child);
+          this.lastElementChild = child;
+          return child;
+        },
+      };
+      directAriaPortal.parentNode = mockBody;
+
+      (globalThis as any).document = {
+        body: mockBody,
+        querySelectorAll: (sel: string) => (sel === '[aria-modal="true"]' ? [directAriaPortal] : []),
+      };
+      (globalThis as any).MutationObserver = CleanupMutationObserver;
+
+      try {
+        const cleanup = initModalStackObserver();
+
+        // Register the untracked modal in stack
+        registerModal('rnw-modal-direct', { element: directAriaPortal });
+        expect(getActiveModalCount()).toBe(1);
+
+        // Trigger mutation with direct body change
+        observerCallback([
+          {
+            target: mockBody,
+            addedNodes: [directAriaPortal],
+            removedNodes: [],
+          },
+        ]);
+
+        // It must NOT be marked stale or unregistered because getAttribute('aria-modal') is true
+        expect(getActiveModalCount()).toBe(1);
+        expect(isTopModal('rnw-modal-direct')).toBe(true);
+
+        cleanup();
+      } finally {
+        (globalThis as any).document = originalDoc;
+        (globalThis as any).MutationObserver = originalMO;
+      }
+    });
+
+    test('ADV-3: attachPortalElement re-attaches portal if it was detached from document.body', () => {
+      const originalDoc = (globalThis as any).document;
+      let appendCallCount = 0;
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          child.parentNode = this;
+          this.children.push(child);
+          this.lastElementChild = child;
+          appendCallCount++;
+          return child;
+        },
+      };
+      (globalThis as any).document = { body: mockBody };
+
+      try {
+        registerModal('test-reattach');
+        const mockPortal: any = {
+          style: { zIndex: '10000' },
+          dataset: {},
+          firstElementChild: { style: { zIndex: '10000' } },
+          querySelector: () => null,
+          parentNode: null,
+        };
+
+        // 1. Initial attach
+        attachPortalElement('test-reattach', mockPortal);
+        expect(appendCallCount).toBe(1);
+        expect(mockPortal.parentNode).toBe(mockBody);
+
+        // 2. Detach portal from body (simulating temporary DOM detachment)
+        mockPortal.parentNode = null;
+        mockBody.children = [];
+        mockBody.lastElementChild = null;
+
+        // 3. attachPortalElement must recognize it is detached and re-attach
+        attachPortalElement('test-reattach', mockPortal);
+        expect(appendCallCount).toBe(2);
+        expect(mockPortal.parentNode).toBe(mockBody);
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
+
+    test('ADV-4: PhilHealthProfileModal tab switching between all 5 tabs leaves DOM children undisturbed', () => {
+      const originalDoc = (globalThis as any).document;
+      let appendCount = 0;
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          this.children.push(child);
+          this.lastElementChild = child;
+          appendCount++;
+          return child;
+        },
+      };
+      (globalThis as any).document = { body: mockBody };
+
+      const mockPatient = {
+        id: 'pat-ph-adv-1',
+        fullName: 'Carmela Ramos',
+        patientCode: 'PAT-888',
+        gender: 'Female',
+        age: 32,
+        philHealthNumber: '12-987654321-0',
+      };
+
+      try {
+        // Tab list: general, medical, lifestyle, reproductive, ncd
+        const openMarkupGeneral = renderToStaticMarkup(
+          React.createElement(PhilHealthProfileModal, {
+            visible: true,
+            patient: mockPatient as any,
+            onClose: () => {},
+          })
+        );
+        expect(openMarkupGeneral).toContain('PhilHealth patient profile');
+        expect(openMarkupGeneral).toContain('General and vitals');
+
+        // Dormant BloodTypeSelect modal inside General tab produced NO body appends
+        expect(appendCount).toBe(0);
+        expect(mockBody.children.length).toBe(0);
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
+
+    test('ADV-5: Out-of-order unregistration and promotion synchronize modalContent [aria-modal="true"] z-index cleanly', () => {
+      const originalDoc = (globalThis as any).document;
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          if (child.parentNode) {
+            const idx = child.parentNode.children.indexOf(child);
+            if (idx !== -1) child.parentNode.children.splice(idx, 1);
+          }
+          child.parentNode = this;
+          this.children.push(child);
+          this.lastElementChild = child;
+          return child;
+        },
+      };
+      (globalThis as any).document = { body: mockBody };
+
+      try {
+        const createMockPortal = (id: string) => {
+          const contentDiv: any = { style: {} };
+          const animDiv: any = { style: {} };
+          const portal: any = {
+            dataset: { clinicezModalId: id },
+            style: {},
+            firstElementChild: animDiv,
+            querySelector: (sel: string) => (sel === '[aria-modal="true"]' ? contentDiv : null),
+            parentNode: null,
+          };
+          return { portal, animDiv, contentDiv };
+        };
+
+        const m1 = createMockPortal('modal-z-1');
+        const m2 = createMockPortal('modal-z-2');
+        const m3 = createMockPortal('modal-z-3');
+
+        registerModal('modal-z-1');
+        attachPortalElement('modal-z-1', m1.portal);
+
+        registerModal('modal-z-2');
+        attachPortalElement('modal-z-2', m2.portal);
+
+        registerModal('modal-z-3');
+        attachPortalElement('modal-z-3', m3.portal);
+
+        expect(m3.contentDiv.style.zIndex).toBe('10200');
+        expect(m2.contentDiv.style.zIndex).toBe('10100');
+        expect(m1.contentDiv.style.zIndex).toBe('10000');
+
+        // Unregister middle modal (modal-z-2)
+        unregisterModal('modal-z-2');
+
+        // modal-z-3 is now at depth 1, so its portal, animDiv, and modalContent MUST be 10100
+        expect(getModalStackDepth('modal-z-3')).toBe(1);
+        expect(m3.portal.style.zIndex).toBe('10100');
+        expect(m3.animDiv.style.zIndex).toBe('10100');
+        expect(m3.contentDiv.style.zIndex).toBe('10100');
+
+        // Promote modal-z-1 to front: modal-z-3 becomes depth 0 (10000), modal-z-1 becomes depth 1 (10100)
+        bringModalToFront('modal-z-1');
+        expect(getModalStackDepth('modal-z-1')).toBe(1);
+        expect(getModalStackDepth('modal-z-3')).toBe(0);
+
+        expect(m1.portal.style.zIndex).toBe('10100');
+        expect(m1.animDiv.style.zIndex).toBe('10100');
+        expect(m1.contentDiv.style.zIndex).toBe('10100');
+
+        expect(m3.portal.style.zIndex).toBe('10000');
+        expect(m3.animDiv.style.zIndex).toBe('10000');
+        expect(m3.contentDiv.style.zIndex).toBe('10000');
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
+
+    test('ADV-6: Detached subtree mutations containing aria-modal="true" do not trigger untracked modal additions', () => {
+      const originalDoc = (globalThis as any).document;
+      const originalMO = (globalThis as any).MutationObserver;
+      let observerCallback: any = null;
+
+      class SubtreeMutationObserver {
+        constructor(public cb: any) {
+          observerCallback = cb;
+        }
+        observe() {}
+        disconnect() {}
+      }
+
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          child.parentNode = this;
+          this.children.push(child);
+          this.lastElementChild = child;
+          return child;
+        },
+      };
+
+      (globalThis as any).document = {
+        body: mockBody,
+        querySelectorAll: () => [],
+      };
+      (globalThis as any).MutationObserver = SubtreeMutationObserver;
+
+      try {
+        const cleanup = initModalStackObserver();
+        registerModal('tracked-base-modal');
+
+        // Node in a detached fragment: parentNode exists but does not lead to document.body
+        const detachedFragment = { parentNode: null };
+        const detachedAriaNode: any = {
+          nodeType: 1,
+          getAttribute: (attr: string) => (attr === 'aria-modal' ? 'true' : null),
+          querySelector: () => null,
+          parentNode: detachedFragment,
+        };
+
+        // Fire mutation on detached target
+        observerCallback([
+          {
+            target: detachedFragment,
+            addedNodes: [detachedAriaNode],
+            removedNodes: [],
+          },
+        ]);
+
+        // Stack must still contain ONLY the tracked modal; detached node was NOT registered
+        expect(getActiveModalCount()).toBe(1);
+        expect(isTopModal('tracked-base-modal')).toBe(true);
+
+        cleanup();
+      } finally {
+        (globalThis as any).document = originalDoc;
+        (globalThis as any).MutationObserver = originalMO;
+      }
+    });
+
+    test('ADV-7: bringPortalToFront appends portal to document.body even if portalEl.style is undefined', () => {
+      const originalDoc = (globalThis as any).document;
+      let appendCount = 0;
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          child.parentNode = this;
+          this.children.push(child);
+          this.lastElementChild = child;
+          appendCount++;
+          return child;
+        },
+      };
+      (globalThis as any).document = { body: mockBody };
+
+      try {
+        const portalWithoutStyle: any = {
+          parentNode: null,
+          firstElementChild: null,
+          querySelector: () => null,
+        };
+
+        bringPortalToFront(portalWithoutStyle, 10000);
+        expect(appendCount).toBe(1);
+        expect(mockBody.lastElementChild).toBe(portalWithoutStyle);
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
+
+    test('ADV-8: Multi-level nested modal Escape and backdrop dismissibility guards', () => {
+      let modal1Closed = false;
+      let modal2Closed = false;
+      let modal3Closed = false;
+
+      // Modal 1 opens (level 1)
+      const m1 = registerModal('level-1', { onClose: () => { modal1Closed = true; } });
+      expect(isTopModal('level-1')).toBe(true);
+
+      // Modal 2 opens on top (level 2)
+      const m2 = registerModal('level-2', { parentDepth: 0, onClose: () => { modal2Closed = true; } });
+      expect(isTopModal('level-2')).toBe(true);
+      expect(isTopModal('level-1')).toBe(false);
+
+      // Modal 3 opens on top (level 3)
+      const m3 = registerModal('level-3', { parentDepth: 1, onClose: () => { modal3Closed = true; } });
+      expect(isTopModal('level-3')).toBe(true);
+      expect(isTopModal('level-2')).toBe(false);
+      expect(isTopModal('level-1')).toBe(false);
+
+      // Backdrop press handler verification: only top modal is dismissible
+      const simulateBackdropPress = (id: string, onClose?: () => void) => {
+        if (isTopModal(id) && onClose) {
+          onClose();
+        }
+      };
+
+      // Pressing backdrop on Modal 1 does NOT close Modal 1
+      simulateBackdropPress('level-1', m1.onClose);
+      expect(modal1Closed).toBe(false);
+
+      // Pressing backdrop on Modal 2 does NOT close Modal 2
+      simulateBackdropPress('level-2', m2.onClose);
+      expect(modal2Closed).toBe(false);
+
+      // Pressing backdrop on Modal 3 DOES close Modal 3
+      simulateBackdropPress('level-3', m3.onClose);
+      expect(modal3Closed).toBe(true);
+
+      // Close Modal 3: Modal 2 becomes top
+      unregisterModal('level-3');
+      expect(isTopModal('level-2')).toBe(true);
+      expect(isTopModal('level-1')).toBe(false);
+
+      // Now backdrop on Modal 2 closes Modal 2
+      simulateBackdropPress('level-2', m2.onClose);
+      expect(modal2Closed).toBe(true);
+
+      // Close Modal 2: Modal 1 becomes top
+      unregisterModal('level-2');
+      expect(isTopModal('level-1')).toBe(true);
+
+      // Now backdrop on Modal 1 closes Modal 1
+      simulateBackdropPress('level-1', m1.onClose);
+      expect(modal1Closed).toBe(true);
+    });
+
+    test('ADV-9: Rapid sequential tab switching across ALL 7 PatientChartModal tabs produces ZERO body appends', () => {
+      const originalDoc = (globalThis as any).document;
+      let appendCount = 0;
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          this.children.push(child);
+          this.lastElementChild = child;
+          appendCount++;
+          return child;
+        },
+      };
+      (globalThis as any).document = { body: mockBody };
+
+      const mockPatient = {
+        id: 'pat-all-tabs-1',
+        fullName: 'Juan dela Cruz',
+        patientCode: 'PAT-101',
+        gender: 'Male',
+        age: 45,
+        dateOfBirth: '1981-05-12',
+        verificationStatus: 'Verified',
+      };
+
+      const allTabs = [
+        'summary',
+        'encounters',
+        'diagnostics',
+        'procedures',
+        'immunizations',
+        'profiles',
+        'vault',
+        'summary',
+      ] as const;
+
+      try {
+        for (const tab of allTabs) {
+          const markup = renderToStaticMarkup(
+            React.createElement(PatientChartModal, {
+              visible: true,
+              patient: mockPatient as any,
+              patientChart: null,
+              activeTab: tab as any,
+              onClose: () => {},
+            })
+          );
+          expect(markup).toContain('Juan dela Cruz');
+          expect(markup).toContain('Medical chart');
+        }
+
+        // None of the tabs mounted dormant submodals into document.body
+        expect(appendCount).toBe(0);
+        expect(mockBody.children.length).toBe(0);
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
+
+    test('ADV-10: PhilHealthProfileModal tab cycling across ALL 5 tabs produces ZERO body appends', () => {
+      const originalDoc = (globalThis as any).document;
+      let appendCount = 0;
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          this.children.push(child);
+          this.lastElementChild = child;
+          appendCount++;
+          return child;
+        },
+      };
+      (globalThis as any).document = { body: mockBody };
+
+      const mockPatient = {
+        id: 'pat-ph-adv-10',
+        fullName: 'Ana Santos',
+        patientCode: 'PAT-999',
+        gender: 'Female',
+        age: 29,
+        philHealthNumber: '12-345678901-2',
+      };
+
+      try {
+        const markup = renderToStaticMarkup(
+          React.createElement(PhilHealthProfileModal, {
+            visible: true,
+            patient: mockPatient as any,
+            onClose: () => {},
+          })
+        );
+        expect(markup).toContain('PhilHealth patient profile');
+        expect(appendCount).toBe(0);
+        expect(mockBody.children.length).toBe(0);
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
+  });
 });
+
