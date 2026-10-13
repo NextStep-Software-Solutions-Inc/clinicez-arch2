@@ -26,6 +26,7 @@ const createMockComponent = (name: string) => {
 };
 
 mock.module('react-native', () => ({
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
   View: createMockComponent('View'),
   Pressable: createMockComponent('Pressable'),
@@ -155,7 +156,7 @@ const mockCatalogMap: Record<string, Array<{ code: string; description: string; 
 
 mock.module('@utils/usePhilHealthCatalog', () => ({
   usePhilHealthCatalog: (library: string) => ({
-    items: mockCatalogMap[library] || [{ code: '1', description: 'Essentially normal', isActive: true }],
+    items: mockCatalogMap[library] || [],
     loading: false,
     error: null,
     reload: () => {},
@@ -164,7 +165,7 @@ mock.module('@utils/usePhilHealthCatalog', () => ({
 
 mock.module('../../utils/usePhilHealthCatalog', () => ({
   usePhilHealthCatalog: (library: string) => ({
-    items: mockCatalogMap[library] || [{ code: '1', description: 'Essentially normal', isActive: true }],
+    items: mockCatalogMap[library] || [],
     loading: false,
     error: null,
     reload: () => {},

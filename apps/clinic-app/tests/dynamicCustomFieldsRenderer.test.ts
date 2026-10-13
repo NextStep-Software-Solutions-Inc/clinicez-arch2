@@ -11,6 +11,7 @@ import { describe, expect, test, mock, beforeEach } from 'bun:test';
 
 // 1. Mock React Native modules
 mock.module('react-native', () => ({
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
   View: 'View',
   Pressable: 'Pressable',

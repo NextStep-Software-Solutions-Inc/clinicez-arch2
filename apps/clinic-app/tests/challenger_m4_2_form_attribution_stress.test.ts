@@ -6,6 +6,7 @@ import React from 'react';
 
 // Mock react-native
 mock.module('react-native', () => ({
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
   View: 'View',
   Pressable: 'Pressable',

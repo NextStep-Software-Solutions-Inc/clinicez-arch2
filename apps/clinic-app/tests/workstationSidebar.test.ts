@@ -65,6 +65,10 @@ mock.module('react-native', () => ({
   Alert: {
     alert: () => {},
   },
+  Linking: {
+    openURL: () => Promise.resolve(),
+    canOpenURL: () => Promise.resolve(true),
+  },
 }));
 
 mock.module('@react-navigation/native', () => ({
@@ -88,15 +92,21 @@ mock.module('../constants/fonts', () => ({
   fontAssets: {},
 }));
 
-let mockClinicContext = {
+let mockClinicContext: any = {
   facilityName: 'NextStep OPD',
   planTier: 'pro',
   accreditationNumber: 'ACC-12345',
+  settings: { preferredChartLayout: 'centered' },
 };
+(globalThis as any).__mockClinicContext = mockClinicContext;
 
-mock.module('../context/ClinicContext', () => ({
-  useClinic: () => mockClinicContext,
-}));
+const clinicContextMockFactory = () => ({
+  useClinic: () => (globalThis as any).__mockClinicContext ?? mockClinicContext,
+  ClinicProvider: ({ children }: any) => children,
+});
+
+mock.module('../context/ClinicContext', clinicContextMockFactory);
+mock.module('@context/ClinicContext', clinicContextMockFactory);
 
 let mockAuthContext = {
   user: {
@@ -113,10 +123,15 @@ mock.module('../context/AuthContext', () => ({
   useAuth: () => mockAuthContext,
 }));
 
-mock.module('../context/StaffContext', () => ({
-  useStaff: () => ({ current: null }),
-  formatStaffName: (s: any) => s.name,
-}));
+const staffContextMockFactory = () => ({
+  useStaff: () => (globalThis as any).__mockStaffContext ?? { current: null },
+  formatStaffName: (s: any) => s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim(),
+  staffInitials: (s: any) => `${s?.firstName?.[0] ?? ''}${s?.lastName?.[0] ?? ''}`.toUpperCase() || '?',
+  StaffProvider: ({ children }: any) => children,
+});
+
+mock.module('../context/StaffContext', staffContextMockFactory);
+mock.module('@context/StaffContext', staffContextMockFactory);
 
 const { default: WorkstationSidebar, WORKSTATION_NAV_ITEMS } = await import('../components/layout/WorkstationSidebar');
 
@@ -126,7 +141,10 @@ describe('WorkstationSidebar Component', () => {
       facilityName: 'NextStep OPD',
       planTier: 'pro',
       accreditationNumber: 'ACC-12345',
+      settings: { preferredChartLayout: 'centered' },
     };
+    (globalThis as any).__mockClinicContext = mockClinicContext;
+    (globalThis as any).__mockStaffContext = { current: null };
     mockAuthContext = {
       user: {
         id: 'user-1',
@@ -137,6 +155,13 @@ describe('WorkstationSidebar Component', () => {
       can: () => true,
       offline: false,
     };
+    mock.module('../context/ClinicContext', clinicContextMockFactory);
+    mock.module('@context/ClinicContext', clinicContextMockFactory);
+    mock.module('../context/AuthContext', () => ({
+      useAuth: () => mockAuthContext,
+    }));
+    mock.module('../context/StaffContext', staffContextMockFactory);
+    mock.module('@context/StaffContext', staffContextMockFactory);
   });
 
   test('renders Clinic EZ brand and elevates plan tier badge to top header', () => {
@@ -174,7 +199,9 @@ describe('WorkstationSidebar Component', () => {
       facilityName: 'St. Jude General Hospital',
       planTier: 'enterprise',
       accreditationNumber: '',
+      settings: { preferredChartLayout: 'centered' },
     };
+    (globalThis as any).__mockClinicContext = mockClinicContext;
 
     const html = renderToStaticMarkup(
       React.createElement(WorkstationSidebar, {
@@ -195,7 +222,9 @@ describe('WorkstationSidebar Component', () => {
       facilityName: 'Community Clinic',
       planTier: '',
       accreditationNumber: '',
+      settings: { preferredChartLayout: 'centered' },
     };
+    (globalThis as any).__mockClinicContext = mockClinicContext;
 
     const html = renderToStaticMarkup(
       React.createElement(WorkstationSidebar, {

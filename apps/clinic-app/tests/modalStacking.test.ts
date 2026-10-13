@@ -59,6 +59,7 @@ mock.module('react-native', () => ({
     Text: createMockComponent('Animated.Text'),
   },
   Alert: { alert: () => {} },
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
 }));
 
 mock.module('expo-crypto', () => ({
@@ -90,18 +91,33 @@ mock.module('../utils/useBreakpoint', () => ({
   }),
 }));
 
-mock.module('../context/ClinicContext', () => ({
-  useClinic: () => ({
-    settings: { preferredChartLayout: 'centered' },
-  }),
-}));
+const modalStackingClinicContextFactory = () => ({
+  useClinic: () =>
+    (globalThis as any).__mockClinicContext ?? {
+      facilityName: 'NextStep OPD',
+      planTier: 'pro',
+      accreditationNumber: 'ACC-12345',
+      settings: { preferredChartLayout: 'centered' },
+    },
+  ClinicProvider: ({ children }: any) => children,
+});
 
-mock.module('../context/StaffContext', () => ({
-  useStaff: () => ({
-    current: { id: 'staff-1', name: 'Dr. Santos', role: 'Physician' },
-    currentName: 'Dr. Santos',
-  }),
-}));
+mock.module('../context/ClinicContext', modalStackingClinicContextFactory);
+mock.module('@context/ClinicContext', modalStackingClinicContextFactory);
+
+const modalStackingStaffContextFactory = () => ({
+  useStaff: () =>
+    (globalThis as any).__mockStaffContext ?? {
+      current: { id: 'staff-1', name: 'Dr. Santos', role: 'Physician' },
+      currentName: 'Dr. Santos',
+    },
+  formatStaffName: (s: any) => s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim(),
+  staffInitials: (s: any) => `${s?.firstName?.[0] ?? ''}${s?.lastName?.[0] ?? ''}`.toUpperCase() || '?',
+  StaffProvider: ({ children }: any) => children,
+});
+
+mock.module('../context/StaffContext', modalStackingStaffContextFactory);
+mock.module('@context/StaffContext', modalStackingStaffContextFactory);
 
 mock.module('../utils/usePhilHealthCatalog', () => ({
   usePhilHealthCatalog: () => ({ items: [], loading: false, error: null, reload: () => {} }),
@@ -144,6 +160,8 @@ const { default: StatutoryImmunizationsTab } = await import('../components/chart
 describe('Modal Stacking System — Nested & Layered Modals', () => {
   beforeEach(() => {
     clearModalStack();
+    (globalThis as any).__mockClinicContext = null;
+    (globalThis as any).__mockStaffContext = null;
   });
 
   describe('1. Global Modal Stack State Machine', () => {

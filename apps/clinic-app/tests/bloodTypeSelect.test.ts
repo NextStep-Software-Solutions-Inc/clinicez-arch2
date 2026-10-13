@@ -22,6 +22,7 @@ const createMockComponent = (name: string) => {
 };
 
 mock.module('react-native', () => ({
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
   View: createMockComponent('View'),
   Pressable: createMockComponent('Pressable'),
@@ -32,7 +33,24 @@ mock.module('react-native', () => ({
   Modal: createMockComponent('Modal'),
   KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
-  Dimensions: { get: () => ({ width: 1280, height: 800 }) },
+  Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
+  useWindowDimensions: () => ({ width: 1280, height: 800 }),
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    sequence: () => ({ start: (cb?: any) => cb && cb() }),
+    loop: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: createMockComponent('Animated.View'),
+    Text: createMockComponent('Animated.Text'),
+  },
+  Alert: { alert: () => {} },
 }));
 
 mock.module('react-native-svg', () => ({

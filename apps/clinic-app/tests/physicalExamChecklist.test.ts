@@ -43,15 +43,18 @@ mock.module('react-native', () => ({
   processColor: (c: any) => c,
 }));
 
-mock.module('@ui', () => ({
-  ThemedText: 'ThemedText',
-  Button: 'Button',
-  Input: 'Input',
-  Card: 'Card',
-  CardHeader: 'CardHeader',
-  CardContent: 'CardContent',
-  Icon: 'Icon',
-  Badge: 'Badge',
+mock.module('react-native-svg', () => ({
+  Svg: 'Svg',
+  Path: 'Path',
+  Circle: 'Circle',
+  Rect: 'Rect',
+  Line: 'Line',
+  default: 'Svg',
+}));
+
+mock.module('../constants/fonts', () => ({
+  applyFontFamily: (s: any) => s,
+  fontAssets: {},
 }));
 
 const {

@@ -8,6 +8,7 @@ let currentWindowWidth = 1200;
 let currentWindowHeight = 800;
 
 mock.module('react-native', () => ({
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   StyleSheet: { create: (s: any) => s },
   View: 'View',
   Pressable: 'Pressable',

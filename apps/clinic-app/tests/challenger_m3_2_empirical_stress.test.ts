@@ -5,6 +5,7 @@ import { describe, expect, test, mock, beforeEach } from 'bun:test';
 
 // Mock react-native dependencies
 mock.module('react-native', () => ({
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   StyleSheet: { create: (s: any) => s },
   View: 'View',
   Pressable: 'Pressable',
