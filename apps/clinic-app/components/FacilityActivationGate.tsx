@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   StyleSheet,
   ScrollView,
-  Modal,
   Platform,
 } from 'react-native';
 import { theme } from '@constants/theme';
@@ -13,6 +12,7 @@ import Button from '@ui/Button';
 import Input from '@ui/Input';
 import Badge, { BadgeVariant } from '@ui/Badge';
 import Icon from '@ui/Icon';
+import Modal from '@ui/Modal';
 import { clinicService, FacilityLicenseStatus } from '../services/clinicService';
 import { getOfflineGraceHours, getServiceSubdomain, getSetting, isWorkspaceRequired } from '../services/runtimeConfig';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
@@ -469,10 +469,11 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       {children}
 
       <Modal
+        raw
         visible={modalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
+        onClose={() => setModalVisible(false)}
       >
         <View style={styles.modalBackdrop}>
           <View style={[styles.card, styles.modalCard]}>

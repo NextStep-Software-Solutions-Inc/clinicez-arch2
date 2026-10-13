@@ -16,7 +16,7 @@ import { theme } from '../../constants/theme';
 import {
   useModalStack,
   findPortalContainer,
-  bringPortalToFront,
+  attachPortalElement,
   ModalStackContext,
   BASE_MODAL_Z_INDEX,
 } from './modalStack';
@@ -57,9 +57,10 @@ export default function Modal({
   backdropDismissible = true,
 }: ModalProps) {
   const rootRef = useRef<any>(null);
-  const { modalId, depth, zIndex } = useModalStack(visible, {
+  const { modalId, depth, zIndex, isTop } = useModalStack(visible, {
     onClose,
     zIndex: customZIndex,
+    elementRef: rootRef,
   });
 
   useEffect(() => {
@@ -68,13 +69,13 @@ export default function Modal({
       const node = (rootRef.current as any)?.node || rootRef.current;
       const portal = findPortalContainer(node);
       if (portal) {
-        bringPortalToFront(portal, zIndex);
+        attachPortalElement(modalId, portal);
       }
     }
-  }, [visible, zIndex]);
+  }, [visible, modalId, zIndex]);
 
   const handleBackdropPress = () => {
-    if (backdropDismissible && onClose) {
+    if (backdropDismissible && onClose && isTop) {
       onClose();
     }
   };
@@ -84,10 +85,16 @@ export default function Modal({
       visible={visible}
       transparent={transparent}
       animationType={animationType}
-      onRequestClose={onClose}
+      onRequestClose={isTop ? onClose : undefined}
       testID={testID}
     >
-      <ModalStackContext.Provider value={{ parentDepth: depth, parentModalId: modalId }}>
+      <ModalStackContext.Provider
+        value={{
+          parentDepth: depth,
+          parentModalId: modalId,
+          parentZIndex: zIndex,
+        }}
+      >
         {raw ? (
           <View
             ref={rootRef}
@@ -217,6 +224,7 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
     ...theme.shadows.lg,
+    elevation: 20,
   },
   scrollArea: {
     flexShrink: 1,

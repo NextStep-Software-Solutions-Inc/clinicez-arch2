@@ -5,14 +5,13 @@ import {
   GestureResponderEvent,
   LayoutChangeEvent,
   Linking,
-  Modal,
   Platform,
   Pressable,
   StyleSheet,
   View,
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { Button, Icon, ThemedText } from './ui';
+import { Button, Icon, ThemedText, Modal } from './ui';
 import { theme } from '../constants/theme';
 
 export interface CameraQrScannerModalProps {
@@ -202,7 +201,7 @@ export default function CameraQrScannerModal({
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
+    <Modal raw visible={visible} animationType="slide" transparent={false} onClose={onClose}>
       <View style={styles.container}>
         {/* Header Overlay */}
         <View style={styles.header}>

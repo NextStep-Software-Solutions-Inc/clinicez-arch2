@@ -3,7 +3,6 @@ import {
   View,
   StyleSheet,
   Pressable,
-  Modal,
   ScrollView,
   PressableStateCallbackType,
 } from 'react-native';
@@ -12,6 +11,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import ThemedText from '../ui/ThemedText';
 import Icon, { IconName } from '../ui/Icon';
 import Badge from '../ui/Badge';
+import Modal from '../ui/Modal';
 import { theme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { WORKSTATION_NAV_ITEMS, NavItem } from './WorkstationSidebar';
@@ -215,10 +215,11 @@ export default function MobileBottomTabBar({
       {/* Overflow Bottom Sheet Modal */}
       {overflowRoutes.length > 0 ? (
         <Modal
+          raw
           visible={moreOpen}
           transparent
           animationType="slide"
-          onRequestClose={() => setMoreOpen(false)}
+          onClose={() => setMoreOpen(false)}
         >
           <View style={styles.sheetOverlay}>
             <Pressable

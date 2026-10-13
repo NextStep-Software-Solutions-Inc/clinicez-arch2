@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, TextInput, Modal } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState, Button } from '../ui';
+import { ThemedText, Badge, Icon, EmptyState, Button, Modal } from '../ui';
 import AdministerVaccineModal from './AdministerVaccineModal';
 import HistoricalVaccineModal from './HistoricalVaccineModal';
 import type {
@@ -363,7 +363,7 @@ export default function StatutoryImmunizationsTab({
       {/* ========================================================================= */}
       {/* AEFI REPORTING MODAL                                                      */}
       {/* ========================================================================= */}
-      <Modal visible={aefiModalVisible} transparent animationType="fade">
+      <Modal raw visible={aefiModalVisible} transparent animationType="fade" onClose={() => setAefiModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>

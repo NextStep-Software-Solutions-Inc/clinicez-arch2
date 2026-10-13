@@ -42,6 +42,7 @@ export {
 export {
   useModalStack,
   registerModal,
+  attachPortalElement,
   unregisterModal,
   bringModalToFront,
   getModalStack,
@@ -56,4 +57,6 @@ export {
   BASE_MODAL_Z_INDEX,
   MODAL_Z_INDEX_STEP,
   type ModalStackItem,
+  ModalStackContext,
+  type ModalStackContextValue,
 } from './modalStack';

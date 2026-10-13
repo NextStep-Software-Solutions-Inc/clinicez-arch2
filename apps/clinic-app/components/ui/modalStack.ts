@@ -7,7 +7,7 @@ export interface ModalStackItem {
   id: string;
   depth: number;
   zIndex: number;
-  element?: any;
+  portalEl?: any;
   onClose?: () => void;
 }
 
@@ -34,16 +34,31 @@ function notifyListeners(): void {
  */
 export function findPortalContainer(node: any): any {
   if (!node || typeof document === 'undefined') return null;
-  let curr = node;
+  let curr = (node as any)?.node || node;
   while (curr && curr.parentNode && curr.parentNode !== document.body) {
     curr = curr.parentNode;
   }
   return curr && curr.parentNode === document.body ? curr : null;
 }
 
+let isInternalDomMutation = false;
+
+function safeAppendChildToBody(el: any): void {
+  if (typeof document === 'undefined' || !document.body || !el) return;
+  if (document.body.lastElementChild === el) return;
+  isInternalDomMutation = true;
+  try {
+    document.body.appendChild(el);
+  } finally {
+    queueMicrotask(() => {
+      isInternalDomMutation = false;
+    });
+  }
+}
+
 /**
- * Ensures the modal portal DOM node is moved to the end of document.body
- * and receives the assigned zIndex so it renders cleanly above prior modals.
+ * Ensures the modal portal DOM node is styled with the assigned zIndex
+ * and moved to the end of document.body so it renders cleanly above prior modals.
  */
 export function bringPortalToFront(portalEl: any, zIndex: number): void {
   if (!portalEl || typeof document === 'undefined' || !document.body) return;
@@ -51,18 +66,18 @@ export function bringPortalToFront(portalEl: any, zIndex: number): void {
     portalEl.style.position = 'relative';
     portalEl.style.zIndex = String(zIndex);
 
-    // Also set zIndex on inner animation/modal-content elements if present
-    const modalContent =
-      portalEl.querySelector?.('[aria-modal="true"]') ||
-      portalEl.firstElementChild;
+    // react-native-web ModalAnimation container has position: fixed and hardcoded zIndex: 9999
+    const animContainer = portalEl.firstElementChild;
+    if (animContainer && animContainer.style) {
+      animContainer.style.zIndex = String(zIndex);
+    }
+
+    const modalContent = portalEl.querySelector?.('[aria-modal="true"]');
     if (modalContent && modalContent.style) {
       modalContent.style.zIndex = String(zIndex);
     }
 
-    // Re-append to document.body to ensure DOM order paints it on top
-    if (document.body.lastElementChild !== portalEl) {
-      document.body.appendChild(portalEl);
-    }
+    safeAppendChildToBody(portalEl);
   } catch {}
 }
 
@@ -76,17 +91,21 @@ export function registerModal(
     element?: any;
     onClose?: () => void;
     zIndexOverride?: number;
+    parentDepth?: number;
   }
 ): ModalStackItem {
-  // If already in stack, remove prior entry so it can be re-added to top
   const existingIdx = activeModalStack.findIndex((m) => m.id === id);
   let priorElement = options?.element;
   if (existingIdx !== -1) {
-    priorElement = priorElement || activeModalStack[existingIdx].element;
+    priorElement = priorElement || activeModalStack[existingIdx].portalEl;
     activeModalStack.splice(existingIdx, 1);
   }
 
-  const depth = activeModalStack.length;
+  const minDepth =
+    options?.parentDepth !== undefined && options.parentDepth >= 0
+      ? options.parentDepth + 1
+      : 0;
+  const depth = Math.max(activeModalStack.length, minDepth);
   const zIndex =
     options?.zIndexOverride ?? (BASE_MODAL_Z_INDEX + depth * MODAL_Z_INDEX_STEP);
 
@@ -94,14 +113,19 @@ export function registerModal(
     id,
     depth,
     zIndex,
-    element: priorElement,
+    portalEl: priorElement,
     onClose: options?.onClose,
   };
 
   activeModalStack.push(item);
 
-  if (item.element) {
-    bringPortalToFront(item.element, zIndex);
+  if (item.portalEl) {
+    try {
+      if (item.portalEl.dataset) {
+        item.portalEl.dataset.clinicezModalId = id;
+      }
+    } catch {}
+    bringPortalToFront(item.portalEl, zIndex);
   }
 
   notifyListeners();
@@ -109,7 +133,24 @@ export function registerModal(
 }
 
 /**
- * Unregisters a modal from the active stack and re-synchronizes the remaining stack.
+ * Attaches a DOM portal element to an already registered modal item.
+ */
+export function attachPortalElement(id: string, portalEl: any): void {
+  const item = activeModalStack.find((m) => m.id === id);
+  if (!item) return;
+  item.portalEl = portalEl;
+  if (portalEl && typeof portalEl === 'object') {
+    try {
+      if (portalEl.dataset) {
+        portalEl.dataset.clinicezModalId = id;
+      }
+    } catch {}
+    bringPortalToFront(portalEl, item.zIndex);
+  }
+}
+
+/**
+ * Unregisters a modal from the active stack and re-synchronizes remaining stack depths.
  */
 export function unregisterModal(id: string): void {
   const idx = activeModalStack.findIndex((m) => m.id === id);
@@ -121,8 +162,13 @@ export function unregisterModal(id: string): void {
   activeModalStack.forEach((item, index) => {
     item.depth = index;
     item.zIndex = BASE_MODAL_Z_INDEX + index * MODAL_Z_INDEX_STEP;
-    if (item.element) {
-      bringPortalToFront(item.element, item.zIndex);
+    if (item.portalEl) {
+      try {
+        item.portalEl.style.zIndex = String(item.zIndex);
+        if (item.portalEl.firstElementChild?.style) {
+          item.portalEl.firstElementChild.style.zIndex = String(item.zIndex);
+        }
+      } catch {}
     }
   });
 
@@ -142,10 +188,19 @@ export function bringModalToFront(id: string): void {
   activeModalStack.forEach((m, index) => {
     m.depth = index;
     m.zIndex = BASE_MODAL_Z_INDEX + index * MODAL_Z_INDEX_STEP;
-    if (m.element) {
-      bringPortalToFront(m.element, m.zIndex);
+    if (m.portalEl) {
+      try {
+        m.portalEl.style.zIndex = String(m.zIndex);
+        if (m.portalEl.firstElementChild?.style) {
+          m.portalEl.firstElementChild.style.zIndex = String(m.zIndex);
+        }
+      } catch {}
     }
   });
+
+  if (item.portalEl) {
+    bringPortalToFront(item.portalEl, item.zIndex);
+  }
 
   notifyListeners();
 }
@@ -196,6 +251,7 @@ export function subscribeModalStack(listener: () => void): () => void {
 export interface ModalStackContextValue {
   parentDepth: number;
   parentModalId?: string;
+  parentZIndex?: number;
 }
 
 export const ModalStackContext = React.createContext<ModalStackContextValue>({
@@ -220,6 +276,7 @@ export function useModalStack(
   isTop: boolean;
   stackCount: number;
 } {
+  const context = React.useContext(ModalStackContext);
   const stableIdRef = useRef<string | null>(null);
   if (!stableIdRef.current) {
     stableIdRef.current = options?.id || generateModalId();
@@ -228,9 +285,19 @@ export function useModalStack(
 
   const [state, setState] = useState(() => {
     const d = getModalStackDepth(modalId);
+    const initialDepth =
+      d >= 0
+        ? d
+        : visible
+          ? Math.max(activeModalStack.length, context.parentDepth + 1)
+          : 0;
     return {
-      depth: d >= 0 ? d : (visible ? activeModalStack.length : 0),
-      zIndex: options?.zIndex ?? (d >= 0 ? getModalZIndex(modalId) : BASE_MODAL_Z_INDEX + (visible ? activeModalStack.length : 0) * MODAL_Z_INDEX_STEP),
+      depth: initialDepth,
+      zIndex:
+        options?.zIndex ??
+        (d >= 0
+          ? getModalZIndex(modalId)
+          : BASE_MODAL_Z_INDEX + initialDepth * MODAL_Z_INDEX_STEP),
       isTop: isTopModal(modalId),
       stackCount: activeModalStack.length,
     };
@@ -250,6 +317,7 @@ export function useModalStack(
         element: portalEl,
         onClose: options?.onClose,
         zIndexOverride: options?.zIndex,
+        parentDepth: context.parentDepth,
       });
 
       setState({
@@ -290,7 +358,7 @@ export function useModalStack(
       unregisterModal(modalId);
       unsubscribe();
     };
-  }, [visible, modalId, options?.zIndex]);
+  }, [visible, modalId, options?.zIndex, context.parentDepth]);
 
   return {
     modalId,
@@ -303,8 +371,8 @@ export function useModalStack(
 
 /**
  * Global Web DOM MutationObserver for react-native-web modals.
- * Automatically catches any [aria-modal="true"] dialogs rendered via RNModal
- * and ensures newly mounted/opened modals are layered above existing modals.
+ * Catches third-party or unmanaged [aria-modal="true"] dialogs rendered via RNModal.
+ * Protected with internal mutation lock to prevent infinite feedback loops.
  */
 let observerInitialized = false;
 let globalObserver: any = null;
@@ -320,7 +388,7 @@ export function initModalStackObserver(): () => void {
   observerInitialized = true;
 
   const handleDomMutations = () => {
-    if (!document.body) return;
+    if (isInternalDomMutation || !document.body) return;
 
     // Scan for all active modal portals in document.body
     const ariaModalElements = Array.from(
@@ -332,20 +400,23 @@ export function initModalStackObserver(): () => void {
       const portal = findPortalContainer(ariaEl);
       if (!portal) return;
 
-      const registered = activeModalStack.find((m) => m.element === portal);
+      // Check if already registered either by portalEl ref or dataset ID
+      const existingId = (portal as any).dataset?.clinicezModalId;
+      const registered = activeModalStack.find(
+        (m) => m.portalEl === portal || (existingId && m.id === existingId)
+      );
+
       if (!registered) {
-        // Tag and register in active stack
-        const generatedId =
-          portal.dataset.clinicezModalId || generateModalId('rnw-modal');
-        portal.dataset.clinicezModalId = generatedId;
+        // Tag and register untracked portal
+        const generatedId = existingId || generateModalId('rnw-modal');
+        if ((portal as any).dataset) {
+          (portal as any).dataset.clinicezModalId = generatedId;
+        }
         registerModal(generatedId, { element: portal });
-      } else {
-        // Ensure portal DOM element is correctly positioned and styled
-        bringPortalToFront(portal, registered.zIndex);
       }
     });
 
-    // Cleanup portals that were unmounted from document.body
+    // Cleanup untracked portals that were unmounted from document.body
     const currentPortals = new Set(
       Array.from(document.body.children).filter((el) =>
         el.querySelector?.('[aria-modal="true"]')
@@ -353,7 +424,10 @@ export function initModalStackObserver(): () => void {
     );
 
     const staleItems = activeModalStack.filter(
-      (item) => item.element && !currentPortals.has(item.element)
+      (item) =>
+        item.id.startsWith('rnw-modal-') &&
+        item.portalEl &&
+        !currentPortals.has(item.portalEl)
     );
     staleItems.forEach((stale) => unregisterModal(stale.id));
   };
@@ -365,9 +439,6 @@ export function initModalStackObserver(): () => void {
       subtree: true,
     });
   } catch {}
-
-  // Run once immediately
-  handleDomMutations();
 
   return () => {
     if (globalObserver) {
