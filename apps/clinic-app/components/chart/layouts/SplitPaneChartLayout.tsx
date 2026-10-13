@@ -26,40 +26,62 @@ interface NavItemMeta {
   getCount?: (chart: any, attachments?: any[]) => number | undefined;
 }
 
-const SPLIT_NAV_ITEMS: readonly NavItemMeta[] = [
-  { tab: 'summary', label: 'Executive Summary', icon: 'dashboard' },
+interface NavGroupMeta {
+  groupTitle: string;
+  items: readonly NavItemMeta[];
+}
+
+const SPLIT_NAV_GROUPS: readonly NavGroupMeta[] = [
   {
-    tab: 'encounters',
-    label: 'Encounters Timeline',
-    icon: 'consultations',
-    getCount: (chart) => chart?.consultations?.length,
+    groupTitle: 'CLINICAL OVERVIEW',
+    items: [
+      { tab: 'summary', label: 'Executive Summary', icon: 'dashboard' },
+      {
+        tab: 'encounters',
+        label: 'Encounters Timeline',
+        icon: 'consultations',
+        getCount: (chart) => chart?.consultations?.length,
+      },
+    ],
   },
   {
-    tab: 'diagnostics',
-    label: 'Diagnostic Labs',
-    icon: 'lab',
-    getCount: (chart) => chart?.labOrdersHistory?.length,
+    groupTitle: 'CARE & INVESTIGATIONS',
+    items: [
+      {
+        tab: 'diagnostics',
+        label: 'Diagnostic Labs',
+        icon: 'lab',
+        getCount: (chart) => chart?.labOrdersHistory?.length,
+      },
+      {
+        tab: 'procedures',
+        label: 'Nursing Procedures',
+        icon: 'activity',
+        getCount: (chart) => chart?.proceduresHistory?.length,
+      },
+      {
+        tab: 'immunizations',
+        label: 'Vaccines & Immunization',
+        icon: 'syringe',
+        getCount: (chart) => chart?.immunizations?.length,
+      },
+    ],
   },
   {
-    tab: 'procedures',
-    label: 'Nursing Procedures',
-    icon: 'activity',
-    getCount: (chart) => chart?.proceduresHistory?.length,
-  },
-  {
-    tab: 'immunizations',
-    label: 'Vaccines & Immunization',
-    icon: 'syringe',
-    getCount: (chart) => chart?.immunizations?.length,
-  },
-  { tab: 'profiles', label: 'Health Profiles', icon: 'clipboard' },
-  {
-    tab: 'vault',
-    label: 'Document Vault',
-    icon: 'folder',
-    getCount: (_, attachments) => attachments?.length,
+    groupTitle: 'PATIENT RECORDS',
+    items: [
+      { tab: 'profiles', label: 'Health Profiles', icon: 'clipboard' },
+      {
+        tab: 'vault',
+        label: 'Document Vault',
+        icon: 'folder',
+        getCount: (_, attachments) => attachments?.length,
+      },
+    ],
   },
 ] as const;
+
+const SPLIT_NAV_ITEMS: readonly NavItemMeta[] = SPLIT_NAV_GROUPS.flatMap((g) => g.items);
 
 export default function SplitPaneChartLayout(props: ChartLayoutProps) {
   const {
@@ -246,52 +268,68 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                 CHART NAVIGATION
               </ThemedText>
             </View>
-            <View style={styles.navList}>
-              {SPLIT_NAV_ITEMS.map((item) => {
-                const isSelected = activeTab === item.tab;
-                const count = item.getCount?.(patientChart, patientAttachments);
-                return (
-                  <Pressable
-                    key={item.tab}
-                    onPress={() => onTabChange(item.tab)}
-                    style={({ pressed }) => [
-                      styles.navItem,
-                      isSelected && styles.navItemActive,
-                      pressed && styles.navItemPressed,
-                    ]}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={item.label}
-                  >
-                    <View style={styles.navItemLeft}>
-                      <Icon
-                        name={item.icon}
-                        size={theme.sizes.iconMd}
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
-                      />
-                      <ThemedText
-                        variant={isSelected ? 'bodyBold' : 'body'}
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                        style={styles.navLabel}
-                      >
-                        {item.label}
-                      </ThemedText>
-                    </View>
-
-                    {count !== undefined && count > 0 ? (
-                      <View style={[styles.navBadge, isSelected && styles.navBadgeActive]}>
-                        <ThemedText
-                          variant="caption"
-                          color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
-                          style={styles.navBadgeText}
+            <View style={styles.navGroupContainer}>
+              {SPLIT_NAV_GROUPS.map((group, groupIdx) => (
+                <View key={group.groupTitle} style={[styles.navGroup, groupIdx > 0 && styles.navGroupSpaced]}>
+                  <View style={styles.navGroupHeader}>
+                    <ThemedText
+                      variant="captionBold"
+                      color={theme.colors.textMuted}
+                      style={styles.navGroupTitle}
+                    >
+                      {group.groupTitle}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.navList}>
+                    {group.items.map((item) => {
+                      const isSelected = activeTab === item.tab;
+                      const count = item.getCount?.(patientChart, patientAttachments);
+                      return (
+                        <Pressable
+                          key={item.tab}
+                          onPress={() => onTabChange(item.tab)}
+                          style={({ pressed }) => [
+                            styles.navItem,
+                            isSelected && styles.navItemActive,
+                            pressed && styles.navItemPressed,
+                          ]}
+                          accessibilityRole="tab"
+                          accessibilityState={{ selected: isSelected }}
+                          accessibilityLabel={item.label}
                         >
-                          {count}
-                        </ThemedText>
-                      </View>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
+                          <View style={styles.navItemLeft}>
+                            <Icon
+                              name={item.icon}
+                              size={theme.sizes.iconSm}
+                              color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                            />
+                            <ThemedText
+                              variant={isSelected ? 'smallBold' : 'small'}
+                              color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                              numberOfLines={1}
+                              style={styles.navLabel}
+                            >
+                              {item.label}
+                            </ThemedText>
+                          </View>
+
+                          {count !== undefined && count > 0 ? (
+                            <View style={[styles.navBadge, isSelected && styles.navBadgeActive]}>
+                              <ThemedText
+                                variant="captionBold"
+                                color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                                style={styles.navBadgeText}
+                              >
+                                {count}
+                              </ThemedText>
+                            </View>
+                          ) : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
             </View>
           </ScrollView>
 
@@ -525,23 +563,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  navList: {
+  navGroupContainer: {
     gap: theme.spacing.xs,
+  },
+  navGroup: {
+    gap: 2,
+  },
+  navGroupSpaced: {
+    marginTop: theme.spacing.xs,
+  },
+  navGroupHeader: {
+    paddingHorizontal: theme.spacing.xs,
+    paddingTop: theme.spacing.xs,
+    paddingBottom: 2,
+  },
+  navGroupTitle: {
+    letterSpacing: 0.6,
+  },
+  navList: {
+    gap: 2,
   },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.radii.md,
+    paddingVertical: 6,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
     borderWidth: 1,
     borderColor: theme.colors.transparent,
   },
   navItemActive: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.primaryBorder,
-    borderLeftWidth: 4,
+    borderLeftWidth: 3,
     borderLeftColor: theme.colors.primary,
     ...theme.shadows.sm,
   },
@@ -552,7 +607,7 @@ const styles = StyleSheet.create({
   navItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs + 2,
     flex: 1,
   },
   navLabel: {
@@ -560,11 +615,14 @@ const styles = StyleSheet.create({
   },
   navBadge: {
     backgroundColor: theme.colors.surfaceHighlight,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 2,
+    paddingHorizontal: theme.spacing.xs + 2,
+    paddingVertical: 1,
     borderRadius: theme.radii.full,
     borderWidth: 1,
     borderColor: theme.colors.borderLight,
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   navBadgeActive: {
     backgroundColor: theme.colors.primaryLight,
