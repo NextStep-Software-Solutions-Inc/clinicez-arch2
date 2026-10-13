@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -59,6 +59,12 @@ import EditPatientModal from '../../components/patient/EditPatientModal';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
 import { formatLongAge } from '../../utils/age';
 import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
+import {
+  type MemberType,
+  type PrincipalRelationship,
+  PHILHEALTH_RELATIONSHIPS,
+  buildPhilHealthProfileData,
+} from '../../components/patient/memberType';
 
 import {
   clinicService,
@@ -144,6 +150,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [medicalHistoryModalVisible, setMedicalHistoryModalVisible] = useState(false);
   const [formAlerts, setFormAlerts] = useState('');
   const [isPinValid, setIsPinValid] = useState<boolean | null>(null);
+  const [formMemberType, setFormMemberType] = useState<MemberType>('MM');
+  const [formPrincipalPin, setFormPrincipalPin] = useState('');
+  const [formPrincipalFullName, setFormPrincipalFullName] = useState('');
+  const [formPrincipalRelationship, setFormPrincipalRelationship] = useState<PrincipalRelationship>('C');
+  const [formPrincipalDob, setFormPrincipalDob] = useState('');
+  const [isPrincipalPinValid, setIsPrincipalPinValid] = useState<boolean | null>(null);
   const [structuredAllergies, setStructuredAllergies] = useState<CreateAllergyRequest[]>([]);
   const [allergyModalVisible, setAllergyModalVisible] = useState(false);
   const [formChiefComplaint, setFormChiefComplaint] = useState('');
@@ -169,6 +181,19 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       }
     });
   };
+
+  const quickCodesSet = useMemo(() => new Set(PHILHEALTH_QUICK_CONDITIONS.map((q) => q.code)), []);
+  const quickTitlesSet = useMemo(() => new Set(PHILHEALTH_QUICK_CONDITIONS.map((q) => q.title.toLowerCase())), []);
+
+  const additionalFormConditions = useMemo(() => {
+    return formMedicalHistories.filter(
+      (c) =>
+        (!(c.philHealthMdiseaseCode && quickCodesSet.has(c.philHealthMdiseaseCode)) &&
+         !quickTitlesSet.has(c.conditionTitle.trim().toLowerCase())) ||
+        Boolean(c.clinicalNotes?.trim()) ||
+        Boolean(c.icd10Code?.trim())
+    );
+  }, [formMedicalHistories, quickCodesSet, quickTitlesSet]);
 
   const clearFieldError = (field: string) => {
     setFormFieldErrors((prev) => {
@@ -323,6 +348,28 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       }
     }
 
+    if (formMemberType === 'DD') {
+      if (!formPrincipalFullName.trim()) {
+        Alert.alert('Missing Details', 'Principal member full name is required for dependents.');
+        return;
+      }
+      if (!formPrincipalRelationship) {
+        Alert.alert('Missing Details', 'Relationship to principal member is required.');
+        return;
+      }
+      if (formPrincipalPin.trim() && isPrincipalPinValid === false) {
+        Alert.alert('Invalid PIN', 'Principal Member PIN failed Mod-11 verification.');
+        return;
+      }
+      if (formPrincipalDob.trim()) {
+        const pDobCheck = validateDateString(formPrincipalDob, { boundaryMode: 'pastOrToday' });
+        if (!pDobCheck.isValid) {
+          Alert.alert('Invalid Date of Birth', pDobCheck.errorMessage || 'Principal Date of Birth cannot be in the future.');
+          return;
+        }
+      }
+    }
+
     setSavingPatient(true);
 
     const customFields: Record<string, any> = {};
@@ -342,6 +389,27 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         if (formDepartment.trim()) customFields['department'] = formDepartment.trim();
       }
     }
+
+    customFields['member_type'] = formMemberType;
+    if (formMemberType === 'DD') {
+      customFields['principal_member_pin'] = formPrincipalPin.trim();
+      customFields['principal_full_name'] = formPrincipalFullName.trim();
+      customFields['principal_relationship'] = formPrincipalRelationship;
+      if (formPrincipalDob.trim()) customFields['principal_dob'] = formPrincipalDob.trim();
+    }
+
+    customFields['philhealth_profile'] = buildPhilHealthProfileData({
+      memberType: formMemberType,
+      patientPin: formPhilHealth,
+      patientFirstName: formFirstName,
+      patientLastName: formLastName,
+      patientMiddleName: formMiddleName,
+      patientDob: formDob,
+      principalPin: formPrincipalPin,
+      principalFullName: formPrincipalFullName,
+      principalRelationship: formPrincipalRelationship,
+      principalDob: formPrincipalDob,
+    });
 
     const allergiesSummary = structuredAllergies.length > 0
       ? structuredAllergies.map((a) => `${a.allergen} (${a.category}${a.isAnaphylactic ? ' - STAT' : ''})`).join(', ')
@@ -478,6 +546,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setIsPinValid(null);
     setFormChiefComplaint('');
     setFormTriagePriority('Routine');
+    setFormMemberType('MM');
+    setFormPrincipalPin('');
+    setFormPrincipalFullName('');
+    setFormPrincipalRelationship('C');
+    setFormPrincipalDob('');
+    setIsPrincipalPinValid(null);
   };
 
   const handleViewExistingPatient = async (patientId: string) => {
@@ -622,9 +696,15 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
-  const handleVerifyAttachment = async (attachmentId: string, isApproved: boolean) => {
+  const handleVerifyAttachment = async (
+    attachmentId: string,
+    isApproved: boolean,
+    userRejectionReason?: string
+  ) => {
     setVerifyingAttachmentId(attachmentId);
-    const rejectionReason = !isApproved ? 'Document illegible or missing official physician signature/stamp.' : undefined;
+    const rejectionReason = !isApproved
+      ? (userRejectionReason?.trim() || 'Document illegible or missing official physician signature/stamp.')
+      : undefined;
     const [, verifyErr] = await clinicService.verifyRecordAttachment(attachmentId, isApproved, rejectionReason);
     setVerifyingAttachmentId(null);
     if (verifyErr) {
@@ -1315,6 +1395,97 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 error={formFieldErrors.philHealthId || formFieldErrors.philHealthPin || formFieldErrors.philHealthNumber}
               />
 
+              {/* PhilHealth Member Type Selector (MM vs DD) */}
+              <View style={{ gap: 4 }}>
+                <ThemedText style={styles.inputLabel}>PhilHealth Member Type *</ThemedText>
+                <SegmentedControl
+                  options={[
+                    { value: 'MM', label: 'Member (MM)' },
+                    { value: 'DD', label: 'Dependent (DD)' },
+                  ]}
+                  value={formMemberType}
+                  onChange={(val) => setFormMemberType(val as MemberType)}
+                />
+              </View>
+
+              {/* Conditional Principal Sponsor Details Card when DD */}
+              {formMemberType === 'DD' && (
+                <View style={styles.sponsorCard}>
+                  <View style={styles.sponsorHeader}>
+                    <Icon name="shield" size={14} color={theme.colors.primaryDark} />
+                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                      Principal Sponsor Details
+                    </ThemedText>
+                    <Badge label="Required for Konsulta" variant="info" size="sm" />
+                  </View>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    Required for PhilHealth Konsulta dependent registration and statutory encounter claims.
+                  </ThemedText>
+
+                  <Input
+                    label="Principal Member Full Name *"
+                    placeholder="e.g. Maria Santos"
+                    value={formPrincipalFullName}
+                    onChangeText={(val) => {
+                      setFormPrincipalFullName(val);
+                      clearFieldError('principalFullName');
+                    }}
+                    error={formFieldErrors.principalFullName}
+                  />
+
+                  <View style={{ gap: 4 }}>
+                    <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                      Relationship to Principal Member *
+                    </ThemedText>
+                    <View style={styles.relationshipGrid}>
+                      {PHILHEALTH_RELATIONSHIPS.map((rel) => {
+                        const isSelected = formPrincipalRelationship === rel.code;
+                        return (
+                          <Pressable
+                            key={rel.code}
+                            onPress={() => setFormPrincipalRelationship(rel.code)}
+                            style={[
+                              styles.relationshipChip,
+                              isSelected && styles.relationshipChip_selected,
+                            ]}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected: isSelected }}
+                          >
+                            <ThemedText
+                              variant="captionBold"
+                              color={isSelected ? theme.colors.onPrimary : theme.colors.textSecondary}
+                            >
+                              {rel.label}
+                            </ThemedText>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={styles.formRow}>
+                    <View style={{ flex: 1 }}>
+                      <PhilHealthPinInput
+                        label="Principal Member PIN (RA 11223)"
+                        value={formPrincipalPin}
+                        onChangeText={setFormPrincipalPin}
+                        onValidityChange={setIsPrincipalPinValid}
+                        error={formFieldErrors.principalMemberPin}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ValidatedDateInput
+                        label="Principal Date of Birth"
+                        value={formPrincipalDob}
+                        onChangeText={setFormPrincipalDob}
+                        boundaryMode="pastOrToday"
+                        placeholder="YYYY-MM-DD"
+                      />
+                    </View>
+                  </View>
+                </View>
+              )}
+
               <View style={styles.formRow}>
                 <View style={{ flex: 1 }}>
                   <ThemedText style={styles.inputLabel}>Senior Citizen ID (RA 9994)</ThemedText>
@@ -1433,12 +1604,26 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   })}
                 </View>
 
-                <MedicalHistoryPillList
-                  items={formMedicalHistories}
-                  onRemove={(index) => {
-                    setFormMedicalHistories((prev) => prev.filter((_, i) => i !== index));
-                  }}
-                />
+                {additionalFormConditions.length > 0 && (
+                  <View style={styles.additionalConditionsWrap}>
+                    <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 6 }}>
+                      Additional Documented Conditions:
+                    </ThemedText>
+                    <MedicalHistoryPillList
+                      items={additionalFormConditions}
+                      onRemove={(index) => {
+                        const target = additionalFormConditions[index];
+                        setFormMedicalHistories((prev) => prev.filter((item) => item !== target));
+                      }}
+                    />
+                  </View>
+                )}
+
+                {formMedicalHistories.length === 0 && (
+                  <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 2 }}>
+                    No chronic conditions selected (Patient has no known chronic illnesses).
+                  </ThemedText>
+                )}
               </View>
 
               {/* Section 2: Dedicated Clinical & Safety Alerts */}
@@ -2767,6 +2952,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
+  additionalConditionsWrap: {
+    marginTop: theme.spacing.xs,
+  },
   quickChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -2787,5 +2975,35 @@ const styles = StyleSheet.create({
   quickChipActive: {
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.primaryLight,
+  },
+  sponsorCard: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderLight,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  sponsorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  relationshipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  relationshipChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  relationshipChip_selected: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
 });

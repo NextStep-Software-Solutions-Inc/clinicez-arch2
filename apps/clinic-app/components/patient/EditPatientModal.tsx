@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,11 +6,18 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { ThemedText, TextInput, Input, Icon, Button, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal } from '../ui';
+import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl } from '../ui';
 import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition } from '../../services/clinicService';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
+import {
+  type MemberType,
+  type PrincipalRelationship,
+  PHILHEALTH_RELATIONSHIPS,
+  buildPhilHealthProfileData,
+  extractPhilHealthProfileData,
+} from './memberType';
 import StructuredAllergyIntakeModal, {
   AllergyPillList,
   CreateAllergyRequest,
@@ -141,6 +148,12 @@ export function EditPatientModal({
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
   const [emergencyContactRelationship, setEmergencyContactRelationship] = useState('');
   const [philHealthNumber, setPhilHealthNumber] = useState('');
+  const [memberType, setMemberType] = useState<MemberType>('MM');
+  const [principalMemberPin, setPrincipalMemberPin] = useState('');
+  const [principalFullName, setPrincipalFullName] = useState('');
+  const [principalRelationship, setPrincipalRelationship] = useState<PrincipalRelationship>('C');
+  const [principalDob, setPrincipalDob] = useState('');
+  const [isPrincipalPinValid, setIsPrincipalPinValid] = useState<boolean | null>(null);
   const [seniorCitizenId, setSeniorCitizenId] = useState('');
   const [pwdId, setPwdId] = useState('');
   const [bloodType, setBloodType] = useState('');
@@ -169,6 +182,19 @@ export function EditPatientModal({
       }
     });
   };
+
+  const quickCodesSet = useMemo(() => new Set(PHILHEALTH_QUICK_CONDITIONS.map((q) => q.code)), []);
+  const quickTitlesSet = useMemo(() => new Set(PHILHEALTH_QUICK_CONDITIONS.map((q) => q.title.toLowerCase())), []);
+
+  const additionalConditions = useMemo(() => {
+    return structuredMedicalHistories.filter(
+      (c) =>
+        (!(c.philHealthMdiseaseCode && quickCodesSet.has(c.philHealthMdiseaseCode)) &&
+         !quickTitlesSet.has(c.conditionTitle.trim().toLowerCase())) ||
+        Boolean(c.clinicalNotes?.trim()) ||
+        Boolean(c.icd10Code?.trim())
+    );
+  }, [structuredMedicalHistories, quickCodesSet, quickTitlesSet]);
 
   // Institutional classification
   const [classification, setClassification] = useState<'General' | 'Student' | 'Employee'>('General');
@@ -237,6 +263,13 @@ export function EditPatientModal({
     setEmergencyContactPhone(patient.emergencyContactPhone || '');
     setEmergencyContactRelationship(patient.emergencyContactRelationship || '');
     setPhilHealthNumber(patient.philHealthNumber || '');
+    const pProfile = extractPhilHealthProfileData(patient.customFields, patient);
+    setMemberType(pProfile.memberType);
+    setPrincipalMemberPin(pProfile.principalPin);
+    setPrincipalFullName(pProfile.principalFullName);
+    setPrincipalRelationship(pProfile.principalRelationship);
+    setPrincipalDob(pProfile.principalDob);
+    setIsPrincipalPinValid(null);
     setSeniorCitizenId(patient.seniorCitizenId || '');
     setPwdId(patient.pwdId || '');
     setBloodType(patient.bloodType || '');
@@ -365,6 +398,54 @@ export function EditPatientModal({
         delete mergedCustomFields['department'];
       }
     }
+
+    if (memberType === 'DD') {
+      if (!principalFullName.trim()) {
+        Alert.alert('Missing Details', 'Principal member full name is required for dependents.');
+        return;
+      }
+      if (!principalRelationship) {
+        Alert.alert('Missing Details', 'Relationship to principal member is required.');
+        return;
+      }
+      if (principalMemberPin.trim() && isPrincipalPinValid === false) {
+        Alert.alert('Invalid PIN', 'Principal Member PIN failed Mod-11 verification.');
+        return;
+      }
+      if (principalDob.trim()) {
+        const pDobCheck = validateDateString(principalDob, { boundaryMode: 'pastOrToday' });
+        if (!pDobCheck.isValid) {
+          Alert.alert('Invalid Date of Birth', pDobCheck.errorMessage || 'Principal Date of Birth cannot be in the future.');
+          return;
+        }
+      }
+    }
+
+    mergedCustomFields['member_type'] = memberType;
+    if (memberType === 'DD') {
+      mergedCustomFields['principal_member_pin'] = principalMemberPin.trim();
+      mergedCustomFields['principal_full_name'] = principalFullName.trim();
+      mergedCustomFields['principal_relationship'] = principalRelationship;
+      if (principalDob.trim()) mergedCustomFields['principal_dob'] = principalDob.trim();
+    } else {
+      delete mergedCustomFields['principal_member_pin'];
+      delete mergedCustomFields['principal_full_name'];
+      delete mergedCustomFields['principal_relationship'];
+      delete mergedCustomFields['principal_dob'];
+    }
+
+    mergedCustomFields['philhealth_profile'] = buildPhilHealthProfileData({
+      memberType,
+      patientPin: philHealthNumber,
+      patientFirstName: firstName,
+      patientLastName: lastName,
+      patientMiddleName: middleName,
+      patientDob: dateOfBirth,
+      principalPin: principalMemberPin,
+      principalFullName,
+      principalRelationship,
+      principalDob,
+    });
 
     const allergiesSummary = structuredAllergies.length > 0
       ? structuredAllergies.map((a) => `${a.allergen} (${a.category}${a.isAnaphylactic ? ' - STAT' : ''})`).join(', ')
@@ -760,6 +841,99 @@ export function EditPatientModal({
               error={fieldErrors.philHealthId || fieldErrors.philHealthPin || fieldErrors.philHealthNumber}
             />
 
+            {/* PhilHealth Member Type Selector (MM vs DD) */}
+            <View style={{ gap: 4 }}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                PhilHealth Member Type *
+              </ThemedText>
+              <SegmentedControl
+                options={[
+                  { value: 'MM', label: 'Member (MM)' },
+                  { value: 'DD', label: 'Dependent (DD)' },
+                ]}
+                value={memberType}
+                onChange={(val) => setMemberType(val as MemberType)}
+              />
+            </View>
+
+            {/* Conditional Principal Sponsor Details Card when DD */}
+            {memberType === 'DD' && (
+              <View style={styles.sponsorCard}>
+                <View style={styles.sponsorHeader}>
+                  <Icon name="shield" size={14} color={theme.colors.primaryDark} />
+                  <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                    Principal Sponsor Details
+                  </ThemedText>
+                  <Badge label="Required for Konsulta" variant="info" size="sm" />
+                </View>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Required for PhilHealth Konsulta dependent registration and statutory encounter claims.
+                </ThemedText>
+
+                <Input
+                  label="Principal Member Full Name *"
+                  placeholder="e.g. Maria Santos"
+                  value={principalFullName}
+                  onChangeText={(val) => {
+                    setPrincipalFullName(val);
+                    clearFieldError('principalFullName');
+                  }}
+                  error={fieldErrors.principalFullName}
+                />
+
+                <View style={{ gap: 4 }}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                    Relationship to Principal Member *
+                  </ThemedText>
+                  <View style={styles.relationshipGrid}>
+                    {PHILHEALTH_RELATIONSHIPS.map((rel) => {
+                      const isSelected = principalRelationship === rel.code;
+                      return (
+                        <Pressable
+                          key={rel.code}
+                          onPress={() => setPrincipalRelationship(rel.code)}
+                          style={[
+                            styles.relationshipChip,
+                            isSelected && styles.relationshipChip_selected,
+                          ]}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: isSelected }}
+                        >
+                          <ThemedText
+                            variant="captionBold"
+                            color={isSelected ? theme.colors.onPrimary : theme.colors.textSecondary}
+                          >
+                            {rel.label}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.formRow}>
+                  <View style={styles.formCol}>
+                    <PhilHealthPinInput
+                      label="Principal Member PIN (RA 11223)"
+                      value={principalMemberPin}
+                      onChangeText={setPrincipalMemberPin}
+                      onValidityChange={setIsPrincipalPinValid}
+                      error={fieldErrors.principalMemberPin}
+                    />
+                  </View>
+                  <View style={styles.formCol}>
+                    <ValidatedDateInput
+                      label="Principal Date of Birth"
+                      value={principalDob}
+                      onChangeText={setPrincipalDob}
+                      boundaryMode="pastOrToday"
+                      placeholder="YYYY-MM-DD"
+                    />
+                  </View>
+                </View>
+              </View>
+            )}
+
             <View style={styles.formRow}>
               <View style={styles.formCol}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
@@ -885,12 +1059,26 @@ export function EditPatientModal({
                 })}
               </View>
 
-              <MedicalHistoryPillList
-                items={structuredMedicalHistories}
-                onRemove={(index) => {
-                  setStructuredMedicalHistories((prev) => prev.filter((_, i) => i !== index));
-                }}
-              />
+              {additionalConditions.length > 0 && (
+                <View style={styles.additionalConditionsWrap}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 6 }}>
+                    Additional Documented Conditions:
+                  </ThemedText>
+                  <MedicalHistoryPillList
+                    items={additionalConditions}
+                    onRemove={(index) => {
+                      const target = additionalConditions[index];
+                      setStructuredMedicalHistories((prev) => prev.filter((item) => item !== target));
+                    }}
+                  />
+                </View>
+              )}
+
+              {structuredMedicalHistories.length === 0 && (
+                <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 2 }}>
+                  No chronic conditions selected (Patient has no known chronic illnesses).
+                </ThemedText>
+              )}
             </View>
 
             {/* Section 2: Dedicated Clinical & Safety Alerts */}
@@ -1081,6 +1269,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
+  additionalConditionsWrap: {
+    marginTop: theme.spacing.xs,
+  },
   quickChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1101,5 +1292,35 @@ const styles = StyleSheet.create({
   quickChipActive: {
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.primaryLight,
+  },
+  sponsorCard: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderLight,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  sponsorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  relationshipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  relationshipChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  relationshipChip_selected: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
 });

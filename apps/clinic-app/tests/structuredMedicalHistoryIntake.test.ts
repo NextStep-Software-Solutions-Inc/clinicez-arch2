@@ -331,10 +331,19 @@ describe('Structured Past Medical History & Clinical Safety Alerts Intake', () =
       expect(codes).toContain('998'); // Others
     });
 
-    it('quick-pick conditions contain the 6 most frequent chronic illnesses', () => {
+    it('quick-pick conditions contain the 6 most frequent chronic illnesses with clean labels', () => {
       expect(PHILHEALTH_QUICK_CONDITIONS).toHaveLength(6);
       const quickCodes = PHILHEALTH_QUICK_CONDITIONS.map((q) => q.code);
       expect(quickCodes).toEqual(['011', '006', '002', '010', '015', '012']);
+      const quickLabels = PHILHEALTH_QUICK_CONDITIONS.map((q) => q.label);
+      expect(quickLabels).toEqual([
+        'Hypertension',
+        'Diabetes Mellitus',
+        'Asthma',
+        'Hyperlipidemia',
+        'Pulmonary TB',
+        'Peptic Ulcer',
+      ]);
     });
   });
 
@@ -430,7 +439,7 @@ describe('Structured Past Medical History & Clinical Safety Alerts Intake', () =
       expect(el.props.items).toEqual([]);
     });
 
-    it('renders condition pills with PhilHealth code badges when populated', () => {
+    it('renders clean clinical condition pills without raw statutory code badges when populated', () => {
       const items: MedicalHistoryItem[] = [
         { conditionTitle: 'Hypertension', philHealthMdiseaseCode: '011', clinicalNotes: 'Controlled' },
         { conditionTitle: 'Asthma', philHealthMdiseaseCode: '002', isResolved: true },

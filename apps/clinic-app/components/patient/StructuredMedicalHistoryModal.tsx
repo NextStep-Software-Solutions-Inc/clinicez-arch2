@@ -54,12 +54,12 @@ export const PHILHEALTH_MDISEASES_CONDITIONS: PhilHealthMdiseaseDef[] = [
 ];
 
 export const PHILHEALTH_QUICK_CONDITIONS = [
-  { code: '011', label: 'Hypertension (011)', title: 'Hypertension' },
-  { code: '006', label: 'Diabetes Mellitus (006)', title: 'Diabetes Mellitus' },
-  { code: '002', label: 'Asthma (002)', title: 'Asthma' },
-  { code: '010', label: 'Hyperlipidemia (010)', title: 'Hyperlipidemia' },
-  { code: '015', label: 'Pulmonary TB (015)', title: 'Pulmonary Tuberculosis' },
-  { code: '012', label: 'Peptic Ulcer (012)', title: 'Peptic Ulcer' },
+  { code: '011', label: 'Hypertension', title: 'Hypertension' },
+  { code: '006', label: 'Diabetes Mellitus', title: 'Diabetes Mellitus' },
+  { code: '002', label: 'Asthma', title: 'Asthma' },
+  { code: '010', label: 'Hyperlipidemia', title: 'Hyperlipidemia' },
+  { code: '015', label: 'Pulmonary TB', title: 'Pulmonary Tuberculosis' },
+  { code: '012', label: 'Peptic Ulcer', title: 'Peptic Ulcer' },
 ];
 
 /**
@@ -167,13 +167,6 @@ export const MedicalHistoryPillList: React.FC<MedicalHistoryPillListProps> = ({
           <View key={`${item.conditionTitle}-${index}`} style={styles.pillCard}>
             <View style={styles.pillContent}>
               <View style={styles.badgeRow}>
-                {code ? (
-                  <Badge
-                    label={`Code: ${code}`}
-                    variant="info"
-                    size="sm"
-                  />
-                ) : null}
                 {item.icd10Code ? (
                   <Badge
                     label={`ICD: ${item.icd10Code}`}
@@ -334,7 +327,7 @@ export default function StructuredMedicalHistoryModal({
       <View style={styles.modalBody}>
         <View style={styles.headerInfo}>
           <ThemedText variant="caption" color={theme.colors.textSecondary}>
-            Document statutory PhilHealth conditions (lib_mdiseases) and custom chronic diagnoses.
+            Document patient's chronic conditions, medical history, and diagnoses.
           </ThemedText>
         </View>
 
@@ -354,16 +347,47 @@ export default function StructuredMedicalHistoryModal({
         </View>
 
         <View style={styles.activePillsBox}>
-          <MedicalHistoryPillList
-            items={selectedConditions}
-            onRemove={handleRemoveCondition}
-          />
+          {selectedConditions.length === 0 ? (
+            <View style={styles.emptyPillContainer}>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                No conditions selected yet. Tap standard conditions below or add a custom diagnosis.
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.compactChipsWrap}>
+              {selectedConditions.map((item, index) => {
+                const title = item.specificDescription?.trim() || item.conditionTitle;
+                return (
+                  <View key={`${item.conditionTitle}-${index}`} style={styles.compactSelectedChip}>
+                    <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                      {title}
+                    </ThemedText>
+                    {item.icd10Code ? (
+                      <Badge
+                        label={`ICD: ${item.icd10Code}`}
+                        variant="neutral"
+                        size="sm"
+                      />
+                    ) : null}
+                    <Pressable
+                      accessibilityLabel={`Remove ${title}`}
+                      style={styles.compactRemoveBtn}
+                      onPress={() => handleRemoveCondition(index)}
+                      hitSlop={8}
+                    >
+                      <Icon name="close" size={12} color={theme.colors.primaryDark} />
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Input
-            placeholder="Search conditions or PhilHealth codes (e.g. 011, Hypertension)..."
+            placeholder="Search conditions (e.g. Hypertension, Asthma)..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             leftIcon="search"
@@ -373,7 +397,7 @@ export default function StructuredMedicalHistoryModal({
         {/* Catalog Selector Grid */}
         <ScrollView style={styles.catalogScroll} showsVerticalScrollIndicator={true}>
           <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.catalogSubtitle}>
-            PhilHealth Statutory Conditions (lib_mdiseases)
+            Standard Medical Conditions
           </ThemedText>
 
           <View style={styles.catalogGrid}>
@@ -389,11 +413,6 @@ export default function StructuredMedicalHistoryModal({
                   onPress={() => toggleStatutoryCondition(item)}
                 >
                   <View style={styles.catalogItemContent}>
-                    <Badge
-                      label={item.code}
-                      variant={active ? 'primary' : 'neutral'}
-                      size="sm"
-                    />
                     <ThemedText
                       variant={active ? 'bodyBold' : 'body'}
                       color={active ? theme.colors.primary : theme.colors.text}
@@ -413,7 +432,7 @@ export default function StructuredMedicalHistoryModal({
           {/* Custom Condition Intake Section */}
           <View style={styles.customIntakeSection}>
             <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.customSectionTitle}>
-              + Add Custom Diagnosis / Non-catalog Condition (998 Others)
+              + Add Custom Diagnosis / Other Condition
             </ThemedText>
 
             <View style={styles.customInputRow}>
@@ -491,6 +510,26 @@ const styles = StyleSheet.create({
     padding: theme.spacing.sm,
     marginBottom: theme.spacing.md,
     minHeight: 48,
+  },
+  compactChipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  compactSelectedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+    borderWidth: 1,
+    borderRadius: theme.radii.full,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  compactRemoveBtn: {
+    padding: 2,
+    marginLeft: 2,
   },
   searchContainer: {
     marginBottom: theme.spacing.sm,
