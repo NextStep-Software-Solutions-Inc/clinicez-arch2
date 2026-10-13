@@ -744,6 +744,8 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       expect(html).toContain('Administer Vaccine');
       expect(html).toContain('Add Historical Vaccine');
       expect(html).not.toContain('+ +');
+      expect(html).not.toContain('PhilHealth');
+      expect(html).not.toContain('Fallback Code 999');
     });
   });
 });

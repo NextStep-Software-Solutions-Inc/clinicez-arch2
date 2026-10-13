@@ -516,6 +516,8 @@ describe('Adversarial Medical Chart Workstation Layouts Refinement (Round 1)', (
       expect(markup).toContain('Immunization Documentation Status');
       expect(markup).toContain('No immunizations are currently documented for this patient');
       expect(markup).toContain('No immunizations recorded');
+      expect(markup).not.toContain('PhilHealth');
+      expect(markup).not.toContain('Fallback Code 999');
     });
   });
 

@@ -154,8 +154,8 @@ export default function StatutoryImmunizationsTab({
       {/* IMMUNIZATION DOCUMENTATION STATUS BANNER                                  */}
       {/* ========================================================================= */}
       {!hasAnyRecorded ? (
-        <View style={styles.fallbackNoticeCard}>
-          <View style={styles.fallbackTopRow}>
+        <View style={styles.documentationStatusCard}>
+          <View style={styles.documentationStatusTopRow}>
             <Icon name="info" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
             <View style={{ flex: 1 }}>
               <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
@@ -471,7 +471,7 @@ export default function StatutoryImmunizationsTab({
   );
 }
 
-const styles = StyleSheet.create({
+export const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -491,6 +491,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
+    maxWidth: '100%',
+  },
+  documentationStatusCard: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  documentationStatusTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
   },
   fallbackNoticeCard: {
     backgroundColor: theme.colors.primarySubtle,

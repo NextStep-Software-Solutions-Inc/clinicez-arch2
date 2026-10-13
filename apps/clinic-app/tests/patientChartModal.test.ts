@@ -334,6 +334,8 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
 
     expect(markup).toContain('Immunization Documentation Status');
     expect(markup).toContain('No immunizations are currently documented for this patient');
+    expect(markup).not.toContain('PhilHealth Konsulta Statutory Coverage');
+    expect(markup).not.toContain('Fallback Code 999');
   });
 
   test('7. Renders External Document Vault tab with category filters and upload button', () => {

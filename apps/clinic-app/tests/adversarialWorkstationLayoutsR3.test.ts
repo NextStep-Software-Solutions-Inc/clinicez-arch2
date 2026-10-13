@@ -518,6 +518,8 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
       expect(markup).toContain('Administer Vaccine');
       expect(markup).toContain('Add Historical Vaccine');
       expect(markup).not.toContain('+ +');
+      expect(markup).not.toContain('PhilHealth');
+      expect(markup).not.toContain('Fallback Code 999');
     });
   });
 

@@ -684,8 +684,12 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
           immunizations: [],
         })
       );
+      expect(emptyMarkup).toContain('Immunization Documentation Status');
+      expect(emptyMarkup).toContain('No immunizations are currently documented for this patient');
       expect(emptyMarkup).toContain('No immunizations recorded');
       expect(emptyMarkup).toContain('No vaccination records found for this patient');
+      expect(emptyMarkup).not.toContain('PhilHealth');
+      expect(emptyMarkup).not.toContain('Fallback Code 999');
 
       // Catalog completeness
       expect(PHILHEALTH_STATUTORY_VACCINES.lib_immchild.length).toBe(13);

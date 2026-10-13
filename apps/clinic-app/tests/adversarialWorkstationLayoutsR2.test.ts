@@ -485,6 +485,8 @@ describe('Adversarial Review Round 2: Medical Chart Workstation Layouts Robustne
       // Verify clinical immunization documentation status banner is intact
       expect(markup).toContain('Immunization Documentation Status');
       expect(markup).toContain('No immunizations are currently documented for this patient');
+      expect(markup).not.toContain('PhilHealth');
+      expect(markup).not.toContain('Fallback Code 999');
     });
   });
 

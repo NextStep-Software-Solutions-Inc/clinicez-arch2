@@ -87,6 +87,8 @@ mock.module('../constants/fonts', () => ({
 const {
   default: StatutoryImmunizationsTab,
   PHILHEALTH_STATUTORY_VACCINES,
+  COHORT_CATEGORY_NAMES,
+  styles: tabStyles,
 } = await import('../components/chart/StatutoryImmunizationsTab');
 
 const {
@@ -204,6 +206,13 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
   ];
 
   describe('Feature 11: StatutoryImmunizationsTab Action Controls & Compliance Layout', () => {
+    test('renders right-aligned action buttons with flex-end justification and overflow wrapping constraints', () => {
+      expect(tabStyles.headerActionBar.justifyContent).toBe('flex-end');
+      expect(tabStyles.actionButtonsRow.justifyContent).toBe('flex-end');
+      expect(tabStyles.actionButtonsRow.flexWrap).toBe('wrap');
+      expect(tabStyles.actionButtonsRow.maxWidth).toBe('100%');
+    });
+
     test('renders Administer Vaccine and Add Historical Vaccine header action buttons', () => {
       const html = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
@@ -220,7 +229,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
       expect(html).not.toContain('+ +');
     });
 
-    test('renders immunization documentation status banner when zero immunizations recorded', () => {
+    test('renders immunization documentation status banner and pure clinical empty state when zero immunizations recorded', () => {
       const html = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
           patient: mockChildPatient,
@@ -231,9 +240,28 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
         })
       );
 
+      // Clinical documentation status banner
       expect(html).toContain('Immunization Documentation Status');
       expect(html).toContain('No immunizations are currently documented for this patient');
+      expect(html).toContain('Review the recommended vaccination schedule for their cohort');
+      expect(html).toContain('record any previously administered doses under');
+      expect(html).toContain('Add Historical Vaccine');
+      expect(html).toContain('or administer new vaccines during this encounter');
+
+      // Clinical empty state copy
       expect(html).toContain('No immunizations recorded');
+      expect(html).toContain('No vaccination records found for this patient');
+      expect(html).toContain('Administer Vaccine');
+      expect(html).toContain('to document past immunizations');
+
+      // Strict exclusion of payer/regulatory jargon per user direction
+      expect(html).not.toContain('PhilHealth');
+      expect(html).not.toContain('Konsulta');
+      expect(html).not.toContain('Fallback Code 999');
+      expect(html).not.toContain('fallback code 999');
+      expect(html).not.toContain('statutory fallback');
+      expect(html).not.toContain('DTD v1.14');
+      expect(html).not.toContain('claim compliance');
     });
 
     test('renders recorded immunizations with distinction between administered and historical', () => {
@@ -259,6 +287,20 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
 
       // AEFI reporting badge
       expect(html).toContain('AEFI REPORTED: Severity: Mild');
+
+      // Banner is suppressed when immunizations exist
+      expect(html).not.toContain('Immunization Documentation Status');
+
+      // Verify no PhilHealth jargon leaks into populated cards
+      expect(html).not.toContain('PhilHealth');
+      expect(html).not.toContain('Fallback Code');
+    });
+
+    test('provides clean clinical names for all statutory cohort categories without payer jargon', () => {
+      expect(COHORT_CATEGORY_NAMES.lib_immchild).toBe('Childhood');
+      expect(COHORT_CATEGORY_NAMES.lib_immyoungw).toBe('Young Women');
+      expect(COHORT_CATEGORY_NAMES.lib_immpregw).toBe('Maternal');
+      expect(COHORT_CATEGORY_NAMES.lib_immelderly).toBe('Senior Citizen');
     });
 
     test('verifies all 4 PhilHealth statutory vaccine catalogs are complete', () => {
