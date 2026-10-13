@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLight,
@@ -247,9 +247,12 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   spineWrapper: {
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.xs,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLight,
-    backgroundColor: theme.colors.surfaceHighlight,
+    backgroundColor: theme.colors.surface,
   },
   tabBarContainer: {
     paddingHorizontal: theme.spacing.xl,
