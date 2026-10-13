@@ -16,6 +16,9 @@ import {
   DIETARY_HABIT_OPTIONS,
   ALCOHOL_FREQUENCY_OPTIONS,
 } from './chart/LifestyleSocialTab';
+import OrganSystemsExamSection, {
+  DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+} from './chart/OrganSystemsExamSection';
 
 interface PhilHealthProfileModalProps {
   visible: boolean;
@@ -119,57 +122,11 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** UI field on the profile -> the PhilHealth library that defines the allowed findings for that organ system. */
-const ORGAN_SYSTEMS: { key: string; label: string; library: PhilHealthLibraryName }[] = [
-  { key: 'skinId', label: 'Skin / extremities', library: 'lib_skin_extremities' },
-  { key: 'heentId', label: 'HEENT', library: 'lib_heent' },
-  { key: 'chestId', label: 'Chest / lungs', library: 'lib_chest' },
-  { key: 'heartId', label: 'Heart', library: 'lib_heart' },
-  { key: 'abdomenId', label: 'Abdomen', library: 'lib_abdomen' },
-  { key: 'neuroId', label: 'Neurological', library: 'lib_neuro' },
-  { key: 'guId', label: 'Genitourinary', library: 'lib_genitourinary' },
-  { key: 'rectalId', label: 'Rectal', library: 'lib_digital_rectal' },
-];
-
 /** Shows a catalog library's load state in the same place its choices would appear. */
 function CatalogStatus({ loading, error, onRetry }: { loading: boolean; error: { message: string } | null; onRetry: () => void }) {
   if (loading) return <SkeletonList rows={1} />;
   if (error) return <ErrorState compact title="PhilHealth catalog unavailable" message={error.message} onRetry={onRetry} />;
   return null;
-}
-
-/** One organ system: choose the finding from the library (single choice, as the PhilHealth form requires). */
-function OrganSystemRow({
-  label,
-  library,
-  value,
-  onChange,
-}: {
-  label: string;
-  library: PhilHealthLibraryName;
-  value?: string;
-  onChange: (code: string) => void;
-}) {
-  const { items, loading, error, reload } = usePhilHealthCatalog(library);
-  return (
-    <View style={styles.organRow}>
-      <ThemedText variant="bodyBold" color={theme.colors.textSecondary}>
-        {label}
-      </ThemedText>
-      <CatalogStatus loading={loading} error={error} onRetry={reload} />
-      <View style={styles.conditionsWrap}>
-        {items.map((item) => (
-          <Chip
-            key={item.code}
-            label={item.description}
-            tone={/normal/i.test(item.description) ? 'success' : 'warning'}
-            active={value === item.code}
-            onPress={() => onChange(item.code)}
-          />
-        ))}
-      </View>
-    </View>
-  );
 }
 
 /** Multi-select chips over lib_mdiseases (personal and family history use the same disease list). */
@@ -684,17 +641,34 @@ export default function PhilHealthProfileModal({
               )}
             </View>
 
-            <SectionTitle spaced>Organ systems examination</SectionTitle>
-            <View style={styles.organsGrid}>
-              {ORGAN_SYSTEMS.map((item) => (
-                <OrganSystemRow
-                  key={item.key}
-                  label={item.label}
-                  library={item.library}
-                  value={(profile as any)[item.key]}
-                  onChange={(code) => setProfile({ ...profile, [item.key]: code })}
-                />
-              ))}            </View>
+            <OrganSystemsExamSection
+              values={{
+                skinId: profile.skinId,
+                skinRemarks: profile.skinRemarks,
+                heentId: profile.heentId,
+                heentRemarks: profile.heentRemarks,
+                chestId: profile.chestId,
+                chestRemarks: profile.chestRemarks,
+                heartId: profile.heartId,
+                heartRemarks: profile.heartRemarks,
+                abdomenId: profile.abdomenId,
+                abdomenRemarks: profile.abdomenRemarks,
+                neuroId: profile.neuroId,
+                neuroRemarks: profile.neuroRemarks,
+                guId: profile.guId,
+                guRemarks: profile.guRemarks,
+                rectalId: profile.rectalId,
+                rectalRemarks: profile.rectalRemarks,
+              }}
+              onChange={(key, code) => setProfile({ ...profile, [key]: code })}
+              onSetAllNormal={() =>
+                setProfile({
+                  ...profile,
+                  ...DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+                })
+              }
+              spaced
+            />
           </View>
         )}
 
@@ -1464,6 +1438,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderDark,
+    flexShrink: 0,
   },
   chipPrimary: {
     backgroundColor: theme.colors.primaryLight,

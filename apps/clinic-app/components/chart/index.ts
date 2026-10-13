@@ -59,3 +59,16 @@ export type { AdministerVaccineModalProps } from './AdministerVaccineModal';
 
 export { default as HistoricalVaccineModal } from './HistoricalVaccineModal';
 export type { HistoricalVaccineModalProps } from './HistoricalVaccineModal';
+
+export {
+  default as OrganSystemsExamSection,
+  OrganSystemRow,
+  ORGAN_SYSTEMS,
+  DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+} from './OrganSystemsExamSection';
+export type {
+  OrganSystemsExamSectionProps,
+  OrganSystemRowProps,
+  OrganSystemsExamValues,
+  OrganSystemDef,
+} from './OrganSystemsExamSection';
