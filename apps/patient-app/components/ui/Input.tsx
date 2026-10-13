@@ -1,9 +1,21 @@
 import React, { forwardRef, useState } from 'react';
-import { StyleSheet, View, type StyleProp, type TextInput as RNTextInput, type TextInputProps, type ViewStyle } from 'react-native';
+import {
+  Platform,
+  StyleSheet,
+  View,
+  type NativeSyntheticEvent,
+  type StyleProp,
+  type TextInput as RNTextInput,
+  type TextInputFocusEventData,
+  type TextInputProps,
+  type ViewStyle,
+} from 'react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { TextInput } from './Text';
 import ThemedText from './ThemedText';
 import { AppIcon, type IconName } from './Icon';
+import { useInBottomSheet } from './BottomSheetContext';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
 export interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
@@ -17,6 +29,8 @@ export interface InputProps extends Omit<TextInputProps, 'style'> {
   right?: React.ReactNode;
   disabled?: boolean;
   containerStyle?: StyleProp<ViewStyle>;
+  /** Explicitly opt-in or opt-out of BottomSheetTextInput when in bottom sheet */
+  useBottomSheetInput?: boolean;
 }
 
 /**
@@ -24,13 +38,16 @@ export interface InputProps extends Omit<TextInputProps, 'style'> {
  * hint / error text below. Replaces ad-hoc `TextInput` styling across screens.
  */
 const Input = forwardRef<RNTextInput, InputProps>(function Input(
-  { label, required, hint, error, leftIcon, right, disabled, multiline, containerStyle, onFocus, onBlur, ...rest },
+  { label, required, hint, error, leftIcon, right, disabled, multiline, containerStyle, onFocus, onBlur, useBottomSheetInput, ...rest },
   ref,
 ) {
   const { colors, spacing, radii, sizes, typography } = useAppTheme();
   const [focused, setFocused] = useState(false);
+  const inBottomSheet = useInBottomSheet();
 
   const borderColor = error ? colors.emergency : focused ? colors.focusRing : colors.border;
+  const shouldUseBottomSheet = (useBottomSheetInput ?? inBottomSheet) && Platform.OS !== 'web';
+  const InputComponent: any = shouldUseBottomSheet ? BottomSheetTextInput : TextInput;
 
   return (
     <View style={[{ marginBottom: spacing.lg }, containerStyle]}>
@@ -58,18 +75,18 @@ const Input = forwardRef<RNTextInput, InputProps>(function Input(
             <AppIcon name={leftIcon} size={sizes.iconMd} color="textMuted" />
           </View>
         ) : null}
-        <TextInput
+        <InputComponent
           ref={ref}
           editable={!disabled}
           multiline={multiline}
           placeholderTextColor={colors.textLight}
           accessibilityLabel={label}
           accessibilityState={{ disabled: !!disabled }}
-          onFocus={(e) => {
+          onFocus={(e: NativeSyntheticEvent<TextInputFocusEventData>) => {
             setFocused(true);
             onFocus?.(e);
           }}
-          onBlur={(e) => {
+          onBlur={(e: NativeSyntheticEvent<TextInputFocusEventData>) => {
             setFocused(false);
             onBlur?.(e);
           }}

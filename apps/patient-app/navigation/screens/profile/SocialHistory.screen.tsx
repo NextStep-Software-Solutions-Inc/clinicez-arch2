@@ -18,6 +18,7 @@ import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 
 type TobaccoStatus = 'Never' | 'Former' | 'Current';
 type SleepQuality = 'Good' | 'Fair' | 'Poor';
@@ -66,6 +67,7 @@ export default function SocialHistoryScreen() {
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
   const navigation = useNavigation();
+  const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<'tobacco' | 'alcohol' | 'activity' | 'sleep' | null>(null);
 
@@ -188,8 +190,18 @@ export default function SocialHistoryScreen() {
 
   return (
     <Screen width="form" scroll={false} padded={false}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+      >
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentContainerStyle={[styles.content, { padding: spacing.md }]}
+        >
           <ProfileSectionHeader title="Tobacco Use" />
         <Controller control={control} name="tobaccoStatus" render={({ field }) => (
           <ProfileFormField label="Tobacco Status" value={TOBACCO_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setModal('tobacco')} placeholder="Select status" picker />
@@ -304,5 +316,5 @@ export default function SocialHistoryScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { padding: 16, paddingBottom: 24 },
+  content: { paddingBottom: 48 },
 });

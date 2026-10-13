@@ -17,6 +17,7 @@ import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 
 type CorrectiveLenses = 'None' | 'Glasses' | 'Contacts' | 'Both';
 
@@ -40,6 +41,7 @@ export default function DentalVisionScreen() {
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
   const navigation = useNavigation();
+  const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
   const [lensesModal, setLensesModal] = useState(false);
 
@@ -132,8 +134,18 @@ export default function DentalVisionScreen() {
 
   return (
     <Screen width="form" scroll={false} padded={false}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+      >
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentContainerStyle={[styles.content, { padding: spacing.md }]}
+        >
           <ProfileSectionHeader title="Dental Health" />
           <Controller control={control} name="dentistName" render={({ field }) => (
             <ProfileFormField label="Dentist Name" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
@@ -164,5 +176,5 @@ export default function DentalVisionScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { paddingBottom: 24 },
+  content: { paddingBottom: 48 },
 });

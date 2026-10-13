@@ -21,6 +21,7 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 import { dialog } from '@utils/dialog';
 
 type PhilhealthCategory = 'MM' | 'DD';
@@ -158,6 +159,7 @@ export default function GovernmentIdsScreen() {
   const { getToken } = useAuth();
   const navigation = useNavigation();
   const { colors, spacing, radii } = useAppTheme();
+  const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<'philhealth' | 'disability' | 'hmoPlan' | 'sponsorRel' | null>(null);
 
@@ -311,11 +313,17 @@ export default function GovernmentIdsScreen() {
 
   return (
     <Screen width="form" scroll={false} padded={false}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+      >
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: spacing['4xl'] }]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: spacing['4xl'] }]}
         >
           <ProfileSectionHeader title="PhilHealth" />
           <Controller control={control} name="philhealthId" render={({ field }) => (

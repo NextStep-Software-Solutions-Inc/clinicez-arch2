@@ -165,7 +165,7 @@ export default function AllergiesScreen() {
         <ProfileAddButton label="Add Allergy" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
 
-      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['55%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['60%', '85%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Allergy" />
           <Controller control={control} name="allergen" render={({ field }) => (
@@ -196,5 +196,5 @@ export default function AllergiesScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: 40 },
-  sheetContent: { padding: 16, paddingBottom: 16 },
+  sheetContent: { padding: 16, paddingBottom: 40 },
 });

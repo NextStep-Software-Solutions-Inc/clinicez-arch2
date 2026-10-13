@@ -18,6 +18,7 @@ import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 
 type PsychotherapyStatus = 'Active' | 'Inactive' | 'None';
 
@@ -40,6 +41,7 @@ export default function MentalHealthScreen() {
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
   const navigation = useNavigation();
+  const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
   const [therapyModal, setTherapyModal] = useState(false);
 
@@ -131,8 +133,18 @@ export default function MentalHealthScreen() {
 
   return (
     <Screen width="form" scroll={false} padded={false}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+      >
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentContainerStyle={[styles.content, { padding: spacing.md }]}
+        >
           <ProfileSectionHeader title="Mental Health Profile" description="Confidential — visible only to your healthcare provider." />
           <Controller control={control} name="hasPriorDiagnosis" render={({ field }) => (
             <ProfileToggle label="Has Prior Mental Health Diagnosis" value={field.value} onValueChange={field.onChange} />
@@ -163,5 +175,5 @@ export default function MentalHealthScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { paddingBottom: 24 },
+  content: { paddingBottom: 48 },
 });

@@ -16,6 +16,7 @@ import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import Card from '@ui/Card';
 import Input from '@ui/Input';
+import { useSafeHeaderHeight } from '../../hooks/useSafeHeaderHeight';
 
 type Step = 'email' | 'code' | 'password';
 
@@ -24,6 +25,7 @@ const STEP_LABELS = ['Email', 'Code', 'Password'];
 
 export default function ForgotPasswordScreen() {
   const navigation = useNavigation<any>();
+  const headerHeight = useSafeHeaderHeight();
   const { colors, spacing, radii, sizes, typography } = useAppTheme();
   const { signIn, errors, fetchStatus } = useSignIn();
   const { unlock } = useAuth();
@@ -70,7 +72,8 @@ export default function ForgotPasswordScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.page, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
     >
       <ScrollView
         contentContainerStyle={[
@@ -83,6 +86,8 @@ export default function ForgotPasswordScreen() {
           },
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         showsVerticalScrollIndicator={false}
       >
         {/* Step indicator */}

@@ -19,6 +19,7 @@ import { getPatientProfile, updatePatientDemographics, type PatientSummary } fro
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { upsertPatientSummary } from '@db/hydrate';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 
 type FormValues = {
   mobile: string;
@@ -34,6 +35,7 @@ export default function ContactInfoScreen() {
   const accountEmail = user?.primaryEmailAddress?.emailAddress ?? '';
   const navigation = useNavigation();
   const { spacing } = useAppTheme();
+  const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<FormValues>({
@@ -231,8 +233,18 @@ export default function ContactInfoScreen() {
 
   return (
     <Screen width="form" scroll={false} padded={false}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+      >
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentContainerStyle={[styles.content, { padding: spacing.md }]}
+        >
           <ProfileSectionHeader title="Phone Numbers" />
           <Controller control={control} name="mobile" render={({ field }) => (
             <ProfileFormField label="Mobile Number" value={field.value} onChangeText={field.onChange} keyboardType="phone-pad" placeholder="+63 9XX XXX XXXX" required />
@@ -270,5 +282,5 @@ export default function ContactInfoScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { paddingBottom: 24 },
+  content: { paddingBottom: 48 },
 });

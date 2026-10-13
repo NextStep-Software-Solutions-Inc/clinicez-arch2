@@ -26,6 +26,7 @@ import {
 } from 'services/api/patientApi';
 import { upsertPatientSummary } from '@db/hydrate';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 
 type FormValues = {
   firstName: string;
@@ -89,6 +90,7 @@ export default function PersonalDemographicsScreen() {
   const { getToken } = useAuth();
   const navigation = useNavigation();
   const { spacing } = useAppTheme();
+  const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<'sex' | 'civil' | 'blood' | 'education' | null>(null);
 
@@ -366,11 +368,14 @@ export default function PersonalDemographicsScreen() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
       >
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: spacing['4xl'] }]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: spacing['4xl'] }]}
         >
           <ProfileSectionHeader title="Full Name" />
           <ProfileFormGrid>

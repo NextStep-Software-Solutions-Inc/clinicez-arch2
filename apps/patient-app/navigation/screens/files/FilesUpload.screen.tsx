@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import useSWR from 'swr';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
@@ -151,6 +151,9 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
       style={{ backgroundColor: colors.background }}
       contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: insets.bottom + spacing.xl, gap: spacing.xl }]}
     >

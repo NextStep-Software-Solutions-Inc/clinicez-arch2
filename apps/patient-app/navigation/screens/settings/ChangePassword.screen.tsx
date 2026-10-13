@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { ScrollView, View, TextInput, Pressable, StyleSheet } from 'react-native';
+import { ScrollView, View, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@clerk/expo';
 import { useForm, Controller } from 'react-hook-form';
 import { useAppTheme } from '../../../contexts/ThemeContext';
+import { useSafeHeaderHeight } from '../../../hooks/useSafeHeaderHeight';
 import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import Card from '@ui/Card';
@@ -125,22 +126,31 @@ export default function ChangePasswordScreen() {
   };
 
   const divider = <View style={[styles.divider, { backgroundColor: colors.border, marginLeft: spacing.lg }]} />;
+  const headerHeight = useSafeHeaderHeight();
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={[
-        styles.container,
-        {
-          padding: spacing.lg,
-          gap: spacing.lg,
-          maxWidth: sizes.formMaxWidth,
-          alignSelf: 'center',
-          width: '100%',
-        },
-      ]}
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
     >
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        contentContainerStyle={[
+          styles.container,
+          {
+            padding: spacing.lg,
+            gap: spacing.lg,
+            maxWidth: sizes.formMaxWidth,
+            alignSelf: 'center',
+            width: '100%',
+            paddingBottom: spacing['3xl'] ?? 48,
+          },
+        ]}
+      >
       <ThemedText variant="body" color="textSecondary">
         Your new password must be at least 8 characters long.
       </ThemedText>
@@ -218,10 +228,12 @@ export default function ChangePasswordScreen() {
         onPress={handleSubmit(onSubmit)}
       />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: {},
   card: {
     overflow: 'hidden',

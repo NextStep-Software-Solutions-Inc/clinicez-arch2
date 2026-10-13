@@ -18,6 +18,7 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 import { randomUUID } from 'expo-crypto';
 import { dialog } from '@utils/dialog';
 
@@ -35,6 +36,7 @@ export default function NcdQuestionnaireScreen() {
   const { getToken } = useAuth();
   const navigation = useNavigation();
   const { colors, spacing, radii, sizes } = useAppTheme();
+  const headerHeight = useSafeHeaderHeight();
 
   const [recordId, setRecordId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -326,11 +328,14 @@ export default function NcdQuestionnaireScreen() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
       >
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: spacing['4xl'] }]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: spacing['4xl'] }]}
         >
           {/* Banner */}
           <View style={[styles.headerBanner, { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder, borderRadius: radii.xl, padding: spacing.lg, gap: spacing.xs, marginBottom: spacing.lg }]}>

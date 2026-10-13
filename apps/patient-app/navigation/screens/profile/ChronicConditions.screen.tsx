@@ -135,7 +135,7 @@ export default function ChronicConditionsScreen() {
         <ProfileAddButton label="Add Condition" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
 
-      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['45%', '70%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['55%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Chronic Condition" />
           <Controller control={control} name="diagnosis" render={({ field }) => (
@@ -156,5 +156,5 @@ export default function ChronicConditionsScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: 40 },
-  sheetContent: { padding: 16, paddingBottom: 16 },
+  sheetContent: { padding: 16, paddingBottom: 40 },
 });

@@ -18,6 +18,7 @@ import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 
 type FormValues = { hasVasectomy: boolean; vasectomyDate: string; conditions: string; };
 
@@ -26,6 +27,7 @@ export default function MaleReproductiveScreen() {
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
   const navigation = useNavigation();
+  const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
   const { control, handleSubmit, reset, watch, formState: { isDirty } } = useForm<FormValues>({
     defaultValues: { hasVasectomy: false, vasectomyDate: '', conditions: '' },
@@ -112,8 +114,18 @@ export default function MaleReproductiveScreen() {
 
   return (
     <Screen width="form" scroll={false} padded={false}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+      >
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+          contentContainerStyle={[styles.content, { padding: spacing.md }]}
+        >
           <ProfileSectionHeader title="Male Reproductive Health" />
           <Controller control={control} name="hasVasectomy" render={({ field }) => (
             <ProfileToggle label="Has Vasectomy" value={field.value} onValueChange={field.onChange} />
@@ -135,5 +147,5 @@ export default function MaleReproductiveScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { paddingBottom: 24 },
+  content: { paddingBottom: 48 },
 });

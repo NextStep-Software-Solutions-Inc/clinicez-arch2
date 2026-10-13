@@ -15,11 +15,13 @@ import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import Card from '@ui/Card';
 import { AppIcon } from '@ui/Icon';
+import { useSafeHeaderHeight } from '../../hooks/useSafeHeaderHeight';
 
 export default function VerifyScreen() {
   const { signIn, fetchStatus: signInFetchStatus } = useSignIn();
   const { signUp, fetchStatus: signUpFetchStatus } = useSignUp();
   const { unlock } = useAuth();
+  const headerHeight = useSafeHeaderHeight();
   const { colors, spacing, radii, sizes, typography } = useAppTheme();
   const [code, setCode] = useState('');
 
@@ -64,7 +66,8 @@ export default function VerifyScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.page, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
     >
       <ScrollView
         contentContainerStyle={[
@@ -77,6 +80,8 @@ export default function VerifyScreen() {
           },
         ]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.header, { gap: spacing.xs }]}>

@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Image, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { FlatList, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { addDays, format } from 'date-fns';
@@ -23,6 +23,8 @@ import { SkeletonCard } from '@ui/Skeleton';
 import WeeklyDatePicker from 'components/appointments/WeeklyDatePicker';
 import TimeSlotPicker from 'components/appointments/TimeSlotPicker';
 import { usePatientId } from 'hooks/usePatientId';
+import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
+import { useKeyboardVisible } from 'hooks/useKeyboardVisible';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useContentInsets } from '../../hooks/useContentInsets';
 import { db } from '@db/index';
@@ -315,6 +317,8 @@ function SummaryRow({
 export default function BookingDraftScreen(props: Props) {
   const { colors, spacing, radii, sizes, typography } = useAppTheme();
   const insets = useContentInsets();
+  const headerHeight = useSafeHeaderHeight();
+  const isKeyboardVisible = useKeyboardVisible();
   const initialClinicId = props.route?.params?.clinicId;
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
@@ -1138,13 +1142,22 @@ export default function BookingDraftScreen(props: Props) {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.screen, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+    >
       <StepIndicator step={step} total={5} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 110 }]}
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: (isKeyboardVisible ? spacing.md : insets.bottom) + 110 },
+        ]}
       >
         {renderStep()}
       </ScrollView>
@@ -1152,7 +1165,11 @@ export default function BookingDraftScreen(props: Props) {
       <View
         style={[
           styles.bottomNav,
-          { borderTopColor: colors.border, backgroundColor: colors.card, paddingBottom: insets.bottom + spacing.md },
+          {
+            borderTopColor: colors.border,
+            backgroundColor: colors.card,
+            paddingBottom: (isKeyboardVisible ? spacing.sm : insets.bottom) + spacing.md,
+          },
         ]}
       >
         <Pressable
@@ -1206,7 +1223,7 @@ export default function BookingDraftScreen(props: Props) {
           </Pressable>
         )}
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

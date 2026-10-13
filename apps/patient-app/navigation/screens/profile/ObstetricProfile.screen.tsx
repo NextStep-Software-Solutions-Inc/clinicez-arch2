@@ -28,6 +28,7 @@ import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
 import { deletePatientPregnancy, deletePatientContraceptiveHistory } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
+import { useSafeHeaderHeight } from 'hooks/useSafeHeaderHeight';
 
 // ── Obstetric Profile Form ──────────────────────────────────────────────────
 
@@ -99,6 +100,7 @@ export default function ObstetricProfileScreen() {
   const { getToken } = useAuth();
   const { spacing } = useAppTheme();
   const navigation = useNavigation();
+  const headerHeight = useSafeHeaderHeight();
   const [saving, setSaving] = useState(false);
   const [savingPreg, setSavingPreg] = useState(false);
   const [savingContra, setSavingContra] = useState(false);
@@ -359,8 +361,18 @@ export default function ObstetricProfileScreen() {
   return (
     <BottomSheetModalProvider>
       <Screen width="form" scroll={false} padded={false}>
-        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+        >
+          <ScrollView
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+            contentContainerStyle={[styles.content, { padding: spacing.md }]}
+          >
             <ProfileSectionHeader title="Menstrual History" />
             <Controller control={obsForm.control} name="menarche" render={({ field }) => (
               <ProfileFormField label="Age at Menarche" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="e.g. 12" />
@@ -465,7 +477,7 @@ export default function ObstetricProfileScreen() {
       </Screen>
 
       {/* Pregnancy Sheet */}
-      <ThemedBottomSheetModal ref={pregSheetRef} snapPoints={['55%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={pregSheetRef} snapPoints={['60%', '90%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Pregnancy" />
           <Controller control={pregForm.control} name="outcome" render={({ field }) => (
@@ -488,7 +500,7 @@ export default function ObstetricProfileScreen() {
       </ThemedBottomSheetModal>
 
       {/* Contraceptive Sheet */}
-      <ThemedBottomSheetModal ref={contraSheetRef} snapPoints={['50%', '75%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={contraSheetRef} snapPoints={['55%', '85%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Contraceptive Method" />
           <Controller control={contraForm.control} name="method" render={({ field }) => (
@@ -522,6 +534,6 @@ export default function ObstetricProfileScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { paddingBottom: 40 },
-  sheetContent: { padding: 16, paddingBottom: 16 },
+  content: { paddingBottom: 48 },
+  sheetContent: { padding: 16, paddingBottom: 40 },
 });

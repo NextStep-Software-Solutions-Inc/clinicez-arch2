@@ -140,7 +140,7 @@ export default function ImmunizationsSelfScreen() {
         <ProfileAddButton label="Add Vaccine" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
 
-      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['50%', '75%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['55%', '85%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Vaccine / Immunization" />
           <Controller control={control} name="vaccineName" render={({ field }) => (
@@ -167,5 +167,5 @@ export default function ImmunizationsSelfScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: 40 },
-  sheetContent: { padding: 16, paddingBottom: 16 },
+  sheetContent: { padding: 16, paddingBottom: 40 },
 });

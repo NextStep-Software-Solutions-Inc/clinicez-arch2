@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { BottomSheetContext } from './BottomSheetContext';
 
 export interface WebBottomSheetModalRef {
   present: () => void;
@@ -135,7 +136,11 @@ const ThemedBottomSheetModal = forwardRef<WebBottomSheetModalRef, ThemedBottomSh
               </View>
             )}
 
-            <View style={styles.contentContainer}>{props.children}</View>
+            <View style={styles.contentContainer}>
+              <BottomSheetContext.Provider value={{ isInBottomSheet: true }}>
+                {props.children}
+              </BottomSheetContext.Provider>
+            </View>
           </View>
         </View>
       </Modal>

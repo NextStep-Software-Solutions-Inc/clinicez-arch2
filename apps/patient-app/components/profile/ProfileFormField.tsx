@@ -4,6 +4,7 @@ import { AppIcon } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useInBottomSheet } from '@ui/BottomSheetContext';
 
 interface ProfileFormFieldProps extends Omit<TextInputProps, 'value' | 'onChangeText'> {
   label: string;
@@ -15,7 +16,7 @@ interface ProfileFormFieldProps extends Omit<TextInputProps, 'value' | 'onChange
   picker?: boolean;
   /**
    * Use the BottomSheet-aware input only when this field is rendered inside a BottomSheet.
-   * Rendering BottomSheetTextInput outside of a sheet throws runtime context errors.
+   * Defaults to automatically inheriting from BottomSheetContext.
    */
   useBottomSheetInput?: boolean;
 }
@@ -27,11 +28,12 @@ export default function ProfileFormField({
   required = false,
   editable = true,
   picker = false,
-  useBottomSheetInput = false,
+  useBottomSheetInput,
   multiline = false,
   ...rest
 }: ProfileFormFieldProps) {
   const { colors, radii, sizes } = useAppTheme();
+  const inBottomSheet = useInBottomSheet();
 
   const isDisabled = !editable && !picker;
   const isPickerField = picker || Boolean(rest.onPressIn || (rest as any).onPress);
@@ -40,8 +42,9 @@ export default function ProfileFormField({
     if ((rest as any).onPress) (rest as any).onPress();
   };
 
-  // Web sheets are plain modals (no gorhom context), so BottomSheetTextInput would throw there.
-  const InputComponent = useBottomSheetInput && Platform.OS !== 'web' ? BottomSheetTextInput : TextInput;
+  // BottomSheetTextInput coordinates with @gorhom/bottom-sheet to prevent keyboard obstruction.
+  const shouldUseBottomSheetInput = (useBottomSheetInput ?? inBottomSheet) && Platform.OS !== 'web';
+  const InputComponent = shouldUseBottomSheetInput ? BottomSheetTextInput : TextInput;
 
   const inputEl = (
     <InputComponent

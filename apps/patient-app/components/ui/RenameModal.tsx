@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Modal, View, StyleSheet, Dimensions, TextInput, Platform } from 'react-native';
+import { Modal, View, StyleSheet, Dimensions, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
 import ThemedText from './ThemedText';
 import ThemedView from './ThemedView';
 import Button from './Button';
@@ -86,18 +86,22 @@ export default function RenameModal({
       onRequestClose={onClose}
     >
       <View ref={overlayRef} style={[styles.overlay, { backgroundColor: colors.overlay }]}>
-        <ThemedView
-          style={[
-            styles.dialog,
-            shadows.lg,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              borderRadius: radii.xl,
-              padding: spacing['2xl'],
-            },
-          ]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardAvoid}
         >
+          <ThemedView
+            style={[
+              styles.dialog,
+              shadows.lg,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                borderRadius: radii.xl,
+                padding: spacing['2xl'],
+              },
+            ]}
+          >
           <ThemedText variant="h2" style={[styles.title, { marginBottom: spacing.lg }]}>
             {title}
           </ThemedText>
@@ -144,6 +148,7 @@ export default function RenameModal({
             />
           </View>
         </ThemedView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -155,6 +160,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
+  },
+  keyboardAvoid: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dialog: {
     width: Math.min(width - 48, 380),

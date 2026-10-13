@@ -137,7 +137,7 @@ export default function DisabilitiesScreen() {
         <ProfileAddButton label="Add Disability" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
 
-      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['40%', '60%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['50%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Disability" />
           <Controller control={control} name="classification" render={({ field }) => (
@@ -158,5 +158,5 @@ export default function DisabilitiesScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: 40 },
-  sheetContent: { padding: 16, paddingBottom: 16 },
+  sheetContent: { padding: 16, paddingBottom: 40 },
 });

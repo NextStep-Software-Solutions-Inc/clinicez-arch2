@@ -1,8 +1,9 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ThemedText from '@ui/ThemedText';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
 
 interface ProfileSaveBarProps {
   onSave: () => void;
@@ -20,6 +21,7 @@ export default function ProfileSaveBar({
   const insets = useSafeAreaInsets();
   const { colors, radii, spacing } = useAppTheme();
   const isDisabled = !isDirty || saving;
+  const isKeyboardVisible = useKeyboardVisible();
 
   return (
     <View
@@ -28,7 +30,7 @@ export default function ProfileSaveBar({
         {
           borderTopColor: colors.borderLight,
           backgroundColor: colors.surface,
-          paddingBottom: insets.bottom || spacing.lg,
+          paddingBottom: isKeyboardVisible ? spacing.sm : (insets.bottom || spacing.lg),
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.md,
         },

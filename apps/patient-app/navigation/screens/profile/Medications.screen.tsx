@@ -196,5 +196,5 @@ export default function MedicationsScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: 40 },
-  sheetContent: { padding: 16, paddingBottom: 16 },
+  sheetContent: { padding: 16, paddingBottom: 40 },
 });
