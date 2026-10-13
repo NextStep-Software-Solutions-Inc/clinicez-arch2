@@ -188,3 +188,28 @@ export function formatLongAge(
 
   return parts.join(', ');
 }
+
+/**
+ * Format chronological age into compact format suitable for rails, badges & dense tables:
+ * - Adults / Children (>= 1 yr): e.g. "27 yrs old", "5 yrs old"
+ * - Infants (1-12 mos): e.g. "3 mos old"
+ * - Newborns (< 1 mo): e.g. "12 days old"
+ */
+export function formatShortAge(
+  dateOfBirth: string | Date | undefined | null,
+  referenceDate?: Date
+): string {
+  const age = calculateChronologicalAge(dateOfBirth, referenceDate);
+  if (!age) return '';
+
+  if (age.isNewborn) {
+    const d = age.totalDays;
+    return `${d} ${d === 1 ? 'day' : 'days'} old`;
+  }
+
+  if (age.isInfant) {
+    return `${age.months} ${age.months === 1 ? 'mo' : 'mos'} old`;
+  }
+
+  return `${age.years} ${age.years === 1 ? 'yr' : 'yrs'} old`;
+}

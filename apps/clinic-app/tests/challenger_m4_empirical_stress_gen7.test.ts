@@ -127,6 +127,8 @@ const {
   default: HealthProfilesTab,
 } = await import('../components/chart/HealthProfilesTab');
 
+const { setSessionItem } = await import('../utils/deviceStorage');
+
 describe('Empirical Challenger Gen7 — Milestone M4 Stress Test Harness', () => {
   const basePatient: ClinicPatient = {
     id: 'pat-stress-gen7-001',
@@ -142,6 +144,7 @@ describe('Empirical Challenger Gen7 — Milestone M4 Stress Test Harness', () =>
   };
 
   beforeEach(() => {
+    setSessionItem('clinicez_health_profiles_active_subtab', null);
     lastGetUrl = '';
     lastPutUrl = '';
     lastPutPayload = null;
@@ -556,6 +559,7 @@ describe('Empirical Challenger Gen7 — Milestone M4 Stress Test Harness', () =>
         React.createElement(HealthProfilesTab, {
           patient: basePatient,
           profile: defaultPhilHealthProfile,
+          initialSubTab: 'surgical',
         })
       );
 

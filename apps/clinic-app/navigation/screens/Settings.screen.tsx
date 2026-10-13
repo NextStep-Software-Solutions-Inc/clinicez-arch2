@@ -168,10 +168,14 @@ export default function SettingsScreen() {
     setSavingSettings(true);
     const [saved, err] = await clinicService.updateSettings({
       clinicName: clinicName.trim(),
+      taxIdentificationNumber: settings?.taxIdentificationNumber,
       accreditationNumber: accreditationNumber.trim(),
       operatingHours: operatingHours.trim(),
       defaultSlotDurationMinutes: slotMinutes,
+      queuePrefix: settings?.queuePrefix || 'Q',
+      invoicePrefix: settings?.invoicePrefix || 'INV',
       defaultConsultationFee: fee,
+      vatRate: settings?.vatRate ?? 0.12,
       letterheadHeader: letterheadHeader.trim(),
       letterheadAddress: letterheadAddress.trim(),
       letterheadContact: letterheadContact.trim(),

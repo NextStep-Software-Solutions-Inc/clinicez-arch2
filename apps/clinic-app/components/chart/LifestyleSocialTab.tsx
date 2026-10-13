@@ -683,12 +683,10 @@ export default function LifestyleSocialTab({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   content: {
-    padding: theme.spacing.md,
-    gap: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
+    gap: theme.spacing.md,
   },
   pediatricBanner: {
     flexDirection: 'row',

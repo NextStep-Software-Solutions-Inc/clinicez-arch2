@@ -436,6 +436,7 @@ describe('Challenger M4.2 Adversarial Stress Suite: Profile Persistence & Chart 
         React.createElement(HealthProfilesTab, {
           patient: basePatient,
           profile: richProfile,
+          initialSubTab: 'surgical',
           onRefreshChart: onRefreshChartMock,
         })
       );

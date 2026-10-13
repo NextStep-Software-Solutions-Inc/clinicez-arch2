@@ -489,12 +489,10 @@ export default function ReproductiveHealthTab({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   content: {
-    padding: theme.spacing.md,
-    gap: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
+    gap: theme.spacing.md,
   },
   maleGuardCard: {
     backgroundColor: theme.colors.infoBg,
@@ -504,7 +502,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xl,
     alignItems: 'center',
     gap: theme.spacing.md,
-    margin: theme.spacing.md,
+    marginVertical: theme.spacing.md,
   },
   sectionCard: {
     backgroundColor: theme.colors.surface,

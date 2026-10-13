@@ -7,12 +7,10 @@ import {
 import { theme } from '../../../constants/theme';
 import {
   ThemedText,
-  Badge,
   Icon,
   SegmentedControl,
 } from '../../ui';
 import { useBreakpoint } from '../../../utils/useBreakpoint';
-import { formatLongAge } from '../../../utils/age';
 import PatientSummarySpine from '../PatientSummarySpine';
 import ChartLayoutSwitcher from '../ChartLayoutSwitcher';
 import ChartTabContentView from '../ChartTabContentView';
@@ -75,35 +73,11 @@ export default function SlideOverDrawerChartLayout(props: ChartLayoutProps) {
             </Pressable>
 
             <View style={styles.titleBlock}>
-              <View style={styles.titleRow}>
-                <ThemedText variant="title">Medical chart</ThemedText>
-                {patient?.fullName ? (
-                  <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-                    {patient.fullName}
-                  </ThemedText>
-                ) : null}
-              </View>
-
-              {patient ? (
-                <View style={styles.metaRow}>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    Code: <ThemedText variant="caption" color={theme.colors.text}>{patient.patientCode || '—'}</ThemedText>
-                  </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.borderDark}>•</ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    {patient.dateOfBirth
-                      ? `${formatLongAge(patient.dateOfBirth)}, ${patient.gender}`
-                      : `${patient.age ? `${patient.age} yrs, ` : ''}${patient.gender}`}
-                  </ThemedText>
-                  {patient.verificationStatus === 'Verified' ? (
-                    <Badge label="Verified" variant="success" size="sm" icon="checkCircle" />
-                  ) : (
-                    <Badge label="Unverified" variant="warning" size="sm" icon="alert" />
-                  )}
-                  {patient.bloodType ? (
-                    <Badge label={patient.bloodType} variant="neutral" size="sm" icon="droplet" />
-                  ) : null}
-                </View>
+              <ThemedText variant="title">Medical chart</ThemedText>
+              {patient?.fullName ? (
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  {patient.fullName} {patient.patientCode ? `• ${patient.patientCode}` : ''}
+                </ThemedText>
               ) : null}
             </View>
           </View>
@@ -254,19 +228,6 @@ const styles = StyleSheet.create({
   titleBlock: {
     flex: 1,
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flexWrap: 'wrap',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
-    flexWrap: 'wrap',
-  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -291,7 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceHighlight,
   },
   tabBarContainer: {
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLight,
@@ -300,7 +261,7 @@ const styles = StyleSheet.create({
   viewport: {
     flex: 1,
     minHeight: 0,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.md,
     backgroundColor: theme.colors.surface,
   },

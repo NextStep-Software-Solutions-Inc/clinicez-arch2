@@ -1339,10 +1339,9 @@ export default function ClinicalHistoryTab({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   content: {
-    padding: theme.spacing.md,
+    paddingBottom: theme.spacing.xl,
     gap: theme.spacing.md,
   },
   sectionCard: {

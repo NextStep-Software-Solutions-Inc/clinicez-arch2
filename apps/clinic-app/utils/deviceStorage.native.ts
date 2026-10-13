@@ -36,3 +36,14 @@ export function setDeviceItem(key: string, value: string | null) {
 
 export const getSessionItem = getDeviceItem;
 export const setSessionItem = setDeviceItem;
+
+export function clearDeviceStorage() {
+  memory.clear();
+  try {
+    Storage.clear();
+  } catch {
+    // ignore
+  }
+}
+
+export const clearSessionStorage = clearDeviceStorage;

@@ -778,12 +778,10 @@ export default function CardiometabolicRiskTab({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
   content: {
-    padding: theme.spacing.md,
-    gap: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
+    gap: theme.spacing.md,
   },
   riskBandHeroCard: {
     borderRadius: theme.radii.lg,

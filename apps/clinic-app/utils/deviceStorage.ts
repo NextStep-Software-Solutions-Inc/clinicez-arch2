@@ -84,3 +84,23 @@ export function setSessionItem(key: string, value: string | null) {
   }
   setDeviceItem(key, value);
 }
+
+export function clearDeviceStorage() {
+  memory.clear();
+  const storage = webStorage();
+  try {
+    storage?.clear();
+  } catch {
+    // ignore
+  }
+}
+
+export function clearSessionStorage() {
+  memory.clear();
+  const session = webSessionStorage();
+  try {
+    session?.clear();
+  } catch {
+    // ignore
+  }
+}

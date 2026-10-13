@@ -11,20 +11,20 @@ using Microsoft.EntityFrameworkCore;
 namespace ClinicEz.Clinic.Application.Features.Settings.Commands;
 
 public sealed record UpdateClinicSettingsCommand(
-    string ClinicName,
-    string? TaxIdentificationNumber,
-    string? AccreditationNumber,
-    string OperatingHours,
-    int DefaultSlotDurationMinutes,
-    string QueuePrefix,
-    string InvoicePrefix,
-    decimal DefaultConsultationFee,
-    decimal VatRate,
-    string? LetterheadHeader,
-    string? LetterheadSubHeader,
-    string? LetterheadAddress,
-    string? LetterheadContact,
-    string? LetterheadFooter,
+    string? ClinicName = null,
+    string? TaxIdentificationNumber = null,
+    string? AccreditationNumber = null,
+    string? OperatingHours = null,
+    int? DefaultSlotDurationMinutes = null,
+    string? QueuePrefix = null,
+    string? InvoicePrefix = null,
+    decimal? DefaultConsultationFee = null,
+    decimal? VatRate = null,
+    string? LetterheadHeader = null,
+    string? LetterheadSubHeader = null,
+    string? LetterheadAddress = null,
+    string? LetterheadContact = null,
+    string? LetterheadFooter = null,
     string? PrimaryColorHex = null,
     string? PrimaryLogoUrl = null,
     string? PaperSize = null,
@@ -58,35 +58,67 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
                 Id = Guid.NewGuid(),
                 TenantId = _clinicContext.TenantId,
                 ClinicId = _clinicContext.ClinicId,
-                ClinicName = request.ClinicName.Trim(),
+                ClinicName = string.IsNullOrWhiteSpace(request.ClinicName) ? "Default Clinic" : request.ClinicName.Trim(),
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "ClinicAdmin"
             };
             await _settingsRepo.AddAsync(settings, ct);
         }
 
-        settings.ClinicName = request.ClinicName.Trim();
-        settings.TaxIdentificationNumber = request.TaxIdentificationNumber?.Trim();
-        settings.AccreditationNumber = request.AccreditationNumber?.Trim();
-        settings.OperatingHours = string.IsNullOrWhiteSpace(request.OperatingHours) ? string.Empty : request.OperatingHours.Trim();
-        settings.DefaultSlotDurationMinutes = request.DefaultSlotDurationMinutes > 0 ? request.DefaultSlotDurationMinutes : 30;
-        settings.QueuePrefix = string.IsNullOrWhiteSpace(request.QueuePrefix) ? "Q" : request.QueuePrefix.Trim();
-        settings.InvoicePrefix = string.IsNullOrWhiteSpace(request.InvoicePrefix) ? "INV" : request.InvoicePrefix.Trim();
-        settings.DefaultConsultationFee = request.DefaultConsultationFee >= 0 ? request.DefaultConsultationFee : 400.00m;
-        settings.VatRate = request.VatRate >= 0 ? request.VatRate : 0.12m;
-        settings.LetterheadHeader = request.LetterheadHeader?.Trim();
-        settings.LetterheadSubHeader = request.LetterheadSubHeader?.Trim();
-        settings.LetterheadAddress = request.LetterheadAddress?.Trim();
-        settings.LetterheadContact = request.LetterheadContact?.Trim();
-        settings.LetterheadFooter = request.LetterheadFooter?.Trim();
+        if (!string.IsNullOrWhiteSpace(request.ClinicName))
+            settings.ClinicName = request.ClinicName.Trim();
+
+        if (request.TaxIdentificationNumber != null)
+            settings.TaxIdentificationNumber = string.IsNullOrWhiteSpace(request.TaxIdentificationNumber) ? null : request.TaxIdentificationNumber.Trim();
+
+        if (request.AccreditationNumber != null)
+            settings.AccreditationNumber = string.IsNullOrWhiteSpace(request.AccreditationNumber) ? null : request.AccreditationNumber.Trim();
+
+        if (request.OperatingHours != null)
+            settings.OperatingHours = request.OperatingHours.Trim();
+
+        if (request.DefaultSlotDurationMinutes.HasValue && request.DefaultSlotDurationMinutes.Value > 0)
+            settings.DefaultSlotDurationMinutes = request.DefaultSlotDurationMinutes.Value;
+
+        if (!string.IsNullOrWhiteSpace(request.QueuePrefix))
+            settings.QueuePrefix = request.QueuePrefix.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.InvoicePrefix))
+            settings.InvoicePrefix = request.InvoicePrefix.Trim();
+
+        if (request.DefaultConsultationFee.HasValue && request.DefaultConsultationFee.Value >= 0)
+            settings.DefaultConsultationFee = request.DefaultConsultationFee.Value;
+
+        if (request.VatRate.HasValue && request.VatRate.Value >= 0)
+            settings.VatRate = request.VatRate.Value;
+
+        if (request.LetterheadHeader != null)
+            settings.LetterheadHeader = string.IsNullOrWhiteSpace(request.LetterheadHeader) ? null : request.LetterheadHeader.Trim();
+
+        if (request.LetterheadSubHeader != null)
+            settings.LetterheadSubHeader = string.IsNullOrWhiteSpace(request.LetterheadSubHeader) ? null : request.LetterheadSubHeader.Trim();
+
+        if (request.LetterheadAddress != null)
+            settings.LetterheadAddress = string.IsNullOrWhiteSpace(request.LetterheadAddress) ? null : request.LetterheadAddress.Trim();
+
+        if (request.LetterheadContact != null)
+            settings.LetterheadContact = string.IsNullOrWhiteSpace(request.LetterheadContact) ? null : request.LetterheadContact.Trim();
+
+        if (request.LetterheadFooter != null)
+            settings.LetterheadFooter = string.IsNullOrWhiteSpace(request.LetterheadFooter) ? null : request.LetterheadFooter.Trim();
+
         if (!string.IsNullOrWhiteSpace(request.PrimaryColorHex))
             settings.PrimaryColorHex = request.PrimaryColorHex.Trim();
+
         if (request.PrimaryLogoUrl != null)
             settings.PrimaryLogoUrl = request.PrimaryLogoUrl.Trim();
+
         if (!string.IsNullOrWhiteSpace(request.PaperSize))
             settings.PaperSize = request.PaperSize.Trim();
+
         if (!string.IsNullOrWhiteSpace(request.PreferredChartLayout))
             settings.PreferredChartLayout = request.PreferredChartLayout.Trim();
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 

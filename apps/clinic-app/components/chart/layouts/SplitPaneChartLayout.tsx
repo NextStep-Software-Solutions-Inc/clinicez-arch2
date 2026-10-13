@@ -13,7 +13,7 @@ import {
 } from '../../ui';
 import type { IconName } from '../../ui/Icon';
 import { useBreakpoint } from '../../../utils/useBreakpoint';
-import { formatLongAge } from '../../../utils/age';
+import { formatShortAge } from '../../../utils/age';
 import { formatPhilHealthPin } from '../PatientSummarySpine';
 import ChartLayoutSwitcher from '../ChartLayoutSwitcher';
 import ChartTabContentView from '../ChartTabContentView';
@@ -137,8 +137,8 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                       style={styles.identityValue}
                     >
                       {patient.dateOfBirth
-                        ? `${formatLongAge(patient.dateOfBirth)}, ${patient.gender}`
-                        : `${patient.age ? `${patient.age} yrs, ` : ''}${patient.gender}`}
+                        ? `${formatShortAge(patient.dateOfBirth)}, ${patient.gender}`
+                        : `${patient.age ? `${patient.age} yrs old, ` : ''}${patient.gender}`}
                     </ThemedText>
                   </View>
 
@@ -339,6 +339,28 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                 currentLayout={currentLayout}
                 onSwitchLayout={onSwitchLayout}
               />
+
+              <Pressable
+                onPress={onEditDemographics}
+                hitSlop={8}
+                style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Edit Demographics"
+              >
+                <Icon name="edit" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
+              </Pressable>
+
+              {onRefreshChart ? (
+                <Pressable
+                  onPress={onRefreshChart}
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Refresh patient chart"
+                >
+                  <Icon name="refresh" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
+                </Pressable>
+              ) : null}
 
               <Pressable
                 onPress={onClose}

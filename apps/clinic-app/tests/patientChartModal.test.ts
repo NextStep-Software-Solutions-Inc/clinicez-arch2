@@ -441,6 +441,9 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
 
     setSessionItem('clinicez_active_chart_tab', null);
     expect(getSessionItem('clinicez_active_chart_tab')).toBeNull();
+
+    setSessionItem('clinicez_health_profiles_active_subtab', null);
+    expect(getSessionItem('clinicez_health_profiles_active_subtab')).toBeNull();
   });
 
   test('14. CHART_LAYOUT_OPTIONS exports canonical 3 layout configurations', () => {

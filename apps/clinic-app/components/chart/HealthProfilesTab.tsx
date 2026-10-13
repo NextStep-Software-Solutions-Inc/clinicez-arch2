@@ -32,12 +32,14 @@ export interface HealthProfilesTabProps {
   latestNcdAssessment?: NcdRiskAssessment;
   initialLatestAssessment?: NcdRiskAssessment;
   onRefreshChart?: () => void;
+  initialSubTab?: ProfileSubTab;
 }
 
 export default function HealthProfilesTab({
   patient,
   profile,
   initialProfile,
+  initialSubTab,
   surgicalHistories,
   initialSurgicalHistories,
   socialHistory,
@@ -49,6 +51,9 @@ export default function HealthProfilesTab({
   onRefreshChart,
 }: HealthProfilesTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<ProfileSubTab>(() => {
+    if (initialSubTab && ['surgical', 'lifestyle', 'reproductive', 'cardiometabolic'].includes(initialSubTab)) {
+      return initialSubTab;
+    }
     if (typeof window !== 'undefined' && window.location?.search) {
       try {
         const sp = new URLSearchParams(window.location.search);
