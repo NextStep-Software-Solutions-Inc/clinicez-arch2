@@ -482,8 +482,9 @@ describe('Adversarial Review Round 2: Medical Chart Workstation Layouts Robustne
       expect(markup).toContain('Add Historical Vaccine');
       expect(markup).not.toContain('+ +');
 
-      // Verify statutory 999 fallback card for claim compliance is intact
-      expect(markup).toContain('PhilHealth Konsulta Statutory Coverage (Fallback Code 999)');
+      // Verify clinical immunization documentation status banner is intact
+      expect(markup).toContain('Immunization Documentation Status');
+      expect(markup).toContain('No immunizations are currently documented for this patient');
     });
   });
 

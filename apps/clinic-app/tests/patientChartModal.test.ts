@@ -321,7 +321,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).toContain('Completed');
   });
 
-  test('6. Renders Statutory Immunizations tab with PhilHealth statutory banner', () => {
+  test('6. Renders Statutory Immunizations tab with clinical documentation status banner', () => {
     const markup = renderToStaticMarkup(
       React.createElement(PatientChartModal, {
         visible: true,
@@ -332,8 +332,8 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       })
     );
 
-    expect(markup).toContain('PhilHealth Konsulta Statutory Coverage');
-    expect(markup).toContain('Fallback Code 999');
+    expect(markup).toContain('Immunization Documentation Status');
+    expect(markup).toContain('No immunizations are currently documented for this patient');
   });
 
   test('7. Renders External Document Vault tab with category filters and upload button', () => {

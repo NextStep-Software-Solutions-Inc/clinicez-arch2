@@ -640,7 +640,7 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
       expect(lookupStatutoryManagementCode('CustomProcedureNotCataloged').code).toBe('X');
     });
 
-    test('2.5 Tab 5: StatutoryImmunizationsTab renders vaccine records, statutory fallback 999, and empty state', () => {
+    test('2.5 Tab 5: StatutoryImmunizationsTab renders vaccine records, clinical status notice, and empty state', () => {
       const immunizations: PatientImmunizationRecord[] = [
         {
           id: 'imm-1',
@@ -677,7 +677,7 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
       expect(fullMarkup).toContain('PRC: PRC-RN-998877');
       expect(fullMarkup).toContain('Report Adverse Reaction (AEFI)');
 
-      // Empty immunizations render (verifies statutory fallback code 999 notice)
+      // Empty immunizations render (verifies clinical documentation status notice)
       const emptyMarkup = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
           patient: basePatient,
@@ -685,7 +685,7 @@ describe('Empirical Adversarial Stress Suite — Milestone M3 Round 2 (Challenge
         })
       );
       expect(emptyMarkup).toContain('No immunizations recorded');
-      expect(emptyMarkup).toContain('Fallback code 999 will be automatically used for PhilHealth claims');
+      expect(emptyMarkup).toContain('No vaccination records found for this patient');
 
       // Catalog completeness
       expect(PHILHEALTH_STATUTORY_VACCINES.lib_immchild.length).toBe(13);

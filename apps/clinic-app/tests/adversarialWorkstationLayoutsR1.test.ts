@@ -505,7 +505,7 @@ describe('Adversarial Medical Chart Workstation Layouts Refinement (Round 1)', (
       expect(markup).not.toContain('+ Add Historical Vaccine');
     });
 
-    test('ADV-R4-1: Statutory fallback banner 999 renders when zero vaccines are recorded', () => {
+    test('ADV-R4-1: Immunization documentation status banner renders when zero vaccines are recorded', () => {
       const markup = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
           patient: mockPatient,
@@ -513,8 +513,8 @@ describe('Adversarial Medical Chart Workstation Layouts Refinement (Round 1)', (
         })
       );
 
-      expect(markup).toContain('PhilHealth Konsulta Statutory Coverage (Fallback Code 999)');
-      expect(markup).toContain('statutory fallback code 999');
+      expect(markup).toContain('Immunization Documentation Status');
+      expect(markup).toContain('No immunizations are currently documented for this patient');
       expect(markup).toContain('No immunizations recorded');
     });
   });

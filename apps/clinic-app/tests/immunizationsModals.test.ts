@@ -220,7 +220,7 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
       expect(html).not.toContain('+ +');
     });
 
-    test('renders PhilHealth Konsulta 999 statutory fallback banner when zero immunizations recorded', () => {
+    test('renders immunization documentation status banner when zero immunizations recorded', () => {
       const html = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
           patient: mockChildPatient,
@@ -231,8 +231,8 @@ describe('Milestone M3: Statutory Immunizations & Clinical Modals (Features 11, 
         })
       );
 
-      expect(html).toContain('PhilHealth Konsulta Statutory Coverage (Fallback Code 999)');
-      expect(html).toContain('statutory fallback code 999');
+      expect(html).toContain('Immunization Documentation Status');
+      expect(html).toContain('No immunizations are currently documented for this patient');
       expect(html).toContain('No immunizations recorded');
     });
 

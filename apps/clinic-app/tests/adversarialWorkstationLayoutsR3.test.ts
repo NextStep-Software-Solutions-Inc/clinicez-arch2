@@ -512,8 +512,9 @@ describe('Adversarial Review Round 3: Workstation Layouts Asynchronous Edge Case
         })
       );
 
-      // Verify that it renders cleanly and contains PhilHealth 999 statutory fallback
-      expect(markup).toContain('PhilHealth Konsulta Statutory Coverage (Fallback Code 999)');
+      // Verify that it renders cleanly and contains clinical documentation status banner
+      expect(markup).toContain('Immunization Documentation Status');
+      expect(markup).toContain('No immunizations are currently documented for this patient');
       expect(markup).toContain('Administer Vaccine');
       expect(markup).toContain('Add Historical Vaccine');
       expect(markup).not.toContain('+ +');

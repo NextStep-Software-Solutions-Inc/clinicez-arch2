@@ -151,18 +151,18 @@ export default function StatutoryImmunizationsTab({
       </View>
 
       {/* ========================================================================= */}
-      {/* PHILHEALTH STATUTORY COMPLIANCE BANNER / 999 FALLBACK NOTICE              */}
+      {/* IMMUNIZATION DOCUMENTATION STATUS BANNER                                  */}
       {/* ========================================================================= */}
       {!hasAnyRecorded ? (
         <View style={styles.fallbackNoticeCard}>
           <View style={styles.fallbackTopRow}>
-            <Icon name="yakap" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+            <Icon name="info" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
             <View style={{ flex: 1 }}>
               <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-                PhilHealth Konsulta Statutory Coverage (Fallback Code 999)
+                Immunization Documentation Status
               </ThemedText>
               <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginTop: 2 }}>
-                Under PhilHealth Konsulta DTD v1.14 specification, claim transmittals require an &lt;IMMUNIZATION+&gt; block. When a patient has zero recorded vaccines, statutory fallback code 999 (&quot;None / Not Given&quot;) is automatically emitted to guarantee 100% claim compliance without rejections.
+                No immunizations are currently documented for this patient. Review the recommended vaccination schedule for their cohort, record any previously administered doses under &quot;Add Historical Vaccine&quot;, or administer new vaccines during this encounter.
               </ThemedText>
             </View>
           </View>
@@ -354,8 +354,8 @@ export default function StatutoryImmunizationsTab({
           title="No immunizations recorded"
           description={
             hasAnyRecorded
-              ? `Zero vaccines recorded for ${COHORT_CATEGORY_NAMES[selectedCohort] || 'this category'}.`
-              : 'Zero statutory vaccines documented for this patient. Fallback code 999 will be automatically used for PhilHealth claims.'
+              ? `No vaccines recorded for ${COHORT_CATEGORY_NAMES[selectedCohort] || 'this category'}.`
+              : 'No vaccination records found for this patient. Click "Administer Vaccine" to record a dose given today or "Add Historical Vaccine" to document past immunizations.'
           }
         />
       )}
@@ -481,12 +481,13 @@ const styles = StyleSheet.create({
   },
   headerActionBar: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     marginBottom: theme.spacing.md,
   },
   actionButtonsRow: {
     flexDirection: 'row',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',

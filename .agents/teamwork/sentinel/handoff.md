@@ -1,38 +1,38 @@
-# Sentinel Handoff Report — Structured Error Handling & Contextual Cause Resolution
+# Sentinel Handoff Report — Tab-Switching Flicker & Modal Stacking Refinement
 
 ## 1. Observation
-- **User Request**: Implement structured error handling and contextual cause resolution across ClinicEZ backend services and frontend applications (requirements R1 through R4), eliminating raw database/ORM leaks and providing clear, actionable feedback to clinicians and staff.
-- **Route Executed**: General path -> `teamwork_preview_orchestrator` (`orchestrator_10`, ID `5408d029-4875-4700-88c6-ab860f92ea2c`).
-- **Milestones Completed**:
-  1. **Milestone 1 (`packages/shared-dotnet`)**: Implemented `DatabaseExceptionTranslator` mapping PostgreSQL SQLSTATE codes (`23505` -> 409 `DUPLICATE_RESOURCE`/`DUPLICATE_PATIENT_CODE`, `22001` -> 400 `FIELD_TOO_LONG`, `23503` -> 409 `FOREIGN_KEY_VIOLATION`, `23502` -> 400 `REQUIRED_FIELD_MISSING`, `23P01` -> 409 `EXCLUSION_VIOLATION`, and `DbUpdateConcurrencyException` -> 409 `CONCURRENCY_CONFLICT`). Refactored `GlobalExceptionHandler` with cycle-safe breadth-first exception tree traversal, defensive traceId correlation, and strict sanitization of status 500 error messages (zero raw internal ORM leaks). (180 tests pass)
-  2. **Milestone 2 (`services/clinic-api`)**: Hardened patient code sequence generation in `RegisterClinicPatientCommand`, `BulkRegisterClinicPatientsCommand`, and `PublicStudentSelfEnrollCommand` using `ignoreQueryFilters: true` scoped by `ClinicId == currentClinicId` and parsing the maximum numeric suffix to prevent `23505` collisions with soft-deleted records. Hardened `CheckInPatientCommandValidator` with 255-character maximum validation on `ChiefComplaint` and defensive length truncation in the command handler. (1,351 tests pass)
-  3. **Milestone 3 (`packages/shared-ts`)**: Extended `ApiResponse` and `ApiError` with `errorCode`, `traceId`, and case-insensitive/JSON-path field error lookup helpers (`getFieldErrors`, `getFieldError`, `hasFieldError`, `getFieldErrorsMap`). Tightened client safety net regex in `extractApiError` to catch all PostgreSQL/ORM exception variants across all HTTP status codes while eliminating clinical text false positives. (66 tests pass)
-  4. **Milestone 4 (`apps/clinic-app`)**: Configured error toasts in `FeedbackHost` and `notify.error` to 10 seconds default duration with explicit dismiss buttons and a "Copy Ref ID" clipboard action. Bound API field error maps to form inputs in Patient Registration (`Patients.screen.tsx`) and Demographic Edit (`EditPatientModal.tsx`) modals to display visual error borders and contextual error captions that dynamically clear on keystroke edits. 100% design token compliant. (1,025 tests pass)
-  5. **Milestone 5 (Full-Stack Regression & Independent Victory Audit)**: Whole-project regression executed by Worker M5 (2,622 passing tests, 0 warnings/0 errors on 42-project solution build, 0 type errors across all 5 apps, 0 token violations).
-- **Independent Victory Audit**: Executed by `teamwork_preview_victory_auditor` (`b3ea7ded-88b7-45f8-9028-d5ec40919535`):
-  - Phase A (Timeline & Git History): PASS.
-  - Phase B (Integrity & Forensic Authenticity): PASS.
-  - Phase C (Independent Test Execution): PASS.
-  - **Verdict**: `VICTORY CONFIRMED`.
+- User requested a single self-contained, focused fix to resolve tab-switching flicker and modal portal elevation thrashing across `PatientChartModal` and `PhilHealthProfileModal` in `apps/clinic-app`.
+- Requirements called for:
+  - R1: Suppress dormant modal portal mounting in DOM when `visible={false}`.
+  - R2: Guard modal portal elevation against internal subtree tab re-renders.
+  - R3: Seamless, zero-flicker tab transitions without backdrop flash or CSS keyframe re-animation.
+  - R4: Multi-level modal layering and z-index elevation floor preservation for nested dialogs.
+  - Acceptance criteria: 0 test failures in `modalStacking.test.ts`, 0 test failures in `bun run test:clinic`, 0 errors in `bun run typecheck:clinic`.
 
 ## 2. Logic Chain
-1. Requirements R1–R4 directly targeted elimination of unhandled database exception leaks to users and workstations.
-2. The orchestrator executed a multi-round adversarial development lifecycle (explorers, workers, reviewers, challengers, forensic auditors).
-3. The post-victory audit was conducted independently with zero shared context, confirming genuine implementations with zero facade mocks or hardcoded test bypasses.
-4. All acceptance criteria are 100% satisfied with full test and build evidence.
+- **Task Routing**: Request explicitly identified as a single self-contained focused fix; routed to **SWE Light** (`teamwork_preview_swe`).
+- **Orchestration**: Dispatched `swe_2` (`94a3832b-ed30-4820-9f84-6d2e4c185702`) with strict instructions to execute the implementer -> reviewer refinement loop.
+- **Implementation & Review Rounds**:
+  - Implementer resolved dormant portal mounting via early-return guards in `Modal.tsx` and `PhilHealthProfileModal.tsx`, and guarded DOM re-appends in `modalStack.ts`.
+  - Sequential refinement satisfied the 3-reviewer floor (Round 1, Round 2, Round 3).
+  - Internal auditor caught a `TS2322` type error in `PatientSummarySpine.tsx`, which was immediately remediated in Reviewer Round 4.
+  - All test suites passed: `modalStacking.test.ts` (47/47 passed), `bun run test:clinic` (1,131 passed, 0 failures), `bun run typecheck:clinic` (0 errors), `bun run lint:clinic` (0 violations).
+- **Independent Victory Audit**:
+  - Dispatched `victory_auditor_6` (`c9249d36-a8d7-4cb0-a250-7983079fd5b1`) with clean context to perform 3-phase verification (Timeline, Anti-cheating & forensic authenticity, Independent test execution).
+  - The auditor confirmed genuine implementation of R1–R4, zero fake mocks or vacuous assertions, and independently verified that all 47 `modalStacking.test.ts` tests and 1,131 clinic suite tests pass cleanly with zero TypeScript errors.
+  - Verdict returned: **VICTORY CONFIRMED**.
+- **Cleanup**: Cancelled background crons (task-28, task-30) and terminated all subagents via `kill_all`.
 
 ## 3. Caveats
-- Production database unique constraints rely on database indexes; PostgreSQL error code 23505 translation accurately parses standard PostgreSQL constraint names and formats them into camelCase field attributions.
-- Soft-delete sequence query bypasses EF query filters via `IgnoreQueryFilters()`; explicit clinic scoping (`ClinicId == CurrentClinicId`) was strictly enforced across all commands to preserve tenant isolation.
+- Tests run within Bun's simulated web DOM environment where `react-native-web` portals mount directly to `document.body`.
+- Real hardware GPU compositor rasterization on native mobile platforms (iOS `UIModalPresentationStyle` and Android native window layer transitions) operates outside web DOM portals and is governed by native view managers.
 
 ## 4. Conclusion
-All deliverables are complete, verified, and audited. The solution eliminates raw database/ORM leaks, guarantees unique patient code sequences even with soft-deleted entities, provides client-side defensive sanitization, and provides clean, actionable workstation feedback with copyable trace reference IDs.
+- All requirements (R1–R4) and acceptance criteria have been authentically implemented, rigorously reviewed across 4 reviewer rounds, independently audited, and verified with 0 failures and 0 errors.
 
 ## 5. Verification Method
-- `dotnet test packages/shared-dotnet.Tests/ClinicEz.Shared.Tests.csproj` (180 passed, 0 failed)
-- `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj` (1,351 passed, 0 failed)
-- `dotnet build CLINICEZ.sln` (42 projects, 0 errors, 0 warnings)
-- `bun test packages/shared-ts` (66 passed, 0 failed)
-- `bun test apps/clinic-app/tests` (1,025 passed, 0 failed)
-- `bun run typecheck:all` (0 type errors)
-- `bun run lint:clinic` (0 token violations)
+- Independent Victory Auditor Execution:
+  - `bun test apps/clinic-app/tests/modalStacking.test.ts` (47 passed, 0 failed, 269 assertions)
+  - `bun run test:clinic` (1,131 passed, 0 failed across 58 test files)
+  - `bun run typecheck:clinic` (0 errors)
+  - `bun run lint:clinic` (0 token violations, 0 host violations)

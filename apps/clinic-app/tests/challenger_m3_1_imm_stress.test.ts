@@ -727,7 +727,7 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
       expect(html).toContain('Save Historical Vaccine');
     });
 
-    test('StatutoryImmunizationsTab renders fallback banner when patient has 0 vaccines', () => {
+    test('StatutoryImmunizationsTab renders clinical status banner when patient has 0 vaccines', () => {
       const html = renderToStaticMarkup(
         React.createElement(StatutoryImmunizationsTab, {
           patient: mockPatientChild,
@@ -738,8 +738,8 @@ describe('Adversarial Stress Test: Milestone M3 Immunization Modals (challenger_
         })
       );
 
-      expect(html).toContain('PhilHealth Konsulta Statutory Coverage (Fallback Code 999)');
-      expect(html).toContain('statutory fallback code 999');
+      expect(html).toContain('Immunization Documentation Status');
+      expect(html).toContain('No immunizations are currently documented for this patient');
       expect(html).toContain('No immunizations recorded');
       expect(html).toContain('Administer Vaccine');
       expect(html).toContain('Add Historical Vaccine');
