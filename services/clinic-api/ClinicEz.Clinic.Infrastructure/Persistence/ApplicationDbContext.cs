@@ -74,6 +74,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<PatientAllergy> PatientAllergies { get; set; } = null!;
     public DbSet<PatientPastMedicalHistory> PatientPastMedicalHistories { get; set; } = null!;
     public DbSet<PatientFamilyHistory> PatientFamilyHistories { get; set; } = null!;
+    public DbSet<PatientPhysicalExamProfile> PatientPhysicalExamProfiles { get; set; } = null!;
     public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
@@ -142,6 +143,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<PatientAllergy>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PatientPastMedicalHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PatientFamilyHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientPhysicalExamProfile>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted);
@@ -593,6 +595,35 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasOne(e => e.Patient)
                 .WithOne(p => p.ReproductiveHistory)
                 .HasForeignKey<PatientReproductiveHistory>(e => e.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId }).IsUnique();
+        });
+
+        modelBuilder.Entity<PatientPhysicalExamProfile>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.GenSurveyId).HasMaxLength(10).HasDefaultValue("1");
+            entity.Property(e => e.GenSurveyRemarks).HasMaxLength(1000);
+            entity.Property(e => e.SkinId).HasMaxLength(10).HasDefaultValue("1");
+            entity.Property(e => e.SkinRemarks).HasMaxLength(1000);
+            entity.Property(e => e.HeentId).HasMaxLength(10).HasDefaultValue("11");
+            entity.Property(e => e.HeentRemarks).HasMaxLength(1000);
+            entity.Property(e => e.ChestId).HasMaxLength(10).HasDefaultValue("6");
+            entity.Property(e => e.ChestRemarks).HasMaxLength(1000);
+            entity.Property(e => e.HeartId).HasMaxLength(10).HasDefaultValue("5");
+            entity.Property(e => e.HeartRemarks).HasMaxLength(1000);
+            entity.Property(e => e.AbdomenId).HasMaxLength(10).HasDefaultValue("7");
+            entity.Property(e => e.AbdomenRemarks).HasMaxLength(1000);
+            entity.Property(e => e.NeuroId).HasMaxLength(10).HasDefaultValue("6");
+            entity.Property(e => e.NeuroRemarks).HasMaxLength(1000);
+            entity.Property(e => e.RectalId).HasMaxLength(10).HasDefaultValue("1");
+            entity.Property(e => e.RectalRemarks).HasMaxLength(1000);
+            entity.Property(e => e.GuId).HasMaxLength(10).HasDefaultValue("1");
+            entity.Property(e => e.GuRemarks).HasMaxLength(1000);
+            entity.HasOne(e => e.Patient)
+                .WithOne(p => p.PhysicalExamProfile)
+                .HasForeignKey<PatientPhysicalExamProfile>(e => e.PatientId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId }).IsUnique();
         });

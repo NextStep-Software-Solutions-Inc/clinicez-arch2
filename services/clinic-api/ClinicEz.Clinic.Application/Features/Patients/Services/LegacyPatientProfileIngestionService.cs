@@ -28,6 +28,7 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
     private readonly IRepository<NcdRiskAssessment> _ncdRepo;
     private readonly IRepository<PatientImmunization>? _immunizationRepo;
     private readonly IPhilHealthCatalogLookup? _catalogLookup;
+    private readonly IRepository<PatientPhysicalExamProfile>? _physicalExamRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
@@ -40,7 +41,8 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IRepository<PatientImmunization>? immunizationRepo = null,
-        IPhilHealthCatalogLookup? catalogLookup = null)
+        IPhilHealthCatalogLookup? catalogLookup = null,
+        IRepository<PatientPhysicalExamProfile>? physicalExamRepo = null)
     {
         _patientRepo = patientRepo;
         _surgicalRepo = surgicalRepo;
@@ -51,6 +53,7 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
         _clinicContext = clinicContext;
         _immunizationRepo = immunizationRepo;
         _catalogLookup = catalogLookup;
+        _physicalExamRepo = physicalExamRepo;
     }
 
     public async Task SyncFromProfileAsync(Guid patientId, PhilHealthPatientProfileDto profile, CancellationToken ct = default)
@@ -442,6 +445,44 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
             await IngestCohort(legacyProfile.PregnantWomanImmunizations, "lib_immpregw");
             await IngestCohort(legacyProfile.ElderlyImmunizations, "lib_immelderly");
             await IngestCohort(legacyProfile.OtherImmunizations, "OtherImm");
+        }
+
+        // 6. Physical Exam Profile
+        if (_physicalExamRepo != null)
+        {
+            var existingPe = await _physicalExamRepo.Query(pe => pe.PatientId == patientId).FirstOrDefaultAsync(ct);
+            if (existingPe == null)
+            {
+                var pe = new PatientPhysicalExamProfile
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ClinicId = clinicId,
+                    PatientId = patientId,
+                    GenSurveyId = !string.IsNullOrWhiteSpace(legacyProfile.GenSurveyId) ? legacyProfile.GenSurveyId : "1",
+                    GenSurveyRemarks = legacyProfile.GenSurveyRemarks,
+                    SkinId = !string.IsNullOrWhiteSpace(legacyProfile.SkinId) ? legacyProfile.SkinId : "1",
+                    SkinRemarks = legacyProfile.SkinRemarks,
+                    HeentId = !string.IsNullOrWhiteSpace(legacyProfile.HeentId) ? legacyProfile.HeentId : "11",
+                    HeentRemarks = legacyProfile.HeentRemarks,
+                    ChestId = !string.IsNullOrWhiteSpace(legacyProfile.ChestId) ? legacyProfile.ChestId : "6",
+                    ChestRemarks = legacyProfile.ChestRemarks,
+                    HeartId = !string.IsNullOrWhiteSpace(legacyProfile.HeartId) ? legacyProfile.HeartId : "5",
+                    HeartRemarks = legacyProfile.HeartRemarks,
+                    AbdomenId = !string.IsNullOrWhiteSpace(legacyProfile.AbdomenId) ? legacyProfile.AbdomenId : "7",
+                    AbdomenRemarks = legacyProfile.AbdomenRemarks,
+                    NeuroId = !string.IsNullOrWhiteSpace(legacyProfile.NeuroId) ? legacyProfile.NeuroId : "6",
+                    NeuroRemarks = legacyProfile.NeuroRemarks,
+                    RectalId = !string.IsNullOrWhiteSpace(legacyProfile.RectalId) ? legacyProfile.RectalId : "1",
+                    RectalRemarks = legacyProfile.RectalRemarks,
+                    GuId = !string.IsNullOrWhiteSpace(legacyProfile.GuId) ? legacyProfile.GuId : "1",
+                    GuRemarks = legacyProfile.GuRemarks,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "LegacyProfileIngestion"
+                };
+                await _physicalExamRepo.AddAsync(pe, ct);
+                modified = true;
+            }
         }
 
         if (modified)

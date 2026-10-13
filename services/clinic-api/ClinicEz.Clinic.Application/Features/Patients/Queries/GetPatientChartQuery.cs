@@ -44,6 +44,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
     private readonly IRepository<PatientAllergy>? _allergyRepo;
     private readonly IRepository<PatientImmunization>? _immunizationRepo;
     private readonly IRepository<ClinicRecordAttachment>? _attachmentRepo;
+    private readonly IRepository<PatientPhysicalExamProfile>? _physicalExamRepo;
 
     public GetPatientChartQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
@@ -61,7 +62,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         IRepository<PatientProblem>? problemRepo = null,
         IRepository<PatientAllergy>? allergyRepo = null,
         IRepository<PatientImmunization>? immunizationRepo = null,
-        IRepository<ClinicRecordAttachment>? attachmentRepo = null)
+        IRepository<ClinicRecordAttachment>? attachmentRepo = null,
+        IRepository<PatientPhysicalExamProfile>? physicalExamRepo = null)
     {
         _consultationRepo = consultationRepo;
         _triageRepo = triageRepo;
@@ -79,6 +81,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         _allergyRepo = allergyRepo;
         _immunizationRepo = immunizationRepo;
         _attachmentRepo = attachmentRepo;
+        _physicalExamRepo = physicalExamRepo;
     }
 
     public async Task<PatientChartDto> Handle(GetPatientChartQuery request, CancellationToken cancellationToken)
@@ -536,6 +539,39 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             }
         }
 
+        PatientPhysicalExamProfileDto? physicalExamDto = null;
+        if (_physicalExamRepo != null)
+        {
+            var pe = await _physicalExamRepo.Query(p => p.PatientId == request.PatientId).FirstOrDefaultAsync(cancellationToken);
+            if (pe != null)
+            {
+                physicalExamDto = new PatientPhysicalExamProfileDto(
+                    pe.Id,
+                    pe.PatientId,
+                    pe.GenSurveyId,
+                    pe.GenSurveyRemarks,
+                    pe.SkinId,
+                    pe.SkinRemarks,
+                    pe.HeentId,
+                    pe.HeentRemarks,
+                    pe.ChestId,
+                    pe.ChestRemarks,
+                    pe.HeartId,
+                    pe.HeartRemarks,
+                    pe.AbdomenId,
+                    pe.AbdomenRemarks,
+                    pe.NeuroId,
+                    pe.NeuroRemarks,
+                    pe.RectalId,
+                    pe.RectalRemarks,
+                    pe.GuId,
+                    pe.GuRemarks,
+                    pe.CreatedAt,
+                    pe.UpdatedAt
+                );
+            }
+        }
+
         return new PatientChartDto(
             request.PatientId,
             patientName,
@@ -553,7 +589,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             problemDtos,
             allergyDtos,
             immunizationDtos,
-            attachmentDtos
+            attachmentDtos,
+            PhysicalExamProfile: physicalExamDto
         );
     }
 

@@ -33,5 +33,6 @@ public record PatientChartDto(
     List<PatientPastMedicalHistoryDto>? PastMedicalHistories = null,
     string? PersonalMedicalHistoryNotes = null,
     List<PatientFamilyHistoryDto>? FamilyHistories = null,
-    string? FamilyMedicalHistoryNotes = null
+    string? FamilyMedicalHistoryNotes = null,
+    PatientPhysicalExamProfileDto? PhysicalExamProfile = null
 );

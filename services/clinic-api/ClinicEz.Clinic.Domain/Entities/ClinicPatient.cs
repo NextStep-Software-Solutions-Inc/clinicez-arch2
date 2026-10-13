@@ -76,6 +76,7 @@ public sealed class ClinicPatient : BaseEntity
     public System.Collections.Generic.ICollection<PatientSurgicalHistory> SurgicalHistories { get; set; } = new System.Collections.Generic.List<PatientSurgicalHistory>();
     public PatientSocialHistory? SocialHistory { get; set; }
     public PatientReproductiveHistory? ReproductiveHistory { get; set; }
+    public PatientPhysicalExamProfile? PhysicalExamProfile { get; set; }
     public System.Collections.Generic.ICollection<NcdRiskAssessment> NcdRiskAssessments { get; set; } = new System.Collections.Generic.List<NcdRiskAssessment>();
 
     /// <summary>
