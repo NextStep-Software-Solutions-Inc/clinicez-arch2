@@ -42,7 +42,7 @@ export default async function LockedJoinPage({
   }
 
   try {
-    const facilities = await facilityService.getFacilities(tenantSlug);
+    const facilities = await facilityService.getPublicClinicFacilities(tenantSlug);
     const facility = facilities?.find(
       (f) => f.slug.toLowerCase() === facilitySlug.toLowerCase()
     );

@@ -39,6 +39,7 @@ import {
 import { JoinCodeModal } from "@/components/join/JoinCodeModal";
 import { OutsideDocumentDropzone } from "@/components/join/OutsideDocumentDropzone";
 import { DigitalPassCard } from "@/components/join/DigitalPassCard";
+import { apiBaseUrl } from "@/transport/apiClient";
 
 interface JoinClientProps {
   tenantSlug: string;
@@ -375,7 +376,7 @@ export default function JoinClient({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/v1/public/join", {
+      const response = await fetch(`${apiBaseUrl}/public/join`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

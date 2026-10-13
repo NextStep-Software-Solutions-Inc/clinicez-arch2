@@ -297,8 +297,13 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                 await _unitOfWork.SaveChangesAsync(ct);
                 return MapToDto(patient, queueItem?.QueueNumber, queueItem?.Id);
             }
-            catch (DbUpdateException ex) when (attempt < maxAttempts && PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
+            catch (DbUpdateException ex) when (PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
             {
+                if (attempt >= maxAttempts)
+                {
+                    throw new InvalidOperationException("Failed to register patient after multiple sequence allocation attempts.", ex);
+                }
+
                 var nextCode = await _codeGenerator.GenerateNextCodeAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
                 patient.PatientCode = nextCode;
             }

@@ -1458,4 +1458,409 @@ public class PatientCodeSequenceTests
         var expectedCodes = Enumerable.Range(1, workerCount).Select(seq => $"PAT-{year}-{seq:D5}").ToHashSet();
         allocatedCodes.ToHashSet().Should().BeEquivalentTo(expectedCodes);
     }
+
+    [Fact]
+    public async Task YearRollover_ResetsSequenceTo1_AndMaintainsStrictYearIsolation()
+    {
+        // Arrange
+        var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
+        var generator = new PatientCodeGenerator(context);
+
+        // Act 1: Intake in Year 2026
+        var code2026_1 = await generator.GenerateNextCodeAsync(_tenantId, _clinicId, 2026);
+        var batch2026 = await generator.ReserveBatchCodesAsync(_tenantId, _clinicId, 2, 2026);
+
+        // Act 2: Year rolls over to 2027
+        var code2027_1 = await generator.GenerateNextCodeAsync(_tenantId, _clinicId, 2027);
+        var batch2027 = await generator.ReserveBatchCodesAsync(_tenantId, _clinicId, 2, 2027);
+
+        // Act 3: Subsequent intake in Year 2026 (retroactive entry)
+        var code2026_4 = await generator.GenerateNextCodeAsync(_tenantId, _clinicId, 2026);
+
+        // Assert: Year 2026 sequence advanced cleanly: 00001, 00002, 00003, 00004
+        code2026_1.Should().Be("PAT-2026-00001");
+        batch2026.Should().Equal("PAT-2026-00002", "PAT-2026-00003");
+        code2026_4.Should().Be("PAT-2026-00004");
+
+        // Assert: Year 2027 reset cleanly to 1 without sequence contamination: 00001, 00002, 00003
+        code2027_1.Should().Be("PAT-2027-00001");
+        batch2027.Should().Equal("PAT-2027-00002", "PAT-2027-00003");
+
+        // Check underlying trackers in database
+        var tracker2026 = await context.PatientCodeSequenceTrackers.AsNoTracking().FirstOrDefaultAsync(t => t.TenantId == _tenantId && t.ClinicId == _clinicId && t.Year == 2026);
+        var tracker2027 = await context.PatientCodeSequenceTrackers.AsNoTracking().FirstOrDefaultAsync(t => t.TenantId == _tenantId && t.ClinicId == _clinicId && t.Year == 2027);
+
+        tracker2026.Should().NotBeNull();
+        tracker2026!.CurrentSequence.Should().Be(4);
+
+        tracker2027.Should().NotBeNull();
+        tracker2027!.CurrentSequence.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task YearRollover_WithPreExistingRecordsInBothYears_BootstrapsIndependentlyWithoutContamination()
+    {
+        // Arrange: Pre-existing patient records in 2026 (up to 50) and 2027 (up to 15) without any trackers
+        var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
+        await context.Patients.AddRangeAsync(
+            new ClinicPatient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                ClinicId = _clinicId,
+                PatientCode = "PAT-2026-00050",
+                FirstName = "Legacy",
+                LastName = "Patient2026",
+                DateOfBirth = new DateOnly(1980, 1, 1),
+                Gender = "Male",
+                ContactNumber = "09170002026",
+                CreatedAt = DateTime.UtcNow
+            },
+            new ClinicPatient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                ClinicId = _clinicId,
+                PatientCode = "PAT-2027-00015",
+                FirstName = "Legacy",
+                LastName = "Patient2027",
+                DateOfBirth = new DateOnly(1985, 1, 1),
+                Gender = "Female",
+                ContactNumber = "09170002027",
+                CreatedAt = DateTime.UtcNow
+            }
+        );
+        await context.SaveChangesAsync();
+
+        var generator = new PatientCodeGenerator(context);
+
+        // Act
+        var next2027 = await generator.GenerateNextCodeAsync(_tenantId, _clinicId, 2027);
+        var next2026 = await generator.GenerateNextCodeAsync(_tenantId, _clinicId, 2026);
+
+        // Assert: 2027 bootstraps from 15 to 16, 2026 bootstraps from 50 to 51
+        next2027.Should().Be("PAT-2027-00016");
+        next2026.Should().Be("PAT-2026-00051");
+
+        var tracker2026 = await context.PatientCodeSequenceTrackers.AsNoTracking().FirstOrDefaultAsync(t => t.TenantId == _tenantId && t.ClinicId == _clinicId && t.Year == 2026);
+        var tracker2027 = await context.PatientCodeSequenceTrackers.AsNoTracking().FirstOrDefaultAsync(t => t.TenantId == _tenantId && t.ClinicId == _clinicId && t.Year == 2027);
+
+        tracker2026!.CurrentSequence.Should().Be(51);
+        tracker2027!.CurrentSequence.Should().Be(16);
+    }
+
+    [Fact]
+    public async Task LargeSequenceFormatting_Beyond99999_ExpandsSeamlesslyWithoutTruncation()
+    {
+        // Arrange: Seed tracker at sequence 99,999
+        var year = 2026;
+        var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
+        context.PatientCodeSequenceTrackers.Add(new PatientCodeSequenceTracker
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            Year = year,
+            CurrentSequence = 99999,
+            LastAssignedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "Seed"
+        });
+        await context.SaveChangesAsync();
+
+        var generator = new PatientCodeGenerator(context);
+
+        // Act: Generate 100,000th code and batch beyond
+        var nextCode = await generator.GenerateNextCodeAsync(_tenantId, _clinicId, year);
+        var batch = await generator.ReserveBatchCodesAsync(_tenantId, _clinicId, 3, year);
+
+        // Assert: D5 format expands smoothly to 6 digits without truncation
+        nextCode.Should().Be("PAT-2026-100000");
+        batch.Should().Equal("PAT-2026-100001", "PAT-2026-100002", "PAT-2026-100003");
+
+        var tracker = await context.PatientCodeSequenceTrackers.AsNoTracking().FirstOrDefaultAsync(t => t.TenantId == _tenantId && t.ClinicId == _clinicId && t.Year == year);
+        tracker!.CurrentSequence.Should().Be(100003);
+    }
+
+    [Fact]
+    public async Task BootstrapFromPreExistingLargeSequences_ParsesAndIncrementsWithoutTruncation()
+    {
+        // Arrange: Pre-existing patient with 6-digit sequence 250,000 without any tracker
+        var year = 2026;
+        var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
+        context.Patients.Add(new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-2026-250000",
+            FirstName = "LargeSeq",
+            LastName = "Patient",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            Gender = "Male",
+            ContactNumber = "09170250000",
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var generator = new PatientCodeGenerator(context);
+
+        // Act
+        var nextCode = await generator.GenerateNextCodeAsync(_tenantId, _clinicId, year);
+
+        // Assert: Correctly parsed 250,000 and incremented to 250,001
+        nextCode.Should().Be("PAT-2026-250001");
+
+        var tracker = await context.PatientCodeSequenceTrackers.AsNoTracking().FirstOrDefaultAsync(t => t.TenantId == _tenantId && t.ClinicId == _clinicId && t.Year == year);
+        tracker!.CurrentSequence.Should().Be(250001);
+    }
+
+    [Fact]
+    public async Task SequenceGenerator_InputValidation_RejectsInvalidArguments()
+    {
+        // Arrange
+        var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
+        var generator = new PatientCodeGenerator(context);
+
+        // Act & Assert
+        await generator.Invoking(g => g.GenerateNextCodeAsync("", _clinicId, 2026))
+            .Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*TenantId*");
+
+        await generator.Invoking(g => g.GenerateNextCodeAsync(_tenantId, Guid.Empty, 2026))
+            .Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*ClinicId*");
+
+        await generator.Invoking(g => g.ReserveRangeAsync(_tenantId, _clinicId, -1, 2026))
+            .Should().ThrowAsync<ArgumentOutOfRangeException>()
+            .WithMessage("*Count*");
+
+        await generator.Invoking(g => g.ReserveRangeAsync(_tenantId, _clinicId, 1, -2026))
+            .Should().ThrowAsync<ArgumentOutOfRangeException>()
+            .WithMessage("*Year*");
+
+        var emptyReservation = await generator.ReserveRangeAsync(_tenantId, _clinicId, 0, 2026);
+        emptyReservation.PatientCodes.Should().BeEmpty();
+        emptyReservation.StartSequence.Should().Be(0);
+        emptyReservation.EndSequence.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task OptimisticRetry_ExhaustedAttempts_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var year = DateTime.UtcNow.Year;
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+
+        // Seed collision patients for sequences 1, 2, and 3
+        await context.Patients.AddRangeAsync(
+            new ClinicPatient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                ClinicId = _clinicId,
+                PatientCode = $"PAT-{year}-00001",
+                FirstName = "Collision1",
+                LastName = "P",
+                DateOfBirth = new DateOnly(1990, 1, 1),
+                Gender = "Male",
+                ContactNumber = "09170000001",
+                CreatedAt = DateTime.UtcNow
+            },
+            new ClinicPatient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                ClinicId = _clinicId,
+                PatientCode = $"PAT-{year}-00002",
+                FirstName = "Collision2",
+                LastName = "P",
+                DateOfBirth = new DateOnly(1990, 1, 1),
+                Gender = "Male",
+                ContactNumber = "09170000002",
+                CreatedAt = DateTime.UtcNow
+            },
+            new ClinicPatient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _tenantId,
+                ClinicId = _clinicId,
+                PatientCode = $"PAT-{year}-00003",
+                FirstName = "Collision3",
+                LastName = "P",
+                DateOfBirth = new DateOnly(1990, 1, 1),
+                Gender = "Male",
+                ContactNumber = "09170000003",
+                CreatedAt = DateTime.UtcNow
+            }
+        );
+        await context.SaveChangesAsync();
+
+        // Stub code generator to repeatedly return the colliding codes 00001, 00002, 00003
+        var mockGenerator = Substitute.For<IPatientCodeGenerator>();
+        mockGenerator.GenerateNextCodeAsync(_tenantId, _clinicId, year, Arg.Any<CancellationToken>())
+            .Returns($"PAT-{year}-00001", $"PAT-{year}-00002", $"PAT-{year}-00003");
+
+        var handler = new RegisterClinicPatientCommandHandler(patientRepo, uow, _clinicContext, codeGenerator: mockGenerator);
+        var command = new RegisterClinicPatientCommand(
+            FirstName: "Doomed",
+            LastName: "Patient",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(1995, 1, 1),
+            Gender: "Female",
+            CivilStatus: null,
+            ContactNumber: "09170009999",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null
+        );
+
+        // Act & Assert: All 3 retry attempts collide, throws InvalidOperationException with inner DbUpdateException
+        var act = () => handler.Handle(command, CancellationToken.None);
+        var exception = await act.Should().ThrowAsync<InvalidOperationException>();
+        exception.WithMessage("*Failed to register patient after multiple sequence allocation attempts*");
+        exception.WithInnerException<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task BulkRegister_OptimisticRetry_ExhaustedAttempts_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var year = DateTime.UtcNow.Year;
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+
+        // Seed collision patient for 00001
+        await context.Patients.AddAsync(new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = $"PAT-{year}-00001",
+            FirstName = "Collision",
+            LastName = "Bulk",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            Gender = "Male",
+            ContactNumber = "09170000001",
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var mockGenerator = Substitute.For<IPatientCodeGenerator>();
+        mockGenerator.ReserveBatchCodesAsync(_tenantId, _clinicId, 1, year, Arg.Any<CancellationToken>())
+            .Returns(new[] { $"PAT-{year}-00001" });
+
+        var handler = new BulkRegisterClinicPatientsCommandHandler(patientRepo, uow, _clinicContext, codeGenerator: mockGenerator);
+        var command = new BulkRegisterClinicPatientsCommand(new List<BulkPatientItemDto>
+        {
+            new BulkPatientItemDto(
+                FirstName: "Item",
+                LastName: "1",
+                MiddleName: null,
+                Suffix: null,
+                DateOfBirth: new DateOnly(1990, 1, 1),
+                Gender: "Male",
+                CivilStatus: null,
+                ContactNumber: "09170001111",
+                Email: null,
+                AddressLine: null,
+                Barangay: null,
+                City: null,
+                Province: null,
+                EmergencyContactName: null,
+                EmergencyContactPhone: null,
+                EmergencyContactRelationship: null,
+                PhilHealthNumber: null,
+                SeniorCitizenId: null,
+                PwdId: null,
+                BloodType: null,
+                Allergies: null,
+                ChronicConditions: null,
+                Alerts: null,
+                CustomFields: null,
+                VerificationStatus: "PendingVerification"
+            )
+        });
+
+        // Act & Assert
+        var act = () => handler.Handle(command, CancellationToken.None);
+        var exception = await act.Should().ThrowAsync<InvalidOperationException>();
+        exception.WithMessage("*Failed to bulk register patients after multiple sequence allocation attempts*");
+        exception.WithInnerException<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task PublicStudentSelfEnroll_OptimisticRetry_ExhaustedAttempts_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var year = DateTime.UtcNow.Year;
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var attachmentRepo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
+
+        // Seed collision patient for 00001
+        await context.Patients.AddAsync(new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = $"PAT-{year}-00001",
+            FirstName = "Collision",
+            LastName = "Student",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            Gender = "Male",
+            ContactNumber = "09170000001",
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var mockGenerator = Substitute.For<IPatientCodeGenerator>();
+        mockGenerator.ReserveNextAsync(_tenantId, _clinicId, year, Arg.Any<CancellationToken>())
+            .Returns(new PatientCodeReservation(1, $"PAT-{year}-00001"));
+
+        var handler = new PublicStudentSelfEnrollCommandHandler(patientRepo, attachmentRepo, uow, _clinicContext, codeGenerator: mockGenerator);
+        var command = new PublicStudentSelfEnrollCommand(
+            StudentId: "STU-001",
+            FirstName: "Doomed",
+            LastName: "Student",
+            MiddleName: null,
+            DateOfBirth: new DateOnly(2002, 1, 1),
+            Gender: "Male",
+            ContactNumber: "09170005555",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            BloodType: null,
+            College: "Engineering",
+            Program: "BSCS",
+            YearLevel: "3",
+            AdditionalCustomFields: null,
+            Documents: null
+        );
+
+        // Act & Assert
+        var act = () => handler.Handle(command, CancellationToken.None);
+        var exception = await act.Should().ThrowAsync<InvalidOperationException>();
+        exception.WithMessage("*Failed to self-enroll student after multiple sequence allocation attempts*");
+        exception.WithInnerException<DbUpdateException>();
+    }
 }

@@ -167,8 +167,13 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
                 await _unitOfWork.SaveChangesAsync(ct);
                 break;
             }
-            catch (DbUpdateException ex) when (attempt < maxAttempts && PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
+            catch (DbUpdateException ex) when (PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
             {
+                if (attempt >= maxAttempts)
+                {
+                    throw new InvalidOperationException("Failed to bulk register patients after multiple sequence allocation attempts.", ex);
+                }
+
                 var newCodes = await _codeGenerator.ReserveBatchCodesAsync(
                     _clinicContext.TenantId,
                     _clinicContext.ClinicId,

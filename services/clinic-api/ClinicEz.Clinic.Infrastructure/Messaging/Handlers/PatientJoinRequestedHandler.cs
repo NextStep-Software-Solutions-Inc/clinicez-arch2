@@ -306,8 +306,13 @@ public sealed class PatientJoinRequestedHandler : IInteropHandler<PatientJoinReq
                 await _dbContext.SaveChangesAsync(ct);
                 break;
             }
-            catch (DbUpdateException ex) when (attempt < maxAttempts && PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
+            catch (DbUpdateException ex) when (PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
             {
+                if (attempt >= maxAttempts)
+                {
+                    throw new InvalidOperationException($"Failed to ingest patient join request after {maxAttempts} sequence allocation attempts.", ex);
+                }
+
                 var nextCode = await _codeGenerator.GenerateNextCodeAsync(clinic.TenantId, clinic.ClinicId, year, ct);
                 clinicPatient.PatientCode = nextCode;
             }

@@ -27,10 +27,7 @@ export default async function BranchSelectorPage({
   }
 
   try {
-    const allFacilities = await facilityService.getFacilities(tenantSlug);
-    clinicFacilities = (allFacilities || []).filter(
-      (f) => f.facilityType === "Clinic" && f.status === "Active"
-    );
+    clinicFacilities = await facilityService.getPublicClinicFacilities(tenantSlug);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     error = `Unable to load clinic branches: ${msg}`;

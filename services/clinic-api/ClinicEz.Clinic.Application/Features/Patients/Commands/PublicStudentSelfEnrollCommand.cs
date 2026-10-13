@@ -187,8 +187,13 @@ public sealed class PublicStudentSelfEnrollCommandHandler
                 await _unitOfWork.SaveChangesAsync(ct);
                 break;
             }
-            catch (DbUpdateException ex) when (attempt < maxAttempts && PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
+            catch (DbUpdateException ex) when (PatientCodeCollisionDetector.IsPatientCodeCollision(ex))
             {
+                if (attempt >= maxAttempts)
+                {
+                    throw new InvalidOperationException("Failed to self-enroll student after multiple sequence allocation attempts.", ex);
+                }
+
                 var newReservation = await _codeGenerator.ReserveNextAsync(
                     _clinicContext.TenantId,
                     _clinicContext.ClinicId,

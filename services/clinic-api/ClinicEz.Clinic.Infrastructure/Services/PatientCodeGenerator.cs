@@ -66,7 +66,27 @@ public sealed class PatientCodeGenerator : IPatientCodeGenerator
         int? year = null,
         CancellationToken ct = default)
     {
-        if (count <= 0)
+        if (string.IsNullOrWhiteSpace(tenantId))
+        {
+            throw new ArgumentException("TenantId cannot be null or whitespace.", nameof(tenantId));
+        }
+
+        if (clinicId == Guid.Empty)
+        {
+            throw new ArgumentException("ClinicId cannot be empty.", nameof(clinicId));
+        }
+
+        if (year.HasValue && year.Value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(year), "Year must be a positive integer.");
+        }
+
+        if (count < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count), "Count cannot be negative.");
+        }
+
+        if (count == 0)
         {
             return new PatientCodeRangeReservation(0, 0, Array.Empty<string>());
         }
@@ -180,20 +200,28 @@ public sealed class PatientCodeGenerator : IPatientCodeGenerator
                         return new PatientCodeRangeReservation(startSeq, endSeq, codes);
                     }
                 }
-                catch (DbUpdateException) when (attempt < maxAttempts)
+                catch (DbUpdateConcurrencyException ex)
                 {
                     if (tracker != null)
                     {
                         _dbContext.Entry(tracker).State = EntityState.Detached;
                     }
+                    if (attempt >= maxAttempts)
+                    {
+                        throw new InvalidOperationException($"Failed to allocate patient code sequence after {maxAttempts} attempts.", ex);
+                    }
                     var jitter = Random.Shared.Next(10, 35);
                     await Task.Delay(jitter * attempt, ct);
                 }
-                catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
+                catch (DbUpdateException ex)
                 {
                     if (tracker != null)
                     {
                         _dbContext.Entry(tracker).State = EntityState.Detached;
+                    }
+                    if (attempt >= maxAttempts)
+                    {
+                        throw new InvalidOperationException($"Failed to allocate patient code sequence after {maxAttempts} attempts.", ex);
                     }
                     var jitter = Random.Shared.Next(10, 35);
                     await Task.Delay(jitter * attempt, ct);
