@@ -18,6 +18,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Api.Controllers;
 
+/// <summary>
+/// PhilHealth Konsulta eKAS Composite Profile & Enlistment Facade.
+/// Provides composite statutory eKAS FPE profile projection and enlistment management for PhilHealth transmittals.
+/// Domain-specific clinical mutations (e.g. physical examinations) are decoupled and handled via dedicated domain endpoints.
+/// </summary>
 [ApiController]
 [Route("api/v1/yakap/patients/{patientId:guid}/profile")]
 public sealed class YakapPatientProfileController : ControllerBase
@@ -334,8 +339,9 @@ public sealed class YakapPatientProfileController : ControllerBase
     }
 
     /// <summary>
-    /// Saves or updates the standalone PhilHealth Patient Profile directly in relational tables.
-    /// Operates completely offline/on-premise without untyped JSON blobs in CustomFields.
+    /// Updates the standalone PhilHealth Patient Profile directly in relational tables.
+    /// Acts as the PhilHealth Konsulta eKAS Composite Profile & Enlistment Facade.
+    /// Note: Physical examination mutations are decoupled and handled via PatientsController (/api/v1/patients/{patientId}/physical-exam).
     /// </summary>
     [HttpPut]
     [HasPermission(ClinicPermissions.PatientsWrite)]
@@ -502,88 +508,6 @@ public sealed class YakapPatientProfileController : ControllerBase
             existingSocial.UpdatedAt = DateTime.UtcNow;
             existingSocial.UpdatedBy = updatedProfile.UpdatedBy ?? "ClinicStaff";
             _socialRepo.Update(existingSocial);
-        }
-
-
-        // Sync physical exam profile to core relational table
-        if (_physicalExamRepo != null)
-        {
-            var existingPhysicalExam = await _physicalExamRepo.Query(pe => pe.PatientId == patientId).FirstOrDefaultAsync(ct);
-
-            var skinId = !string.IsNullOrWhiteSpace(updatedProfile.SkinId) ? updatedProfile.SkinId : "1";
-            var skinRemarks = string.IsNullOrWhiteSpace(updatedProfile.SkinRemarks) ? null : updatedProfile.SkinRemarks.Trim();
-            var heentId = !string.IsNullOrWhiteSpace(updatedProfile.HeentId) ? updatedProfile.HeentId : "11";
-            var heentRemarks = string.IsNullOrWhiteSpace(updatedProfile.HeentRemarks) ? null : updatedProfile.HeentRemarks.Trim();
-            var chestId = !string.IsNullOrWhiteSpace(updatedProfile.ChestId) ? updatedProfile.ChestId : "6";
-            var chestRemarks = string.IsNullOrWhiteSpace(updatedProfile.ChestRemarks) ? null : updatedProfile.ChestRemarks.Trim();
-            var heartId = !string.IsNullOrWhiteSpace(updatedProfile.HeartId) ? updatedProfile.HeartId : "5";
-            var heartRemarks = string.IsNullOrWhiteSpace(updatedProfile.HeartRemarks) ? null : updatedProfile.HeartRemarks.Trim();
-            var abdomenId = !string.IsNullOrWhiteSpace(updatedProfile.AbdomenId) ? updatedProfile.AbdomenId : "7";
-            var abdomenRemarks = string.IsNullOrWhiteSpace(updatedProfile.AbdomenRemarks) ? null : updatedProfile.AbdomenRemarks.Trim();
-            var neuroId = !string.IsNullOrWhiteSpace(updatedProfile.NeuroId) ? updatedProfile.NeuroId : "6";
-            var neuroRemarks = string.IsNullOrWhiteSpace(updatedProfile.NeuroRemarks) ? null : updatedProfile.NeuroRemarks.Trim();
-            var rectalId = !string.IsNullOrWhiteSpace(updatedProfile.RectalId) ? updatedProfile.RectalId : "1";
-            var rectalRemarks = string.IsNullOrWhiteSpace(updatedProfile.RectalRemarks) ? null : updatedProfile.RectalRemarks.Trim();
-            var guId = !string.IsNullOrWhiteSpace(updatedProfile.GuId) ? updatedProfile.GuId : "1";
-            var guRemarks = string.IsNullOrWhiteSpace(updatedProfile.GuRemarks) ? null : updatedProfile.GuRemarks.Trim();
-            var genSurveyId = !string.IsNullOrWhiteSpace(updatedProfile.GenSurveyId) ? updatedProfile.GenSurveyId : "1";
-            var genSurveyRemarks = string.IsNullOrWhiteSpace(updatedProfile.GenSurveyRemarks) ? null : updatedProfile.GenSurveyRemarks.Trim();
-
-            if (existingPhysicalExam == null)
-            {
-                existingPhysicalExam = new PatientPhysicalExamProfile
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = patient.TenantId ?? _clinicContext.TenantId,
-                    ClinicId = clinicId,
-                    PatientId = patientId,
-                    GenSurveyId = genSurveyId,
-                    GenSurveyRemarks = genSurveyRemarks,
-                    SkinId = skinId,
-                    SkinRemarks = skinRemarks,
-                    HeentId = heentId,
-                    HeentRemarks = heentRemarks,
-                    ChestId = chestId,
-                    ChestRemarks = chestRemarks,
-                    HeartId = heartId,
-                    HeartRemarks = heartRemarks,
-                    AbdomenId = abdomenId,
-                    AbdomenRemarks = abdomenRemarks,
-                    NeuroId = neuroId,
-                    NeuroRemarks = neuroRemarks,
-                    RectalId = rectalId,
-                    RectalRemarks = rectalRemarks,
-                    GuId = guId,
-                    GuRemarks = guRemarks,
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedBy = updatedProfile.UpdatedBy ?? "ClinicStaff"
-                };
-                await _physicalExamRepo.AddAsync(existingPhysicalExam, ct);
-            }
-            else
-            {
-                existingPhysicalExam.GenSurveyId = genSurveyId;
-                existingPhysicalExam.GenSurveyRemarks = genSurveyRemarks;
-                existingPhysicalExam.SkinId = skinId;
-                existingPhysicalExam.SkinRemarks = skinRemarks;
-                existingPhysicalExam.HeentId = heentId;
-                existingPhysicalExam.HeentRemarks = heentRemarks;
-                existingPhysicalExam.ChestId = chestId;
-                existingPhysicalExam.ChestRemarks = chestRemarks;
-                existingPhysicalExam.HeartId = heartId;
-                existingPhysicalExam.HeartRemarks = heartRemarks;
-                existingPhysicalExam.AbdomenId = abdomenId;
-                existingPhysicalExam.AbdomenRemarks = abdomenRemarks;
-                existingPhysicalExam.NeuroId = neuroId;
-                existingPhysicalExam.NeuroRemarks = neuroRemarks;
-                existingPhysicalExam.RectalId = rectalId;
-                existingPhysicalExam.RectalRemarks = rectalRemarks;
-                existingPhysicalExam.GuId = guId;
-                existingPhysicalExam.GuRemarks = guRemarks;
-                existingPhysicalExam.UpdatedAt = DateTime.UtcNow;
-                existingPhysicalExam.UpdatedBy = updatedProfile.UpdatedBy ?? "ClinicStaff";
-                _physicalExamRepo.Update(existingPhysicalExam);
-            }
         }
 
         // Sync medical histories to relational table

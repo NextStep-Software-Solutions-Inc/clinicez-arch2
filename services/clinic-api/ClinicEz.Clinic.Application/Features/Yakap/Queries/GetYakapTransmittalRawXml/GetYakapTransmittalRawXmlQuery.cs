@@ -29,6 +29,7 @@ public sealed class GetYakapTransmittalRawXmlQueryHandler : IRequestHandler<GetY
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IYakapClinicalMapper _mapper;
+    private readonly IRepository<PatientPhysicalExamProfile>? _physicalExamRepo;
 
     public GetYakapTransmittalRawXmlQueryHandler(
         IRepository<YakapTransmittal> transmittalRepo,
@@ -41,7 +42,8 @@ public sealed class GetYakapTransmittalRawXmlQueryHandler : IRequestHandler<GetY
         IPhilHealthProxyClient proxyClient,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IYakapClinicalMapper mapper)
+        IYakapClinicalMapper mapper,
+        IRepository<PatientPhysicalExamProfile>? physicalExamRepo = null)
     {
         _transmittalRepo = transmittalRepo;
         _encounterRepo = encounterRepo;
@@ -54,6 +56,7 @@ public sealed class GetYakapTransmittalRawXmlQueryHandler : IRequestHandler<GetY
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _mapper = mapper;
+        _physicalExamRepo = physicalExamRepo;
     }
 
     public async Task<ApiResponse<string>> Handle(
@@ -91,6 +94,14 @@ public sealed class GetYakapTransmittalRawXmlQueryHandler : IRequestHandler<GetY
         var patientsList = await _patientRepo.Query(p => patientIds.Contains(p.Id))
             .ToListAsync(cancellationToken);
         var patientsMap = patientsList.ToDictionary(p => p.Id, p => p);
+
+        Dictionary<Guid, PatientPhysicalExamProfile>? peMap = null;
+        if (_physicalExamRepo != null)
+        {
+            var peList = await _physicalExamRepo.Query(pe => patientIds.Contains(pe.PatientId))
+                .ToListAsync(cancellationToken);
+            peMap = peList.ToDictionary(pe => pe.PatientId, pe => pe);
+        }
 
         var queueItemIds = encounters.Where(e => e.QueueItemId.HasValue).Select(e => e.QueueItemId!.Value).ToList();
         var vitalsList = await _vitalsRepo.Query(v => queueItemIds.Contains(v.QueueItemId) || patientIds.Contains(v.PatientId))
@@ -148,7 +159,8 @@ public sealed class GetYakapTransmittalRawXmlQueryHandler : IRequestHandler<GetY
             transmittal.TransmittalNumber,
             ncdMap: null,
             labOrdersMap: labOrdersMap,
-            feeScheduleMap: feeScheduleMap);
+            feeScheduleMap: feeScheduleMap,
+            physicalExamsMap: peMap);
 
         var proxyResponse = await _proxyClient.ValidateReportAsync(
             new GenerateAndValidateReportProxyRequest

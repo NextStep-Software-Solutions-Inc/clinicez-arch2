@@ -25,7 +25,8 @@ public interface IYakapClinicalMapper
         IReadOnlyDictionary<Guid, PatientReproductiveHistory>? reproductiveHistoriesMap = null,
         IReadOnlyDictionary<Guid, List<PatientSurgicalHistory>>? surgicalHistoriesMap = null,
         IReadOnlyDictionary<Guid, List<PatientPastMedicalHistory>>? pastMedicalHistoriesMap = null,
-        IReadOnlyDictionary<Guid, List<PatientFamilyHistory>>? familyHistoriesMap = null);
+        IReadOnlyDictionary<Guid, List<PatientFamilyHistory>>? familyHistoriesMap = null,
+        IReadOnlyDictionary<Guid, PatientPhysicalExamProfile>? physicalExamsMap = null);
 
     string FormatPhilHealthAge(DateOnly birthDate, DateTime asOfDate);
 

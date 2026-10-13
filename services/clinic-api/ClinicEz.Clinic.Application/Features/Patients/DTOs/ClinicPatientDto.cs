@@ -1,6 +1,16 @@
 using System;
+using System.Collections.Generic;
 
 namespace ClinicEz.Clinic.Application.Features.Patients.DTOs;
+
+public sealed record MedicalHistoryEntryDto(
+    string ConditionTitle,
+    string? PhilHealthMdiseaseCode = null,
+    string? Icd10Code = null,
+    string? SpecificDescription = null,
+    DateOnly? OnsetDate = null,
+    bool IsResolved = false,
+    string? ClinicalNotes = null);
 
 public sealed record ClinicPatientDto(
     Guid Id,
@@ -37,4 +47,5 @@ public sealed record ClinicPatientDto(
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
     string VerificationStatus = "Verified",
     string? ActiveQueueTicket = null,
-    Guid? ActiveQueueItemId = null);
+    Guid? ActiveQueueItemId = null,
+    List<PatientPastMedicalHistoryDto>? PastMedicalHistories = null);

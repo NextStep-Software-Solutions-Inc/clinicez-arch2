@@ -58,7 +58,7 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
 
     public async Task SyncFromProfileAsync(Guid patientId, PhilHealthPatientProfileDto profile, CancellationToken ct = default)
     {
-        await IngestProfileCoreAsync(patientId, profile, ct);
+        await IngestProfileCoreAsync(patientId, profile, ct, isLegacyMigration: false);
     }
 
     public async Task EnsureIngestedAsync(Guid patientId, CancellationToken ct = default)
@@ -100,11 +100,11 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
 
         if (legacyProfile != null)
         {
-            await IngestProfileCoreAsync(patientId, legacyProfile, ct);
+            await IngestProfileCoreAsync(patientId, legacyProfile, ct, isLegacyMigration: true);
         }
     }
 
-    private async Task IngestProfileCoreAsync(Guid patientId, PhilHealthPatientProfileDto legacyProfile, CancellationToken ct)
+    private async Task IngestProfileCoreAsync(Guid patientId, PhilHealthPatientProfileDto legacyProfile, CancellationToken ct, bool isLegacyMigration = true)
     {
         var patient = await _patientRepo.Query(p => p.Id == patientId && p.ClinicId == _clinicContext.ClinicId)
             .FirstOrDefaultAsync(ct);
@@ -447,8 +447,8 @@ public sealed class LegacyPatientProfileIngestionService : ILegacyPatientProfile
             await IngestCohort(legacyProfile.OtherImmunizations, "OtherImm");
         }
 
-        // 6. Physical Exam Profile
-        if (_physicalExamRepo != null)
+        // 6. Physical Exam Profile (only during legacy migration of CustomFields["philhealth_profile"])
+        if (isLegacyMigration && _physicalExamRepo != null)
         {
             var existingPe = await _physicalExamRepo.Query(pe => pe.PatientId == patientId).FirstOrDefaultAsync(ct);
             if (existingPe == null)

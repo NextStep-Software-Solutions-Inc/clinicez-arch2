@@ -1098,6 +1098,35 @@ export interface UpdatePatientReproductiveHistoryPayload {
   remarks?: string;
 }
 
+export interface PatientPhysicalExamProfile {
+  id: string;
+  patientId: string;
+  genSurveyId: string;
+  genSurveyRemarks?: string | null;
+  skinId: string;
+  skinRemarks?: string | null;
+  heentId: string;
+  heentRemarks?: string | null;
+  chestId: string;
+  chestRemarks?: string | null;
+  heartId: string;
+  heartRemarks?: string | null;
+  abdomenId: string;
+  abdomenRemarks?: string | null;
+  neuroId: string;
+  neuroRemarks?: string | null;
+  rectalId: string;
+  rectalRemarks?: string | null;
+  guId: string;
+  guRemarks?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export type UpdatePatientPhysicalExamPayload = Partial<
+  Omit<PatientPhysicalExamProfile, 'id' | 'patientId' | 'createdAt' | 'updatedAt'>
+>;
+
 export interface NcdRiskAssessment {
   id: string;
   clinicId: string;
@@ -2160,6 +2189,15 @@ export const clinicService = {
 
   async updateReproductiveHistory(patientId: string, payload: UpdatePatientReproductiveHistoryPayload) {
     return clinicApiClient.put<PatientReproductiveHistory>(`/patients/${patientId}/reproductive-history`, payload);
+  },
+
+  // Patient Physical Examination Profile
+  async getPatientPhysicalExam(patientId: string) {
+    return clinicApiClient.get<PatientPhysicalExamProfile>(`/patients/${patientId}/physical-exam`);
+  },
+
+  async updatePatientPhysicalExam(patientId: string, payload: UpdatePatientPhysicalExamPayload) {
+    return clinicApiClient.put<PatientPhysicalExamProfile>(`/patients/${patientId}/physical-exam`, payload);
   },
 
   // NCD Risk Assessment

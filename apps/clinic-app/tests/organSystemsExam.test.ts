@@ -383,4 +383,60 @@ describe('Organ Systems Examination Suite', () => {
       expect(markup).toContain('Abnormal');
     });
   });
+
+  describe('4. Organ Systems Autosave Visual Status & Remarks', () => {
+    test('4.1 renders saving status indicator badge when savingStatus is saving', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(OrganSystemsExamSection, {
+          values: DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+          onChange: () => {},
+          savingStatus: 'saving',
+        })
+      );
+
+      expect(markup).toContain('Saving findings...');
+    });
+
+    test('4.2 renders saved status indicator badge when savingStatus is saved', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(OrganSystemsExamSection, {
+          values: DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+          onChange: () => {},
+          savingStatus: 'saved',
+        })
+      );
+
+      expect(markup).toContain('Saved to clinical record');
+    });
+
+    test('4.3 renders error status indicator badge when savingStatus is error', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(OrganSystemsExamSection, {
+          values: DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+          onChange: () => {},
+          savingStatus: 'error',
+        })
+      );
+
+      expect(markup).toContain('Autosave error');
+    });
+
+    test('4.4 renders remarks input field when finding is abnormal and onRemarksChange is provided', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(OrganSystemsExamSection, {
+          values: {
+            ...DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+            skinId: '2', // Clubbing (abnormal)
+            skinRemarks: 'Bilateral digital clubbing',
+          },
+          onChange: () => {},
+          onRemarksChange: () => {},
+        })
+      );
+
+      expect(markup).toContain('Skin / extremities Remarks');
+      expect(markup).toContain('Bilateral digital clubbing');
+      expect(markup).toContain('Describe abnormal skin / extremities findings...');
+    });
+  });
 });

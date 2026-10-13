@@ -457,6 +457,50 @@ public sealed class PatientsController : ControllerBase
         var result = await _sender.Send(query, ct);
         return Ok(ApiResponse<PediatricZScoreDto?>.Success(result));
     }
+
+    // --- Physical Examination Endpoints ---
+
+    [HttpGet("{patientId:guid}/physical-exam")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<PatientPhysicalExamProfileDto>>> GetPhysicalExam(
+        Guid patientId,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetPatientPhysicalExamQuery(patientId), ct);
+        return Ok(ApiResponse<PatientPhysicalExamProfileDto>.Success(result));
+    }
+
+    [HttpPut("{patientId:guid}/physical-exam")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientPhysicalExamProfileDto>>> UpdatePhysicalExam(
+        Guid patientId,
+        [FromBody] UpdatePatientPhysicalExamRequest request,
+        CancellationToken ct)
+    {
+        var command = new UpdatePatientPhysicalExamCommand(
+            patientId,
+            request.GenSurveyId,
+            request.GenSurveyRemarks,
+            request.SkinId,
+            request.SkinRemarks,
+            request.HeentId,
+            request.HeentRemarks,
+            request.ChestId,
+            request.ChestRemarks,
+            request.HeartId,
+            request.HeartRemarks,
+            request.AbdomenId,
+            request.AbdomenRemarks,
+            request.NeuroId,
+            request.NeuroRemarks,
+            request.RectalId,
+            request.RectalRemarks,
+            request.GuId,
+            request.GuRemarks);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PatientPhysicalExamProfileDto>.Success(result, "Physical examination findings updated successfully."));
+    }
 }
 
 public sealed record UpdatePatientRequest(

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, Button, SkeletonList, ErrorState } from '../ui';
+import { ThemedText, Badge, Icon, Button, SkeletonList, ErrorState, Input } from '../ui';
 import { usePhilHealthCatalog } from '../../utils/usePhilHealthCatalog';
 import type { PhilHealthLibraryName } from '../../services/philHealthCatalogService';
 
@@ -36,6 +36,8 @@ export const DEFAULT_ORGAN_SYSTEM_NORMAL_CODES: Record<OrganSystemDef['key'], st
 };
 
 export interface OrganSystemsExamValues {
+  genSurveyId?: string;
+  genSurveyRemarks?: string;
   skinId?: string;
   skinRemarks?: string;
   heentId?: string;
@@ -58,7 +60,9 @@ export interface OrganSystemRowProps {
   label: string;
   library: PhilHealthLibraryName;
   value?: string;
+  remarksValue?: string;
   onChange: (code: string) => void;
+  onRemarksChange?: (remarks: string) => void;
   disabled?: boolean;
 }
 
@@ -67,7 +71,9 @@ export function OrganSystemRow({
   label,
   library,
   value,
+  remarksValue,
   onChange,
+  onRemarksChange,
   disabled = false,
 }: OrganSystemRowProps) {
   const { items, loading, error, reload } = usePhilHealthCatalog(library);
@@ -150,6 +156,18 @@ export function OrganSystemRow({
           })}
         </ScrollView>
       ) : null}
+
+      {(!isSelectedNormal || Boolean(remarksValue)) && onRemarksChange ? (
+        <View style={styles.remarksRow}>
+          <Input
+            label={`${label} Remarks`}
+            value={remarksValue || ''}
+            onChangeText={onRemarksChange}
+            placeholder={`Describe abnormal ${label.toLowerCase()} findings...`}
+            disabled={disabled}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -157,22 +175,26 @@ export function OrganSystemRow({
 export interface OrganSystemsExamSectionProps {
   values: OrganSystemsExamValues;
   onChange: (key: OrganSystemDef['key'], code: string) => void;
+  onRemarksChange?: (remarksKey: keyof OrganSystemsExamValues, remarks: string) => void;
   onSetAllNormal?: () => void;
   disabled?: boolean;
   spaced?: boolean;
   title?: string;
   helperText?: string;
+  savingStatus?: 'idle' | 'saving' | 'saved' | 'error';
 }
 
 /** Complete Organ Systems Examination section with horizontally scrollable options. */
 export default function OrganSystemsExamSection({
   values,
   onChange,
+  onRemarksChange,
   onSetAllNormal,
   disabled = false,
   spaced = false,
   title = 'Organ systems examination',
   helperText = 'Select examination findings for each system. Scroll horizontally across findings to review all clinical options.',
+  savingStatus = 'idle',
 }: OrganSystemsExamSectionProps) {
   const abnormalCount = ORGAN_SYSTEMS.filter((sys) => {
     const val = values[sys.key];
@@ -189,6 +211,13 @@ export default function OrganSystemsExamSection({
             variant={abnormalCount > 0 ? 'warning' : 'routine'}
             size="sm"
           />
+          {savingStatus === 'saving' ? (
+            <Badge label="Saving findings..." variant="warning" size="sm" icon="clock" />
+          ) : savingStatus === 'saved' ? (
+            <Badge label="Saved to clinical record" variant="routine" size="sm" icon="check" />
+          ) : savingStatus === 'error' ? (
+            <Badge label="Autosave error" variant="emergency" size="sm" icon="alertCircle" />
+          ) : null}
         </View>
 
         {onSetAllNormal ? (
@@ -216,7 +245,13 @@ export default function OrganSystemsExamSection({
             label={item.label}
             library={item.library}
             value={values[item.key]}
+            remarksValue={item.remarksKey ? values[item.remarksKey] : undefined}
             onChange={(code) => onChange(item.key, code)}
+            onRemarksChange={
+              onRemarksChange && item.remarksKey
+                ? (text) => onRemarksChange(item.remarksKey!, text)
+                : undefined
+            }
             disabled={disabled}
           />
         ))}
@@ -294,5 +329,8 @@ const styles = StyleSheet.create({
   chipWarning: {
     backgroundColor: theme.colors.warningBg,
     borderColor: theme.colors.warning,
+  },
+  remarksRow: {
+    marginTop: theme.spacing.xs,
   },
 });

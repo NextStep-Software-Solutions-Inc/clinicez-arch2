@@ -38,7 +38,8 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         IReadOnlyDictionary<Guid, PatientReproductiveHistory>? reproductiveHistoriesMap = null,
         IReadOnlyDictionary<Guid, List<PatientSurgicalHistory>>? surgicalHistoriesMap = null,
         IReadOnlyDictionary<Guid, List<PatientPastMedicalHistory>>? pastMedicalHistoriesMap = null,
-        IReadOnlyDictionary<Guid, List<PatientFamilyHistory>>? familyHistoriesMap = null)
+        IReadOnlyDictionary<Guid, List<PatientFamilyHistory>>? familyHistoriesMap = null,
+        IReadOnlyDictionary<Guid, PatientPhysicalExamProfile>? physicalExamsMap = null)
     {
         var isFirstTranche = reportTagging == "1";
         var accreditationNo = !string.IsNullOrWhiteSpace(settings.AccreditationNumber)
@@ -178,6 +179,9 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             List<PatientFamilyHistory>? relFams = null;
             familyHistoriesMap?.TryGetValue(patient.Id, out relFams);
 
+            PatientPhysicalExamProfile? relPhysicalExam = null;
+            physicalExamsMap?.TryGetValue(patient.Id, out relPhysicalExam);
+
             // Medical histories & specifics (chronic conditions with 3-digit codes or DTD '+' fallback)
             var (medHistories, medSpecifics) = MapMedicalHistories(patient, customProfile, relProblems, relMeds);
 
@@ -199,14 +203,20 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             // Pregnancy history (strictly N for male and non-pregnant female, overwritable for pregnant adolescents and adults)
             var pregHist = MapPregnancyHistory(customProfile, isFemale, relRepro);
 
-            // Physical exam miscs & specifics (DTD '+' fallback with normal systems '1')
-            var peMiscs = MapPhysicalExamMiscs(customProfile);
-            var peSpecifics = MapPhysicalExamSpecifics(customProfile);
+            // Physical exam miscs & specifics (relational PatientPhysicalExamProfile or customProfile fallback)
+            var peMiscs = MapPhysicalExamMiscs(customProfile, relPhysicalExam);
+            var peSpecifics = MapPhysicalExamSpecifics(customProfile, relPhysicalExam);
 
-            var bloodType = customProfile?.BloodType 
-                ?? (!string.IsNullOrWhiteSpace(patient.BloodType) ? patient.BloodType : string.Empty);
-            var genSurveyId = customProfile?.GenSurveyId ?? "1";
-            var genSurveyRem = customProfile?.GenSurveyRemarks ?? string.Empty;
+            // Official ClinicPatient.BloodType takes priority over legacy customProfile
+            var bloodType = !string.IsNullOrWhiteSpace(patient.BloodType)
+                ? patient.BloodType
+                : (customProfile?.BloodType ?? string.Empty);
+            var genSurveyId = !string.IsNullOrWhiteSpace(relPhysicalExam?.GenSurveyId)
+                ? relPhysicalExam.GenSurveyId
+                : (customProfile?.GenSurveyId ?? "1");
+            var genSurveyRem = !string.IsNullOrWhiteSpace(relPhysicalExam?.GenSurveyRemarks)
+                ? relPhysicalExam.GenSurveyRemarks
+                : (customProfile?.GenSurveyRemarks ?? string.Empty);
 
             var ncdAnswers = isPediatric
                 ? new YakapNcdAnswersDto("N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "A", "N", "N", "", "", "", "N", "", "", "N", "", "", "N", "", "", "N", "N")
@@ -952,8 +962,23 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             DeficiencyRemarks: string.Empty);
     }
 
-    private List<YakapPhysicalExamMiscDto> MapPhysicalExamMiscs(PhilHealthPatientProfileDto? customProfile)
+    private List<YakapPhysicalExamMiscDto> MapPhysicalExamMiscs(
+        PhilHealthPatientProfileDto? customProfile,
+        PatientPhysicalExamProfile? relPhysicalExam = null)
     {
+        if (relPhysicalExam != null)
+        {
+            return [new YakapPhysicalExamMiscDto(
+                SkinId: !string.IsNullOrWhiteSpace(relPhysicalExam.SkinId) ? relPhysicalExam.SkinId : "1",
+                HeentId: !string.IsNullOrWhiteSpace(relPhysicalExam.HeentId) ? relPhysicalExam.HeentId : "11",
+                ChestId: !string.IsNullOrWhiteSpace(relPhysicalExam.ChestId) ? relPhysicalExam.ChestId : "6",
+                HeartId: !string.IsNullOrWhiteSpace(relPhysicalExam.HeartId) ? relPhysicalExam.HeartId : "5",
+                AbdomenId: !string.IsNullOrWhiteSpace(relPhysicalExam.AbdomenId) ? relPhysicalExam.AbdomenId : "7",
+                NeuroId: !string.IsNullOrWhiteSpace(relPhysicalExam.NeuroId) ? relPhysicalExam.NeuroId : "6",
+                RectalId: !string.IsNullOrWhiteSpace(relPhysicalExam.RectalId) ? relPhysicalExam.RectalId : "1",
+                GuId: !string.IsNullOrWhiteSpace(relPhysicalExam.GuId) ? relPhysicalExam.GuId : "1")];
+        }
+
         if (customProfile != null)
         {
             return [new YakapPhysicalExamMiscDto(
@@ -970,8 +995,23 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         return [_resolver.EssentiallyNormalExam()];
     }
 
-    private static YakapPhysicalExamSpecificDto MapPhysicalExamSpecifics(PhilHealthPatientProfileDto? customProfile)
+    private static YakapPhysicalExamSpecificDto MapPhysicalExamSpecifics(
+        PhilHealthPatientProfileDto? customProfile,
+        PatientPhysicalExamProfile? relPhysicalExam = null)
     {
+        if (relPhysicalExam != null)
+        {
+            return new YakapPhysicalExamSpecificDto(
+                SkinRem: relPhysicalExam.SkinRemarks ?? string.Empty,
+                HeentRem: relPhysicalExam.HeentRemarks ?? string.Empty,
+                ChestRem: relPhysicalExam.ChestRemarks ?? string.Empty,
+                HeartRem: relPhysicalExam.HeartRemarks ?? string.Empty,
+                AbdomenRem: relPhysicalExam.AbdomenRemarks ?? string.Empty,
+                NeuroRem: relPhysicalExam.NeuroRemarks ?? string.Empty,
+                RectalRem: relPhysicalExam.RectalRemarks ?? string.Empty,
+                GuRem: relPhysicalExam.GuRemarks ?? string.Empty);
+        }
+
         if (customProfile != null)
         {
             return new YakapPhysicalExamSpecificDto(

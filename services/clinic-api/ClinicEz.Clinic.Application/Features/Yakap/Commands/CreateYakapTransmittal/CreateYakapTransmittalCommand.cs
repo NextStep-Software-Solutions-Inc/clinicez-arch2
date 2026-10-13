@@ -44,6 +44,7 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
     private readonly IClinicContext _clinicContext;
     private readonly IYakapClinicalMapper _mapper;
     private readonly IPhilHealthSequenceGenerator? _sequenceGenerator;
+    private readonly IRepository<PatientPhysicalExamProfile>? _physicalExamRepo;
 
     public CreateYakapTransmittalCommandHandler(
         IRepository<YakapTransmittal> transmittalRepo,
@@ -56,7 +57,8 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IYakapClinicalMapper mapper,
-        IPhilHealthSequenceGenerator? sequenceGenerator = null)
+        IPhilHealthSequenceGenerator? sequenceGenerator = null,
+        IRepository<PatientPhysicalExamProfile>? physicalExamRepo = null)
     {
         _transmittalRepo = transmittalRepo;
         _encounterRepo = encounterRepo;
@@ -69,6 +71,7 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         _clinicContext = clinicContext;
         _mapper = mapper;
         _sequenceGenerator = sequenceGenerator;
+        _physicalExamRepo = physicalExamRepo;
     }
 
     public async Task<ApiResponse<YakapTransmittalDto>> Handle(
@@ -127,6 +130,14 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         var patientsList = await _patientRepo.Query(p => patientIds.Contains(p.Id))
             .ToListAsync(cancellationToken);
         var patientsMap = patientsList.ToDictionary(p => p.Id, p => p);
+
+        Dictionary<Guid, PatientPhysicalExamProfile>? peMap = null;
+        if (_physicalExamRepo != null)
+        {
+            var peList = await _physicalExamRepo.Query(pe => patientIds.Contains(pe.PatientId))
+                .ToListAsync(cancellationToken);
+            peMap = peList.ToDictionary(pe => pe.PatientId, pe => pe);
+        }
 
         // 3. Load vitals
         var queueItemIds = encounters.Where(e => e.QueueItemId.HasValue).Select(e => e.QueueItemId!.Value).ToList();
@@ -218,7 +229,8 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
             transmittalNumber,
             ncdMap: null,
             labOrdersMap: labOrdersMap,
-            feeScheduleMap: feeScheduleMap);
+            feeScheduleMap: feeScheduleMap,
+            physicalExamsMap: peMap);
 
         // 6. Build Transmittal Entity
         var transmittal = new YakapTransmittal

@@ -19,6 +19,7 @@ import {
 import OrganSystemsExamSection, {
   DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
   type OrganSystemsExamValues,
+  type OrganSystemDef,
 } from './OrganSystemsExamSection';
 
 export const PHILHEALTH_MDISEASES_CONDITIONS: { code: string; description: string }[] = [
@@ -188,6 +189,8 @@ export default function ClinicalHistoryTab({
 
   // Organ Systems Examination State
   const [organSystems, setOrganSystems] = useState<OrganSystemsExamValues>(() => ({
+    genSurveyId: '1',
+    genSurveyRemarks: '',
     skinId: initialProfile?.skinId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.skinId,
     heentId: initialProfile?.heentId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.heentId,
     chestId: initialProfile?.chestId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.chestId,
@@ -205,6 +208,13 @@ export default function ClinicalHistoryTab({
     guRemarks: initialProfile?.guRemarks || '',
     rectalRemarks: initialProfile?.rectalRemarks || '',
   }));
+
+  // Physical Exam Autosave & State
+  const [physicalExamSavingStatus, setPhysicalExamSavingStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [physicalExamError, setPhysicalExamError] = useState<string | null>(null);
+  const remarksDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const organSystemsRef = useRef(organSystems);
+  organSystemsRef.current = organSystems;
 
   // Catalog for past medical conditions (lib_mdiseases)
   const { items: diseaseCatalog } = usePhilHealthCatalog('lib_mdiseases');
@@ -257,27 +267,6 @@ export default function ClinicalHistoryTab({
     if (data.familyHistoryNotes) {
       setFamilyNotes(data.familyHistoryNotes);
     }
-
-    if (data.skinId || data.heentId || data.chestId || data.heartId || data.abdomenId) {
-      setOrganSystems({
-        skinId: data.skinId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.skinId,
-        heentId: data.heentId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.heentId,
-        chestId: data.chestId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.chestId,
-        heartId: data.heartId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.heartId,
-        abdomenId: data.abdomenId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.abdomenId,
-        neuroId: data.neuroId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.neuroId,
-        guId: data.guId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.guId,
-        rectalId: data.rectalId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.rectalId,
-        skinRemarks: data.skinRemarks || '',
-        heentRemarks: data.heentRemarks || '',
-        chestRemarks: data.chestRemarks || '',
-        heartRemarks: data.heartRemarks || '',
-        abdomenRemarks: data.abdomenRemarks || '',
-        neuroRemarks: data.neuroRemarks || '',
-        guRemarks: data.guRemarks || '',
-        rectalRemarks: data.rectalRemarks || '',
-      });
-    }
   }, [patient.chronicConditions]);
 
   const fetchProfile = useCallback(async () => {
@@ -318,6 +307,38 @@ export default function ClinicalHistoryTab({
     }
   }, [patient.id, patient.chronicConditions, seedFromProfile]);
 
+  const fetchPhysicalExam = useCallback(async () => {
+    try {
+      const [data] = await clinicService.getPatientPhysicalExam(patient.id);
+      if (data) {
+        const nextExam: OrganSystemsExamValues = {
+          genSurveyId: data.genSurveyId || '1',
+          genSurveyRemarks: data.genSurveyRemarks || '',
+          skinId: data.skinId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.skinId,
+          heentId: data.heentId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.heentId,
+          chestId: data.chestId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.chestId,
+          heartId: data.heartId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.heartId,
+          abdomenId: data.abdomenId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.abdomenId,
+          neuroId: data.neuroId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.neuroId,
+          guId: data.guId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.guId,
+          rectalId: data.rectalId || DEFAULT_ORGAN_SYSTEM_NORMAL_CODES.rectalId,
+          skinRemarks: data.skinRemarks || '',
+          heentRemarks: data.heentRemarks || '',
+          chestRemarks: data.chestRemarks || '',
+          heartRemarks: data.heartRemarks || '',
+          abdomenRemarks: data.abdomenRemarks || '',
+          neuroRemarks: data.neuroRemarks || '',
+          guRemarks: data.guRemarks || '',
+          rectalRemarks: data.rectalRemarks || '',
+        };
+        setOrganSystems(nextExam);
+        organSystemsRef.current = nextExam;
+      }
+    } catch {
+      // Non-blocking fallback
+    }
+  }, [patient.id]);
+
   const isInitializedRef = useRef(false);
   const prevPatientIdRef = useRef(patient.id);
   const prevInitialProfileRef = useRef(initialProfile);
@@ -331,6 +352,28 @@ export default function ClinicalHistoryTab({
       prevPatientIdRef.current = patient.id;
       prevInitialProfileRef.current = initialProfile;
 
+      if (patientChanged) {
+        if (remarksDebounceTimerRef.current) {
+          clearTimeout(remarksDebounceTimerRef.current);
+          remarksDebounceTimerRef.current = null;
+        }
+        setOrganSystems({
+          genSurveyId: '1',
+          genSurveyRemarks: '',
+          ...DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+          skinRemarks: '',
+          heentRemarks: '',
+          chestRemarks: '',
+          heartRemarks: '',
+          abdomenRemarks: '',
+          neuroRemarks: '',
+          guRemarks: '',
+          rectalRemarks: '',
+        });
+        setPhysicalExamSavingStatus('idle');
+      }
+
+      fetchPhysicalExam();
       if (initialProfile) {
         setProfile(initialProfile);
         seedFromProfile(initialProfile);
@@ -338,7 +381,122 @@ export default function ClinicalHistoryTab({
         fetchProfile();
       }
     }
-  }, [patient.id, initialProfile, fetchProfile, seedFromProfile]);
+  }, [patient.id, initialProfile, fetchProfile, fetchPhysicalExam, seedFromProfile]);
+
+  const savePhysicalExam = useCallback(async (valuesToSave: OrganSystemsExamValues) => {
+    setPhysicalExamSavingStatus('saving');
+    setPhysicalExamError(null);
+    try {
+      const [, err] = await clinicService.updatePatientPhysicalExam(patient.id, {
+        genSurveyId: valuesToSave.genSurveyId,
+        genSurveyRemarks: valuesToSave.genSurveyRemarks,
+        skinId: valuesToSave.skinId,
+        skinRemarks: valuesToSave.skinRemarks,
+        heentId: valuesToSave.heentId,
+        heentRemarks: valuesToSave.heentRemarks,
+        chestId: valuesToSave.chestId,
+        chestRemarks: valuesToSave.chestRemarks,
+        heartId: valuesToSave.heartId,
+        heartRemarks: valuesToSave.heartRemarks,
+        abdomenId: valuesToSave.abdomenId,
+        abdomenRemarks: valuesToSave.abdomenRemarks,
+        neuroId: valuesToSave.neuroId,
+        neuroRemarks: valuesToSave.neuroRemarks,
+        guId: valuesToSave.guId,
+        guRemarks: valuesToSave.guRemarks,
+        rectalId: valuesToSave.rectalId,
+        rectalRemarks: valuesToSave.rectalRemarks,
+      });
+
+      if (err) {
+        setPhysicalExamSavingStatus('error');
+        setPhysicalExamError(err.message || 'Failed to save physical exam findings.');
+      } else {
+        setPhysicalExamSavingStatus('saved');
+        onRefreshChart?.();
+      }
+    } catch (e: any) {
+      setPhysicalExamSavingStatus('error');
+      setPhysicalExamError(e.message || 'Failed to save physical exam findings.');
+    }
+  }, [patient.id, onRefreshChart]);
+
+  const handleOrganSystemOptionChange = (key: OrganSystemDef['key'], code: string) => {
+    const updated = { ...organSystemsRef.current, [key]: code };
+    setOrganSystems(updated);
+    organSystemsRef.current = updated;
+    if (remarksDebounceTimerRef.current) {
+      clearTimeout(remarksDebounceTimerRef.current);
+      remarksDebounceTimerRef.current = null;
+    }
+    savePhysicalExam(updated);
+  };
+
+  const handleSetAllNormal = () => {
+    const updated: OrganSystemsExamValues = {
+      ...organSystemsRef.current,
+      ...DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
+      skinRemarks: '',
+      heentRemarks: '',
+      chestRemarks: '',
+      heartRemarks: '',
+      abdomenRemarks: '',
+      neuroRemarks: '',
+      guRemarks: '',
+      rectalRemarks: '',
+    };
+    setOrganSystems(updated);
+    organSystemsRef.current = updated;
+    if (remarksDebounceTimerRef.current) {
+      clearTimeout(remarksDebounceTimerRef.current);
+      remarksDebounceTimerRef.current = null;
+    }
+    savePhysicalExam(updated);
+  };
+
+  const handleOrganSystemRemarksChange = (remarksKey: keyof OrganSystemsExamValues, text: string) => {
+    const updated = { ...organSystemsRef.current, [remarksKey]: text };
+    setOrganSystems(updated);
+    organSystemsRef.current = updated;
+
+    if (remarksDebounceTimerRef.current) {
+      clearTimeout(remarksDebounceTimerRef.current);
+    }
+    setPhysicalExamSavingStatus('saving');
+    remarksDebounceTimerRef.current = setTimeout(() => {
+      savePhysicalExam(updated);
+      remarksDebounceTimerRef.current = null;
+    }, 600);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (remarksDebounceTimerRef.current) {
+        clearTimeout(remarksDebounceTimerRef.current);
+        remarksDebounceTimerRef.current = null;
+        clinicService.updatePatientPhysicalExam(patient.id, {
+          genSurveyId: organSystemsRef.current.genSurveyId,
+          genSurveyRemarks: organSystemsRef.current.genSurveyRemarks,
+          skinId: organSystemsRef.current.skinId,
+          skinRemarks: organSystemsRef.current.skinRemarks,
+          heentId: organSystemsRef.current.heentId,
+          heentRemarks: organSystemsRef.current.heentRemarks,
+          chestId: organSystemsRef.current.chestId,
+          chestRemarks: organSystemsRef.current.chestRemarks,
+          heartId: organSystemsRef.current.heartId,
+          heartRemarks: organSystemsRef.current.heartRemarks,
+          abdomenId: organSystemsRef.current.abdomenId,
+          abdomenRemarks: organSystemsRef.current.abdomenRemarks,
+          neuroId: organSystemsRef.current.neuroId,
+          neuroRemarks: organSystemsRef.current.neuroRemarks,
+          guId: organSystemsRef.current.guId,
+          guRemarks: organSystemsRef.current.guRemarks,
+          rectalId: organSystemsRef.current.rectalId,
+          rectalRemarks: organSystemsRef.current.rectalRemarks,
+        }).catch(() => {});
+      }
+    };
+  }, [patient.id]);
 
   const toggleMedicalCondition = (code: string) => {
     setSelectedMedicalCodes((prev) => {
@@ -397,7 +555,6 @@ export default function ClinicalHistoryTab({
 
     const updatedProfile: PhilHealthPatientProfile = {
       ...(profile || defaultPhilHealthProfile),
-      ...organSystems,
       medicalHistories,
       familyHistories,
       medicalHistoryNotes: personalNotes.trim() || undefined,
@@ -1034,18 +1191,25 @@ export default function ClinicalHistoryTab({
       <View style={styles.sectionCard}>
         <OrganSystemsExamSection
           values={organSystems}
-          onChange={(key, code) => {
-            setOrganSystems((prev) => ({ ...prev, [key]: code }));
-            setProfileSuccess(false);
-          }}
-          onSetAllNormal={() => {
-            setOrganSystems((prev) => ({
-              ...prev,
-              ...DEFAULT_ORGAN_SYSTEM_NORMAL_CODES,
-            }));
-            setProfileSuccess(false);
-          }}
+          onChange={handleOrganSystemOptionChange}
+          onRemarksChange={handleOrganSystemRemarksChange}
+          onSetAllNormal={handleSetAllNormal}
+          savingStatus={physicalExamSavingStatus}
         />
+        {physicalExamError ? (
+          <View style={styles.formErrorBanner}>
+            <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+            <ThemedText variant="small" color={theme.colors.emergencyText} style={{ flex: 1 }}>
+              {physicalExamError}
+            </ThemedText>
+            <Button
+              title="Retry"
+              variant="outline"
+              size="sm"
+              onPress={() => savePhysicalExam(organSystemsRef.current)}
+            />
+          </View>
+        ) : null}
       </View>
 
       {/* SECTION 6: Save Profile Persistence Action */}
