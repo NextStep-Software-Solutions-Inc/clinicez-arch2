@@ -103,7 +103,7 @@ mock.module('../services/apiClient', () => ({
 const { clinicService } = await import('../services/clinicService');
 type ClinicPatient = import('../services/clinicService').ClinicPatient;
 type RegisterPatientPayload = import('../services/clinicService').RegisterPatientPayload;
-const { EditPatientModal } = await import('../components/patient/EditPatientModal');
+const { EditPatientModal, parseAllergiesStringToStructured } = await import('../components/patient/EditPatientModal');
 const { formatLongAge } = await import('../utils/age');
 
 describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restoration', () => {
@@ -369,5 +369,75 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     expect(element.props.patient.middleName).toBeUndefined();
     expect(element.props.patient.suffix).toBeUndefined();
     expect(element.props.patient.email).toBeUndefined();
+  });
+
+  test('F4: parseAllergiesStringToStructured correctly parses summary strings, plain names, and JSON arrays', () => {
+    // 1. Formatted summary string
+    const parsedSummary = parseAllergiesStringToStructured('Penicillin (Medication - STAT), Peanuts (Food)');
+    expect(parsedSummary.length).toBe(2);
+    expect(parsedSummary[0].allergen).toBe('Penicillin');
+    expect(parsedSummary[0].category).toBe('Medication');
+    expect(parsedSummary[0].isAnaphylactic).toBe(true);
+    expect(parsedSummary[0].severity).toBe('LifeThreatening');
+    expect(parsedSummary[1].allergen).toBe('Peanuts');
+    expect(parsedSummary[1].category).toBe('Food');
+    expect(parsedSummary[1].isAnaphylactic).toBe(false);
+
+    // 2. Comma-separated plain allergens
+    const parsedPlain = parseAllergiesStringToStructured('Penicillin, Shellfish');
+    expect(parsedPlain.length).toBe(2);
+    expect(parsedPlain[0].allergen).toBe('Penicillin');
+    expect(parsedPlain[0].category).toBe('Medication');
+    expect(parsedPlain[1].allergen).toBe('Shellfish');
+    expect(parsedPlain[1].category).toBe('Food');
+
+    // 3. NKDA / None known
+    expect(parseAllergiesStringToStructured('None known')).toEqual([]);
+    expect(parseAllergiesStringToStructured('NKDA')).toEqual([]);
+    expect(parseAllergiesStringToStructured('')).toEqual([]);
+
+    // 4. JSON array string
+    const jsonStr = JSON.stringify([
+      { allergen: 'Latex', category: 'Environmental', severity: 'Severe', isAnaphylactic: true },
+    ]);
+    const parsedJson = parseAllergiesStringToStructured(jsonStr);
+    expect(parsedJson.length).toBe(1);
+    expect(parsedJson[0].allergen).toBe('Latex');
+    expect(parsedJson[0].category).toBe('Environmental');
+    expect(parsedJson[0].isAnaphylactic).toBe(true);
+  });
+
+  test('F5: clinicService.updatePatient transmits structuredAllergies and formatted summary', async () => {
+    const payloadWithAllergies: RegisterPatientPayload = {
+      firstName: 'Maria',
+      lastName: 'Santos',
+      dateOfBirth: '1990-01-01',
+      gender: 'Female',
+      contactNumber: '0917-123-4567',
+      allergies: 'Amoxicillin (Medication - STAT), Eggs (Food)',
+      structuredAllergies: [
+        {
+          category: 'Medication',
+          allergen: 'Amoxicillin',
+          severity: 'LifeThreatening',
+          isAnaphylactic: true,
+        },
+        {
+          category: 'Food',
+          allergen: 'Eggs',
+          severity: 'Moderate',
+          isAnaphylactic: false,
+        },
+      ],
+      verificationStatus: 'Verified',
+    };
+
+    const [updated, err] = await clinicService.updatePatient('pat-allergy-test', payloadWithAllergies);
+    expect(err).toBeNull();
+    expect(lastPutUrl).toBe('/patients/pat-allergy-test');
+    expect(lastPutPayload.allergies).toBe('Amoxicillin (Medication - STAT), Eggs (Food)');
+    expect(lastPutPayload.structuredAllergies.length).toBe(2);
+    expect(lastPutPayload.structuredAllergies[0].allergen).toBe('Amoxicillin');
+    expect(lastPutPayload.structuredAllergies[0].isAnaphylactic).toBe(true);
   });
 });

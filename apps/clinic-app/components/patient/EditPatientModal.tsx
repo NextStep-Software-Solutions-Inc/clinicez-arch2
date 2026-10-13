@@ -12,6 +12,95 @@ import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition } from '../../services/clinicService';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
+import StructuredAllergyIntakeModal, {
+  AllergyPillList,
+  CreateAllergyRequest,
+} from './StructuredAllergyIntakeModal';
+
+export function parseAllergiesStringToStructured(raw?: string | null): CreateAllergyRequest[] {
+  if (!raw || !raw.trim()) return [];
+  const trimmed = raw.trim();
+  if (/^(none|nkda|no known allergies|none known)$/i.test(trimmed)) return [];
+
+  // Try JSON array format first
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => ({
+            category: (['Medication', 'Food', 'Environmental', 'Biologic', 'Other'].includes(item.category)
+              ? item.category
+              : 'Other') as CreateAllergyRequest['category'],
+            allergen: String(item.allergen || item.name || '').trim(),
+            allergenDrugCode: item.allergenDrugCode ? String(item.allergenDrugCode) : null,
+            severity: (['Mild', 'Moderate', 'Severe', 'LifeThreatening'].includes(item.severity)
+              ? item.severity
+              : 'Moderate') as CreateAllergyRequest['severity'],
+            reactionManifestation: item.reactionManifestation ? String(item.reactionManifestation) : null,
+            isAnaphylactic: Boolean(item.isAnaphylactic),
+            onsetDate: item.onsetDate ? String(item.onsetDate) : null,
+            notes: item.notes ? String(item.notes) : null,
+          }))
+          .filter((a) => a.allergen.length > 0);
+      }
+    } catch {
+      // Fall through to text parsing
+    }
+  }
+
+  // Parse comma-separated summary: "Penicillin (Medication - STAT), Peanuts (Food)" or "Penicillin, Peanuts"
+  const segments = trimmed.split(/,\s*(?![^()]*\))/);
+  const result: CreateAllergyRequest[] = [];
+
+  for (const seg of segments) {
+    const s = seg.trim();
+    if (!s) continue;
+
+    const match = s.match(/^(.+?)\s*\((.+?)\)$/);
+    if (match) {
+      const allergen = match[1].trim();
+      const meta = match[2].trim();
+      const isAnaphylactic = /stat|anaphylax|life-?threatening/i.test(meta);
+      let severity: CreateAllergyRequest['severity'] = isAnaphylactic ? 'LifeThreatening' : 'Moderate';
+      if (/mild/i.test(meta)) severity = 'Mild';
+      else if (/moderate/i.test(meta)) severity = 'Moderate';
+      else if (/severe/i.test(meta) && !/life-?threatening/i.test(meta)) severity = 'Severe';
+      else if (/life-?threatening/i.test(meta)) severity = 'LifeThreatening';
+
+      let category: CreateAllergyRequest['category'] = 'Other';
+      if (/medication|drug|rx/i.test(meta)) category = 'Medication';
+      else if (/food/i.test(meta)) category = 'Food';
+      else if (/environmental|airborne|contact/i.test(meta)) category = 'Environmental';
+      else if (/biologic|vaccine|blood/i.test(meta)) category = 'Biologic';
+      else if (/penicillin|amoxicillin|aspirin|ibuprofen|antibiotic|paracetamol|sulfa/i.test(allergen)) category = 'Medication';
+      else if (/peanut|egg|milk|seafood|shellfish|wheat|soy|fish/i.test(allergen)) category = 'Food';
+      else if (/latex|pollen|dust|mold/i.test(allergen)) category = 'Environmental';
+
+      result.push({
+        category,
+        allergen,
+        severity,
+        isAnaphylactic,
+      });
+    } else {
+      const isAnaphylactic = /anaphylax|severe/i.test(s);
+      let category: CreateAllergyRequest['category'] = 'Other';
+      if (/penicillin|amoxicillin|aspirin|ibuprofen|antibiotic|paracetamol|sulfa/i.test(s)) category = 'Medication';
+      else if (/peanut|egg|milk|seafood|shellfish|wheat|soy|fish/i.test(s)) category = 'Food';
+      else if (/latex|pollen|dust|mold/i.test(s)) category = 'Environmental';
+
+      result.push({
+        category,
+        allergen: s,
+        severity: isAnaphylactic ? 'LifeThreatening' : 'Moderate',
+        isAnaphylactic,
+      });
+    }
+  }
+
+  return result;
+}
 
 export interface EditPatientModalProps {
   patient: ClinicPatient | null;
@@ -46,7 +135,8 @@ export function EditPatientModal({
   const [seniorCitizenId, setSeniorCitizenId] = useState('');
   const [pwdId, setPwdId] = useState('');
   const [bloodType, setBloodType] = useState('');
-  const [allergies, setAllergies] = useState('');
+  const [structuredAllergies, setStructuredAllergies] = useState<CreateAllergyRequest[]>([]);
+  const [allergyModalVisible, setAllergyModalVisible] = useState(false);
   const [chronicConditions, setChronicConditions] = useState('');
   const [alerts, setAlerts] = useState('');
 
@@ -120,7 +210,10 @@ export function EditPatientModal({
     setSeniorCitizenId(patient.seniorCitizenId || '');
     setPwdId(patient.pwdId || '');
     setBloodType(patient.bloodType || '');
-    setAllergies(patient.allergies || '');
+    const initialAllergies = (patient as any)?.structuredAllergies && Array.isArray((patient as any).structuredAllergies) && (patient as any).structuredAllergies.length > 0
+      ? (patient as any).structuredAllergies
+      : parseAllergiesStringToStructured(patient.allergies);
+    setStructuredAllergies(initialAllergies);
     setChronicConditions(patient.chronicConditions || '');
     setAlerts(patient.alerts || '');
 
@@ -236,6 +329,10 @@ export function EditPatientModal({
       }
     }
 
+    const allergiesSummary = structuredAllergies.length > 0
+      ? structuredAllergies.map((a) => `${a.allergen} (${a.category}${a.isAnaphylactic ? ' - STAT' : ''})`).join(', ')
+      : undefined;
+
     const payload: RegisterPatientPayload = {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -257,7 +354,8 @@ export function EditPatientModal({
       seniorCitizenId: seniorCitizenId.trim() || undefined,
       pwdId: pwdId.trim() || undefined,
       bloodType: bloodType.trim() || undefined,
-      allergies: allergies.trim() || undefined,
+      allergies: allergiesSummary,
+      structuredAllergies: structuredAllergies.length > 0 ? structuredAllergies : undefined,
       chronicConditions: chronicConditions.trim() || undefined,
       alerts: alerts.trim() || undefined,
       customFields: Object.keys(mergedCustomFields).length > 0 ? mergedCustomFields : undefined,
@@ -312,7 +410,8 @@ export function EditPatientModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <>
+      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           {/* Header */}
@@ -654,7 +753,7 @@ export function EditPatientModal({
             {tenantCustomFields.length > 0 && (
               <>
                 <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-                  Additional Intake & Institutional Details
+                  Institutional & Additional Details
                 </ThemedText>
                 <DynamicCustomFieldsRenderer
                   fields={tenantCustomFields}
@@ -678,16 +777,28 @@ export function EditPatientModal({
               Clinical Summary & Alerts
             </ThemedText>
 
-            <View>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                Known Allergies
-              </ThemedText>
-              <TextInput
-                style={styles.textInput}
-                placeholder="e.g. Penicillin, Peanuts"
-                placeholderTextColor={theme.colors.textMuted}
-                value={allergies}
-                onChangeText={setAllergies}
+            {/* Embedded Structured Allergy Section */}
+            <View style={styles.allergySectionCard}>
+              <View style={styles.allergySectionHeader}>
+                <View style={styles.allergySectionTitleRow}>
+                  <Icon name="emergency" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
+                    Known Allergies & Anaphylaxis Alerts
+                  </ThemedText>
+                </View>
+                <Button
+                  title="+ Add Allergy"
+                  variant="outline"
+                  size="sm"
+                  onPress={() => setAllergyModalVisible(true)}
+                />
+              </View>
+
+              <AllergyPillList
+                allergies={structuredAllergies}
+                onRemove={(index) => {
+                  setStructuredAllergies((prev) => prev.filter((_, i) => i !== index));
+                }}
               />
             </View>
 
@@ -740,6 +851,15 @@ export function EditPatientModal({
         </View>
       </View>
     </Modal>
+
+    {/* Structured Allergy Intake Sub-Modal */}
+    <StructuredAllergyIntakeModal
+      visible={visible && allergyModalVisible}
+      onClose={() => setAllergyModalVisible(false)}
+      allergies={structuredAllergies}
+      onChange={setStructuredAllergies}
+    />
+  </>
   );
 }
 
@@ -848,5 +968,24 @@ const styles = StyleSheet.create({
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
     paddingTop: theme.spacing.md,
+  },
+  allergySectionCard: {
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm + 4,
+    backgroundColor: theme.colors.surfaceMuted,
+    gap: theme.spacing.xs,
+  },
+  allergySectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  allergySectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
 });

@@ -1136,31 +1136,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 onSelectExistingPatient={handleViewExistingPatient}
               />
 
-              {/* Institutional & Custom Metadata Section */}
-              {tenantCustomFields.length > 0 && (
-                <View style={{ marginBottom: theme.spacing.sm }}>
-                  <ThemedText style={styles.inputLabel}>Institutional & Additional Details</ThemedText>
-                  <DynamicCustomFieldsRenderer
-                    fields={tenantCustomFields}
-                    values={dynamicFieldValues}
-                    onChange={(key, val) => {
-                      setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
-                      setDynamicFieldErrors((prev) => {
-                        const next = { ...prev };
-                        delete next[key];
-                        return next;
-                      });
-                    }}
-                    errors={dynamicFieldErrors}
-                    staticValues={{
-                      gender: formGender,
-                      civilStatus: formCivilStatus,
-                      dateOfBirth: formDob,
-                    }}
-                  />
-                </View>
-              )}
-
               <View style={styles.formRow}>
                 <View style={{ flex: 1 }}>
                   <Input
@@ -1330,6 +1305,31 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   />
                 </View>
               </View>
+
+              {/* Institutional & Custom Metadata Section */}
+              {tenantCustomFields.length > 0 && (
+                <View style={{ marginBottom: theme.spacing.sm }}>
+                  <ThemedText style={styles.inputLabel}>Institutional & Additional Details</ThemedText>
+                  <DynamicCustomFieldsRenderer
+                    fields={tenantCustomFields}
+                    values={dynamicFieldValues}
+                    onChange={(key, val) => {
+                      setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
+                      setDynamicFieldErrors((prev) => {
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                      });
+                    }}
+                    errors={dynamicFieldErrors}
+                    staticValues={{
+                      gender: formGender,
+                      civilStatus: formCivilStatus,
+                      dateOfBirth: formDob,
+                    }}
+                  />
+                </View>
+              )}
 
               {/* Embedded Structured Allergy Section */}
               <View style={styles.allergySectionCard}>
