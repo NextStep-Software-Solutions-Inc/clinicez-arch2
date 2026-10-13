@@ -1,6 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
-  Modal,
   View,
   StyleSheet,
   Pressable,
@@ -10,6 +9,7 @@ import {
 } from 'react-native';
 import ThemedText from './ThemedText';
 import Icon, { IconName } from './Icon';
+import Modal from './Modal';
 import { theme } from '../../constants/theme';
 
 export interface ActionMenuItem {
@@ -29,6 +29,8 @@ export interface ActionMenuProps {
   triggerAriaLabel?: string;
   disabled?: boolean;
   customTrigger?: (props: { open: () => void; isOpen: boolean }) => React.ReactNode;
+  trigger?: React.ReactNode;
+  defaultOpen?: boolean;
 }
 
 interface MenuCoords {
@@ -43,8 +45,10 @@ export default function ActionMenu({
   triggerAriaLabel = 'More actions',
   disabled = false,
   customTrigger,
+  trigger,
+  defaultOpen = false,
 }: ActionMenuProps) {
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(defaultOpen);
   const [coords, setCoords] = useState<MenuCoords | null>(null);
   const triggerRef = useRef<View>(null);
 
@@ -112,7 +116,16 @@ export default function ActionMenu({
   return (
     <View collapsable={false}>
       <View ref={triggerRef} collapsable={false}>
-        {customTrigger ? (
+        {trigger ? (
+          <Pressable
+            onPress={handleOpen}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={triggerAriaLabel}
+          >
+            {trigger}
+          </Pressable>
+        ) : customTrigger ? (
           customTrigger({ open: handleOpen, isOpen: visible })
         ) : (
           <Pressable
@@ -137,10 +150,11 @@ export default function ActionMenu({
       </View>
 
       <Modal
+        raw
         visible={visible}
         transparent
         animationType="none"
-        onRequestClose={handleClose}
+        onClose={handleClose}
       >
         <Pressable
           style={styles.backdrop}

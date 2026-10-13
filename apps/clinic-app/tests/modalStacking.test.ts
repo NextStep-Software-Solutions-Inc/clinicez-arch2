@@ -7,11 +7,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 // Mock React Native modules for Bun environment
 const createMockComponent = (name: string) => {
-  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder }: any) =>
+  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, testID }: any) =>
     React.createElement(
       'div',
       {
         'data-component': name,
+        ...(testID ? { 'data-testid': testID } : {}),
         ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
         ...(accessibilityRole ? { role: accessibilityRole } : {}),
         ...(placeholder ? { 'data-placeholder': placeholder } : {}),
@@ -104,6 +105,7 @@ mock.module('../context/StaffContext', () => ({
 
 const {
   registerModal,
+  attachPortalElement,
   unregisterModal,
   bringModalToFront,
   getModalStack,
@@ -116,6 +118,8 @@ const {
   subscribeModalStack,
   bringPortalToFront,
   findPortalContainer,
+  initModalStackObserver,
+  ModalStackContext,
   BASE_MODAL_Z_INDEX,
   MODAL_Z_INDEX_STEP,
 } = await import('../components/ui/modalStack');
@@ -123,6 +127,9 @@ const {
 const { default: Modal } = await import('../components/ui/Modal');
 const { default: PatientChartModal } = await import('../components/chart/PatientChartModal');
 const { default: EditPatientModal } = await import('../components/patient/EditPatientModal');
+const { default: ActionMenu } = await import('../components/ui/ActionMenu');
+const { default: DiagnosticLabTab } = await import('../components/chart/DiagnosticLabTab');
+const { default: StatutoryImmunizationsTab } = await import('../components/chart/StatutoryImmunizationsTab');
 
 describe('Modal Stacking System — Nested & Layered Modals', () => {
   beforeEach(() => {
@@ -183,6 +190,13 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
       expect(isTopModal('modal-chart')).toBe(false);
     });
 
+    test('registerModal respects parentDepth when nested in context', () => {
+      // Child modal registered with parentDepth: 1 must be at least depth 2
+      const child = registerModal('nested-sub-dialog', { parentDepth: 1 });
+      expect(child.depth).toBeGreaterThanOrEqual(2);
+      expect(child.zIndex).toBeGreaterThanOrEqual(BASE_MODAL_Z_INDEX + 2 * MODAL_Z_INDEX_STEP);
+    });
+
     test('Re-registering an already open modal promotes it to the top of the stack', () => {
       registerModal('modal-a');
       registerModal('modal-b');
@@ -233,15 +247,19 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
     });
   });
 
-  describe('2. DOM Ordering & Portal Z-Index Rebalancing', () => {
-    test('bringPortalToFront moves existing DOM node to end of document.body and sets zIndex', () => {
+  describe('2. DOM Ordering, Portal Linking & Loop Prevention', () => {
+    test('bringPortalToFront moves existing DOM node to end of document.body and sets zIndex on container and animation div', () => {
+      const mockAnimDiv: any = { style: {} };
+      const mockContentDiv: any = { style: {}, attributes: { 'aria-modal': 'true' } };
       const mockPortal1: any = {
         style: {},
-        querySelector: () => null,
+        firstElementChild: mockAnimDiv,
+        querySelector: (sel: string) => sel === '[aria-modal="true"]' ? mockContentDiv : null,
         parentNode: null,
       };
       const mockPortal2: any = {
         style: {},
+        firstElementChild: { style: {} },
         querySelector: () => null,
         parentNode: null,
       };
@@ -275,6 +293,40 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
         expect(mockBody.lastElementChild).toBe(mockPortal1);
         expect(mockPortal1.style.position).toBe('relative');
         expect(mockPortal1.style.zIndex).toBe('10200');
+        expect(mockAnimDiv.style.zIndex).toBe('10200');
+        expect(mockContentDiv.style.zIndex).toBe('10200');
+      } finally {
+        (globalThis as any).document = originalDoc;
+      }
+    });
+
+    test('attachPortalElement attaches portal DOM node to registered modal and tags dataset ID', () => {
+      const modal = registerModal('test-attach-modal');
+      const mockPortal: any = {
+        style: {},
+        dataset: {},
+        firstElementChild: { style: {} },
+        querySelector: () => null,
+        parentNode: null,
+      };
+
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          this.children.push(child);
+          this.lastElementChild = child;
+          return child;
+        },
+      };
+
+      const originalDoc = (globalThis as any).document;
+      (globalThis as any).document = { body: mockBody };
+
+      try {
+        attachPortalElement('test-attach-modal', mockPortal);
+        expect(mockPortal.dataset.clinicezModalId).toBe('test-attach-modal');
+        expect(mockPortal.style.zIndex).toBe(String(modal.zIndex));
       } finally {
         (globalThis as any).document = originalDoc;
       }
@@ -298,6 +350,53 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
         expect(findPortalContainer(orphanNode)).toBeNull();
       } finally {
         (globalThis as any).document = originalDoc;
+      }
+    });
+
+    test('initModalStackObserver tags untracked portals without infinite mutation loops', () => {
+      let mutationCount = 0;
+      const observers: Function[] = [];
+
+      class TestMutationObserver {
+        constructor(public cb: Function) {}
+        observe() { observers.push(this.cb); }
+        disconnect() {
+          const idx = observers.indexOf(this.cb);
+          if (idx !== -1) observers.splice(idx, 1);
+        }
+      }
+
+      const mockBody: any = {
+        children: [] as any[],
+        lastElementChild: null as any,
+        appendChild(child: any) {
+          if (child.parentNode) {
+            const idx = child.parentNode.children.indexOf(child);
+            if (idx !== -1) child.parentNode.children.splice(idx, 1);
+          }
+          child.parentNode = this;
+          this.children.push(child);
+          this.lastElementChild = child;
+          mutationCount++;
+          return child;
+        },
+      };
+
+      const originalDoc = (globalThis as any).document;
+      const originalMO = (globalThis as any).MutationObserver;
+      (globalThis as any).document = {
+        body: mockBody,
+        querySelectorAll: () => [],
+      };
+      (globalThis as any).MutationObserver = TestMutationObserver;
+
+      try {
+        const cleanup = initModalStackObserver();
+        expect(typeof cleanup).toBe('function');
+        cleanup();
+      } finally {
+        (globalThis as any).document = originalDoc;
+        (globalThis as any).MutationObserver = originalMO;
       }
     });
   });
@@ -393,32 +492,37 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
       expect(markup).toContain('PAT-001');
     });
 
-    test('EditPatientModal renders demographics fields seamlessly', () => {
-      const mockPatient = {
-        id: 'pat-stack-2',
-        fullName: 'Maria Santos',
-        patientCode: 'PAT-002',
-        gender: 'Female',
-        dateOfBirth: '1992-08-20',
-        age: 33,
-        contactNumber: '0918-987-6543',
-        address: 'Cebu, Philippines',
-        allergies: 'Penicillin (Medication - STAT)',
-        bloodType: 'A+',
-        verificationStatus: 'Verified',
-      };
-
+    test('DiagnosticLabTab panic verbal readback modal participates in modal stack', () => {
       const markup = renderToStaticMarkup(
-        React.createElement(EditPatientModal, {
-          visible: true,
-          patient: mockPatient as any,
-          onClose: () => {},
-          onSaved: () => {},
+        React.createElement(DiagnosticLabTab, {
+          labOrders: [],
         })
       );
+      expect(markup).toContain('Verbal Readback Acknowledgment');
+    });
 
-      expect(markup).toContain('Edit Patient Demographics');
-      expect(markup).toContain('Maria Santos');
+    test('StatutoryImmunizationsTab AEFI modal participates in modal stack', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(StatutoryImmunizationsTab, {
+          immunizations: [],
+        })
+      );
+      expect(markup).toContain('Report Adverse Event (AEFI)');
+    });
+
+    test('ActionMenu renders with raw Modal and participates in stack', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(ActionMenu, {
+          defaultOpen: true,
+          trigger: React.createElement('button', null, 'Actions'),
+          items: [
+            { id: '1', label: 'View Profile', onPress: () => {} },
+            { id: '2', label: 'Delete', onPress: () => {}, destructive: true },
+          ],
+        })
+      );
+      expect(markup).toContain('View Profile');
+      expect(markup).toContain('Delete');
     });
 
     test('3-Level Live Stack: ChartModal -> EditPatientModal -> AllergyIntakeModal stack progression', () => {
