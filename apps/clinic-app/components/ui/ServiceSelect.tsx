@@ -151,7 +151,7 @@ export default function ServiceSelect({
                     hitSlop={theme.spacing.xs}
                     accessibilityLabel={`Remove ${svc}`}
                   >
-                    <Icon name="close" size={theme.sizes.iconXs} color={theme.colors.textMuted} />
+                    <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
                   </Pressable>
                 )}
               </View>
