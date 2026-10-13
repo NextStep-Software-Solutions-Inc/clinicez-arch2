@@ -6,12 +6,11 @@ import {
   RefreshControl,
   Pressable,
   ActivityIndicator,
-  Modal,
 } from 'react-native';
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
 import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
-import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect } from '@ui';
+import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal } from '@ui';
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import * as DocumentPicker from 'expo-document-picker';
 import {
@@ -1114,7 +1113,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       )}
 
       {/* Register Patient Modal */}
-      <Modal visible={registerVisible} animationType="slide" transparent>
+      <Modal raw visible={registerVisible} animationType="slide" transparent onClose={() => setRegisterVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -1484,7 +1483,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       />
 
       {/* Lab Order Slip Modal with Verifiable QR Code & Upload Token */}
-      <Modal visible={slipModalVisible} transparent animationType="slide">
+      <Modal raw visible={slipModalVisible} transparent animationType="slide" onClose={() => setSlipModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxWidth: 560 }]}>
             <View style={styles.slipHeader}>
@@ -1571,7 +1570,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       </Modal>
 
       {/* Attach External Lab Result Modal (Path B) */}
-      <Modal visible={attachModalVisible} transparent animationType="slide">
+      <Modal raw visible={attachModalVisible} transparent animationType="slide" onClose={() => setAttachModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxWidth: 480 }]}>
             <View style={styles.modalHeader}>
@@ -1680,7 +1679,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       />
 
       {/* Attach External Physical Document Modal (School Clinic / 80/20) */}
-      <Modal visible={uploadDocModalVisible} transparent animationType="slide">
+      <Modal raw visible={uploadDocModalVisible} transparent animationType="slide" onClose={() => setUploadDocModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxWidth: 500 }]}>
             <View style={styles.modalHeader}>

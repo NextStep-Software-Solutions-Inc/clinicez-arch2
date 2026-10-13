@@ -5,10 +5,9 @@ import {
   ScrollView,
   Pressable,
   TextInput,
-  Modal,
 } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Button, Icon, Badge, ValidatedDateInput, validateDateString } from '../ui';
+import { ThemedText, Button, Icon, Badge, ValidatedDateInput, validateDateString, Modal } from '../ui';
 import { PHILHEALTH_STATUTORY_VACCINES } from './StatutoryImmunizationsTab';
 import { COHORTS, VACCINE_ROUTES, INJECTION_SITES } from './AdministerVaccineModal';
 import type {
@@ -134,7 +133,7 @@ export default function HistoricalVaccineModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal raw visible={visible} transparent animationType="slide" onClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           {/* Header */}

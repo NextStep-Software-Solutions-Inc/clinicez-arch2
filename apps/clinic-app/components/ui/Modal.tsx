@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   Modal as RNModal,
   View,
@@ -13,17 +13,30 @@ import {
 import ThemedText from './ThemedText';
 import Icon from './Icon';
 import { theme } from '../../constants/theme';
+import {
+  useModalStack,
+  findPortalContainer,
+  bringPortalToFront,
+  ModalStackContext,
+  BASE_MODAL_Z_INDEX,
+} from './modalStack';
 
 export interface ModalProps {
   visible: boolean;
-  onClose: () => void;
-  title: string;
+  onClose?: () => void;
+  title?: string;
   subtitle?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
   maxWidth?: number;
   maxHeight?: DimensionValue;
   contentStyle?: ViewStyle;
+  raw?: boolean;
+  animationType?: 'none' | 'slide' | 'fade';
+  transparent?: boolean;
+  testID?: string;
+  zIndex?: number;
+  backdropDismissible?: boolean;
 }
 
 export default function Modal({
@@ -36,65 +49,152 @@ export default function Modal({
   maxWidth = 540,
   maxHeight = '95%',
   contentStyle,
+  raw = false,
+  animationType = 'fade',
+  transparent = true,
+  testID,
+  zIndex: customZIndex,
+  backdropDismissible = true,
 }: ModalProps) {
+  const rootRef = useRef<any>(null);
+  const { modalId, depth, zIndex } = useModalStack(visible, {
+    onClose,
+    zIndex: customZIndex,
+  });
+
+  useEffect(() => {
+    if (!visible) return;
+    if (typeof document !== 'undefined' && rootRef.current) {
+      const node = (rootRef.current as any)?.node || rootRef.current;
+      const portal = findPortalContainer(node);
+      if (portal) {
+        bringPortalToFront(portal, zIndex);
+      }
+    }
+  }, [visible, zIndex]);
+
+  const handleBackdropPress = () => {
+    if (backdropDismissible && onClose) {
+      onClose();
+    }
+  };
+
   return (
-    <RNModal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.overlay}
-      >
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close dialog" />
-
-        <View style={[styles.dialog, { maxWidth, maxHeight }, contentStyle]}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerText}>
-              <ThemedText variant="title" style={styles.title}>
-                {title}
-              </ThemedText>
-              {subtitle ? (
-                <ThemedText variant="small" color={theme.colors.textMuted} style={styles.subtitle}>
-                  {subtitle}
-                </ThemedText>
-              ) : null}
-            </View>
-
-            <Pressable
-              onPress={onClose}
-              style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
-              hitSlop={theme.spacing.sm}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-            >
-              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
-            </Pressable>
-          </View>
-
-          {/* Body Content */}
-          <ScrollView
-            style={styles.scrollArea}
-            contentContainerStyle={styles.body}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
+    <RNModal
+      visible={visible}
+      transparent={transparent}
+      animationType={animationType}
+      onRequestClose={onClose}
+      testID={testID}
+    >
+      <ModalStackContext.Provider value={{ parentDepth: depth, parentModalId: modalId }}>
+        {raw ? (
+          <View
+            ref={rootRef}
+            style={[styles.rawContainer, { zIndex }]}
+            testID={testID}
           >
             {children}
-          </ScrollView>
+          </View>
+        ) : (
+          <KeyboardAvoidingView
+            ref={rootRef}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={[
+              styles.overlay,
+              { zIndex },
+              depth > 0 && styles.nestedOverlay,
+            ]}
+            testID={testID}
+          >
+            <Pressable
+              style={styles.backdrop}
+              onPress={handleBackdropPress}
+              accessibilityLabel="Close dialog"
+            />
 
-          {/* Optional Footer */}
-          {footer ? <View style={styles.footer}>{footer}</View> : null}
-        </View>
-      </KeyboardAvoidingView>
+            <View
+              style={[
+                styles.dialog,
+                { maxWidth, maxHeight, zIndex: zIndex + 1 },
+                depth > 0 && styles.nestedDialog,
+                contentStyle,
+              ]}
+            >
+              {/* Header */}
+              {(title || onClose) ? (
+                <View style={styles.header}>
+                  <View style={styles.headerText}>
+                    {title ? (
+                      <ThemedText variant="title" style={styles.title}>
+                        {title}
+                      </ThemedText>
+                    ) : null}
+                    {subtitle ? (
+                      <ThemedText
+                        variant="small"
+                        color={theme.colors.textMuted}
+                        style={styles.subtitle}
+                      >
+                        {subtitle}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+
+                  {onClose ? (
+                    <Pressable
+                      onPress={onClose}
+                      style={({ pressed }) => [
+                        styles.closeBtn,
+                        pressed && styles.closeBtnPressed,
+                      ]}
+                      hitSlop={theme.spacing.sm}
+                      accessibilityRole="button"
+                      accessibilityLabel="Close"
+                    >
+                      <Icon
+                        name="close"
+                        size={theme.sizes.iconMd}
+                        color={theme.colors.textMuted}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {/* Body Content */}
+              <ScrollView
+                style={styles.scrollArea}
+                contentContainerStyle={styles.body}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {children}
+              </ScrollView>
+
+              {/* Optional Footer */}
+              {footer ? <View style={styles.footer}>{footer}</View> : null}
+            </View>
+          </KeyboardAvoidingView>
+        )}
+      </ModalStackContext.Provider>
     </RNModal>
   );
 }
 
 const styles = StyleSheet.create({
+  rawContainer: {
+    flex: 1,
+  },
   overlay: {
     flex: 1,
     backgroundColor: theme.colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: theme.spacing.lg,
+  },
+  nestedOverlay: {
+    backgroundColor: theme.colors.overlay,
   },
   backdrop: {
     position: 'absolute',
@@ -111,6 +211,11 @@ const styles = StyleSheet.create({
     maxHeight: '95%',
     display: 'flex',
     flexDirection: 'column',
+    ...theme.shadows.lg,
+  },
+  nestedDialog: {
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
     ...theme.shadows.lg,
   },
   scrollArea: {

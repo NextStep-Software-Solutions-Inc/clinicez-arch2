@@ -9,7 +9,7 @@ import { ConnectionGate } from './components/connection/ConnectionGate';
 import { AuthGate } from './components/auth/AuthGate';
 import { ClinicProvider } from './context/ClinicContext';
 import { StaffProvider } from './context/StaffContext';
-import { FeedbackHost } from './components/ui';
+import { FeedbackHost, initModalStackObserver } from './components/ui';
 import { OfflineSyncRunner } from './components/OfflineSyncRunner';
 import ErrorBoundary from './components/ErrorBoundary';
 import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
@@ -17,6 +17,10 @@ import { theme } from './constants/theme';
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
+
+  React.useEffect(() => {
+    return initModalStackObserver();
+  }, []);
 
   // If the typeface fails to load, fall back to the system font instead of rendering
   // text against missing font families.

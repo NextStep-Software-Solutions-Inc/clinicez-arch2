@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Modal as RNModal } from 'react-native';
+import Modal from '../ui/Modal';
 import { useClinic } from '../../context/ClinicContext';
 import type { ClinicPatient } from '../../services/clinicService';
 import EditPatientModal from '../patient/EditPatientModal';
@@ -156,11 +156,12 @@ export default function PatientChartModal({
   };
 
   return (
-    <RNModal
+    <Modal
+      raw
       visible={visible}
       animationType="fade"
       transparent
-      onRequestClose={onClose}
+      onClose={onClose}
     >
       {/* Declarative layout dispatcher: clean, modular, zero spaghetti */}
       {activeLayout === 'split' ? (
@@ -180,6 +181,6 @@ export default function PatientChartModal({
           onSaved={handleDemographicsSaved}
         />
       )}
-    </RNModal>
+    </Modal>
   );
 }

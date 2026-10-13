@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
-  Modal,
   ScrollView,
   Pressable,
   ActivityIndicator,
 } from 'react-native';
-import { ThemedText, TextInput, Input, Icon, Button, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect } from '../ui';
+import { ThemedText, TextInput, Input, Icon, Button, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal } from '../ui';
 import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition } from '../../services/clinicService';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../custom-fields';
@@ -411,7 +410,7 @@ export function EditPatientModal({
 
   return (
     <>
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <Modal raw visible={visible} animationType="slide" transparent onClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           {/* Header */}
