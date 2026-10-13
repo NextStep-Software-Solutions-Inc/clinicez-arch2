@@ -30,6 +30,7 @@ public sealed class YakapPatientProfileController : ControllerBase
     private readonly IRepository<PatientSocialHistory> _socialRepo;
     private readonly IRepository<PatientReproductiveHistory> _reproductiveRepo;
     private readonly IRepository<NcdRiskAssessment> _ncdRepo;
+    private readonly IRepository<PatientPhysicalExamProfile>? _physicalExamRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly PhilHealthCatalogResolver _catalogResolver;
@@ -48,7 +49,8 @@ public sealed class YakapPatientProfileController : ControllerBase
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IPhilHealthCatalogLookup catalog,
-        ILegacyPatientProfileIngestionService ingestionService)
+        ILegacyPatientProfileIngestionService ingestionService,
+        IRepository<PatientPhysicalExamProfile>? physicalExamRepo = null)
     {
         _catalogResolver = new PhilHealthCatalogResolver(catalog);
         _catalogLookup = catalog;
@@ -60,6 +62,7 @@ public sealed class YakapPatientProfileController : ControllerBase
         _socialRepo = socialRepo;
         _reproductiveRepo = reproductiveRepo;
         _ncdRepo = ncdRepo;
+        _physicalExamRepo = physicalExamRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _ingestionService = ingestionService;
@@ -135,10 +138,13 @@ public sealed class YakapPatientProfileController : ControllerBase
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        // Load core relational social, reproductive, NCD, and vitals records
+        // Load core relational social, reproductive, NCD, physical exam, and vitals records
         var relSocial = await _socialRepo.Query(s => s.PatientId == patientId).FirstOrDefaultAsync(ct);
         var relReproductive = await _reproductiveRepo.Query(r => r.PatientId == patientId).FirstOrDefaultAsync(ct);
         var relNcd = await _ncdRepo.Query(n => n.PatientId == patientId).OrderByDescending(n => n.AssessmentDate).FirstOrDefaultAsync(ct);
+        var relPhysicalExam = _physicalExamRepo != null
+            ? await _physicalExamRepo.Query(pe => pe.PatientId == patientId).FirstOrDefaultAsync(ct)
+            : null;
         var latestVitals = await _vitalsRepo.Query(v => v.PatientId == patientId)
             .OrderByDescending(v => v.CreatedAt)
             .FirstOrDefaultAsync(ct);
@@ -283,16 +289,42 @@ public sealed class YakapPatientProfileController : ControllerBase
             Bmi = latestVitals?.Bmi?.ToString("F1"),
             WaistCm = null,
             HipCm = null,
-            LengthCm = latestVitals?.HeightCm?.ToString("F0"),
-            SkinId = _catalogResolver.EssentiallyNormalCode("lib_skin_extremities"),
-            HeentId = _catalogResolver.EssentiallyNormalCode("lib_heent"),
-            ChestId = _catalogResolver.EssentiallyNormalCode("lib_chest"),
-            HeartId = _catalogResolver.EssentiallyNormalCode("lib_heart"),
-            AbdomenId = _catalogResolver.EssentiallyNormalCode("lib_abdomen"),
-            NeuroId = _catalogResolver.EssentiallyNormalCode("lib_neuro"),
-            RectalId = _catalogResolver.EssentiallyNormalCode("lib_digital_rectal"),
-            GuId = _catalogResolver.EssentiallyNormalCode("lib_genitourinary"),
-            GenSurveyId = "1",
+            SkinId = !string.IsNullOrWhiteSpace(relPhysicalExam?.SkinId)
+                ? relPhysicalExam.SkinId
+                : _catalogResolver.EssentiallyNormalCode("lib_skin_extremities"),
+            SkinRemarks = relPhysicalExam?.SkinRemarks,
+            HeentId = !string.IsNullOrWhiteSpace(relPhysicalExam?.HeentId)
+                ? relPhysicalExam.HeentId
+                : _catalogResolver.EssentiallyNormalCode("lib_heent"),
+            HeentRemarks = relPhysicalExam?.HeentRemarks,
+            ChestId = !string.IsNullOrWhiteSpace(relPhysicalExam?.ChestId)
+                ? relPhysicalExam.ChestId
+                : _catalogResolver.EssentiallyNormalCode("lib_chest"),
+            ChestRemarks = relPhysicalExam?.ChestRemarks,
+            HeartId = !string.IsNullOrWhiteSpace(relPhysicalExam?.HeartId)
+                ? relPhysicalExam.HeartId
+                : _catalogResolver.EssentiallyNormalCode("lib_heart"),
+            HeartRemarks = relPhysicalExam?.HeartRemarks,
+            AbdomenId = !string.IsNullOrWhiteSpace(relPhysicalExam?.AbdomenId)
+                ? relPhysicalExam.AbdomenId
+                : _catalogResolver.EssentiallyNormalCode("lib_abdomen"),
+            AbdomenRemarks = relPhysicalExam?.AbdomenRemarks,
+            NeuroId = !string.IsNullOrWhiteSpace(relPhysicalExam?.NeuroId)
+                ? relPhysicalExam.NeuroId
+                : _catalogResolver.EssentiallyNormalCode("lib_neuro"),
+            NeuroRemarks = relPhysicalExam?.NeuroRemarks,
+            RectalId = !string.IsNullOrWhiteSpace(relPhysicalExam?.RectalId)
+                ? relPhysicalExam.RectalId
+                : _catalogResolver.EssentiallyNormalCode("lib_digital_rectal"),
+            RectalRemarks = relPhysicalExam?.RectalRemarks,
+            GuId = !string.IsNullOrWhiteSpace(relPhysicalExam?.GuId)
+                ? relPhysicalExam.GuId
+                : _catalogResolver.EssentiallyNormalCode("lib_genitourinary"),
+            GuRemarks = relPhysicalExam?.GuRemarks,
+            GenSurveyId = !string.IsNullOrWhiteSpace(relPhysicalExam?.GenSurveyId)
+                ? relPhysicalExam.GenSurveyId
+                : "1",
+            GenSurveyRemarks = relPhysicalExam?.GenSurveyRemarks,
             NcdAnswers = ncdAnswers,
             LastUpdatedAt = DateTimeOffset.UtcNow,
             UpdatedBy = null
@@ -473,21 +505,85 @@ public sealed class YakapPatientProfileController : ControllerBase
         }
 
 
-        // Sync primary attributes to ClinicPatient entity
-        if (!string.IsNullOrWhiteSpace(updatedProfile.Pin))
+        // Sync physical exam profile to core relational table
+        if (_physicalExamRepo != null)
         {
-            patient.PhilHealthNumber = updatedProfile.Pin;
-        }
+            var existingPhysicalExam = await _physicalExamRepo.Query(pe => pe.PatientId == patientId).FirstOrDefaultAsync(ct);
 
-        if (!string.IsNullOrWhiteSpace(updatedProfile.BloodType))
-        {
-            patient.BloodType = updatedProfile.BloodType;
-        }
+            var skinId = !string.IsNullOrWhiteSpace(updatedProfile.SkinId) ? updatedProfile.SkinId : "1";
+            var skinRemarks = string.IsNullOrWhiteSpace(updatedProfile.SkinRemarks) ? null : updatedProfile.SkinRemarks.Trim();
+            var heentId = !string.IsNullOrWhiteSpace(updatedProfile.HeentId) ? updatedProfile.HeentId : "11";
+            var heentRemarks = string.IsNullOrWhiteSpace(updatedProfile.HeentRemarks) ? null : updatedProfile.HeentRemarks.Trim();
+            var chestId = !string.IsNullOrWhiteSpace(updatedProfile.ChestId) ? updatedProfile.ChestId : "6";
+            var chestRemarks = string.IsNullOrWhiteSpace(updatedProfile.ChestRemarks) ? null : updatedProfile.ChestRemarks.Trim();
+            var heartId = !string.IsNullOrWhiteSpace(updatedProfile.HeartId) ? updatedProfile.HeartId : "5";
+            var heartRemarks = string.IsNullOrWhiteSpace(updatedProfile.HeartRemarks) ? null : updatedProfile.HeartRemarks.Trim();
+            var abdomenId = !string.IsNullOrWhiteSpace(updatedProfile.AbdomenId) ? updatedProfile.AbdomenId : "7";
+            var abdomenRemarks = string.IsNullOrWhiteSpace(updatedProfile.AbdomenRemarks) ? null : updatedProfile.AbdomenRemarks.Trim();
+            var neuroId = !string.IsNullOrWhiteSpace(updatedProfile.NeuroId) ? updatedProfile.NeuroId : "6";
+            var neuroRemarks = string.IsNullOrWhiteSpace(updatedProfile.NeuroRemarks) ? null : updatedProfile.NeuroRemarks.Trim();
+            var rectalId = !string.IsNullOrWhiteSpace(updatedProfile.RectalId) ? updatedProfile.RectalId : "1";
+            var rectalRemarks = string.IsNullOrWhiteSpace(updatedProfile.RectalRemarks) ? null : updatedProfile.RectalRemarks.Trim();
+            var guId = !string.IsNullOrWhiteSpace(updatedProfile.GuId) ? updatedProfile.GuId : "1";
+            var guRemarks = string.IsNullOrWhiteSpace(updatedProfile.GuRemarks) ? null : updatedProfile.GuRemarks.Trim();
+            var genSurveyId = !string.IsNullOrWhiteSpace(updatedProfile.GenSurveyId) ? updatedProfile.GenSurveyId : "1";
+            var genSurveyRemarks = string.IsNullOrWhiteSpace(updatedProfile.GenSurveyRemarks) ? null : updatedProfile.GenSurveyRemarks.Trim();
 
-        if (updatedProfile.MedicalHistories.Count > 0)
-        {
-            patient.ChronicConditions = string.Join(", ", updatedProfile.MedicalHistories
-                .Select(m => !string.IsNullOrWhiteSpace(m.SpecificDesc) ? m.SpecificDesc : m.Code));
+            if (existingPhysicalExam == null)
+            {
+                existingPhysicalExam = new PatientPhysicalExamProfile
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = patient.TenantId ?? _clinicContext.TenantId,
+                    ClinicId = clinicId,
+                    PatientId = patientId,
+                    GenSurveyId = genSurveyId,
+                    GenSurveyRemarks = genSurveyRemarks,
+                    SkinId = skinId,
+                    SkinRemarks = skinRemarks,
+                    HeentId = heentId,
+                    HeentRemarks = heentRemarks,
+                    ChestId = chestId,
+                    ChestRemarks = chestRemarks,
+                    HeartId = heartId,
+                    HeartRemarks = heartRemarks,
+                    AbdomenId = abdomenId,
+                    AbdomenRemarks = abdomenRemarks,
+                    NeuroId = neuroId,
+                    NeuroRemarks = neuroRemarks,
+                    RectalId = rectalId,
+                    RectalRemarks = rectalRemarks,
+                    GuId = guId,
+                    GuRemarks = guRemarks,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = updatedProfile.UpdatedBy ?? "ClinicStaff"
+                };
+                await _physicalExamRepo.AddAsync(existingPhysicalExam, ct);
+            }
+            else
+            {
+                existingPhysicalExam.GenSurveyId = genSurveyId;
+                existingPhysicalExam.GenSurveyRemarks = genSurveyRemarks;
+                existingPhysicalExam.SkinId = skinId;
+                existingPhysicalExam.SkinRemarks = skinRemarks;
+                existingPhysicalExam.HeentId = heentId;
+                existingPhysicalExam.HeentRemarks = heentRemarks;
+                existingPhysicalExam.ChestId = chestId;
+                existingPhysicalExam.ChestRemarks = chestRemarks;
+                existingPhysicalExam.HeartId = heartId;
+                existingPhysicalExam.HeartRemarks = heartRemarks;
+                existingPhysicalExam.AbdomenId = abdomenId;
+                existingPhysicalExam.AbdomenRemarks = abdomenRemarks;
+                existingPhysicalExam.NeuroId = neuroId;
+                existingPhysicalExam.NeuroRemarks = neuroRemarks;
+                existingPhysicalExam.RectalId = rectalId;
+                existingPhysicalExam.RectalRemarks = rectalRemarks;
+                existingPhysicalExam.GuId = guId;
+                existingPhysicalExam.GuRemarks = guRemarks;
+                existingPhysicalExam.UpdatedAt = DateTime.UtcNow;
+                existingPhysicalExam.UpdatedBy = updatedProfile.UpdatedBy ?? "ClinicStaff";
+                _physicalExamRepo.Update(existingPhysicalExam);
+            }
         }
 
         // Sync medical histories to relational table
