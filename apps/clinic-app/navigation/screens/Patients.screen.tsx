@@ -57,9 +57,15 @@ import StructuredMedicalHistoryModal, {
 } from '../../components/patient/StructuredMedicalHistoryModal';
 import ClinicalAlertsSection from '../../components/patient/ClinicalAlertsSection';
 import EditPatientModal from '../../components/patient/EditPatientModal';
+import PatientDirectoryCard, {
+  PatientDirectoryTableHeader,
+  type PatientDirectoryViewMode,
+  hasKnownAllergies,
+} from '../../components/patient/PatientDirectoryCard';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
 import { formatLongAge } from '../../utils/age';
+import { useBreakpoint } from '../../utils/useBreakpoint';
 import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
 import {
   type MemberType,
@@ -96,6 +102,7 @@ export type PatientsScreenProps = StaticScreenProps<{ openPatientId?: string } |
 
 export default function PatientsScreen({ route }: PatientsScreenProps) {
   const navigation = useNavigation<any>();
+  const { isWorkstation, isDesktop } = useBreakpoint();
   const canImportPatient = usePermission(PERMISSIONS.patientsWrite);
   const openPatientId = route.params?.openPatientId;
   const { letterhead } = useClinic();
@@ -105,6 +112,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<PatientFilter>(() => {
     const saved = getSessionItem('clinicez_patients_filter_mode') as PatientFilter | null;
     if (saved && ['ALL', 'STUDENTS', 'EMPLOYEES', 'ALERTS', 'SENIOR_PWD'].includes(saved)) {
@@ -112,11 +120,32 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
     return 'ALL';
   });
+  const [viewMode, setViewMode] = useState<PatientDirectoryViewMode>(() => {
+    const saved = getSessionItem('clinicez_patients_view_mode') as PatientDirectoryViewMode | null;
+    if (saved === 'cards' || saved === 'table') {
+      return saved;
+    }
+    return 'cards';
+  });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const handleFilterModeChange = (mode: PatientFilter) => {
     setFilterMode(mode);
     setSessionItem('clinicez_patients_filter_mode', mode);
   };
+
+  const handleViewModeChange = (mode: PatientDirectoryViewMode) => {
+    setViewMode(mode);
+    setSessionItem('clinicez_patients_view_mode', mode);
+  };
+
+  const effectiveViewMode: PatientDirectoryViewMode = isWorkstation ? viewMode : 'cards';
 
   // Register Modal state
   const [registerVisible, setRegisterVisible] = useState(false);
@@ -309,15 +338,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [offlineFailedCount, setOfflineFailedCount] = useState(offlineSyncService.getFailedCount());
   const [syncingOffline, setSyncingOffline] = useState(false);
 
-  const fetchPatients = useCallback(async () => {
-    const [data, err] = await clinicService.getPatients(searchTerm || undefined);
+  const fetchPatients = useCallback(async (termOverride?: string) => {
+    const activeSearch = termOverride !== undefined ? termOverride : debouncedSearchTerm;
+    const [data, err] = await clinicService.getPatients(activeSearch || undefined);
     if (err) {
       setPatientsError(err.message || 'Unable to load patients.');
       return;
     }
     setPatientsError(null);
     setPatients(data ?? []);
-  }, [searchTerm]);
+  }, [debouncedSearchTerm]);
 
   useEffect(() => {
     setLoading(true);
@@ -1046,9 +1076,38 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
+  const filterCounts = useMemo(() => {
+    if (!patients) return null;
+    let students = 0;
+    let employees = 0;
+    let alerts = 0;
+    let seniorPwd = 0;
+    for (const p of patients) {
+      if (p.customFields?.classification === 'Student' || !!p.customFields?.student_id) {
+        students++;
+      }
+      if (p.customFields?.classification === 'Employee' || !!p.customFields?.employee_id) {
+        employees++;
+      }
+      if (hasKnownAllergies(p.allergies) || (p.alerts && p.alerts.trim().length > 0)) {
+        alerts++;
+      }
+      if (!!p.seniorCitizenId || !!p.pwdId || p.age >= 60) {
+        seniorPwd++;
+      }
+    }
+    return {
+      all: patients.length,
+      students,
+      employees,
+      alerts,
+      seniorPwd,
+    };
+  }, [patients]);
+
   const filteredPatients = (patients ?? []).filter((p) => {
     if (filterMode === 'ALERTS') {
-      return (p.allergies && p.allergies.length > 0) || (p.alerts && p.alerts.length > 0);
+      return hasKnownAllergies(p.allergies) || !!(p.alerts && p.alerts.trim().length > 0);
     }
     if (filterMode === 'SENIOR_PWD') {
       return !!p.seniorCitizenId || !!p.pwdId || p.age >= 60;
@@ -1061,6 +1120,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
     return true;
   });
+
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setDebouncedSearchTerm('');
+    handleFilterModeChange('ALL');
+  };
 
   const handleSyncNow = async () => {
     setSyncingOffline(true);
@@ -1151,27 +1216,53 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       <Input
         value={searchTerm}
         onChangeText={setSearchTerm}
-        onSubmitEditing={fetchPatients}
+        onSubmitEditing={() => {
+          setDebouncedSearchTerm(searchTerm);
+          fetchPatients(searchTerm);
+        }}
         placeholder="Search by name, patient code, phone or ID number"
         leftIcon="search"
         rightIcon={searchTerm ? 'close' : undefined}
-        onRightIconPress={() => setSearchTerm('')}
+        onRightIconPress={() => {
+          setSearchTerm('');
+          setDebouncedSearchTerm('');
+        }}
         returnKeyType="search"
         containerStyle={styles.searchInput}
       />
 
-      {/* Filters */}
-      <SegmentedControl<PatientFilter>
-        value={filterMode}
-        onChange={handleFilterModeChange}
-        options={[
-          { value: 'ALL', label: 'All patients' },
-          { value: 'STUDENTS', label: 'Students' },
-          { value: 'EMPLOYEES', label: 'Employees' },
-          { value: 'ALERTS', label: 'Alerts & allergies' },
-          { value: 'SENIOR_PWD', label: 'Senior & PWD' },
-        ]}
-      />
+      {/* Filters & Workstation View Switcher Toolbar */}
+      <View style={styles.toolbarRow}>
+        <SegmentedControl<PatientFilter>
+          value={filterMode}
+          onChange={handleFilterModeChange}
+          options={[
+            { value: 'ALL', label: 'All patients', count: filterCounts?.all },
+            { value: 'STUDENTS', label: 'Students', count: filterCounts?.students },
+            { value: 'EMPLOYEES', label: 'Employees', count: filterCounts?.employees },
+            { value: 'ALERTS', label: 'Alerts & allergies', count: filterCounts?.alerts },
+            { value: 'SENIOR_PWD', label: 'Senior & PWD', count: filterCounts?.seniorPwd },
+          ]}
+        />
+
+        {isWorkstation ? (
+          <View style={styles.toolbarRight}>
+            {patients !== null ? (
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Showing {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'}
+              </ThemedText>
+            ) : null}
+            <SegmentedControl<PatientDirectoryViewMode>
+              value={viewMode}
+              onChange={handleViewModeChange}
+              options={[
+                { value: 'cards', label: 'Cards' },
+                { value: 'table', label: 'Compact Table' },
+              ]}
+            />
+          </View>
+        ) : null}
+      </View>
 
       {showSkeleton ? (
         <Card>
@@ -1191,127 +1282,57 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 ? 'Try a different name, code or filter.'
                 : 'Register the first patient to start building the clinic registry.'
             }
-            actionTitle={searchTerm || filterMode !== 'ALL' ? undefined : 'Register patient'}
-            onAction={searchTerm || filterMode !== 'ALL' ? undefined : () => setRegisterVisible(true)}
+            actionTitle={searchTerm || filterMode !== 'ALL' ? 'Clear search & filters' : 'Register patient'}
+            onAction={searchTerm || filterMode !== 'ALL' ? handleResetFilters : () => setRegisterVisible(true)}
           />
+        </Card>
+      ) : effectiveViewMode === 'table' ? (
+        <Card style={styles.tableCard}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tableScrollContent}
+          >
+            <View style={styles.tableInner}>
+              <PatientDirectoryTableHeader />
+              {filteredPatients.map((item) => (
+                <PatientDirectoryCard
+                  key={item.id}
+                  patient={item}
+                  mode="table"
+                  checkingIn={checkingInPatientId === item.id}
+                  disableCheckIn={!!checkingInPatientId}
+                  onOpenChart={(p) => handleOpenChart(p)}
+                  onEditDemographics={handleOpenEditDemographics}
+                  onOpenPhilHealth={handleOpenPhilHealthProfile}
+                  onBookAppointment={(p) =>
+                    navigation.navigate('Appointments', { patientId: p.id, patientName: p.fullName })
+                  }
+                  onAddToQueue={handleQueueCheckIn}
+                />
+              ))}
+            </View>
+          </ScrollView>
         </Card>
       ) : (
         <View style={styles.list}>
-          {filteredPatients.map((item) => {
-            const ageDisplay = item.dateOfBirth
-              ? formatLongAge(item.dateOfBirth)
-              : (item.age !== undefined && item.age !== null ? `${item.age} yrs` : null);
-            const demographics = [
-              ageDisplay,
-              item.gender,
-              item.civilStatus,
-              item.bloodType ? `Blood type ${item.bloodType}` : null,
-            ]
-              .filter(Boolean)
-              .join(' • ');
-            const location = item.city ? [item.barangay, item.city].filter(Boolean).join(', ') : '';
-            const hasAllergies = !!item.allergies && item.allergies !== 'None known';
-
-            return (
-              <Card key={item.id} style={styles.patientCard}>
-                <View style={styles.cardBody}>
-                  <View style={styles.cardTitleRow}>
-                    <ThemedText variant="h3" style={styles.patientName}>
-                      {item.fullName}
-                    </ThemedText>
-                    <Badge label={item.patientCode} variant="neutral" />
-                    {item.verificationStatus === 'PendingVerification' && (
-                      <Badge label="Pending verification" variant="warning" icon="hourglass" />
-                    )}
-                  </View>
-
-                  {demographics ? (
-                    <ThemedText variant="body" color={theme.colors.textSecondary}>
-                      {demographics}
-                    </ThemedText>
-                  ) : null}
-
-                  {item.customFields?.student_id ? (
-                    <Badge
-                      label={`Student ID ${item.customFields.student_id}${item.customFields.program ? ` • ${item.customFields.program}` : ''}${item.customFields.year_level ? ` (${item.customFields.year_level})` : ''}`}
-                      variant="info"
-                      style={styles.selfStart}
-                    />
-                  ) : item.customFields?.employee_id ? (
-                    <Badge
-                      label={`Employee ID ${item.customFields.employee_id}${item.customFields.department ? ` • ${item.customFields.department}` : ''}`}
-                      variant="success"
-                      style={styles.selfStart}
-                    />
-                  ) : null}
-
-                  <ThemedText variant="small" color={theme.colors.textMuted}>
-                    {[item.contactNumber, location].filter(Boolean).join(' • ')}
-                  </ThemedText>
-
-                  {item.philHealthNumber || item.seniorCitizenId || item.pwdId ? (
-                    <View style={styles.badgeRow}>
-                      {item.philHealthNumber ? <Badge label={`PhilHealth ${item.philHealthNumber}`} variant="primary" /> : null}
-                      {item.seniorCitizenId ? <Badge label={`Senior ID ${item.seniorCitizenId}`} variant="warning" /> : null}
-                      {item.pwdId ? <Badge label={`PWD ID ${item.pwdId}`} variant="purple" /> : null}
-                    </View>
-                  ) : null}
-
-                  {hasAllergies ? (
-                    <View style={[styles.noticeStrip, styles.allergyStrip]}>
-                      <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
-                      <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.noticeText}>
-                        Allergies: {item.allergies}
-                      </ThemedText>
-                    </View>
-                  ) : null}
-
-                  {item.alerts ? (
-                    <View style={[styles.noticeStrip, styles.alertStrip]}>
-                      <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
-                      <ThemedText variant="small" color={theme.colors.warningText} style={styles.noticeText}>
-                        {item.alerts}
-                      </ThemedText>
-                    </View>
-                  ) : null}
-                </View>
-
-                <View style={styles.actionRow}>
-                  <Button title="View chart" variant="outline" size="sm" icon="clipboard" onPress={() => handleOpenChart(item)} />
-                  <Button
-                    title="Edit Demographics"
-                    variant="outline"
-                    size="sm"
-                    icon="edit"
-                    onPress={() => handleOpenEditDemographics(item)}
-                  />
-                  <Button
-                    title="PhilHealth"
-                    variant="outline"
-                    size="sm"
-                    icon="shield"
-                    onPress={() => handleOpenPhilHealthProfile(item)}
-                  />
-                  <Button
-                    title="Book appointment"
-                    variant="secondary"
-                    size="sm"
-                    icon="calendar"
-                    onPress={() => navigation.navigate('Appointments', { patientId: item.id, patientName: item.fullName })}
-                  />
-                  <Button
-                    title="Add to queue"
-                    variant="primary"
-                    size="sm"
-                    icon="plus"
-                    loading={checkingInPatientId === item.id}
-                    disabled={!!checkingInPatientId}
-                    onPress={() => handleQueueCheckIn(item)}
-                  />
-                </View>
-              </Card>
-            );
-          })}
+          {filteredPatients.map((item) => (
+            <PatientDirectoryCard
+              key={item.id}
+              patient={item}
+              mode="card"
+              isDesktopGrid={isDesktop}
+              checkingIn={checkingInPatientId === item.id}
+              disableCheckIn={!!checkingInPatientId}
+              onOpenChart={(p) => handleOpenChart(p)}
+              onEditDemographics={handleOpenEditDemographics}
+              onOpenPhilHealth={handleOpenPhilHealthProfile}
+              onBookAppointment={(p) =>
+                navigation.navigate('Appointments', { patientId: p.id, patientName: p.fullName })
+              }
+              onAddToQueue={handleQueueCheckIn}
+            />
+          ))}
         </View>
       )}
 
@@ -2282,6 +2303,19 @@ const styles = StyleSheet.create({
   searchInput: {
     width: '100%',
   },
+  toolbarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  toolbarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
   skeletonWrap: {
     padding: theme.spacing.lg,
   },
@@ -2290,59 +2324,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: theme.spacing.lg,
   },
-  patientCard: {
+  tableCard: {
+    padding: 0,
+    overflow: 'hidden',
+  },
+  tableScrollContent: {
     flexGrow: 1,
-    flexBasis: 420,
-    padding: theme.spacing.lg,
-    gap: theme.spacing.md,
   },
-  cardBody: {
-    gap: theme.spacing.sm,
-  },
-  cardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  patientName: {
-    flexShrink: 1,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  selfStart: {
-    alignSelf: 'flex-start',
-  },
-  noticeStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    borderWidth: theme.sizes.borderWidth,
-    borderRadius: theme.radii.md,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-  },
-  noticeText: {
-    flex: 1,
-  },
-  allergyStrip: {
-    backgroundColor: theme.colors.emergencySubtle,
-    borderColor: theme.colors.emergencyBorder,
-  },
-  alertStrip: {
-    backgroundColor: theme.colors.warningBg,
-    borderColor: theme.colors.warningBorder,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    borderTopWidth: theme.sizes.borderWidth,
-    borderTopColor: theme.colors.borderLight,
-    paddingTop: theme.spacing.md,
+  tableInner: {
+    width: '100%',
+    minWidth: 920,
   },
   modalOverlay: {
     flex: 1,
