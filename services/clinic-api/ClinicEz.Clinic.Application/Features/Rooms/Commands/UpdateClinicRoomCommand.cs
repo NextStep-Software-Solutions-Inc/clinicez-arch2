@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,7 +21,8 @@ public sealed record UpdateClinicRoomCommand(
     ClinicRoomType Type,
     string? Description = null,
     int? DisplayOrder = null,
-    bool IsActive = true) : IRequest<ClinicRoomDto>;
+    bool IsActive = true,
+    IReadOnlyList<Guid>? AssignedStaffIds = null) : IRequest<ClinicRoomDto>;
 
 public sealed class UpdateClinicRoomCommandValidator : AbstractValidator<UpdateClinicRoomCommand>
 {
@@ -92,6 +94,37 @@ public sealed class UpdateClinicRoomCommandHandler : IRequestHandler<UpdateClini
 
         _roomRepository.Update(room);
 
+        // Synchronize staff assignments when AssignedStaffIds is provided
+        if (request.AssignedStaffIds != null)
+        {
+            var desiredIds = request.AssignedStaffIds.Distinct().ToHashSet();
+            var relevantStaff = await _staffRepository
+                .Query(s => s.ClinicId == _clinicContext.ClinicId &&
+                            (s.AssignedRoomId == room.Id || desiredIds.Contains(s.Id)))
+                .ToListAsync(cancellationToken);
+
+            foreach (var staff in relevantStaff)
+            {
+                if (desiredIds.Contains(staff.Id) && (staff.Role == StaffRole.Doctor || staff.Role == StaffRole.Nurse))
+                {
+                    if (staff.AssignedRoomId != room.Id)
+                    {
+                        staff.AssignedRoomId = room.Id;
+                        staff.UpdatedAt = DateTime.UtcNow;
+                        staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
+                        _staffRepository.Update(staff);
+                    }
+                }
+                else if (staff.AssignedRoomId == room.Id && !desiredIds.Contains(staff.Id))
+                {
+                    staff.AssignedRoomId = null;
+                    staff.UpdatedAt = DateTime.UtcNow;
+                    staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
+                    _staffRepository.Update(staff);
+                }
+            }
+        }
+
         // Synchronize active queue items referencing this room (by RoomId or legacy RoomOrStation name)
         if (!string.Equals(previousName, normalizedName, StringComparison.Ordinal))
         {
@@ -113,9 +146,18 @@ public sealed class UpdateClinicRoomCommandHandler : IRequestHandler<UpdateClini
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var assignedStaffCount = await _staffRepository
-            .Query(s => s.ClinicId == _clinicContext.ClinicId && s.AssignedRoomId == room.Id)
-            .CountAsync(cancellationToken);
+        var assignedStaff = await _staffRepository
+            .Query(s => s.ClinicId == _clinicContext.ClinicId && s.AssignedRoomId == room.Id && s.IsActive)
+            .OrderBy(s => s.FirstName)
+            .ThenBy(s => s.LastName)
+            .ToListAsync(cancellationToken);
+
+        var assignedIds = assignedStaff.Select(s => s.Id).ToList();
+        var assignedNames = assignedStaff
+            .Select(s => string.IsNullOrWhiteSpace(s.Title)
+                ? $"{s.FirstName} {s.LastName}".Trim()
+                : $"{s.Title} {s.FirstName} {s.LastName}".Trim())
+            .ToList();
 
         return new ClinicRoomDto(
             room.Id,
@@ -127,7 +169,9 @@ public sealed class UpdateClinicRoomCommandHandler : IRequestHandler<UpdateClini
             room.Description,
             room.DisplayOrder,
             room.IsActive,
-            assignedStaffCount,
-            room.CreatedAt);
+            assignedIds.Count,
+            room.CreatedAt,
+            assignedIds,
+            assignedNames);
     }
 }

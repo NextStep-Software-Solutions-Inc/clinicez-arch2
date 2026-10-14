@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Application.Features.Rooms.DTOs;
@@ -14,4 +15,6 @@ public sealed record ClinicRoomDto(
     int DisplayOrder,
     bool IsActive,
     int AssignedStaffCount,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    IReadOnlyList<Guid>? AssignedStaffIds = null,
+    IReadOnlyList<string>? AssignedStaffNames = null);

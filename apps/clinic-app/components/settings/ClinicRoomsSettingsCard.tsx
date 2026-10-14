@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import { Card, CardHeader, CardContent } from '../ui/Card';
@@ -12,8 +12,10 @@ import {
   clinicService,
   type ClinicRoom,
   type ClinicRoomType,
+  type StaffMember,
 } from '../../services/clinicService';
 import { useClinic } from '../../context/ClinicContext';
+import { useStaff } from '../../context/StaffContext';
 import { theme } from '../../constants/theme';
 import { Chip, FieldGroup, FormError } from './common';
 import SortableRoomsGrid from './SortableRoomsGrid';
@@ -52,10 +54,19 @@ function getRoomTypeMeta(roomType: ClinicRoomType) {
   return ROOM_TYPES.find((r) => r.type === roomType) ?? ROOM_TYPES[0];
 }
 
+function formatStaffDisplayName(member: StaffMember): string {
+  const full = `${member.firstName} ${member.lastName}`.trim();
+  return member.title ? `${member.title} ${full}` : full;
+}
+
 export function ClinicRoomsSettingsCard() {
   const { rooms: contextRooms = [], refreshRooms } = useClinic();
+  const { staff: contextStaff = [], reload: reloadStaff } = useStaff();
   const [allRooms, setAllRooms] = useState<ClinicRoom[]>(() =>
     Array.isArray(contextRooms) ? contextRooms : [],
+  );
+  const [staffList, setStaffList] = useState<StaffMember[]>(() =>
+    Array.isArray(contextStaff) ? contextStaff : [],
   );
   const [loading, setLoading] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
@@ -68,8 +79,14 @@ export function ClinicRoomsSettingsCard() {
   const [roomType, setRoomType] = useState<ClinicRoomType>('Consultation');
   const [description, setDescription] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Quick Assign Staff Modal state
+  const [assigningRoom, setAssigningRoom] = useState<ClinicRoom | null>(null);
+  const [assignStaffIds, setAssignStaffIds] = useState<string[]>([]);
+  const [savingAssign, setSavingAssign] = useState(false);
 
   // Delete confirmation state
   const [deletingRoom, setDeletingRoom] = useState<ClinicRoom | null>(null);
@@ -78,26 +95,82 @@ export function ClinicRoomsSettingsCard() {
   const loadAllRooms = useCallback(async () => {
     setLoading(true);
     try {
-      const [list] = await clinicService.getRooms(false);
+      const [[list], [staffRes]] = await Promise.all([
+        clinicService.getRooms(false),
+        clinicService.getStaff(undefined, true),
+      ]);
       if (Array.isArray(list)) {
         setAllRooms(list);
       } else {
         setAllRooms(Array.isArray(contextRooms) ? contextRooms : []);
+      }
+      if (Array.isArray(staffRes)) {
+        setStaffList(staffRes);
+      } else if (Array.isArray(contextStaff) && contextStaff.length > 0) {
+        setStaffList(contextStaff);
       }
     } catch {
       setAllRooms(Array.isArray(contextRooms) ? contextRooms : []);
     } finally {
       setLoading(false);
     }
-  }, [contextRooms]);
+  }, [contextRooms, contextStaff]);
 
   useEffect(() => {
     loadAllRooms();
   }, [loadAllRooms]);
 
+  const eligibleClinicalStaff = useMemo(
+    () =>
+      (Array.isArray(staffList) ? staffList : []).filter(
+        (s) => s.isActive && (s.role === 'Doctor' || s.role === 'Nurse'),
+      ),
+    [staffList],
+  );
+
   const sortedRooms = [...allRooms].sort(
     (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0),
   );
+
+  const getInitialAssignedIdsForRoom = useCallback(
+    (room: ClinicRoom): string[] => {
+      if (Array.isArray(room.assignedStaffIds) && room.assignedStaffIds.length > 0) {
+        return [...room.assignedStaffIds];
+      }
+      return eligibleClinicalStaff
+        .filter((s) => s.assignedRoomId === room.id)
+        .map((s) => s.id);
+    },
+    [eligibleClinicalStaff],
+  );
+
+  const getRoomStaffSummary = useCallback(
+    (room: ClinicRoom): string => {
+      if (Array.isArray(room.assignedStaffNames) && room.assignedStaffNames.length > 0) {
+        return room.assignedStaffNames.join(', ');
+      }
+      const matched = eligibleClinicalStaff
+        .filter((s) => s.assignedRoomId === room.id)
+        .map(formatStaffDisplayName);
+      if (matched.length > 0) {
+        return matched.join(', ');
+      }
+      if ((room.assignedStaffCount ?? 0) > 0) {
+        return `${room.assignedStaffCount} staff assigned`;
+      }
+      return 'No fixed staff';
+    },
+    [eligibleClinicalStaff],
+  );
+
+  const toggleStaffId = (
+    staffId: string,
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+  ) => {
+    setter((prev) =>
+      prev.includes(staffId) ? prev.filter((id) => id !== staffId) : [...prev, staffId],
+    );
+  };
 
   const handleReorderRooms = async (newOrderedIds: string[]) => {
     if (isReordering) return;
@@ -159,6 +232,7 @@ export function ClinicRoomsSettingsCard() {
     setRoomType('Consultation');
     setDescription('');
     setIsActive(true);
+    setSelectedStaffIds([]);
     setFormError(null);
     setModalOpen(true);
   };
@@ -170,8 +244,14 @@ export function ClinicRoomsSettingsCard() {
     setRoomType(room.type);
     setDescription(room.description ?? '');
     setIsActive(room.isActive);
+    setSelectedStaffIds(getInitialAssignedIdsForRoom(room));
     setFormError(null);
     setModalOpen(true);
+  };
+
+  const openAssignStaffModal = (room: ClinicRoom) => {
+    setAssigningRoom(room);
+    setAssignStaffIds(getInitialAssignedIdsForRoom(room));
   };
 
   const handleSaveRoom = async () => {
@@ -192,6 +272,7 @@ export function ClinicRoomsSettingsCard() {
           description: description.trim() || undefined,
           displayOrder: editingRoom.displayOrder,
           isActive,
+          assignedStaffIds: selectedStaffIds,
         });
         if (err) {
           setFormError(err.message || 'Unable to update room.');
@@ -210,6 +291,7 @@ export function ClinicRoomsSettingsCard() {
           type: roomType,
           description: description.trim() || undefined,
           displayOrder: nextOrder,
+          assignedStaffIds: selectedStaffIds,
         });
         if (err) {
           setFormError(err.message || 'Unable to create room.');
@@ -219,11 +301,38 @@ export function ClinicRoomsSettingsCard() {
       }
 
       setModalOpen(false);
-      await Promise.all([loadAllRooms(), refreshRooms?.()]);
+      await Promise.all([loadAllRooms(), refreshRooms?.(), reloadStaff?.()]);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Unable to save room.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveAssignStaff = async () => {
+    if (!assigningRoom) return;
+    setSavingAssign(true);
+    try {
+      const [, err] = await clinicService.updateRoom(assigningRoom.id, {
+        name: assigningRoom.name,
+        code: assigningRoom.code,
+        type: assigningRoom.type,
+        description: assigningRoom.description,
+        displayOrder: assigningRoom.displayOrder,
+        isActive: assigningRoom.isActive,
+        assignedStaffIds: assignStaffIds,
+      });
+      if (err) {
+        notify.error(err.message || 'Unable to update staff assignment.');
+        return;
+      }
+      notify.success(`Updated staff assigned to "${assigningRoom.name}".`);
+      setAssigningRoom(null);
+      await Promise.all([loadAllRooms(), refreshRooms?.(), reloadStaff?.()]);
+    } catch (e) {
+      notify.error(e instanceof Error ? e.message : 'Unable to update staff assignment.');
+    } finally {
+      setSavingAssign(false);
     }
   };
 
@@ -238,7 +347,7 @@ export function ClinicRoomsSettingsCard() {
       }
       notify.success(`Removed "${deletingRoom.name}".`);
       setDeletingRoom(null);
-      await Promise.all([loadAllRooms(), refreshRooms?.()]);
+      await Promise.all([loadAllRooms(), refreshRooms?.(), reloadStaff?.()]);
     } catch (e) {
       notify.error(e instanceof Error ? e.message : 'Unable to delete room.');
     } finally {
@@ -247,6 +356,81 @@ export function ClinicRoomsSettingsCard() {
   };
 
   const selectedTypeMeta = getRoomTypeMeta(roomType);
+
+  const renderStaffAssignmentSelector = (
+    activeIds: string[],
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    targetRoomId?: string,
+  ) => {
+    if (eligibleClinicalStaff.length === 0) {
+      return (
+        <ThemedText variant="small" color={theme.colors.textMuted}>
+          No active Doctors or Nurses found in Staff Directory yet.
+        </ThemedText>
+      );
+    }
+
+    return (
+      <View style={styles.staffPickerList}>
+        {eligibleClinicalStaff.map((member) => {
+          const isSelected = activeIds.includes(member.id);
+          const otherRoomName =
+            member.assignedRoomId && member.assignedRoomId !== targetRoomId
+              ? member.assignedRoomName ||
+                sortedRooms.find((r) => r.id === member.assignedRoomId)?.name
+              : null;
+
+          return (
+            <Pressable
+              key={member.id}
+              onPress={() => toggleStaffId(member.id, setter)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: isSelected }}
+              style={({ pressed }) => [
+                styles.staffOptionRow,
+                isSelected && styles.staffOptionRowActive,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View
+                style={[
+                  styles.staffCheckbox,
+                  isSelected && styles.staffCheckboxChecked,
+                ]}
+              >
+                {isSelected ? (
+                  <Icon name="check" size={12} color={theme.colors.textInverted} />
+                ) : null}
+              </View>
+              <View style={styles.staffOptionInfo}>
+                <ThemedText variant="smallBold">
+                  {formatStaffDisplayName(member)}
+                </ThemedText>
+                <View style={styles.staffOptionMeta}>
+                  <Badge
+                    label={member.role === 'Doctor' ? 'Doctor' : 'Nurse'}
+                    variant={member.role === 'Doctor' ? 'primary' : 'info'}
+                    size="sm"
+                  />
+                  {otherRoomName ? (
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      {isSelected
+                        ? `Will move from ${otherRoomName}`
+                        : `Currently in ${otherRoomName}`}
+                    </ThemedText>
+                  ) : (
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      {isSelected ? 'Assigned to this room' : 'Unassigned / Floating'}
+                    </ThemedText>
+                  )}
+                </View>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  };
 
   return (
     <>
@@ -284,6 +468,8 @@ export function ClinicRoomsSettingsCard() {
                 onMoveLater={handleMoveLater}
                 renderRoomCardContent={(room, _index, dragControls) => {
                   const meta = getRoomTypeMeta(room.type);
+                  const staffSummary = getRoomStaffSummary(room);
+                  const hasAssignedStaff = staffSummary !== 'No fixed staff';
                   return (
                     <View
                       style={[
@@ -308,10 +494,17 @@ export function ClinicRoomsSettingsCard() {
                               {room.code ? (
                                 <Badge label={room.code} variant="outline" size="sm" />
                               ) : null}
-                              <ThemedText variant="caption" color={theme.colors.textSecondary} numberOfLines={1}>
-                                {(room.assignedStaffCount ?? 0) > 0
-                                  ? `${room.assignedStaffCount} staff assigned`
-                                  : 'No fixed staff'}
+                              <ThemedText
+                                variant="caption"
+                                color={
+                                  hasAssignedStaff
+                                    ? theme.colors.primaryDark
+                                    : theme.colors.textSecondary
+                                }
+                                numberOfLines={1}
+                                style={styles.staffSummaryText}
+                              >
+                                {staffSummary}
                               </ThemedText>
                             </View>
                           </View>
@@ -332,7 +525,11 @@ export function ClinicRoomsSettingsCard() {
                         <View style={styles.roomDescriptionBox}>
                           <ThemedText
                             variant="small"
-                            color={room.description ? theme.colors.textSecondary : theme.colors.textMuted}
+                            color={
+                              room.description
+                                ? theme.colors.textSecondary
+                                : theme.colors.textMuted
+                            }
                             numberOfLines={2}
                           >
                             {room.description || 'No description'}
@@ -341,6 +538,13 @@ export function ClinicRoomsSettingsCard() {
                       </View>
 
                       <View style={styles.roomActions}>
+                        <Button
+                          title="Staff"
+                          icon="staff"
+                          size="sm"
+                          variant="outline"
+                          onPress={() => openAssignStaffModal(room)}
+                        />
                         <Button
                           title="Edit"
                           icon="edit"
@@ -379,7 +583,7 @@ export function ClinicRoomsSettingsCard() {
         onClose={() => !saving && setModalOpen(false)}
         title={editingRoom ? `Edit ${editingRoom.name}` : 'Add Clinic Room / Station'}
         subtitle="Rooms appear as filter tabs in Consultations and can be assigned to Doctors and Nurses"
-        maxWidth={520}
+        maxWidth={540}
         footer={
           <>
             <Button
@@ -442,6 +646,17 @@ export function ClinicRoomsSettingsCard() {
             placeholder="e.g. Ground floor consultation room with ultrasound"
           />
 
+          <FieldGroup label="Assigned Staff (Doctors & Nurses — Optional)">
+            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+              Select which Doctors or Nurses are stationed in this room. You can also manage assignments from the Staff Directory.
+            </ThemedText>
+            {renderStaffAssignmentSelector(
+              selectedStaffIds,
+              setSelectedStaffIds,
+              editingRoom?.id,
+            )}
+          </FieldGroup>
+
           {editingRoom ? (
             <FieldGroup label="Status">
               <View style={styles.chipRow}>
@@ -458,6 +673,39 @@ export function ClinicRoomsSettingsCard() {
               </View>
             </FieldGroup>
           ) : null}
+        </View>
+      </Modal>
+
+      {/* Quick Assign Staff Modal */}
+      <Modal
+        visible={!!assigningRoom}
+        onClose={() => !savingAssign && setAssigningRoom(null)}
+        title={assigningRoom ? `Assign Staff — ${assigningRoom.name}` : 'Assign Staff'}
+        subtitle="Select the Doctors or Nurses stationed in this room. Changes sync automatically with the Staff Directory."
+        maxWidth={500}
+        footer={
+          <>
+            <Button
+              title="Cancel"
+              variant="ghost"
+              onPress={() => setAssigningRoom(null)}
+              disabled={savingAssign}
+            />
+            <Button
+              title="Save Staff Assignment"
+              icon="save"
+              onPress={handleSaveAssignStaff}
+              loading={savingAssign}
+            />
+          </>
+        }
+      >
+        <View style={styles.modalBody}>
+          {renderStaffAssignmentSelector(
+            assignStaffIds,
+            setAssignStaffIds,
+            assigningRoom?.id,
+          )}
         </View>
       </Modal>
 
@@ -556,6 +804,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
+  staffSummaryText: {
+    flex: 1,
+    minWidth: 0,
+  },
   roomMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -602,6 +854,48 @@ const styles = StyleSheet.create({
   },
   chipRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  staffPickerList: {
+    gap: theme.spacing.xs,
+  },
+  staffOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surface,
+  },
+  staffOptionRowActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  staffCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: theme.radii.xs,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  staffCheckboxChecked: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
+  },
+  staffOptionInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  staffOptionMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flexWrap: 'wrap',
     gap: theme.spacing.xs,
   },

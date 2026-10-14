@@ -60,7 +60,8 @@ public sealed class RoomsController : ControllerBase
             request.Type,
             request.Description,
             request.DisplayOrder,
-            request.IsActive), ct);
+            request.IsActive,
+            request.AssignedStaffIds), ct);
         return Ok(ApiResponse<ClinicRoomDto>.Success(result, "Clinic room updated successfully."));
     }
 
@@ -89,7 +90,9 @@ public sealed record UpdateClinicRoomRequest(
     ClinicRoomType Type,
     string? Description = null,
     int? DisplayOrder = null,
-    bool IsActive = true);
+    bool IsActive = true,
+    IReadOnlyList<Guid>? AssignedStaffIds = null);
 
 public sealed record ReorderClinicRoomsRequest(IReadOnlyList<Guid> OrderedIds);
+
 

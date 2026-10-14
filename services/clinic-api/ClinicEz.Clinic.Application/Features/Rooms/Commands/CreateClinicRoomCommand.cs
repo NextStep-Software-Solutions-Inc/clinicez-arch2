@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,7 +20,8 @@ public sealed record CreateClinicRoomCommand(
     ClinicRoomType Type,
     string? Description = null,
     int? DisplayOrder = null,
-    bool IsActive = true) : IRequest<ClinicRoomDto>;
+    bool IsActive = true,
+    IReadOnlyList<Guid>? AssignedStaffIds = null) : IRequest<ClinicRoomDto>;
 
 public sealed class CreateClinicRoomCommandValidator : AbstractValidator<CreateClinicRoomCommand>
 {
@@ -37,15 +39,18 @@ public sealed class CreateClinicRoomCommandHandler : IRequestHandler<CreateClini
     private readonly IRepository<ClinicRoom> _roomRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<StaffMember>? _staffRepository;
 
     public CreateClinicRoomCommandHandler(
         IRepository<ClinicRoom> roomRepository,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<StaffMember>? staffRepository = null)
     {
         _roomRepository = roomRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _staffRepository = staffRepository;
     }
 
     public async Task<ClinicRoomDto> Handle(CreateClinicRoomCommand request, CancellationToken cancellationToken)
@@ -81,6 +86,32 @@ public sealed class CreateClinicRoomCommandHandler : IRequestHandler<CreateClini
         };
 
         await _roomRepository.AddAsync(room, cancellationToken);
+
+        var assignedIds = new List<Guid>();
+        var assignedNames = new List<string>();
+
+        if (_staffRepository != null && request.AssignedStaffIds is { Count: > 0 })
+        {
+            var targetIds = request.AssignedStaffIds.Distinct().ToHashSet();
+            var eligibleStaff = await _staffRepository
+                .Query(s => s.ClinicId == _clinicContext.ClinicId &&
+                            targetIds.Contains(s.Id) &&
+                            (s.Role == StaffRole.Doctor || s.Role == StaffRole.Nurse))
+                .ToListAsync(cancellationToken);
+
+            foreach (var staff in eligibleStaff)
+            {
+                staff.AssignedRoomId = room.Id;
+                staff.UpdatedAt = DateTime.UtcNow;
+                staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
+                _staffRepository.Update(staff);
+                assignedIds.Add(staff.Id);
+                assignedNames.Add(string.IsNullOrWhiteSpace(staff.Title)
+                    ? $"{staff.FirstName} {staff.LastName}".Trim()
+                    : $"{staff.Title} {staff.FirstName} {staff.LastName}".Trim());
+            }
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new ClinicRoomDto(
@@ -93,7 +124,9 @@ public sealed class CreateClinicRoomCommandHandler : IRequestHandler<CreateClini
             room.Description,
             room.DisplayOrder,
             room.IsActive,
-            0,
-            room.CreatedAt);
+            assignedIds.Count,
+            room.CreatedAt,
+            assignedIds,
+            assignedNames);
     }
 }

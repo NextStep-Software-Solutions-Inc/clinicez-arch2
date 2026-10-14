@@ -123,23 +123,52 @@ public sealed class GetClinicRoomsQueryHandler : IRequestHandler<GetClinicRoomsQ
             .ThenBy(r => r.Name)
             .ToListAsync(cancellationToken);
 
-        var staffCounts = await _staffRepository
-            .Query(s => s.ClinicId == _clinicContext.ClinicId && s.AssignedRoomId != null)
-            .GroupBy(s => s.AssignedRoomId!.Value)
-            .Select(g => new { RoomId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.RoomId, x => x.Count, cancellationToken);
+        var assignedStaffList = await _staffRepository
+            .Query(s => s.ClinicId == _clinicContext.ClinicId && s.AssignedRoomId != null && s.IsActive)
+            .OrderBy(s => s.FirstName)
+            .ThenBy(s => s.LastName)
+            .Select(s => new
+            {
+                s.Id,
+                RoomId = s.AssignedRoomId!.Value,
+                s.Title,
+                s.FirstName,
+                s.LastName
+            })
+            .ToListAsync(cancellationToken);
 
-        return rooms.Select(r => new ClinicRoomDto(
-            r.Id,
-            r.TenantId,
-            r.ClinicId,
-            r.Name,
-            r.Code,
-            r.Type,
-            r.Description,
-            r.DisplayOrder,
-            r.IsActive,
-            staffCounts.GetValueOrDefault(r.Id, 0),
-            r.CreatedAt)).ToList();
+        var staffByRoom = assignedStaffList
+            .GroupBy(s => s.RoomId)
+            .ToDictionary(
+                g => g.Key,
+                g => new
+                {
+                    Ids = (IReadOnlyList<Guid>)g.Select(x => x.Id).ToList(),
+                    Names = (IReadOnlyList<string>)g.Select(x =>
+                        string.IsNullOrWhiteSpace(x.Title)
+                            ? $"{x.FirstName} {x.LastName}".Trim()
+                            : $"{x.Title} {x.FirstName} {x.LastName}".Trim()).ToList()
+                });
+
+        return rooms.Select(r =>
+        {
+            var group = staffByRoom.GetValueOrDefault(r.Id);
+            var ids = group?.Ids ?? Array.Empty<Guid>();
+            var names = group?.Names ?? Array.Empty<string>();
+            return new ClinicRoomDto(
+                r.Id,
+                r.TenantId,
+                r.ClinicId,
+                r.Name,
+                r.Code,
+                r.Type,
+                r.Description,
+                r.DisplayOrder,
+                r.IsActive,
+                ids.Count,
+                r.CreatedAt,
+                ids,
+                names);
+        }).ToList();
     }
 }

@@ -40,6 +40,8 @@ export interface ClinicRoom {
   displayOrder: number;
   isActive: boolean;
   assignedStaffCount: number;
+  assignedStaffIds?: string[];
+  assignedStaffNames?: string[];
   createdAt: string;
 }
 
@@ -2396,6 +2398,7 @@ export const clinicService = {
     description?: string | null;
     displayOrder?: number;
     isActive?: boolean;
+    assignedStaffIds?: string[];
   }) {
     return clinicApiClient.post<ClinicRoom>('/rooms', payload);
   },
@@ -2407,6 +2410,7 @@ export const clinicService = {
     description?: string | null;
     displayOrder?: number;
     isActive?: boolean;
+    assignedStaffIds?: string[];
   }) {
     return clinicApiClient.put<ClinicRoom>(`/rooms/${id}`, payload);
   },
