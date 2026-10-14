@@ -537,11 +537,17 @@ export default function StaffManagementTab({
                         ) : null}
                         <Badge label={s.role} variant={s.role === 'Doctor' ? 'primary' : 'neutral'} size="sm" />
                         {s.assignedRoomNames && s.assignedRoomNames.length > 0 ? (
-                          s.assignedRoomNames.map((roomName) => (
-                            <Badge key={roomName} label={roomName} variant="outline" size="sm" icon="clinic" />
+                          s.assignedRoomNames.map((roomName, idx) => (
+                            <Badge
+                              key={roomName}
+                              label={idx === 0 && s.assignedRoomNames!.length > 1 ? `${roomName} (Primary)` : roomName}
+                              variant={idx === 0 ? 'primary' : 'outline'}
+                              size="sm"
+                              icon="clinic"
+                            />
                           ))
                         ) : s.assignedRoomName ? (
-                          <Badge label={s.assignedRoomName} variant="outline" size="sm" icon="clinic" />
+                          <Badge label={s.assignedRoomName} variant="primary" size="sm" icon="clinic" />
                         ) : null}
                         {s.roleName && s.roleName !== s.role ? (
                           <Badge label={s.roleName} variant="purple" size="sm" />
@@ -929,6 +935,32 @@ export default function StaffManagementTab({
                 );
               })}
             </ScrollView>
+            {assignedRoomIds.length > 1 && (
+              <View style={{ marginTop: theme.spacing.xs, gap: theme.spacing.xs }}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Primary / Default Room (tap to change):
+                </ThemedText>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
+                  {assignedRoomIds.map((roomId, idx) => {
+                    const room = activeRoomsForRole.find((r) => r.id === roomId);
+                    if (!room) return null;
+                    const isPrimary = idx === 0;
+                    return (
+                      <Chip
+                        key={roomId}
+                        label={isPrimary ? `${room.name} (Primary)` : room.name}
+                        active={isPrimary}
+                        onPress={() => {
+                          if (!isPrimary) {
+                            setAssignedRoomIds((prev) => [roomId, ...prev.filter((id) => id !== roomId)]);
+                          }
+                        }}
+                      />
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </FieldGroup>
         ) : null}
 
@@ -1336,6 +1368,32 @@ export default function StaffManagementTab({
                   );
                 })}
               </ScrollView>
+              {assignedRoomIds.length > 1 && (
+                <View style={{ marginTop: theme.spacing.xs, gap: theme.spacing.xs }}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Primary / Default Room (tap to change):
+                  </ThemedText>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
+                    {assignedRoomIds.map((roomId, idx) => {
+                      const room = activeRoomsForRole.find((r) => r.id === roomId);
+                      if (!room) return null;
+                      const isPrimary = idx === 0;
+                      return (
+                        <Chip
+                          key={roomId}
+                          label={isPrimary ? `${room.name} (Primary)` : room.name}
+                          active={isPrimary}
+                          onPress={() => {
+                            if (!isPrimary) {
+                              setAssignedRoomIds((prev) => [roomId, ...prev.filter((id) => id !== roomId)]);
+                            }
+                          }}
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
             </FieldGroup>
           ) : null}
         </Modal>
