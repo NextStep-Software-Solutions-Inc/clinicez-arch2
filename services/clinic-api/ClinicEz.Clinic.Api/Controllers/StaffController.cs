@@ -150,7 +150,7 @@ public sealed class StaffController : ControllerBase
             request.Specialty,
             request.IsActive,
             request.PhilHealthPan,
-            request.AssignedRoomId,
+            request.AssignedRoomIds,
             request.ClearAssignedRoom);
 
         var result = await _sender.Send(command, ct);
@@ -203,7 +203,7 @@ public sealed record UpdateStaffMemberRequest(
     string? Specialty,
     bool IsActive = true,
     string? PhilHealthPan = null,
-    Guid? AssignedRoomId = null,
+    IReadOnlyList<Guid>? AssignedRoomIds = null,
     bool ClearAssignedRoom = false);
 
 public sealed record UpdateMyProfileRequest(

@@ -58,6 +58,8 @@ import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { openDocument } from '../../services/documentOpener';
 import {
   clinicService,
+  computeScopedStations,
+  isPatientVisibleToStaff,
   PatientQueueItem,
   QueueStatus,
   QueueView,
@@ -309,11 +311,17 @@ export default function ConsultationsScreen() {
   const [selectedStationFilter, setSelectedStationFilter] = useState<string>('ALL');
   const didApplyStaffRoomDefaults = useRef(false);
 
+  const { visibleRooms, allPillLabel } = useMemo(
+    () => computeScopedStations(activeRooms, current),
+    [activeRooms, current],
+  );
+
   useEffect(() => {
     if (didApplyStaffRoomDefaults.current || !current || activeRooms.length === 0) return;
     didApplyStaffRoomDefaults.current = true;
-    if (current.role === 'Nurse' && current.assignedRoomId) {
-      const assignedRoom = activeRooms.find((r) => r.id === current.assignedRoomId);
+    const assignedIds = current.assignedRoomIds ?? (current.assignedRoomId ? [current.assignedRoomId] : []);
+    if (current.role === 'Nurse' && assignedIds.length > 0) {
+      const assignedRoom = activeRooms.find((r) => r.id === assignedIds[0]);
       if (assignedRoom) {
         setSelectedStationFilter(assignedRoom.name);
         if (assignedRoom.type === 'Treatment') {
@@ -741,11 +749,14 @@ export default function ConsultationsScreen() {
     if (queueErr || !queueData) {
       setQueueError(queueErr?.message || 'Unable to load the patient queue.');
     } else {
-      setPatients(queueData);
+      const filtered = queueData.filter((item) =>
+        isPatientVisibleToStaff(item, current, activeRooms),
+      );
+      setPatients(filtered);
       setQueueError(null);
     }
     setQueueLoading(false);
-  }, [signer?.id, queueViewFilter, selectedStationFilter, activeRooms]);
+  }, [signer?.id, current, queueViewFilter, selectedStationFilter, activeRooms]);
 
   useEffect(() => {
     loadQueue();
@@ -3090,12 +3101,12 @@ export default function ConsultationsScreen() {
                   variant="captionBold"
                   color={selectedStationFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
                 >
-                  All Stations
+                  {allPillLabel}
                 </ThemedText>
               </Pressable>
-              {activeRooms.map((room) => {
+              {visibleRooms.map((room) => {
                 const isSelected = selectedStationFilter === room.name;
-                const isMyAssignedRoom = current?.assignedRoomId === room.id;
+                const isMyAssignedRoom = (current?.assignedRoomIds?.includes(room.id)) || current?.assignedRoomId === room.id;
                 return (
                   <Pressable
                     key={room.id}

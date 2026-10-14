@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.DTOs;
@@ -26,5 +27,50 @@ public sealed record StaffMemberDto(
     bool MustChangePassword = false,
     string? TemporaryPassword = null,
     string? PhilHealthPan = null,
-    Guid? AssignedRoomId = null,
-    string? AssignedRoomName = null);
+    IReadOnlyList<Guid>? AssignedRoomIds = null,
+    IReadOnlyList<string>? AssignedRoomNames = null)
+{
+    public StaffMemberDto(
+        Guid Id,
+        Guid ClinicId,
+        string UserId,
+        string Email,
+        StaffRole Role,
+        string? Specialization,
+        string? LicenseNumber,
+        string FirstName,
+        string LastName,
+        IReadOnlyList<Guid>? AssignedRoomIds = null,
+        IReadOnlyList<string>? AssignedRoomNames = null)
+        : this(
+            Id,
+            TenantId: UserId,
+            ClinicId: ClinicId,
+            ClinicRoleId: null,
+            RoleName: null,
+            FirstName: FirstName,
+            LastName: LastName,
+            MiddleName: null,
+            Title: null,
+            Role: Role,
+            Email: Email,
+            PhoneNumber: null,
+            PrcLicenseNumber: LicenseNumber,
+            PtrNumber: null,
+            S2LicenseNumber: null,
+            Specialty: Specialization,
+            IsActive: true,
+            CreatedAt: DateTime.UtcNow,
+            HasCredentials: false,
+            MustChangePassword: false,
+            TemporaryPassword: null,
+            PhilHealthPan: null,
+            AssignedRoomIds: AssignedRoomIds,
+            AssignedRoomNames: AssignedRoomNames)
+    {
+    }
+
+    public string? UserId => TenantId;
+    public string? Specialization => Specialty;
+    public string? LicenseNumber => PrcLicenseNumber;
+}

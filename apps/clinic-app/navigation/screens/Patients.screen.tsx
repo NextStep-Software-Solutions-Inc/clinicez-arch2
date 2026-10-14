@@ -1104,9 +1104,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       patient.alerts?.toLowerCase().includes('chest');
     const defaultDoc =
       currentStaff?.role === 'Doctor' && currentStaff.isActive ? currentStaff : null;
+    const defaultDocRooms = defaultDoc?.assignedRoomIds ?? (defaultDoc?.assignedRoomId ? [defaultDoc.assignedRoomId] : []);
     setCheckInModalPatient(patient);
     setCheckInDoctorId(defaultDoc?.id ?? '');
-    setCheckInRoomId(defaultDoc?.assignedRoomId ?? '');
+    setCheckInRoomId(defaultDocRooms[0] ?? '');
     setCheckInPriority(isUrgent ? 'Urgent' : 'Routine');
     setCheckInComplaint(
       patient.chronicConditions
@@ -1121,8 +1122,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       return;
     }
     const doc = activeDoctors.find((d) => d.id === docId);
-    if (doc?.assignedRoomId) {
-      setCheckInRoomId(doc.assignedRoomId);
+    const docRooms = doc?.assignedRoomIds ?? (doc?.assignedRoomId ? [doc.assignedRoomId] : []);
+    if (docRooms.length > 0) {
+      setCheckInRoomId(docRooms[0]);
     }
   };
 
@@ -2397,8 +2399,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               </Pressable>
               {activeDoctors.map((doc) => {
                 const isSelected = checkInDoctorId === doc.id;
+                const docRooms = doc.assignedRoomNames && doc.assignedRoomNames.length > 0
+                  ? doc.assignedRoomNames.join(', ')
+                  : (doc.assignedRoomName || '');
                 const docLabel = `${formatStaffName(doc)}${
-                  doc.assignedRoomName ? ` · ${doc.assignedRoomName}` : ''
+                  docRooms ? ` · ${docRooms}` : ''
                 }`;
                 return (
                   <Pressable
@@ -2447,6 +2452,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 </Pressable>
                 {activeRooms.map((room) => {
                   const isSelected = checkInRoomId === room.id;
+                  const selectedDoctor = activeDoctors.find((d) => d.id === checkInDoctorId);
+                  const selectedDocRooms = selectedDoctor?.assignedRoomIds ?? (selectedDoctor?.assignedRoomId ? [selectedDoctor.assignedRoomId] : []);
+                  const isDocRoom = selectedDocRooms.includes(room.id);
+                  const roomLabel = isDocRoom ? `${room.name} (Doctor's Room)` : room.name;
                   return (
                     <Pressable
                       key={room.id}
@@ -2460,7 +2469,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                         variant="smallBold"
                         color={isSelected ? theme.colors.textInverted : theme.colors.text}
                       >
-                        {room.name}
+                        {roomLabel}
                       </ThemedText>
                     </Pressable>
                   );

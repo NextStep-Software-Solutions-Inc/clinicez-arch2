@@ -98,26 +98,29 @@ public sealed class UpdateClinicRoomCommandHandler : IRequestHandler<UpdateClini
         if (request.AssignedStaffIds != null)
         {
             var desiredIds = request.AssignedStaffIds.Distinct().ToHashSet();
-            var relevantStaff = await _staffRepository
+            var allStaff = await _staffRepository
                 .Query(s => s.ClinicId == _clinicContext.ClinicId &&
-                            (s.AssignedRoomId == room.Id || desiredIds.Contains(s.Id)))
+                            (s.Role == StaffRole.Doctor || s.Role == StaffRole.Nurse))
                 .ToListAsync(cancellationToken);
 
-            foreach (var staff in relevantStaff)
+            foreach (var staff in allStaff)
             {
-                if (desiredIds.Contains(staff.Id) && (staff.Role == StaffRole.Doctor || staff.Role == StaffRole.Nurse))
+                var currentRooms = staff.GetAssignedRoomIds().ToHashSet();
+                bool isDesired = desiredIds.Contains(staff.Id);
+                bool hasRoom = currentRooms.Contains(room.Id);
+
+                if (isDesired && !hasRoom)
                 {
-                    if (staff.AssignedRoomId != room.Id)
-                    {
-                        staff.AssignedRoomId = room.Id;
-                        staff.UpdatedAt = DateTime.UtcNow;
-                        staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
-                        _staffRepository.Update(staff);
-                    }
+                    currentRooms.Add(room.Id);
+                    staff.SetAssignedRoomIds(currentRooms);
+                    staff.UpdatedAt = DateTime.UtcNow;
+                    staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
+                    _staffRepository.Update(staff);
                 }
-                else if (staff.AssignedRoomId == room.Id && !desiredIds.Contains(staff.Id))
+                else if (!isDesired && hasRoom)
                 {
-                    staff.AssignedRoomId = null;
+                    currentRooms.Remove(room.Id);
+                    staff.SetAssignedRoomIds(currentRooms);
                     staff.UpdatedAt = DateTime.UtcNow;
                     staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
                     _staffRepository.Update(staff);
@@ -146,11 +149,15 @@ public sealed class UpdateClinicRoomCommandHandler : IRequestHandler<UpdateClini
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var assignedStaff = await _staffRepository
-            .Query(s => s.ClinicId == _clinicContext.ClinicId && s.AssignedRoomId == room.Id && s.IsActive)
+        var allActiveStaff = await _staffRepository
+            .Query(s => s.ClinicId == _clinicContext.ClinicId && s.IsActive && s.AssignedRoomIdsJson != null)
             .OrderBy(s => s.FirstName)
             .ThenBy(s => s.LastName)
             .ToListAsync(cancellationToken);
+
+        var assignedStaff = allActiveStaff
+            .Where(s => s.GetAssignedRoomIds().Contains(room.Id))
+            .ToList();
 
         var assignedIds = assignedStaff.Select(s => s.Id).ToList();
         var assignedNames = assignedStaff

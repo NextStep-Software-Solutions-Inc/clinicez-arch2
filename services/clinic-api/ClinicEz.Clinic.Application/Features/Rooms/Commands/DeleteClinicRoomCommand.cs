@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Domain.Entities;
@@ -41,17 +42,21 @@ public sealed class DeleteClinicRoomCommandHandler : IRequestHandler<DeleteClini
             throw new NotFoundException($"Clinic room '{request.Id}' was not found.");
         }
 
-        // Unassign any staff members referencing this room before soft-deleting
+        // Remove this room from any staff members referencing it before soft-deleting
         var assignedStaff = await _staffRepository
-            .Query(s => s.ClinicId == _clinicContext.ClinicId && s.AssignedRoomId == room.Id)
+            .Query(s => s.ClinicId == _clinicContext.ClinicId && s.AssignedRoomIdsJson != null)
             .ToListAsync(cancellationToken);
 
         foreach (var staff in assignedStaff)
         {
-            staff.AssignedRoomId = null;
-            staff.UpdatedAt = DateTime.UtcNow;
-            staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
-            _staffRepository.Update(staff);
+            var currentRooms = staff.GetAssignedRoomIds().ToHashSet();
+            if (currentRooms.Remove(room.Id))
+            {
+                staff.SetAssignedRoomIds(currentRooms);
+                staff.UpdatedAt = DateTime.UtcNow;
+                staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
+                _staffRepository.Update(staff);
+            }
         }
 
         room.IsDeleted = true;

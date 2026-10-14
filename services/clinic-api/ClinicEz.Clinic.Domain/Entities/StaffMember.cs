@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Enums;
 
@@ -13,10 +16,55 @@ public sealed class StaffMember : BaseEntity
     public ClinicRole? ClinicRole { get; set; }
 
     /// <summary>
-    /// Optional default room or station assigned to this Doctor or Nurse.
+    /// Backing JSON array of room GUIDs assigned to this Doctor or Nurse (e.g. ["guid-1", "guid-2"]).
     /// </summary>
-    public Guid? AssignedRoomId { get; set; }
-    public ClinicRoom? AssignedRoom { get; set; }
+    public string? AssignedRoomIdsJson { get; set; }
+
+    /// <summary>
+    /// Deserializes AssignedRoomIdsJson into a distinct, read-only list of room GUIDs.
+    /// Returns an empty list when null, whitespace, or malformed.
+    /// </summary>
+    public IReadOnlyList<Guid> GetAssignedRoomIds()
+    {
+        if (string.IsNullOrWhiteSpace(AssignedRoomIdsJson))
+        {
+            return Array.Empty<Guid>();
+        }
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<Guid>>(AssignedRoomIdsJson);
+            return parsed != null
+                ? parsed.Where(id => id != Guid.Empty).Distinct().ToList()
+                : Array.Empty<Guid>();
+        }
+        catch
+        {
+            return Array.Empty<Guid>();
+        }
+    }
+
+    /// <summary>
+    /// Updates AssignedRoomIdsJson with the provided room GUIDs, removing duplicates and Guid.Empty.
+    /// Stores null if the sequence is null or contains zero valid room IDs.
+    /// </summary>
+    public void SetAssignedRoomIds(IEnumerable<Guid>? roomIds)
+    {
+        if (roomIds == null)
+        {
+            AssignedRoomIdsJson = null;
+            return;
+        }
+
+        var distinct = roomIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        AssignedRoomIdsJson = distinct.Count > 0
+            ? JsonSerializer.Serialize(distinct)
+            : null;
+    }
 
     public required string FirstName { get; set; }
     public required string LastName { get; set; }

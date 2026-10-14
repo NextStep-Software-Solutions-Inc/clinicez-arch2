@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
@@ -32,7 +34,7 @@ public sealed record CreateStaffMemberCommand(
     string? InitialPassword = null,
     bool SendInviteEmail = false,
     string? PhilHealthPan = null,
-    Guid? AssignedRoomId = null) : IRequest<StaffMemberDto>;
+    IReadOnlyList<Guid>? AssignedRoomIds = null) : IRequest<StaffMemberDto>;
 
 public sealed class CreateStaffMemberCommandValidator : AbstractValidator<CreateStaffMemberCommand>
 {
@@ -173,24 +175,23 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             }
         }
 
-        Guid? assignedRoomId = null;
-        string? assignedRoomName = null;
-        if (request.AssignedRoomId.HasValue && request.AssignedRoomId.Value != Guid.Empty)
+        var validRoomIds = new List<Guid>();
+        var assignedRoomNames = new List<string>();
+
+        if (request.AssignedRoomIds is { Count: > 0 })
         {
-            if (_roomRepository != null)
+            var targetIds = request.AssignedRoomIds.Where(id => id != Guid.Empty).Distinct().ToHashSet();
+            if (_roomRepository != null && targetIds.Count > 0)
             {
-                var room = await _roomRepository
-                    .Query(r => r.Id == request.AssignedRoomId.Value && r.ClinicId == _clinicContext.ClinicId)
-                    .FirstOrDefaultAsync(cancellationToken);
-                if (room != null)
-                {
-                    assignedRoomId = room.Id;
-                    assignedRoomName = room.Name;
-                }
+                var validRooms = await _roomRepository
+                    .Query(r => r.ClinicId == _clinicContext.ClinicId && targetIds.Contains(r.Id))
+                    .ToListAsync(cancellationToken);
+                validRoomIds = validRooms.Select(r => r.Id).ToList();
+                assignedRoomNames = validRooms.Select(r => r.Name).ToList();
             }
             else
             {
-                assignedRoomId = request.AssignedRoomId.Value;
+                validRoomIds = targetIds.ToList();
             }
         }
 
@@ -235,7 +236,6 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
             ClinicRoleId = assignedRoleId,
-            AssignedRoomId = assignedRoomId,
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName.Trim(),
             MiddleName = request.MiddleName?.Trim(),
@@ -255,6 +255,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             CreatedAt = DateTime.UtcNow,
             CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin"
         };
+        staff.SetAssignedRoomIds(validRoomIds);
 
         await _staffRepository.AddAsync(staff, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -282,7 +283,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             MustChangePassword: mustChangePassword,
             TemporaryPassword: returnedTempPassword,
             PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomId: staff.AssignedRoomId,
-            AssignedRoomName: assignedRoomName);
+            AssignedRoomIds: staff.GetAssignedRoomIds(),
+            AssignedRoomNames: assignedRoomNames);
     }
 }

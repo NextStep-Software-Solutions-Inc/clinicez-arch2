@@ -105,7 +105,7 @@ export default function StaffManagementTab({
   const [pan, setPan] = useState('');
   const [stampModalStaff, setStampModalStaff] = useState<StaffMember | null>(null);
   const [specialty, setSpecialty] = useState('');
-  const [assignedRoomId, setAssignedRoomId] = useState<string>('');
+  const [assignedRoomIds, setAssignedRoomIds] = useState<string[]>([]);
   const [provisionLogin, setProvisionLogin] = useState(true);
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [addingStaff, setAddingStaff] = useState(false);
@@ -179,7 +179,7 @@ export default function StaffManagementTab({
     setSelectedRoleId(r.id);
     setRole(r.staffRole);
     if (r.staffRole !== 'Doctor' && r.staffRole !== 'Nurse') {
-      setAssignedRoomId('');
+      setAssignedRoomIds([]);
     }
     if (r.staffRole === 'Doctor') {
       if (!title || title === 'RN' || title === 'Ms.' || title === 'Mr.') setTitle('Dr.');
@@ -208,7 +208,7 @@ export default function StaffManagementTab({
     setS2('');
     setPan('');
     setSpecialty('');
-    setAssignedRoomId('');
+    setAssignedRoomIds([]);
     setProvisionLogin(true);
     setTemporaryPassword(generateRandomPassword());
     setAddError(null);
@@ -244,7 +244,7 @@ export default function StaffManagementTab({
     setS2(s.s2LicenseNumber || '');
     setPan(s.philHealthPan || '');
     setSpecialty(s.specialty || '');
-    setAssignedRoomId(s.assignedRoomId || '');
+    setAssignedRoomIds(s.assignedRoomIds ?? (s.assignedRoomId ? [s.assignedRoomId] : []));
     setRole(s.role);
     setIsActiveStaff(s.isActive);
 
@@ -287,8 +287,7 @@ export default function StaffManagementTab({
     const clinicRoleId = isEditingSelf ? editingStaff.clinicRoleId : resolvedClinicRoleId;
 
     const canHaveRoom = effectiveStaffRole === 'Doctor' || effectiveStaffRole === 'Nurse';
-    const nextRoomId = canHaveRoom && assignedRoomId ? assignedRoomId : undefined;
-    const shouldClearRoom = !nextRoomId && !!editingStaff.assignedRoomId;
+    const nextRoomIds = canHaveRoom ? assignedRoomIds : [];
 
     const [updated, err] = await clinicService.updateStaff(editingStaff.id, {
       firstName: firstName.trim(),
@@ -304,8 +303,7 @@ export default function StaffManagementTab({
       s2LicenseNumber: effectiveStaffRole === 'Doctor' ? s2.trim() || undefined : undefined,
       philHealthPan: effectiveStaffRole === 'Doctor' ? pan.trim() || undefined : undefined,
       specialty: specialty.trim() || undefined,
-      assignedRoomId: nextRoomId,
-      clearAssignedRoom: shouldClearRoom,
+      assignedRoomIds: nextRoomIds,
       isActive: isEditingSelf ? editingStaff.isActive : isActiveStaff,
     });
 
@@ -365,7 +363,7 @@ export default function StaffManagementTab({
       s2LicenseNumber: role === 'Doctor' ? s2.trim() || undefined : undefined,
       philHealthPan: role === 'Doctor' ? pan.trim() || undefined : undefined,
       specialty: specialty.trim() || undefined,
-      assignedRoomId: canHaveRoom && assignedRoomId ? assignedRoomId : undefined,
+      assignedRoomIds: canHaveRoom && assignedRoomIds.length > 0 ? assignedRoomIds : undefined,
       initialPassword: provisionLogin ? temporaryPassword : undefined,
       sendInviteEmail: false,
     });
@@ -538,7 +536,11 @@ export default function StaffManagementTab({
                           <Badge label="You" variant="info" size="sm" />
                         ) : null}
                         <Badge label={s.role} variant={s.role === 'Doctor' ? 'primary' : 'neutral'} size="sm" />
-                        {s.assignedRoomName ? (
+                        {s.assignedRoomNames && s.assignedRoomNames.length > 0 ? (
+                          s.assignedRoomNames.map((roomName) => (
+                            <Badge key={roomName} label={roomName} variant="outline" size="sm" icon="clinic" />
+                          ))
+                        ) : s.assignedRoomName ? (
                           <Badge label={s.assignedRoomName} variant="outline" size="sm" icon="clinic" />
                         ) : null}
                         {s.roleName && s.roleName !== s.role ? (
@@ -906,17 +908,26 @@ export default function StaffManagementTab({
             >
               <Chip
                 label="Unassigned / Floating"
-                active={!assignedRoomId}
-                onPress={() => setAssignedRoomId('')}
+                active={assignedRoomIds.length === 0}
+                onPress={() => setAssignedRoomIds([])}
               />
-              {activeRoomsForRole.map((room) => (
-                <Chip
-                  key={room.id}
-                  label={`${room.name} (${room.type})`}
-                  active={assignedRoomId === room.id}
-                  onPress={() => setAssignedRoomId(room.id)}
-                />
-              ))}
+              {activeRoomsForRole.map((room) => {
+                const isSelected = assignedRoomIds.includes(room.id);
+                return (
+                  <Chip
+                    key={room.id}
+                    label={`${room.name} (${room.type})`}
+                    active={isSelected}
+                    onPress={() => {
+                      setAssignedRoomIds((prev) =>
+                        prev.includes(room.id)
+                          ? prev.filter((id) => id !== room.id)
+                          : [...prev, room.id],
+                      );
+                    }}
+                  />
+                );
+              })}
             </ScrollView>
           </FieldGroup>
         ) : null}
@@ -1304,17 +1315,26 @@ export default function StaffManagementTab({
               >
                 <Chip
                   label="Unassigned / Floating"
-                  active={!assignedRoomId}
-                  onPress={() => setAssignedRoomId('')}
+                  active={assignedRoomIds.length === 0}
+                  onPress={() => setAssignedRoomIds([])}
                 />
-                {activeRoomsForRole.map((room) => (
-                  <Chip
-                    key={room.id}
-                    label={`${room.name} (${room.type})`}
-                    active={assignedRoomId === room.id}
-                    onPress={() => setAssignedRoomId(room.id)}
-                  />
-                ))}
+                {activeRoomsForRole.map((room) => {
+                  const isSelected = assignedRoomIds.includes(room.id);
+                  return (
+                    <Chip
+                      key={room.id}
+                      label={`${room.name} (${room.type})`}
+                      active={isSelected}
+                      onPress={() => {
+                        setAssignedRoomIds((prev) =>
+                          prev.includes(room.id)
+                            ? prev.filter((id) => id !== room.id)
+                            : [...prev, room.id],
+                        );
+                      }}
+                    />
+                  );
+                })}
               </ScrollView>
             </FieldGroup>
           ) : null}

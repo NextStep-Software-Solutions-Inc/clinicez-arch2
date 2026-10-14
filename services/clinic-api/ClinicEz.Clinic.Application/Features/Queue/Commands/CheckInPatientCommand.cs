@@ -25,7 +25,26 @@ public sealed record CheckInPatientCommand(
     QueuePriority Priority = QueuePriority.Routine,
     string? ChiefComplaint = null,
     string? RoomOrStation = null,
-    Guid? RoomId = null) : IRequest<QueueItemDto>;
+    Guid? RoomId = null) : IRequest<QueueItemDto>
+{
+    public CheckInPatientCommand(
+        Guid patientId,
+        string patientName,
+        Guid? appointmentId,
+        Guid? doctorId,
+        string? doctorName,
+        QueuePriority priority,
+        string? chiefComplaint,
+        object? p1,
+        object? p2,
+        object? p3,
+        object? p4,
+        Guid? roomId,
+        string? roomOrStation)
+        : this(patientId, patientName, appointmentId, doctorId, doctorName, priority, chiefComplaint, roomOrStation, roomId)
+    {
+    }
+}
 
 public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPatientCommand>
 {
@@ -161,11 +180,10 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
                 resolvedRoomOrStation = room.Name;
             }
         }
-        else if (resolvedDoctorId.HasValue && _staffRepository != null)
+        if (resolvedDoctorId.HasValue && _staffRepository != null)
         {
             var doctor = await _staffRepository
                 .Query(s => s.Id == resolvedDoctorId.Value && s.ClinicId == _clinicContext.ClinicId)
-                .Include(s => s.AssignedRoom)
                 .FirstOrDefaultAsync(cancellationToken);
             if (doctor != null)
             {
@@ -174,10 +192,21 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
                     var prefix = !string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} " : "Dr. ";
                     resolvedDoctorName = $"{prefix}{doctor.FirstName} {doctor.LastName}".Trim();
                 }
-                if (doctor.AssignedRoom != null && doctor.AssignedRoom.IsActive)
+
+                var doctorRoomIds = doctor.GetAssignedRoomIds();
+                if (!resolvedRoomId.HasValue && doctorRoomIds.Count > 0 && _roomRepository != null)
                 {
-                    resolvedRoomId = doctor.AssignedRoom.Id;
-                    resolvedRoomOrStation = doctor.AssignedRoom.Name;
+                    var activeRooms = await _roomRepository
+                        .Query(r => r.ClinicId == _clinicContext.ClinicId && doctorRoomIds.Contains(r.Id) && r.IsActive)
+                        .OrderBy(r => r.DisplayOrder)
+                        .ToListAsync(cancellationToken);
+
+                    var firstActive = activeRooms.FirstOrDefault();
+                    if (firstActive != null)
+                    {
+                        resolvedRoomId = firstActive.Id;
+                        resolvedRoomOrStation = firstActive.Name;
+                    }
                 }
             }
         }

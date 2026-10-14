@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
@@ -30,26 +32,28 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
     private readonly IFacilityLicenseValidator _licenseValidator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<ClinicRoom>? _roomRepository;
 
     public ActivateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
         IRepository<ClinicSettings> settingsRepository,
         IFacilityLicenseValidator licenseValidator,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<ClinicRoom>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _settingsRepository = settingsRepository;
         _licenseValidator = licenseValidator;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _roomRepository = roomRepository;
     }
 
     public async Task<StaffMemberDto> Handle(ActivateStaffMemberCommand request, CancellationToken cancellationToken)
     {
         var staff = await _staffRepository.Query(s => s.Id == request.Id && s.ClinicId == _clinicContext.ClinicId)
             .Include(s => s.ClinicRole)
-            .Include(s => s.AssignedRoom)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (staff == null)
@@ -57,9 +61,20 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
             throw new NotFoundException($"Staff member '{request.Id}' was not found in this clinic.");
         }
 
+        var roomIds = staff.GetAssignedRoomIds();
+        var roomNames = new List<string>();
+        if (_roomRepository != null && roomIds.Count > 0)
+        {
+            var targetIds = roomIds.ToHashSet();
+            var rooms = await _roomRepository.Query(r => r.ClinicId == _clinicContext.ClinicId && targetIds.Contains(r.Id))
+                .ToListAsync(cancellationToken);
+            var roomMap = rooms.ToDictionary(r => r.Id, r => r.Name);
+            roomNames = roomIds.Where(id => roomMap.ContainsKey(id)).Select(id => roomMap[id]).ToList();
+        }
+
         if (staff.IsActive)
         {
-            return MapToDto(staff);
+            return MapToDto(staff, roomNames);
         }
 
         // Cryptographic License Validation & Tamper Verification
@@ -101,10 +116,10 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
             _staffRepository.Update(staff);
         }, cancellationToken);
 
-        return MapToDto(staff);
+        return MapToDto(staff, roomNames);
     }
 
-    private static StaffMemberDto MapToDto(StaffMember staff) =>
+    private static StaffMemberDto MapToDto(StaffMember staff, IReadOnlyList<string>? roomNames = null) =>
         new(
             staff.Id,
             staff.TenantId,
@@ -127,7 +142,7 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
             MustChangePassword: staff.MustChangePassword,
             PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomId: staff.AssignedRoomId,
-            AssignedRoomName: staff.AssignedRoom?.Name
+            AssignedRoomIds: staff.GetAssignedRoomIds(),
+            AssignedRoomNames: roomNames ?? Array.Empty<string>()
         );
 }

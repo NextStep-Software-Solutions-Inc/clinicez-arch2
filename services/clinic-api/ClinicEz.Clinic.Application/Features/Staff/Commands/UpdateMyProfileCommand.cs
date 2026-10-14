@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
@@ -48,24 +50,26 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IStaffAccessInvalidator? _accessCache;
+    private readonly IRepository<ClinicRoom>? _roomRepository;
 
     public UpdateMyProfileCommandHandler(
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IStaffAccessInvalidator? accessCache = null)
+        IStaffAccessInvalidator? accessCache = null,
+        IRepository<ClinicRoom>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _accessCache = accessCache;
+        _roomRepository = roomRepository;
     }
 
     public async Task<StaffMemberDto> Handle(UpdateMyProfileCommand request, CancellationToken cancellationToken)
     {
         var staff = await _staffRepository.Query(s => s.Id == request.StaffId && s.ClinicId == _clinicContext.ClinicId)
             .Include(s => s.ClinicRole)
-            .Include(s => s.AssignedRoom)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (staff == null)
@@ -102,6 +106,17 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
 
         _accessCache?.Invalidate(staff.Id);
 
+        var roomIds = staff.GetAssignedRoomIds();
+        var roomNames = new List<string>();
+        if (_roomRepository != null && roomIds.Count > 0)
+        {
+            var targetIds = roomIds.ToHashSet();
+            var rooms = await _roomRepository.Query(r => r.ClinicId == _clinicContext.ClinicId && targetIds.Contains(r.Id))
+                .ToListAsync(cancellationToken);
+            var roomMap = rooms.ToDictionary(r => r.Id, r => r.Name);
+            roomNames = roomIds.Where(id => roomMap.ContainsKey(id)).Select(id => roomMap[id]).ToList();
+        }
+
         return new StaffMemberDto(
             staff.Id,
             staff.TenantId,
@@ -124,7 +139,7 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
             MustChangePassword: staff.MustChangePassword,
             PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomId: staff.AssignedRoomId,
-            AssignedRoomName: staff.AssignedRoom?.Name);
+            AssignedRoomIds: roomIds,
+            AssignedRoomNames: roomNames);
     }
 }

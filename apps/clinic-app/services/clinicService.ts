@@ -63,6 +63,8 @@ export interface StaffMember {
   clinicId: string;
   clinicRoleId?: string;
   roleName?: string;
+  assignedRoomIds?: string[];
+  assignedRoomNames?: string[];
   assignedRoomId?: string | null;
   assignedRoomName?: string | null;
   firstName: string;
@@ -91,6 +93,7 @@ export interface CreateStaffPayload {
   title?: string;
   role: StaffRole;
   clinicRoleId?: string;
+  assignedRoomIds?: string[];
   assignedRoomId?: string | null;
   email?: string;
   phoneNumber?: string;
@@ -110,6 +113,7 @@ export interface UpdateStaffPayload {
   title?: string;
   role: StaffRole;
   clinicRoleId?: string;
+  assignedRoomIds?: string[];
   assignedRoomId?: string | null;
   clearAssignedRoom?: boolean;
   email?: string;
@@ -1682,10 +1686,12 @@ export interface ReconcileEodResult {
 
 export interface CheckInRequest {
   patientId: string;
-  patientName: string;
+  patientName?: string;
   appointmentId?: string;
   doctorId?: string;
+  assignedDoctorId?: string;
   doctorName?: string;
+  assignedDoctorName?: string;
   priority?: QueuePriority;
   chiefComplaint?: string;
   roomOrStation?: string;
@@ -2398,6 +2404,7 @@ export const clinicService = {
     type: ClinicRoomType;
     description?: string | null;
     displayOrder?: number;
+    sortOrder?: number;
     isActive?: boolean;
     assignedStaffIds?: string[];
   }) {
@@ -2410,6 +2417,7 @@ export const clinicService = {
     type: ClinicRoomType;
     description?: string | null;
     displayOrder?: number;
+    sortOrder?: number;
     isActive?: boolean;
     assignedStaffIds?: string[];
   }) {
@@ -3326,5 +3334,190 @@ export interface PhilHealthConfigStatus {
   isActive: boolean;
   updatedAt?: string;
 }
+
+// ============================================================================
+// Multi-Room Staff Assignment & Scoped Station Routing Pure Domain Helpers
+// ============================================================================
+
+export interface ScopedStationConfig {
+  visibleRooms: ClinicRoom[];
+  allPillLabel: string;
+  defaultStationId?: string;
+  defaultStationName?: string;
+}
+
+/**
+ * Computes visible station rooms and labels based on clinician role and assignedRoomIds
+ */
+export function computeScopedStations(
+  activeRooms: ClinicRoom[],
+  currentStaff: StaffMember | null,
+): ScopedStationConfig {
+  if (!currentStaff) {
+    return { visibleRooms: activeRooms, allPillLabel: 'All Stations' };
+  }
+
+  const assignedIds = currentStaff.assignedRoomIds ?? (currentStaff.assignedRoomId ? [currentStaff.assignedRoomId] : []);
+  const isDoctor = currentStaff.role === 'Doctor';
+  const isNurse = currentStaff.role === 'Nurse';
+
+  if (isDoctor && assignedIds.length > 0) {
+    const visible = activeRooms.filter(
+      (r) => assignedIds.includes(r.id) || r.type === 'Triage' || r.type === 'Treatment',
+    );
+    return {
+      visibleRooms: visible,
+      allPillLabel: 'All My Stations',
+      defaultStationId: assignedIds[0],
+      defaultStationName: activeRooms.find((r) => r.id === assignedIds[0])?.name,
+    };
+  }
+
+  if (isNurse && assignedIds.length > 0) {
+    const visible = activeRooms.filter(
+      (r) => assignedIds.includes(r.id) || r.type === 'Triage' || r.type === 'Treatment',
+    );
+    const defaultRoom = activeRooms.find((r) => r.id === assignedIds[0]);
+    return {
+      visibleRooms: visible,
+      allPillLabel: 'All Stations',
+      defaultStationId: defaultRoom?.id,
+      defaultStationName: defaultRoom?.name,
+    };
+  }
+
+  return {
+    visibleRooms: activeRooms,
+    allPillLabel: 'All Stations',
+  };
+}
+
+/**
+ * Queue patient visibility filtering by doctor's scoped rooms
+ */
+export function isPatientVisibleToStaff(
+  patient: PatientQueueItem,
+  currentStaff: StaffMember | null,
+  activeRooms: ClinicRoom[],
+): boolean {
+  if (!currentStaff || currentStaff.role !== 'Doctor') return true;
+  const assignedIds = currentStaff.assignedRoomIds ?? (currentStaff.assignedRoomId ? [currentStaff.assignedRoomId] : []);
+  if (assignedIds.length === 0) return true;
+
+  if (patient.doctorId === currentStaff.id) return true;
+
+  const patientRoom = activeRooms.find(
+    (r) => r.id === patient.roomId || r.name.toLowerCase() === patient.roomOrStation?.toLowerCase(),
+  );
+
+  if (patientRoom && patientRoom.type === 'Consultation') {
+    return assignedIds.includes(patientRoom.id);
+  }
+
+  return true;
+}
+
+/**
+ * 4-Step Call-to-Room Resolution Algorithm
+ * 1. Active station pill if valid (not 'ALL' and matches an active visible room)
+ * 2. Ticket's check-in room if contained in clinician's assigned rooms
+ * 3. Clinician's primary assigned room (assignedRoomIds[0])
+ * 4. First available active consultation room (fallback)
+ */
+export function resolveCallToRoom({
+  ticket,
+  selectedStation,
+  currentStaff,
+  activeRooms,
+  visibleRooms,
+}: {
+  ticket: PatientQueueItem;
+  selectedStation: string;
+  currentStaff: StaffMember | null;
+  activeRooms: ClinicRoom[];
+  visibleRooms: ClinicRoom[];
+}): { roomName: string; roomId?: string } {
+  const assignedIds = currentStaff?.assignedRoomIds ?? (currentStaff?.assignedRoomId ? [currentStaff.assignedRoomId] : []);
+
+  // Step 1: Active station pill if valid (selectedStation !== 'ALL' and matches visible active room)
+  if (selectedStation !== 'ALL') {
+    const matchingStation = visibleRooms.find(
+      (r) => r.id === selectedStation || r.name.toLowerCase() === selectedStation.toLowerCase(),
+    );
+    if (matchingStation) {
+      return { roomName: matchingStation.name, roomId: matchingStation.id };
+    }
+  }
+
+  // Step 2: Ticket's check-in room if contained in clinician's assigned rooms
+  if (ticket.roomId && assignedIds.includes(ticket.roomId)) {
+    const match = activeRooms.find((r) => r.id === ticket.roomId);
+    if (match) return { roomName: match.name, roomId: match.id };
+  }
+  if (ticket.roomOrStation) {
+    const match = activeRooms.find(
+      (r) => r.name.toLowerCase() === ticket.roomOrStation?.toLowerCase() && assignedIds.includes(r.id),
+    );
+    if (match) return { roomName: match.name, roomId: match.id };
+  }
+
+  // Step 3: Clinician's primary assigned room (assignedRoomIds[0])
+  if (assignedIds.length > 0) {
+    const primary = activeRooms.find((r) => r.id === assignedIds[0]);
+    if (primary) return { roomName: primary.name, roomId: primary.id };
+  }
+
+  // Step 4: First available active consultation room fallback
+  const firstConsult = activeRooms.find((r) => r.type === 'Consultation') || activeRooms[0];
+  if (firstConsult) {
+    return { roomName: firstConsult.name, roomId: firstConsult.id };
+  }
+
+  return { roomName: 'Room 1' };
+}
+
+/**
+ * Staff assignment coverage text in Room Settings card
+ */
+export function getOtherRoomCoverageText(
+  member: StaffMember,
+  targetRoomId: string | undefined,
+  sortedRooms: ClinicRoom[],
+  isSelected: boolean,
+): string {
+  const memberRoomIds = member.assignedRoomIds ?? (member.assignedRoomId ? [member.assignedRoomId] : []);
+  const otherRooms = sortedRooms.filter(
+    (r) => (!targetRoomId || r.id !== targetRoomId) && memberRoomIds.includes(r.id),
+  );
+  const otherRoomNames = otherRooms.map((r) => r.name).join(', ');
+
+  if (otherRoomNames) {
+    return isSelected
+      ? `Also in ${otherRoomNames} · Will cover both`
+      : `Currently in ${otherRoomNames}`;
+  }
+
+  return isSelected ? 'Assigned to this room' : 'Unassigned / Floating';
+}
+
+/**
+ * Walk-in attending doctor room preselection and badging
+ */
+export function resolveWalkInDoctorRoomSelection(
+  doctor: StaffMember | null,
+  activeRooms: ClinicRoom[],
+): { preselectedRoomId?: string; doctorRoomIds: string[] } {
+  const doctorRoomIds = doctor?.assignedRoomIds ?? (doctor?.assignedRoomId ? [doctor.assignedRoomId] : []);
+  if (!doctor || doctorRoomIds.length === 0) {
+    return { preselectedRoomId: undefined, doctorRoomIds: [] };
+  }
+
+  const validRooms = doctorRoomIds.filter((id) => activeRooms.some((r) => r.id === id));
+  return {
+    preselectedRoomId: validRooms[0],
+    doctorRoomIds: validRooms,
+  };
+}
+
 
 

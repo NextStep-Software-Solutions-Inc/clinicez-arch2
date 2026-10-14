@@ -13,6 +13,7 @@ import {
   type ClinicRoom,
   type ClinicRoomType,
   type StaffMember,
+  getOtherRoomCoverageText,
 } from '../../services/clinicService';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff } from '../../context/StaffContext';
@@ -138,7 +139,7 @@ export function ClinicRoomsSettingsCard() {
         return [...room.assignedStaffIds];
       }
       return eligibleClinicalStaff
-        .filter((s) => s.assignedRoomId === room.id)
+        .filter((s) => s.assignedRoomIds?.includes(room.id) || s.assignedRoomId === room.id)
         .map((s) => s.id);
     },
     [eligibleClinicalStaff],
@@ -150,7 +151,7 @@ export function ClinicRoomsSettingsCard() {
         return room.assignedStaffNames.join(', ');
       }
       const matched = eligibleClinicalStaff
-        .filter((s) => s.assignedRoomId === room.id)
+        .filter((s) => s.assignedRoomIds?.includes(room.id) || s.assignedRoomId === room.id)
         .map(formatStaffDisplayName);
       if (matched.length > 0) {
         return matched.join(', ');
@@ -374,11 +375,12 @@ export function ClinicRoomsSettingsCard() {
       <View style={styles.staffPickerList}>
         {eligibleClinicalStaff.map((member) => {
           const isSelected = activeIds.includes(member.id);
-          const otherRoomName =
-            member.assignedRoomId && member.assignedRoomId !== targetRoomId
-              ? member.assignedRoomName ||
-                sortedRooms.find((r) => r.id === member.assignedRoomId)?.name
-              : null;
+          const coverageText = getOtherRoomCoverageText(
+            member,
+            targetRoomId,
+            sortedRooms,
+            isSelected,
+          );
 
           return (
             <Pressable
@@ -412,17 +414,9 @@ export function ClinicRoomsSettingsCard() {
                     variant={member.role === 'Doctor' ? 'primary' : 'info'}
                     size="sm"
                   />
-                  {otherRoomName ? (
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      {isSelected
-                        ? `Will move from ${otherRoomName}`
-                        : `Currently in ${otherRoomName}`}
-                    </ThemedText>
-                  ) : (
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      {isSelected ? 'Assigned to this room' : 'Unassigned / Floating'}
-                    </ThemedText>
-                  )}
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    {coverageText}
+                  </ThemedText>
                 </View>
               </View>
             </Pressable>

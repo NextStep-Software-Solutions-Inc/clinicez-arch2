@@ -217,10 +217,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                 .HasForeignKey(e => e.ClinicRoleId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasOne(e => e.AssignedRoom)
-                .WithMany(r => r.AssignedStaff)
-                .HasForeignKey(e => e.AssignedRoomId)
-                .OnDelete(DeleteBehavior.SetNull);
+            entity.Property(e => e.AssignedRoomIdsJson).HasColumnType("text");
 
             entity.Property(e => e.PasswordHash).HasMaxLength(500);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId });

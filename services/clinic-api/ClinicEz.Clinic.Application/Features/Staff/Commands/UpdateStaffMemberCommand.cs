@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
@@ -29,7 +31,7 @@ public sealed record UpdateStaffMemberCommand(
     string? Specialty,
     bool IsActive,
     string? PhilHealthPan = null,
-    Guid? AssignedRoomId = null,
+    IReadOnlyList<Guid>? AssignedRoomIds = null,
     bool ClearAssignedRoom = false) : IRequest<StaffMemberDto>;
 
 public sealed class UpdateStaffMemberCommandValidator : AbstractValidator<UpdateStaffMemberCommand>
@@ -85,7 +87,6 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
     {
         var staff = await _staffRepository.Query(s => s.Id == request.Id && s.ClinicId == _clinicContext.ClinicId)
             .Include(s => s.ClinicRole)
-            .Include(s => s.AssignedRoom)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (staff == null)
@@ -141,29 +142,39 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             roleName = role.Name;
         }
 
-        string? assignedRoomName = staff.AssignedRoom?.Name;
-        if (request.ClearAssignedRoom || (request.AssignedRoomId.HasValue && request.AssignedRoomId.Value == Guid.Empty))
+        var assignedRoomNames = new List<string>();
+        if (request.ClearAssignedRoom || (request.AssignedRoomIds != null && request.AssignedRoomIds.Count == 0))
         {
-            staff.AssignedRoomId = null;
-            assignedRoomName = null;
+            staff.SetAssignedRoomIds(null);
         }
-        else if (request.AssignedRoomId.HasValue && request.AssignedRoomId != staff.AssignedRoomId)
+        else if (request.AssignedRoomIds != null)
         {
-            if (_roomRepository != null)
+            var targetIds = request.AssignedRoomIds.Where(id => id != Guid.Empty).Distinct().ToHashSet();
+            if (_roomRepository != null && targetIds.Count > 0)
             {
-                var room = await _roomRepository
-                    .Query(r => r.Id == request.AssignedRoomId.Value && r.ClinicId == _clinicContext.ClinicId)
-                    .FirstOrDefaultAsync(cancellationToken);
-                if (room == null)
-                {
-                    throw new NotFoundException($"Clinic room '{request.AssignedRoomId.Value}' does not exist in this clinic.");
-                }
-                staff.AssignedRoomId = room.Id;
-                assignedRoomName = room.Name;
+                var validRooms = await _roomRepository
+                    .Query(r => r.ClinicId == _clinicContext.ClinicId && targetIds.Contains(r.Id))
+                    .ToListAsync(cancellationToken);
+                staff.SetAssignedRoomIds(validRooms.Select(r => r.Id));
+                assignedRoomNames = validRooms.Select(r => r.Name).ToList();
             }
             else
             {
-                staff.AssignedRoomId = request.AssignedRoomId.Value;
+                staff.SetAssignedRoomIds(targetIds);
+            }
+        }
+        else
+        {
+            // Preserve existing rooms and look up their display names for the DTO
+            var currentIds = staff.GetAssignedRoomIds();
+            if (_roomRepository != null && currentIds.Count > 0)
+            {
+                var targetIds = currentIds.ToHashSet();
+                var validRooms = await _roomRepository
+                    .Query(r => r.ClinicId == _clinicContext.ClinicId && targetIds.Contains(r.Id))
+                    .ToListAsync(cancellationToken);
+                var roomMap = validRooms.ToDictionary(r => r.Id, r => r.Name);
+                assignedRoomNames = currentIds.Where(id => roomMap.ContainsKey(id)).Select(id => roomMap[id]).ToList();
             }
         }
 
@@ -210,7 +221,7 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
             MustChangePassword: staff.MustChangePassword,
             PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomId: staff.AssignedRoomId,
-            AssignedRoomName: assignedRoomName);
+            AssignedRoomIds: staff.GetAssignedRoomIds(),
+            AssignedRoomNames: assignedRoomNames);
     }
 }

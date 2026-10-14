@@ -19,20 +19,22 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
 {
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<ClinicRoom>? _roomRepository;
 
     public GetStaffMembersQueryHandler(
         IRepository<StaffMember> staffRepository,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<ClinicRoom>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _clinicContext = clinicContext;
+        _roomRepository = roomRepository;
     }
 
     public async Task<IReadOnlyList<StaffMemberDto>> Handle(GetStaffMembersQuery request, CancellationToken cancellationToken)
     {
         var query = _staffRepository.Query(s => s.ClinicId == _clinicContext.ClinicId)
             .Include(s => s.ClinicRole)
-            .Include(s => s.AssignedRoom)
             .AsQueryable();
 
         if (request.Role.HasValue)
@@ -50,31 +52,45 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
             .ThenBy(s => s.FirstName)
             .ToListAsync(cancellationToken);
 
-        return list.Select(staff => new StaffMemberDto(
-            staff.Id,
-            staff.TenantId,
-            staff.ClinicId,
-            staff.ClinicRoleId,
-            staff.ClinicRole?.Name,
-            staff.FirstName,
-            staff.LastName,
-            staff.MiddleName,
-            staff.Title,
-            staff.Role,
-            staff.Email,
-            staff.PhoneNumber,
-            staff.PrcLicenseNumber,
-            staff.PtrNumber,
-            staff.S2LicenseNumber,
-            staff.Specialty,
-            staff.IsActive,
-            staff.CreatedAt,
-            HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
-            MustChangePassword: staff.MustChangePassword,
-            PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomId: staff.AssignedRoomId,
-            AssignedRoomName: staff.AssignedRoom?.Name
-        )).ToList();
+        Dictionary<Guid, string> roomMap = new();
+        if (_roomRepository != null)
+        {
+            var rooms = await _roomRepository.Query(r => r.ClinicId == _clinicContext.ClinicId)
+                .ToListAsync(cancellationToken);
+            roomMap = rooms.ToDictionary(r => r.Id, r => r.Name);
+        }
+
+        return list.Select(staff =>
+        {
+            var roomIds = staff.GetAssignedRoomIds();
+            var roomNames = roomIds.Where(id => roomMap.ContainsKey(id)).Select(id => roomMap[id]).ToList();
+
+            return new StaffMemberDto(
+                staff.Id,
+                staff.TenantId,
+                staff.ClinicId,
+                staff.ClinicRoleId,
+                staff.ClinicRole?.Name,
+                staff.FirstName,
+                staff.LastName,
+                staff.MiddleName,
+                staff.Title,
+                staff.Role,
+                staff.Email,
+                staff.PhoneNumber,
+                staff.PrcLicenseNumber,
+                staff.PtrNumber,
+                staff.S2LicenseNumber,
+                staff.Specialty,
+                staff.IsActive,
+                staff.CreatedAt,
+                HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
+                MustChangePassword: staff.MustChangePassword,
+                PhilHealthPan: staff.PhilHealthPan,
+                AssignedRoomIds: roomIds,
+                AssignedRoomNames: roomNames
+            );
+        }).ToList();
     }
 }
 
@@ -84,25 +100,38 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
 {
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<ClinicRoom>? _roomRepository;
 
     public GetStaffMemberByIdQueryHandler(
         IRepository<StaffMember> staffRepository,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<ClinicRoom>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _clinicContext = clinicContext;
+        _roomRepository = roomRepository;
     }
 
     public async Task<StaffMemberDto> Handle(GetStaffMemberByIdQuery request, CancellationToken cancellationToken)
     {
         var staff = await _staffRepository.Query(s => s.Id == request.Id && s.ClinicId == _clinicContext.ClinicId)
             .Include(s => s.ClinicRole)
-            .Include(s => s.AssignedRoom)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (staff == null)
         {
             throw new NotFoundException($"Staff member '{request.Id}' was not found in this clinic.");
+        }
+
+        var roomIds = staff.GetAssignedRoomIds();
+        var roomNames = new List<string>();
+        if (_roomRepository != null && roomIds.Count > 0)
+        {
+            var targetIds = roomIds.ToHashSet();
+            var rooms = await _roomRepository.Query(r => r.ClinicId == _clinicContext.ClinicId && targetIds.Contains(r.Id))
+                .ToListAsync(cancellationToken);
+            var roomMap = rooms.ToDictionary(r => r.Id, r => r.Name);
+            roomNames = roomIds.Where(id => roomMap.ContainsKey(id)).Select(id => roomMap[id]).ToList();
         }
 
         return new StaffMemberDto(
@@ -127,7 +156,7 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
             MustChangePassword: staff.MustChangePassword,
             PhilHealthPan: staff.PhilHealthPan,
-            AssignedRoomId: staff.AssignedRoomId,
-            AssignedRoomName: staff.AssignedRoom?.Name);
+            AssignedRoomIds: roomIds,
+            AssignedRoomNames: roomNames);
     }
 }

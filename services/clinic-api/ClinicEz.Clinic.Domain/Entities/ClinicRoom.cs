@@ -30,6 +30,5 @@ public sealed class ClinicRoom : BaseEntity
     public bool IsActive { get; set; } = true;
 
     // Navigation properties
-    public ICollection<StaffMember> AssignedStaff { get; set; } = new List<StaffMember>();
     public ICollection<QueueItem> QueueItems { get; set; } = new List<QueueItem>();
 }

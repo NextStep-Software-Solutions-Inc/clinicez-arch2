@@ -123,38 +123,35 @@ public sealed class GetClinicRoomsQueryHandler : IRequestHandler<GetClinicRoomsQ
             .ThenBy(r => r.Name)
             .ToListAsync(cancellationToken);
 
-        var assignedStaffList = await _staffRepository
-            .Query(s => s.ClinicId == _clinicContext.ClinicId && s.AssignedRoomId != null && s.IsActive)
+        var activeStaff = await _staffRepository
+            .Query(s => s.ClinicId == _clinicContext.ClinicId && s.IsActive && s.AssignedRoomIdsJson != null)
             .OrderBy(s => s.FirstName)
             .ThenBy(s => s.LastName)
-            .Select(s => new
-            {
-                s.Id,
-                RoomId = s.AssignedRoomId!.Value,
-                s.Title,
-                s.FirstName,
-                s.LastName
-            })
             .ToListAsync(cancellationToken);
 
-        var staffByRoom = assignedStaffList
-            .GroupBy(s => s.RoomId)
-            .ToDictionary(
-                g => g.Key,
-                g => new
+        var staffByRoom = new Dictionary<Guid, List<(Guid Id, string Name)>>();
+        foreach (var staff in activeStaff)
+        {
+            var fullName = string.IsNullOrWhiteSpace(staff.Title)
+                ? $"{staff.FirstName} {staff.LastName}".Trim()
+                : $"{staff.Title} {staff.FirstName} {staff.LastName}".Trim();
+
+            foreach (var roomId in staff.GetAssignedRoomIds())
+            {
+                if (!staffByRoom.TryGetValue(roomId, out var list))
                 {
-                    Ids = (IReadOnlyList<Guid>)g.Select(x => x.Id).ToList(),
-                    Names = (IReadOnlyList<string>)g.Select(x =>
-                        string.IsNullOrWhiteSpace(x.Title)
-                            ? $"{x.FirstName} {x.LastName}".Trim()
-                            : $"{x.Title} {x.FirstName} {x.LastName}".Trim()).ToList()
-                });
+                    list = new List<(Guid Id, string Name)>();
+                    staffByRoom[roomId] = list;
+                }
+                list.Add((staff.Id, fullName));
+            }
+        }
 
         return rooms.Select(r =>
         {
-            var group = staffByRoom.GetValueOrDefault(r.Id);
-            var ids = group?.Ids ?? Array.Empty<Guid>();
-            var names = group?.Names ?? Array.Empty<string>();
+            var assigned = staffByRoom.GetValueOrDefault(r.Id);
+            var ids = (IReadOnlyList<Guid>)(assigned?.Select(x => x.Id).ToList() ?? (IList<Guid>)Array.Empty<Guid>());
+            var names = (IReadOnlyList<string>)(assigned?.Select(x => x.Name).ToList() ?? (IList<string>)Array.Empty<string>());
             return new ClinicRoomDto(
                 r.Id,
                 r.TenantId,

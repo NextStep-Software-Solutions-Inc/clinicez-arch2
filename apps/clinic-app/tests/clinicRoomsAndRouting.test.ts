@@ -1,7 +1,9 @@
 // token-guard:ignore-file
+// @ts-ignore
 import { describe, expect, test, mock } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { ClinicRoom } from '../services/clinicService';
 
 (globalThis as any).__DEV__ = true;
 
@@ -85,7 +87,14 @@ mock.module('../constants/fonts', () => ({
 }));
 
 const { clinicApiClient } = await import('../services/apiClient');
-const { clinicService } = await import('../services/clinicService');
+const {
+  clinicService,
+  computeScopedStations,
+  isPatientVisibleToStaff,
+  resolveCallToRoom,
+  getOtherRoomCoverageText,
+  resolveWalkInDoctorRoomSelection,
+} = await import('../services/clinicService');
 const { ClinicRoomsSettingsCard } = await import('../components/settings/ClinicRoomsSettingsCard');
 
 describe('ClinicRoom Domain Entity & Multi-Room Routing — Frontend Suite', () => {
@@ -258,6 +267,283 @@ describe('ClinicRoom Domain Entity & Multi-Room Routing — Frontend Suite', () 
     } finally {
       clinicApiClient.post = origPost;
     }
+  });
+
+  test('6. Scoped station visibility for Single-Room Doctor restricts to assigned + shared stations', () => {
+    const activeRooms: ClinicRoom[] = [
+      { id: 'room-1', name: 'Room 1', type: 'Consultation', isActive: true, displayOrder: 1, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-2', name: 'Room 2', type: 'Consultation', isActive: true, displayOrder: 2, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 0, createdAt: '' },
+      { id: 'room-triage', name: 'Triage Station', type: 'Triage', isActive: true, displayOrder: 3, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-tx', name: 'Treatment Room', type: 'Treatment', isActive: true, displayOrder: 4, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+    ];
+    const singleRoomDoc = {
+      id: 'doc-1',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Maria',
+      lastName: 'Santos',
+      role: 'Doctor' as const,
+      assignedRoomIds: ['room-1'],
+      assignedRoomNames: ['Room 1'],
+      isActive: true,
+      createdAt: '',
+    };
+
+    const config = computeScopedStations(activeRooms, singleRoomDoc);
+    expect(config.allPillLabel).toBe('All My Stations');
+    expect(config.defaultStationId).toBe('room-1');
+    expect(config.visibleRooms.map((r) => r.id)).toEqual(['room-1', 'room-triage', 'room-tx']);
+    expect(config.visibleRooms.some((r) => r.id === 'room-2')).toBe(false);
+  });
+
+  test('7. Scoped station visibility for Multi-Room Doctor restricts to assigned rooms + shared stations', () => {
+    const activeRooms: ClinicRoom[] = [
+      { id: 'room-1', name: 'Room 1', type: 'Consultation', isActive: true, displayOrder: 1, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-2', name: 'Room 2', type: 'Consultation', isActive: true, displayOrder: 2, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-3', name: 'Room 3', type: 'Consultation', isActive: true, displayOrder: 3, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 0, createdAt: '' },
+      { id: 'room-triage', name: 'Triage Station', type: 'Triage', isActive: true, displayOrder: 4, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-tx', name: 'Treatment Room', type: 'Treatment', isActive: true, displayOrder: 5, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+    ];
+    const multiRoomDoc = {
+      id: 'doc-multi',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Alice',
+      lastName: 'Cruz',
+      role: 'Doctor' as const,
+      assignedRoomIds: ['room-1', 'room-2'],
+      assignedRoomNames: ['Room 1', 'Room 2'],
+      isActive: true,
+      createdAt: '',
+    };
+
+    const config = computeScopedStations(activeRooms, multiRoomDoc);
+    expect(config.allPillLabel).toBe('All My Stations');
+    expect(config.defaultStationId).toBe('room-1');
+    expect(config.visibleRooms.map((r) => r.id)).toEqual(['room-1', 'room-2', 'room-triage', 'room-tx']);
+    expect(config.visibleRooms.some((r) => r.id === 'room-3')).toBe(false);
+  });
+
+  test('8. Scoped station visibility for Nurse with assigned room defaults to assigned room', () => {
+    const activeRooms: ClinicRoom[] = [
+      { id: 'room-1', name: 'Room 1', type: 'Consultation', isActive: true, displayOrder: 1, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-triage', name: 'Triage Station', type: 'Triage', isActive: true, displayOrder: 2, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-tx', name: 'Treatment Room', type: 'Treatment', isActive: true, displayOrder: 3, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+    ];
+    const nurse = {
+      id: 'nurse-1',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Nancy',
+      lastName: 'Reyes',
+      role: 'Nurse' as const,
+      assignedRoomIds: ['room-tx'],
+      assignedRoomNames: ['Treatment Room'],
+      isActive: true,
+      createdAt: '',
+    };
+
+    const config = computeScopedStations(activeRooms, nurse);
+    expect(config.allPillLabel).toBe('All Stations');
+    expect(config.defaultStationId).toBe('room-tx');
+    expect(config.visibleRooms.map((r) => r.id)).toEqual(['room-triage', 'room-tx']);
+    expect(config.visibleRooms.some((r) => r.id === 'room-1')).toBe(false);
+  });
+
+  test('9. Scoped station visibility for Floating Staff, Receptionist and Admin shows all active rooms', () => {
+    const activeRooms: ClinicRoom[] = [
+      { id: 'room-1', name: 'Room 1', type: 'Consultation', isActive: true, displayOrder: 1, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-2', name: 'Room 2', type: 'Consultation', isActive: true, displayOrder: 2, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 0, createdAt: '' },
+      { id: 'room-triage', name: 'Triage Station', type: 'Triage', isActive: true, displayOrder: 3, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+    ];
+    const floatingDoc = {
+      id: 'doc-float',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Float',
+      lastName: 'Doc',
+      role: 'Doctor' as const,
+      assignedRoomIds: [],
+      assignedRoomNames: [],
+      isActive: true,
+      createdAt: '',
+    };
+    const receptionist = {
+      id: 'rec-1',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Rachel',
+      lastName: 'Front',
+      role: 'Receptionist' as const,
+      assignedRoomIds: [],
+      assignedRoomNames: [],
+      isActive: true,
+      createdAt: '',
+    };
+
+    const docConfig = computeScopedStations(activeRooms, floatingDoc);
+    expect(docConfig.allPillLabel).toBe('All Stations');
+    expect(docConfig.visibleRooms).toHaveLength(3);
+
+    const recConfig = computeScopedStations(activeRooms, receptionist);
+    expect(recConfig.allPillLabel).toBe('All Stations');
+    expect(recConfig.visibleRooms).toHaveLength(3);
+  });
+
+  test('10. 4-Step Call-to-Room Resolution respects priority steps 1 through 4', () => {
+    const activeRooms: ClinicRoom[] = [
+      { id: 'room-1', name: 'Room 1', type: 'Consultation', isActive: true, displayOrder: 1, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-2', name: 'Room 2', type: 'Consultation', isActive: true, displayOrder: 2, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-3', name: 'Room 3', type: 'Consultation', isActive: true, displayOrder: 3, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 0, createdAt: '' },
+    ];
+    const visibleRooms = activeRooms;
+    const multiDoc = {
+      id: 'doc-1',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Doc',
+      lastName: 'One',
+      role: 'Doctor' as const,
+      assignedRoomIds: ['room-1', 'room-2'],
+      assignedRoomNames: ['Room 1', 'Room 2'],
+      isActive: true,
+      createdAt: '',
+    };
+    const floatingDoc = {
+      id: 'doc-f',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Float',
+      lastName: 'Doc',
+      role: 'Doctor' as const,
+      assignedRoomIds: [],
+      assignedRoomNames: [],
+      isActive: true,
+      createdAt: '',
+    };
+
+    // Step 1: Active station pill selected (not ALL and matches visible room)
+    const step1 = resolveCallToRoom({
+      ticket: { id: 't1', patientId: 'p1', patientName: 'P1', ticketNumber: 'A1', status: 'Triaged', queueNumber: 'A1', waitTimeMinutes: 0 } as any,
+      selectedStation: 'Room 2',
+      currentStaff: multiDoc,
+      activeRooms,
+      visibleRooms,
+    });
+    expect(step1.roomName).toBe('Room 2');
+    expect(step1.roomId).toBe('room-2');
+
+    // Step 2: Ticket check-in room matches doctor's assigned room
+    const step2 = resolveCallToRoom({
+      ticket: { id: 't2', patientId: 'p2', patientName: 'P2', ticketNumber: 'A2', status: 'Triaged', queueNumber: 'A2', waitTimeMinutes: 0, roomId: 'room-2', roomOrStation: 'Room 2' } as any,
+      selectedStation: 'ALL',
+      currentStaff: multiDoc,
+      activeRooms,
+      visibleRooms,
+    });
+    expect(step2.roomName).toBe('Room 2');
+    expect(step2.roomId).toBe('room-2');
+
+    // Step 3: Clinician's primary assigned room
+    const step3 = resolveCallToRoom({
+      ticket: { id: 't3', patientId: 'p3', patientName: 'P3', ticketNumber: 'A3', status: 'Triaged', queueNumber: 'A3', waitTimeMinutes: 0, roomId: 'room-3', roomOrStation: 'Room 3' } as any,
+      selectedStation: 'ALL',
+      currentStaff: multiDoc,
+      activeRooms,
+      visibleRooms,
+    });
+    expect(step3.roomName).toBe('Room 1');
+    expect(step3.roomId).toBe('room-1');
+
+    // Step 4: Floating doctor fallback to first consultation room
+    const step4 = resolveCallToRoom({
+      ticket: { id: 't4', patientId: 'p4', patientName: 'P4', ticketNumber: 'A4', status: 'Triaged', queueNumber: 'A4', waitTimeMinutes: 0 } as any,
+      selectedStation: 'ALL',
+      currentStaff: floatingDoc,
+      activeRooms,
+      visibleRooms,
+    });
+    expect(step4.roomName).toBe('Room 1');
+    expect(step4.roomId).toBe('room-1');
+  });
+
+  test('11. isPatientVisibleToStaff filters queue for doctor rooms', () => {
+    const activeRooms: ClinicRoom[] = [
+      { id: 'room-1', name: 'Room 1', type: 'Consultation', isActive: true, displayOrder: 1, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-2', name: 'Room 2', type: 'Consultation', isActive: true, displayOrder: 2, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-triage', name: 'Triage Station', type: 'Triage', isActive: true, displayOrder: 3, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+    ];
+    const doctor = {
+      id: 'doc-1',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Dr',
+      lastName: 'One',
+      role: 'Doctor' as const,
+      assignedRoomIds: ['room-1'],
+      assignedRoomNames: ['Room 1'],
+      isActive: true,
+      createdAt: '',
+    };
+
+    // Patient in doctor's assigned room is visible
+    expect(isPatientVisibleToStaff({ id: 'q1', roomId: 'room-1', patientId: 'p1', patientName: 'P1', ticketNumber: 'A1', status: 'Triaged', queueNumber: 'A1', waitTimeMinutes: 0 } as any, doctor, activeRooms)).toBe(true);
+
+    // Patient in triage is visible
+    expect(isPatientVisibleToStaff({ id: 'q2', roomId: 'room-triage', patientId: 'p2', patientName: 'P2', ticketNumber: 'A2', status: 'Waiting', queueNumber: 'A2', waitTimeMinutes: 0 } as any, doctor, activeRooms)).toBe(true);
+
+    // Patient in another doctor's consultation room is hidden unless assigned to doctor
+    expect(isPatientVisibleToStaff({ id: 'q3', roomId: 'room-2', patientId: 'p3', patientName: 'P3', ticketNumber: 'A3', status: 'Triaged', queueNumber: 'A3', waitTimeMinutes: 0 } as any, doctor, activeRooms)).toBe(false);
+
+    // Patient in another doctor's consultation room assigned to this doctor is visible
+    expect(isPatientVisibleToStaff({ id: 'q4', roomId: 'room-2', doctorId: 'doc-1', patientId: 'p4', patientName: 'P4', ticketNumber: 'A4', status: 'Triaged', queueNumber: 'A4', waitTimeMinutes: 0 } as any, doctor, activeRooms)).toBe(true);
+  });
+
+  test('12. getOtherRoomCoverageText renders additive coverage phrasing', () => {
+    const sortedRooms: ClinicRoom[] = [
+      { id: 'room-1', name: 'Room 1', type: 'Consultation', isActive: true, displayOrder: 1, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-2', name: 'Room 2', type: 'Consultation', isActive: true, displayOrder: 2, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+    ];
+    const staff = {
+      id: 's1',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Maria',
+      lastName: 'Santos',
+      role: 'Doctor' as const,
+      assignedRoomIds: ['room-1'],
+      assignedRoomNames: ['Room 1'],
+      isActive: true,
+      createdAt: '',
+    };
+
+    // Selected in Room 2 while already in Room 1 -> "Also in Room 1 · Will cover both"
+    expect(getOtherRoomCoverageText(staff, 'room-2', sortedRooms, true)).toBe('Also in Room 1 · Will cover both');
+    // Not selected in Room 2 while already in Room 1 -> "Currently in Room 1"
+    expect(getOtherRoomCoverageText(staff, 'room-2', sortedRooms, false)).toBe('Currently in Room 1');
+  });
+
+  test('13. resolveWalkInDoctorRoomSelection preselects primary doctor room', () => {
+    const activeRooms: ClinicRoom[] = [
+      { id: 'room-1', name: 'Room 1', type: 'Consultation', isActive: true, displayOrder: 1, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-2', name: 'Room 2', type: 'Consultation', isActive: true, displayOrder: 2, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+    ];
+    const doctor = {
+      id: 'doc-1',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Alice',
+      lastName: 'Cruz',
+      role: 'Doctor' as const,
+      assignedRoomIds: ['room-2', 'room-1'],
+      assignedRoomNames: ['Room 2', 'Room 1'],
+      isActive: true,
+      createdAt: '',
+    };
+
+    const res = resolveWalkInDoctorRoomSelection(doctor, activeRooms);
+    expect(res.preselectedRoomId).toBe('room-2');
+    expect(res.doctorRoomIds).toEqual(['room-2', 'room-1']);
   });
 });
 

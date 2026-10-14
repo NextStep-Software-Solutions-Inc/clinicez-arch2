@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
@@ -41,6 +42,16 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
         _notificationDispatcher = notificationDispatcher;
         _roomRepository = roomRepository;
         _staffRepository = staffRepository;
+    }
+
+    public CallQueueItemCommandHandler(
+        IRepository<QueueItem> queueRepository,
+        IRepository<StaffMember> staffRepository,
+        IRepository<ClinicRoom> roomRepository,
+        IUnitOfWork unitOfWork,
+        IClinicContext clinicContext)
+        : this(queueRepository, unitOfWork, clinicContext, null, roomRepository, staffRepository)
+    {
     }
 
     public async Task<QueueItemDto> Handle(CallQueueItemCommand request, CancellationToken cancellationToken)
@@ -92,12 +103,40 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
             {
                 var doctor = await _staffRepository
                     .Query(s => s.Id == targetDoctorId.Value && s.ClinicId == _clinicContext.ClinicId)
-                    .Include(s => s.AssignedRoom)
                     .FirstOrDefaultAsync(cancellationToken);
-                if (doctor?.AssignedRoom != null && doctor.AssignedRoom.IsActive)
+
+                if (doctor != null)
                 {
-                    item.RoomId = doctor.AssignedRoom.Id;
-                    item.RoomOrStation = doctor.AssignedRoom.Name;
+                    var doctorRoomIds = doctor.GetAssignedRoomIds();
+                    if (doctorRoomIds.Count > 0 && _roomRepository != null)
+                    {
+                        var activeRooms = await _roomRepository
+                            .Query(r => r.ClinicId == _clinicContext.ClinicId && doctorRoomIds.Contains(r.Id) && r.IsActive)
+                            .OrderBy(r => r.DisplayOrder)
+                            .ToListAsync(cancellationToken);
+
+                        // Preservation Check: If item.RoomId is in doctor's ACTIVE assigned rooms, preserve it!
+                        var preservedRoom = item.RoomId.HasValue
+                            ? activeRooms.FirstOrDefault(r => r.Id == item.RoomId.Value)
+                            : null;
+
+                        if (preservedRoom != null)
+                        {
+                            item.RoomId = preservedRoom.Id;
+                            item.RoomOrStation = preservedRoom.Name;
+                        }
+                        else if (activeRooms.Count > 0)
+                        {
+                            var firstActive = activeRooms.First();
+                            item.RoomId = firstActive.Id;
+                            item.RoomOrStation = firstActive.Name;
+                        }
+                        else
+                        {
+                            item.RoomId = null;
+                            item.RoomOrStation = null;
+                        }
+                    }
                 }
             }
         }

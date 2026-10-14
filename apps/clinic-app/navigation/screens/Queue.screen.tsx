@@ -21,28 +21,32 @@ import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { notify } from '@utils/feedback';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
+import { useClinic } from '../../context/ClinicContext';
 import {
   clinicService,
+  computeScopedStations,
+  isPatientVisibleToStaff,
+  resolveCallToRoom,
   PatientQueueItem,
   QueueStatus,
   QueueView,
   QueueMetrics,
   ClinicalProcedureRecord,
+  ClinicRoom,
 } from '../../services/clinicService';
 import { ProcedureExecutionModal } from '../../components/chart/NursingProceduresTab';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
 
-const STATIONS = [
-  { id: 'ALL', label: 'All Stations' },
-  { id: 'Room 1', label: 'Room 1' },
-  { id: 'Room 2', label: 'Room 2' },
-  { id: 'Triage Station', label: 'Triage Station' },
-  { id: 'Treatment Room', label: 'Treatment Room' },
-];
-
 export default function QueueScreen() {
   const navigation = useNavigation<any>();
   const { current: currentStaff } = useStaff();
+  const { rooms = [] } = useClinic();
+
+  const activeRooms = useMemo(() => (rooms || []).filter((r) => r.isActive), [rooms]);
+  const { visibleRooms, allPillLabel } = useMemo(
+    () => computeScopedStations(activeRooms, currentStaff),
+    [activeRooms, currentStaff],
+  );
 
   const [queue, setQueue] = useState<PatientQueueItem[]>([]);
   const [metrics, setMetrics] = useState<QueueMetrics | null>(null);
@@ -57,6 +61,7 @@ export default function QueueScreen() {
   // Call to room modal
   const [callModalItem, setCallModalItem] = useState<PatientQueueItem | null>(null);
   const [selectedCallRoom, setSelectedCallRoom] = useState<string>('Room 1');
+  const [selectedCallRoomId, setSelectedCallRoomId] = useState<string | undefined>(undefined);
   const [isCalling, setIsCalling] = useState(false);
 
   // Procedure execution modal
@@ -65,9 +70,14 @@ export default function QueueScreen() {
   const loadData = useCallback(async () => {
     setError(null);
     const doctorId = currentStaff?.id;
+    const selectedRoomObj =
+      selectedStation === 'ALL'
+        ? undefined
+        : activeRooms.find((r) => r.name === selectedStation || r.id === selectedStation);
     const [queueData, queueErr] = await clinicService.getQueue({
       view: selectedView,
       doctorId: selectedView === 'MyRoom' ? doctorId : undefined,
+      roomId: selectedRoomObj?.id,
       roomOrStation: selectedStation === 'ALL' ? undefined : selectedStation,
     });
 
@@ -76,7 +86,10 @@ export default function QueueScreen() {
     if (queueErr || !queueData) {
       setError(queueErr?.message || 'Failed to load queue items.');
     } else {
-      setQueue(queueData);
+      const filtered = queueData.filter((item) =>
+        isPatientVisibleToStaff(item, currentStaff, activeRooms),
+      );
+      setQueue(filtered);
     }
 
     if (metricsData) {
@@ -84,7 +97,7 @@ export default function QueueScreen() {
     }
     setLoading(false);
     setRefreshing(false);
-  }, [selectedView, selectedStation, currentStaff?.id]);
+  }, [selectedView, selectedStation, currentStaff, activeRooms]);
 
   useEffect(() => {
     setLoading(true);
@@ -100,11 +113,14 @@ export default function QueueScreen() {
     if (!callModalItem) return;
     setIsCalling(true);
     const doctorName = currentStaff ? formatStaffName(currentStaff) : undefined;
+    const targetRoom = activeRooms.find((r) => r.name === selectedCallRoom || r.id === selectedCallRoomId);
+    const targetRoomId = targetRoom?.id || selectedCallRoomId;
     const [, err] = await clinicService.callQueueItem(
       callModalItem.id,
       currentStaff?.id,
       doctorName,
-      selectedCallRoom
+      selectedCallRoom,
+      targetRoomId,
     );
 
     setIsCalling(false);
@@ -208,23 +224,41 @@ export default function QueueScreen() {
             STATION / ROOM ASSIGNMENT:
           </ThemedText>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillScroll}>
-            {STATIONS.map((station) => (
-              <Pressable
-                key={station.id}
-                onPress={() => setSelectedStation(station.id)}
-                style={[
-                  styles.stationPill,
-                  selectedStation === station.id && styles.stationPillActive,
-                ]}
+            <Pressable
+              onPress={() => setSelectedStation('ALL')}
+              style={[
+                styles.stationPill,
+                selectedStation === 'ALL' && styles.stationPillActive,
+              ]}
+            >
+              <ThemedText
+                variant="captionBold"
+                color={selectedStation === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
-                <ThemedText
-                  variant="captionBold"
-                  color={selectedStation === station.id ? theme.colors.primaryDark : theme.colors.textSecondary}
+                {allPillLabel}
+              </ThemedText>
+            </Pressable>
+            {visibleRooms.map((room) => {
+              const isSelected = selectedStation === room.name;
+              const isMine = (currentStaff?.assignedRoomIds?.includes(room.id)) || currentStaff?.assignedRoomId === room.id;
+              return (
+                <Pressable
+                  key={room.id}
+                  onPress={() => setSelectedStation(room.name)}
+                  style={[
+                    styles.stationPill,
+                    isSelected && styles.stationPillActive,
+                  ]}
                 >
-                  {station.label}
-                </ThemedText>
-              </Pressable>
-            ))}
+                  <ThemedText
+                    variant="captionBold"
+                    color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  >
+                    {isMine ? `${room.name} (Mine)` : room.name}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -320,8 +354,16 @@ export default function QueueScreen() {
                           icon="bell"
                           size="sm"
                           onPress={() => {
+                            const resolved = resolveCallToRoom({
+                              ticket,
+                              selectedStation,
+                              currentStaff,
+                              activeRooms,
+                              visibleRooms,
+                            });
                             setCallModalItem(ticket);
-                            setSelectedCallRoom(ticket.roomOrStation || 'Room 1');
+                            setSelectedCallRoom(resolved.roomName);
+                            setSelectedCallRoomId(resolved.roomId);
                           }}
                         />
                       )}
@@ -411,28 +453,35 @@ export default function QueueScreen() {
             </ThemedText>
 
             <View style={styles.roomOptionGroup}>
-              {['Room 1', 'Room 2', 'Triage Station', 'Treatment Room'].map((room) => (
-                <Pressable
-                  key={room}
-                  onPress={() => setSelectedCallRoom(room)}
-                  style={[
-                    styles.roomOptionCard,
-                    selectedCallRoom === room && styles.roomOptionCardActive,
-                  ]}
-                >
-                  <Icon
-                    name={selectedCallRoom === room ? 'checkCircle' : 'dot'}
-                    size={16}
-                    color={selectedCallRoom === room ? theme.colors.primaryDark : theme.colors.textSecondary}
-                  />
-                  <ThemedText
-                    variant="bodyBold"
-                    color={selectedCallRoom === room ? theme.colors.primaryDark : theme.colors.text}
+              {visibleRooms.map((room) => {
+                const isSelected = selectedCallRoom === room.name;
+                const isMine = (currentStaff?.assignedRoomIds?.includes(room.id)) || currentStaff?.assignedRoomId === room.id;
+                return (
+                  <Pressable
+                    key={room.id}
+                    onPress={() => {
+                      setSelectedCallRoom(room.name);
+                      setSelectedCallRoomId(room.id);
+                    }}
+                    style={[
+                      styles.roomOptionCard,
+                      isSelected && styles.roomOptionCardActive,
+                    ]}
                   >
-                    {room}
-                  </ThemedText>
-                </Pressable>
-              ))}
+                    <Icon
+                      name={isSelected ? 'checkCircle' : 'dot'}
+                      size={16}
+                      color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                    />
+                    <ThemedText
+                      variant="bodyBold"
+                      color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                    >
+                      {room.name}{isMine ? ' (Mine)' : ''}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
             </View>
 
             <View style={styles.modalActions}>

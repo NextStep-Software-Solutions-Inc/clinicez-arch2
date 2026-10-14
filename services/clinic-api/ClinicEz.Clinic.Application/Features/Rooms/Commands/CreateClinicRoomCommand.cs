@@ -101,10 +101,14 @@ public sealed class CreateClinicRoomCommandHandler : IRequestHandler<CreateClini
 
             foreach (var staff in eligibleStaff)
             {
-                staff.AssignedRoomId = room.Id;
-                staff.UpdatedAt = DateTime.UtcNow;
-                staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
-                _staffRepository.Update(staff);
+                var currentRooms = staff.GetAssignedRoomIds().ToHashSet();
+                if (currentRooms.Add(room.Id))
+                {
+                    staff.SetAssignedRoomIds(currentRooms);
+                    staff.UpdatedAt = DateTime.UtcNow;
+                    staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
+                    _staffRepository.Update(staff);
+                }
                 assignedIds.Add(staff.Id);
                 assignedNames.Add(string.IsNullOrWhiteSpace(staff.Title)
                     ? $"{staff.FirstName} {staff.LastName}".Trim()
