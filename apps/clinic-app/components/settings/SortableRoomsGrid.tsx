@@ -1,9 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, ScrollView, StyleSheet, Pressable } from 'react-native';
 import Icon from '../ui/Icon';
 import ThemedText from '../ui/ThemedText';
 import { theme } from '../../constants/theme';
 import { type ClinicRoom } from '../../services/clinicService';
+
+export const ROOM_CARD_WIDTH = 284;
+export const ROOM_CARD_HEIGHT = 196;
 
 export interface SortableRoomsGridProps {
   rooms: ClinicRoom[];
@@ -26,7 +29,11 @@ export default function SortableRoomsGrid({
   renderRoomCardContent,
 }: SortableRoomsGridProps) {
   return (
-    <View style={styles.roomGrid}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator
+      contentContainerStyle={styles.roomRow}
+    >
       {rooms.map((room, index) => {
         const isFirst = index === 0;
         const isLast = index === rooms.length - 1;
@@ -41,12 +48,12 @@ export default function SortableRoomsGrid({
                 onPress={() => onMoveEarlier(room.id)}
                 disabled={isFirst || isReordering}
                 accessibilityRole="button"
-                accessibilityLabel={`Move ${room.name} earlier`}
+                accessibilityLabel={`Move ${room.name} left`}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 style={[styles.arrowBtn, (isFirst || isReordering) && styles.arrowBtnDisabled]}
               >
                 <Icon
-                  name="arrowUp"
+                  name="arrowLeft"
                   size={12}
                   color={isFirst || isReordering ? theme.colors.textLight : theme.colors.textMuted}
                 />
@@ -55,12 +62,12 @@ export default function SortableRoomsGrid({
                 onPress={() => onMoveLater(room.id)}
                 disabled={isLast || isReordering}
                 accessibilityRole="button"
-                accessibilityLabel={`Move ${room.name} later`}
+                accessibilityLabel={`Move ${room.name} right`}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 style={[styles.arrowBtn, (isLast || isReordering) && styles.arrowBtnDisabled]}
               >
                 <Icon
-                  name="arrowDown"
+                  name="arrowRight"
                   size={12}
                   color={isLast || isReordering ? theme.colors.textLight : theme.colors.textMuted}
                 />
@@ -75,19 +82,24 @@ export default function SortableRoomsGrid({
           </View>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  roomGrid: {
+  roomRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+    alignItems: 'stretch',
     gap: theme.spacing.md,
+    paddingBottom: theme.spacing.xs,
   },
   cardSlot: {
-    flex: 1,
-    minWidth: 260,
+    width: ROOM_CARD_WIDTH,
+    minWidth: ROOM_CARD_WIDTH,
+    maxWidth: ROOM_CARD_WIDTH,
+    height: ROOM_CARD_HEIGHT,
+    flexShrink: 0,
   },
   reorderHeaderPill: {
     flexDirection: 'row',

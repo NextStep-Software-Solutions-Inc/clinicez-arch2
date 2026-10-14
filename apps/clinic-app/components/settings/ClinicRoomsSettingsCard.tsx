@@ -291,49 +291,54 @@ export function ClinicRoomsSettingsCard() {
                         !room.isActive && styles.roomCardInactive,
                       ]}
                     >
-                      <View style={styles.roomHeader}>
-                        <View style={styles.roomIconBadge}>
-                          <Icon
-                            name={meta.icon}
-                            size={theme.sizes.iconMd}
-                            color={theme.colors.primaryDark}
-                          />
-                        </View>
-                        <View style={styles.roomTitleCol}>
-                          <View style={styles.roomTitleRow}>
-                            <ThemedText variant="bodyBold">{room.name}</ThemedText>
-                            {room.code ? (
-                              <Badge label={room.code} variant="outline" size="sm" />
-                            ) : null}
-                            {!room.isActive ? (
-                              <Badge label="Inactive" variant="neutral" size="sm" />
-                            ) : null}
-                          </View>
-                          <View style={styles.roomMetaRow}>
-                            <Badge
-                              label={meta.label}
-                              variant={meta.badgeVariant}
-                              size="sm"
+                      <View style={styles.roomTopBlock}>
+                        <View style={styles.roomHeader}>
+                          <View style={styles.roomIconBadge}>
+                            <Icon
+                              name={meta.icon}
+                              size={theme.sizes.iconMd}
+                              color={theme.colors.primaryDark}
                             />
-                            <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                              {(room.assignedStaffCount ?? 0) > 0
-                                ? `${room.assignedStaffCount} staff assigned`
-                                : 'No fixed staff'}
-                            </ThemedText>
                           </View>
+                          <View style={styles.roomTitleCol}>
+                            <ThemedText variant="bodyBold" numberOfLines={1}>
+                              {room.name}
+                            </ThemedText>
+                            <View style={styles.roomSubTitleRow}>
+                              {room.code ? (
+                                <Badge label={room.code} variant="outline" size="sm" />
+                              ) : null}
+                              <ThemedText variant="caption" color={theme.colors.textSecondary} numberOfLines={1}>
+                                {(room.assignedStaffCount ?? 0) > 0
+                                  ? `${room.assignedStaffCount} staff assigned`
+                                  : 'No fixed staff'}
+                              </ThemedText>
+                            </View>
+                          </View>
+                          {dragControls}
                         </View>
-                        {dragControls}
-                      </View>
 
-                      {room.description ? (
-                        <ThemedText
-                          variant="small"
-                          color={theme.colors.textSecondary}
-                          numberOfLines={2}
-                        >
-                          {room.description}
-                        </ThemedText>
-                      ) : null}
+                        <View style={styles.roomMetaRow}>
+                          <Badge
+                            label={meta.label}
+                            variant={meta.badgeVariant}
+                            size="sm"
+                          />
+                          {!room.isActive ? (
+                            <Badge label="Inactive" variant="neutral" size="sm" />
+                          ) : null}
+                        </View>
+
+                        <View style={styles.roomDescriptionBox}>
+                          <ThemedText
+                            variant="small"
+                            color={room.description ? theme.colors.textSecondary : theme.colors.textMuted}
+                            numberOfLines={2}
+                          >
+                            {room.description || 'No description'}
+                          </ThemedText>
+                        </View>
+                      </View>
 
                       <View style={styles.roomActions}>
                         <Button
@@ -510,49 +515,55 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderLight,
   },
   roomCard: {
-    flex: 1,
-    minWidth: 260,
+    width: '100%',
+    height: '100%',
     backgroundColor: theme.colors.surfaceHighlight,
     borderRadius: theme.radii.lg,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
     padding: theme.spacing.md,
-    gap: theme.spacing.sm,
     justifyContent: 'space-between',
   },
   roomCardInactive: {
     opacity: 0.65,
   },
+  roomTopBlock: {
+    gap: theme.spacing.xs,
+  },
   roomHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: theme.spacing.sm,
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   roomIconBadge: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: theme.radii.md,
     backgroundColor: theme.colors.primaryLight,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   roomTitleCol: {
     flex: 1,
-    gap: 4,
+    minWidth: 0,
+    gap: 2,
   },
-  roomTitleRow: {
+  roomSubTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: theme.spacing.xs,
   },
   roomMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: theme.spacing.xs,
+  },
+  roomDescriptionBox: {
+    height: 36,
+    justifyContent: 'center',
   },
   roomActions: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, ScrollView, StyleSheet, Pressable } from 'react-native';
 import {
   DndContext,
   closestCenter,
@@ -14,14 +14,19 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
-  rectSortingStrategy,
+  horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
 import Icon from '../ui/Icon';
 import ThemedText from '../ui/ThemedText';
 import { theme } from '../../constants/theme';
 import { type ClinicRoom } from '../../services/clinicService';
-import { type SortableRoomsGridProps } from './SortableRoomsGrid';
+import {
+  ROOM_CARD_WIDTH,
+  ROOM_CARD_HEIGHT,
+  type SortableRoomsGridProps,
+} from './SortableRoomsGrid';
 
 function SortableRoomCardItem({
   room,
@@ -65,8 +70,11 @@ function SortableRoomCardItem({
     opacity: isDragging ? 0.82 : 1,
     position: 'relative',
     display: 'flex',
-    flex: 1,
-    minWidth: 260,
+    width: ROOM_CARD_WIDTH,
+    minWidth: ROOM_CARD_WIDTH,
+    maxWidth: ROOM_CARD_WIDTH,
+    height: ROOM_CARD_HEIGHT,
+    flexShrink: 0,
   };
 
   const dragHandleStyle: React.CSSProperties = {
@@ -93,8 +101,8 @@ function SortableRoomCardItem({
         {...(!isReordering ? attributes : {})}
         {...(!isReordering ? listeners : {})}
         style={dragHandleStyle}
-        aria-label={`Drag to reorder ${room.name}`}
-        title={`Drag to reorder ${room.name}`}
+        aria-label={`Drag left or right to reorder ${room.name}`}
+        title={`Drag left or right to reorder ${room.name}`}
         role="button"
         tabIndex={!isReordering ? 0 : -1}
       >
@@ -115,12 +123,12 @@ function SortableRoomCardItem({
           onPress={() => onMoveEarlier(room.id)}
           disabled={isFirst || isReordering}
           accessibilityRole="button"
-          accessibilityLabel={`Move ${room.name} earlier`}
+          accessibilityLabel={`Move ${room.name} left`}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           style={[styles.arrowBtn, (isFirst || isReordering) && styles.arrowBtnDisabled]}
         >
           <Icon
-            name="arrowUp"
+            name="arrowLeft"
             size={12}
             color={isFirst || isReordering ? theme.colors.textLight : theme.colors.textMuted}
           />
@@ -129,12 +137,12 @@ function SortableRoomCardItem({
           onPress={() => onMoveLater(room.id)}
           disabled={isLast || isReordering}
           accessibilityRole="button"
-          accessibilityLabel={`Move ${room.name} later`}
+          accessibilityLabel={`Move ${room.name} right`}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           style={[styles.arrowBtn, (isLast || isReordering) && styles.arrowBtnDisabled]}
         >
           <Icon
-            name="arrowDown"
+            name="arrowRight"
             size={12}
             color={isLast || isReordering ? theme.colors.textLight : theme.colors.textMuted}
           />
@@ -187,10 +195,15 @@ export default function SortableRoomsGrid({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
+      modifiers={[restrictToHorizontalAxis]}
       onDragEnd={handleDragEnd}
     >
-      <SortableContext items={rooms.map((r) => r.id)} strategy={rectSortingStrategy}>
-        <View style={styles.roomGrid}>
+      <SortableContext items={rooms.map((r) => r.id)} strategy={horizontalListSortingStrategy}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator
+          contentContainerStyle={styles.roomRow}
+        >
           {rooms.map((room, index) => (
             <SortableRoomCardItem
               key={room.id}
@@ -204,22 +217,25 @@ export default function SortableRoomsGrid({
               renderRoomCardContent={renderRoomCardContent}
             />
           ))}
-        </View>
+        </ScrollView>
       </SortableContext>
     </DndContext>
   );
 }
 
 const styles = StyleSheet.create({
-  roomGrid: {
+  roomRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
+    alignItems: 'stretch',
     gap: theme.spacing.md,
+    paddingBottom: theme.spacing.xs,
   },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    flexShrink: 0,
   },
   arrowPair: {
     flexDirection: 'row',
