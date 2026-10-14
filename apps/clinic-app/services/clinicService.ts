@@ -27,6 +27,22 @@ export type DiscountType = 'None' | 'SeniorCitizen' | 'Pwd' | 'PhilHealthKonsult
 export type ProcedureStatus = 'Ordered' | 'InProgress' | 'Completed' | 'Cancelled';
 export type LabOrderStatus = 'Draft' | 'Ordered' | 'SpecimenCollected' | 'InTesting' | 'SentToLab' | 'ResultsReceived' | 'Completed' | 'CompletedWithExternalReport' | 'Cancelled';
 
+export type ClinicRoomType = 'Consultation' | 'Triage' | 'Treatment';
+
+export interface ClinicRoom {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  name: string;
+  code?: string | null;
+  type: ClinicRoomType;
+  description?: string | null;
+  displayOrder: number;
+  isActive: boolean;
+  assignedStaffCount: number;
+  createdAt: string;
+}
+
 export interface ClinicRole {
   id: string;
   tenantId: string;
@@ -45,6 +61,8 @@ export interface StaffMember {
   clinicId: string;
   clinicRoleId?: string;
   roleName?: string;
+  assignedRoomId?: string | null;
+  assignedRoomName?: string | null;
   firstName: string;
   lastName: string;
   middleName?: string;
@@ -71,6 +89,7 @@ export interface CreateStaffPayload {
   title?: string;
   role: StaffRole;
   clinicRoleId?: string;
+  assignedRoomId?: string | null;
   email?: string;
   phoneNumber?: string;
   prcLicenseNumber?: string;
@@ -89,6 +108,8 @@ export interface UpdateStaffPayload {
   title?: string;
   role: StaffRole;
   clinicRoleId?: string;
+  assignedRoomId?: string | null;
+  clearAssignedRoom?: boolean;
   email?: string;
   phoneNumber?: string;
   prcLicenseNumber?: string;
@@ -164,6 +185,7 @@ export interface PatientQueueItem {
   hasVitals: boolean;
   vitalsSummary?: string;
   roomOrStation?: string;
+  roomId?: string | null;
 }
 
 export interface GetQueueParams {
@@ -171,6 +193,7 @@ export interface GetQueueParams {
   status?: QueueStatus;
   doctorId?: string;
   roomOrStation?: string;
+  roomId?: string;
   view?: QueueView | string;
 }
 
@@ -493,6 +516,8 @@ export interface ClinicalProcedureRecord {
   siteRoute?: string;
   clinicalNotes?: string;
   complications?: string;
+  targetRoomId?: string | null;
+  targetRoomName?: string | null;
 }
 
 export interface ClinicLabOrderItem {
@@ -1660,6 +1685,8 @@ export interface CheckInRequest {
   doctorName?: string;
   priority?: QueuePriority;
   chiefComplaint?: string;
+  roomOrStation?: string;
+  roomId?: string;
 }
 
 export interface RecordTriageRequest {
@@ -1768,6 +1795,7 @@ export const clinicService = {
       if (paramsOrDate.status) params.append('status', paramsOrDate.status);
       if (paramsOrDate.doctorId) params.append('doctorId', paramsOrDate.doctorId);
       if (paramsOrDate.roomOrStation) params.append('roomOrStation', paramsOrDate.roomOrStation);
+      if (paramsOrDate.roomId) params.append('roomId', paramsOrDate.roomId);
       if (paramsOrDate.view) params.append('view', paramsOrDate.view);
     }
     const qs = params.toString();
@@ -1783,8 +1811,8 @@ export const clinicService = {
     return clinicApiClient.post<PatientQueueItem>('/queue/check-in', payload);
   },
 
-  async callQueueItem(id: string, doctorId?: string, doctorName?: string, roomOrStation?: string) {
-    return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/call`, { doctorId, doctorName, roomOrStation });
+  async callQueueItem(id: string, doctorId?: string, doctorName?: string, roomOrStation?: string, roomId?: string) {
+    return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/call`, { doctorId, doctorName, roomOrStation, roomId });
   },
 
   async completeQueueItem(id: string) {
@@ -1987,6 +2015,8 @@ export const clinicService = {
     orderedByDoctorId?: string;
     orderedByDoctorName?: string;
     clinicalNotes?: string;
+    targetRoomId?: string;
+    targetRoomName?: string;
   }) {
     return clinicApiClient.post<ClinicalProcedureRecord>('/procedures', payload);
   },
@@ -2351,6 +2381,38 @@ export const clinicService = {
 
   async deleteRole(id: string) {
     return clinicApiClient.delete<boolean>(`/roles/${id}`);
+  },
+
+  // Clinic Rooms & Stations
+  async getRooms(activeOnly: boolean = false) {
+    const qs = activeOnly ? '?activeOnly=true' : '';
+    return clinicApiClient.get<ClinicRoom[]>(`/rooms${qs}`);
+  },
+
+  async createRoom(payload: {
+    name: string;
+    code?: string | null;
+    type: ClinicRoomType;
+    description?: string | null;
+    displayOrder?: number;
+    isActive?: boolean;
+  }) {
+    return clinicApiClient.post<ClinicRoom>('/rooms', payload);
+  },
+
+  async updateRoom(id: string, payload: {
+    name: string;
+    code?: string | null;
+    type: ClinicRoomType;
+    description?: string | null;
+    displayOrder?: number;
+    isActive?: boolean;
+  }) {
+    return clinicApiClient.put<ClinicRoom>(`/rooms/${id}`, payload);
+  },
+
+  async deleteRoom(id: string) {
+    return clinicApiClient.delete<boolean>(`/rooms/${id}`);
   },
 
   // Patients Directory & Master Patient Index

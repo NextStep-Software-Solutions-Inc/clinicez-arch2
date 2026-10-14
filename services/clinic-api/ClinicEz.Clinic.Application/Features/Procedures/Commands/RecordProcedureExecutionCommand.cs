@@ -32,17 +32,20 @@ public class RecordProcedureExecutionCommandHandler : IRequestHandler<RecordProc
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<QueueItem>? _queueRepo;
+    private readonly IRepository<StaffMember>? _staffRepo;
 
     public RecordProcedureExecutionCommandHandler(
         IRepository<ClinicalProcedure> procRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IRepository<QueueItem>? queueRepo = null)
+        IRepository<QueueItem>? queueRepo = null,
+        IRepository<StaffMember>? staffRepo = null)
     {
         _procRepo = procRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _queueRepo = queueRepo;
+        _staffRepo = staffRepo;
     }
 
     public async Task<ClinicalProcedureDto> Handle(RecordProcedureExecutionCommand request, CancellationToken cancellationToken)
@@ -75,6 +78,24 @@ public class RecordProcedureExecutionCommandHandler : IRequestHandler<RecordProc
             if (queueItem != null && queueItem.Status == QueueStatus.PendingProcedure)
             {
                 queueItem.Status = QueueStatus.ReEvaluation;
+                var targetDoctorId = queueItem.DoctorId ?? proc.OrderedByDoctorId;
+                if (targetDoctorId.HasValue && _staffRepo != null)
+                {
+                    var doctor = await _staffRepo
+                        .Query(s => s.Id == targetDoctorId.Value && s.ClinicId == _clinicContext.ClinicId)
+                        .Include(s => s.AssignedRoom)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (doctor?.AssignedRoom != null && doctor.AssignedRoom.IsActive)
+                    {
+                        queueItem.RoomId = doctor.AssignedRoom.Id;
+                        queueItem.RoomOrStation = doctor.AssignedRoom.Name;
+                    }
+                    else if (queueItem.RoomId == proc.TargetRoomId || queueItem.RoomOrStation == proc.TargetRoomName)
+                    {
+                        queueItem.RoomId = null;
+                        queueItem.RoomOrStation = null;
+                    }
+                }
                 queueItem.UpdatedAt = DateTime.UtcNow;
                 _queueRepo.Update(queueItem);
             }

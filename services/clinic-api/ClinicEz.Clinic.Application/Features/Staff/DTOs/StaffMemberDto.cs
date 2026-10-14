@@ -25,4 +25,6 @@ public sealed record StaffMemberDto(
     bool HasCredentials = false,
     bool MustChangePassword = false,
     string? TemporaryPassword = null,
-    string? PhilHealthPan = null);
+    string? PhilHealthPan = null,
+    Guid? AssignedRoomId = null,
+    string? AssignedRoomName = null);

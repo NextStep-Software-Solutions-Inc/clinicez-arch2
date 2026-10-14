@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Procedures.DTOs;
@@ -22,7 +23,9 @@ public record OrderProcedureCommand(
     string Category = "Procedure",
     Guid? OrderedByDoctorId = null,
     string? OrderedByDoctorName = null,
-    string? ClinicalNotes = null
+    string? ClinicalNotes = null,
+    Guid? TargetRoomId = null,
+    string? TargetRoomName = null
 ) : IRequest<ClinicalProcedureDto>;
 
 public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureCommand, ClinicalProcedureDto>
@@ -31,17 +34,20 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<QueueItem>? _queueRepo;
+    private readonly IRepository<ClinicRoom>? _roomRepo;
 
     public OrderProcedureCommandHandler(
         IRepository<ClinicalProcedure> procRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IRepository<QueueItem>? queueRepo = null)
+        IRepository<QueueItem>? queueRepo = null,
+        IRepository<ClinicRoom>? roomRepo = null)
     {
         _procRepo = procRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _queueRepo = queueRepo;
+        _roomRepo = roomRepo;
     }
 
     public async Task<ClinicalProcedureDto> Handle(OrderProcedureCommand request, CancellationToken cancellationToken)
@@ -50,6 +56,50 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
         {
             throw new BadRequestException("PatientId and PatientName are required to order a procedure.");
         }
+
+        Guid? resolvedRoomId = request.TargetRoomId;
+        string? resolvedRoomName = string.IsNullOrWhiteSpace(request.TargetRoomName) ? null : request.TargetRoomName.Trim();
+
+        if (_roomRepo != null)
+        {
+            if (resolvedRoomId.HasValue)
+            {
+                var room = await _roomRepo
+                    .Query(r => r.Id == resolvedRoomId.Value && r.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (room != null)
+                {
+                    resolvedRoomId = room.Id;
+                    resolvedRoomName = room.Name;
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(resolvedRoomName))
+            {
+                var room = await _roomRepo
+                    .Query(r => r.ClinicId == _clinicContext.ClinicId && r.Name.ToLower() == resolvedRoomName.ToLower())
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (room != null)
+                {
+                    resolvedRoomId = room.Id;
+                    resolvedRoomName = room.Name;
+                }
+            }
+            else
+            {
+                var treatmentRoom = await _roomRepo
+                    .Query(r => r.ClinicId == _clinicContext.ClinicId && r.IsActive && r.Type == ClinicRoomType.Treatment)
+                    .OrderBy(r => r.DisplayOrder)
+                    .ThenBy(r => r.Name)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (treatmentRoom != null)
+                {
+                    resolvedRoomId = treatmentRoom.Id;
+                    resolvedRoomName = treatmentRoom.Name;
+                }
+            }
+        }
+
+        resolvedRoomName ??= "Treatment Room";
 
         var procedure = new ClinicalProcedure
         {
@@ -66,7 +116,9 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
             OrderedByDoctorName = request.OrderedByDoctorName?.Trim(),
             ScheduledAt = DateTime.UtcNow,
             Status = ProcedureStatus.Ordered,
-            ClinicalNotes = request.ClinicalNotes?.Trim()
+            ClinicalNotes = request.ClinicalNotes?.Trim(),
+            TargetRoomId = resolvedRoomId,
+            TargetRoomName = resolvedRoomName
         };
 
         await _procRepo.AddAsync(procedure, cancellationToken);
@@ -78,6 +130,8 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
             if (queueItem != null && queueItem.Status != QueueStatus.Completed && queueItem.Status != QueueStatus.Cancelled)
             {
                 queueItem.Status = QueueStatus.PendingProcedure;
+                queueItem.RoomId = resolvedRoomId;
+                queueItem.RoomOrStation = resolvedRoomName;
                 queueItem.UpdatedAt = DateTime.UtcNow;
                 _queueRepo.Update(queueItem);
             }
@@ -113,6 +167,8 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
         p.ExpirationDate,
         p.SiteRoute,
         p.ClinicalNotes,
-        p.Complications
+        p.Complications,
+        p.TargetRoomId,
+        p.TargetRoomName
     );
 }

@@ -53,7 +53,9 @@ public sealed class ProceduresController : ControllerBase
             request.Category,
             request.OrderedByDoctorId,
             request.OrderedByDoctorName,
-            request.ClinicalNotes
+            request.ClinicalNotes,
+            request.TargetRoomId,
+            request.TargetRoomName
         );
 
         var result = await _sender.Send(command, ct);

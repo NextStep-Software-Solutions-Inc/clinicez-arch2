@@ -26,6 +26,7 @@ import {
 } from '../../services/roleUtils';
 import { useAuth } from '../../context/AuthContext';
 import { useStaff } from '../../context/StaffContext';
+import { useClinic } from '../../context/ClinicContext';
 import { DoctorRosterCalendarModal } from '../roster/DoctorRosterCalendarModal';
 
 interface StaffManagementTabProps {
@@ -56,7 +57,8 @@ export default function StaffManagementTab({
   onStaffAdded,
 }: StaffManagementTabProps) {
   const { user } = useAuth();
-  const { current: currentStaff } = useStaff();
+  const { current: currentStaff, reload: refreshGlobalStaff } = useStaff();
+  const { rooms = [], refreshRooms } = useClinic();
 
   const isSelf = (target: StaffMember | null | undefined): boolean =>
     isSelfStaffMember(target, user) || isSelfStaffMember(target, currentStaff);
@@ -100,8 +102,10 @@ export default function StaffManagementTab({
   const [prc, setPrc] = useState('');
   const [ptr, setPtr] = useState('');
   const [s2, setS2] = useState('');
+  const [pan, setPan] = useState('');
   const [stampModalStaff, setStampModalStaff] = useState<StaffMember | null>(null);
   const [specialty, setSpecialty] = useState('');
+  const [assignedRoomId, setAssignedRoomId] = useState<string>('');
   const [provisionLogin, setProvisionLogin] = useState(true);
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [addingStaff, setAddingStaff] = useState(false);
@@ -137,6 +141,23 @@ export default function StaffManagementTab({
   const [rosterDoctorId, setRosterDoctorId] = useState<string | undefined>(undefined);
   const doctors = (staff || []).filter((s) => s.role === 'Doctor' && s.isActive);
 
+  // Sort active rooms so Doctor sees Consultation rooms first and Nurse sees Triage/Treatment first
+  const activeRoomsForRole = React.useMemo(() => {
+    const active = (rooms || []).filter((r) => r.isActive);
+    return [...active].sort((a, b) => {
+      if (role === 'Doctor') {
+        const aScore = a.type === 'Consultation' ? 0 : 1;
+        const bScore = b.type === 'Consultation' ? 0 : 1;
+        if (aScore !== bScore) return aScore - bScore;
+      } else if (role === 'Nurse') {
+        const aScore = a.type === 'Treatment' || a.type === 'Triage' ? 0 : 1;
+        const bScore = b.type === 'Treatment' || b.type === 'Triage' ? 0 : 1;
+        if (aScore !== bScore) return aScore - bScore;
+      }
+      return a.displayOrder - b.displayOrder;
+    });
+  }, [rooms, role]);
+
   const generateRandomPassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
     let res = 'Clinic#';
@@ -157,6 +178,9 @@ export default function StaffManagementTab({
     }
     setSelectedRoleId(r.id);
     setRole(r.staffRole);
+    if (r.staffRole !== 'Doctor' && r.staffRole !== 'Nurse') {
+      setAssignedRoomId('');
+    }
     if (r.staffRole === 'Doctor') {
       if (!title || title === 'RN' || title === 'Ms.' || title === 'Mr.') setTitle('Dr.');
     } else if (r.staffRole === 'Nurse') {
@@ -182,7 +206,9 @@ export default function StaffManagementTab({
     setPrc('');
     setPtr('');
     setS2('');
+    setPan('');
     setSpecialty('');
+    setAssignedRoomId('');
     setProvisionLogin(true);
     setTemporaryPassword(generateRandomPassword());
     setAddError(null);
@@ -216,7 +242,9 @@ export default function StaffManagementTab({
     setPrc(s.prcLicenseNumber || '');
     setPtr(s.ptrNumber || '');
     setS2(s.s2LicenseNumber || '');
+    setPan(s.philHealthPan || '');
     setSpecialty(s.specialty || '');
+    setAssignedRoomId(s.assignedRoomId || '');
     setRole(s.role);
     setIsActiveStaff(s.isActive);
 
@@ -258,6 +286,10 @@ export default function StaffManagementTab({
     const resolvedClinicRoleId = effectiveRoleId.startsWith('sys-') ? undefined : effectiveRoleId;
     const clinicRoleId = isEditingSelf ? editingStaff.clinicRoleId : resolvedClinicRoleId;
 
+    const canHaveRoom = effectiveStaffRole === 'Doctor' || effectiveStaffRole === 'Nurse';
+    const nextRoomId = canHaveRoom && assignedRoomId ? assignedRoomId : undefined;
+    const shouldClearRoom = !nextRoomId && !!editingStaff.assignedRoomId;
+
     const [updated, err] = await clinicService.updateStaff(editingStaff.id, {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -270,7 +302,10 @@ export default function StaffManagementTab({
       prcLicenseNumber: effectiveStaffRole === 'Doctor' ? prc.trim() : undefined,
       ptrNumber: effectiveStaffRole === 'Doctor' ? ptr.trim() || undefined : undefined,
       s2LicenseNumber: effectiveStaffRole === 'Doctor' ? s2.trim() || undefined : undefined,
+      philHealthPan: effectiveStaffRole === 'Doctor' ? pan.trim() || undefined : undefined,
       specialty: specialty.trim() || undefined,
+      assignedRoomId: nextRoomId,
+      clearAssignedRoom: shouldClearRoom,
       isActive: isEditingSelf ? editingStaff.isActive : isActiveStaff,
     });
 
@@ -284,7 +319,7 @@ export default function StaffManagementTab({
     setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
     setEditingStaff(null);
     notify.success(`Staff member ${updated.firstName} ${updated.lastName} updated.`);
-    await onRefreshStaff();
+    await Promise.all([onRefreshStaff(), refreshRooms(), refreshGlobalStaff()]);
   };
 
   const handleCreateStaff = async () => {
@@ -314,6 +349,7 @@ export default function StaffManagementTab({
 
     const effectiveRoleId = selectedRoleId || selectedRoleOption.id;
     const clinicRoleId = effectiveRoleId.startsWith('sys-') ? undefined : effectiveRoleId;
+    const canHaveRoom = role === 'Doctor' || role === 'Nurse';
 
     const [created, err] = await clinicService.createStaff({
       firstName: firstName.trim(),
@@ -327,7 +363,9 @@ export default function StaffManagementTab({
       prcLicenseNumber: role === 'Doctor' ? prc.trim() : undefined,
       ptrNumber: role === 'Doctor' ? ptr.trim() || undefined : undefined,
       s2LicenseNumber: role === 'Doctor' ? s2.trim() || undefined : undefined,
+      philHealthPan: role === 'Doctor' ? pan.trim() || undefined : undefined,
       specialty: specialty.trim() || undefined,
+      assignedRoomId: canHaveRoom && assignedRoomId ? assignedRoomId : undefined,
       initialPassword: provisionLogin ? temporaryPassword : undefined,
       sendInviteEmail: false,
     });
@@ -341,7 +379,7 @@ export default function StaffManagementTab({
 
     setStaff((prev) => [...prev, created]);
     setShowAddModal(false);
-    await onStaffAdded();
+    await Promise.all([onStaffAdded(), refreshRooms(), refreshGlobalStaff()]);
 
     if (provisionLogin && temporaryPassword) {
       setCredentialsModal({
@@ -500,6 +538,9 @@ export default function StaffManagementTab({
                           <Badge label="You" variant="info" size="sm" />
                         ) : null}
                         <Badge label={s.role} variant={s.role === 'Doctor' ? 'primary' : 'neutral'} size="sm" />
+                        {s.assignedRoomName ? (
+                          <Badge label={s.assignedRoomName} variant="outline" size="sm" icon="clinic" />
+                        ) : null}
                         {s.roleName && s.roleName !== s.role ? (
                           <Badge label={s.roleName} variant="purple" size="sm" />
                         ) : null}
@@ -522,6 +563,7 @@ export default function StaffManagementTab({
                           s.email ? s.email : 'No email',
                           s.prcLicenseNumber ? `PRC ${s.prcLicenseNumber}` : null,
                           s.ptrNumber ? `PTR ${s.ptrNumber}` : null,
+                          s.philHealthPan ? `PAN ${s.philHealthPan}` : null,
                           s.s2LicenseNumber ? `S2 ${s.s2LicenseNumber}` : null,
                           s.specialty,
                         ]
@@ -772,13 +814,23 @@ export default function StaffManagementTab({
 
         {role === 'Doctor' ? (
           <>
-            <Input
-              label="PRC license number"
-              required
-              value={prc}
-              onChangeText={setPrc}
-              placeholder="e.g. 0108924 (Mandatory for doctors)"
-            />
+            <View style={styles.formRow}>
+              <Input
+                containerStyle={styles.flexWide}
+                label="PRC license number"
+                required
+                value={prc}
+                onChangeText={setPrc}
+                placeholder="e.g. 0108924 (Mandatory for doctors)"
+              />
+              <Input
+                containerStyle={styles.flexWide}
+                label="PhilHealth Accreditation Number (PAN)"
+                value={pan}
+                onChangeText={setPan}
+                placeholder="e.g. 1200-9876543-2 (Konsulta)"
+              />
+            </View>
             <View style={styles.formRow}>
               <Input
                 containerStyle={styles.flexWide}
@@ -817,6 +869,11 @@ export default function StaffManagementTab({
                     {ptr}
                   </ThemedText>
                 ) : null}
+                {pan ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    {`PhilHealth PAN: ${pan}`}
+                  </ThemedText>
+                ) : null}
                 {s2 ? (
                   <ThemedText variant="captionBold" color={theme.colors.emergency}>
                     {s2}
@@ -833,6 +890,36 @@ export default function StaffManagementTab({
           onChangeText={setSpecialty}
           placeholder="e.g. Pediatrics, Triage Nursing, Billing Officer"
         />
+
+        {(role === 'Doctor' || role === 'Nurse') && activeRoomsForRole.length > 0 ? (
+          <FieldGroup label="Assigned Room / Station (Optional)">
+            <ThemedText variant="caption" color={theme.colors.textMuted}>
+              {role === 'Doctor'
+                ? 'Optional. Patients checked in to this doctor will automatically be routed to their assigned room.'
+                : 'Optional. Nurses assigned to a Treatment Room or Triage Station default to that station on login.'}
+            </ThemedText>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              nestedScrollEnabled
+              contentContainerStyle={styles.chipScrollRow}
+            >
+              <Chip
+                label="Unassigned / Floating"
+                active={!assignedRoomId}
+                onPress={() => setAssignedRoomId('')}
+              />
+              {activeRoomsForRole.map((room) => (
+                <Chip
+                  key={room.id}
+                  label={`${room.name} (${room.type})`}
+                  active={assignedRoomId === room.id}
+                  onPress={() => setAssignedRoomId(room.id)}
+                />
+              ))}
+            </ScrollView>
+          </FieldGroup>
+        ) : null}
 
         {/* Credentials provisioning section */}
         <View style={styles.credentialSection}>
@@ -1125,13 +1212,23 @@ export default function StaffManagementTab({
 
           {role === 'Doctor' ? (
             <>
-              <Input
-                label="PRC license number"
-                required
-                value={prc}
-                onChangeText={setPrc}
-                placeholder="e.g. 0108924 (Mandatory for doctors)"
-              />
+              <View style={styles.formRow}>
+                <Input
+                  containerStyle={styles.flexWide}
+                  label="PRC license number"
+                  required
+                  value={prc}
+                  onChangeText={setPrc}
+                  placeholder="e.g. 0108924 (Mandatory for doctors)"
+                />
+                <Input
+                  containerStyle={styles.flexWide}
+                  label="PhilHealth Accreditation Number (PAN)"
+                  value={pan}
+                  onChangeText={setPan}
+                  placeholder="e.g. 1200-9876543-2 (Konsulta)"
+                />
+              </View>
               <View style={styles.formRow}>
                 <Input
                   containerStyle={styles.flexWide}
@@ -1170,6 +1267,11 @@ export default function StaffManagementTab({
                       {ptr}
                     </ThemedText>
                   ) : null}
+                  {pan ? (
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      {`PhilHealth PAN: ${pan}`}
+                    </ThemedText>
+                  ) : null}
                   {s2 ? (
                     <ThemedText variant="captionBold" color={theme.colors.emergency}>
                       {s2}
@@ -1186,6 +1288,36 @@ export default function StaffManagementTab({
             onChangeText={setSpecialty}
             placeholder="e.g. Pediatrics, Triage Nursing, Billing Officer"
           />
+
+          {(role === 'Doctor' || role === 'Nurse') && activeRoomsForRole.length > 0 ? (
+            <FieldGroup label="Assigned Room / Station (Optional)">
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                {role === 'Doctor'
+                  ? 'Optional. Patients checked in to this doctor will automatically be routed to their assigned room.'
+                  : 'Optional. Nurses assigned to a Treatment Room or Triage Station default to that station on login.'}
+              </ThemedText>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                nestedScrollEnabled
+                contentContainerStyle={styles.chipScrollRow}
+              >
+                <Chip
+                  label="Unassigned / Floating"
+                  active={!assignedRoomId}
+                  onPress={() => setAssignedRoomId('')}
+                />
+                {activeRoomsForRole.map((room) => (
+                  <Chip
+                    key={room.id}
+                    label={`${room.name} (${room.type})`}
+                    active={assignedRoomId === room.id}
+                    onPress={() => setAssignedRoomId(room.id)}
+                  />
+                ))}
+              </ScrollView>
+            </FieldGroup>
+          ) : null}
         </Modal>
       ) : null}
 
@@ -1325,6 +1457,11 @@ export default function StaffManagementTab({
               {stampModalStaff.ptrNumber ? (
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
                   {stampModalStaff.ptrNumber}
+                </ThemedText>
+              ) : null}
+              {stampModalStaff.philHealthPan ? (
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  {`PhilHealth PAN: ${stampModalStaff.philHealthPan}`}
                 </ThemedText>
               ) : null}
               {stampModalStaff.s2LicenseNumber ? (

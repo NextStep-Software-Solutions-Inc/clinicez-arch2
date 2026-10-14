@@ -35,4 +35,11 @@ public sealed class ClinicalProcedure : BaseEntity
     public string? SiteRoute { get; set; }
     public string? ClinicalNotes { get; set; }
     public string? Complications { get; set; }
+
+    /// <summary>
+    /// Optional target treatment room where the procedure is routed for nursing execution.
+    /// </summary>
+    public Guid? TargetRoomId { get; set; }
+    public ClinicRoom? TargetRoom { get; set; }
+    public string? TargetRoomName { get; set; }
 }

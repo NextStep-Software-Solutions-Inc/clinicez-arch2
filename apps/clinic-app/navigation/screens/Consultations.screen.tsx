@@ -248,8 +248,21 @@ function CheckRow({ checked, onPress, label, disabled }: CheckRowProps) {
 export default function ConsultationsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { facilityName, accreditationNumber, letterhead } = useClinic();
-  const { current, staff } = useStaff();
+  const { facilityName, accreditationNumber, letterhead, rooms = [] } = useClinic();
+  const { current, staff, reload: reloadStaff } = useStaff();
+
+  const activeRooms = useMemo(() => (rooms || []).filter((r) => r.isActive), [rooms]);
+  const treatmentRooms = useMemo(
+    () => activeRooms.filter((r) => r.type === 'Treatment'),
+    [activeRooms],
+  );
+  const [selectedTreatmentRoomId, setSelectedTreatmentRoomId] = useState<string>('');
+
+  useEffect(() => {
+    if (!selectedTreatmentRoomId && treatmentRooms.length > 0) {
+      setSelectedTreatmentRoomId(treatmentRooms[0].id);
+    }
+  }, [selectedTreatmentRoomId, treatmentRooms]);
 
   // Queue
   const [patients, setPatients] = useState<PatientQueueItem[]>([]);
@@ -292,6 +305,21 @@ export default function ConsultationsScreen() {
   // Multi-Provider Queue Room / Station Filter States (Feature 19)
   const [queueViewFilter, setQueueViewFilter] = useState<QueueView>('WaitingForDoctor');
   const [selectedStationFilter, setSelectedStationFilter] = useState<string>('ALL');
+  const didApplyStaffRoomDefaults = useRef(false);
+
+  useEffect(() => {
+    if (didApplyStaffRoomDefaults.current || !current || activeRooms.length === 0) return;
+    didApplyStaffRoomDefaults.current = true;
+    if (current.role === 'Nurse' && current.assignedRoomId) {
+      const assignedRoom = activeRooms.find((r) => r.id === current.assignedRoomId);
+      if (assignedRoom) {
+        setSelectedStationFilter(assignedRoom.name);
+        if (assignedRoom.type === 'Treatment') {
+          setQueueViewFilter('PendingProcedure');
+        }
+      }
+    }
+  }, [current, activeRooms]);
 
   // PhilHealth Yakap Claim Readiness States (Feature 17)
   const [serverReadiness, setServerReadiness] = useState<YakapClaimReadinessDto | null>(null);
@@ -461,14 +489,16 @@ export default function ConsultationsScreen() {
   const [doctorPan, setDoctorPan] = useState('');
   const [physicalExamFindings, setPhysicalExamFindings] = useState<PhysicalExamFindings>({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
   const signerStaffId = signerStaff?.id;
+  const signerPrc = signerStaff?.prcLicenseNumber ?? '';
+  const signerPtr = signerStaff?.ptrNumber ?? '';
+  const signerS2 = signerStaff?.s2LicenseNumber ?? '';
+  const signerPan = signerStaff?.philHealthPan ?? '';
   useEffect(() => {
-    setDoctorPrc(signerStaff?.prcLicenseNumber ?? '');
-    setDoctorPtr(signerStaff?.ptrNumber ?? '');
-    setDoctorS2(signerStaff?.s2LicenseNumber ?? '');
-    setDoctorPan(signerStaff?.philHealthPan ?? '');
-    // Only re-seed when the acting doctor changes, so manual edits are not overwritten.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signerStaffId]);
+    setDoctorPrc(signerPrc);
+    setDoctorPtr(signerPtr);
+    setDoctorS2(signerS2);
+    setDoctorPan(signerPan);
+  }, [signerStaffId, signerPrc, signerPtr, signerS2, signerPan]);
 
   const requireSigner = () => {
     if (!signer) {
@@ -682,9 +712,14 @@ export default function ConsultationsScreen() {
   const loadQueue = useCallback(async () => {
     setQueueLoading(true);
     const doctorId = signer?.id;
+    const selectedRoomObj =
+      selectedStationFilter === 'ALL'
+        ? undefined
+        : activeRooms.find((r) => r.name === selectedStationFilter);
     const [queueData, queueErr] = await clinicService.getQueue({
       view: queueViewFilter,
       doctorId: queueViewFilter === 'MyRoom' ? doctorId : undefined,
+      roomId: selectedRoomObj?.id,
       roomOrStation: selectedStationFilter === 'ALL' ? undefined : selectedStationFilter,
     });
     if (queueErr || !queueData) {
@@ -694,7 +729,7 @@ export default function ConsultationsScreen() {
       setQueueError(null);
     }
     setQueueLoading(false);
-  }, [signer?.id, queueViewFilter, selectedStationFilter]);
+  }, [signer?.id, queueViewFilter, selectedStationFilter, activeRooms]);
 
   useEffect(() => {
     loadQueue();
@@ -1293,6 +1328,8 @@ export default function ConsultationsScreen() {
     }
 
     // Auto-order in-clinic procedures for the nursing station
+    const targetTreatmentRoom =
+      treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
     for (const procName of orderedProcedures) {
       const procInfo = procedureCatalog.find((p) => p.name === procName);
       const [, procErr] = await clinicService.orderProcedure({
@@ -1305,6 +1342,8 @@ export default function ConsultationsScreen() {
         category: procInfo?.category ?? 'Procedure',
         orderedByDoctorId: doctor.id,
         orderedByDoctorName: doctor.name,
+        targetRoomId: targetTreatmentRoom?.id,
+        targetRoomName: targetTreatmentRoom?.name,
         clinicalNotes: `Ordered during encounter for ${assessment}`,
       });
       if (procErr) followUpIssues.push(`procedure order (${procName})`);
@@ -1545,6 +1584,9 @@ export default function ConsultationsScreen() {
     const doctor = requireSigner();
     if (!doctor) return;
     const procInfo = procedureCatalog.find((p) => p.name === procedureName);
+    const targetTreatmentRoom =
+      treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
+    const resolvedTargetName = targetTreatmentRoom?.name || 'Treatment Room';
 
     const [proc, procErr] = await clinicService.orderProcedure({
       patientId: selectedPatient.patientId,
@@ -1556,18 +1598,28 @@ export default function ConsultationsScreen() {
       category: procInfo?.category ?? 'Procedure',
       orderedByDoctorId: doctor.id,
       orderedByDoctorName: doctor.name,
+      targetRoomId: targetTreatmentRoom?.id,
+      targetRoomName: resolvedTargetName,
       clinicalNotes: `Ordered for in-clinic execution: ${assessment || 'Evaluation'}`,
     });
 
     if (procErr) {
-      notify.error(procErr.message || 'Could not hand off procedure to Treatment Room.');
+      notify.error(procErr.message || `Could not hand off procedure to ${resolvedTargetName}.`);
       return;
     }
 
+    const finalRoomName = proc?.targetRoomName || resolvedTargetName;
     setSelectedPatient((prev) =>
-      prev ? { ...prev, status: 'PendingProcedure', roomOrStation: 'Treatment Room' } : null
+      prev
+        ? {
+            ...prev,
+            status: 'PendingProcedure',
+            roomId: proc?.targetRoomId ?? targetTreatmentRoom?.id,
+            roomOrStation: finalRoomName,
+          }
+        : null,
     );
-    notify.success(`${procedureName} ordered. Patient routed to Treatment Room.`);
+    notify.success(`${procedureName} ordered. Patient routed to ${finalRoomName}.`);
     loadQueue();
   };
 
@@ -2039,26 +2091,6 @@ export default function ConsultationsScreen() {
                       editable={!isSigned}
                     />
                   </View>
-
-                  {/* Automated Doctor PAN Snapshotting Display */}
-                  <View style={styles.panSnapshotCard}>
-                    <View style={styles.rowBetween}>
-                      <ThemedText variant="smallBold" color={theme.colors.text}>
-                        Attending Physician PhilHealth PAN (Accreditation #)
-                      </ThemedText>
-                      {doctorPan.trim() || signerStaff?.philHealthPan?.trim() ? (
-                        <Badge label="PAN Auto-Snapshotted" variant="success" size="sm" />
-                      ) : (
-                        <Badge label="PAN Missing" variant="warning" size="sm" />
-                      )}
-                    </View>
-                    <Input
-                      placeholder="Doctor PhilHealth PAN (e.g. 123456789012)"
-                      value={doctorPan}
-                      onChangeText={setDoctorPan}
-                      editable={!isSigned}
-                    />
-                  </View>
                 </Card>
               </View>
             )}
@@ -2316,8 +2348,23 @@ export default function ConsultationsScreen() {
               )}
               {orderedProcedures.length > 0 && !isSigned ? (
                 <View style={styles.procedureHandoffRow}>
+                  {treatmentRooms.length > 1 ? (
+                    <View style={styles.chipsRow}>
+                      {treatmentRooms.map((tr) => (
+                        <ToggleChip
+                          key={tr.id}
+                          label={tr.name}
+                          selected={selectedTreatmentRoomId === tr.id}
+                          onPress={() => setSelectedTreatmentRoomId(tr.id)}
+                        />
+                      ))}
+                    </View>
+                  ) : null}
                   <Button
-                    title="Send to Treatment Room (Nurse Handoff)"
+                    title={`Send to ${
+                      (treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0])?.name ||
+                      'Treatment Room'
+                    } (Nurse Handoff)`}
                     variant="primary"
                     icon="syringe"
                     size="sm"
@@ -2674,16 +2721,14 @@ export default function ConsultationsScreen() {
                   editable={!isSigned}
                   containerStyle={styles.fieldGrow}
                 />
-                {isYakapEligible ? (
-                  <Input
-                    label="PhilHealth PAN"
-                    value={doctorPan}
-                    onChangeText={setDoctorPan}
-                    editable={!isSigned}
-                    containerStyle={styles.fieldGrow}
-                    placeholder="Doctor PAN"
-                  />
-                ) : null}
+                <Input
+                  label="PhilHealth PAN"
+                  value={doctorPan}
+                  onChangeText={setDoctorPan}
+                  editable={!isSigned}
+                  containerStyle={styles.fieldGrow}
+                  placeholder="Doctor PAN"
+                />
               </View>
               {signerStaff && !isSigned && (
                 <View style={styles.updateProfileRow}>
@@ -2696,11 +2741,16 @@ export default function ConsultationsScreen() {
                       await clinicService.updateMyProfile({
                         firstName: signerStaff.firstName,
                         lastName: signerStaff.lastName,
+                        middleName: signerStaff.middleName,
+                        title: signerStaff.title,
+                        phoneNumber: signerStaff.phoneNumber,
+                        specialty: signerStaff.specialty,
                         prcLicenseNumber: doctorPrc,
                         ptrNumber: doctorPtr,
                         s2LicenseNumber: doctorS2,
                         philHealthPan: doctorPan,
                       });
+                      await reloadStaff();
                       notify.success('Updated credentials in your staff profile.');
                     }}
                   />
@@ -2889,24 +2939,43 @@ export default function ConsultationsScreen() {
               ]}
             />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stationFilterScroll}>
-              {(['ALL', 'Room 1', 'Room 2', 'Triage Station', 'Treatment Room'] as const).map((station) => (
-                <Pressable
-                  key={station}
-                  accessibilityRole="button"
-                  onPress={() => setSelectedStationFilter(station)}
-                  style={[
-                    styles.stationFilterPill,
-                    selectedStationFilter === station && styles.stationFilterPillActive,
-                  ]}
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setSelectedStationFilter('ALL')}
+                style={[
+                  styles.stationFilterPill,
+                  selectedStationFilter === 'ALL' && styles.stationFilterPillActive,
+                ]}
+              >
+                <ThemedText
+                  variant="captionBold"
+                  color={selectedStationFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
                 >
-                  <ThemedText
-                    variant="captionBold"
-                    color={selectedStationFilter === station ? theme.colors.primaryDark : theme.colors.textSecondary}
+                  All Stations
+                </ThemedText>
+              </Pressable>
+              {activeRooms.map((room) => {
+                const isSelected = selectedStationFilter === room.name;
+                const isMyAssignedRoom = current?.assignedRoomId === room.id;
+                return (
+                  <Pressable
+                    key={room.id}
+                    accessibilityRole="button"
+                    onPress={() => setSelectedStationFilter(room.name)}
+                    style={[
+                      styles.stationFilterPill,
+                      isSelected && styles.stationFilterPillActive,
+                    ]}
                   >
-                    {station === 'ALL' ? 'All Stations' : station}
-                  </ThemedText>
-                </Pressable>
-              ))}
+                    <ThemedText
+                      variant="captionBold"
+                      color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                    >
+                      {isMyAssignedRoom ? `${room.name} (Mine)` : room.name}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           </View>
 
@@ -2925,10 +2994,11 @@ export default function ConsultationsScreen() {
               {patients.map((p) => {
                 const isSelected = selectedPatient?.id === p.id;
                 const statusBadge = p.status === 'PendingProcedure' ? ' [Procedure]' : p.status === 'ReEvaluation' ? ' [Re-Eval]' : '';
+                const roomTag = p.roomOrStation ? ` · ${p.roomOrStation}` : '';
                 return (
                   <Button
                     key={p.id}
-                    title={`${p.queueNumber}  ${p.patientName}${statusBadge}`}
+                    title={`${p.queueNumber}  ${p.patientName}${roomTag}${statusBadge}`}
                     size="sm"
                     variant={isSelected ? 'primary' : 'outline'}
                     onPress={() => handleSelectPatient(p)}
@@ -3799,14 +3869,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     flex: 1,
-  },
-  panSnapshotCard: {
-    backgroundColor: theme.colors.surface,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
-    padding: theme.spacing.sm,
-    gap: theme.spacing.xs,
   },
   dualModeSwitcher: {
     flexDirection: 'row',

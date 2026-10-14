@@ -24,7 +24,8 @@ public sealed record CheckInPatientCommand(
     string? DoctorName = null,
     QueuePriority Priority = QueuePriority.Routine,
     string? ChiefComplaint = null,
-    string? RoomOrStation = null) : IRequest<QueueItemDto>;
+    string? RoomOrStation = null,
+    Guid? RoomId = null) : IRequest<QueueItemDto>;
 
 public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPatientCommand>
 {
@@ -47,6 +48,8 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
     private readonly IClinicContext _clinicContext;
     private readonly IClinicIdentityProvider _clinicIdentity;
     private readonly IPatientAppointmentPublisher _appointmentPublisher;
+    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<StaffMember>? _staffRepository;
 
     public CheckInPatientCommandHandler(
         IRepository<QueueItem> queueRepository,
@@ -54,7 +57,9 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IClinicIdentityProvider clinicIdentity,
-        IPatientAppointmentPublisher appointmentPublisher)
+        IPatientAppointmentPublisher appointmentPublisher,
+        IRepository<ClinicRoom>? roomRepository = null,
+        IRepository<StaffMember>? staffRepository = null)
     {
         _queueRepository = queueRepository;
         _appointmentRepository = appointmentRepository;
@@ -62,6 +67,8 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         _clinicContext = clinicContext;
         _clinicIdentity = clinicIdentity;
         _appointmentPublisher = appointmentPublisher;
+        _roomRepository = roomRepository;
+        _staffRepository = staffRepository;
     }
 
     public async Task<QueueItemDto> Handle(CheckInPatientCommand request, CancellationToken cancellationToken)
@@ -127,6 +134,54 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
 
         var sanitizedComplaint = SanitizeChiefComplaint(rawComplaint);
 
+        var resolvedDoctorId = request.DoctorId ?? appointment?.DoctorId;
+        var resolvedDoctorName = request.DoctorName ?? appointment?.DoctorName;
+        Guid? resolvedRoomId = request.RoomId;
+        string? resolvedRoomOrStation = request.RoomOrStation?.Trim();
+
+        if (resolvedRoomId.HasValue && _roomRepository != null)
+        {
+            var room = await _roomRepository
+                .Query(r => r.Id == resolvedRoomId.Value && r.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (room != null)
+            {
+                resolvedRoomId = room.Id;
+                resolvedRoomOrStation = room.Name;
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(resolvedRoomOrStation) && _roomRepository != null)
+        {
+            var room = await _roomRepository
+                .Query(r => r.ClinicId == _clinicContext.ClinicId && r.Name.ToLower() == resolvedRoomOrStation.ToLower())
+                .FirstOrDefaultAsync(cancellationToken);
+            if (room != null)
+            {
+                resolvedRoomId = room.Id;
+                resolvedRoomOrStation = room.Name;
+            }
+        }
+        else if (resolvedDoctorId.HasValue && _staffRepository != null)
+        {
+            var doctor = await _staffRepository
+                .Query(s => s.Id == resolvedDoctorId.Value && s.ClinicId == _clinicContext.ClinicId)
+                .Include(s => s.AssignedRoom)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (doctor != null)
+            {
+                if (string.IsNullOrWhiteSpace(resolvedDoctorName))
+                {
+                    var prefix = !string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} " : "Dr. ";
+                    resolvedDoctorName = $"{prefix}{doctor.FirstName} {doctor.LastName}".Trim();
+                }
+                if (doctor.AssignedRoom != null && doctor.AssignedRoom.IsActive)
+                {
+                    resolvedRoomId = doctor.AssignedRoom.Id;
+                    resolvedRoomOrStation = doctor.AssignedRoom.Name;
+                }
+            }
+        }
+
         var queueItem = new QueueItem
         {
             Id = Guid.NewGuid(),
@@ -138,13 +193,14 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             PatientId = request.PatientId,
             PatientName = request.PatientName.Trim(),
             AppointmentId = request.AppointmentId,
-            DoctorId = request.DoctorId,
-            DoctorName = request.DoctorName ?? appointment?.DoctorName,
+            DoctorId = resolvedDoctorId,
+            DoctorName = resolvedDoctorName,
+            RoomId = resolvedRoomId,
             Priority = request.Priority,
             Status = QueueStatus.Waiting,
             CheckInTime = DateTime.UtcNow,
             ChiefComplaint = sanitizedComplaint,
-            RoomOrStation = request.RoomOrStation?.Trim(),
+            RoomOrStation = resolvedRoomOrStation,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = _clinicContext.StaffId?.ToString() ?? "FrontDesk"
         };
@@ -168,8 +224,8 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
                         _clinicContext.ClinicId.ToString(),
                         clinic.Name,
                         new ClinicProviderSnapshotDto(
-                            (request.DoctorId ?? Guid.Empty).ToString(),
-                            request.DoctorName ?? appointment?.DoctorName ?? "Attending Physician",
+                            (resolvedDoctorId ?? Guid.Empty).ToString(),
+                            resolvedDoctorName ?? "Attending Physician",
                             null,
                             null
                         ),
@@ -178,7 +234,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
                         appointment?.DurationMinutes ?? 30,
                         AppointmentStatus.CheckedIn.ToString(),
                         $"Checked in at {queueItem.CheckInTime:HH:mm} (Queue {queueItem.QueueNumber})",
-                        appointment?.DoctorName ?? "Consultation",
+                        resolvedDoctorName ?? "Consultation",
                         queueItem.ChiefComplaint,
                         DraftId: appointment?.DraftId
                     )
@@ -210,7 +266,8 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             queueItem.ChiefComplaint,
             false,
             null,
-            queueItem.RoomOrStation);
+            queueItem.RoomOrStation,
+            queueItem.RoomId);
     }
 
     private static string? SanitizeChiefComplaint(string? rawInput)

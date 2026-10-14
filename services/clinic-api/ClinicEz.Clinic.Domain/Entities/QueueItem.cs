@@ -26,6 +26,12 @@ public sealed class QueueItem : BaseEntity
     public string? DoctorName { get; set; }
 
     /// <summary>
+    /// Optional foreign key to the assigned ClinicRoom entity.
+    /// </summary>
+    public Guid? RoomId { get; set; }
+    public ClinicRoom? Room { get; set; }
+
+    /// <summary>
     /// Exam room or nursing station assignment (e.g. "Exam Room 1 - Dr. Santos", "Triage Station A", "Procedure Bay")
     /// </summary>
     public string? RoomOrStation { get; set; }

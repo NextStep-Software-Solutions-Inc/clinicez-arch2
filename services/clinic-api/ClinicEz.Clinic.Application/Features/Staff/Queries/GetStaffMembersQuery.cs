@@ -32,6 +32,7 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
     {
         var query = _staffRepository.Query(s => s.ClinicId == _clinicContext.ClinicId)
             .Include(s => s.ClinicRole)
+            .Include(s => s.AssignedRoom)
             .AsQueryable();
 
         if (request.Role.HasValue)
@@ -70,7 +71,9 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
             staff.CreatedAt,
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
             MustChangePassword: staff.MustChangePassword,
-            PhilHealthPan: staff.PhilHealthPan
+            PhilHealthPan: staff.PhilHealthPan,
+            AssignedRoomId: staff.AssignedRoomId,
+            AssignedRoomName: staff.AssignedRoom?.Name
         )).ToList();
     }
 }
@@ -94,6 +97,7 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
     {
         var staff = await _staffRepository.Query(s => s.Id == request.Id && s.ClinicId == _clinicContext.ClinicId)
             .Include(s => s.ClinicRole)
+            .Include(s => s.AssignedRoom)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (staff == null)
@@ -122,6 +126,8 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
             staff.CreatedAt,
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
             MustChangePassword: staff.MustChangePassword,
-            PhilHealthPan: staff.PhilHealthPan);
+            PhilHealthPan: staff.PhilHealthPan,
+            AssignedRoomId: staff.AssignedRoomId,
+            AssignedRoomName: staff.AssignedRoom?.Name);
     }
 }

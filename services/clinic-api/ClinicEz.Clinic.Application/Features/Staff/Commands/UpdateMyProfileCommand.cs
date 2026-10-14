@@ -65,6 +65,7 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
     {
         var staff = await _staffRepository.Query(s => s.Id == request.StaffId && s.ClinicId == _clinicContext.ClinicId)
             .Include(s => s.ClinicRole)
+            .Include(s => s.AssignedRoom)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (staff == null)
@@ -122,6 +123,8 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
             staff.CreatedAt,
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
             MustChangePassword: staff.MustChangePassword,
-            PhilHealthPan: staff.PhilHealthPan);
+            PhilHealthPan: staff.PhilHealthPan,
+            AssignedRoomId: staff.AssignedRoomId,
+            AssignedRoomName: staff.AssignedRoom?.Name);
     }
 }

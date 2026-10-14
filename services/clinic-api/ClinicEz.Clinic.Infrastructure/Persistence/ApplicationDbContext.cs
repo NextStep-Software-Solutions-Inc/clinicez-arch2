@@ -29,6 +29,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
     public DbSet<Product> Products { get; set; } = null!;
     public DbSet<ClinicRole> ClinicRoles { get; set; } = null!;
+    public DbSet<ClinicRoom> ClinicRooms { get; set; } = null!;
     public DbSet<StaffMember> StaffMembers { get; set; } = null!;
     public DbSet<ClinicRefreshToken> RefreshTokens { get; set; } = null!;
     public DbSet<Appointment> Appointments { get; set; } = null!;
@@ -112,6 +113,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
         // 1. Multi-Tenant & Clinic Jurisdiction Global Query Filters
         modelBuilder.Entity<ClinicRole>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicRoom>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<StaffMember>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<Appointment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<DoctorScheduleTemplate>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
@@ -184,6 +186,18 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasIndex(e => new { e.TenantId, e.ClinicId });
         });
 
+        modelBuilder.Entity<ClinicRoom>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Code).HasMaxLength(30);
+            entity.Property(e => e.Description).HasMaxLength(255);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.DisplayOrder });
+            entity.HasIndex(e => new { e.ClinicId, e.Name });
+        });
+
         modelBuilder.Entity<StaffMember>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -201,6 +215,11 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasOne(e => e.ClinicRole)
                 .WithMany(r => r.StaffMembers)
                 .HasForeignKey(e => e.ClinicRoleId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.AssignedRoom)
+                .WithMany(r => r.AssignedStaff)
+                .HasForeignKey(e => e.AssignedRoomId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.Property(e => e.PasswordHash).HasMaxLength(500);
@@ -288,6 +307,11 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasOne(e => e.Appointment)
                 .WithMany()
                 .HasForeignKey(e => e.AppointmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Room)
+                .WithMany(r => r.QueueItems)
+                .HasForeignKey(e => e.RoomId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(e => e.TriageVitals)
@@ -435,6 +459,11 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
             entity.Property(e => e.ProcedureName).IsRequired().HasMaxLength(150);
             entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.TargetRoomName).HasMaxLength(100);
+            entity.HasOne(e => e.TargetRoom)
+                .WithMany()
+                .HasForeignKey(e => e.TargetRoomId)
+                .OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
         });
 

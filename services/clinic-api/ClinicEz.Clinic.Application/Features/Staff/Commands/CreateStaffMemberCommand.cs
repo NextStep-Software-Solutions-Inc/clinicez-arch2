@@ -31,7 +31,8 @@ public sealed record CreateStaffMemberCommand(
     string? Specialty,
     string? InitialPassword = null,
     bool SendInviteEmail = false,
-    string? PhilHealthPan = null) : IRequest<StaffMemberDto>;
+    string? PhilHealthPan = null,
+    Guid? AssignedRoomId = null) : IRequest<StaffMemberDto>;
 
 public sealed class CreateStaffMemberCommandValidator : AbstractValidator<CreateStaffMemberCommand>
 {
@@ -76,6 +77,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IFacilityPasswordHasher _passwordHasher;
+    private readonly IRepository<ClinicRoom>? _roomRepository;
 
     public CreateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
@@ -84,7 +86,8 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         IFacilityLicenseValidator licenseValidator,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IFacilityPasswordHasher? passwordHasher = null)
+        IFacilityPasswordHasher? passwordHasher = null,
+        IRepository<ClinicRoom>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _roleRepository = roleRepository;
@@ -93,6 +96,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _passwordHasher = passwordHasher ?? new FacilityPasswordHasher();
+        _roomRepository = roomRepository;
     }
 
     public async Task<StaffMemberDto> Handle(CreateStaffMemberCommand request, CancellationToken cancellationToken)
@@ -169,6 +173,27 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             }
         }
 
+        Guid? assignedRoomId = null;
+        string? assignedRoomName = null;
+        if (request.AssignedRoomId.HasValue && request.AssignedRoomId.Value != Guid.Empty)
+        {
+            if (_roomRepository != null)
+            {
+                var room = await _roomRepository
+                    .Query(r => r.Id == request.AssignedRoomId.Value && r.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (room != null)
+                {
+                    assignedRoomId = room.Id;
+                    assignedRoomName = room.Name;
+                }
+            }
+            else
+            {
+                assignedRoomId = request.AssignedRoomId.Value;
+            }
+        }
+
         string? passwordHash = null;
         bool mustChangePassword = false;
         string? returnedTempPassword = null;
@@ -210,6 +235,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
             ClinicRoleId = assignedRoleId,
+            AssignedRoomId = assignedRoomId,
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName.Trim(),
             MiddleName = request.MiddleName?.Trim(),
@@ -255,6 +281,8 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             HasCredentials: passwordHash != null,
             MustChangePassword: mustChangePassword,
             TemporaryPassword: returnedTempPassword,
-            PhilHealthPan: staff.PhilHealthPan);
+            PhilHealthPan: staff.PhilHealthPan,
+            AssignedRoomId: staff.AssignedRoomId,
+            AssignedRoomName: assignedRoomName);
     }
 }

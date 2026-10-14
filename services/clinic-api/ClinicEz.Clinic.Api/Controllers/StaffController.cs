@@ -149,7 +149,9 @@ public sealed class StaffController : ControllerBase
             request.S2LicenseNumber,
             request.Specialty,
             request.IsActive,
-            request.PhilHealthPan);
+            request.PhilHealthPan,
+            request.AssignedRoomId,
+            request.ClearAssignedRoom);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member updated successfully."));
@@ -200,7 +202,9 @@ public sealed record UpdateStaffMemberRequest(
     string? S2LicenseNumber,
     string? Specialty,
     bool IsActive = true,
-    string? PhilHealthPan = null);
+    string? PhilHealthPan = null,
+    Guid? AssignedRoomId = null,
+    bool ClearAssignedRoom = false);
 
 public sealed record UpdateMyProfileRequest(
     string FirstName,

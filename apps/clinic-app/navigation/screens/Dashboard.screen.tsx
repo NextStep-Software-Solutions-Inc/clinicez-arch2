@@ -302,8 +302,17 @@ export default function DashboardScreen() {
       return;
     }
 
+    const roomId = currentStaff?.assignedRoomId ?? item.roomId ?? undefined;
+    const roomOrStation = currentStaff?.assignedRoomName ?? item.roomOrStation ?? undefined;
+
     setActioningId(item.id);
-    const [, err] = await clinicService.callQueueItem(item.id, doctorId, doctorName);
+    const [, err] = await clinicService.callQueueItem(
+      item.id,
+      doctorId,
+      doctorName,
+      roomOrStation,
+      roomId,
+    );
     setActioningId(null);
 
     if (err) {
@@ -320,6 +329,8 @@ export default function DashboardScreen() {
               calledTime: new Date().toISOString(),
               doctorId: doctorId ?? q.doctorId,
               doctorName: doctorName ?? q.doctorName,
+              roomId: roomId ?? q.roomId,
+              roomOrStation: roomOrStation ?? q.roomOrStation,
             }
           : q
       )
@@ -822,6 +833,9 @@ export default function DashboardScreen() {
                       </ThemedText>
                     </View>
                     <View style={styles.badgeRow}>
+                      {item.roomOrStation ? (
+                        <Badge label={item.roomOrStation} variant="outline" size="sm" icon="clinic" />
+                      ) : null}
                       {isOverdueWait ? (
                         <Badge label="Waiting > 60m" variant="emergency" icon="alert" />
                       ) : null}

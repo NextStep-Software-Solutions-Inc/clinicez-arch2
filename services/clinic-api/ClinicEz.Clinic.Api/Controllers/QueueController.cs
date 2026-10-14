@@ -47,9 +47,10 @@ public sealed class QueueController : ControllerBase
         [FromQuery] Guid? doctorId,
         [FromQuery] string? roomOrStation,
         [FromQuery] string? view,
+        [FromQuery] Guid? roomId,
         CancellationToken ct)
     {
-        var result = await _sender.Send(new GetQueueQuery(date, status, doctorId, roomOrStation, view), ct);
+        var result = await _sender.Send(new GetQueueQuery(date, status, doctorId, roomOrStation, view, roomId), ct);
         return Ok(ApiResponse<IReadOnlyList<QueueItemDto>>.Success(result));
     }
 
@@ -120,7 +121,7 @@ public sealed class QueueController : ControllerBase
         [FromBody] CallQueueRequest? request,
         CancellationToken ct)
     {
-        var result = await _sender.Send(new CallQueueItemCommand(id, request?.DoctorId, request?.DoctorName, request?.RoomOrStation), ct);
+        var result = await _sender.Send(new CallQueueItemCommand(id, request?.DoctorId, request?.DoctorName, request?.RoomOrStation, request?.RoomId), ct);
         return Ok(ApiResponse<QueueItemDto>.Success(result, "Patient called to room."));
     }
 
@@ -215,4 +216,4 @@ public sealed record RecordTriageRequest(
     string? PhilHealthZScoreCategory = null,
     string? PhilHealthZScoreCode = null);
 
-public sealed record CallQueueRequest(Guid? DoctorId, string? DoctorName, string? RoomOrStation = null);
+public sealed record CallQueueRequest(Guid? DoctorId, string? DoctorName, string? RoomOrStation = null, Guid? RoomId = null);

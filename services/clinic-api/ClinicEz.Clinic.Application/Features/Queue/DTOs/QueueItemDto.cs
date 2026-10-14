@@ -23,7 +23,8 @@ public sealed record QueueItemDto(
     string? ChiefComplaint,
     bool HasVitals,
     string? VitalsSummary,
-    string? RoomOrStation = null);
+    string? RoomOrStation = null,
+    Guid? RoomId = null);
 
 public sealed record QueueMetricsDto(
     int InQueue,

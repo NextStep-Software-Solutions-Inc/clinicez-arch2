@@ -1010,6 +1010,77 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.ToTable("ClinicRoles", "clinic_dashboard");
                 });
 
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicRoom", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClinicId", "Name");
+
+                    b.HasIndex("TenantId", "ClinicId", "DisplayOrder");
+
+                    b.ToTable("ClinicRooms", "clinic_dashboard");
+                });
+
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicServiceItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1382,6 +1453,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<Guid?>("TargetRoomId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetRoomName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("TenantId")
                         .HasColumnType("text");
 
@@ -1392,6 +1470,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TargetRoomId");
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
@@ -4045,6 +4125,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<Guid?>("RoomId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("RoomOrStation")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -4074,6 +4157,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AppointmentId");
+
+                    b.HasIndex("RoomId");
 
                     b.HasIndex("TenantId", "ClinicId", "QueueDate");
 
@@ -4322,6 +4407,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AssignedRoomId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");
 
@@ -4427,6 +4515,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AssignedRoomId");
 
                     b.HasIndex("ClinicRoleId");
 
@@ -4951,6 +5041,16 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Navigation("StaffMember");
                 });
 
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicalProcedure", b =>
+                {
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.ClinicRoom", "TargetRoom")
+                        .WithMany()
+                        .HasForeignKey("TargetRoomId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("TargetRoom");
+                });
+
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ConsultationEncounter", b =>
                 {
                     b.HasOne("ClinicEz.Clinic.Domain.Entities.Appointment", "Appointment")
@@ -5102,15 +5202,29 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasForeignKey("AppointmentId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.ClinicRoom", "Room")
+                        .WithMany("QueueItems")
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Appointment");
+
+                    b.Navigation("Room");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.StaffMember", b =>
                 {
+                    b.HasOne("ClinicEz.Clinic.Domain.Entities.ClinicRoom", "AssignedRoom")
+                        .WithMany("AssignedStaff")
+                        .HasForeignKey("AssignedRoomId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("ClinicEz.Clinic.Domain.Entities.ClinicRole", "ClinicRole")
                         .WithMany("StaffMembers")
                         .HasForeignKey("ClinicRoleId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AssignedRoom");
 
                     b.Navigation("ClinicRole");
                 });
@@ -5177,6 +5291,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicRole", b =>
                 {
                     b.Navigation("StaffMembers");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicRoom", b =>
+                {
+                    b.Navigation("AssignedStaff");
+
+                    b.Navigation("QueueItems");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ConsultationEncounter", b =>

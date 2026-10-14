@@ -12,6 +12,12 @@ public sealed class StaffMember : BaseEntity
     public Guid? ClinicRoleId { get; set; }
     public ClinicRole? ClinicRole { get; set; }
 
+    /// <summary>
+    /// Optional default room or station assigned to this Doctor or Nurse.
+    /// </summary>
+    public Guid? AssignedRoomId { get; set; }
+    public ClinicRoom? AssignedRoom { get; set; }
+
     public required string FirstName { get; set; }
     public required string LastName { get; set; }
     public string? MiddleName { get; set; }

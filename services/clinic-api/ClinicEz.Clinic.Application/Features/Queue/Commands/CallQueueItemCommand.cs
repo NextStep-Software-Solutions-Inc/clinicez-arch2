@@ -11,7 +11,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.Queue.Commands;
 
-public sealed record CallQueueItemCommand(Guid Id, Guid? DoctorId = null, string? DoctorName = null, string? RoomOrStation = null) : IRequest<QueueItemDto>;
+public sealed record CallQueueItemCommand(
+    Guid Id,
+    Guid? DoctorId = null,
+    string? DoctorName = null,
+    string? RoomOrStation = null,
+    Guid? RoomId = null) : IRequest<QueueItemDto>;
 
 public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemCommand, QueueItemDto>
 {
@@ -19,17 +24,23 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly Features.Queue.Services.IQueueNotificationDispatcher? _notificationDispatcher;
+    private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IRepository<StaffMember>? _staffRepository;
 
     public CallQueueItemCommandHandler(
         IRepository<QueueItem> queueRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null)
+        Features.Queue.Services.IQueueNotificationDispatcher? notificationDispatcher = null,
+        IRepository<ClinicRoom>? roomRepository = null,
+        IRepository<StaffMember>? staffRepository = null)
     {
         _queueRepository = queueRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _notificationDispatcher = notificationDispatcher;
+        _roomRepository = roomRepository;
+        _staffRepository = staffRepository;
     }
 
     public async Task<QueueItemDto> Handle(CallQueueItemCommand request, CancellationToken cancellationToken)
@@ -47,7 +58,50 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
         item.CalledTime = DateTime.UtcNow;
         if (request.DoctorId.HasValue) item.DoctorId = request.DoctorId.Value;
         if (!string.IsNullOrWhiteSpace(request.DoctorName)) item.DoctorName = request.DoctorName;
-        if (!string.IsNullOrWhiteSpace(request.RoomOrStation)) item.RoomOrStation = request.RoomOrStation.Trim();
+
+        if (request.RoomId.HasValue && _roomRepository != null)
+        {
+            var room = await _roomRepository
+                .Query(r => r.Id == request.RoomId.Value && r.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (room != null)
+            {
+                item.RoomId = room.Id;
+                item.RoomOrStation = room.Name;
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(request.RoomOrStation))
+        {
+            item.RoomOrStation = request.RoomOrStation.Trim();
+            if (_roomRepository != null)
+            {
+                var room = await _roomRepository
+                    .Query(r => r.ClinicId == _clinicContext.ClinicId && r.Name.ToLower() == item.RoomOrStation.ToLower())
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (room != null)
+                {
+                    item.RoomId = room.Id;
+                    item.RoomOrStation = room.Name;
+                }
+            }
+        }
+        else if (_staffRepository != null)
+        {
+            var targetDoctorId = item.DoctorId ?? _clinicContext.StaffId;
+            if (targetDoctorId.HasValue)
+            {
+                var doctor = await _staffRepository
+                    .Query(s => s.Id == targetDoctorId.Value && s.ClinicId == _clinicContext.ClinicId)
+                    .Include(s => s.AssignedRoom)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (doctor?.AssignedRoom != null && doctor.AssignedRoom.IsActive)
+                {
+                    item.RoomId = doctor.AssignedRoom.Id;
+                    item.RoomOrStation = doctor.AssignedRoom.Name;
+                }
+            }
+        }
+
         item.UpdatedAt = DateTime.UtcNow;
         item.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Doctor";
 
@@ -84,7 +138,8 @@ public sealed class CallQueueItemCommandHandler : IRequestHandler<CallQueueItemC
             item.ChiefComplaint,
             item.TriageVitals != null,
             vitalsSummary,
-            item.RoomOrStation);
+            item.RoomOrStation,
+            item.RoomId);
     }
 }
 

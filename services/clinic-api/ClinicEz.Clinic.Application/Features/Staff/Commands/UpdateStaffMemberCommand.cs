@@ -28,7 +28,9 @@ public sealed record UpdateStaffMemberCommand(
     string? S2LicenseNumber,
     string? Specialty,
     bool IsActive,
-    string? PhilHealthPan = null) : IRequest<StaffMemberDto>;
+    string? PhilHealthPan = null,
+    Guid? AssignedRoomId = null,
+    bool ClearAssignedRoom = false) : IRequest<StaffMemberDto>;
 
 public sealed class UpdateStaffMemberCommandValidator : AbstractValidator<UpdateStaffMemberCommand>
 {
@@ -61,25 +63,29 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
     private readonly IClinicContext _clinicContext;
 
     private readonly IStaffAccessInvalidator? _accessCache;
+    private readonly IRepository<ClinicRoom>? _roomRepository;
 
     public UpdateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
         IRepository<ClinicRole> roleRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IStaffAccessInvalidator? accessCache = null)
+        IStaffAccessInvalidator? accessCache = null,
+        IRepository<ClinicRoom>? roomRepository = null)
     {
         _staffRepository = staffRepository;
         _roleRepository = roleRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _accessCache = accessCache;
+        _roomRepository = roomRepository;
     }
 
     public async Task<StaffMemberDto> Handle(UpdateStaffMemberCommand request, CancellationToken cancellationToken)
     {
         var staff = await _staffRepository.Query(s => s.Id == request.Id && s.ClinicId == _clinicContext.ClinicId)
             .Include(s => s.ClinicRole)
+            .Include(s => s.AssignedRoom)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (staff == null)
@@ -135,6 +141,32 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             roleName = role.Name;
         }
 
+        string? assignedRoomName = staff.AssignedRoom?.Name;
+        if (request.ClearAssignedRoom || (request.AssignedRoomId.HasValue && request.AssignedRoomId.Value == Guid.Empty))
+        {
+            staff.AssignedRoomId = null;
+            assignedRoomName = null;
+        }
+        else if (request.AssignedRoomId.HasValue && request.AssignedRoomId != staff.AssignedRoomId)
+        {
+            if (_roomRepository != null)
+            {
+                var room = await _roomRepository
+                    .Query(r => r.Id == request.AssignedRoomId.Value && r.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (room == null)
+                {
+                    throw new NotFoundException($"Clinic room '{request.AssignedRoomId.Value}' does not exist in this clinic.");
+                }
+                staff.AssignedRoomId = room.Id;
+                assignedRoomName = room.Name;
+            }
+            else
+            {
+                staff.AssignedRoomId = request.AssignedRoomId.Value;
+            }
+        }
+
         staff.FirstName = request.FirstName.Trim();
         staff.LastName = request.LastName.Trim();
         staff.MiddleName = request.MiddleName?.Trim();
@@ -177,6 +209,8 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             staff.CreatedAt,
             HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
             MustChangePassword: staff.MustChangePassword,
-            PhilHealthPan: staff.PhilHealthPan);
+            PhilHealthPan: staff.PhilHealthPan,
+            AssignedRoomId: staff.AssignedRoomId,
+            AssignedRoomName: assignedRoomName);
     }
 }

@@ -17,7 +17,8 @@ public sealed record GetQueueQuery(
     QueueStatus? Status = null,
     Guid? DoctorId = null,
     string? RoomOrStation = null,
-    string? View = null // "All", "MyRoom", "WaitingForDoctor", "Triage", "PendingProcedure"
+    string? View = null, // "All", "MyRoom", "WaitingForDoctor", "Triage", "PendingProcedure"
+    Guid? RoomId = null
 ) : IRequest<IReadOnlyList<QueueItemDto>>;
 
 public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadOnlyList<QueueItemDto>>
@@ -50,7 +51,18 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
         }
 
         // Specific Room/Station Filter
-        if (!string.IsNullOrWhiteSpace(request.RoomOrStation))
+        if (request.RoomId.HasValue && !string.IsNullOrWhiteSpace(request.RoomOrStation))
+        {
+            var roomId = request.RoomId.Value;
+            var room = request.RoomOrStation.Trim();
+            query = query.Where(q => q.RoomId == roomId || q.RoomOrStation == room);
+        }
+        else if (request.RoomId.HasValue)
+        {
+            var roomId = request.RoomId.Value;
+            query = query.Where(q => q.RoomId == roomId);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.RoomOrStation))
         {
             var room = request.RoomOrStation.Trim();
             query = query.Where(q => q.RoomOrStation == room);
@@ -126,7 +138,8 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
                 item.ChiefComplaint,
                 item.TriageVitals != null,
                 vitalsSummary,
-                item.RoomOrStation);
+                item.RoomOrStation,
+                item.RoomId);
         }).ToList();
     }
 }

@@ -28,7 +28,9 @@ public record ClinicalProcedureDto(
     DateTime? ExpirationDate,
     string? SiteRoute,
     string? ClinicalNotes,
-    string? Complications
+    string? Complications,
+    Guid? TargetRoomId = null,
+    string? TargetRoomName = null
 );
 
 public record OrderProcedureRequest(
@@ -41,7 +43,9 @@ public record OrderProcedureRequest(
     string Category,
     Guid? OrderedByDoctorId,
     string? OrderedByDoctorName,
-    string? ClinicalNotes
+    string? ClinicalNotes,
+    Guid? TargetRoomId = null,
+    string? TargetRoomName = null
 );
 
 public record RecordProcedureExecutionRequest(

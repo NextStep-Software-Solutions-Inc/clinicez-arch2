@@ -31,7 +31,7 @@ import {
   CardiometabolicRiskTab,
 } from '../../components/chart';
 import { useClinic } from '@context/ClinicContext';
-import { useStaff } from '@context/StaffContext';
+import { useStaff, formatStaffName } from '@context/StaffContext';
 import { openDocument } from '../../services/documentOpener';
 import { notify } from '@utils/feedback';
 import { ResponsiveLayout } from '@layout';
@@ -106,8 +106,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const canImportPatient = usePermission(PERMISSIONS.patientsWrite);
   const openPatientId = route.params?.openPatientId;
   const openRegister = route.params?.openRegister;
-  const { letterhead } = useClinic();
-  const { currentName } = useStaff();
+  const { letterhead, rooms = [] } = useClinic();
+  const { currentName, staff: staffList, current: currentStaff } = useStaff();
   const [patients, setPatients] = useState<ClinicPatient[] | null>(null);
   const [patientsError, setPatientsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -284,11 +284,25 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const isCheckingInRef = useRef(false);
   const isRegisteringRef = useRef(false);
   const [checkingInPatientId, setCheckingInPatientId] = useState<string | null>(null);
+  const [checkInModalPatient, setCheckInModalPatient] = useState<ClinicPatient | null>(null);
+  const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
+  const [checkInRoomId, setCheckInRoomId] = useState<string>('');
+  const [checkInPriority, setCheckInPriority] = useState<'Routine' | 'Urgent' | 'Emergency'>('Routine');
+  const [checkInComplaint, setCheckInComplaint] = useState<string>('');
   const [conflictModal, setConflictModal] = useState<{
     visible: boolean;
     error?: any;
     patientName?: string;
   } | null>(null);
+
+  const activeDoctors = useMemo(
+    () => (staffList || []).filter((s) => s.role === 'Doctor' && s.isActive),
+    [staffList],
+  );
+  const activeRooms = useMemo(
+    () => (rooms || []).filter((r) => r.isActive),
+    [rooms],
+  );
 
   // Standalone PhilHealth Profile Modal state
   const [philHealthProfileModalVisible, setPhilHealthProfileModalVisible] = useState(false);
@@ -1083,18 +1097,58 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setSelectedRxSlip(updatedSlip);
   };
 
-  const handleQueueCheckIn = async (patient: ClinicPatient) => {
+  const handleQueueCheckIn = (patient: ClinicPatient) => {
     if (isCheckingInRef.current || checkingInPatientId) return;
+    const isUrgent =
+      patient.alerts?.toLowerCase().includes('fall') ||
+      patient.alerts?.toLowerCase().includes('chest');
+    const defaultDoc =
+      currentStaff?.role === 'Doctor' && currentStaff.isActive ? currentStaff : null;
+    setCheckInModalPatient(patient);
+    setCheckInDoctorId(defaultDoc?.id ?? '');
+    setCheckInRoomId(defaultDoc?.assignedRoomId ?? '');
+    setCheckInPriority(isUrgent ? 'Urgent' : 'Routine');
+    setCheckInComplaint(
+      patient.chronicConditions
+        ? `Follow-up: ${patient.chronicConditions}`
+        : 'General consultation',
+    );
+  };
+
+  const handleSelectCheckInDoctor = (docId: string) => {
+    setCheckInDoctorId(docId);
+    if (!docId) {
+      return;
+    }
+    const doc = activeDoctors.find((d) => d.id === docId);
+    if (doc?.assignedRoomId) {
+      setCheckInRoomId(doc.assignedRoomId);
+    }
+  };
+
+  const handleConfirmQueueCheckIn = async () => {
+    if (!checkInModalPatient || isCheckingInRef.current || checkingInPatientId) return;
+    const patient = checkInModalPatient;
     isCheckingInRef.current = true;
     setCheckingInPatientId(patient.id);
 
+    const chosenDoctor = checkInDoctorId
+      ? activeDoctors.find((d) => d.id === checkInDoctorId)
+      : undefined;
+    const chosenRoom = checkInRoomId
+      ? activeRooms.find((r) => r.id === checkInRoomId)
+      : undefined;
+
     try {
-      const isUrgent = patient.alerts?.toLowerCase().includes('fall') || patient.alerts?.toLowerCase().includes('chest');
       const [, checkInErr] = await clinicService.checkInPatient({
         patientId: patient.id,
         patientName: patient.fullName,
-        priority: isUrgent ? 'Urgent' : 'Routine',
-        chiefComplaint: patient.chronicConditions ? `Follow-up: ${patient.chronicConditions}` : 'General consultation',
+        doctorId: chosenDoctor?.id,
+        doctorName: chosenDoctor ? formatStaffName(chosenDoctor) : undefined,
+        roomId: chosenRoom?.id,
+        roomOrStation: chosenRoom?.name,
+        priority: checkInPriority,
+        chiefComplaint: checkInComplaint.trim() || 'General consultation',
       });
       if (checkInErr) {
         if (
@@ -1102,6 +1156,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           checkInErr.errorCode === 'CONFLICT' ||
           checkInErr.errorCode === 'active_queue_ticket_exists'
         ) {
+          setCheckInModalPatient(null);
           setConflictModal({
             visible: true,
             error: checkInErr,
@@ -1112,6 +1167,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         notify.error(checkInErr.message || 'Could not add the patient to the queue.');
         return;
       }
+      setCheckInModalPatient(null);
       navigation.navigate('Dashboard');
     } finally {
       isCheckingInRef.current = false;
@@ -2289,6 +2345,168 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         patient={selectedPatientForProfile}
         onSaved={handlePhilHealthProfileSaved}
       />
+
+      {/* Walk-In Check-In & Room Routing Modal */}
+      <Modal
+        visible={!!checkInModalPatient}
+        onClose={() => !checkingInPatientId && setCheckInModalPatient(null)}
+        title="Walk-In Check-In & Routing"
+        subtitle={
+          checkInModalPatient
+            ? `Queue ${checkInModalPatient.fullName} (${checkInModalPatient.patientCode}) and optionally assign a doctor or room`
+            : ''
+        }
+        maxWidth={540}
+        footer={
+          <>
+            <Button
+              title="Cancel"
+              variant="ghost"
+              onPress={() => setCheckInModalPatient(null)}
+              disabled={!!checkingInPatientId}
+            />
+            <Button
+              title="Confirm Check-In"
+              icon="check"
+              onPress={handleConfirmQueueCheckIn}
+              loading={!!checkingInPatientId}
+            />
+          </>
+        }
+      >
+        <View style={{ gap: theme.spacing.md }}>
+          {/* Attending Doctor Picker */}
+          <View style={{ gap: theme.spacing.xs }}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+              Attending Doctor (Optional)
+            </ThemedText>
+            <View style={styles.relationshipGrid}>
+              <Pressable
+                onPress={() => handleSelectCheckInDoctor('')}
+                style={[
+                  styles.relationshipChip,
+                  !checkInDoctorId && styles.relationshipChip_selected,
+                ]}
+              >
+                <ThemedText
+                  variant="smallBold"
+                  color={!checkInDoctorId ? theme.colors.textInverted : theme.colors.text}
+                >
+                  Any Available Doctor
+                </ThemedText>
+              </Pressable>
+              {activeDoctors.map((doc) => {
+                const isSelected = checkInDoctorId === doc.id;
+                const docLabel = `${formatStaffName(doc)}${
+                  doc.assignedRoomName ? ` · ${doc.assignedRoomName}` : ''
+                }`;
+                return (
+                  <Pressable
+                    key={doc.id}
+                    onPress={() => handleSelectCheckInDoctor(doc.id)}
+                    style={[
+                      styles.relationshipChip,
+                      isSelected && styles.relationshipChip_selected,
+                    ]}
+                  >
+                    <ThemedText
+                      variant="smallBold"
+                      color={isSelected ? theme.colors.textInverted : theme.colors.text}
+                    >
+                      {docLabel}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Room / Station Picker */}
+          {activeRooms.length > 0 ? (
+            <View style={{ gap: theme.spacing.xs }}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                Room / Station (Optional)
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Selecting a doctor with an assigned room automatically pre-selects their room.
+              </ThemedText>
+              <View style={styles.relationshipGrid}>
+                <Pressable
+                  onPress={() => setCheckInRoomId('')}
+                  style={[
+                    styles.relationshipChip,
+                    !checkInRoomId && styles.relationshipChip_selected,
+                  ]}
+                >
+                  <ThemedText
+                    variant="smallBold"
+                    color={!checkInRoomId ? theme.colors.textInverted : theme.colors.text}
+                  >
+                    Auto / Unassigned
+                  </ThemedText>
+                </Pressable>
+                {activeRooms.map((room) => {
+                  const isSelected = checkInRoomId === room.id;
+                  return (
+                    <Pressable
+                      key={room.id}
+                      onPress={() => setCheckInRoomId(room.id)}
+                      style={[
+                        styles.relationshipChip,
+                        isSelected && styles.relationshipChip_selected,
+                      ]}
+                    >
+                      <ThemedText
+                        variant="smallBold"
+                        color={isSelected ? theme.colors.textInverted : theme.colors.text}
+                      >
+                        {room.name}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
+          {/* Priority Picker */}
+          <View style={{ gap: theme.spacing.xs }}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+              Queue Priority
+            </ThemedText>
+            <View style={styles.relationshipGrid}>
+              {(['Routine', 'Urgent', 'Emergency'] as const).map((prio) => {
+                const isSelected = checkInPriority === prio;
+                return (
+                  <Pressable
+                    key={prio}
+                    onPress={() => setCheckInPriority(prio)}
+                    style={[
+                      styles.relationshipChip,
+                      isSelected && styles.relationshipChip_selected,
+                    ]}
+                  >
+                    <ThemedText
+                      variant="smallBold"
+                      color={isSelected ? theme.colors.textInverted : theme.colors.text}
+                    >
+                      {prio}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Chief Complaint */}
+          <Input
+            label="Chief Complaint / Reason for Visit"
+            value={checkInComplaint}
+            onChangeText={setCheckInComplaint}
+            placeholder="e.g. Fever and cough for 2 days, annual physical exam"
+          />
+        </View>
+      </Modal>
 
       {/* Active Queue Ticket Conflict Modal */}
       <QueueConflictModal

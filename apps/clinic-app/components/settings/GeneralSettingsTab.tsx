@@ -21,6 +21,7 @@ import PatientSearchConfigSection from './PatientSearchConfigSection';
 import EodReconciliationSettingsCard from './EodReconciliationSettingsCard';
 import WaitingAreaTvSettingsCard from './WaitingAreaTvSettingsCard';
 import QueuePushNotificationSettingsCard from './QueuePushNotificationSettingsCard';
+import { ClinicRoomsSettingsCard } from './ClinicRoomsSettingsCard';
 
 interface GeneralSettingsTabProps {
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
@@ -249,6 +250,9 @@ export default function GeneralSettingsTab({
           )}
         </CardContent>
       </Card>
+
+      {/* Clinic Rooms & Stations */}
+      <ClinicRoomsSettingsCard />
 
       {/* Today's collections & EOD Census */}
       <Card>
