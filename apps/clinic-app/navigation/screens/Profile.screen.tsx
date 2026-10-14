@@ -47,6 +47,7 @@ export default function ProfileScreen() {
   const [prc, setPrc] = useState('');
   const [ptr, setPtr] = useState('');
   const [s2, setS2] = useState('');
+  const [pan, setPan] = useState('');
 
   // Status & Feedback States
   const [savingProfile, setSavingProfile] = useState(false);
@@ -75,6 +76,7 @@ export default function ProfileScreen() {
     setPrc(s?.prcLicenseNumber || '');
     setPtr(s?.ptrNumber || '');
     setS2(s?.s2LicenseNumber || '');
+    setPan(s?.philHealthPan || '');
   }, [staffCurrent, user]);
 
   if (!user) return null;
@@ -106,6 +108,7 @@ export default function ProfileScreen() {
       prcLicenseNumber: isDoctor ? prc.trim() : undefined,
       ptrNumber: isDoctor ? ptr.trim() || undefined : undefined,
       s2LicenseNumber: isDoctor ? s2.trim() || undefined : undefined,
+      philHealthPan: isDoctor ? pan.trim() || undefined : undefined,
       specialty: specialty.trim() || undefined,
     });
 
@@ -320,13 +323,24 @@ export default function ProfileScreen() {
               />
             </View>
 
-            <Input
-              label="PDEA S2 Dangerous Drug License Number"
-              value={s2}
-              onChangeText={setS2}
-              placeholder="e.g. S2 No. 0918-99214-A1 (Optional)"
-              helperText="Required by Philippine PDEA to prescribe yellow pad dangerous drugs and regulated narcotics."
-            />
+            <View style={styles.formRow}>
+              <Input
+                containerStyle={styles.flexWide}
+                label="PhilHealth Accreditation Number (PAN)"
+                value={pan}
+                onChangeText={setPan}
+                placeholder="e.g. 1200-9876543-2"
+                helperText="Auto-prefilled on PhilHealth Konsulta / YAKAP consultations."
+              />
+              <Input
+                containerStyle={styles.flexWide}
+                label="PDEA S2 Dangerous Drug License Number"
+                value={s2}
+                onChangeText={setS2}
+                placeholder="e.g. S2 No. 0918-99214-A1 (Optional)"
+                helperText="Required by Philippine PDEA to prescribe yellow pad dangerous drugs."
+              />
+            </View>
 
             {/* Official Doctor Stamp Specimen Preview */}
             <View style={styles.stampCard}>
@@ -354,6 +368,11 @@ export default function ProfileScreen() {
                 {ptr ? (
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
                     {ptr}
+                  </ThemedText>
+                ) : null}
+                {pan ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    {`PhilHealth PAN: ${pan}`}
                   </ThemedText>
                 ) : null}
                 {s2 ? (

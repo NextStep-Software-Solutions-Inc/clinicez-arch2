@@ -305,4 +305,46 @@ describe('Milestone M5 Empirical Stress Tests: Section Jump Navigation & Whitesp
       expect(validBadges.ptrBadge).toBe('PTR [Snapshotted]');
     });
   });
+
+  // =========================================================================
+  // 3. STAFF PROFILE PAN PERSISTENCE & SINGLE CONSULTATION PAN INPUT
+  // =========================================================================
+  describe('Requirement 3: Staff Profile & Management PAN Integration and Single Consultation PAN Input', () => {
+    test('3.1 Profile.screen.tsx includes PhilHealth Accreditation Number (PAN) field and persists philHealthPan in updateMyProfile', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const profilePath = path.resolve(__dirname, '../navigation/screens/Profile.screen.tsx');
+      const source = fs.readFileSync(profilePath, 'utf8');
+
+      expect(source).toContain('label="PhilHealth Accreditation Number (PAN)"');
+      expect(source).toContain('setPan(s?.philHealthPan || \'\')');
+      expect(source).toContain('philHealthPan: isDoctor ? pan.trim() || undefined : undefined');
+    });
+
+    test('3.2 StaffManagementTab.tsx includes PhilHealth Accreditation Number (PAN) in Add/Edit modals and persists philHealthPan in createStaff/updateStaff', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const staffTabPath = path.resolve(__dirname, '../components/settings/StaffManagementTab.tsx');
+      const source = fs.readFileSync(staffTabPath, 'utf8');
+
+      const panLabelMatches = source.match(/label="PhilHealth Accreditation Number \(PAN\)"/g);
+      expect(panLabelMatches?.length).toBe(2); // Add modal + Edit modal
+      expect(source).toContain('setPan(s.philHealthPan || \'\')');
+      expect(source).toContain('philHealthPan: effectiveStaffRole === \'Doctor\' ? pan.trim() || undefined : undefined');
+      expect(source).toContain('philHealthPan: role === \'Doctor\' ? pan.trim() || undefined : undefined');
+    });
+
+    test('3.3 Consultations.screen.tsx renders only a single doctorPan input in Attending Physician card and preserves profile fields on quick-save', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const consultationScreenPath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
+      const source = fs.readFileSync(consultationScreenPath, 'utf8');
+
+      const setDoctorPanInputs = source.match(/onChangeText=\{setDoctorPan\}/g);
+      expect(setDoctorPanInputs?.length).toBe(1);
+      expect(source).not.toContain('panSnapshotCard');
+      expect(source).toContain('middleName: signerStaff.middleName');
+      expect(source).toContain('specialty: signerStaff.specialty');
+    });
+  });
 });
