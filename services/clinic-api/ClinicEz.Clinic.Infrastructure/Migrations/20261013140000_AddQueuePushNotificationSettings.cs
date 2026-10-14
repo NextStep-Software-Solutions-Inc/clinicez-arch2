@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -11,6 +11,29 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<bool>(
+                name: "ApproachingNotificationSent",
+                schema: "clinic_dashboard",
+                table: "QueueItems",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
+            migrationBuilder.AddColumn<bool>(
+                name: "CalledNotificationSent",
+                schema: "clinic_dashboard",
+                table: "QueueItems",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
+            migrationBuilder.AddColumn<Guid>(
+                name: "SyncPatientId",
+                schema: "clinic_dashboard",
+                table: "QueueItems",
+                type: "uuid",
+                nullable: true);
+
             migrationBuilder.AddColumn<bool>(
                 name: "EnableQueuePushNotifications",
                 schema: "clinic_dashboard",
@@ -26,34 +49,26 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                 type: "integer",
                 nullable: false,
                 defaultValue: 2);
-
-            migrationBuilder.AddColumn<Guid>(
-                name: "SyncPatientId",
-                schema: "clinic_dashboard",
-                table: "QueueItems",
-                type: "uuid",
-                nullable: true);
-
-            migrationBuilder.AddColumn<bool>(
-                name: "ApproachingNotificationSent",
-                schema: "clinic_dashboard",
-                table: "QueueItems",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
-
-            migrationBuilder.AddColumn<bool>(
-                name: "CalledNotificationSent",
-                schema: "clinic_dashboard",
-                table: "QueueItems",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropColumn(
+                name: "ApproachingNotificationSent",
+                schema: "clinic_dashboard",
+                table: "QueueItems");
+
+            migrationBuilder.DropColumn(
+                name: "CalledNotificationSent",
+                schema: "clinic_dashboard",
+                table: "QueueItems");
+
+            migrationBuilder.DropColumn(
+                name: "SyncPatientId",
+                schema: "clinic_dashboard",
+                table: "QueueItems");
+
             migrationBuilder.DropColumn(
                 name: "EnableQueuePushNotifications",
                 schema: "clinic_dashboard",
@@ -63,21 +78,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                 name: "QueuePushNotificationThreshold",
                 schema: "clinic_dashboard",
                 table: "ClinicSettings");
-
-            migrationBuilder.DropColumn(
-                name: "SyncPatientId",
-                schema: "clinic_dashboard",
-                table: "QueueItems");
-
-            migrationBuilder.DropColumn(
-                name: "ApproachingNotificationSent",
-                schema: "clinic_dashboard",
-                table: "QueueItems");
-
-            migrationBuilder.DropColumn(
-                name: "CalledNotificationSent",
-                schema: "clinic_dashboard",
-                table: "QueueItems");
         }
     }
 }
