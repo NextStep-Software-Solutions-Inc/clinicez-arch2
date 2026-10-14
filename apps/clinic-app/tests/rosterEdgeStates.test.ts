@@ -297,6 +297,89 @@ describe('Roster and Slot Edge States', () => {
     expect(markup).not.toContain('No physicians registered yet');
   });
 
+  test('Issue #23: resolveSelectedDoctorId preserves switched physician and does not reset to initialDoctorId', () => {
+    const multiDoctors: StaffMember[] = [
+      {
+        id: 'doc-1',
+        tenantId: 'tenant-1',
+        clinicId: 'clinic-1',
+        firstName: 'Maria',
+        lastName: 'Santos',
+        role: 'Doctor',
+        isActive: true,
+        createdAt: '2026-10-14T00:00:00Z',
+      },
+      {
+        id: 'doc-2',
+        tenantId: 'tenant-1',
+        clinicId: 'clinic-1',
+        firstName: 'Juan',
+        lastName: 'Reyes',
+        role: 'Doctor',
+        isActive: true,
+        createdAt: '2026-10-14T00:00:00Z',
+      },
+    ];
+
+    // When user switches to doc-2, currentSelectedId is doc-2 even though initialDoctorId was doc-1.
+    // Must NOT reset back to doc-1:
+    expect(resolveSelectedDoctorId(multiDoctors, 'doc-2', 'doc-1')).toBe('doc-2');
+
+    // When modal first opens and no physician has been selected yet, initialDoctorId is honored:
+    expect(resolveSelectedDoctorId(multiDoctors, '', 'doc-2')).toBe('doc-2');
+    expect(resolveSelectedDoctorId(multiDoctors, undefined, 'doc-2')).toBe('doc-2');
+
+    // If current selected doctor was deleted/removed from staff, gracefully fallback to initialDoctorId:
+    expect(resolveSelectedDoctorId(multiDoctors, 'deleted-doc', 'doc-2')).toBe('doc-2');
+
+    // If both current selection and initialDoctorId are absent/invalid, fallback to first doctor:
+    expect(resolveSelectedDoctorId(multiDoctors, 'deleted-doc', 'deleted-init')).toBe('doc-1');
+    expect(resolveSelectedDoctorId(multiDoctors, '', undefined)).toBe('doc-1');
+
+    // Empty doctors array returns empty string safely:
+    expect(resolveSelectedDoctorId([], 'doc-2', 'doc-1')).toBe('');
+  });
+
+  test('Issue #23: DoctorRosterCalendarModal renders physician pills with accessibility roles and labels for multi-doctor clinics', () => {
+    const multiDoctors: StaffMember[] = [
+      {
+        id: 'doc-1',
+        tenantId: 'tenant-1',
+        clinicId: 'clinic-1',
+        firstName: 'Maria',
+        lastName: 'Santos',
+        role: 'Doctor',
+        isActive: true,
+        createdAt: '2026-10-14T00:00:00Z',
+      },
+      {
+        id: 'doc-2',
+        tenantId: 'tenant-1',
+        clinicId: 'clinic-1',
+        firstName: 'Juan',
+        lastName: 'Reyes',
+        role: 'Doctor',
+        isActive: true,
+        createdAt: '2026-10-14T00:00:00Z',
+      },
+    ];
+
+    const markup = renderToStaticMarkup(
+      React.createElement(DoctorRosterCalendarModal, {
+        visible: true,
+        onClose: () => {},
+        doctors: multiDoctors,
+        initialDoctorId: 'doc-2',
+      })
+    );
+
+    expect(markup).toContain('Select Physician:');
+    expect(markup).toContain('Dr. Maria Santos');
+    expect(markup).toContain('Dr. Juan Reyes');
+    expect(markup).toContain('aria-label="Select Dr. Maria Santos"');
+    expect(markup).toContain('aria-label="Select Dr. Juan Reyes"');
+  });
+
   test('resolveSettingsRouteIntent routes openAddStaff to the staff tab and opens the Add Staff modal', () => {
     expect(resolveSettingsRouteIntent(undefined)).toEqual({
       targetTab: null,

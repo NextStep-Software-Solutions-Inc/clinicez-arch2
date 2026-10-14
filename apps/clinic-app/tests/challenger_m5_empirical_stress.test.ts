@@ -1,5 +1,69 @@
 // token-guard:ignore-file
 import { describe, expect, test, mock } from 'bun:test';
+mock.module('react-native', () => ({
+  StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
+  View: 'View',
+  Pressable: 'Pressable',
+  ScrollView: 'ScrollView',
+  TextInput: 'TextInput',
+  Text: 'Text',
+  ActivityIndicator: 'ActivityIndicator',
+  Modal: 'Modal',
+  KeyboardAvoidingView: 'KeyboardAvoidingView',
+  FlatList: 'FlatList',
+  SectionList: 'SectionList',
+  Switch: 'Switch',
+  TouchableOpacity: 'TouchableOpacity',
+  TouchableHighlight: 'TouchableHighlight',
+  Image: 'Image',
+  RefreshControl: 'RefreshControl',
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
+  useWindowDimensions: () => ({ width: 1280, height: 800 }),
+  Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
+  Touchable: { Mixin: {} },
+  TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
+  NativeModules: {},
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    sequence: () => ({ start: (cb?: any) => cb && cb() }),
+    loop: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: 'Animated.View',
+    Text: 'Animated.Text',
+  },
+  Alert: { alert: () => {} },
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
+  PanResponder: { create: () => ({ panHandlers: {} }) },
+  processColor: (c: any) => c,
+}));
+
+mock.module('react-native-svg', () => ({
+  Svg: 'Svg',
+  Path: 'Path',
+  Circle: 'Circle',
+  Rect: 'Rect',
+  Line: 'Line',
+  default: 'Svg',
+}));
+
+mock.module('../constants/fonts', () => ({
+  applyFontFamily: (s: any) => s,
+  fontAssets: {},
+}));
+mock.module('@expo-google-fonts/geist', () => ({
+  useFonts: () => [true],
+}));
+mock.module('@expo-google-fonts/geist-mono', () => ({
+  useFonts: () => [true],
+}));
+
 import type { StatutorySectionKey } from '../components/consultation/YakapClaimReadinessCard';
 
 (globalThis as any).__DEV__ = true;
@@ -262,7 +326,7 @@ describe('Milestone M5 Empirical Stress Tests: Section Jump Navigation & Whitesp
     });
 
     test('2.7 Attending Physician UI Badges reflect whitespace trimming defensively', () => {
-      // Simulating badges in Consultations.screen.tsx lines 2560–2575
+      // Simulating badges in Consultations.screen.tsx
       const getBadges = (
         doctorPan: string,
         doctorPrc: string,
@@ -274,11 +338,11 @@ describe('Milestone M5 Empirical Stress Tests: Section Jump Navigation & Whitesp
         const ptrTrimmed = doctorPtr.trim() || signerStaff?.ptrNumber?.trim();
 
         return {
-          panBadge: panTrimmed ? 'PAN [Auto-Snapshotted]' : 'PAN [Missing]',
+          panBadge: panTrimmed ? 'PAN [Verified]' : 'PAN [Missing]',
           panVariant: panTrimmed ? 'success' : 'warning',
-          prcBadge: prcTrimmed ? 'PRC [Auto-Snapshotted]' : 'PRC [Missing]',
+          prcBadge: prcTrimmed ? 'PRC [Verified]' : 'PRC [Missing]',
           prcVariant: prcTrimmed ? 'success' : 'emergency',
-          ptrBadge: ptrTrimmed ? 'PTR [Snapshotted]' : 'PTR [Optional]',
+          ptrBadge: ptrTrimmed ? 'PTR [Recorded]' : 'PTR [Optional]',
           ptrVariant: 'neutral',
         };
       };
@@ -296,13 +360,13 @@ describe('Milestone M5 Empirical Stress Tests: Section Jump Navigation & Whitesp
       expect(missingBadges.prcVariant).toBe('emergency');
       expect(missingBadges.ptrBadge).toBe('PTR [Optional]');
 
-      // Valid inputs with whitespace must show [Auto-Snapshotted] with success variants
+      // Valid inputs with whitespace must show [Verified] / [Recorded] with success variants
       const validBadges = getBadges('  PAN-999  ', '  PRC-888  ', '  PTR-777  ');
-      expect(validBadges.panBadge).toBe('PAN [Auto-Snapshotted]');
+      expect(validBadges.panBadge).toBe('PAN [Verified]');
       expect(validBadges.panVariant).toBe('success');
-      expect(validBadges.prcBadge).toBe('PRC [Auto-Snapshotted]');
+      expect(validBadges.prcBadge).toBe('PRC [Verified]');
       expect(validBadges.prcVariant).toBe('success');
-      expect(validBadges.ptrBadge).toBe('PTR [Snapshotted]');
+      expect(validBadges.ptrBadge).toBe('PTR [Recorded]');
     });
   });
 
@@ -345,6 +409,277 @@ describe('Milestone M5 Empirical Stress Tests: Section Jump Navigation & Whitesp
       expect(source).not.toContain('panSnapshotCard');
       expect(source).toContain('middleName: signerStaff.middleName');
       expect(source).toContain('specialty: signerStaff.specialty');
+    });
+  });
+
+  // =========================================================================
+  // 4. JARGON-FREE LABELS & INDEPENDENT SPLIT-SCROLL VERIFICATION
+  // =========================================================================
+  describe('Requirement 4: Jargon Removal & Independent Split-Scroll Architecture', () => {
+    test('4.1 Zero XML attributes, DTD filenames, statutory citations, or internal jargon rendered in consultation workspace', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+
+      const consultationPath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
+      const peCardPath = path.resolve(__dirname, '../components/consultation/InlinePhysicalExamCard.tsx');
+      const readinessCardPath = path.resolve(__dirname, '../components/consultation/YakapClaimReadinessCard.tsx');
+
+      const consultationSrc = fs.readFileSync(consultationPath, 'utf8');
+      const peSrc = fs.readFileSync(peCardPath, 'utf8');
+      const readinessSrc = fs.readFileSync(readinessCardPath, 'utf8');
+
+      const FORBIDDEN_JARGON_IN_JSX = [
+        'pHciCaseNo',
+        'pHciTransNo',
+        'pSoapTransNo',
+        'pDoctorPan',
+        'pDoctorPrc',
+        'pPin',
+        'pPhilHealthAtc',
+        'pSignSympCode',
+        'PESPECIFIC',
+        'pIcdCode',
+        'KONSULTADATA',
+        'KonsultaData_v1.14.dtd',
+        'DTD v1.14',
+        'RA 11223',
+        'Auto-Snapshotted',
+        'Snapshotted',
+        '(Code 1)',
+      ];
+
+      for (const fileSrc of [consultationSrc, peSrc, readinessSrc]) {
+        for (const jargon of FORBIDDEN_JARGON_IN_JSX) {
+          expect(fileSrc).not.toContain(jargon);
+        }
+      }
+    });
+
+    test('4.2 Subjective symptom ToggleChips do not render raw catalog codes (no meta={symp.code})', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const consultationPath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
+      const source = fs.readFileSync(consultationPath, 'utf8');
+
+      // Verify meta={symp.code} is removed from symptom ToggleChip
+      expect(source).not.toContain('meta={symp.code}');
+    });
+
+    test('4.3 Diagnostic lab chips and prescriptions display clean formulary labels without raw codes', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const consultationPath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
+      const source = fs.readFileSync(consultationPath, 'utf8');
+
+      expect(source).toContain("meta={isYakapEligible && diag.philHealthCode ? 'PhilHealth Covered' : undefined}");
+      expect(source).toContain('Badge label="PhilHealth Formulary"');
+      expect(source).not.toContain('GAMOT ${rx.philHealthDrugCode}');
+      expect(source).not.toContain('PhilHealth drug code: <ThemedText variant="code">{newRxDrugCode}</ThemedText>');
+    });
+
+    test('4.4 Desktop dual-pane renders independent ScrollViews with chartScrollViewRef and soapScrollViewRef', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const consultationPath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
+      const source = fs.readFileSync(consultationPath, 'utf8');
+
+      expect(source).toContain('const chartScrollViewRef = useRef<ScrollView>(null);');
+      expect(source).toContain('const soapScrollViewRef = useRef<ScrollView>(null);');
+      expect(source).toContain('ref={chartScrollViewRef}');
+      expect(source).toContain('ref={soapScrollViewRef}');
+      expect(source).toContain('nestedScrollEnabled');
+      expect(source).toContain('desktopPaneHeight');
+    });
+
+    test('4.5 Attending physician badges render clean clinical labels [Verified] and [Recorded]', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const consultationPath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
+      const source = fs.readFileSync(consultationPath, 'utf8');
+
+      expect(source).toContain("'PAN [Verified]' : 'PAN [Missing]'");
+      expect(source).toContain("'PRC [Verified]' : 'PRC [Missing]'");
+      expect(source).toContain("'PTR [Recorded]' : 'PTR [Optional]'");
+    });
+
+    test('4.6 formatMissingRequirement sanitizes backend validation messages (NOMED, 30-char drug code, code 2, statutory fallback)', async () => {
+      const { formatMissingRequirement } = await import('../components/consultation/YakapClaimReadinessCard');
+
+      // Test 1: NOMED statutory fallback warning
+      const rawWarning = 'Zero prescriptions recorded; encounter will transmit statutory fallback code NOMED (No Medication Needed).';
+      const cleanWarning = formatMissingRequirement(rawWarning);
+      expect(cleanWarning).not.toContain('NOMED');
+      expect(cleanWarning).not.toContain('statutory');
+      expect(cleanWarning).toContain('no medication needed');
+
+      // Test 2: 30-character drug code requirement
+      const rawDrugCode = "Prescription 'Amoxicillin 500mg' does not have a valid 30-character PhilHealth drug code.";
+      const cleanDrugCode = formatMissingRequirement(rawDrugCode);
+      expect(cleanDrugCode).not.toContain('30-character');
+      expect(cleanDrugCode).toContain('must match a PhilHealth formulary medication');
+
+      // Test 3: Chief complaint code 'X' (OTHERS)
+      const rawOther = "Mandatory other complaint description is missing for chief complaint code 'X' (OTHERS).";
+      const cleanOther = formatMissingRequirement(rawOther);
+      expect(cleanOther).not.toContain("code 'X'");
+      expect(cleanOther).not.toContain('(OTHERS)');
+      expect(cleanOther).toContain('other complaint');
+
+      // Test 4: General Survey abnormal code 2
+      const rawSurvey = 'General Survey remarks are mandatory when marked abnormal (code 2).';
+      const cleanSurvey = formatMissingRequirement(rawSurvey);
+      expect(cleanSurvey).not.toContain('code 2');
+      expect(cleanSurvey).not.toContain('(code 2)');
+
+      // Test 5: Statutory symptoms code
+      const rawSymptom = 'PhilHealth Signs & Symptoms statutory code is missing.';
+      const cleanSymptom = formatMissingRequirement(rawSymptom);
+      expect(cleanSymptom).not.toContain('statutory');
+      expect(cleanSymptom).toContain('PhilHealth chief complaint or symptom is required.');
+    });
+
+    test('4.7 YakapClaimReadinessCard passes warnings through formatMissingRequirement and does not render raw NOMED or statutory jargon', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const readinessCardPath = path.resolve(__dirname, '../components/consultation/YakapClaimReadinessCard.tsx');
+      const source = fs.readFileSync(readinessCardPath, 'utf8');
+
+      expect(source).toContain('{formatMissingRequirement(warn)}');
+    });
+
+    test('4.8 Desktop dual-pane ScrollViews configure overscrollBehavior contain and touch gesture props', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const consultationPath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
+      const source = fs.readFileSync(consultationPath, 'utf8');
+
+      expect(source).toContain("overscrollBehavior: 'contain'");
+      expect(source).toContain('directionalLockEnabled');
+      expect(source).toContain('scrollEventThrottle={16}');
+      expect(source).toContain('overScrollMode="never"');
+      expect(source).toContain('bounces={false}');
+    });
+
+    test('4.9 Desktop pane height adapts responsively on short viewports without rigid 600px overflow', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const consultationPath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
+      const source = fs.readFileSync(consultationPath, 'utf8');
+
+      expect(source).toContain('const desktopPaneHeight = Math.max(480, windowHeight - 160);');
+    });
+
+    test('4.10 formatMissingRequirement sanitizes XML attributes, DTD filenames, and unquoted code 38 / code X / RA 11223', async () => {
+      const { formatMissingRequirement } = await import('../components/consultation/YakapClaimReadinessCard');
+
+      // Test XML attributes & DTD schema
+      const rawXml = 'Backend check failed: pDoctorPan is required and PESPECIFIC findings must comply with KonsultaData_v1.14.dtd.';
+      const cleanXml = formatMissingRequirement(rawXml);
+      expect(cleanXml).not.toContain('pDoctorPan');
+      expect(cleanXml).not.toContain('PESPECIFIC');
+      expect(cleanXml).not.toContain('KonsultaData_v1.14.dtd');
+      expect(cleanXml).toContain('Doctor PAN');
+      expect(cleanXml).toContain('Physical examination findings');
+
+      // Test unquoted code 38 (PAIN)
+      const rawUnquoted38 = 'Mandatory pain site description is missing for chief complaint code 38 (PAIN).';
+      const cleanUnquoted38 = formatMissingRequirement(rawUnquoted38);
+      expect(cleanUnquoted38).not.toContain('code 38');
+      expect(cleanUnquoted38).not.toContain('(PAIN)');
+      expect(cleanUnquoted38).toContain('pain complaint');
+
+      // Test unquoted code X (OTHERS)
+      const rawUnquotedX = 'Mandatory other complaint description is missing for chief complaint code X (OTHERS).';
+      const cleanUnquotedX = formatMissingRequirement(rawUnquotedX);
+      expect(cleanUnquotedX).not.toContain('code X');
+      expect(cleanUnquotedX).not.toContain('(OTHERS)');
+      expect(cleanUnquotedX).toContain('other complaint');
+
+      // Test unparenthesized RA 11223
+      const rawUnparenthesizedRa = 'Patient PhilHealth PIN is invalid per RA 11223.';
+      const cleanUnparenthesizedRa = formatMissingRequirement(rawUnparenthesizedRa);
+      expect(cleanUnparenthesizedRa).not.toContain('RA 11223');
+      expect(cleanUnparenthesizedRa).not.toContain('per .');
+      expect(cleanUnparenthesizedRa).toBe('Patient PhilHealth PIN is invalid.');
+    });
+
+    test('4.11 formatMissingRequirement sanitizes GAMOT codes and unbranded 30-character drug codes', async () => {
+      const { formatMissingRequirement } = await import('../components/consultation/YakapClaimReadinessCard');
+
+      // GAMOT catalog badge / pill code
+      const rawGamot = 'Prescription GAMOT 123456789012345678901234567890 is unverified.';
+      const cleanGamot = formatMissingRequirement(rawGamot);
+      expect(cleanGamot).not.toContain('GAMOT');
+      expect(cleanGamot).toContain('PhilHealth Formulary');
+
+      // Unbranded 30-character drug code
+      const raw30Char = 'Prescription does not have a 30-character drug code.';
+      const clean30Char = formatMissingRequirement(raw30Char);
+      expect(clean30Char).not.toContain('30-character');
+      expect(clean30Char).toContain('PhilHealth formulary medication');
+    });
+
+    test('4.12 resolveMissingSection keyword mapping correctly identifies sections for all clinical variations', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const readinessCardPath = path.resolve(__dirname, '../components/consultation/YakapClaimReadinessCard.tsx');
+      const source = fs.readFileSync(readinessCardPath, 'utf8');
+
+      // Verify extended keywords are present in resolveMissingSection
+      expect(source).toContain("lower.includes('pan') || lower.includes('accreditation')");
+      expect(source).toContain("lower.includes('pespecific')");
+      expect(source).toContain("lower.includes('temp')");
+      expect(source).toContain("lower.includes('height')");
+      expect(source).toContain("lower.includes('weight')");
+      expect(source).toContain("lower.includes('formulary')");
+    });
+
+    test('4.13 statutoryConditions targets doctor-s2 section when medicines are valid but S2 license is missing', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const readinessCardPath = path.resolve(__dirname, '../components/consultation/YakapClaimReadinessCard.tsx');
+      const source = fs.readFileSync(readinessCardPath, 'utf8');
+
+      expect(source).toContain("sectionKey: !s2LicenseValid && medicinesValid ? 'doctor-s2' : 'medicines'");
+    });
+
+    test('4.14 formatMissingRequirement defensively handles null, undefined, and non-string inputs with zero exceptions', async () => {
+      const { formatMissingRequirement } = await import('../components/consultation/YakapClaimReadinessCard');
+
+      expect(formatMissingRequirement(null as any)).toBe('');
+      expect(formatMissingRequirement(undefined as any)).toBe('');
+      expect(formatMissingRequirement(123 as any)).toBe('');
+      expect(formatMissingRequirement('')).toBe('');
+    });
+
+    test('4.15 formatMissingRequirement sanitizes pPeSpecific, pVitals, and strips dangling prepositions before RA citations', async () => {
+      const { formatMissingRequirement } = await import('../components/consultation/YakapClaimReadinessCard');
+
+      const rawPe = 'Encounter check: pPeSpecific findings are missing and pVitals are incomplete.';
+      const cleanPe = formatMissingRequirement(rawPe);
+      expect(cleanPe).not.toContain('pPeSpecific');
+      expect(cleanPe).not.toContain('pVitals');
+      expect(cleanPe).toContain('Physical examination findings');
+      expect(cleanPe).toContain('Triage vitals');
+
+      const rawPreposition = 'According to RA 11223, patient PIN must have 12 numeric digits.';
+      const cleanPreposition = formatMissingRequirement(rawPreposition);
+      expect(cleanPreposition).not.toContain('RA 11223');
+      expect(cleanPreposition).toBe('patient PIN must have 12 numeric digits.');
+    });
+
+    test('4.16 resolveMissingSection correctly routes hyphenated S-2, PDEA, blood pressure, and assessment', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const readinessCardPath = path.resolve(__dirname, '../components/consultation/YakapClaimReadinessCard.tsx');
+      const source = fs.readFileSync(readinessCardPath, 'utf8');
+
+      // Verify new keywords in source
+      expect(source).toContain("lower.includes('s-2')");
+      expect(source).toContain("lower.includes('blood pressure')");
+      expect(source).toContain("lower.includes('systolic')");
+      expect(source).toContain("lower.includes('diastolic')");
+      expect(source).toContain("lower.includes('assessment')");
     });
   });
 });

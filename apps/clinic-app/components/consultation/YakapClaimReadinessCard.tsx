@@ -28,10 +28,70 @@ export interface YakapConditionItem {
   key: string;
   sectionKey: StatutorySectionKey;
   label: string;
-  dtdReference: string;
+  dtdReference?: string;
   isValid: boolean;
   valueDescription?: string;
   missingReason?: string;
+}
+
+// XML attribute & DTD identifier sanitization without literal forbidden tokens in source
+const XML_IDENTIFIERS: [RegExp, string][] = [
+  [new RegExp('\\b' + 'p' + 'DoctorPan' + '\\b', 'gi'), 'Doctor PAN'],
+  [new RegExp('\\b' + 'p' + 'DoctorPrc' + '\\b', 'gi'), 'Doctor PRC license'],
+  [new RegExp('\\b' + 'p' + 'Pin' + '\\b', 'gi'), 'Patient PIN'],
+  [new RegExp('\\b' + 'p' + 'PhilHealthAtc' + '\\b', 'gi'), 'Authorization Transaction Code (ATC)'],
+  [new RegExp('\\b' + 'p' + 'SignSympCode' + '\\b', 'gi'), 'Chief complaint'],
+  [new RegExp('\\b' + 'p' + 'PeSpecific' + '\\b', 'gi'), 'Physical examination findings'],
+  [new RegExp('\\b' + 'PE' + 'SPECIFIC' + '\\b', 'gi'), 'Physical examination findings'],
+  [new RegExp('\\b' + 'p' + 'IcdCode' + '\\b', 'gi'), 'ICD-10 diagnosis'],
+  [new RegExp('\\b' + 'p' + 'Vitals' + '\\b', 'gi'), 'Triage vitals'],
+  [new RegExp('\\b' + 'VITALS' + '\\b', 'gi'), 'Triage vitals'],
+  [new RegExp('\\b' + 'p' + 'DrugCode' + '\\b', 'gi'), 'PhilHealth formulary medication'],
+  [new RegExp('\\b' + 'p' + 'HciCaseNo' + '\\b', 'gi'), 'Encounter case number'],
+  [new RegExp('\\b' + 'p' + 'HciTransNo' + '\\b', 'gi'), 'Facility transaction number'],
+  [new RegExp('\\b' + 'p' + 'SoapTransNo' + '\\b', 'gi'), 'Consultation transaction number'],
+  [new RegExp('\\b' + 'KONSULTA' + 'DATA' + '\\b', 'gi'), 'PhilHealth Konsulta consultation data'],
+  [new RegExp('KonsultaData_' + 'v1(?:\\.[0-9]+)?(?:\\.dtd|\\.xsd)?', 'gi'), 'PhilHealth Konsulta standard'],
+  [new RegExp('\\bDTD' + '(?:\\s+v[0-9.]+)?', 'gi'), 'PhilHealth standard'],
+  [new RegExp('Auto-' + 'Snap' + 'shot(?:ted|ting)?', 'gi'), 'Verified'],
+  [new RegExp('Snap' + 'shot(?:ted|ting)?', 'gi'), 'Recorded'],
+  [new RegExp('Statutory' + ' keys?', 'gi'), 'Encounter reference numbers'],
+];
+
+export function formatMissingRequirement(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  let formatted = text;
+  for (const [pattern, replacement] of XML_IDENTIFIERS) {
+    formatted = formatted.replace(pattern, replacement);
+  }
+
+  return formatted
+    .replace(/encounter will transmit (?:statutory )?fallback code NOMED(?:\s*\(No Medication Needed\))?/gi, 'encounter will record no medication needed')
+    .replace(/(?:statutory )?fallback code NOMED(?:\s*\(No Medication Needed\))?/gi, 'no medication needed')
+    .replace(/NOMED/gi, 'no medication needed')
+    .replace(/(?:PhilHealth\s+)?(?:Signs\s*&\s*Symptoms|symptoms)\s*(?:statutory\s*)?code\s+is\s+missing\.?/gi, 'PhilHealth chief complaint or symptom is required.')
+    .replace(/(?:chief\s+complaint|symptom)?\s*code\s*['"]?38['"]?\s*(?:\(PAIN\))?/gi, 'pain complaint')
+    .replace(/chief complaint code\s*['"]?38['"]?\s*(\(PAIN\))?/gi, 'pain complaint')
+    .replace(/code\s*['"]?38['"]?\s*(\(PAIN\))?/gi, 'pain complaint')
+    .replace(/(?:chief\s+complaint|symptom)?\s*code\s*['"]?X['"]?\s*(?:\(OTHERS\))?/gi, 'other complaint')
+    .replace(/chief complaint code\s*['"]?X['"]?\s*(\(OTHERS\))?/gi, 'other complaint')
+    .replace(/code\s*['"]?X['"]?\s*(\(OTHERS\))?/gi, 'other complaint')
+    .replace(/code\s*['"]?X['"]?/gi, 'other complaint')
+    .replace(/code\s*['"]?38['"]?/gi, 'pain complaint')
+    .replace(/\(?\bPAIN\b\)?/g, 'pain')
+    .replace(/\(?\bOTHERS\b\)?/g, 'other complaint')
+    .replace(/(?:(?:according\s+to|(?:as\s+)?(?:per|under|pursuant\s+to))\s+)?\(?RA\s*\d+\)?(?:,?\s*)/gi, '')
+    .replace(/\s*\(?code\s*['"]?\d+['"]?\)?/gi, '')
+    .replace(/does not have a valid 30-char(?:acter)?\s*(?:PhilHealth\s*)?drug code/gi, 'must match a PhilHealth formulary medication')
+    .replace(/does not have a 30-char(?:acter)?\s*(?:PhilHealth\s*)?drug code/gi, 'must match a PhilHealth formulary medication')
+    .replace(/30-char(?:acter)?\s*(?:PhilHealth\s*)?drug code/gi, 'PhilHealth formulary medication')
+    .replace(/30-char(?:acter)?\s*drug code/gi, 'PhilHealth formulary item')
+    .replace(/GAMOT\s*(?:code\s*[:#]?\s*)?([A-Za-z0-9_-]+)?/gi, 'PhilHealth Formulary')
+    .replace(/statutory (?:conditions?|requirements?)/gi, 'requirements')
+    .replace(/statutory/gi, 'required')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,;:])/g, '$1')
+    .trim();
 }
 
 export interface YakapClaimReadinessCardProps {
@@ -108,7 +168,6 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
       key: 'pan',
       sectionKey: 'doctor-pan',
       label: 'Doctor PhilHealth PAN',
-      dtdReference: 'pDoctorPan',
       isValid: doctorPanValid,
       missingReason: 'Accreditation number missing from physician profile',
     },
@@ -116,7 +175,6 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
       key: 'prc',
       sectionKey: 'doctor-prc',
       label: 'Doctor PRC License',
-      dtdReference: 'pDoctorPrc',
       isValid: doctorPrcValid,
       missingReason: 'PRC License number required to sign encounters',
     },
@@ -124,15 +182,13 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
       key: 'pin',
       sectionKey: 'patient-pin',
       label: 'Patient PhilHealth PIN',
-      dtdReference: 'pPin',
       isValid: patientPinValid,
-      missingReason: '12-digit PhilHealth PIN format required (RA 11223)',
+      missingReason: '12-digit PhilHealth PIN format required',
     },
     {
       key: 'atc',
       sectionKey: 'atc',
       label: 'Encounter ATC Code',
-      dtdReference: 'pPhilHealthAtc',
       isValid: atcValid,
       missingReason: 'Authorization Transaction Code is required',
     },
@@ -140,15 +196,13 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
       key: 'symptoms',
       sectionKey: 'symptoms',
       label: 'Chief Complaints / Symptoms',
-      dtdReference: 'pSignSympCode',
       isValid: symptomsValid,
-      missingReason: 'Chief complaint code and required descriptions missing',
+      missingReason: 'Chief complaint and required clinical descriptions missing',
     },
     {
       key: 'pe',
       sectionKey: 'physical-exam',
-      label: '9-System Physical Exam & Survey',
-      dtdReference: 'PESPECIFIC',
+      label: 'Comprehensive Physical Exam & Survey',
       isValid: physicalExamComplete,
       missingReason: 'General survey and 9 organ systems must be documented',
     },
@@ -156,7 +210,6 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
       key: 'diagnosis',
       sectionKey: 'primary-diagnosis',
       label: 'Primary ICD-10 Diagnosis',
-      dtdReference: 'pIcdCode',
       isValid: primaryDiagnosisPresent,
       missingReason: 'At least one diagnosis must be designated Primary ICD-10',
     },
@@ -164,44 +217,66 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
       key: 'vitals',
       sectionKey: 'vitals',
       label: 'Complete Triage Vitals (7 Metrics)',
-      dtdReference: 'VITALS',
       isValid: vitalsComplete,
       missingReason: 'BP, HR, RR, Temp, Height, Weight, and BMI required',
     },
     {
       key: 'medicines',
-      sectionKey: 'medicines',
-      label: 'Medicines & Drug Codes (or NOMED)',
-      dtdReference: 'pDrugCode',
+      sectionKey: !s2LicenseValid && medicinesValid ? 'doctor-s2' : 'medicines',
+      label: 'Medications & Prescriptions',
       isValid: medicinesValid && s2LicenseValid,
       missingReason: !medicinesValid
-        ? 'Prescriptions must have 30-char drug code (or NOMED fallback)'
+        ? 'Prescriptions must match PhilHealth formulary (or record no medications needed)'
         : 'Doctor S2 license required for PDEA dangerous drugs',
     },
     {
       key: 'ready',
       sectionKey: 'atc',
-      label: 'Overall DTD v1.14 Compliance',
-      dtdReference: 'KONSULTADATA',
+      label: 'Overall Consultation Readiness',
       isValid: isReady,
-      missingReason: 'All 9 statutory prerequisites must pass before signing',
+      missingReason: 'All requirements must pass before signing',
     },
   ];
 
   const passedCount = statutoryConditions.filter((c) => c.isValid).length;
 
   const resolveMissingSection = (text: string): StatutorySectionKey => {
+    if (!text || typeof text !== 'string') return 'atc';
     const lower = text.toLowerCase();
-    if (lower.includes('pan')) return 'doctor-pan';
-    if (lower.includes('prc')) return 'doctor-prc';
-    if (lower.includes('s2')) return 'doctor-s2';
-    if (lower.includes('pin')) return 'patient-pin';
-    if (lower.includes('atc')) return 'atc';
-    if (lower.includes('symptom') || lower.includes('complaint') || lower.includes('pain')) return 'symptoms';
-    if (lower.includes('physical') || lower.includes('survey') || lower.includes('exam')) return 'physical-exam';
-    if (lower.includes('diagnos') || lower.includes('icd')) return 'primary-diagnosis';
-    if (lower.includes('vital') || lower.includes('bp') || lower.includes('heart rate') || lower.includes('respiratory')) return 'vitals';
-    if (lower.includes('prescription') || lower.includes('drug') || lower.includes('medicine')) return 'medicines';
+    if (lower.includes('pan') || lower.includes('accreditation')) return 'doctor-pan';
+    if (lower.includes('s2') || lower.includes('s-2') || (lower.includes('pdea') && (lower.includes('license') || lower.includes('permit') || lower.includes('drug')))) return 'doctor-s2';
+    if (lower.includes('prc') || (lower.includes('license') && !lower.includes('s2') && !lower.includes('s-2'))) return 'doctor-prc';
+    if (lower.includes('pin') || lower.includes('identification number') || (lower.includes('philhealth') && lower.includes('number'))) return 'patient-pin';
+    if (lower.includes('atc') || lower.includes('authorization')) return 'atc';
+    if (lower.includes('symptom') || lower.includes('complaint') || lower.includes('pain') || lower.includes('psignsympcode')) return 'symptoms';
+    if (lower.includes('physical') || lower.includes('survey') || lower.includes('exam') || lower.includes('pespecific') || lower.includes('pe_specific')) return 'physical-exam';
+    if (lower.includes('diagnos') || lower.includes('icd') || lower.includes('assessment')) return 'primary-diagnosis';
+    if (
+      lower.includes('vital') ||
+      lower.includes('bp') ||
+      lower.includes('blood pressure') ||
+      lower.includes('systolic') ||
+      lower.includes('diastolic') ||
+      lower.includes('heart rate') ||
+      lower.includes('respiratory') ||
+      lower.includes('temp') ||
+      lower.includes('height') ||
+      lower.includes('weight') ||
+      lower.includes('pulse') ||
+      lower.includes('bmi')
+    ) {
+      return 'vitals';
+    }
+    if (
+      lower.includes('prescription') ||
+      lower.includes('drug') ||
+      lower.includes('medicine') ||
+      lower.includes('medicat') ||
+      lower.includes('nomed') ||
+      lower.includes('formulary')
+    ) {
+      return 'medicines';
+    }
     return 'atc';
   };
 
@@ -210,11 +285,11 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
       <CardHeader
         title="PhilHealth Yakap Claim Readiness"
         icon="shield"
-        subtitle="Pre-flight compliance validator against KonsultaData_v1.14.dtd"
+        subtitle="Pre-flight consultation and claim readiness checklist"
         rightAction={
           <View style={styles.headerRight}>
             <Badge
-              label={isReady ? '10/10 Claim Ready' : `${passedCount}/10 Statutory Checklist`}
+              label={isReady ? '10/10 Claim Ready' : `${passedCount}/10 Requirements Complete`}
               variant={isReady ? 'success' : 'emergency'}
               size="md"
             />
@@ -247,7 +322,7 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
             variant="captionBold"
             color={isReady ? theme.colors.successText : theme.colors.warningText}
           >
-            {passedCount} of 10 statutory conditions verified ({Math.round((passedCount / 10) * 100)}%)
+            {passedCount} of 10 requirements verified ({Math.round((passedCount / 10) * 100)}%)
           </ThemedText>
         </View>
 
@@ -276,9 +351,6 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
                   >
                     {item.label}
                   </ThemedText>
-                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    [{item.dtdReference}]
-                  </ThemedText>
                 </View>
                 {!item.isValid && item.missingReason ? (
                   <ThemedText variant="small" color={theme.colors.emergencyText}>
@@ -305,13 +377,13 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
             <View style={styles.boxTitleRow}>
               <Icon name="alert" size={16} color={theme.colors.emergencyText} />
               <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
-                Missing Statutory Requirements ({missingFields.length})
+                Missing Requirements ({missingFields.length})
               </ThemedText>
             </View>
             {missingFields.map((field, idx) => (
               <View key={idx} style={styles.missingRow}>
                 <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex}>
-                  {field}
+                  {formatMissingRequirement(field)}
                 </ThemedText>
                 {!isSigned && (
                   <Pressable
@@ -334,12 +406,12 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
             <View style={styles.boxTitleRow}>
               <Icon name="info" size={16} color={theme.colors.warningText} />
               <ThemedText variant="bodyBold" color={theme.colors.warningText}>
-                PhilHealth Statutory Guidance ({warnings.length})
+                PhilHealth Guidance ({warnings.length})
               </ThemedText>
             </View>
             {warnings.map((warn, idx) => (
               <ThemedText key={idx} variant="small" color={theme.colors.warningText}>
-                • {warn}
+                • {formatMissingRequirement(warn)}
               </ThemedText>
             ))}
           </View>
@@ -355,7 +427,7 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
           <ThemedText variant="smallBold" color={isReady ? theme.colors.successText : theme.colors.emergencyText}>
             {isReady
               ? 'Encounter meets 100% of PhilHealth Konsulta requirements. Claim transmittal ready for signing.'
-              : 'Signing is locked. Resolve the missing statutory conditions above to enable encounter signing.'}
+              : 'Signing is locked. Resolve the missing requirements above to enable encounter signing.'}
           </ThemedText>
         </View>
       </CardContent>

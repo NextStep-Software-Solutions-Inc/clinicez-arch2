@@ -203,7 +203,7 @@ export const InlinePhysicalExamCard: React.FC<InlinePhysicalExamCardProps> = ({
     <Card style={styles.card}>
       <CardHeader
         title="Physical Examination (PE)"
-        subtitle="PhilHealth Konsulta statutory 9-system physical findings"
+        subtitle="PhilHealth Konsulta physical examination findings"
         rightAction={
           <View style={styles.headerActions}>
             {abnormalCount > 0 ? (
@@ -227,7 +227,7 @@ export const InlinePhysicalExamCard: React.FC<InlinePhysicalExamCardProps> = ({
       />
       <CardContent style={styles.content}>
         <ThemedText variant="small" color={theme.colors.textMuted} style={styles.hint}>
-          Single-click to toggle any system abnormal to document findings per PhilHealth statutory requirements. All normal systems default to "Essentially normal" (Code 1).
+          Single-click to toggle any system abnormal to document clinical findings. Normal systems default to essentially normal findings.
         </ThemedText>
 
         <View style={styles.systemList}>

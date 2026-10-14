@@ -772,3 +772,90 @@ Prevent duplicate patient profile creation at intake.
 - [ ] Frontend unit tests for TV display, EOD settings, duplicate warning modal, and push threshold controls pass cleanly.
 - [ ] Design token checks (`check-tokens.mjs`) pass with 0 violations.
 - [ ] TypeScript compilation (`tsc --noEmit`) passes with 0 errors.
+
+
+## 2026-10-14T08:53:01Z
+
+This is a single self-contained fix; keep it small and focused. In the ClinicEZ `clinic-app` Consultation screen, remove all statutory, XML attribute/node, and raw catalog code jargon from the right-hand consultation pane while retaining/paraphrasing PhilHealth instructional labels, and split the vertical scroll independently between the left Longitudinal Medical Chart pane and the right Consultation Workspace pane.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Reference Material & Skills
+- Skill: `c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\skills\clinicez-ui-ux-expert\SKILL.md` (Strict UI Token Mandate: never use hardcoded hex values or direct `palette.ts` imports in `.tsx`/`.jsx`; consume semantic tokens via `theme` / `@clinicez/design-tokens`).
+- Target files in `apps/clinic-app`:
+  - `apps/clinic-app/navigation/screens/Consultations.screen.tsx`
+  - `apps/clinic-app/components/consultation/InlinePhysicalExamCard.tsx`
+  - `apps/clinic-app/components/consultation/YakapClaimReadinessCard.tsx`
+
+## Requirements
+
+### R1. Remove Statutory, XML Schema, and Catalog Code Jargon from the Right Consultation Pane while Retaining/Paraphrasing PhilHealth Instructional Labels
+In the right-hand consultation documentation workspace (`Consultations.screen.tsx`, `InlinePhysicalExamCard.tsx`, and `YakapClaimReadinessCard.tsx`), remove all non-clinical statutory jargon, XML attribute/node names (`pHciCaseNo`, `pHciTransNo`, `pSoapTransNo`, `pDoctorPan`, `pDoctorPrc`, `pPin`, `pPhilHealthAtc`, `pSignSympCode`, `PESPECIFIC`, `pIcdCode`, `VITALS`, `pDrugCode`, `KONSULTADATA`), DTD schema filenames (`KonsultaData_v1.14.dtd`, `DTD v1.14`), statutory law citations (`RA 11223`), raw PhilHealth catalog codes displayed on UI pills/badges (`meta={symp.code}` showing `01`–`38` and `X` on Subjective symptom chips, `Code 1` in Physical Exam hint, `Yakap <philHealthCode>` on Laboratory order chips, raw 30-character `newRxDrugCode` and `GAMOT <philHealthDrugCode>` on Prescriptions, `NOMED`), and internal jargon (`Statutory keys`, `Auto-Snapshotted`, `Snapshotted`, `statutory conditions`, `statutory requirements`). Retain and paraphrase all PhilHealth instructional labels in clear, clinician-friendly language so physicians understand what is required to complete and sign a PhilHealth Konsulta consultation. Standard clinical ICD-10 diagnosis codes (`I10`, `J06.9`, etc.) in the Assessment section remain intact.
+
+### R2. Split Independent Vertical Scrolling for the Medical Chart and Consult Workspace
+On desktop workstations (`isDesktopWorkstation`, width >= 1024px), decouple the vertical scrolling of the left pane (Longitudinal Medical Chart) and the right pane (Consult Workspace / SOAP Documentation) so that scrolling the medical chart does not scroll the consult workspace and vice versa. Ensure each pane has its own independent `ScrollView` with bounded viewport height and `nestedScrollEnabled`, while preserving 1-click "Jump to section" (`handleJumpToSection`) behavior for both top patient spine sections (`patient-pin`, `vitals`) and right-pane consultation sections (`atc`, `symptoms`, `physical-exam`, `primary-diagnosis`, `medicines`, `doctor-pan`, `doctor-prc`, `doctor-s2`).
+
+### R3. Preserve ClinicEZ UI/UX Design Token Compliance and Existing Test Contracts
+All UI styles must strictly use semantic tokens from `theme` / `@clinicez/design-tokens` with zero raw hex values. All existing unit and stress tests in `apps/clinic-app/tests/` (including `challenger_m5_empirical_stress.test.ts` which inspects `sectionOffsets.current['<key>'] =` in `Consultations.screen.tsx`) and `packages/design-tokens` must pass, and any test assertions updated or added to verify the new jargon-free labels and independent split-scroll structure.
+
+## Verification Resources
+- Existing test suites:
+  - `bun test apps/clinic-app/tests/consultationWorkstation.test.ts`
+  - `bun test apps/clinic-app/tests/physicalExamChecklist.test.ts`
+  - `bun test apps/clinic-app/tests/challenger_m4_1_features17_18_stress.test.ts`
+  - `bun test apps/clinic-app/tests/challenger_m5_empirical_stress.test.ts`
+  - `bun test packages/design-tokens/src/tokens.test.ts`
+
+## Acceptance Criteria
+
+### Jargon Removal & Paraphrased PhilHealth Instructions
+- [ ] Zero XML attribute/node identifiers (`pHciCaseNo`, `pHciTransNo`, `pSoapTransNo`, `pDoctorPan`, `pDoctorPrc`, `pPin`, `pPhilHealthAtc`, `pSignSympCode`, `PESPECIFIC`, `pIcdCode`, `VITALS`, `pDrugCode`, `KONSULTADATA`) or DTD filenames (`KonsultaData_v1.14.dtd`, `DTD v1.14`) are rendered in `Consultations.screen.tsx`, `InlinePhysicalExamCard.tsx`, or `YakapClaimReadinessCard.tsx`.
+- [ ] Subjective symptom `ToggleChip` components do not pass `meta={symp.code}`, so catalog codes (`01`..`38`, `X`) are not displayed next to symptom names.
+- [ ] Laboratory order `ToggleChip` components and Prescription cards/forms do not display raw PhilHealth catalog codes (`Yakap ${diag.philHealthCode}`, raw 30-char drug codes, `GAMOT ${rx.philHealthDrugCode}`, `NOMED`), showing clean PhilHealth formulary labels instead.
+- [ ] Physical Examination card (`InlinePhysicalExamCard.tsx`), Attending Physician badges, and PhilHealth Claim Readiness card (`YakapClaimReadinessCard.tsx`) use clean clinical and paraphrased PhilHealth instructional labels (no `(Code 1)`, `Auto-Snapshotted`, `RA 11223`, or `code '38' (PAIN)` / `code 'X'`).
+
+### Independent Split Scroll
+- [ ] In `Consultations.screen.tsx`, when `isDesktopWorkstation` is true, `leftChartPane` and `rightSoapPane` each render an independent `ScrollView` (`chartScrollViewRef` and `soapScrollViewRef`) with bounded height so scrolling one pane does not scroll the other.
+- [ ] `handleJumpToSection` scrolls the appropriate scroll container for all 10 section keys (`patient-pin`, `vitals`, `atc`, `symptoms`, `physical-exam`, `primary-diagnosis`, `medicines`, `doctor-pan`, `doctor-prc`, `doctor-s2`), and all 10 `sectionOffsets.current['...'] =` assignments remain intact.
+
+### Automated Verification
+- [ ] All tests in `apps/clinic-app/tests/` and `packages/design-tokens/src/tokens.test.ts` pass with 0 failures under `bun test`.
+
+
+## 2026-10-14T10:27:11Z
+
+Replace the single-room `AssignedRoomId` on `StaffMember` with multi-room `AssignedRoomIds` (`ClinicRoom * <-> * StaffMember`) as the single source of truth across `services/clinic-api` and `apps/clinic-app`, and implement Scoped Station Visibility by Role and multi-room patient call/check-in resolution in the ClinicEZ workstation UI following the `clinicez-ui-ux-expert` design system guidelines (`c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\skills\clinicez-ui-ux-expert\SKILL.md`).
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Single Source of Truth for Multi-Room Staff Assignment (`services/clinic-api`)
+Remove the redundant scalar `AssignedRoomId` / `AssignedRoom` navigation property from `StaffMember` and replace it with `AssignedRoomIdsJson` (and domain helpers `GetAssignedRoomIds()` / `SetAssignedRoomIds(IEnumerable<Guid>? roomIds)`) on `StaffMember` (with an EF Core migration in `ClinicEz.Clinic.Infrastructure`). Update `StaffMemberDto`, `GetStaffMembersQuery`, `CreateStaffMemberCommand`, `UpdateStaffMemberCommand`, `UpdateMyProfileCommand`, and `StaffController` to accept `IReadOnlyList<Guid>? AssignedRoomIds` and return `IReadOnlyList<Guid> AssignedRoomIds` and `IReadOnlyList<string> AssignedRoomNames`.
+
+### R2. Additive Room-to-Staff Synchronization & Multi-Room Queue Routing (`services/clinic-api`)
+Update `GetClinicRoomsQuery`, `CreateClinicRoomCommand`, `UpdateClinicRoomCommand`, and `DeleteClinicRoomCommand` so assigning a staff member to a room adds that room's `Id` to `staff.GetAssignedRoomIds()` without removing their other assigned rooms, and unchecking/deleting a room removes only that room's `Id` from `staff.GetAssignedRoomIds()`. Update `CheckInPatientCommand`, `CallQueueItemCommand`, and `RecordProcedureExecutionCommand` to resolve a doctor's assigned rooms from `GetAssignedRoomIds()` (preserving the queue item's `RoomId` if it already belongs to the doctor's `GetAssignedRoomIds()`, or defaulting to the first active room in `GetAssignedRoomIds()`).
+
+### R3. Multi-Room Staff Assignment UI in Settings (`apps/clinic-app`)
+Update `clinicService.ts`, `ClinicRoomsSettingsCard.tsx`, and `StaffManagementTab.tsx` (adhering strictly to `@clinicez/design-tokens` and `clinicez-ui-ux-expert`) to use `assignedRoomIds: string[]` and `assignedRoomNames: string[]` (removing `assignedRoomId` / `assignedRoomName`). In `ClinicRoomsSettingsCard.tsx`, when a staff member already assigned to another room is shown in the staff picker, display `"Also in <Room> · Will cover both"` instead of `"Will move from <Room>"`. In `StaffManagementTab.tsx`, allow multi-selecting rooms for Doctors and Nurses (`Unassigned / Floating` clears the selection) and render all `assignedRoomNames` badges on each staff row.
+
+### R4. Scoped Station Visibility by Role & Smart Call/Check-In Room Resolution (`apps/clinic-app`)
+In `Consultations.screen.tsx` and `Queue.screen.tsx`, compute `visibleRooms` based on the active staff member's role and `assignedRoomIds`:
+- Doctors with `assignedRoomIds.length > 0` see only their assigned Consultation Room(s) (labeled `<Room> (Mine)`), plus shared `Triage` and `Treatment` stations and `All My Stations`—hiding other doctors' unassigned Consultation Rooms from the pill bar and excluding patients sitting in hidden Consultation Rooms (unless assigned to that doctor).
+- Nurses with `assignedRoomIds.length > 0` see their assigned room(s) (`(Mine)`) plus shared `Triage` and `Treatment` stations, hiding unassigned Consultation Rooms, and default to `assignedRoomIds[0]` on load.
+- Unassigned/floating staff (`assignedRoomIds.length === 0`), Receptionists, Cashiers, and Clinic Admins see all active rooms (`All Stations`).
+In `Queue.screen.tsx`, replace the hardcoded `STATIONS` and Call to Room modal options with dynamic rooms from `useClinic().rooms`, pre-selecting the target room when calling a patient using the 4-step priority order: (1) active station pill if valid, (2) ticket's check-in room if in the clinician's rooms, (3) `assignedRoomIds[0]`, (4) first available consultation room. In `Patients.screen.tsx`, when selecting an Attending Doctor at walk-in check-in, pre-select `doctor.assignedRoomIds[0]` and badge all rooms in `doctor.assignedRoomIds` with `(Doctor's Room)`.
+
+## Acceptance Criteria
+
+### Backend Verification (`services/clinic-api`)
+- [ ] `StaffMember` and `StaffMemberDto` no longer expose the redundant scalar `AssignedRoomId` / `AssignedRoomName` properties, using `AssignedRoomIds` and `AssignedRoomNames` as the single source of truth.
+- [ ] Assigning a doctor to `Room 1` and then assigning the same doctor to `Room 2` via `UpdateClinicRoomCommand` retains both `Room 1` and `Room 2` in `AssignedRoomIds` and returns the doctor under both rooms in `GetClinicRoomsQuery`.
+- [ ] `dotnet test services/clinic-api/ClinicEz.Clinic.UnitTests/ClinicEz.Clinic.UnitTests.csproj` passes with 0 errors and includes unit tests for multi-room staff assignment, room deletion cleanup, check-in routing, and call-to-room resolution.
+
+### Frontend & UI/UX Verification (`apps/clinic-app`)
+- [ ] `Consultations.screen.tsx` and `Queue.screen.tsx` dynamically scope visible station pills by role and `assignedRoomIds`, with zero hardcoded room arrays remaining in `Queue.screen.tsx`.
+- [ ] `pnpm --filter clinic-app test -- --runTestsByPath services/__tests__/clinicRoomsAndRouting.test.ts` passes with unit tests covering scoped station visibility by role (single-room doctor, multi-room doctor, assigned nurse, floating staff) and 4-step call-to-room resolution.
+- [ ] `pnpm --filter clinic-app typecheck` and `pnpm lint:tokens` pass with 0 errors and zero raw hex color violations.

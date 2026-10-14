@@ -48,14 +48,25 @@ public static class DatabaseExceptionTranslator
                 case "23505": // unique_violation
                 {
                     var isPatientCode = IsPatientCodeConstraint(postgresEx);
-                    var errorCode = isPatientCode ? "DUPLICATE_PATIENT_CODE" : "DUPLICATE_RESOURCE";
+                    var isQueueConsultation = !isPatientCode && IsQueueItemConstraint(postgresEx);
+
+                    var errorCode = isPatientCode
+                        ? "DUPLICATE_PATIENT_CODE"
+                        : isQueueConsultation
+                            ? "DUPLICATE_QUEUE_CONSULTATION"
+                            : "DUPLICATE_RESOURCE";
+
                     var field = isPatientCode
                         ? "patientCode"
-                        : ExtractFieldFromUniqueViolation(postgresEx.Detail, postgresEx.ConstraintName);
+                        : isQueueConsultation
+                            ? "queueItemId"
+                            : ExtractFieldFromUniqueViolation(postgresEx.Detail, postgresEx.ConstraintName);
 
                     var message = isPatientCode
                         ? "A patient with this code already exists. Please refresh or retry."
-                        : "A record with the same unique value already exists.";
+                        : isQueueConsultation
+                            ? "A consultation encounter already exists for this queue visit. Please refresh the patient chart or update the existing encounter."
+                            : "A record with the same unique value already exists.";
 
                     result = new TranslationResult(
                         (int)HttpStatusCode.Conflict,
@@ -193,6 +204,20 @@ public static class DatabaseExceptionTranslator
         if (ex.Detail?.Contains("PatientCode", StringComparison.OrdinalIgnoreCase) == true)
             return true;
         if (ex.Detail?.Contains("patient_code", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+
+        return false;
+    }
+
+    private static bool IsQueueItemConstraint(PostgresException ex)
+    {
+        if (ex.ConstraintName?.Contains("QueueItemId", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        if (ex.ConstraintName?.Contains("queue_item_id", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        if (ex.Detail?.Contains("QueueItemId", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        if (ex.Detail?.Contains("queue_item_id", StringComparison.OrdinalIgnoreCase) == true)
             return true;
 
         return false;

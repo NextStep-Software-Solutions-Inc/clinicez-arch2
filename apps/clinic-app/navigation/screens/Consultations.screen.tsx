@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { Alert, notify } from '@utils/feedback';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -283,8 +284,9 @@ export default function ConsultationsScreen() {
   const appliedRouteKey = useRef<string | null>(null);
 
   // Responsive Desktop Workstation Detection (Feature 21)
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isDesktopWorkstation = windowWidth >= (theme.breakpoints.desktop ?? 1024);
+  const desktopPaneHeight = Math.max(480, windowHeight - 160);
 
   // Split-Screen & Longitudinal Chart Review States (Feature 21)
   type ChartReviewTab = 'summary' | 'encounters' | 'diagnostics' | 'procedures' | 'immunizations' | 'profiles' | 'vault';
@@ -327,6 +329,8 @@ export default function ConsultationsScreen() {
 
   // Jump to section refs
   const scrollViewRef = useRef<ScrollView>(null);
+  const chartScrollViewRef = useRef<ScrollView>(null);
+  const soapScrollViewRef = useRef<ScrollView>(null);
   const sectionOffsets = useRef<Record<string, number>>({});
   const soapPaneOffsetY = useRef<number>(0);
 
@@ -337,8 +341,19 @@ export default function ConsultationsScreen() {
     const rawY = sectionOffsets.current[section];
     if (rawY != null) {
       const isSpineSection = section === 'patient-pin' || section === 'vitals';
-      const containerOffset = isSpineSection ? 0 : soapPaneOffsetY.current;
-      scrollViewRef.current?.scrollTo({ y: Math.max(0, rawY + containerOffset - 24), animated: true });
+      if (isDesktopWorkstation) {
+        if (isSpineSection) {
+          scrollViewRef.current?.scrollTo({ y: Math.max(0, rawY - 24), animated: true });
+        } else {
+          if (soapPaneOffsetY.current > 0) {
+            scrollViewRef.current?.scrollTo({ y: Math.max(0, soapPaneOffsetY.current - 16), animated: true });
+          }
+          soapScrollViewRef.current?.scrollTo({ y: Math.max(0, rawY - 24), animated: true });
+        }
+      } else {
+        const containerOffset = isSpineSection ? 0 : soapPaneOffsetY.current;
+        scrollViewRef.current?.scrollTo({ y: Math.max(0, rawY + containerOffset - 24), animated: true });
+      }
     }
   };
 
@@ -1198,7 +1213,7 @@ export default function ConsultationsScreen() {
     // Pre-flight Yakap readiness gatekeeper
     if (isYakapEligible && !isYakapReady) {
       setBanner({
-        text: 'Encounter signing is locked: Complete all 10 statutory conditions on the Yakap Claim Readiness checklist before signing.',
+        text: 'Encounter signing is locked: Complete all 10 requirements on the Yakap Claim Readiness checklist before signing.',
         isError: true,
       });
       return;
@@ -1483,10 +1498,10 @@ export default function ConsultationsScreen() {
     if (!prcValid) missing.push('Doctor PRC License number is required to sign encounters.');
     if (!pinValid) missing.push('Patient PhilHealth PIN is invalid (must contain exactly 12 numeric digits).');
     if (!atcValid) missing.push('Encounter ATC code is required.');
-    if (!hasSymptom) missing.push('At least one statutory complaint/symptom is required.');
-    if (hasPainCode && !painSiteValid) missing.push("Mandatory pain site description is missing for chief complaint code '38' (PAIN).");
-    if (hasOtherCode && !otherValid) missing.push("Mandatory complaint description is missing for code 'X'.");
-    if (!peComplete) missing.push('9-system physical examination and general survey must be completed.');
+    if (!hasSymptom) missing.push('At least one complaint or symptom is required.');
+    if (hasPainCode && !painSiteValid) missing.push('Pain site description is required when pain is reported.');
+    if (hasOtherCode && !otherValid) missing.push('Description is required when other complaint is reported.');
+    if (!peComplete) missing.push('Comprehensive physical examination and general survey must be completed.');
     if (!primaryDiagPresent) missing.push('At least one diagnosis must be designated Primary ICD-10.');
     if (!vitalsComp) missing.push('Complete triage vitals required (BP, HR, Temp, Height, Weight).');
     if (!s2Valid) missing.push('Doctor S2 License number is required for PDEA controlled drugs.');
@@ -2037,7 +2052,7 @@ export default function ConsultationsScreen() {
                         <Badge label="Cash / Private / HMO" variant="neutral" size="sm" />
                       </View>
                       <ThemedText variant="small" color={theme.colors.textMuted} style={{ marginTop: theme.spacing.xs }}>
-                        Standard clinical documentation. Zero PhilHealth bureaucracy (no ATC prompts, Case/Trans numbers, or statutory questionnaires).
+                        Standard clinical documentation for private, cash, or HMO consultations.
                       </ThemedText>
                     </View>
                     {!isSigned ? (
@@ -2053,7 +2068,7 @@ export default function ConsultationsScreen() {
                 </Card>
               </View>
             ) : (
-              /* PhilHealth Konsulta Encounter: Guided Statutory Mode with Encounter ATC Header Banner */
+              /* PhilHealth Konsulta Encounter: Guided Mode with Encounter ATC Header Banner */
               <View onLayout={(e) => { sectionOffsets.current['atc'] = e.nativeEvent.layout.y; }}>
                 <Card style={styles.atcBannerCard}>
                   <View style={styles.atcHeaderRow}>
@@ -2064,7 +2079,7 @@ export default function ConsultationsScreen() {
                           PhilHealth Konsulta Encounter Active
                         </ThemedText>
                         <ThemedText variant="small" color={theme.colors.primary}>
-                          Statutory keys (pHciCaseNo, pHciTransNo, pSoapTransNo) auto-generated & linked on save/sign
+                          Encounter reference numbers are automatically generated and linked upon signing
                         </ThemedText>
                       </View>
                     </View>
@@ -2120,7 +2135,6 @@ export default function ConsultationsScreen() {
                         <ToggleChip
                           key={symp.code}
                           label={symp.name}
-                          meta={symp.code}
                           selected={selectedSymptomCodes.includes(symp.code)}
                           disabled={isSigned}
                           onPress={() => handleToggleSymptom(symp)}
@@ -2301,7 +2315,7 @@ export default function ConsultationsScreen() {
                       key={diag.id}
                       tone="success"
                       label={`${diag.name} (₱${diag.standardPrice.toFixed(0)})`}
-                      meta={isYakapEligible && diag.philHealthCode ? `Yakap ${diag.philHealthCode}` : undefined}
+                      meta={isYakapEligible && diag.philHealthCode ? 'PhilHealth Covered' : undefined}
                       selected={orderedLabs.includes(diag.name)}
                       disabled={isSigned}
                       onPress={() => handleToggleLab(diag.name)}
@@ -2453,7 +2467,7 @@ export default function ConsultationsScreen() {
                       ) : null}
                       {newRxDrugCode ? (
                         <ThemedText variant="caption" color={theme.colors.textMuted}>
-                          PhilHealth drug code: <ThemedText variant="code">{newRxDrugCode}</ThemedText>
+                          PhilHealth formulary item selected
                         </ThemedText>
                       ) : null}
                     </View>
@@ -2547,7 +2561,7 @@ export default function ConsultationsScreen() {
                         {rx.philHealthDrugCode || rx.isDangerousDrug ? (
                           <View style={styles.rowWrap}>
                             {rx.philHealthDrugCode ? (
-                              <Badge label={`GAMOT ${rx.philHealthDrugCode}`} variant="info" size="sm" />
+                              <Badge label="PhilHealth Formulary" variant="info" size="sm" />
                             ) : null}
                             {rx.isDangerousDrug ? <Badge label="PDEA S2 dangerous drug" variant="emergency" size="sm" /> : null}
                           </View>
@@ -2679,17 +2693,17 @@ export default function ConsultationsScreen() {
               />
               <View style={styles.credentialBadgesRow}>
                 <Badge
-                  label={doctorPan.trim() || signerStaff?.philHealthPan?.trim() ? 'PAN [Auto-Snapshotted]' : 'PAN [Missing]'}
+                  label={doctorPan.trim() || signerStaff?.philHealthPan?.trim() ? 'PAN [Verified]' : 'PAN [Missing]'}
                   variant={doctorPan.trim() || signerStaff?.philHealthPan?.trim() ? 'success' : 'warning'}
                   size="sm"
                 />
                 <Badge
-                  label={doctorPrc.trim() || signerStaff?.prcLicenseNumber?.trim() ? 'PRC [Auto-Snapshotted]' : 'PRC [Missing]'}
+                  label={doctorPrc.trim() || signerStaff?.prcLicenseNumber?.trim() ? 'PRC [Verified]' : 'PRC [Missing]'}
                   variant={doctorPrc.trim() || signerStaff?.prcLicenseNumber?.trim() ? 'success' : 'emergency'}
                   size="sm"
                 />
                 <Badge
-                  label={doctorPtr.trim() || signerStaff?.ptrNumber?.trim() ? 'PTR [Snapshotted]' : 'PTR [Optional]'}
+                  label={doctorPtr.trim() || signerStaff?.ptrNumber?.trim() ? 'PTR [Recorded]' : 'PTR [Optional]'}
                   variant="neutral"
                   size="sm"
                 />
@@ -2892,7 +2906,7 @@ export default function ConsultationsScreen() {
               <Button
                 title={
                   isYakapEligible && !isYakapReady
-                    ? `Signing locked (${(serverReadiness || localEvaluation).missingFields.length} statutory requirements pending)`
+                    ? `Signing locked (${(serverReadiness || localEvaluation).missingFields.length} requirements pending)`
                     : 'Sign & sync encounter'
                 }
                 icon={isYakapEligible && !isYakapReady ? 'lock' : 'check'}
@@ -3131,10 +3145,44 @@ export default function ConsultationsScreen() {
                 }}
               >
                 <View style={styles.leftChartPane}>
-                  {renderLongitudinalChartContent()}
+                  <ScrollView
+                    ref={chartScrollViewRef}
+                    style={[
+                      styles.splitPaneScroll,
+                      { maxHeight: desktopPaneHeight },
+                      Platform.OS === 'web' && ({ overscrollBehavior: 'contain' } as any),
+                    ]}
+                    contentContainerStyle={styles.splitPaneScrollContent}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                    keyboardShouldPersistTaps="handled"
+                    directionalLockEnabled
+                    scrollEventThrottle={16}
+                    overScrollMode="never"
+                    bounces={false}
+                  >
+                    {renderLongitudinalChartContent()}
+                  </ScrollView>
                 </View>
                 <View style={styles.rightSoapPane}>
-                  {renderSoapDocumentationContent()}
+                  <ScrollView
+                    ref={soapScrollViewRef}
+                    style={[
+                      styles.splitPaneScroll,
+                      { maxHeight: desktopPaneHeight },
+                      Platform.OS === 'web' && ({ overscrollBehavior: 'contain' } as any),
+                    ]}
+                    contentContainerStyle={styles.splitPaneScrollContent}
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                    keyboardShouldPersistTaps="handled"
+                    directionalLockEnabled
+                    scrollEventThrottle={16}
+                    overScrollMode="never"
+                    bounces={false}
+                  >
+                    {renderSoapDocumentationContent()}
+                  </ScrollView>
                 </View>
               </View>
             ) : (
@@ -3928,6 +3976,14 @@ const styles = StyleSheet.create({
     flex: 0.58,
     minWidth: 440,
     gap: theme.spacing.md,
+  },
+  splitPaneScroll: {
+    flex: 1,
+    width: '100%',
+  },
+  splitPaneScrollContent: {
+    gap: theme.spacing.md,
+    paddingBottom: theme.spacing.xl,
   },
   soapContentColumn: {
     gap: theme.spacing.md,

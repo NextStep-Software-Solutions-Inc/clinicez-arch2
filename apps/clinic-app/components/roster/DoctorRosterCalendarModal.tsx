@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -44,11 +44,11 @@ export function resolveSelectedDoctorId(
   if (!doctors || doctors.length === 0) {
     return '';
   }
-  if (initialDoctorId && doctors.some((d) => d.id === initialDoctorId)) {
-    return initialDoctorId;
-  }
   if (currentSelectedId && doctors.some((d) => d.id === currentSelectedId)) {
     return currentSelectedId;
+  }
+  if (initialDoctorId && doctors.some((d) => d.id === initialDoctorId)) {
+    return initialDoctorId;
   }
   return doctors[0].id;
 }
@@ -146,44 +146,73 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
   const [partialStartTime, setPartialStartTime] = useState<string>('13:00');
   const [partialEndTime, setPartialEndTime] = useState<string>('17:00');
 
+  const prevInitialDoctorIdRef = useRef(initialDoctorId);
+  const prevVisibleRef = useRef(visible);
+  const activeTemplateDocIdRef = useRef<string | null>(null);
+  const activeLeaveDocIdRef = useRef<string | null>(null);
+
   useEffect(() => {
+    const visibleJustOpened = visible && !prevVisibleRef.current;
+    const initialDoctorChanged = initialDoctorId !== prevInitialDoctorIdRef.current;
+
+    prevVisibleRef.current = visible;
+    prevInitialDoctorIdRef.current = initialDoctorId;
+
+    if (visibleJustOpened || initialDoctorChanged) {
+      const targetId = resolveSelectedDoctorId(doctors, '', initialDoctorId);
+      if (targetId && targetId !== selectedDoctorId) {
+        setSelectedDoctorId(targetId);
+      }
+      return;
+    }
+
     const nextDoctorId = resolveSelectedDoctorId(doctors, selectedDoctorId, initialDoctorId);
     if (nextDoctorId !== selectedDoctorId) {
       setSelectedDoctorId(nextDoctorId);
     }
-  }, [initialDoctorId, doctors, selectedDoctorId]);
+  }, [visible, initialDoctorId, doctors, selectedDoctorId]);
 
   const loadTemplates = useCallback(async (docId: string) => {
     if (!docId) return;
+    activeTemplateDocIdRef.current = docId;
     try {
       setLoadingTemplates(true);
       const [data, err] = await clinicService.getDoctorScheduleTemplates(docId);
+      if (activeTemplateDocIdRef.current !== docId) return;
       if (err) {
         notify.error(err.message || 'Failed to load doctor templates.');
       } else {
         setTemplates(data || []);
       }
     } catch (err: any) {
+      if (activeTemplateDocIdRef.current !== docId) return;
       notify.error(err?.message || 'Failed to load doctor templates.');
     } finally {
-      setLoadingTemplates(false);
+      if (activeTemplateDocIdRef.current === docId) {
+        setLoadingTemplates(false);
+      }
     }
   }, []);
 
   const loadLeaves = useCallback(async (docId: string) => {
     if (!docId) return;
+    activeLeaveDocIdRef.current = docId;
     try {
       setLoadingLeaves(true);
       const [data, err] = await clinicService.getDoctorLeaves(docId);
+      if (activeLeaveDocIdRef.current !== docId) return;
       if (err) {
         notify.error(err.message || 'Failed to load doctor leaves.');
       } else {
         setLeaves(data || []);
       }
     } catch (err: any) {
+      if (activeLeaveDocIdRef.current !== docId) return;
       notify.error(err?.message || 'Failed to load doctor leaves.');
     } finally {
-      setLoadingLeaves(false);
+      if (activeLeaveDocIdRef.current === docId) {
+        setLoadingLeaves(false);
+      }
     }
   }, []);
 
@@ -434,6 +463,10 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
                   key={doc.id}
                   style={[styles.doctorPill, isSelected && styles.doctorPillSelected]}
                   onPress={() => setSelectedDoctorId(doc.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select Dr. ${doc.firstName} ${doc.lastName}`}
+                  accessibilityState={{ selected: isSelected }}
+                  disabled={savingTemplate || deletingTemplate || submittingLeave}
                 >
                   <Icon
                     name="consultations"
