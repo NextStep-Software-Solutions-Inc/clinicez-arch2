@@ -126,7 +126,9 @@ public sealed class StaffController : ControllerBase
                 request.PtrNumber,
                 request.S2LicenseNumber,
                 request.Specialty,
-                request.PhilHealthPan);
+                request.PhilHealthPan,
+                RequestedRole: request.Role,
+                RequestedClinicRoleId: request.ClinicRoleId);
 
             var myResult = await _sender.Send(myCommand, ct);
             return Ok(ApiResponse<StaffMemberDto>.Success(myResult, "Profile updated successfully."));

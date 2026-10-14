@@ -21,7 +21,11 @@ import {
   SYSTEM_ROLE_ORDER,
   inferStaffRole,
   FALLBACK_SYSTEM_ROLES,
+  isSelfStaffMember,
+  canModifyStaffRole,
 } from '../../services/roleUtils';
+import { useAuth } from '../../context/AuthContext';
+import { useStaff } from '../../context/StaffContext';
 import { DoctorRosterCalendarModal } from '../roster/DoctorRosterCalendarModal';
 
 interface StaffManagementTabProps {
@@ -51,6 +55,12 @@ export default function StaffManagementTab({
   setShowAddModal,
   onStaffAdded,
 }: StaffManagementTabProps) {
+  const { user } = useAuth();
+  const { current: currentStaff } = useStaff();
+
+  const isSelf = (target: StaffMember | null | undefined): boolean =>
+    isSelfStaffMember(target, user) || isSelfStaffMember(target, currentStaff);
+
   // Derived role lists: System standard roles + Clinic custom roles defined by admin
   const rawSystemRoles = (roles || []).filter((r) => r.isSystem);
   const systemRoleOptions: RoleOption[] =
@@ -120,6 +130,8 @@ export default function StaffManagementTab({
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
+  const isEditingSelf = isSelf(editingStaff);
+
   // Doctor Roster Calendar Modal State
   const [rosterModalVisible, setRosterModalVisible] = useState(false);
   const [rosterDoctorId, setRosterDoctorId] = useState<string | undefined>(undefined);
@@ -140,6 +152,9 @@ export default function StaffManagementTab({
     FALLBACK_SYSTEM_ROLES[0];
 
   const handleSelectRole = (r: RoleOption) => {
+    if (editingStaff && (!canModifyStaffRole(editingStaff, user) || !canModifyStaffRole(editingStaff, currentStaff))) {
+      return;
+    }
     setSelectedRoleId(r.id);
     setRole(r.staffRole);
     if (r.staffRole === 'Doctor') {
@@ -208,7 +223,14 @@ export default function StaffManagementTab({
       return;
     }
 
-    if (role === 'Doctor' && !prc.trim()) {
+    const effectiveStaffRole: StaffRole = isEditingSelf ? editingStaff.role : role;
+
+    if (isEditingSelf && role !== editingStaff.role) {
+      setEditError('You cannot change or downgrade your own clinic role.');
+      return;
+    }
+
+    if (effectiveStaffRole === 'Doctor' && !prc.trim()) {
       setEditError('PRC License Number is mandatory for Doctors.');
       return;
     }
@@ -217,22 +239,23 @@ export default function StaffManagementTab({
     setEditError(null);
 
     const effectiveRoleId = selectedRoleId || selectedRoleOption.id;
-    const clinicRoleId = effectiveRoleId.startsWith('sys-') ? undefined : effectiveRoleId;
+    const resolvedClinicRoleId = effectiveRoleId.startsWith('sys-') ? undefined : effectiveRoleId;
+    const clinicRoleId = isEditingSelf ? editingStaff.clinicRoleId : resolvedClinicRoleId;
 
     const [updated, err] = await clinicService.updateStaff(editingStaff.id, {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       middleName: middleName.trim() || undefined,
       title: title.trim() || undefined,
-      role,
+      role: effectiveStaffRole,
       clinicRoleId: clinicRoleId || undefined,
       email: email.trim() || undefined,
       phoneNumber: phone.trim() || undefined,
-      prcLicenseNumber: role === 'Doctor' ? prc.trim() : undefined,
-      ptrNumber: role === 'Doctor' ? ptr.trim() || undefined : undefined,
-      s2LicenseNumber: role === 'Doctor' ? s2.trim() || undefined : undefined,
+      prcLicenseNumber: effectiveStaffRole === 'Doctor' ? prc.trim() : undefined,
+      ptrNumber: effectiveStaffRole === 'Doctor' ? ptr.trim() || undefined : undefined,
+      s2LicenseNumber: effectiveStaffRole === 'Doctor' ? s2.trim() || undefined : undefined,
       specialty: specialty.trim() || undefined,
-      isActive: isActiveStaff,
+      isActive: isEditingSelf ? editingStaff.isActive : isActiveStaff,
     });
 
     setSavingEdit(false);
@@ -452,12 +475,16 @@ export default function StaffManagementTab({
             <View style={styles.staffList}>
               {staff.map((s) => {
                 const fullName = `${s.title ? `${s.title} ` : ''}${s.firstName} ${s.lastName}`.trim();
+                const isSelfRow = isSelf(s);
 
                 return (
                   <View key={s.id} style={styles.staffItem}>
                     <View style={styles.staffIdentityCol}>
                       <View style={styles.staffNameRow}>
                         <ThemedText variant="bodyBold">{fullName}</ThemedText>
+                        {isSelfRow ? (
+                          <Badge label="You" variant="info" size="sm" />
+                        ) : null}
                         <Badge label={s.role} variant={s.role === 'Doctor' ? 'primary' : 'neutral'} size="sm" />
                         {s.roleName && s.roleName !== s.role ? (
                           <Badge label={s.roleName} variant="purple" size="sm" />
@@ -534,15 +561,19 @@ export default function StaffManagementTab({
                               setResetError(null);
                             },
                           },
-                          {
-                            id: 'toggle-active',
-                            label: s.isActive ? 'Deactivate Staff Member' : 'Activate Staff Member',
-                            icon: (s.isActive ? 'close' : 'checkCircle') as IconName,
-                            hint: s.isActive ? 'Revoke login and seat access' : 'Restore staff login access',
-                            destructive: s.isActive,
-                            dividerBefore: true,
-                            onPress: () => handleToggleActive(s),
-                          },
+                          ...(!isSelfRow
+                            ? [
+                                {
+                                  id: 'toggle-active',
+                                  label: s.isActive ? 'Deactivate Staff Member' : 'Activate Staff Member',
+                                  icon: (s.isActive ? 'close' : 'checkCircle') as IconName,
+                                  hint: s.isActive ? 'Revoke login and seat access' : 'Restore staff login access',
+                                  destructive: s.isActive,
+                                  dividerBefore: true,
+                                  onPress: () => handleToggleActive(s),
+                                },
+                              ]
+                            : []),
                         ]}
                       />
                     </View>
@@ -881,9 +912,18 @@ export default function StaffManagementTab({
           {/* Role Selection */}
           <View style={styles.roleSelectionGroup}>
             <FieldGroup label="Staff Role *">
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Select the system standard role or a clinic custom role.
-              </ThemedText>
+              {isEditingSelf ? (
+                <View style={styles.selfRoleNoticeBox}>
+                  <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                  <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
+                    You cannot change or downgrade your own clinic role. Ask another clinic administrator to update your role assignment.
+                  </ThemedText>
+                </View>
+              ) : (
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Select the system standard role or a clinic custom role.
+                </ThemedText>
+              )}
 
               {/* System Standard Roles */}
               <View style={styles.roleSubgroup}>
@@ -901,6 +941,7 @@ export default function StaffManagementTab({
                       key={r.id}
                       label={r.displayName}
                       active={selectedRoleOption.id === r.id}
+                      disabled={isEditingSelf}
                       onPress={() => handleSelectRole(r)}
                     />
                   ))}
@@ -927,6 +968,7 @@ export default function StaffManagementTab({
                         key={r.id}
                         label={r.displayName}
                         active={selectedRoleOption.id === r.id}
+                        disabled={isEditingSelf}
                         onPress={() => handleSelectRole(r)}
                       />
                     ))}
@@ -959,7 +1001,9 @@ export default function StaffManagementTab({
                     {(['Doctor', 'Nurse', 'Receptionist', 'Cashier', 'Admin'] as const).map((cat) => (
                       <Pressable
                         key={cat}
+                        disabled={isEditingSelf}
                         onPress={() => {
+                          if (isEditingSelf) return;
                           setRole(cat);
                           if (cat === 'Doctor' && !title) setTitle('Dr.');
                           if (cat === 'Nurse' && (!title || title === 'Dr.')) setTitle('RN');
@@ -967,6 +1011,7 @@ export default function StaffManagementTab({
                         style={[
                           styles.miniChip,
                           role === cat && styles.miniChipActive,
+                          isEditingSelf && styles.miniChipDisabled,
                         ]}
                       >
                         <ThemedText
@@ -1045,7 +1090,9 @@ export default function StaffManagementTab({
                 Staff Account Status
               </ThemedText>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                {isActiveStaff
+                {isEditingSelf
+                  ? 'Active: you cannot deactivate your own workstation account.'
+                  : isActiveStaff
                   ? 'Active: staff member can be assigned consultations and access workstation.'
                   : 'Deactivated: staff member cannot log in or be assigned.'}
               </ThemedText>
@@ -1054,7 +1101,11 @@ export default function StaffManagementTab({
               title={isActiveStaff ? 'Active' : 'Deactivated'}
               variant={isActiveStaff ? 'success' : 'danger'}
               size="sm"
-              onPress={() => setIsActiveStaff((prev) => !prev)}
+              disabled={isEditingSelf}
+              onPress={() => {
+                if (isEditingSelf) return;
+                setIsActiveStaff((prev) => !prev);
+              }}
             />
           </View>
 
@@ -1360,6 +1411,17 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     marginTop: theme.spacing.xs,
   },
+  selfRoleNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primary,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    marginTop: theme.spacing.xs,
+  },
   customCategoryRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1384,6 +1446,9 @@ const styles = StyleSheet.create({
   miniChipActive: {
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.primaryLight,
+  },
+  miniChipDisabled: {
+    opacity: 0.5,
   },
   chipScrollRow: {
     flexDirection: 'row',

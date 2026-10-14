@@ -68,6 +68,20 @@ public sealed class UpdateClinicRoleCommandHandler : IRequestHandler<UpdateClini
             throw new BadRequestException("Default system roles cannot be modified.");
         }
 
+        if (_clinicContext.StaffId.HasValue)
+        {
+            var isAssignedToCaller = await _staffRepository.Query(s =>
+                s.Id == _clinicContext.StaffId.Value &&
+                s.ClinicId == _clinicContext.ClinicId &&
+                s.ClinicRoleId == role.Id)
+                .AnyAsync(cancellationToken);
+
+            if (isAssignedToCaller)
+            {
+                throw new ClinicEz.Shared.Exceptions.ValidationException("You cannot modify or downgrade your own assigned clinic role.");
+            }
+        }
+
         var duplicate = await _roleRepository.Query(r => 
             r.ClinicId == _clinicContext.ClinicId && 
             r.Id != request.Id && 

@@ -825,4 +825,341 @@ public class StaffCommandsTests
         result.Role.Should().Be(StaffRole.Doctor);
         cache.Received(1).Invalidate(staffId);
     }
+
+    [Theory]
+    [InlineData(StaffRole.Admin, StaffRole.Doctor)]
+    [InlineData(StaffRole.Admin, StaffRole.Nurse)]
+    [InlineData(StaffRole.Admin, StaffRole.Receptionist)]
+    [InlineData(StaffRole.Admin, StaffRole.Cashier)]
+    [InlineData(StaffRole.Doctor, StaffRole.Nurse)]
+    [InlineData(StaffRole.Nurse, StaffRole.Admin)]
+    public async Task UpdateStaffMember_SelfRoleChangeOrDowngrade_ThrowsValidationException(StaffRole currentRole, StaffRole targetRole)
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var selfStaffId = Guid.NewGuid();
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(selfStaffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var cache = Substitute.For<IStaffAccessInvalidator>();
+
+        var staff = new StaffMember
+        {
+            Id = selfStaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Self",
+            LastName = "Staff",
+            Role = currentRole,
+            PrcLicenseNumber = "PRC-12345",
+            IsActive = true
+        };
+        await context.StaffMembers.AddAsync(staff);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateStaffMemberCommandHandler(staffRepo, roleRepo, uow, clinicContext, cache);
+
+        var act = () => handler.Handle(new UpdateStaffMemberCommand(
+            selfStaffId,
+            "Self",
+            "Staff",
+            null,
+            null,
+            targetRole,
+            null,
+            "self@clinic.com",
+            "09170001111",
+            "PRC-12345",
+            null,
+            null,
+            null,
+            true
+        ), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*cannot change or downgrade your own clinic role*");
+        cache.DidNotReceiveWithAnyArgs().Invalidate(default);
+    }
+
+    [Fact]
+    public async Task UpdateStaffMember_SelfClinicRoleIdChange_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var selfStaffId = Guid.NewGuid();
+        var currentClinicRoleId = Guid.NewGuid();
+        var downgradedClinicRoleId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(selfStaffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+
+        await context.ClinicRoles.AddRangeAsync(
+            new ClinicRole { Id = currentClinicRoleId, TenantId = tenantId, ClinicId = clinicId, Name = "Clinic Administrator", IsSystem = true },
+            new ClinicRole { Id = downgradedClinicRoleId, TenantId = tenantId, ClinicId = clinicId, Name = "Limited Custom Role", IsSystem = false }
+        );
+
+        var staff = new StaffMember
+        {
+            Id = selfStaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Self",
+            LastName = "Admin",
+            Role = StaffRole.Admin,
+            ClinicRoleId = currentClinicRoleId,
+            IsActive = true
+        };
+        await context.StaffMembers.AddAsync(staff);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateStaffMemberCommandHandler(staffRepo, roleRepo, uow, clinicContext);
+
+        var act = () => handler.Handle(new UpdateStaffMemberCommand(
+            selfStaffId,
+            "Self",
+            "Admin",
+            null,
+            null,
+            StaffRole.Admin,
+            downgradedClinicRoleId,
+            "admin@clinic.com",
+            "09170001111",
+            null,
+            null,
+            null,
+            null,
+            true
+        ), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*cannot change or downgrade your own clinic role*");
+    }
+
+    [Fact]
+    public async Task UpdateStaffMember_SelfProfileUpdateWithUnchangedRole_Succeeds()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var selfStaffId = Guid.NewGuid();
+        var adminClinicRoleId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(selfStaffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+
+        await context.ClinicRoles.AddAsync(new ClinicRole
+        {
+            Id = adminClinicRoleId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = "Clinic Administrator",
+            IsSystem = true
+        });
+
+        var staff = new StaffMember
+        {
+            Id = selfStaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Self",
+            LastName = "Admin",
+            Role = StaffRole.Admin,
+            ClinicRoleId = adminClinicRoleId,
+            IsActive = true
+        };
+        await context.StaffMembers.AddAsync(staff);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateStaffMemberCommandHandler(staffRepo, roleRepo, uow, clinicContext);
+
+        var result = await handler.Handle(new UpdateStaffMemberCommand(
+            selfStaffId,
+            "UpdatedFirst",
+            "UpdatedLast",
+            "M.",
+            "Dr.",
+            StaffRole.Admin,
+            adminClinicRoleId,
+            "admin@clinic.com",
+            "09179998888",
+            "PRC-777",
+            null,
+            null,
+            "Medical Director",
+            true
+        ), CancellationToken.None);
+
+        result.FirstName.Should().Be("UpdatedFirst");
+        result.LastName.Should().Be("UpdatedLast");
+        result.Role.Should().Be(StaffRole.Admin);
+        result.ClinicRoleId.Should().Be(adminClinicRoleId);
+    }
+
+    [Fact]
+    public async Task UpdateStaffMember_SelfDeactivation_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var selfStaffId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(selfStaffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+
+        await context.StaffMembers.AddAsync(new StaffMember
+        {
+            Id = selfStaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Self",
+            LastName = "Admin",
+            Role = StaffRole.Admin,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateStaffMemberCommandHandler(staffRepo, roleRepo, uow, clinicContext);
+
+        var act = () => handler.Handle(new UpdateStaffMemberCommand(
+            selfStaffId,
+            "Self",
+            "Admin",
+            null,
+            null,
+            StaffRole.Admin,
+            null,
+            "admin@clinic.com",
+            null,
+            null,
+            null,
+            null,
+            null,
+            IsActive: false
+        ), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*cannot deactivate your own account*");
+    }
+
+    [Fact]
+    public async Task UpdateStaffMember_DowngradeSoleActiveAdmin_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var callerStaffId = Guid.NewGuid();
+        var soleAdminId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(callerStaffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+
+        await context.StaffMembers.AddAsync(new StaffMember
+        {
+            Id = soleAdminId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Sole",
+            LastName = "Admin",
+            Role = StaffRole.Admin,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateStaffMemberCommandHandler(staffRepo, roleRepo, uow, clinicContext);
+
+        var act = () => handler.Handle(new UpdateStaffMemberCommand(
+            soleAdminId,
+            "Sole",
+            "Admin",
+            null,
+            null,
+            StaffRole.Receptionist,
+            null,
+            "sole@clinic.com",
+            null,
+            null,
+            null,
+            null,
+            null,
+            IsActive: true
+        ), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*only active Administrator*");
+    }
+
+    [Fact]
+    public async Task UpdateMyProfile_WhenRequestedRoleDiffersFromCurrentRole_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var staffId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(staffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        await context.StaffMembers.AddAsync(new StaffMember
+        {
+            Id = staffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Maria",
+            LastName = "Santos",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-001",
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateMyProfileCommandHandler(staffRepo, uow, clinicContext);
+
+        var act = () => handler.Handle(new UpdateMyProfileCommand(
+            staffId,
+            "Maria",
+            "Santos",
+            null,
+            "Dr.",
+            null,
+            "PRC-001",
+            null,
+            null,
+            null,
+            RequestedRole: StaffRole.Nurse
+        ), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*cannot change or downgrade your own clinic role*");
+    }
 }
+

@@ -72,3 +72,42 @@ export const FALLBACK_SYSTEM_ROLES: RoleOption[] = [
     description: 'Facility configuration, user permissions, and clinic operations',
   },
 ];
+
+export interface StaffIdentityRef {
+  id?: string | null;
+  email?: string | null;
+}
+
+/**
+ * Determines whether a target staff member record represents the currently authenticated staff member.
+ */
+export function isSelfStaffMember(
+  target: StaffIdentityRef | null | undefined,
+  currentActor: StaffIdentityRef | null | undefined,
+): boolean {
+  if (!target || !currentActor) return false;
+
+  if (target.id && currentActor.id && target.id === currentActor.id) {
+    return true;
+  }
+
+  const targetEmail = target.email?.trim().toLowerCase();
+  const actorEmail = currentActor.email?.trim().toLowerCase();
+  if (targetEmail && actorEmail && targetEmail === actorEmail) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Clinic staff must never be able to change or downgrade their own clinic role.
+ */
+export function canModifyStaffRole(
+  target: StaffIdentityRef | null | undefined,
+  currentActor: StaffIdentityRef | null | undefined,
+): boolean {
+  if (!target) return false;
+  return !isSelfStaffMember(target, currentActor);
+}
+

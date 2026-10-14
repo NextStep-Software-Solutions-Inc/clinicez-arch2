@@ -23,7 +23,9 @@ public sealed record UpdateMyProfileCommand(
     string? PtrNumber,
     string? S2LicenseNumber,
     string? Specialty,
-    string? PhilHealthPan = null) : IRequest<StaffMemberDto>;
+    string? PhilHealthPan = null,
+    StaffRole? RequestedRole = null,
+    Guid? RequestedClinicRoleId = null) : IRequest<StaffMemberDto>;
 
 public sealed class UpdateMyProfileCommandValidator : AbstractValidator<UpdateMyProfileCommand>
 {
@@ -68,6 +70,12 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
         if (staff == null)
         {
             throw new NotFoundException($"Staff member '{request.StaffId}' was not found in this clinic.");
+        }
+
+        if ((request.RequestedRole.HasValue && request.RequestedRole.Value != staff.Role) ||
+            (request.RequestedClinicRoleId.HasValue && request.RequestedClinicRoleId.Value != staff.ClinicRoleId))
+        {
+            throw new ClinicEz.Shared.Exceptions.ValidationException("You cannot change or downgrade your own clinic role.");
         }
 
         if (staff.Role == StaffRole.Doctor && string.IsNullOrWhiteSpace(request.PrcLicenseNumber))

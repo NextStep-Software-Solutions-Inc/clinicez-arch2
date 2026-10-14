@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import { clinicService, ClinicRole } from '../../services/clinicService';
+import { useAuth } from '../../context/AuthContext';
+import { useStaff } from '../../context/StaffContext';
 import RoleFormModal from './RoleFormModal';
 
 interface AccessControlTabProps {
@@ -20,6 +22,8 @@ interface AccessControlTabProps {
 }
 
 export default function AccessControlTab({ roles, onRefreshRoles, loading }: AccessControlTabProps) {
+  const { user } = useAuth();
+  const { current: currentStaff } = useStaff();
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
   const [selectedRole, setSelectedRole] = useState<ClinicRole | null>(null);
 
@@ -39,6 +43,12 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
   }, []);
 
   const activeRole = selectedRole || roles[0] || null;
+  const isOwnCustomRole = Boolean(
+    activeRole &&
+      !activeRole.isSystem &&
+      ((currentStaff?.clinicRoleId && currentStaff.clinicRoleId === activeRole.id) ||
+        (user?.roleName && user.roleName === activeRole.name))
+  );
 
   // Group permissions by prefix (e.g. appointments:, queue:, consultations:, billing:)
   const groupPermissions = (perms: string[]) => {
@@ -214,14 +224,22 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
                               icon="edit"
                               variant="outline"
                               size="sm"
-                              onPress={() => setEditingRole(activeRole)}
+                              disabled={isOwnCustomRole}
+                              onPress={() => {
+                                if (isOwnCustomRole) return;
+                                setEditingRole(activeRole);
+                              }}
                             />
                             <Button
                               title="Delete"
                               icon="trash"
                               variant="ghost"
                               size="sm"
-                              onPress={() => setDeleteModalRole(activeRole)}
+                              disabled={isOwnCustomRole}
+                              onPress={() => {
+                                if (isOwnCustomRole) return;
+                                setDeleteModalRole(activeRole);
+                              }}
                             />
                           </>
                         )}
@@ -233,6 +251,13 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
                         <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primary} />
                         <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ flex: 1 }}>
                           System roles are core to clinic standard operating procedures. Use "Clone as Custom Role" to create a modified version.
+                        </ThemedText>
+                      </View>
+                    ) : isOwnCustomRole ? (
+                      <View style={styles.systemNotice}>
+                        <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                        <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ flex: 1 }}>
+                          You are currently assigned to this custom role. You cannot modify or downgrade your own assigned clinic role.
                         </ThemedText>
                       </View>
                     ) : null}

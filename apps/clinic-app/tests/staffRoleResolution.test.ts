@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { inferStaffRole } from '../services/roleUtils';
+import { inferStaffRole, isSelfStaffMember, canModifyStaffRole } from '../services/roleUtils';
 
 describe('inferStaffRole', () => {
   test('correctly identifies system standard roles', () => {
@@ -36,3 +36,32 @@ describe('inferStaffRole', () => {
     expect(inferStaffRole({ name: 'General Clerk', isSystem: false, permissions: ['appointments:read'] })).toBe('Receptionist');
   });
 });
+
+describe('self-role modification guards (isSelfStaffMember & canModifyStaffRole)', () => {
+  test('identifies self by matching staff ID and blocks role modification', () => {
+    const self = { id: 'staff-111', email: 'admin@clinic.com' };
+    expect(isSelfStaffMember(self, { id: 'staff-111' })).toBe(true);
+    expect(canModifyStaffRole(self, { id: 'staff-111' })).toBe(false);
+  });
+
+  test('identifies self by case-insensitive email match when IDs differ or are absent', () => {
+    const target = { id: 'staff-111', email: 'Dr.Santos@Clinic.com' };
+    const actor = { id: 'session-user-1', email: '  dr.santos@clinic.com ' };
+    expect(isSelfStaffMember(target, actor)).toBe(true);
+    expect(canModifyStaffRole(target, actor)).toBe(false);
+  });
+
+  test('allows modifying clinic role of a different staff member', () => {
+    const target = { id: 'staff-222', email: 'nurse@clinic.com' };
+    const actor = { id: 'staff-111', email: 'admin@clinic.com' };
+    expect(isSelfStaffMember(target, actor)).toBe(false);
+    expect(canModifyStaffRole(target, actor)).toBe(true);
+  });
+
+  test('handles null/undefined inputs safely', () => {
+    expect(isSelfStaffMember(null, { id: 'staff-111' })).toBe(false);
+    expect(isSelfStaffMember({ id: 'staff-111' }, null)).toBe(false);
+    expect(canModifyStaffRole(null, { id: 'staff-111' })).toBe(false);
+  });
+});
+

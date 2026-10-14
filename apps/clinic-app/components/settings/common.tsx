@@ -11,17 +11,20 @@ export function Chip({
   label,
   active,
   onPress,
+  disabled = false,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
       accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      style={[styles.chip, active && styles.chipActive]}
+      accessibilityState={{ selected: active, disabled }}
+      style={[styles.chip, active && styles.chipActive, disabled && styles.chipDisabled]}
     >
       <ThemedText
         variant={active ? 'smallBold' : 'small'}
@@ -93,6 +96,9 @@ const styles = StyleSheet.create({
   chipActive: {
     backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
+  },
+  chipDisabled: {
+    opacity: 0.5,
   },
   infoRow: {
     flexDirection: 'row',

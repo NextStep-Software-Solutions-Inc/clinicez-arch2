@@ -152,4 +152,57 @@ public class PermissionPolicyTests
         await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.BadRequestException>()
             .WithMessage("*Default system roles cannot be modified*");
     }
+
+    [Fact]
+    public async Task UpdateClinicRoleCommandHandler_ThrowsValidationException_WhenCallerAssignedToCustomRole()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var callerStaffId = Guid.NewGuid();
+        var customRoleId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(callerStaffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        var customRole = new ClinicRole
+        {
+            Id = customRoleId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = "Custom Operations Lead",
+            IsSystem = false,
+            Permissions = new List<string> { ClinicPermissions.RolesManage, ClinicPermissions.StaffManage }
+        };
+        await context.ClinicRoles.AddAsync(customRole);
+
+        await context.StaffMembers.AddAsync(new StaffMember
+        {
+            Id = callerStaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Caller",
+            LastName = "Lead",
+            ClinicRoleId = customRoleId,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateClinicRoleCommandHandler(roleRepo, staffRepo, uow, clinicContext);
+        var command = new UpdateClinicRoleCommand(
+            customRoleId,
+            "Custom Operations Lead",
+            "Downgraded permissions",
+            new List<string> { ClinicPermissions.QueueRead });
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*cannot modify or downgrade your own assigned clinic role*");
+    }
 }
+

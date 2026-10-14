@@ -9,6 +9,7 @@ using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
@@ -84,6 +85,39 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         if (staff == null)
         {
             throw new NotFoundException($"Staff member '{request.Id}' was not found in this clinic.");
+        }
+
+        // Prevent clinic staff from changing or downgrading their own clinic role or deactivating themselves
+        bool isSelf = _clinicContext.StaffId.HasValue && _clinicContext.StaffId.Value == staff.Id;
+        if (isSelf)
+        {
+            bool roleChanged = request.Role != staff.Role;
+            bool clinicRoleChanged = request.ClinicRoleId.HasValue && request.ClinicRoleId.Value != staff.ClinicRoleId;
+            if (roleChanged || clinicRoleChanged)
+            {
+                throw new ValidationException("You cannot change or downgrade your own clinic role.");
+            }
+
+            if (!request.IsActive && staff.IsActive)
+            {
+                throw new ValidationException("You cannot deactivate your own account.");
+            }
+        }
+
+        // Guard: Cannot downgrade or deactivate the only active Administrator
+        if (staff.Role == StaffRole.Admin && staff.IsActive && (request.Role != StaffRole.Admin || !request.IsActive))
+        {
+            var otherActiveAdmins = await _staffRepository.Query(s =>
+                s.ClinicId == _clinicContext.ClinicId &&
+                s.Role == StaffRole.Admin &&
+                s.IsActive &&
+                s.Id != staff.Id)
+                .AnyAsync(cancellationToken);
+
+            if (!otherActiveAdmins)
+            {
+                throw new ValidationException("Cannot downgrade or deactivate the only active Administrator in this clinic.");
+            }
         }
 
         string? roleName = staff.ClinicRole?.Name;
