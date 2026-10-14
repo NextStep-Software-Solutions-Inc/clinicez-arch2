@@ -783,7 +783,7 @@ export default function DashboardScreen() {
                   : 'Try another status filter.'
               }
               actionTitle={queueFilter === 'ALL' ? 'Register a patient' : undefined}
-              onAction={queueFilter === 'ALL' ? () => navigation.navigate('Patients') : undefined}
+              onAction={queueFilter === 'ALL' ? () => navigation.navigate('Patients', { openRegister: true }) : undefined}
             />
           </Card>
         ) : (
@@ -1362,7 +1362,7 @@ export default function DashboardScreen() {
     <ResponsiveLayout
       headerTitle="Dashboard"
       rightAction={
-        <Button title="New patient" variant="primary" size="sm" icon="plus" onPress={() => navigation.navigate('Patients')} />
+        <Button title="New patient" variant="primary" size="sm" icon="plus" onPress={() => navigation.navigate('Patients', { openRegister: true })} />
       }
     >
       <ScrollView

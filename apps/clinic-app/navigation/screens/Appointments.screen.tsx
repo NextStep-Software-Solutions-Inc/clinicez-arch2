@@ -6,7 +6,7 @@ import {
   RefreshControl,
   Pressable,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
 import { notify } from '@utils/feedback';
 import {
   ThemedText,
@@ -43,6 +43,37 @@ import { SlotPicker } from '../../components/roster/SlotPicker';
 import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
 
+export type AppointmentsRouteParams = {
+  patientId?: string;
+  patientName?: string;
+  patientCode?: string;
+};
+
+export type AppointmentsScreenProps = StaticScreenProps<AppointmentsRouteParams | undefined>;
+
+export function buildPreselectedPatientFromRoute(
+  params?: AppointmentsRouteParams | null
+): ClinicPatient | null {
+  const id = params?.patientId?.trim();
+  const fullName = params?.patientName?.trim();
+  if (!id || !fullName) return null;
+  return {
+    id,
+    tenantId: '',
+    clinicId: '',
+    patientCode: params?.patientCode?.trim() ?? '',
+    firstName: '',
+    lastName: '',
+    fullName,
+    dateOfBirth: '',
+    age: 0,
+    gender: '',
+    contactNumber: '',
+    verificationStatus: 'Verified',
+    createdAt: '',
+  };
+}
+
 const STATUS_FILTERS: Array<{ key: string; label: string }> = [
   { key: 'ALL', label: 'All' },
   { key: 'Confirmed', label: 'Confirmed' },
@@ -50,14 +81,14 @@ const STATUS_FILTERS: Array<{ key: string; label: string }> = [
   { key: 'Pending', label: 'Pending' },
 ];
 
-function formatTime(isoString?: string): string {
+export function formatTime(isoString?: string): string {
   if (!isoString) return '--';
   const d = new Date(isoString);
   if (isNaN(d.getTime())) return '--';
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
-function formatDay(isoString?: string): string {
+export function formatDay(isoString?: string): string {
   if (!isoString) return '';
   const d = new Date(isoString);
   if (isNaN(d.getTime())) return '';
@@ -69,7 +100,7 @@ function pad(n: number): string {
 }
 
 /** Two hours from now, as editable form values. */
-function defaultSlot(): { date: string; time: string } {
+export function defaultSlot(): { date: string; time: string } {
   const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
   return {
     date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
@@ -95,8 +126,92 @@ function getStatusBadge(status: AppointmentStatus): { variant: BadgeVariant; lab
   }
 }
 
-export default function AppointmentsScreen() {
+export interface AppointmentBookedSuccessViewProps {
+  appointment: AppointmentItem;
+}
+
+export function AppointmentBookedSuccessView({ appointment }: AppointmentBookedSuccessViewProps) {
+  return (
+    <View style={styles.successContainer} testID="appointment-booked-success-view">
+      <View style={styles.successBanner}>
+        <Icon name="checkCircle" size={theme.sizes.iconLg} color={theme.colors.successText} />
+        <View style={styles.flexFill}>
+          <ThemedText variant="bodyBold" color={theme.colors.successText}>
+            Appointment confirmed for {appointment.patientName}
+          </ThemedText>
+          <ThemedText variant="small" color={theme.colors.successText}>
+            The appointment has been added to the clinic schedule.
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.successSummaryCard}>
+        <View style={styles.successSummaryRow}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Patient
+          </ThemedText>
+          <ThemedText variant="bodyBold">{appointment.patientName}</ThemedText>
+        </View>
+        <View style={styles.successSummaryRow}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Date & Time
+          </ThemedText>
+          <ThemedText variant="bodyBold" color={theme.colors.primary}>
+            {[formatDay(appointment.scheduledAt), formatTime(appointment.scheduledAt)]
+              .filter(Boolean)
+              .join(' · ')}
+          </ThemedText>
+        </View>
+        <View style={styles.successSummaryRow}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary}>
+            Attending physician
+          </ThemedText>
+          <ThemedText variant="body">
+            {appointment.doctorName || 'Any available provider'}
+          </ThemedText>
+        </View>
+        {appointment.serviceType ? (
+          <View style={styles.successSummaryRow}>
+            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+              Service type
+            </ThemedText>
+            <ThemedText variant="body">{appointment.serviceType}</ThemedText>
+          </View>
+        ) : null}
+        {appointment.reason ? (
+          <View style={styles.successSummaryRow}>
+            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+              Reason for visit
+            </ThemedText>
+            <ThemedText variant="body">{appointment.reason}</ThemedText>
+          </View>
+        ) : null}
+      </View>
+
+      <ThemedText variant="small" color={theme.colors.textSecondary}>
+        Would you like to book a new appointment or close this dialog?
+      </ThemedText>
+    </View>
+  );
+}
+
+export default function AppointmentsScreen({ route }: Partial<AppointmentsScreenProps> = {}) {
   const navigation = useNavigation<any>();
+  const incomingPatientId = route?.params?.patientId;
+  const incomingPatientName = route?.params?.patientName;
+  const incomingPatientCode = route?.params?.patientCode;
+  const initialPreselected = useMemo(
+    () =>
+      buildPreselectedPatientFromRoute({
+        patientId: incomingPatientId,
+        patientName: incomingPatientName,
+        patientCode: incomingPatientCode,
+      }),
+    // Only evaluate initial preselected state on first render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   const isCheckingInRef = useRef(false);
   const [conflictModal, setConflictModal] = useState<{
     visible: boolean;
@@ -127,16 +242,17 @@ export default function AppointmentsScreen() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // Booking Modal State
-  const [bookModalVisible, setBookModalVisible] = useState(false);
+  const [bookModalVisible, setBookModalVisible] = useState<boolean>(() => Boolean(initialPreselected));
+  const [bookedAppointment, setBookedAppointment] = useState<AppointmentItem | null>(null);
   const [rosterModalVisible, setRosterModalVisible] = useState(false);
   const [booking, setBooking] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
   const [patientResults, setPatientResults] = useState<ClinicPatient[]>([]);
   const [searchingPatients, setSearchingPatients] = useState(false);
-  const [formPatient, setFormPatient] = useState<ClinicPatient | null>(null);
+  const [formPatient, setFormPatient] = useState<ClinicPatient | null>(() => initialPreselected);
   const [formDoctorId, setFormDoctorId] = useState<string | null>(null);
-  const [formDate, setFormDate] = useState('');
-  const [formTime, setFormTime] = useState('');
+  const [formDate, setFormDate] = useState<string>(() => (initialPreselected ? defaultSlot().date : ''));
+  const [formTime, setFormTime] = useState<string>(() => (initialPreselected ? defaultSlot().time : ''));
   const [formServiceTypes, setFormServiceTypes] = useState<string[]>(['Consultation']);
   const [formReason, setFormReason] = useState('');
   const [formNotes, setFormNotes] = useState('');
@@ -188,15 +304,7 @@ export default function AppointmentsScreen() {
     fetchAppointments().finally(() => setLoading(false));
   }, [fetchAppointments]);
 
-  const openBookModal = () => {
-    const slot = defaultSlot();
-    setFormDate(slot.date);
-    setFormTime(slot.time);
-    setFormServiceTypes(['Consultation']);
-    setBookModalVisible(true);
-  };
-
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setPatientSearch('');
     setPatientResults([]);
     setFormPatient(null);
@@ -204,7 +312,77 @@ export default function AppointmentsScreen() {
     setFormServiceTypes(['Consultation']);
     setFormReason('');
     setFormNotes('');
-  };
+  }, []);
+
+  const openBookModal = useCallback((preselectedPatient?: ClinicPatient | null) => {
+    const slot = defaultSlot();
+    const validPatient =
+      preselectedPatient &&
+      typeof preselectedPatient === 'object' &&
+      typeof preselectedPatient.id === 'string' &&
+      typeof preselectedPatient.fullName === 'string'
+        ? preselectedPatient
+        : null;
+
+    setBookedAppointment(null);
+    setPatientSearch('');
+    setPatientResults([]);
+    setFormPatient(validPatient);
+    setFormDoctorId(null);
+    setFormDate(slot.date);
+    setFormTime(slot.time);
+    setFormServiceTypes(['Consultation']);
+    setFormReason('');
+    setFormNotes('');
+    setBookModalVisible(true);
+  }, []);
+
+  const closeBookModal = useCallback(() => {
+    setBookModalVisible(false);
+    setBookedAppointment(null);
+    resetForm();
+  }, [resetForm]);
+
+  // Arriving from "Book appointment" on the Patient Directory: preselect the patient and open the modal.
+  useEffect(() => {
+    if (!incomingPatientId) return;
+
+    const preselected = buildPreselectedPatientFromRoute({
+      patientId: incomingPatientId,
+      patientName: incomingPatientName,
+      patientCode: incomingPatientCode,
+    });
+
+    if (preselected) {
+      openBookModal(preselected);
+      navigation.setParams?.({
+        patientId: undefined,
+        patientName: undefined,
+        patientCode: undefined,
+      });
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const [patient, err] = await clinicService.getPatientById(incomingPatientId);
+      if (cancelled) return;
+      navigation.setParams?.({
+        patientId: undefined,
+        patientName: undefined,
+        patientCode: undefined,
+      });
+      if (patient) {
+        openBookModal(patient);
+      } else {
+        notify.error(err?.message || 'Could not load the selected patient for booking.');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [incomingPatientId, incomingPatientName, incomingPatientCode, navigation, openBookModal]);
 
   const handleBookAppointment = async () => {
     if (!formPatient) {
@@ -242,7 +420,7 @@ export default function AppointmentsScreen() {
     }
 
     setAppointments((prev) => [newApt, ...prev]);
-    setBookModalVisible(false);
+    setBookedAppointment(newApt);
     notify.success(`Appointment booked for ${formPatient.fullName}.`);
     resetForm();
   };
@@ -326,7 +504,7 @@ export default function AppointmentsScreen() {
           title="No appointments yet"
           description="Booked appointments will appear here."
           actionTitle="Book appointment"
-          onAction={openBookModal}
+          onAction={() => openBookModal(null)}
         />
       );
     }
@@ -413,7 +591,7 @@ export default function AppointmentsScreen() {
             size="sm"
             onPress={() => setRosterModalVisible(true)}
           />
-          <Button title="Book appointment" icon="plus" size="sm" onPress={openBookModal} />
+          <Button title="Book appointment" icon="plus" size="sm" onPress={() => openBookModal(null)} />
         </View>
       }
     >
@@ -444,141 +622,165 @@ export default function AppointmentsScreen() {
       {/* Book Appointment Modal */}
       <Modal
         visible={bookModalVisible}
-        onClose={() => setBookModalVisible(false)}
-        title="Book appointment"
+        onClose={closeBookModal}
+        title={bookedAppointment ? 'Appointment booked' : 'Book appointment'}
+        testID="book-appointment-modal"
         footer={
-          <View style={styles.modalFooter}>
-            <Button title="Cancel" variant="secondary" onPress={() => setBookModalVisible(false)} />
-            <Button title="Confirm and schedule" loading={booking} onPress={handleBookAppointment} />
-          </View>
+          bookedAppointment ? (
+            <View style={styles.modalFooter}>
+              <Button title="Close" variant="secondary" onPress={closeBookModal} />
+              <Button
+                title="Book new appointment"
+                variant="primary"
+                icon="plus"
+                onPress={() => openBookModal(null)}
+              />
+            </View>
+          ) : (
+            <View style={styles.modalFooter}>
+              <Button title="Cancel" variant="secondary" onPress={closeBookModal} />
+              <Button title="Confirm and schedule" loading={booking} onPress={handleBookAppointment} />
+            </View>
+          )
         }
       >
-        {formPatient ? (
-          <View style={styles.selectedPatient}>
-            <View style={styles.flexFill}>
-              <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                Patient
-              </ThemedText>
-              <ThemedText variant="bodyBold">{formPatient.fullName}</ThemedText>
-            </View>
-            <Button
-              size="sm"
-              variant="secondary"
-              title="Change"
-              onPress={() => {
-                setFormPatient(null);
-                setPatientSearch('');
-              }}
-            />
-          </View>
+        {bookedAppointment ? (
+          <AppointmentBookedSuccessView appointment={bookedAppointment} />
         ) : (
-          <View style={styles.patientSearch}>
-            <Input
-              label="Patient"
-              required
-              leftIcon="search"
-              placeholder="Search by name or patient code"
-              value={patientSearch}
-              onChangeText={setPatientSearch}
-            />
-            {searchingPatients ? (
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Searching...
-              </ThemedText>
+          <>
+            {formPatient ? (
+              <View style={styles.selectedPatient} testID="selected-patient-summary">
+                <View style={styles.flexFill}>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    Patient
+                  </ThemedText>
+                  <ThemedText variant="bodyBold">{formPatient.fullName}</ThemedText>
+                  {formPatient.patientCode ? (
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      {formPatient.patientCode}
+                    </ThemedText>
+                  ) : null}
+                </View>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  title="Change"
+                  onPress={() => {
+                    setFormPatient(null);
+                    setPatientSearch('');
+                  }}
+                />
+              </View>
+            ) : (
+              <View style={styles.patientSearch}>
+                <Input
+                  label="Patient"
+                  required
+                  leftIcon="search"
+                  placeholder="Search by name or patient code"
+                  value={patientSearch}
+                  onChangeText={setPatientSearch}
+                />
+                {searchingPatients ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Searching...
+                  </ThemedText>
+                ) : null}
+                {patientResults.map((p) => (
+                  <PatientSearchResultRow
+                    key={p.id}
+                    patient={p}
+                    configuredFieldKeys={configuredSearchFields}
+                    customFieldDefs={customFieldDefs}
+                    onPress={() => {
+                      setFormPatient(p);
+                      setPatientResults([]);
+                    }}
+                  />
+                ))}
+                {!searchingPatients && patientSearch.trim().length >= 2 && patientResults.length === 0 ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    No matching patients.
+                  </ThemedText>
+                ) : null}
+              </View>
+            )}
+
+            {doctors.length > 0 ? (
+              <View style={styles.fieldGroup}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Attending physician
+                </ThemedText>
+                <View style={styles.chipRow}>
+                  <Button
+                    size="sm"
+                    variant={formDoctorId === null ? 'primary' : 'secondary'}
+                    title="Any"
+                    onPress={() => setFormDoctorId(null)}
+                  />
+                  {doctors.map((d) => (
+                    <Button
+                      key={d.id}
+                      size="sm"
+                      variant={formDoctorId === d.id ? 'primary' : 'secondary'}
+                      title={formatStaffName(d)}
+                      onPress={() => setFormDoctorId(d.id)}
+                    />
+                  ))}
+                </View>
+              </View>
             ) : null}
-            {patientResults.map((p) => (
-              <PatientSearchResultRow
-                key={p.id}
-                patient={p}
-                configuredFieldKeys={configuredSearchFields}
-                customFieldDefs={customFieldDefs}
-                onPress={() => {
-                  setFormPatient(p);
-                  setPatientResults([]);
+
+            <View style={styles.fieldRow}>
+              <View style={styles.flexFill}>
+                <ValidatedDateInput
+                  label="Appointment Date"
+                  placeholder="YYYY-MM-DD"
+                  value={formDate}
+                  onChangeText={setFormDate}
+                  boundaryMode="futureOrToday"
+                />
+              </View>
+              <View style={styles.flexFill}>
+                <TimeInput label="Selected Time" placeholder="HH:MM" value={formTime} onChangeText={setFormTime} />
+              </View>
+            </View>
+
+            {formDoctorId ? (
+              <SlotPicker
+                doctorId={formDoctorId}
+                date={formDate}
+                selectedSlot={formTime}
+                onSelectSlot={(slot) => {
+                  const parts = slot.startTime.split(':');
+                  const hhmm = parts.length >= 2 ? `${parts[0]}:${parts[1]}` : slot.startTime;
+                  setFormTime(hhmm);
                 }}
               />
-            ))}
-            {!searchingPatients && patientSearch.trim().length >= 2 && patientResults.length === 0 ? (
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                No matching patients.
-              </ThemedText>
             ) : null}
-          </View>
-        )}
 
-        {doctors.length > 0 ? (
-          <View style={styles.fieldGroup}>
-            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-              Attending physician
-            </ThemedText>
-            <View style={styles.chipRow}>
-              <Button
-                size="sm"
-                variant={formDoctorId === null ? 'primary' : 'secondary'}
-                title="Any"
-                onPress={() => setFormDoctorId(null)}
-              />
-              {doctors.map((d) => (
-                <Button
-                  key={d.id}
-                  size="sm"
-                  variant={formDoctorId === d.id ? 'primary' : 'secondary'}
-                  title={formatStaffName(d)}
-                  onPress={() => setFormDoctorId(d.id)}
-                />
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        <View style={styles.fieldRow}>
-          <View style={styles.flexFill}>
-            <ValidatedDateInput
-              label="Appointment Date"
-              placeholder="YYYY-MM-DD"
-              value={formDate}
-              onChangeText={setFormDate}
-              boundaryMode="futureOrToday"
+            <ServiceSelect
+              label="Service type"
+              selectedServices={formServiceTypes}
+              onChangeServices={setFormServiceTypes}
             />
-          </View>
-          <View style={styles.flexFill}>
-            <TimeInput label="Selected Time" placeholder="HH:MM" value={formTime} onChangeText={setFormTime} />
-          </View>
-        </View>
 
-        {formDoctorId ? (
-          <SlotPicker
-            doctorId={formDoctorId}
-            date={formDate}
-            selectedSlot={formTime}
-            onSelectSlot={(slot) => {
-              const parts = slot.startTime.split(':');
-              const hhmm = parts.length >= 2 ? `${parts[0]}:${parts[1]}` : slot.startTime;
-              setFormTime(hhmm);
-            }}
-          />
-        ) : null}
+            <Input
+              label="Reason for visit"
+              placeholder="Reason or chief complaint"
+              value={formReason}
+              onChangeText={setFormReason}
+            />
 
-        <ServiceSelect
-          label="Service type"
-          selectedServices={formServiceTypes}
-          onChangeServices={setFormServiceTypes}
-        />
-
-        <Input
-          label="Reason for visit"
-          placeholder="Reason or chief complaint"
-          value={formReason}
-          onChangeText={setFormReason}
-        />
-
-        <Input
-          label="Notes"
-          placeholder="Optional"
-          value={formNotes}
-          onChangeText={setFormNotes}
-          multiline
-        />
+            <Input
+              label="Notes"
+              placeholder="Optional"
+              value={formNotes}
+              onChangeText={setFormNotes}
+              multiline
+            />
+          </>
+        )}
       </Modal>
 
       {/* Doctor Roster & Schedule Modal */}
@@ -699,5 +901,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
+  },
+  successContainer: {
+    gap: theme.spacing.md,
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.successBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.successBorder,
+    borderRadius: theme.radii.md,
+  },
+  successSummaryCard: {
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+  },
+  successSummaryRow: {
+    gap: theme.spacing.xs,
   },
 });

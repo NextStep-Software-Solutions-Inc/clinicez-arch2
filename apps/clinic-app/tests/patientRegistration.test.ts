@@ -612,4 +612,116 @@ describe('Feature 13: Duplicate Patient Safeguard & Warning Workflow Interceptio
   });
 });
 
+describe('Dashboard "New Patient" & Post-Registration Dialog Workflow', () => {
+  test('Dashboard "New patient" action navigates to Patients with openRegister: true and Patients.screen handles it', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const dashboardSrc = fs.readFileSync(
+      path.resolve(import.meta.dir, '../navigation/screens/Dashboard.screen.tsx'),
+      'utf8'
+    );
+    const patientsSrc = fs.readFileSync(
+      path.resolve(import.meta.dir, '../navigation/screens/Patients.screen.tsx'),
+      'utf8'
+    );
 
+    expect(dashboardSrc).toContain("navigation.navigate('Patients', { openRegister: true })");
+    expect(patientsSrc).toContain('openRegister?: boolean');
+    expect(patientsSrc).toContain('navigation.setParams({ openRegister: undefined })');
+    expect(patientsSrc).toContain('setRegisterVisible(true)');
+  });
+
+  test('Post-registration Alert.alert presents Close, Register New Patient, and Open Chart actions', async () => {
+    const { Alert, getFeedbackState, resetFeedbackState, dismissAlert } = await import('../utils/feedback');
+    resetFeedbackState();
+
+    const newPat: ClinicPatient = {
+      id: 'pat-new-900',
+      tenantId: 'tenant-demo',
+      clinicId: 'clinic-demo',
+      patientCode: 'PAT-2026-00900',
+      firstName: 'Ana',
+      lastName: 'Reyes',
+      fullName: 'Reyes, Ana',
+      dateOfBirth: '1994-03-12',
+      age: 32,
+      gender: 'Female',
+      contactNumber: '0917-555-0199',
+      createdAt: '2026-10-14T11:50:00Z',
+      activeQueueTicket: 'Q-012',
+    };
+
+    let registerVisible = false;
+    let formResetCount = 0;
+    let openedChartFor: ClinicPatient | null = null;
+
+    const resetRegistrationForm = () => {
+      formResetCount += 1;
+    };
+    const setRegisterVisible = (v: boolean) => {
+      registerVisible = v;
+    };
+    const handleOpenChart = (p: ClinicPatient) => {
+      openedChartFor = p;
+    };
+
+    const sendToTriage = true;
+    const ticketNote =
+      sendToTriage && newPat.activeQueueTicket
+        ? ` and queued for triage (${newPat.activeQueueTicket})`
+        : sendToTriage
+          ? ' and queued for triage'
+          : '';
+
+    Alert.alert(
+      'Patient Registered',
+      `${newPat.fullName} (${newPat.patientCode}) has been registered${ticketNote}. What would you like to do next?`,
+      [
+        {
+          text: 'Close',
+          style: 'cancel',
+        },
+        {
+          text: 'Register New Patient',
+          style: 'cancel',
+          onPress: () => {
+            resetRegistrationForm();
+            setRegisterVisible(true);
+          },
+        },
+        {
+          text: 'Open Chart',
+          onPress: () => {
+            handleOpenChart(newPat);
+          },
+        },
+      ]
+    );
+
+    const state = getFeedbackState();
+    expect(state.alerts).toHaveLength(1);
+    const alert = state.alerts[0];
+    expect(alert.title).toBe('Patient Registered');
+    expect(alert.message).toContain('Reyes, Ana (PAT-2026-00900)');
+    expect(alert.message).toContain('(Q-012)');
+    expect(alert.buttons.map((b) => b.text)).toEqual([
+      'Close',
+      'Register New Patient',
+      'Open Chart',
+    ]);
+
+    // 1. Test "Register New Patient" action
+    alert.buttons[1].onPress?.();
+    expect(formResetCount).toBe(1);
+    expect(registerVisible).toBe(true);
+
+    // 2. Test "Open Chart" action
+    setRegisterVisible(false);
+    alert.buttons[2].onPress?.();
+    expect(openedChartFor?.id).toBe('pat-new-900');
+
+    // 3. Test "Close" action
+    dismissAlert(alert.id);
+    expect(getFeedbackState().alerts).toHaveLength(0);
+  });
+});

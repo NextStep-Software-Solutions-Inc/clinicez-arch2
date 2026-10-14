@@ -98,13 +98,14 @@ const humanizeKey = (key: string) => {
 
 type PatientFilter = 'ALL' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES';
 
-export type PatientsScreenProps = StaticScreenProps<{ openPatientId?: string } | undefined>;
+export type PatientsScreenProps = StaticScreenProps<{ openPatientId?: string; openRegister?: boolean } | undefined>;
 
 export default function PatientsScreen({ route }: PatientsScreenProps) {
   const navigation = useNavigation<any>();
   const { isWorkstation, isDesktop } = useBreakpoint();
   const canImportPatient = usePermission(PERMISSIONS.patientsWrite);
   const openPatientId = route.params?.openPatientId;
+  const openRegister = route.params?.openRegister;
   const { letterhead } = useClinic();
   const { currentName } = useStaff();
   const [patients, setPatients] = useState<ClinicPatient[] | null>(null);
@@ -578,6 +579,39 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
     setRegisterVisible(false);
     resetRegistrationForm();
+
+    if (newPat) {
+      const ticketNote =
+        sendToTriage && newPat.activeQueueTicket
+          ? ` and queued for triage (${newPat.activeQueueTicket})`
+          : sendToTriage
+            ? ' and queued for triage'
+            : '';
+      Alert.alert(
+        'Patient Registered',
+        `${newPat.fullName} (${newPat.patientCode}) has been registered${ticketNote}. What would you like to do next?`,
+        [
+          {
+            text: 'Close',
+            style: 'cancel',
+          },
+          {
+            text: 'Register New Patient',
+            style: 'cancel',
+            onPress: () => {
+              resetRegistrationForm();
+              setRegisterVisible(true);
+            },
+          },
+          {
+            text: 'Open Chart',
+            onPress: () => {
+              handleOpenChart(newPat);
+            },
+          },
+        ]
+      );
+    }
     } finally {
       isRegisteringRef.current = false;
     }
@@ -766,6 +800,15 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openPatientId]);
+
+  // Arriving from Dashboard "New patient": open the registration dialog automatically.
+  useEffect(() => {
+    if (!openRegister) return;
+    navigation.setParams({ openRegister: undefined });
+    resetRegistrationForm();
+    setRegisterVisible(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRegister]);
 
   const handleOpenPhilHealthProfile = (patient: ClinicPatient) => {
     setSelectedPatientForProfile(patient);
@@ -1306,7 +1349,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   onEditDemographics={handleOpenEditDemographics}
                   onOpenPhilHealth={handleOpenPhilHealthProfile}
                   onBookAppointment={(p) =>
-                    navigation.navigate('Appointments', { patientId: p.id, patientName: p.fullName })
+                    navigation.navigate('Appointments', {
+                      patientId: p.id,
+                      patientName: p.fullName,
+                      patientCode: p.patientCode,
+                    })
                   }
                   onAddToQueue={handleQueueCheckIn}
                 />
@@ -1328,7 +1375,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               onEditDemographics={handleOpenEditDemographics}
               onOpenPhilHealth={handleOpenPhilHealthProfile}
               onBookAppointment={(p) =>
-                navigation.navigate('Appointments', { patientId: p.id, patientName: p.fullName })
+                navigation.navigate('Appointments', {
+                  patientId: p.id,
+                  patientName: p.fullName,
+                  patientCode: p.patientCode,
+                })
               }
               onAddToQueue={handleQueueCheckIn}
             />
