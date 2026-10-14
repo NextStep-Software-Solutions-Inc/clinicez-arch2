@@ -25,7 +25,9 @@ export async function openDocument(url: string, _contentType?: string): Promise<
     return false;
   }
 
-  const objectUrl = URL.createObjectURL(blob);
+  const mimeType = _contentType || blob.type || 'application/pdf';
+  const typedBlob = blob.type === mimeType ? blob : new Blob([blob], { type: mimeType });
+  const objectUrl = URL.createObjectURL(typedBlob);
   if (reserved) {
     reserved.location.href = objectUrl;
   } else {

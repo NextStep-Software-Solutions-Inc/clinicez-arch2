@@ -737,6 +737,104 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
+    public byte[] GenerateReceptionPlacardPdf(
+        ClinicSettings settings,
+        string qrUrl,
+        string? joinCode = null,
+        string? expiresAtFormatted = null)
+    {
+        var config = MapToTenantConfig(settings);
+        var primaryColor = config.GetSafePrimaryColorHex();
+        var effectiveJoinCode = !string.IsNullOrWhiteSpace(joinCode) ? joinCode.Trim().ToUpperInvariant() : settings.JoinCode?.Trim().ToUpperInvariant();
+        var effectiveQrUrl = !string.IsNullOrWhiteSpace(qrUrl)
+            ? qrUrl.Trim()
+            : (!string.IsNullOrWhiteSpace(effectiveJoinCode)
+                ? $"{_verificationBaseUrl.TrimEnd('/')}/join/{Uri.EscapeDataString(effectiveJoinCode)}"
+                : $"{_verificationBaseUrl.TrimEnd('/')}/join/{settings.TenantSlug ?? settings.TenantId}/{settings.FacilitySlug ?? "main"}");
+
+        var qrBytes = _qrCodeService.GenerateQrCodePng(effectiveQrUrl, 10);
+
+        var doc = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(config.PaperSize switch
+                {
+                    DocumentPaperSize.A4 => PageSizes.A4,
+                    DocumentPaperSize.A5 => PageSizes.A5,
+                    _ => PageSizes.Letter
+                });
+
+                page.Margin(config.PageMarginMm, Unit.Millimetre);
+                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(10f).FontColor("#1F2937"));
+
+                page.Header().Component(new TenantLetterheadComponent(config));
+
+                page.Content().PaddingTop(12).Column(col =>
+                {
+                    col.Item().Border(2).BorderColor(primaryColor).Background("#FFFFFF").Padding(24).Column(card =>
+                    {
+                        card.Item().AlignCenter().Text("WALK-IN PATIENT SELF-ENLISTMENT")
+                            .FontSize(18).Bold().FontColor(primaryColor);
+
+                        card.Item().PaddingTop(4).AlignCenter()
+                            .Text("Point your smartphone camera at the QR code below to register your visit")
+                            .FontSize(11).FontColor("#475569");
+
+                        card.Item().PaddingTop(18).AlignCenter().Width(210).Height(210)
+                            .Border(1.5f).BorderColor("#CBD5E1").Background("#FFFFFF").Padding(10)
+                            .Image(qrBytes).FitArea();
+
+                        if (!string.IsNullOrWhiteSpace(effectiveJoinCode))
+                        {
+                            card.Item().PaddingTop(16).AlignCenter().Width(240)
+                                .Border(1).BorderColor(primaryColor).Background("#F0FDFA").PaddingVertical(10).PaddingHorizontal(16)
+                                .Column(pill =>
+                                {
+                                    pill.Item().AlignCenter().Text("ACCESS PASSCODE")
+                                        .FontSize(8.5f).Bold().FontColor(primaryColor);
+                                    pill.Item().PaddingTop(2).AlignCenter().Text(effectiveJoinCode)
+                                        .FontSize(22).Bold().FontColor("#0F172A");
+                                });
+
+                            if (!string.IsNullOrWhiteSpace(expiresAtFormatted))
+                            {
+                                card.Item().PaddingTop(4).AlignCenter().Text($"Validity: {expiresAtFormatted}")
+                                    .FontSize(8.5f).FontColor("#64748B");
+                            }
+                        }
+
+                        card.Item().PaddingTop(18).Border(1).BorderColor("#E2E8F0").Background("#F8FAFC").Padding(16).Column(steps =>
+                        {
+                            steps.Item().Text("INSTRUCTIONS FOR PATIENTS")
+                                .FontSize(9.5f).Bold().FontColor("#334155");
+                            steps.Item().PaddingTop(6).Text("1. Scan QR code with your mobile camera or barcode scanner.")
+                                .FontSize(10.5f).FontColor("#0F172A");
+                            steps.Item().PaddingTop(4).Text("2. Fill in your patient demographics, PhilHealth PIN, and visit reason.")
+                                .FontSize(10.5f).FontColor("#0F172A");
+                            steps.Item().PaddingTop(4).Text("3. Receive your Queue Ticket pass and proceed to the triage nurse.")
+                                .FontSize(10.5f).FontColor("#0F172A");
+                        });
+
+                        card.Item().PaddingTop(14).AlignCenter().Text(effectiveQrUrl)
+                            .FontSize(9f).FontColor("#64748B");
+
+                        card.Item().PaddingTop(12).LineHorizontal(0.75f).LineColor("#CBD5E1");
+
+                        var footerNote = !string.IsNullOrWhiteSpace(settings.LetterheadContact)
+                            ? $"Need assistance? Please approach the clinic reception desk. • Contact: {settings.LetterheadContact}"
+                            : "Need assistance? Please approach the clinic reception desk.";
+
+                        card.Item().PaddingTop(10).AlignCenter().Text(footerNote)
+                            .FontSize(9.5f).FontColor("#475569");
+                    });
+                });
+            });
+        });
+
+        return doc.GeneratePdf();
+    }
+
     // The default every clinic row was created with; a clinic still on it has not chosen its own accent.
     private const string LegacyDefaultAccent = "#0284C7";
 

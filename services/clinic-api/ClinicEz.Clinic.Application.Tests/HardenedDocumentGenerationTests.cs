@@ -357,4 +357,35 @@ public class HardenedDocumentGenerationTests
         var masked = ClinicEz.Clinic.Application.Features.Documents.DTOs.DocumentVerificationResultDto.MaskName(input);
         masked.Should().Be(expected);
     }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_Reception_Placard_PDF()
+    {
+        var settings = new ClinicSettings
+        {
+            TenantId = "tenant-001",
+            ClinicId = Guid.NewGuid(),
+            ClinicName = "NextStep OPD",
+            LetterheadHeader = "NEXTSTEP OPD",
+            LetterheadSubHeader = "Patient Self-Registration & Enlistment Station",
+            LetterheadAddress = "Cagayan de Oro City, Philippines",
+            LetterheadContact = "(088) 856-1738",
+            PrimaryColorHex = "#0D6963",
+            PaperSize = "Letter",
+            JoinCode = "E2FW28KT"
+        };
+
+        var pdfBytes = _pdfService.GenerateReceptionPlacardPdf(
+            settings,
+            "https://dev.clinicez.net/join/E2FW28KT",
+            "E2FW28KT",
+            "Oct 15, 2026, 08:49 AM GMT+8 (in 23h)");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
 }

@@ -2649,6 +2649,15 @@ export const clinicService = {
     return clinicApiClient.put<ClinicSettingsRecord>('/settings', payload);
   },
 
+  getReceptionPlacardPdfUrl(params?: { qrUrl?: string; joinCode?: string; expiresAt?: string }) {
+    const qp = new URLSearchParams();
+    if (params?.qrUrl) qp.append('qrUrl', params.qrUrl);
+    if (params?.joinCode) qp.append('joinCode', params.joinCode);
+    if (params?.expiresAt) qp.append('expiresAt', params.expiresAt);
+    const qs = qp.toString();
+    return clinicApiUrl(`/settings/reception-placard-pdf${qs ? `?${qs}` : ''}`);
+  },
+
   async getPublicQueueDisplay(clinicId?: string, facilitySlug?: string, tenantSlug?: string) {
     const params = new URLSearchParams();
     if (clinicId) params.append('clinicId', clinicId);

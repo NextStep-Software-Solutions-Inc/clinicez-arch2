@@ -178,6 +178,36 @@ describe('Feature 10: Printable Reception QR Placard', () => {
     const url = formatReceptionQrUrl('https://portal.clinicez.ph', 'ustp', 'main');
     expect(url).toBe('https://portal.clinicez.ph/join/ustp/main');
   });
+
+  test('T2.2: Generates valid print-ready PDF 1.4 binary for reception placard', async () => {
+    const { buildReceptionPlacardPdfBytes } = await import('../components/settings/receptionPlacardPdf');
+    const pdfBytes = buildReceptionPlacardPdfBytes({
+      facilityName: 'NextStep OPD',
+      qrUrl: 'https://dev.clinicez.net/join/E2FW28KT',
+      joinCode: 'E2FW28KT',
+      expiresAtFormatted: 'Oct 15, 2026, 08:49 AM GMT+8 (in 23h)',
+      letterhead: {
+        header: 'NextStep OPD',
+        subHeader: 'Accredited Outpatient Clinic',
+        address: 'Cagayan de Oro City',
+        contact: '+63 917 000 0000',
+      },
+    });
+
+    expect(pdfBytes).toBeInstanceOf(Uint8Array);
+    expect(pdfBytes.byteLength).toBeGreaterThan(1000);
+
+    const pdfText = new TextDecoder().decode(pdfBytes);
+    expect(pdfText.startsWith('%PDF-1.4\n')).toBe(true);
+    expect(pdfText).toContain('/Type /Page');
+    expect(pdfText).toContain('/MediaBox [0 0 612 792]');
+    expect(pdfText).toContain('NEXTSTEP OPD');
+    expect(pdfText).toContain('WALK-IN PATIENT SELF-ENLISTMENT');
+    expect(pdfText).toContain('ACCESS PASSCODE');
+    expect(pdfText).toContain('E2FW28KT');
+    expect(pdfText).toContain('https://dev.clinicez.net/join/E2FW28KT');
+    expect(pdfText.endsWith('%%EOF\n')).toBe(true);
+  });
 });
 
 describe('Feature 12: External Document Vault Quarantine Review Workflow', () => {

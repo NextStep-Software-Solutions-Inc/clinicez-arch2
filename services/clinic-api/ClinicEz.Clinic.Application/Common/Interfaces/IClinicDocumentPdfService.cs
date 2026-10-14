@@ -10,4 +10,5 @@ public interface IClinicDocumentPdfService
     byte[] GenerateLabRequisitionSlipPdf(LabOrderSlipDto slip, ClinicSettings settings);
     byte[] GeneratePrescriptionPdf(PrescriptionSlipDto slip, ClinicSettings settings);
     byte[] GenerateReferralLetterPdf(ReferralLetter referral, ClinicSettings settings, ClinicPatient? patient = null, StaffMember? doctor = null);
+    byte[] GenerateReceptionPlacardPdf(ClinicSettings settings, string qrUrl, string? joinCode = null, string? expiresAtFormatted = null);
 }

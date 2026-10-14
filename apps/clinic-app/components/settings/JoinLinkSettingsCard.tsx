@@ -25,6 +25,7 @@ import {
   ExpirationWindow,
 } from './joinLinkUtils';
 import { buildReceptionPlacardHtml } from './receptionPlacardHtml';
+import { openReceptionPlacardPdf } from './receptionPlacardPdf';
 
 export interface JoinLinkSettingsCardProps {
   settings: ClinicSettingsRecord | null;
@@ -131,38 +132,34 @@ export default function JoinLinkSettingsCard({
   const handlePrintPlacard = useCallback(async () => {
     setPrinting(true);
     try {
-      const html = buildReceptionPlacardHtml({
+      const expiresAtFormatted = formatJoinCodeExpiration(computedExpiresAt);
+      const placardData = {
         facilityName: facilityName || settings?.clinicName || 'ClinicEZ Facility',
         qrUrl: destinationUrl,
         joinCode: joinCode || undefined,
-        expiresAtFormatted: formatJoinCodeExpiration(computedExpiresAt),
+        expiresAtFormatted,
         letterhead,
-      });
+      };
 
-      let printed = false;
+      let pdfUrl: string | undefined;
       try {
-        const Print = await import('expo-print');
-        if (Print?.printAsync) {
-          await Print.printAsync({ html });
-          printed = true;
-        }
+        pdfUrl = clinicService.getReceptionPlacardPdfUrl({
+          qrUrl: destinationUrl,
+          joinCode: joinCode.trim() || undefined,
+          expiresAt: expiresAtFormatted,
+        });
       } catch {
-        // Fall back to web print dialog below
+        pdfUrl = undefined;
       }
 
-      if (!printed && typeof window !== 'undefined' && typeof window.print === 'function') {
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-          printWindow.document.write(html);
-          printWindow.document.close();
-          printWindow.focus();
-          printWindow.print();
-        }
+      const opened = await openReceptionPlacardPdf(placardData, pdfUrl);
+      if (!opened) {
+        notify.error('Could not open reception placard PDF. Please check your popup blocker.');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       if (!/cancel|dismiss/i.test(msg)) {
-        notify.error('Could not print reception placard.');
+        notify.error('Could not generate reception placard PDF.');
       }
     } finally {
       setPrinting(false);
