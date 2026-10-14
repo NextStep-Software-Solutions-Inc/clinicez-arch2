@@ -71,6 +71,16 @@ public sealed class RoomsController : ControllerBase
         var result = await _sender.Send(new DeleteClinicRoomCommand(id), ct);
         return Ok(ApiResponse<bool>.Success(result, "Clinic room deleted successfully."));
     }
+
+    [HttpPost("reorder")]
+    [HasPermission(ClinicPermissions.SettingsManage)]
+    public async Task<ActionResult<ApiResponse<bool>>> ReorderRooms(
+        [FromBody] ReorderClinicRoomsRequest request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new ReorderClinicRoomsCommand(request.OrderedIds), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Clinic rooms reordered successfully."));
+    }
 }
 
 public sealed record UpdateClinicRoomRequest(
@@ -80,3 +90,6 @@ public sealed record UpdateClinicRoomRequest(
     string? Description = null,
     int? DisplayOrder = null,
     bool IsActive = true);
+
+public sealed record ReorderClinicRoomsRequest(IReadOnlyList<Guid> OrderedIds);
+

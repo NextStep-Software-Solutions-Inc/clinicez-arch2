@@ -2415,6 +2415,10 @@ export const clinicService = {
     return clinicApiClient.delete<boolean>(`/rooms/${id}`);
   },
 
+  async reorderRooms(orderedIds: string[]) {
+    return clinicApiClient.post<boolean>('/rooms/reorder', { orderedIds });
+  },
+
   // Patients Directory & Master Patient Index
   async getPatients(search?: string, hasAlerts?: boolean, page: number = 1, pageSize: number = 50) {
     const params = new URLSearchParams();

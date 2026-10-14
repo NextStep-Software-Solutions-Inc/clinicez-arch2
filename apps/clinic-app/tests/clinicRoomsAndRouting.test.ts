@@ -238,4 +238,26 @@ describe('ClinicRoom Domain Entity & Multi-Room Routing — Frontend Suite', () 
     expect(markup).toContain('Clinic Rooms &amp; Stations');
     expect(markup).toContain('Add Room');
   });
+
+  test('5. clinicService.reorderRooms calls POST /rooms/reorder with orderedIds', async () => {
+    const origPost = clinicApiClient.post;
+    let calledUrl = '';
+    let calledBody: any = null;
+    clinicApiClient.post = (async (url: string, body: any) => {
+      calledUrl = url;
+      calledBody = body;
+      return [true, null];
+    }) as any;
+
+    try {
+      const [ok, err] = await clinicService.reorderRooms(['room-2', 'room-1', 'room-tx']);
+      expect(err).toBeNull();
+      expect(ok).toBe(true);
+      expect(calledUrl).toBe('/rooms/reorder');
+      expect(calledBody).toEqual({ orderedIds: ['room-2', 'room-1', 'room-tx'] });
+    } finally {
+      clinicApiClient.post = origPost;
+    }
+  });
 });
+

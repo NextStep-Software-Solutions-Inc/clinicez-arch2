@@ -16,6 +16,7 @@ import {
 import { useClinic } from '../../context/ClinicContext';
 import { theme } from '../../constants/theme';
 import { Chip, FieldGroup, FormError } from './common';
+import SortableRoomsGrid from './SortableRoomsGrid';
 
 const ROOM_TYPES: {
   type: ClinicRoomType;
@@ -53,8 +54,11 @@ function getRoomTypeMeta(roomType: ClinicRoomType) {
 
 export function ClinicRoomsSettingsCard() {
   const { rooms: contextRooms = [], refreshRooms } = useClinic();
-  const [allRooms, setAllRooms] = useState<ClinicRoom[]>(() => Array.isArray(contextRooms) ? contextRooms : []);
+  const [allRooms, setAllRooms] = useState<ClinicRoom[]>(() =>
+    Array.isArray(contextRooms) ? contextRooms : [],
+  );
   const [loading, setLoading] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
 
   // Add / Edit Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -63,7 +67,6 @@ export function ClinicRoomsSettingsCard() {
   const [code, setCode] = useState('');
   const [roomType, setRoomType] = useState<ClinicRoomType>('Consultation');
   const [description, setDescription] = useState('');
-  const [sortOrder, setSortOrder] = useState('1');
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -92,13 +95,69 @@ export function ClinicRoomsSettingsCard() {
     loadAllRooms();
   }, [loadAllRooms]);
 
+  const sortedRooms = [...allRooms].sort(
+    (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0),
+  );
+
+  const handleReorderRooms = async (newOrderedIds: string[]) => {
+    if (isReordering) return;
+    const previousRooms = [...allRooms];
+
+    const byId = new Map(allRooms.map((r) => [r.id, r]));
+    const optimisticRooms: ClinicRoom[] = [];
+    newOrderedIds.forEach((id, idx) => {
+      const found = byId.get(id);
+      if (found) {
+        optimisticRooms.push({
+          ...found,
+          displayOrder: idx + 1,
+        });
+      }
+    });
+    setAllRooms(optimisticRooms);
+    setIsReordering(true);
+
+    try {
+      const [, err] = await clinicService.reorderRooms(newOrderedIds);
+      if (err) {
+        setAllRooms(previousRooms);
+        notify.error(err.message || 'Unable to save room order.');
+        return;
+      }
+      await Promise.all([loadAllRooms(), refreshRooms?.()]);
+      notify.success('Room order updated.');
+    } catch (e) {
+      setAllRooms(previousRooms);
+      notify.error(e instanceof Error ? e.message : 'Unable to save room order.');
+    } finally {
+      setIsReordering(false);
+    }
+  };
+
+  const handleMoveEarlier = (roomId: string) => {
+    const idx = sortedRooms.findIndex((r) => r.id === roomId);
+    if (idx <= 0 || isReordering) return;
+    const ids = sortedRooms.map((r) => r.id);
+    const [moved] = ids.splice(idx, 1);
+    ids.splice(idx - 1, 0, moved);
+    void handleReorderRooms(ids);
+  };
+
+  const handleMoveLater = (roomId: string) => {
+    const idx = sortedRooms.findIndex((r) => r.id === roomId);
+    if (idx < 0 || idx >= sortedRooms.length - 1 || isReordering) return;
+    const ids = sortedRooms.map((r) => r.id);
+    const [moved] = ids.splice(idx, 1);
+    ids.splice(idx + 1, 0, moved);
+    void handleReorderRooms(ids);
+  };
+
   const openAddModal = () => {
     setEditingRoom(null);
     setName('');
     setCode('');
     setRoomType('Consultation');
     setDescription('');
-    setSortOrder(String((allRooms.length + 1) * 10));
     setIsActive(true);
     setFormError(null);
     setModalOpen(true);
@@ -110,7 +169,6 @@ export function ClinicRoomsSettingsCard() {
     setCode(room.code ?? '');
     setRoomType(room.type);
     setDescription(room.description ?? '');
-    setSortOrder(String(room.displayOrder ?? 10));
     setIsActive(room.isActive);
     setFormError(null);
     setModalOpen(true);
@@ -126,16 +184,13 @@ export function ClinicRoomsSettingsCard() {
     setSaving(true);
     setFormError(null);
     try {
-      const parsedOrder = Number.parseInt(sortOrder, 10);
-      const orderValue = Number.isFinite(parsedOrder) ? parsedOrder : 10;
-
       if (editingRoom) {
         const [, err] = await clinicService.updateRoom(editingRoom.id, {
           name: trimmedName,
           code: code.trim() || undefined,
           type: roomType,
           description: description.trim() || undefined,
-          displayOrder: orderValue,
+          displayOrder: editingRoom.displayOrder,
           isActive,
         });
         if (err) {
@@ -144,12 +199,17 @@ export function ClinicRoomsSettingsCard() {
         }
         notify.success(`Updated "${trimmedName}".`);
       } else {
+        const nextOrder =
+          sortedRooms.length > 0
+            ? Math.max(...sortedRooms.map((r) => r.displayOrder ?? 0)) + 1
+            : 1;
+
         const [, err] = await clinicService.createRoom({
           name: trimmedName,
           code: code.trim() || undefined,
           type: roomType,
           description: description.trim() || undefined,
-          displayOrder: orderValue,
+          displayOrder: nextOrder,
         });
         if (err) {
           setFormError(err.message || 'Unable to create room.');
@@ -159,7 +219,7 @@ export function ClinicRoomsSettingsCard() {
       }
 
       setModalOpen(false);
-      await Promise.all([loadAllRooms(), refreshRooms()]);
+      await Promise.all([loadAllRooms(), refreshRooms?.()]);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Unable to save room.');
     } finally {
@@ -178,7 +238,7 @@ export function ClinicRoomsSettingsCard() {
       }
       notify.success(`Removed "${deletingRoom.name}".`);
       setDeletingRoom(null);
-      await Promise.all([loadAllRooms(), refreshRooms()]);
+      await Promise.all([loadAllRooms(), refreshRooms?.()]);
     } catch (e) {
       notify.error(e instanceof Error ? e.message : 'Unable to delete room.');
     } finally {
@@ -193,7 +253,7 @@ export function ClinicRoomsSettingsCard() {
       <Card>
         <CardHeader
           title="Clinic Rooms & Stations"
-          subtitle="Configure consultation rooms, triage stations, and treatment/procedure rooms used across Queue, Check-In, Staff Assignments, and TV Display"
+          subtitle="Configure consultation rooms, triage stations, and treatment/procedure rooms. Drag the # handle on any card to reorder how stations appear across Consultations, Check-In, and TV Display."
           rightAction={
             <Button
               title="Add Room / Station"
@@ -205,7 +265,7 @@ export function ClinicRoomsSettingsCard() {
         />
         <CardContent>
           <View style={styles.container}>
-            {allRooms.length === 0 && !loading ? (
+            {sortedRooms.length === 0 && !loading ? (
               <View style={styles.emptyBox}>
                 <Icon name="clinic" size={theme.sizes.iconLg} color={theme.colors.textMuted} />
                 <ThemedText variant="bodyBold" color={theme.colors.textSecondary}>
@@ -216,12 +276,16 @@ export function ClinicRoomsSettingsCard() {
                 </ThemedText>
               </View>
             ) : (
-              <View style={styles.roomGrid}>
-                {allRooms.map((room) => {
+              <SortableRoomsGrid
+                rooms={sortedRooms}
+                isReordering={isReordering}
+                onReorderEnd={handleReorderRooms}
+                onMoveEarlier={handleMoveEarlier}
+                onMoveLater={handleMoveLater}
+                renderRoomCardContent={(room, _index, dragControls) => {
                   const meta = getRoomTypeMeta(room.type);
                   return (
                     <View
-                      key={room.id}
                       style={[
                         styles.roomCard,
                         !room.isActive && styles.roomCardInactive,
@@ -252,12 +316,13 @@ export function ClinicRoomsSettingsCard() {
                               size="sm"
                             />
                             <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                              {room.assignedStaffCount > 0
+                              {(room.assignedStaffCount ?? 0) > 0
                                 ? `${room.assignedStaffCount} staff assigned`
                                 : 'No fixed staff'}
                             </ThemedText>
                           </View>
                         </View>
+                        {dragControls}
                       </View>
 
                       {room.description ? (
@@ -296,8 +361,8 @@ export function ClinicRoomsSettingsCard() {
                       </View>
                     </View>
                   );
-                })}
-              </View>
+                }}
+              />
             )}
           </View>
         </CardContent>
@@ -372,35 +437,22 @@ export function ClinicRoomsSettingsCard() {
             placeholder="e.g. Ground floor consultation room with ultrasound"
           />
 
-          <View style={styles.formRow}>
-            <View style={styles.flexNarrow}>
-              <Input
-                label="Display Order"
-                value={sortOrder}
-                onChangeText={setSortOrder}
-                keyboardType="numeric"
-                placeholder="10"
-              />
-            </View>
-            {editingRoom ? (
-              <View style={styles.flexWide}>
-                <FieldGroup label="Status">
-                  <View style={styles.chipRow}>
-                    <Chip
-                      label="Active"
-                      active={isActive}
-                      onPress={() => setIsActive(true)}
-                    />
-                    <Chip
-                      label="Inactive"
-                      active={!isActive}
-                      onPress={() => setIsActive(false)}
-                    />
-                  </View>
-                </FieldGroup>
+          {editingRoom ? (
+            <FieldGroup label="Status">
+              <View style={styles.chipRow}>
+                <Chip
+                  label="Active"
+                  active={isActive}
+                  onPress={() => setIsActive(true)}
+                />
+                <Chip
+                  label="Inactive"
+                  active={!isActive}
+                  onPress={() => setIsActive(false)}
+                />
               </View>
-            ) : null}
-          </View>
+            </FieldGroup>
+          ) : null}
         </View>
       </Modal>
 
@@ -456,11 +508,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
-  },
-  roomGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
   },
   roomCard: {
     flex: 1,

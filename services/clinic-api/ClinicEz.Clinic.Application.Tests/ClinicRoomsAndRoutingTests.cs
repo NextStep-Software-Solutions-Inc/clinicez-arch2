@@ -197,8 +197,8 @@ public class ClinicRoomsAndRoutingTests
             clinicContext,
             IdentityOf(clinicId, tenantId),
             Substitute.For<IPatientAppointmentPublisher>(),
-            staffRepo,
-            roomRepo);
+            roomRepo,
+            staffRepo);
 
         var checkedIn = await checkInHandler.Handle(
             new CheckInPatientCommand(
@@ -215,7 +215,7 @@ public class ClinicRoomsAndRoutingTests
         checkedIn.RoomOrStation.Should().Be("Room 2");
 
         // 2. Doctor orders nebulization -> routes patient to clinic's configured Treatment room ("Minor Procedure Bay")
-        var orderProcHandler = new OrderProcedureCommandHandler(procRepo, queueRepo, uow, clinicContext, roomRepo);
+        var orderProcHandler = new OrderProcedureCommandHandler(procRepo, uow, clinicContext, queueRepo, roomRepo);
         var orderedProc = await orderProcHandler.Handle(
             new OrderProcedureCommand(
                 patientId,
@@ -241,11 +241,10 @@ public class ClinicRoomsAndRoutingTests
         // 3. Nurse completes nebulization -> restores patient to Dr. Marco's Room 2 with ReEvaluation status
         var completeProcHandler = new RecordProcedureExecutionCommandHandler(
             procRepo,
-            queueRepo,
             uow,
             clinicContext,
-            staffRepo,
-            roomRepo);
+            queueRepo,
+            staffRepo);
 
         await completeProcHandler.Handle(
             new RecordProcedureExecutionCommand(
@@ -267,4 +266,33 @@ public class ClinicRoomsAndRoutingTests
         queueAfterProc.RoomId.Should().Be(room2.Id);
         queueAfterProc.RoomOrStation.Should().Be("Room 2");
     }
+
+    [Fact]
+    public async Task ReorderClinicRoomsCommand_UpdatesDisplayOrderInSequence()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_reorder";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        var getHandler = new GetClinicRoomsQueryHandler(roomRepo, staffRepo, uow, clinicContext);
+        var initialRooms = await getHandler.Handle(new GetClinicRoomsQuery(), CancellationToken.None);
+        initialRooms.Should().HaveCount(4);
+
+        var reversedIds = initialRooms.Select(r => r.Id).Reverse().ToList();
+        var reorderHandler = new ReorderClinicRoomsCommandHandler(roomRepo, uow, clinicContext);
+        var result = await reorderHandler.Handle(new ReorderClinicRoomsCommand(reversedIds), CancellationToken.None);
+        result.Should().BeTrue();
+
+        var reorderedRooms = await getHandler.Handle(new GetClinicRoomsQuery(), CancellationToken.None);
+        reorderedRooms.Select(r => r.Id).Should().Equal(reversedIds);
+        reorderedRooms.Select(r => r.DisplayOrder).Should().Equal(1, 2, 3, 4);
+    }
 }
+
+
