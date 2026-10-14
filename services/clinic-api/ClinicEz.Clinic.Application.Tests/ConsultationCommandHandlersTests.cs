@@ -802,4 +802,120 @@ public class ConsultationCommandHandlersTests
 
         findings.AllEssentiallyNormal.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task CreateConsultation_WithExistingUnsignedQueueItemEncounter_UpdatesExistingDraftInsteadOfDuplicateInsert()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var patientId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
+        var queueItemId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var consultationRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+
+        var handler = new CreateConsultationCommandHandler(consultationRepo, queueRepo, uow, clinicContext);
+
+        var firstCommand = new CreateConsultationCommand(
+            patientId,
+            "Maria Santos",
+            doctorId,
+            "Dr. Jose Rizal",
+            queueItemId,
+            null,
+            "Initial subjective draft",
+            "Initial objective draft",
+            "Initial assessment",
+            "Initial plan",
+            new List<DiagnosisInput> { new("J00", "Acute nasopharyngitis", true) });
+
+        var firstResult = await handler.Handle(firstCommand, CancellationToken.None);
+
+        var secondCommand = new CreateConsultationCommand(
+            patientId,
+            "Maria Santos",
+            doctorId,
+            "Dr. Jose Rizal",
+            queueItemId,
+            null,
+            "Updated subjective notes",
+            "Updated objective findings",
+            "Essential Hypertension",
+            "Start Amlodipine 5mg OD",
+            new List<DiagnosisInput> { new("I10", "Essential (primary) hypertension", true) },
+            new List<PrescriptionInput> { new("Amlodipine", "Norvasc", "5mg", "Tablet", "1 tab OD", 30) });
+
+        // Act
+        var secondResult = await handler.Handle(secondCommand, CancellationToken.None);
+
+        // Assert
+        secondResult.Id.Should().Be(firstResult.Id);
+        secondResult.Subjective.Should().Be("Updated subjective notes");
+        secondResult.Objective.Should().Be("Updated objective findings");
+        secondResult.Assessment.Should().Be("Essential Hypertension");
+        secondResult.Diagnoses.Should().ContainSingle(d => d.Icd10Code == "I10");
+        secondResult.Prescriptions.Should().ContainSingle(p => p.GenericName == "Amlodipine");
+
+        var countForQueue = await context.Consultations.CountAsync(c => c.QueueItemId == queueItemId);
+        countForQueue.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CreateConsultation_WithExistingSignedQueueItemEncounter_ThrowsConflictException()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var patientId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
+        var queueItemId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var consultationRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+
+        await context.Consultations.AddAsync(new ConsultationEncounter
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            QueueItemId = queueItemId,
+            PatientId = patientId,
+            PatientName = "Maria Santos",
+            DoctorId = doctorId,
+            DoctorName = "Dr. Jose Rizal",
+            Subjective = "Signed encounter",
+            IsSigned = true,
+            SignedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new CreateConsultationCommandHandler(consultationRepo, queueRepo, uow, clinicContext);
+
+        var command = new CreateConsultationCommand(
+            patientId,
+            "Maria Santos",
+            doctorId,
+            "Dr. Jose Rizal",
+            queueItemId,
+            null,
+            "Duplicate attempt",
+            "Duplicate objective");
+
+        // Act & Assert
+        var act = async () => await handler.Handle(command, CancellationToken.None);
+        await act.Should().ThrowAsync<ConflictException>()
+            .WithMessage("*already been signed and locked*");
+    }
 }

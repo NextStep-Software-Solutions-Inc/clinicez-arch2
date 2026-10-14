@@ -79,6 +79,27 @@ public class DatabaseExceptionTranslatorTests
     }
 
     [Fact]
+    public void TryTranslate_UniqueViolation_QueueItemId_MapsToDuplicateQueueConsultation()
+    {
+        var pgEx = CreatePostgresException(
+            sqlState: "23505",
+            constraintName: "IX_Consultations_QueueItemId",
+            detail: "Key (\"QueueItemId\")=(8f14e45f-ceea-467a-9a38-000000000001) already exists.");
+        var dbEx = new DbUpdateException("An error occurred while saving the entity changes.", pgEx);
+
+        var translated = DatabaseExceptionTranslator.TryTranslate(dbEx, "trace-queue-consult", out var result);
+
+        translated.Should().BeTrue();
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be((int)HttpStatusCode.Conflict);
+        result.ErrorCode.Should().Be("DUPLICATE_QUEUE_CONSULTATION");
+        result.Message.Should().Be("A consultation encounter already exists for this queue visit. Please refresh the patient chart or update the existing encounter.");
+        result.Errors.Should().HaveCount(1);
+        result.Errors[0].Field.Should().Be("queueItemId");
+        result.Errors[0].Code.Should().Be("DUPLICATE_QUEUE_CONSULTATION");
+    }
+
+    [Fact]
     public void TryTranslate_UniqueViolation_EmailInDetail_MapsToDuplicateResourceWithEmailAttribution()
     {
         var pgEx = CreatePostgresException(

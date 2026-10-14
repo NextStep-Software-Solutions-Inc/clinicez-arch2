@@ -276,6 +276,7 @@ export interface PrescriptionItem {
   refills: number;
   isDangerousDrug: boolean;
   remarks?: string;
+  philHealthDrugCode?: string;
 }
 
 export interface ConsultationRecord {

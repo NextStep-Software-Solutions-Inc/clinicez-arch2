@@ -269,4 +269,35 @@ describe('Task 3 & 4: Form Field Error Attribution with ApiError', () => {
     expect(state.toasts[0].traceId).toBe('00-trace-edit-409');
     expect(state.toasts[0].durationMs).toBe(10000);
   });
+
+  test('4.3 Consultation signing conflict (DUPLICATE_QUEUE_CONSULTATION) and completion surface floating toasts with traceId', () => {
+    const duplicateQueueError = new ApiError(
+      'A consultation encounter already exists for this queue visit. Please refresh the patient chart or update the existing encounter.',
+      409,
+      [
+        {
+          field: 'queueItemId',
+          code: 'DUPLICATE_QUEUE_CONSULTATION',
+          message: 'A consultation encounter already exists for this queue visit. Please refresh the patient chart or update the existing encounter.',
+        },
+      ],
+      'DUPLICATE_QUEUE_CONSULTATION',
+      '00-trace-consult-queue-409'
+    );
+
+    expect(duplicateQueueError.getFieldError('queueItemId')).toContain('consultation encounter already exists for this queue visit');
+    notify.error(duplicateQueueError.message, { traceId: duplicateQueueError.traceId });
+
+    let state = getFeedbackState();
+    expect(state.toasts).toHaveLength(1);
+    expect(state.toasts[0].kind).toBe('error');
+    expect(state.toasts[0].message).toContain('A consultation encounter already exists for this queue visit.');
+    expect(state.toasts[0].traceId).toBe('00-trace-consult-queue-409');
+
+    notify.success('Encounter signed by Dr. Jose Rizal (PRC-123456) at 10:30 AM. Lab requisitions, nursing orders and the cashier invoice were forwarded.');
+    state = getFeedbackState();
+    expect(state.toasts).toHaveLength(2);
+    expect(state.toasts[1].kind).toBe('success');
+    expect(state.toasts[1].message).toContain('Encounter signed by Dr. Jose Rizal');
+  });
 });

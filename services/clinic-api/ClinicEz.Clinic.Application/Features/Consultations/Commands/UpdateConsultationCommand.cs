@@ -169,16 +169,17 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
 
             foreach (var diag in request.Diagnoses)
             {
-                encounter.Diagnoses.Add(new EncounterDiagnosis
+                var newDiag = new EncounterDiagnosis
                 {
-                    Id = Guid.NewGuid(),
                     ConsultationEncounterId = encounter.Id,
                     Icd10Code = diag.Icd10Code.Trim().ToUpperInvariant(),
                     Description = diag.Description.Trim(),
                     IsPrimary = diag.IsPrimary,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = encounter.DoctorName
-                });
+                };
+                encounter.Diagnoses.Add(newDiag);
+                await _diagnosisRepository.AddAsync(newDiag, cancellationToken);
             }
         }
 
@@ -193,9 +194,8 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
 
             foreach (var rx in request.Prescriptions)
             {
-                encounter.Prescriptions.Add(new PrescriptionItem
+                var newRx = new PrescriptionItem
                 {
-                    Id = Guid.NewGuid(),
                     ConsultationEncounterId = encounter.Id,
                     GenericName = rx.GenericName.Trim(),
                     BrandName = rx.BrandName?.Trim(),
@@ -210,11 +210,12 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
                     PhilHealthDrugCode = rx.PhilHealthDrugCode?.Trim(),
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = encounter.DoctorName
-                });
+                };
+                encounter.Prescriptions.Add(newRx);
+                await _prescriptionRepository.AddAsync(newRx, cancellationToken);
             }
         }
 
-        _consultationRepository.Update(encounter);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new ConsultationEncounterDto(

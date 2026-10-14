@@ -9,6 +9,7 @@ using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -115,85 +116,175 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             }
         }
 
-        var encounter = new ConsultationEncounter
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _clinicContext.TenantId,
-            ClinicId = _clinicContext.ClinicId,
-            QueueItemId = request.QueueItemId,
-            AppointmentId = request.AppointmentId,
-            PatientId = request.PatientId,
-            PatientName = request.PatientName.Trim(),
-            DoctorId = request.DoctorId,
-            DoctorName = request.DoctorName.Trim(),
-            DoctorPrcLicense = doctorPrc,
-            DoctorPtr = doctorPtr,
-            DoctorS2License = doctorS2,
-            DoctorPhilHealthPan = doctorPan,
-            PhilHealthAtc = request.PhilHealthAtc,
-            HciCaseNo = request.HciCaseNo,
-            HciTransNo = request.HciTransNo,
-            SoapTransNo = request.SoapTransNo,
-            GeneralSurveyId = request.GeneralSurveyId,
-            GeneralSurveyRemarks = request.GeneralSurveyRemarks,
-            PhysicalExamFindingsJson = request.PhysicalExamFindingsJson,
-            EncounterDate = DateTime.UtcNow,
-            Subjective = request.Subjective ?? string.Empty,
-            Objective = request.Objective ?? string.Empty,
-            Assessment = request.Assessment ?? string.Empty,
-            Plan = request.Plan ?? string.Empty,
-            IsYakapEligible = request.IsYakapEligible,
-            PhilHealthSignSympCode = request.PhilHealthSignSympCode,
-            PhilHealthOtherComplaint = request.PhilHealthOtherComplaint,
-            PhilHealthPainSite = request.PhilHealthPainSite,
-            IsSigned = false,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = request.DoctorName
-        };
+        ConsultationEncounter? encounter = null;
 
-        if (request.Diagnoses != null)
+        if (request.QueueItemId.HasValue)
         {
-            foreach (var diag in request.Diagnoses)
+            encounter = await _consultationRepository
+                .Query(c => c.QueueItemId == request.QueueItemId.Value && c.ClinicId == _clinicContext.ClinicId)
+                .Include(c => c.Diagnoses)
+                .Include(c => c.Prescriptions)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (encounter != null && encounter.IsSigned)
             {
-                encounter.Diagnoses.Add(new EncounterDiagnosis
-                {
-                    Id = Guid.NewGuid(),
-                    ConsultationEncounterId = encounter.Id,
-                    Icd10Code = diag.Icd10Code.Trim().ToUpperInvariant(),
-                    Description = diag.Description.Trim(),
-                    IsPrimary = diag.IsPrimary,
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedBy = request.DoctorName
-                });
+                throw new ConflictException("A consultation encounter for this queue visit has already been signed and locked.");
             }
         }
 
-        if (request.Prescriptions != null)
+        if (encounter != null)
         {
-            foreach (var rx in request.Prescriptions)
+            encounter.AppointmentId = request.AppointmentId ?? encounter.AppointmentId;
+            encounter.PatientId = request.PatientId;
+            encounter.PatientName = request.PatientName.Trim();
+            encounter.DoctorId = request.DoctorId;
+            encounter.DoctorName = request.DoctorName.Trim();
+            encounter.DoctorPrcLicense = doctorPrc ?? encounter.DoctorPrcLicense;
+            encounter.DoctorPtr = doctorPtr ?? encounter.DoctorPtr;
+            encounter.DoctorS2License = doctorS2 ?? encounter.DoctorS2License;
+            encounter.DoctorPhilHealthPan = doctorPan ?? encounter.DoctorPhilHealthPan;
+            encounter.PhilHealthAtc = request.PhilHealthAtc ?? encounter.PhilHealthAtc;
+            if (request.HciCaseNo != null) { encounter.HciCaseNo = request.HciCaseNo; encounter.PhilHealthCaseNo = request.HciCaseNo; }
+            if (request.HciTransNo != null) encounter.HciTransNo = request.HciTransNo;
+            if (request.SoapTransNo != null) { encounter.SoapTransNo = request.SoapTransNo; encounter.PhilHealthSoapTransNo = request.SoapTransNo; }
+            encounter.GeneralSurveyId = request.GeneralSurveyId ?? encounter.GeneralSurveyId;
+            encounter.GeneralSurveyRemarks = request.GeneralSurveyRemarks ?? encounter.GeneralSurveyRemarks;
+            encounter.PhysicalExamFindingsJson = request.PhysicalExamFindingsJson ?? encounter.PhysicalExamFindingsJson;
+            encounter.Subjective = request.Subjective ?? string.Empty;
+            encounter.Objective = request.Objective ?? string.Empty;
+            encounter.Assessment = request.Assessment ?? string.Empty;
+            encounter.Plan = request.Plan ?? string.Empty;
+            encounter.IsYakapEligible = request.IsYakapEligible;
+            encounter.PhilHealthSignSympCode = request.PhilHealthSignSympCode;
+            encounter.PhilHealthOtherComplaint = request.PhilHealthOtherComplaint;
+            encounter.PhilHealthPainSite = request.PhilHealthPainSite;
+            encounter.UpdatedAt = DateTime.UtcNow;
+            encounter.UpdatedBy = request.DoctorName.Trim();
+
+            encounter.Diagnoses.Clear();
+            if (request.Diagnoses != null)
             {
-                encounter.Prescriptions.Add(new PrescriptionItem
+                foreach (var diag in request.Diagnoses)
                 {
-                    Id = Guid.NewGuid(),
-                    ConsultationEncounterId = encounter.Id,
-                    GenericName = rx.GenericName.Trim(),
-                    BrandName = rx.BrandName?.Trim(),
-                    Dosage = rx.Dosage.Trim(),
-                    Form = rx.Form.Trim(),
-                    Sig = rx.Sig.Trim(),
-                    Quantity = rx.Quantity,
-                    DurationDays = rx.DurationDays,
-                    Refills = rx.Refills,
-                    IsDangerousDrug = rx.IsDangerousDrug,
-                    Remarks = rx.Remarks?.Trim(),
-                    PhilHealthDrugCode = rx.PhilHealthDrugCode?.Trim(),
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedBy = request.DoctorName
-                });
+                    encounter.Diagnoses.Add(new EncounterDiagnosis
+                    {
+                        ConsultationEncounterId = encounter.Id,
+                        Icd10Code = diag.Icd10Code.Trim().ToUpperInvariant(),
+                        Description = diag.Description.Trim(),
+                        IsPrimary = diag.IsPrimary,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = request.DoctorName
+                    });
+                }
+            }
+
+            encounter.Prescriptions.Clear();
+            if (request.Prescriptions != null)
+            {
+                foreach (var rx in request.Prescriptions)
+                {
+                    encounter.Prescriptions.Add(new PrescriptionItem
+                    {
+                        ConsultationEncounterId = encounter.Id,
+                        GenericName = rx.GenericName.Trim(),
+                        BrandName = rx.BrandName?.Trim(),
+                        Dosage = rx.Dosage.Trim(),
+                        Form = rx.Form.Trim(),
+                        Sig = rx.Sig.Trim(),
+                        Quantity = rx.Quantity,
+                        DurationDays = rx.DurationDays,
+                        Refills = rx.Refills,
+                        IsDangerousDrug = rx.IsDangerousDrug,
+                        Remarks = rx.Remarks?.Trim(),
+                        PhilHealthDrugCode = rx.PhilHealthDrugCode?.Trim(),
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = request.DoctorName
+                    });
+                }
             }
         }
+        else
+        {
+            encounter = new ConsultationEncounter
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _clinicContext.TenantId,
+                ClinicId = _clinicContext.ClinicId,
+                QueueItemId = request.QueueItemId,
+                AppointmentId = request.AppointmentId,
+                PatientId = request.PatientId,
+                PatientName = request.PatientName.Trim(),
+                DoctorId = request.DoctorId,
+                DoctorName = request.DoctorName.Trim(),
+                DoctorPrcLicense = doctorPrc,
+                DoctorPtr = doctorPtr,
+                DoctorS2License = doctorS2,
+                DoctorPhilHealthPan = doctorPan,
+                PhilHealthAtc = request.PhilHealthAtc,
+                HciCaseNo = request.HciCaseNo,
+                HciTransNo = request.HciTransNo,
+                SoapTransNo = request.SoapTransNo,
+                GeneralSurveyId = request.GeneralSurveyId,
+                GeneralSurveyRemarks = request.GeneralSurveyRemarks,
+                PhysicalExamFindingsJson = request.PhysicalExamFindingsJson,
+                EncounterDate = DateTime.UtcNow,
+                Subjective = request.Subjective ?? string.Empty,
+                Objective = request.Objective ?? string.Empty,
+                Assessment = request.Assessment ?? string.Empty,
+                Plan = request.Plan ?? string.Empty,
+                IsYakapEligible = request.IsYakapEligible,
+                PhilHealthSignSympCode = request.PhilHealthSignSympCode,
+                PhilHealthOtherComplaint = request.PhilHealthOtherComplaint,
+                PhilHealthPainSite = request.PhilHealthPainSite,
+                IsSigned = false,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = request.DoctorName
+            };
 
-        await _consultationRepository.AddAsync(encounter, cancellationToken);
+            if (request.Diagnoses != null)
+            {
+                foreach (var diag in request.Diagnoses)
+                {
+                    encounter.Diagnoses.Add(new EncounterDiagnosis
+                    {
+                        Id = Guid.NewGuid(),
+                        ConsultationEncounterId = encounter.Id,
+                        Icd10Code = diag.Icd10Code.Trim().ToUpperInvariant(),
+                        Description = diag.Description.Trim(),
+                        IsPrimary = diag.IsPrimary,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = request.DoctorName
+                    });
+                }
+            }
+
+            if (request.Prescriptions != null)
+            {
+                foreach (var rx in request.Prescriptions)
+                {
+                    encounter.Prescriptions.Add(new PrescriptionItem
+                    {
+                        Id = Guid.NewGuid(),
+                        ConsultationEncounterId = encounter.Id,
+                        GenericName = rx.GenericName.Trim(),
+                        BrandName = rx.BrandName?.Trim(),
+                        Dosage = rx.Dosage.Trim(),
+                        Form = rx.Form.Trim(),
+                        Sig = rx.Sig.Trim(),
+                        Quantity = rx.Quantity,
+                        DurationDays = rx.DurationDays,
+                        Refills = rx.Refills,
+                        IsDangerousDrug = rx.IsDangerousDrug,
+                        Remarks = rx.Remarks?.Trim(),
+                        PhilHealthDrugCode = rx.PhilHealthDrugCode?.Trim(),
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = request.DoctorName
+                    });
+                }
+            }
+
+            await _consultationRepository.AddAsync(encounter, cancellationToken);
+        }
 
         // Update queue item state if linked
         if (request.QueueItemId.HasValue)

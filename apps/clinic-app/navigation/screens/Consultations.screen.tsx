@@ -415,6 +415,7 @@ export default function ConsultationsScreen() {
   const [isSigning, setIsSigning] = useState(false);
   const [isSigned, setIsSigned] = useState(false);
   const [signedAt, setSignedAt] = useState<string | null>(null);
+  const [isFollowUpEncounter, setIsFollowUpEncounter] = useState(false);
   const [banner, setBanner] = useState<{ text: string; isError?: boolean } | null>(null);
 
   const handleToggleSymptom = (symptom: StatutorySymptom) => {
@@ -785,6 +786,74 @@ export default function ConsultationsScreen() {
     const [chartData] = chartRes;
     if (chartData) {
       setPatientChart(chartData);
+      const existingEncounter = chartData.consultations?.find((c) => c.queueItemId === p.id);
+      if (existingEncounter) {
+        setSignedConsultationId(existingEncounter.id);
+        setIsSigned(Boolean(existingEncounter.isSigned));
+        setSignedAt(
+          existingEncounter.signedAt
+            ? new Date(existingEncounter.signedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : null,
+        );
+        if (existingEncounter.subjective) setSubjective(existingEncounter.subjective);
+        if (existingEncounter.objective) setObjective(existingEncounter.objective);
+        if (existingEncounter.assessment) setAssessment(existingEncounter.assessment);
+        if (existingEncounter.plan) setPlan(existingEncounter.plan);
+        if (existingEncounter.diagnoses?.length) {
+          setSelectedDiagnoses(
+            existingEncounter.diagnoses.map((d) => ({
+              icd10Code: d.icd10Code,
+              description: d.description,
+              isPrimary: d.isPrimary,
+            })),
+          );
+        }
+        if (existingEncounter.prescriptions?.length) {
+          setPrescriptions(
+            existingEncounter.prescriptions.map((rx) => ({
+              id: rx.id,
+              genericName: rx.genericName,
+              dosage: rx.dosage,
+              form: rx.form,
+              sig: rx.sig,
+              quantity: rx.quantity,
+              durationDays: rx.durationDays,
+              isDangerousDrug: rx.isDangerousDrug,
+              philHealthDrugCode: rx.philHealthDrugCode,
+            })),
+          );
+        }
+        if (existingEncounter.isYakapEligible != null) {
+          setIsYakapEligible(existingEncounter.isYakapEligible);
+        }
+        if (existingEncounter.philHealthAtc) {
+          setPhilHealthAtc(existingEncounter.philHealthAtc);
+        }
+        if (existingEncounter.philHealthSignSympCode) {
+          setSelectedSymptomCodes(
+            existingEncounter.philHealthSignSympCode
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean),
+          );
+        }
+        if (existingEncounter.philHealthOtherComplaint) {
+          setSymptomOtherDesc(existingEncounter.philHealthOtherComplaint);
+        }
+        if (existingEncounter.philHealthPainSite) {
+          setSymptomPainSite(existingEncounter.philHealthPainSite);
+        }
+        if (existingEncounter.physicalExamFindingsJson) {
+          try {
+            const parsedPe = JSON.parse(existingEncounter.physicalExamFindingsJson);
+            if (parsedPe && typeof parsedPe === 'object') {
+              setPhysicalExamFindings((prev) => ({ ...prev, ...parsedPe }));
+            }
+          } catch {
+            // Keep default PE findings on malformed JSON
+          }
+        }
+      }
     } else {
       setPatientChart(null);
     }
@@ -803,6 +872,7 @@ export default function ConsultationsScreen() {
   const resetEncounter = (p: PatientQueueItem) => {
     setIsSigned(false);
     setSignedAt(null);
+    setIsFollowUpEncounter(false);
     setBanner(null);
     setSubjective(p.chiefComplaint ? `Patient presents with: ${p.chiefComplaint}.` : '');
     setObjective('');
@@ -839,6 +909,27 @@ export default function ConsultationsScreen() {
     setIsYakapEligible(false);
     setPhilHealthAtc('ATC-2026-KON01');
     setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
+  };
+
+  const handleStartFollowUpEncounter = () => {
+    if (!selectedPatient) return;
+    setIsSigned(false);
+    setSignedAt(null);
+    setSignedConsultationId(null);
+    setIsFollowUpEncounter(true);
+    setBanner(null);
+    setSubjective(selectedPatient.chiefComplaint ? `Follow-up: ${selectedPatient.chiefComplaint}.` : '');
+    setObjective('');
+    setAssessment('');
+    setPlan('');
+    setSelectedDiagnoses([]);
+    setPrescriptions([]);
+    setOrderedLabs([]);
+    setOrderedProcedures([]);
+    setSelectedSymptomCodes([]);
+    setSymptomOtherDesc('');
+    setSymptomPainSite('');
+    setPrescriptionSlip(null);
   };
 
   const handleSelectPatient = (p: PatientQueueItem) => {
@@ -1170,10 +1261,12 @@ export default function ConsultationsScreen() {
     // Clinical Decision Support (CDS) Critical Override Gate
     const criticalAlerts = cdsAlerts.filter((a) => a.requiresOverrideReason);
     if (criticalAlerts.length > 0 && (!cdsOverrideReason.trim() || !overrideConfirmed)) {
+      const msg = `Safety check: ${criticalAlerts.length} critical drug allergy or severe interaction alert(s) need a documented clinical override before the encounter can be signed.`;
       setBanner({
-        text: `Safety check: ${criticalAlerts.length} critical drug allergy or severe interaction alert(s) need a documented clinical override before the encounter can be signed.`,
+        text: msg,
         isError: true,
       });
+      notify.error(msg);
       setShowOverrideInput(true);
       return;
     }
@@ -1182,40 +1275,48 @@ export default function ConsultationsScreen() {
     const hasDangerousDrug = prescriptions.some((p) => p.isDangerousDrug);
     const finalS2 = doctorS2.trim() || signerStaff?.s2LicenseNumber;
     if (hasDangerousDrug && !finalS2) {
+      const msg = 'An S2 license number is required to prescribe PDEA dangerous drugs.';
       setBanner({
-        text: 'An S2 license number is required to prescribe PDEA dangerous drugs.',
+        text: msg,
         isError: true,
       });
+      notify.error(msg);
       handleJumpToSection('doctor-s2');
       return;
     }
 
     const finalPrc = doctorPrc.trim() || signerStaff?.prcLicenseNumber;
     if (!finalPrc) {
+      const msg = 'A PRC license number is required to sign clinical encounters.';
       setBanner({
-        text: 'A PRC license number is required to sign clinical encounters.',
+        text: msg,
         isError: true,
       });
+      notify.error(msg);
       handleJumpToSection('doctor-prc');
       return;
     }
 
     const finalPan = isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined;
     if (isYakapEligible && (!finalPan || !finalPrc)) {
+      const msg = 'Doctor PhilHealth Accreditation Number (PAN) and PRC license are required for Konsulta encounters.';
       setBanner({
-        text: 'Doctor PhilHealth Accreditation Number (PAN) and PRC license are required for Konsulta encounters.',
+        text: msg,
         isError: true,
       });
+      notify.error(msg);
       handleJumpToSection('doctor-pan');
       return;
     }
 
     // Pre-flight Yakap readiness gatekeeper
     if (isYakapEligible && !isYakapReady) {
+      const msg = 'Encounter signing is locked: Complete all 10 requirements on the Yakap Claim Readiness checklist before signing.';
       setBanner({
-        text: 'Encounter signing is locked: Complete all 10 requirements on the Yakap Claim Readiness checklist before signing.',
+        text: msg,
         isError: true,
       });
+      notify.error(msg);
       return;
     }
 
@@ -1228,7 +1329,7 @@ export default function ConsultationsScreen() {
         patientName: selectedPatient.patientName,
         doctorId: doctor.id,
         doctorName: doctor.name,
-        queueItemId: selectedPatient.id,
+        queueItemId: isFollowUpEncounter ? undefined : selectedPatient.id,
         appointmentId: selectedPatient.appointmentId,
         subjective,
         objective,
@@ -1260,16 +1361,18 @@ export default function ConsultationsScreen() {
       });
       if (createErr || !consultation?.id) {
         setIsSigning(false);
+        const msg = createErr?.message || 'The encounter could not be saved, so nothing was signed. Please try again.';
         setBanner({
-          text: createErr?.message || 'The encounter could not be saved, so nothing was signed. Please try again.',
+          text: msg,
           isError: true,
         });
+        notify.error(msg, { traceId: createErr?.traceId });
         return;
       }
       consultationId = consultation.id;
       setSignedConsultationId(consultation.id);
     } else {
-      await clinicService.updateConsultation(consultationId, {
+      const [, updateErr] = await clinicService.updateConsultation(consultationId, {
         subjective,
         objective,
         assessment,
@@ -1298,6 +1401,16 @@ export default function ConsultationsScreen() {
           philHealthDrugCode: p.philHealthDrugCode,
         })),
       });
+      if (updateErr) {
+        setIsSigning(false);
+        const msg = updateErr.message || 'The encounter could not be updated before signing. Please try again.';
+        setBanner({
+          text: msg,
+          isError: true,
+        });
+        notify.error(msg, { traceId: updateErr.traceId });
+        return;
+      }
     }
 
     const [, signErr] = await clinicService.signConsultation(consultationId, {
@@ -1309,10 +1422,12 @@ export default function ConsultationsScreen() {
     });
     if (signErr) {
       setIsSigning(false);
+      const msg = `The encounter was saved but could not be signed: ${signErr.message || 'unknown error'}. Press Sign again to retry.`;
       setBanner({
-        text: `The encounter was saved but could not be signed: ${signErr.message || 'unknown error'}. Press Sign again to retry.`,
+        text: msg,
         isError: true,
       });
+      notify.error(msg, { traceId: signErr.traceId });
       return;
     }
 
@@ -1421,17 +1536,21 @@ export default function ConsultationsScreen() {
     setIsSigned(true);
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setSignedAt(nowStr);
-    setBanner(
-      followUpIssues.length > 0
-        ? {
-            text: `Encounter signed by ${doctor.name} at ${nowStr}, but these steps did not complete: ${followUpIssues.join(', ')}. Please redo them from the relevant station.`,
-            isError: true,
-          }
-        : {
-            text: `Encounter signed by ${doctor.name} (${doctorPrc}) at ${nowStr}. Lab requisitions, nursing orders and the cashier invoice were forwarded.`,
-            isError: false,
-          },
-    );
+    if (followUpIssues.length > 0) {
+      const warnMsg = `Encounter signed by ${doctor.name} at ${nowStr}, but these steps did not complete: ${followUpIssues.join(', ')}. Please redo them from the relevant station.`;
+      setBanner({
+        text: warnMsg,
+        isError: true,
+      });
+      notify.error(warnMsg);
+    } else {
+      const successMsg = `Encounter signed by ${doctor.name} (${finalPrc}) at ${nowStr}. Lab requisitions, nursing orders and the cashier invoice were forwarded.`;
+      setBanner({
+        text: successMsg,
+        isError: false,
+      });
+      notify.success(successMsg);
+    }
   };
 
   const vitalItems = (
@@ -2888,6 +3007,12 @@ export default function ConsultationsScreen() {
                       />
                     </>
                   ) : null}
+                  <Button
+                    title="Start follow-up encounter"
+                    icon="plus"
+                    variant="outline"
+                    onPress={handleStartFollowUpEncounter}
+                  />
                   <Button
                     title="Forward to cashier"
                     icon="billing"
