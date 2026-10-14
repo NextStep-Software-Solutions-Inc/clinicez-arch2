@@ -13,6 +13,7 @@ import {
   Input,
   Icon,
   Badge,
+  EmptyState,
   ValidatedDateInput,
   validateDateString,
   TimeInput,
@@ -32,6 +33,35 @@ export interface DoctorRosterCalendarModalProps {
   onClose: () => void;
   doctors: StaffMember[];
   initialDoctorId?: string;
+  onAddStaff?: () => void;
+}
+
+export function resolveSelectedDoctorId(
+  doctors: StaffMember[],
+  currentSelectedId?: string,
+  initialDoctorId?: string
+): string {
+  if (!doctors || doctors.length === 0) {
+    return '';
+  }
+  if (initialDoctorId && doctors.some((d) => d.id === initialDoctorId)) {
+    return initialDoctorId;
+  }
+  if (currentSelectedId && doctors.some((d) => d.id === currentSelectedId)) {
+    return currentSelectedId;
+  }
+  return doctors[0].id;
+}
+
+export function resolveRosterEmptyStateProps(onAddStaff?: () => void) {
+  return {
+    icon: 'staff' as const,
+    title: 'No physicians registered yet',
+    description:
+      'Add a doctor or clinical staff member to configure weekly shift templates, slot intervals, and blackout dates.',
+    actionTitle: onAddStaff ? 'Add physician / staff' : undefined,
+    onAction: onAddStaff,
+  };
 }
 
 const DAYS_OF_WEEK = [
@@ -82,10 +112,11 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
   onClose,
   doctors,
   initialDoctorId,
+  onAddStaff,
 }) => {
   const [activeTab, setActiveTab] = useState<'templates' | 'leaves'>('templates');
-  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(
-    initialDoctorId || doctors[0]?.id || ''
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(() =>
+    resolveSelectedDoctorId(doctors, '', initialDoctorId)
   );
 
   // Template Tab State
@@ -116,10 +147,9 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
   const [partialEndTime, setPartialEndTime] = useState<string>('17:00');
 
   useEffect(() => {
-    if (initialDoctorId) {
-      setSelectedDoctorId(initialDoctorId);
-    } else if (doctors.length > 0 && !selectedDoctorId) {
-      setSelectedDoctorId(doctors[0].id);
+    const nextDoctorId = resolveSelectedDoctorId(doctors, selectedDoctorId, initialDoctorId);
+    if (nextDoctorId !== selectedDoctorId) {
+      setSelectedDoctorId(nextDoctorId);
     }
   }, [initialDoctorId, doctors, selectedDoctorId]);
 
@@ -387,12 +417,16 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
       maxWidth={720}
     >
       <ScrollView contentContainerStyle={styles.container}>
-        {/* Doctor Selector */}
-        <View style={styles.doctorSelectorRow}>
-          <ThemedText variant="captionBold" style={styles.sectionLabel}>
-            Select Physician:
-          </ThemedText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.doctorPills}>
+        {doctors.length === 0 ? (
+          <EmptyState {...resolveRosterEmptyStateProps(onAddStaff)} />
+        ) : (
+          <>
+            {/* Doctor Selector */}
+            <View style={styles.doctorSelectorRow}>
+              <ThemedText variant="captionBold" style={styles.sectionLabel}>
+                Select Physician:
+              </ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.doctorPills}>
             {doctors.map((doc) => {
               const isSelected = doc.id === selectedDoctorId;
               return (
@@ -843,6 +877,8 @@ export const DoctorRosterCalendarModal: React.FC<DoctorRosterCalendarModalProps>
               ))
             )}
           </View>
+        )}
+          </>
         )}
       </ScrollView>
     </Modal>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
 import { ThemedText } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
@@ -28,8 +29,17 @@ import ServicesCatalogTab from '../../components/settings/ServicesCatalogTab';
 import CustomFieldsTab from '../../components/settings/CustomFieldsTab';
 import PhilHealthSettingsTab from '../../components/settings/PhilHealthSettingsTab';
 import LicenseSystemTab from '../../components/settings/LicenseSystemTab';
-import { SettingsTabItem, SettingsTabKey } from '../../components/settings/types';
+import {
+  SettingsTabItem,
+  SettingsTabKey,
+  SettingsRouteParams,
+  resolveSettingsRouteIntent,
+} from '../../components/settings/types';
 import { formatPeso } from '../../components/settings/common';
+
+export { type SettingsRouteParams, resolveSettingsRouteIntent };
+
+export type SettingsScreenProps = StaticScreenProps<SettingsRouteParams | undefined>;
 
 const sanitizeLegacyDefault = (val?: string | null): string => {
   if (!val) return '';
@@ -38,7 +48,20 @@ const sanitizeLegacyDefault = (val?: string | null): string => {
   return trimmed;
 };
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ route }: Partial<SettingsScreenProps> = {}) {
+  const navigation = useNavigation<any>();
+  const incomingTab = route?.params?.tab;
+  const incomingOpenAddStaff = route?.params?.openAddStaff;
+  const initialIntent = useMemo(
+    () =>
+      resolveSettingsRouteIntent({
+        tab: incomingTab,
+        openAddStaff: incomingOpenAddStaff,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   const { license, openActivationModal, refreshLicense } = useFacilityLicense();
   const { refresh: refreshClinic } = useClinic();
   const { reload: reloadStaffContext } = useStaff();
@@ -48,7 +71,7 @@ export default function SettingsScreen() {
   const canManageRoles = usePermission(PERMISSIONS.rolesManage);
   const isAdmin = canManageSettings || canManageStaff || user?.role === 'Admin';
 
-  const [activeTab, setActiveTab] = useState<SettingsTabKey>('general');
+  const [activeTab, setActiveTab] = useState<SettingsTabKey>(() => initialIntent.targetTab ?? 'general');
 
   // Core Data States
   const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
@@ -82,8 +105,27 @@ export default function SettingsScreen() {
   const [preferredChartLayout, setPreferredChartLayout] = useState<'modal' | 'split' | 'drawer'>('modal');
 
   // Modals for sub-components
-  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [showAddStaffModal, setShowAddStaffModal] = useState<boolean>(() => initialIntent.shouldOpenAddStaff);
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
+
+  useEffect(() => {
+    const intent = resolveSettingsRouteIntent({
+      tab: incomingTab,
+      openAddStaff: incomingOpenAddStaff,
+    });
+    if (!intent.targetTab && !intent.shouldOpenAddStaff) return;
+
+    if (intent.targetTab) {
+      setActiveTab(intent.targetTab);
+    }
+    if (intent.shouldOpenAddStaff) {
+      setShowAddStaffModal(true);
+    }
+    navigation.setParams?.({
+      tab: undefined,
+      openAddStaff: undefined,
+    });
+  }, [incomingTab, incomingOpenAddStaff, navigation]);
 
   const loadAll = useCallback(async () => {
     const [

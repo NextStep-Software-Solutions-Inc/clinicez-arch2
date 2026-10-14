@@ -789,6 +789,10 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         onClose={() => setRosterModalVisible(false)}
         doctors={doctors}
         initialDoctorId={formDoctorId || doctors[0]?.id}
+        onAddStaff={() => {
+          setRosterModalVisible(false);
+          navigation.navigate('Settings', { tab: 'staff', openAddStaff: true });
+        }}
       />
 
       {/* Active Queue Ticket Conflict Modal */}

@@ -26,3 +26,22 @@ export interface ReadinessCheckItem {
   actionLabel?: string;
   actionTab?: SettingsTabKey;
 }
+
+export type SettingsRouteParams = {
+  tab?: SettingsTabKey;
+  openAddStaff?: boolean;
+};
+
+export function resolveSettingsRouteIntent(params?: SettingsRouteParams | null): {
+  targetTab: SettingsTabKey | null;
+  shouldOpenAddStaff: boolean;
+} {
+  if (!params) {
+    return { targetTab: null, shouldOpenAddStaff: false };
+  }
+  const shouldOpenAddStaff = Boolean(params.openAddStaff);
+  const targetTab: SettingsTabKey | null = shouldOpenAddStaff
+    ? 'staff'
+    : params.tab ?? null;
+  return { targetTab, shouldOpenAddStaff };
+}

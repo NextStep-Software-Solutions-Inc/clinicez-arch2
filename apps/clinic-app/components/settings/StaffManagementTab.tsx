@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
@@ -188,6 +188,22 @@ export default function StaffManagementTab({
     setAddError(null);
     setShowAddModal(true);
   };
+
+  useEffect(() => {
+    if (showAddModal && !temporaryPassword) {
+      setTitle((prev) => prev || 'Dr.');
+      const defaultDoctor =
+        systemRoleOptions.find((r) => r.staffRole === 'Doctor') ||
+        systemRoleOptions[0] ||
+        FALLBACK_SYSTEM_ROLES[0];
+      if (!selectedRoleId) {
+        setSelectedRoleId(defaultDoctor.id);
+        setRole(defaultDoctor.staffRole);
+      }
+      setTemporaryPassword(generateRandomPassword());
+      setAddError(null);
+    }
+  }, [showAddModal, temporaryPassword, selectedRoleId, systemRoleOptions]);
 
   const handleOpenEditModal = (s: StaffMember) => {
     setEditingStaff(s);
@@ -436,18 +452,16 @@ export default function StaffManagementTab({
           }
           rightAction={
             <View style={styles.headerActionsRow}>
-              {doctors.length > 0 ? (
-                <Button
-                  title="Doctor Rosters & Schedules"
-                  icon="calendar"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => {
-                    setRosterDoctorId(doctors[0]?.id);
-                    setRosterModalVisible(true);
-                  }}
-                />
-              ) : null}
+              <Button
+                title="Doctor Rosters & Schedules"
+                icon="calendar"
+                variant="outline"
+                size="sm"
+                onPress={() => {
+                  setRosterDoctorId(doctors[0]?.id);
+                  setRosterModalVisible(true);
+                }}
+              />
               <Button
                 title="Add staff member"
                 icon="plus"
@@ -1333,6 +1347,10 @@ export default function StaffManagementTab({
           onClose={() => setRosterModalVisible(false)}
           doctors={doctors}
           initialDoctorId={rosterDoctorId}
+          onAddStaff={() => {
+            setRosterModalVisible(false);
+            handleOpenAddModal();
+          }}
         />
       ) : null}
     </View>
