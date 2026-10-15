@@ -1,8 +1,10 @@
-import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, ViewStyle, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 import UserMenu from './UserMenu';
+import ClinicNotificationCenterModal from '../notifications/ClinicNotificationCenterModal';
+import { useClinicNotifications } from '../../hooks/useClinicNotifications';
 import { theme } from '../../constants/theme';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 
@@ -23,6 +25,17 @@ export default function ClinicHeaderBar({
   style,
 }: ClinicHeaderBarProps) {
   const { isCompact } = useBreakpoint();
+  const [modalVisible, setModalVisible] = useState(false);
+
+  const {
+    notifications,
+    unreadCount,
+    hasStatAlert,
+    loading,
+    refresh,
+    markAsRead,
+    markAllAsRead,
+  } = useClinicNotifications();
 
   const currentDate = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
@@ -58,8 +71,47 @@ export default function ClinicHeaderBar({
 
         {rightAction ?? null}
 
+        {/* Workstation Notification Bell Button */}
+        <Pressable
+          onPress={() => setModalVisible(true)}
+          style={({ pressed }) => [
+            styles.bellButton,
+            hasStatAlert && styles.bellButtonStat,
+            pressed && styles.bellButtonPressed,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`Notifications (${unreadCount} unread)`}
+        >
+          <Icon
+            name="bell"
+            size={theme.sizes.iconMd}
+            color={hasStatAlert ? theme.colors.emergencyText : theme.colors.text}
+          />
+          {unreadCount > 0 ? (
+            <View style={[styles.badgePill, hasStatAlert && styles.badgePillStat]}>
+              <ThemedText
+                variant="badge"
+                color={theme.colors.onPrimary}
+              >
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </ThemedText>
+            </View>
+          ) : null}
+        </Pressable>
+
         {/* On workstation widths the picker lives in the sidebar footer. */}
         {isCompact ? <UserMenu compact /> : null}
+
+        <ClinicNotificationCenterModal
+          visible={modalVisible}
+          onClose={() => setModalVisible(false)}
+          notifications={notifications}
+          unreadCount={unreadCount}
+          loading={loading}
+          onMarkRead={markAsRead}
+          onMarkAllRead={markAllAsRead}
+          onRefresh={refresh}
+        />
       </View>
     </View>
   );
@@ -104,5 +156,38 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.full,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+  },
+  bellButton: {
+    position: 'relative',
+    width: theme.sizes.controlSm,
+    height: theme.sizes.controlSm,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellButtonStat: {
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  bellButtonPressed: {
+    opacity: 0.7,
+  },
+  badgePill: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgePillStat: {
+    backgroundColor: theme.colors.emergency,
   },
 });

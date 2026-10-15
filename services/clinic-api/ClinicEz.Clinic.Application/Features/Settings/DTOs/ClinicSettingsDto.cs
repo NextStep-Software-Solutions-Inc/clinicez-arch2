@@ -41,5 +41,8 @@ public sealed record ClinicSettingsDto(
     bool TvDisplayMaskPatientNames = true,
     bool EnableQueuePushNotifications = true,
     int QueuePushNotificationThreshold = 2,
-    bool EnableChipLevelQueueCalling = false);
+    bool EnableChipLevelQueueCalling = false,
+    int StaffNotificationRetentionDays = 30,
+    bool EnableStatAudioAlert = true,
+    bool EnableStatVibrationAlert = true);
 

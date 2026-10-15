@@ -93,4 +93,21 @@ public sealed class ClinicSettings : BaseEntity
     /// Opt-in setting; defaults to false to enforce sequential queue calling unless explicitly enabled.
     /// </summary>
     public bool EnableChipLevelQueueCalling { get; set; } = false;
+
+    /// <summary>
+    /// Retention period (in days) for read staff notifications before automated purge. 0 = keep indefinitely.
+    /// Default is 30 days.
+    /// </summary>
+    public int StaffNotificationRetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Controls whether STAT/panic diagnostic findings trigger an audible alert chime in the clinic app.
+    /// </summary>
+    public bool EnableStatAudioAlert { get; set; } = true;
+
+    /// <summary>
+    /// Controls whether STAT/panic diagnostic findings trigger device vibration (mobile/tablet).
+    /// </summary>
+    public bool EnableStatVibrationAlert { get; set; } = true;
 }
+

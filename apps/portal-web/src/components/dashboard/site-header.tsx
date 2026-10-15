@@ -6,6 +6,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
+import { NotificationPopover } from "@/components/dashboard/NotificationPopover";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -22,7 +23,7 @@ export function SiteHeader() {
           className="mx-2 data-[orientation=vertical]:h-4"
         />
         <h1 className="text-base font-medium capitalize">{currentPage}</h1>
-        <div className="ml-auto flex items-center gap-4">
+        <div className="ml-auto flex items-center gap-3">
           <Button variant="ghost" asChild size="sm" className="hidden sm:flex">
             <Link
               href="/"
@@ -32,6 +33,7 @@ export function SiteHeader() {
               Clinic EZ
             </Link>
           </Button>
+          <NotificationPopover />
           <UserButton afterSignOutUrl="/" />
         </div>
       </div>

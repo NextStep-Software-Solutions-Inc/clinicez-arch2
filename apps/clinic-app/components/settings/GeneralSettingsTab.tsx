@@ -21,7 +21,7 @@ import JoinLinkSettingsCard from './JoinLinkSettingsCard';
 import PatientSearchConfigSection from './PatientSearchConfigSection';
 import EodReconciliationSettingsCard from './EodReconciliationSettingsCard';
 import WaitingAreaTvSettingsCard from './WaitingAreaTvSettingsCard';
-import QueuePushNotificationSettingsCard from './QueuePushNotificationSettingsCard';
+import NotificationSettingsCard from './NotificationSettingsCard';
 import QueueCallingSettingsCard from './QueueCallingSettingsCard';
 import { ClinicRoomsSettingsCard } from './ClinicRoomsSettingsCard';
 import { useClinic } from '../../context/ClinicContext';
@@ -490,8 +490,8 @@ export default function GeneralSettingsTab({
         showSkeletons={showSkeletons}
       />
 
-      {/* Patient Queue Push Notifications */}
-      <QueuePushNotificationSettingsCard
+      {/* Notification System & Alert Preferences */}
+      <NotificationSettingsCard
         settings={settings}
         onSettingsUpdated={onSettingsUpdated}
         showSkeletons={showSkeletons}

@@ -42,6 +42,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<WebhookEndpoint> WebhookEndpoints { get; set; }
     public DbSet<WebhookDelivery> WebhookDeliveries { get; set; }
     public DbSet<SystemSetting> SystemSettings { get; set; }
+    public DbSet<PortalNotification> PortalNotifications { get; set; }
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
@@ -440,6 +441,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.ActorName).HasMaxLength(256);
             entity.Property(e => e.ActorRole).HasMaxLength(32);
             entity.Property(e => e.ChangesJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<PortalNotification>(entity =>
+        {
+            entity.ToTable("portal_notifications");
+            entity.HasIndex(e => new { e.TenantId, e.IsRead, e.CreatedAt });
+            entity.HasIndex(e => e.UserId);
+            entity.Property(e => e.Title).HasMaxLength(256);
+            entity.Property(e => e.Category).HasMaxLength(64);
+            entity.Property(e => e.Severity).HasMaxLength(32);
         });
 
         modelBuilder.Entity<WorkspaceApiKey>(entity =>

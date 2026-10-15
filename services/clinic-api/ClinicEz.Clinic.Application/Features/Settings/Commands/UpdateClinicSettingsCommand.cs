@@ -39,7 +39,10 @@ public sealed record UpdateClinicSettingsCommand(
     bool? TvDisplayMaskPatientNames = null,
     bool? EnableQueuePushNotifications = null,
     int? QueuePushNotificationThreshold = null,
-    bool? EnableChipLevelQueueCalling = null) : IRequest<ClinicSettingsDto>;
+    bool? EnableChipLevelQueueCalling = null,
+    int? StaffNotificationRetentionDays = null,
+    bool? EnableStatAudioAlert = null,
+    bool? EnableStatVibrationAlert = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -168,6 +171,15 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.EnableChipLevelQueueCalling.HasValue)
             settings.EnableChipLevelQueueCalling = request.EnableChipLevelQueueCalling.Value;
 
+        if (request.StaffNotificationRetentionDays.HasValue)
+            settings.StaffNotificationRetentionDays = Math.Max(0, request.StaffNotificationRetentionDays.Value);
+
+        if (request.EnableStatAudioAlert.HasValue)
+            settings.EnableStatAudioAlert = request.EnableStatAudioAlert.Value;
+
+        if (request.EnableStatVibrationAlert.HasValue)
+            settings.EnableStatVibrationAlert = request.EnableStatVibrationAlert.Value;
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -212,7 +224,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.TvDisplayMaskPatientNames,
             settings.EnableQueuePushNotifications,
             settings.QueuePushNotificationThreshold,
-            settings.EnableChipLevelQueueCalling);
+            settings.EnableChipLevelQueueCalling,
+            settings.StaffNotificationRetentionDays,
+            settings.EnableStatAudioAlert,
+            settings.EnableStatVibrationAlert);
     }
 }
 

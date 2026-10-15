@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { SignOutButton, useClerk } from "@clerk/nextjs"
 
 import {
@@ -46,6 +46,7 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const { tenant } = useParams<{ tenant: string }>()
+  const router = useRouter()
   const { openUserProfile } = useClerk()
 
   return (
@@ -101,7 +102,7 @@ export function NavUser({
                 <IconCreditCard />
                 Subscription Plans
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { router.push(tenant ? `/${tenant}/dashboard/settings` : "/admin/settings"); }}>
                 <IconNotification />
                 Notifications
               </DropdownMenuItem>

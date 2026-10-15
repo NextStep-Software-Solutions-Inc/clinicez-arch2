@@ -78,6 +78,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<PatientPastMedicalHistory> PatientPastMedicalHistories { get; set; } = null!;
     public DbSet<PatientFamilyHistory> PatientFamilyHistories { get; set; } = null!;
     public DbSet<PatientPhysicalExamProfile> PatientPhysicalExamProfiles { get; set; } = null!;
+    public DbSet<ClinicStaffNotification> StaffNotifications { get; set; } = null!;
     public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
@@ -149,6 +150,14 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<PatientPastMedicalHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PatientFamilyHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PatientPhysicalExamProfile>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicStaffNotification>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+
+        modelBuilder.Entity<ClinicStaffNotification>(b =>
+        {
+            b.ToTable("clinic_staff_notifications");
+            b.HasIndex(n => new { n.ClinicId, n.IsRead, n.CreatedAt });
+            b.HasIndex(n => n.RecipientStaffId);
+        });
 
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted);

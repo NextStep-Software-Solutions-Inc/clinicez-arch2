@@ -78,6 +78,7 @@ public static class DependencyInjection
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogSeedHostedService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyCleanupHostedService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.EodReconciliationBackgroundService>();
+        services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.NotificationRetentionCleanupBackgroundService>();
 
         // Workspace brand/regional defaults: fed by workspace.profile.updated messages and held in this service's own database
         services.AddWorkspaceProfile<ApplicationDbContext>();

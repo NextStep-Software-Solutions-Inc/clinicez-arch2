@@ -1214,6 +1214,12 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("EnableStatAudioAlert")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("EnableStatVibrationAlert")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("EntitlementVersion")
                         .HasColumnType("integer");
 
@@ -1324,6 +1330,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int>("StaffNotificationRetentionDays")
+                        .HasColumnType("integer");
+
                     b.Property<string>("TaxIdentificationNumber")
                         .HasColumnType("text");
 
@@ -1357,6 +1366,92 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ClinicSettings", "clinic_dashboard");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicStaffNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActionParamsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ActionRoute")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RecipientRole")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("RecipientStaffId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SourceType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Urgency")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientStaffId");
+
+                    b.HasIndex("ClinicId", "IsRead", "CreatedAt");
+
+                    b.ToTable("clinic_staff_notifications", "clinic_dashboard");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicalProcedure", b =>

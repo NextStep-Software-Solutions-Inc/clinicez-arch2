@@ -100,7 +100,10 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.TvDisplayMaskPatientNames,
             settings.EnableQueuePushNotifications,
             settings.QueuePushNotificationThreshold,
-            settings.EnableChipLevelQueueCalling);
+            settings.EnableChipLevelQueueCalling,
+            settings.StaffNotificationRetentionDays,
+            settings.EnableStatAudioAlert,
+            settings.EnableStatVibrationAlert);
     }
 }
 

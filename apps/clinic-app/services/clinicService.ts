@@ -169,6 +169,8 @@ export interface FacilityLicenseStatus {
   expiresAtUtc?: string;
   isTampered: boolean;
   errorMessage?: string;
+  primaryLogoUrl?: string | null;
+  primaryColorHex?: string | null;
 }
 
 export interface PatientQueueItem {
@@ -1674,10 +1676,40 @@ export interface ClinicSettingsRecord {
   enableQueuePushNotifications?: boolean;
   queuePushNotificationThreshold?: number;
   enableChipLevelQueueCalling?: boolean;
+  staffNotificationRetentionDays?: number;
+  enableStatAudioAlert?: boolean;
+  enableStatVibrationAlert?: boolean;
   tenantSlug?: string;
   facilitySlug?: string;
   primaryLogoUrl?: string | null;
   primaryColorHex?: string;
+}
+
+export type NotificationUrgency = 'Routine' | 'Urgent' | 'Stat';
+export type StaffNotificationCategory = 'LabResult' | 'Queue' | 'ClinicalAlert' | 'System';
+
+export interface ClinicStaffNotification {
+  id: string;
+  clinicId: string;
+  recipientStaffId?: string | null;
+  recipientRole?: string | null;
+  title: string;
+  body: string;
+  category: StaffNotificationCategory;
+  urgency: NotificationUrgency;
+  actionRoute?: string | null;
+  actionParamsJson?: string | null;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  isRead: boolean;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface StaffNotificationListResponse {
+  items: ClinicStaffNotification[];
+  unreadCount: number;
+  hasStatAlert: boolean;
 }
 
 export interface WorkspaceProfile {
@@ -2981,7 +3013,30 @@ export const clinicService = {
       `/dev/clear-patients${qs ? `?${qs}` : ''}`,
       { timeout: 300_000 }
     );
-  }
+  },
+
+  async getStaffNotifications(params?: {
+    unreadOnly?: boolean;
+    category?: StaffNotificationCategory;
+    urgency?: NotificationUrgency;
+    limit?: number;
+  }) {
+    const qp = new URLSearchParams();
+    if (params?.unreadOnly !== undefined) qp.append('unreadOnly', String(params.unreadOnly));
+    if (params?.category) qp.append('category', params.category);
+    if (params?.urgency) qp.append('urgency', params.urgency);
+    if (params?.limit) qp.append('limit', String(params.limit));
+    const qs = qp.toString();
+    return clinicApiClient.get<StaffNotificationListResponse>(`/notifications${qs ? `?${qs}` : ''}`);
+  },
+
+  async markStaffNotificationRead(id: string) {
+    return clinicApiClient.post<boolean>(`/notifications/${id}/read`);
+  },
+
+  async markAllStaffNotificationsRead() {
+    return clinicApiClient.post<number>('/notifications/read-all');
+  },
 };
 
 export interface LabOrderSlipData {

@@ -2,6 +2,7 @@ using System;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Handling;
@@ -65,6 +66,26 @@ public sealed class LabPanicResultAlertHandler : IInteropHandler<LabPanicResultA
         order.HasCriticalPanicAlert = true;
         order.CriticalFindingsJson = JsonSerializer.Serialize(message.CriticalFindings);
         order.PanicAlertTriggeredAt = message.TriggeredAt;
+
+        var staffNotification = new ClinicStaffNotification
+        {
+            Id = Guid.NewGuid(),
+            TenantId = order.TenantId ?? clinic.TenantId.ToString(),
+            ClinicId = clinic.ClinicId,
+            RecipientStaffId = order.OrderedByDoctorId,
+            RecipientRole = "Doctor",
+            Title = $"STAT Panic Result: {order.PatientName}",
+            Body = $"Critical diagnostic findings reported for Order #{order.OrderNumber}. Immediate clinical review required.",
+            Category = StaffNotificationCategory.LabResult,
+            Urgency = NotificationUrgency.Stat,
+            ActionRoute = "ResultReview",
+            ActionParamsJson = JsonSerializer.Serialize(new { orderId = order.Id, patientId = order.PatientId }),
+            SourceType = "LabOrder",
+            SourceId = order.Id.ToString(),
+            IsRead = false,
+            CreatedAt = DateTime.UtcNow
+        };
+        _dbContext.StaffNotifications.Add(staffNotification);
 
         await _dbContext.SaveChangesAsync(ct);
 
