@@ -311,15 +311,12 @@ export default function ConsultationsScreen() {
 
   const [queueViewFilter, setQueueViewFilter] = useState<QueueView>(() => {
     const saved = getDeviceItem(`${staffKey}:queueView`);
-    return saved === 'WaitingForDoctor' || saved === 'MyRoom' || saved === 'PendingProcedure' || saved === 'All'
+    return saved === 'WaitingForDoctor' || saved === 'MyRoom' || saved === 'PendingProcedure' || saved === 'Completed' || saved === 'All'
       ? saved
       : 'WaitingForDoctor';
   });
   const [selectedStationFilter, setSelectedStationFilter] = useState<string>(() => {
     return getDeviceItem(`${staffKey}:station`) || 'ALL';
-  });
-  const [queueStatusFilter, setQueueStatusFilter] = useState<string>(() => {
-    return getDeviceItem(`${staffKey}:status`) || 'ACTIVE';
   });
   const didApplyStaffRoomDefaults = useRef(false);
 
@@ -334,9 +331,8 @@ export default function ConsultationsScreen() {
     const staffStorageKey = `clinicez:consultations:${current.id}`;
     const savedView = getDeviceItem(`${staffStorageKey}:queueView`);
     const savedStation = getDeviceItem(`${staffStorageKey}:station`);
-    const savedStatus = getDeviceItem(`${staffStorageKey}:status`);
 
-    if (savedView === 'WaitingForDoctor' || savedView === 'MyRoom' || savedView === 'PendingProcedure' || savedView === 'All') {
+    if (savedView === 'WaitingForDoctor' || savedView === 'MyRoom' || savedView === 'PendingProcedure' || savedView === 'Completed' || savedView === 'All') {
       setQueueViewFilter(savedView);
     } else {
       const assignedIds = current.assignedRoomIds ?? (current.assignedRoomId ? [current.assignedRoomId] : []);
@@ -358,10 +354,6 @@ export default function ConsultationsScreen() {
           setSelectedStationFilter(assignedRoom.name);
         }
       }
-    }
-
-    if (savedStatus) {
-      setQueueStatusFilter(savedStatus);
     }
   }, [current, activeRooms]);
 
@@ -390,35 +382,15 @@ export default function ConsultationsScreen() {
     }
   };
 
-  const handleStatusFilterChange = (status: string) => {
-    setQueueStatusFilter(status);
-    if (current?.id) {
-      setDeviceItem(`clinicez:consultations:${current.id}:status`, status);
-    }
-  };
-
-  const statusFilterCounts = useMemo(() => {
-    const active = patients.filter((p) => p.status !== 'Completed' && p.status !== 'Cancelled' && p.status !== 'NoShow');
-    return {
-      ACTIVE: active.length,
-      Triaged: patients.filter((p) => p.status === 'Triaged').length,
-      InConsultation: patients.filter((p) => p.status === 'InConsultation').length,
-      PendingProcedure: patients.filter((p) => p.status === 'PendingProcedure').length,
-      ReEvaluation: patients.filter((p) => p.status === 'ReEvaluation').length,
-      Completed: patients.filter((p) => p.status === 'Completed').length,
-      ALL: patients.length,
-    };
-  }, [patients]);
-
   const displayedPatients = useMemo(() => {
-    if (queueStatusFilter === 'ACTIVE') {
-      return patients.filter((p) => p.status !== 'Completed' && p.status !== 'Cancelled' && p.status !== 'NoShow');
+    if (queueViewFilter === 'Completed') {
+      return patients.filter((p) => p.status === 'Completed');
     }
-    if (queueStatusFilter === 'ALL') {
+    if (queueViewFilter === 'All') {
       return patients.filter((p) => p.status !== 'Cancelled' && p.status !== 'NoShow');
     }
-    return patients.filter((p) => p.status === queueStatusFilter);
-  }, [patients, queueStatusFilter]);
+    return patients.filter((p) => p.status !== 'Completed' && p.status !== 'Cancelled' && p.status !== 'NoShow');
+  }, [patients, queueViewFilter]);
 
   // PhilHealth Yakap Claim Readiness States (Feature 17)
   const [serverReadiness, setServerReadiness] = useState<YakapClaimReadinessDto | null>(null);
@@ -3222,6 +3194,7 @@ export default function ConsultationsScreen() {
                 { value: 'WaitingForDoctor', label: 'Waiting for Doctor' },
                 { value: 'MyRoom', label: 'My Room' },
                 { value: 'PendingProcedure', label: 'Pending Procedure' },
+                { value: 'Completed', label: 'Completed' },
                 { value: 'All', label: 'All Queue' },
               ]}
             />
@@ -3263,125 +3236,6 @@ export default function ConsultationsScreen() {
                   </Pressable>
                 );
               })}
-            </ScrollView>
-
-            {/* Queue Status Filter Pills with Live Counter Badges */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusFilterScroll}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => handleStatusFilterChange('ACTIVE')}
-                style={[
-                  styles.statusFilterPill,
-                  queueStatusFilter === 'ACTIVE' && styles.statusFilterPillActive,
-                ]}
-              >
-                <ThemedText
-                  variant="captionBold"
-                  color={queueStatusFilter === 'ACTIVE' ? theme.colors.primaryDark : theme.colors.textSecondary}
-                >
-                  Active ({statusFilterCounts.ACTIVE})
-                </ThemedText>
-              </Pressable>
-              {statusFilterCounts.Triaged > 0 || queueStatusFilter === 'Triaged' ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => handleStatusFilterChange('Triaged')}
-                  style={[
-                    styles.statusFilterPill,
-                    queueStatusFilter === 'Triaged' && styles.statusFilterPillActive,
-                  ]}
-                >
-                  <ThemedText
-                    variant="captionBold"
-                    color={queueStatusFilter === 'Triaged' ? theme.colors.primaryDark : theme.colors.textSecondary}
-                  >
-                    Ready ({statusFilterCounts.Triaged})
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-              {statusFilterCounts.InConsultation > 0 || queueStatusFilter === 'InConsultation' ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => handleStatusFilterChange('InConsultation')}
-                  style={[
-                    styles.statusFilterPill,
-                    queueStatusFilter === 'InConsultation' && styles.statusFilterPillActive,
-                  ]}
-                >
-                  <ThemedText
-                    variant="captionBold"
-                    color={queueStatusFilter === 'InConsultation' ? theme.colors.primaryDark : theme.colors.textSecondary}
-                  >
-                    In Consult ({statusFilterCounts.InConsultation})
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-              {statusFilterCounts.PendingProcedure > 0 || queueStatusFilter === 'PendingProcedure' ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => handleStatusFilterChange('PendingProcedure')}
-                  style={[
-                    styles.statusFilterPill,
-                    queueStatusFilter === 'PendingProcedure' && styles.statusFilterPillActive,
-                  ]}
-                >
-                  <ThemedText
-                    variant="captionBold"
-                    color={queueStatusFilter === 'PendingProcedure' ? theme.colors.primaryDark : theme.colors.textSecondary}
-                  >
-                    Procedure ({statusFilterCounts.PendingProcedure})
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-              {statusFilterCounts.ReEvaluation > 0 || queueStatusFilter === 'ReEvaluation' ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => handleStatusFilterChange('ReEvaluation')}
-                  style={[
-                    styles.statusFilterPill,
-                    queueStatusFilter === 'ReEvaluation' && styles.statusFilterPillActive,
-                  ]}
-                >
-                  <ThemedText
-                    variant="captionBold"
-                    color={queueStatusFilter === 'ReEvaluation' ? theme.colors.primaryDark : theme.colors.textSecondary}
-                  >
-                    Re-Eval ({statusFilterCounts.ReEvaluation})
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-              {statusFilterCounts.Completed > 0 || queueStatusFilter === 'Completed' ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => handleStatusFilterChange('Completed')}
-                  style={[
-                    styles.statusFilterPill,
-                    queueStatusFilter === 'Completed' && styles.statusFilterPillActive,
-                  ]}
-                >
-                  <ThemedText
-                    variant="captionBold"
-                    color={queueStatusFilter === 'Completed' ? theme.colors.primaryDark : theme.colors.textSecondary}
-                  >
-                    Completed ({statusFilterCounts.Completed})
-                  </ThemedText>
-                </Pressable>
-              ) : null}
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => handleStatusFilterChange('ALL')}
-                style={[
-                  styles.statusFilterPill,
-                  queueStatusFilter === 'ALL' && styles.statusFilterPillActive,
-                ]}
-              >
-                <ThemedText
-                  variant="captionBold"
-                  color={queueStatusFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
-                >
-                  All Statuses ({statusFilterCounts.ALL})
-                </ThemedText>
-              </Pressable>
             </ScrollView>
           </View>
 

@@ -626,7 +626,7 @@ describe('ClinicRoom Domain Entity & Multi-Room Routing — Frontend Suite', () 
     expect(checkStationValid('Room 1', 'PendingProcedure')).toBe(false);
   });
 
-  test('16. Active queue filters exclude Completed, Cancelled, and NoShow encounters', () => {
+  test('16. Active queue filters exclude Completed, Cancelled, and NoShow encounters, and Completed view isolates completed encounters', () => {
     const mockQueue = [
       { id: 'q1', status: 'Triaged', patientName: 'Ready Patient' },
       { id: 'q2', status: 'InConsultation', patientName: 'Consult Patient' },
@@ -637,15 +637,28 @@ describe('ClinicRoom Domain Entity & Multi-Room Routing — Frontend Suite', () 
       { id: 'q7', status: 'NoShow', patientName: 'NoShow Patient' },
     ];
 
-    // Workstation Active filter
-    const activePatients = mockQueue.filter(
-      (p) => p.status !== 'Completed' && p.status !== 'Cancelled' && p.status !== 'NoShow'
-    );
+    // Helper imitating screen's displayedPatients logic
+    const getDisplayed = (queueView: string) => {
+      if (queueView === 'Completed') {
+        return mockQueue.filter((p) => p.status === 'Completed');
+      }
+      if (queueView === 'All') {
+        return mockQueue.filter((p) => p.status !== 'Cancelled' && p.status !== 'NoShow');
+      }
+      return mockQueue.filter((p) => p.status !== 'Completed' && p.status !== 'Cancelled' && p.status !== 'NoShow');
+    };
+
+    // Active workflow views (WaitingForDoctor, MyRoom, PendingProcedure)
+    const activePatients = getDisplayed('WaitingForDoctor');
     expect(activePatients.map((p) => p.id)).toEqual(['q1', 'q2', 'q3', 'q4']);
 
-    // Completed pill filter
-    const completedPatients = mockQueue.filter((p) => p.status === 'Completed');
+    // Completed tab view
+    const completedPatients = getDisplayed('Completed');
     expect(completedPatients.map((p) => p.id)).toEqual(['q5']);
+
+    // All Queue view
+    const allPatients = getDisplayed('All');
+    expect(allPatients.map((p) => p.id)).toEqual(['q1', 'q2', 'q3', 'q4', 'q5']);
 
     // Retirement on finalize encounter
     let currentActive = [...activePatients];
@@ -654,19 +667,16 @@ describe('ClinicRoom Domain Entity & Multi-Room Routing — Frontend Suite', () 
     expect(currentActive.map((p) => p.id)).toEqual(['q1', 'q3', 'q4']);
   });
 
-  test('17. Device storage persistence saves and restores workstation view and station filters', () => {
+  test('17. Device storage persistence saves and restores workstation view and station filters including Completed view', () => {
     const staffId = 'staff-persistent-test-123';
     const viewKey = `clinicez:consultations:${staffId}:queueView`;
     const stationKey = `clinicez:consultations:${staffId}:station`;
-    const statusKey = `clinicez:consultations:${staffId}:status`;
 
-    setDeviceItem(viewKey, 'MyRoom');
+    setDeviceItem(viewKey, 'Completed');
     setDeviceItem(stationKey, 'Room 1');
-    setDeviceItem(statusKey, 'Triaged');
 
-    expect(getDeviceItem(viewKey)).toBe('MyRoom');
+    expect(getDeviceItem(viewKey)).toBe('Completed');
     expect(getDeviceItem(stationKey)).toBe('Room 1');
-    expect(getDeviceItem(statusKey)).toBe('Triaged');
   });
 });
 

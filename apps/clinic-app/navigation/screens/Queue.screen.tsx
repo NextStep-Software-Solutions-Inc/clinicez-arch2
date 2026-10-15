@@ -50,7 +50,7 @@ export default function QueueScreen() {
   // Filters with persistence
   const [selectedView, setSelectedView] = useState<QueueView>(() => {
     const saved = getDeviceItem(`${staffKey}:view`);
-    if (saved === 'All' || saved === 'MyRoom' || saved === 'WaitingForDoctor' || saved === 'Triage' || saved === 'PendingProcedure') {
+    if (saved === 'All' || saved === 'MyRoom' || saved === 'WaitingForDoctor' || saved === 'Triage' || saved === 'PendingProcedure' || saved === 'Completed') {
       return saved as QueueView;
     }
     return 'All';
@@ -67,7 +67,7 @@ export default function QueueScreen() {
     const savedView = getDeviceItem(`${staffStorageKey}:view`);
     const savedStation = getDeviceItem(`${staffStorageKey}:station`);
 
-    if (savedView === 'All' || savedView === 'MyRoom' || savedView === 'WaitingForDoctor' || savedView === 'Triage' || savedView === 'PendingProcedure') {
+    if (savedView === 'All' || savedView === 'MyRoom' || savedView === 'WaitingForDoctor' || savedView === 'Triage' || savedView === 'PendingProcedure' || savedView === 'Completed') {
       setSelectedView(savedView as QueueView);
     }
     if (savedStation) {
@@ -319,11 +319,12 @@ export default function QueueScreen() {
           <View style={styles.segmentedWrap}>
             <SegmentedControl<QueueView>
               options={[
-                { value: 'All', label: 'All Queue' },
-                { value: 'MyRoom', label: 'My Room' },
                 { value: 'WaitingForDoctor', label: 'Waiting for Doctor' },
+                { value: 'MyRoom', label: 'My Room' },
                 { value: 'Triage', label: 'Triage' },
                 { value: 'PendingProcedure', label: 'Procedure Bay' },
+                { value: 'Completed', label: 'Completed' },
+                { value: 'All', label: 'All Queue' },
               ]}
               value={selectedView}
               onChange={handleViewChange}

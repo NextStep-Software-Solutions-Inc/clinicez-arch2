@@ -96,6 +96,11 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
                 // Patients ordered for in-clinic procedures
                 query = query.Where(q => q.Status == QueueStatus.PendingProcedure);
             }
+            else if (view.Equals("Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                // Patients whose encounters are completed
+                query = query.Where(q => q.Status == QueueStatus.Completed);
+            }
             else if (view.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
                 // All items including completed

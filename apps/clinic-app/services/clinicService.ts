@@ -18,7 +18,8 @@ export type QueueView =
   | 'MyRoom'
   | 'WaitingForDoctor'
   | 'Triage'
-  | 'PendingProcedure';
+  | 'PendingProcedure'
+  | 'Completed';
 export type AppointmentStatus = 'Pending' | 'Confirmed' | 'CheckedIn' | 'InConsultation' | 'Completed' | 'Cancelled';
 export type StaffRole = 'Doctor' | 'Nurse' | 'Receptionist' | 'Cashier' | 'Admin';
 export type InvoiceStatus = 'Draft' | 'Paid' | 'PartiallyPaid' | 'Voided' | 'Refunded';
