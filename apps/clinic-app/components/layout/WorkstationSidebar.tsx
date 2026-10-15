@@ -153,7 +153,12 @@ export default function WorkstationSidebar({
                 {displayName}
               </ThemedText>
               {planTier ? (
-                <Badge label={planTier.toUpperCase()} variant="primary" size="sm" />
+                <Badge
+                  label={planTier.toUpperCase()}
+                  variant="primary"
+                  size="xs"
+                  style={styles.planTierBadge}
+                />
               ) : null}
             </View>
           </View>
@@ -353,13 +358,17 @@ const styles = StyleSheet.create({
   brandTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
     overflow: 'hidden',
   },
   brandTitle: {
     color: theme.colors.text,
     letterSpacing: -0.3,
     flexShrink: 1,
+  },
+  planTierBadge: {
+    alignSelf: 'center',
+    flexShrink: 0,
   },
   collapseButton: {
     width: theme.sizes.controlSm,

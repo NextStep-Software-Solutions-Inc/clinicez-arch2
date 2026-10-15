@@ -19,7 +19,7 @@ export type BadgeVariant =
 export interface BadgeProps {
   label: string;
   variant?: BadgeVariant;
-  size?: 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md';
   style?: ViewStyle;
   textStyle?: TextStyle;
   /** IconName (e.g. "clock"). Legacy emoji glyphs are still resolved for old call sites. */
@@ -99,7 +99,23 @@ function getVariantStyles(variant: BadgeVariant) {
   }
 }
 
-function getSizeStyles(size: 'sm' | 'md') {
+function getSizeStyles(size: 'xs' | 'sm' | 'md') {
+  if (size === 'xs') {
+    return {
+      container: {
+        paddingVertical: 1,
+        paddingHorizontal: theme.spacing.xs,
+        borderRadius: theme.radii.xs,
+      },
+      text: {
+        fontSize: theme.fontSizes.xs - 2,
+        fontWeight: '700' as const,
+        lineHeight: 12,
+        letterSpacing: 0.4,
+      },
+      iconSize: theme.fontSizes.xs - 2,
+    };
+  }
   if (size === 'sm') {
     return {
       container: {
