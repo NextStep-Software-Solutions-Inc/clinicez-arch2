@@ -52,6 +52,17 @@ public static class DependencyInjection
                         QueueLimit = 0
                     });
             });
+
+            // Rate limit public directory and join intake endpoints per client IP.
+            options.AddPolicy("PublicApi", httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 60,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0
+                    }));
         });
         return services;
     }

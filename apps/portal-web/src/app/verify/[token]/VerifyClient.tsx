@@ -74,25 +74,46 @@ export default function VerifyClient({ token, data }: VerifyClientProps) {
         </div>
 
         {/* Verification Status Banner */}
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-600/20">
-              <ShieldCheck className="h-8 w-8" />
-            </div>
-            <div className="flex-1">
-              <div className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1.5 uppercase tracking-wide">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Officially Verified & Authentic
+        {data.isVerified ? (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-600/20">
+                <ShieldCheck className="h-8 w-8" />
               </div>
-              <h2 className="text-lg font-extrabold text-emerald-950">
-                {data.documentType}: {data.documentNumber}
-              </h2>
-              <p className="text-xs text-emerald-700 mt-1 leading-relaxed">
-                {data.verificationMessage}
-              </p>
+              <div className="flex-1">
+                <div className="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1.5 uppercase tracking-wide">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Officially Verified & Authentic
+                </div>
+                <h2 className="text-lg font-extrabold text-emerald-950">
+                  {data.documentType}: {data.documentNumber}
+                </h2>
+                <p className="text-xs text-emerald-700 mt-1 leading-relaxed">
+                  {data.verificationMessage}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-red-600 flex items-center justify-center text-white shrink-0 shadow-lg shadow-red-600/20">
+                <Lock className="h-8 w-8" />
+              </div>
+              <div className="flex-1">
+                <div className="inline-flex items-center gap-1.5 bg-red-100 text-red-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full mb-1.5 uppercase tracking-wide">
+                  Unverified Reference
+                </div>
+                <h2 className="text-lg font-extrabold text-red-950">
+                  {data.documentType}: {data.documentNumber}
+                </h2>
+                <p className="text-xs text-red-700 mt-1 leading-relaxed">
+                  {data.verificationMessage}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Cryptographic Security Digest Box */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">

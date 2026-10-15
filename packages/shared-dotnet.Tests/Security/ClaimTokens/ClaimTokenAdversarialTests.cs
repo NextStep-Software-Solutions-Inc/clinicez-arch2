@@ -43,7 +43,7 @@ public class ClaimTokenAdversarialTests
         dateOfBirth: dob ?? new DateOnly(1995, 8, 24),
         memberType: memberType,
         issuedAtUtc: issuedAt ?? new DateTime(2026, 10, 13, 12, 0, 0, DateTimeKind.Utc),
-        expiresAtUtc: expiresAt ?? new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc)
+        expiresAtUtc: expiresAt ?? new DateTime(2035, 1, 1, 0, 0, 0, DateTimeKind.Utc)
     );
 
     #region Dimension 1: Bit Mutation & Tamper Resistance (100% Rejection)

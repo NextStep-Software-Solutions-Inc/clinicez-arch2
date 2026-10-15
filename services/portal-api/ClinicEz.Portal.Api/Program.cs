@@ -154,11 +154,17 @@ using (var scope = app.Services.CreateScope())
         {
             Console.WriteLine($"[Migration Error] Failed to extract EF diagnostics: {diagEx.Message}");
         }
+
+        if (!isDevelopment && !app.Environment.IsEnvironment("Testing"))
+        {
+            throw;
+        }
         Console.WriteLine("[ClinicEz.Portal] Warning: Migration encountered an issue during startup; continuing application execution.");
     }
 
-    // The plan catalogue (Billing:Plans) is production data: seeded in every environment, creating only plans that are missing.
+    // The plan catalogue (Billing:Plans) and Admin RBAC roles/bootstrap Super Admin are production data: seeded in every environment.
     scope.ServiceProvider.GetRequiredService<ClinicEz.Portal.Infrastructure.Persistence.Seeders.PlanSeeder>().SeedAsync().GetAwaiter().GetResult();
+    scope.ServiceProvider.GetRequiredService<ClinicEz.Portal.Infrastructure.Persistence.Seeders.AdminRBACSeeder>().SeedAsync().GetAwaiter().GetResult();
 
     if (isDevelopment)
     {

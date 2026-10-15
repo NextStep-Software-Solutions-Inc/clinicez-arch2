@@ -1,13 +1,16 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using ClinicEz.Portal.Application.Features.PhilHealth;
 using ClinicEz.Portal.Application.Interfaces;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Portal.Infrastructure.PhilHealth;
@@ -19,11 +22,16 @@ public sealed class PhilHealthSoapTester : IPhilHealthSoapTester
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<PhilHealthSoapTester> _logger;
+    private readonly IHostEnvironment? _environment;
 
-    public PhilHealthSoapTester(HttpClient httpClient, ILogger<PhilHealthSoapTester> logger)
+    public PhilHealthSoapTester(
+        HttpClient httpClient,
+        ILogger<PhilHealthSoapTester> logger,
+        IHostEnvironment? environment = null)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _environment = environment;
     }
 
     public async Task<PhilHealthTestConnectionResult> TestConnectionAsync(
@@ -53,10 +61,13 @@ public sealed class PhilHealthSoapTester : IPhilHealthSoapTester
             ? endpoint.Trim()
             : PhilHealthDefaults.KonsultaEndpoint;
 
-        // 1. In-memory / simulation sandbox check
-        if (targetEndpoint.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
-            targetEndpoint.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
-            targetEndpoint.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase))
+        var isProduction = _environment != null && _environment.IsProduction();
+
+        // 1. In-memory / simulation sandbox check (Development / Testing only)
+        if (!isProduction &&
+            (targetEndpoint.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
+             targetEndpoint.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
+             targetEndpoint.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase)))
         {
             _logger.LogInformation("Testing connection against PhilHealth simulation sandbox for {Accreditation}", accreditationNumber);
             var simToken = $"PKA-SIM-{accreditationNumber.Trim()}-{Guid.NewGuid():N}"[..28];
@@ -64,6 +75,11 @@ public sealed class PhilHealthSoapTester : IPhilHealthSoapTester
                 true,
                 "Authentication successful! PhilHealth gateway accepted facility credentials. (Simulation Sandbox Verified)",
                 simToken);
+        }
+
+        if (!IsSafeExternalSoapEndpoint(targetEndpoint, isProduction, out var endpointValidationError))
+        {
+            return new PhilHealthTestConnectionResult(false, endpointValidationError);
         }
 
         // 2. Real PhilHealth SOAP 1.1 getToken probe
@@ -166,4 +182,64 @@ public sealed class PhilHealthSoapTester : IPhilHealthSoapTester
             return null;
         }
     }
+
+    private static bool IsSafeExternalSoapEndpoint(string endpoint, bool isProduction, out string error)
+    {
+        error = string.Empty;
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+        {
+            error = "Invalid PhilHealth SOAP endpoint URL.";
+            return false;
+        }
+
+        if (isProduction && !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            error = "PhilHealth SOAP endpoint must use HTTPS in production.";
+            return false;
+        }
+
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+        {
+            error = "PhilHealth SOAP endpoint must use HTTP or HTTPS.";
+            return false;
+        }
+
+        var host = uri.DnsSafeHost;
+        if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".internal", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "Internal or loopback hosts are not permitted for PhilHealth gateway connectivity.";
+            return false;
+        }
+
+        if (IPAddress.TryParse(host, out var ip))
+        {
+            if (IPAddress.IsLoopback(ip) || IsPrivateOrLinkLocalIp(ip))
+            {
+                error = "Private, link-local, or loopback IP addresses are not permitted for PhilHealth gateway connectivity.";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsPrivateOrLinkLocalIp(IPAddress ip)
+    {
+        if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            return ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6Multicast;
+        }
+
+        var bytes = ip.GetAddressBytes();
+        return bytes[0] == 10
+               || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+               || (bytes[0] == 192 && bytes[1] == 168)
+               || (bytes[0] == 169 && bytes[1] == 254)
+               || bytes[0] == 127
+               || bytes[0] == 0;
+    }
 }
+

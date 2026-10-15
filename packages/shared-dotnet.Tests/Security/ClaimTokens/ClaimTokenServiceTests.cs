@@ -25,7 +25,7 @@ public class ClaimTokenServiceTests
         dateOfBirth: new DateOnly(1990, 5, 15),
         memberType: "MM",
         issuedAtUtc: issuedAt ?? new DateTime(2026, 10, 13, 10, 0, 0, DateTimeKind.Utc),
-        expiresAtUtc: expiresAt ?? new DateTime(2026, 10, 15, 10, 0, 0, DateTimeKind.Utc)
+        expiresAtUtc: expiresAt ?? new DateTime(2035, 1, 1, 0, 0, 0, DateTimeKind.Utc)
     );
 
     [Fact]

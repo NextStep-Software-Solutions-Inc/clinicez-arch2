@@ -37,6 +37,7 @@ public sealed class PublicJoinEndpoints : IEndpoint
         app.MapPost("/public/join", HandleAsync)
             .AllowAnonymous()
             .DisableAntiforgery()
+            .RequireRateLimiting("PublicApi")
             .WithName("RelayPublicPatientJoin")
             .WithDescription("Public, unauthenticated patient self-intake endpoint. Verifies routing viability, issues claim token, and enqueues envelope to clinic facility.")
             .WithTags("PublicJoin");

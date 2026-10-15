@@ -80,6 +80,7 @@ public sealed class PublicDirectoryEndpoints : IEndpoint
     {
         var group = app.MapGroup("/public/directory")
             .AllowAnonymous()
+            .RequireRateLimiting("PublicApi")
             .WithTags("PublicDirectory");
 
         group.MapGet("/clinics", GetClinicsAsync)

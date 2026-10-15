@@ -85,6 +85,8 @@ services:
       # Optional: CertificateBase64 (+ password) encrypts the ring at rest.
       - DataProtection__CertificateBase64=${DATA_PROTECTION_CERT_BASE64:-}
       - DataProtection__CertificatePassword=${DATA_PROTECTION_CERT_PASSWORD:-}
+      # Shared HMAC-SHA256 signing key (at least 32 characters) for progressive patient intake claim tokens (must match patient-api).
+      - ClaimToken__SigningKey=${CLAIM_TOKEN_SIGNING_KEY:?CLAIM_TOKEN_SIGNING_KEY must be set (at least 32 characters)}
     restart: unless-stopped
 
 networks:

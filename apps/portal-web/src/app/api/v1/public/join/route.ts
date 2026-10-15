@@ -56,11 +56,12 @@ export async function POST(request: NextRequest) {
       // Accepted by portal-api
       const issuedAt = new Date().toISOString();
       const year = new Date().getFullYear();
-      const hashSlice = trackingId.replace(/[^a-fA-F0-9]/g, "").slice(0, 4) || "0105";
-      const seq = (parseInt(hashSlice, 16) % 900) + 100;
-      const queueToken = `Q-${seq.toString().padStart(3, "0")}`;
-      const patientCode = `PAT-${year}-${Math.floor(10000 + Math.random() * 90000)}`;
-      const registrationPassId = `PASS-${trackingId.slice(0, 8).toUpperCase()}`;
+      const cleanId = trackingId.replace(/[^a-fA-F0-9]/g, "").toUpperCase();
+      const queueToken = resData.queueToken || resData.QueueToken || `INTAKE-${cleanId.slice(0, 4) || "0001"}`;
+      const patientCode = resData.patientCode || resData.PatientCode || `PAT-${year}-${cleanId.slice(0, 6) || "000001"}`;
+      const registrationPassId = `PASS-${cleanId.slice(0, 8) || "00000001"}`;
+      const claimToken = resData.claimToken || resData.ClaimToken;
+      const expiresAt = resData.expiresAt || resData.ExpiresAt;
 
       const qrDataString = JSON.stringify({
         code: patientCode,
@@ -71,13 +72,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          message: "Patient registration submitted successfully.",
+          message: resData.message || resData.Message || "Patient registration submitted successfully.",
           trackingId,
+          claimToken,
+          expiresAt,
           data: {
             trackingId,
             registrationPassId,
             queueToken,
             patientCode,
+            claimToken,
+            expiresAt,
             fullName: `${payload.lastName}, ${payload.firstName}${payload.middleName ? ` ${payload.middleName[0]}.` : ""}`,
             facilityName: payload.facilitySlug.replace(/-/g, " ").toUpperCase(),
             facilitySlug: payload.facilitySlug,
@@ -90,40 +95,12 @@ export async function POST(request: NextRequest) {
         { status: 202 }
       );
     } catch (_networkError: unknown) {
-      // Local dev / offline fallback if portal-api is not reachable
-      const issuedAt = new Date().toISOString();
-      const year = new Date().getFullYear();
-      const randomSeq = Math.floor(100 + Math.random() * 900);
-      const queueToken = `Q-${randomSeq.toString().padStart(3, "0")}`;
-      const patientCode = `PAT-${year}-${Math.floor(10000 + Math.random() * 90000)}`;
-      const registrationPassId = `PASS-${trackingId.slice(0, 8).toUpperCase()}`;
-
-      const qrDataString = JSON.stringify({
-        code: patientCode,
-        queue: queueToken,
-        issued: issuedAt,
-      });
-
       return NextResponse.json(
         {
-          success: true,
-          message: "Patient registration queued successfully (Gateway Local Relay).",
-          trackingId,
-          data: {
-            trackingId,
-            registrationPassId,
-            queueToken,
-            patientCode,
-            fullName: `${payload.lastName}, ${payload.firstName}${payload.middleName ? ` ${payload.middleName[0]}.` : ""}`,
-            facilityName: payload.facilitySlug.replace(/-/g, " ").toUpperCase(),
-            facilitySlug: payload.facilitySlug,
-            tenantSlug: payload.tenantSlug,
-            estimatedWaitMinutes: 15,
-            issuedAt,
-            qrDataString,
-          },
+          success: false,
+          message: "Patient registration service is temporarily unreachable. Please try again or register at the clinic reception desk.",
         },
-        { status: 202 }
+        { status: 503 }
       );
     }
   } catch (err: unknown) {

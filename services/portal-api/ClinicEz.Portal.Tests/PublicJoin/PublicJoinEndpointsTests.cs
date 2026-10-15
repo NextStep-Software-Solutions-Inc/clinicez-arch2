@@ -300,6 +300,7 @@ public class PublicJoinEndpointsTests : IDisposable
         builder.Configuration["Clerk:SecretKey"] = "sk_test_dummy";
         builder.Configuration["Xendit:SecretKey"] = "xnd_test_dummy";
         builder.Configuration["Xendit:CallbackToken"] = "cb_test_dummy";
+        builder.Configuration["ClaimToken:SigningKey"] = "test-claim-token-signing-key-32-bytes-minimum";
 
         ClinicEz.Portal.Api.DependencyInjection.AddApiServices(builder.Services);
         ClinicEz.Portal.Application.DependencyInjection.AddApplicationServices(builder.Services);

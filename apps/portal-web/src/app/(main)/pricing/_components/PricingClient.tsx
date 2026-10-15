@@ -95,10 +95,14 @@ export function PricingClient({
                     onAction(tier.id);
                   } else if (tier.id === "enterprise") {
                     window.location.href = salesContactHref();
+                  } else if (onAction) {
+                    onAction(tier.id);
+                  } else {
+                    window.location.href = `/signup?plan=${encodeURIComponent(tier.id)}`;
                   }
                 }}
-                disabled={loadingTier === tier.id || (!tier.requiresCheckout && tier.id !== "enterprise" && !onAction)}
-                className={`w-full rounded-full px-4 py-3 text-sm font-semibold transition-colors ${
+                disabled={loadingTier === tier.id}
+                className={`w-full rounded-full px-4 py-3 text-sm font-semibold transition-colors cursor-pointer ${
                   tier.highlighted 
                     ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
                     : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'

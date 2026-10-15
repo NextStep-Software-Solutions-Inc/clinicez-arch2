@@ -109,9 +109,9 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
     setSubmitting(true);
 
     try {
-      // In production calls services/clinic-api: POST /api/v1/public/rx-verify/{token}/dispense
-      const apiUrl = process.env.NEXT_PUBLIC_CLINIC_API_URL || 'http://localhost:5001';
-      const response = await fetch(joinApiUrl(apiUrl, `/public/rx-verify/${token}/dispense`), {
+      // Calls services/clinic-api: POST /api/v1/public/rx-verify/{token}/dispense
+      const apiUrl = process.env.NEXT_PUBLIC_CLINIC_API_URL || 'http://localhost:5245';
+      const response = await fetch(joinApiUrl(apiUrl, `/public/rx-verify/${encodeURIComponent(token)}/dispense`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -125,8 +125,8 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
       });
 
       if (!response.ok) {
-        // If remote API is unreachable in local dev, simulate successful fulfillment
-        console.warn('API returned non-200, simulating success for local verification');
+        const errPayload = await response.json().catch(() => ({}));
+        throw new Error(errPayload.message || `Dispense recording failed with status ${response.status}`);
       }
 
       setData((prev) => ({
@@ -141,17 +141,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
 
       setSubmitSuccess(true);
     } catch (err: any) {
-      // Offline fallback simulation
-      setData((prev) => ({
-        ...prev,
-        isAlreadyDispensed: true,
-        dispenseStatus: 'DispensedExternally',
-        dispensedPharmacyName: finalPharmacy,
-        dispensedReceiptNumber: officialReceiptNumber.trim(),
-        dispensedAt: new Date().toISOString(),
-        dispenseNotes: notes.trim(),
-      }));
-      setSubmitSuccess(true);
+      setSubmitError(err?.message || 'Unable to record prescription fulfillment. Please check network connectivity and try again.');
     } finally {
       setSubmitting(false);
     }
@@ -184,15 +174,36 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
               <Printer className="w-3.5 h-3.5" />
               Print
             </button>
-            <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Cryptographically Verified
-            </span>
+            {data.isValid ? (
+              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Cryptographically Verified
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold rounded-full bg-red-50 text-red-700 border border-red-200">
+                <BadgeAlert className="w-3.5 h-3.5" />
+                Unverified Token
+              </span>
+            )}
           </div>
         </header>
 
         {/* Verification Status Banner */}
-        {isDispensed ? (
+        {!data.isValid ? (
+          <div className="bg-red-50 border-2 border-red-300 rounded-xl p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <BadgeAlert className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h2 className="text-base font-bold text-red-900">
+                  UNVERIFIED OR INVALID PRESCRIPTION TOKEN
+                </h2>
+                <p className="text-sm text-red-800">
+                  Unable to verify prescription token <span className="font-mono font-bold">{token}</span> against the Clinic EZ registry. Do not dispense based on an unverified electronic reference.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : isDispensed ? (
           <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <BadgeAlert className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
@@ -378,7 +389,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
         </div>
 
         {/* External Pharmacist Dispensing Section */}
-        {!isDispensed ? (
+        {data.isValid && !isDispensed ? (
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
             <div className="border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">

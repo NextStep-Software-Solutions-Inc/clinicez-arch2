@@ -545,10 +545,10 @@ public class BranchEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isStaff = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active, ct);
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active, ct);
 
-            if (!isOwner && !isStaff)
+            if (!isOwner && !isAdmin)
             {
                 return Results.Forbid();
             }
@@ -566,17 +566,21 @@ public class BranchEndpoints : IEndpoint
                 ? request.SoftwareCertificateId.Trim()
                 : branch.PhilHealthSoftwareCertificateId;
 
-            var username = !string.IsNullOrWhiteSpace(request.Username)
-                ? request.Username.Trim()
-                : (!string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedUsername) ? protector.Unprotect(branch.PhilHealthEncryptedUsername) : null);
-
-            var password = !string.IsNullOrWhiteSpace(request.Password)
-                ? request.Password
-                : (!string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedPassword) ? protector.Unprotect(branch.PhilHealthEncryptedPassword) : null);
-
             var endpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
                 ? request.KonsultaEndpoint.Trim()
                 : (!string.IsNullOrWhiteSpace(branch.PhilHealthKonsultaEndpoint) ? branch.PhilHealthKonsultaEndpoint : PhilHealthDefaults.KonsultaEndpoint);
+
+            var isCustomUnsavedEndpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint) &&
+                !string.Equals(request.KonsultaEndpoint.Trim(), branch.PhilHealthKonsultaEndpoint?.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(request.KonsultaEndpoint.Trim(), PhilHealthDefaults.KonsultaEndpoint, StringComparison.OrdinalIgnoreCase);
+
+            var username = !string.IsNullOrWhiteSpace(request.Username)
+                ? request.Username.Trim()
+                : (!isCustomUnsavedEndpoint && !string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedUsername) ? protector.Unprotect(branch.PhilHealthEncryptedUsername) : null);
+
+            var password = !string.IsNullOrWhiteSpace(request.Password)
+                ? request.Password
+                : (!isCustomUnsavedEndpoint && !string.IsNullOrWhiteSpace(branch.PhilHealthEncryptedPassword) ? protector.Unprotect(branch.PhilHealthEncryptedPassword) : null);
 
             if (string.IsNullOrWhiteSpace(accreditationNumber))
             {

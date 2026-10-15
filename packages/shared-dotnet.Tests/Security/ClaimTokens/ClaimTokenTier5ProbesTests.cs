@@ -43,7 +43,7 @@ public class ClaimTokenTier5ProbesTests
         dateOfBirth: dob ?? new DateOnly(1985, 12, 30),
         memberType: memberType,
         issuedAtUtc: issuedAt ?? new DateTime(2026, 10, 13, 12, 0, 0, DateTimeKind.Utc),
-        expiresAtUtc: expiresAt ?? new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc)
+        expiresAtUtc: expiresAt ?? new DateTime(2035, 1, 1, 0, 0, 0, DateTimeKind.Utc)
     );
 
     #region Probe 1: Signature Boundary Mutations at Index 41, 42, 43

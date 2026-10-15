@@ -44,7 +44,7 @@ public static class DependencyInjection
     {
         // No built-in secrets or endpoints: outside Development a missing value stops the start-up.
         RequiredSettings.EnsureConfigured(configuration, env,
-            "ConnectionStrings:DefaultConnection", "Clerk:Authority", "Xendit:SecretKey", "Xendit:CallbackToken");
+            "ConnectionStrings:DefaultConnection", "Clerk:Authority", "Xendit:SecretKey", "Xendit:CallbackToken", "ClaimToken:SigningKey");
 
         var connectionString = configuration.GetConnectionString("DefaultConnection");
 
@@ -64,8 +64,9 @@ public static class DependencyInjection
         });
 
         // Register seeders for runtime database initialization
-        // The plan catalogue is seeded explicitly at startup in every environment (see Program.cs), not through IBaseSeeder.
+        // PlanSeeder and AdminRBACSeeder are seeded explicitly at startup in every environment (see Program.cs).
         services.AddScoped<ClinicEz.Portal.Infrastructure.Persistence.Seeders.PlanSeeder>();
+        services.AddScoped<ClinicEz.Portal.Infrastructure.Persistence.Seeders.AdminRBACSeeder>();
         services.AddScoped<ClinicEz.Portal.Domain.Interfaces.IBaseSeeder, ClinicEz.Portal.Infrastructure.Persistence.Seeders.AdminRBACSeeder>();
         services.AddScoped<ClinicEz.Portal.Domain.Interfaces.IBaseSeeder, ClinicEz.Portal.Infrastructure.Persistence.Seeders.BlogSeeder>();
 
