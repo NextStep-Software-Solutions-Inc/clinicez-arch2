@@ -14,8 +14,11 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
+using System.Text.Json.Serialization;
+
 namespace ClinicEz.Clinic.Application.Features.Queue.Commands;
 
+[method: JsonConstructor]
 public sealed record CheckInPatientCommand(
     Guid PatientId,
     string PatientName,
@@ -25,26 +28,7 @@ public sealed record CheckInPatientCommand(
     QueuePriority Priority = QueuePriority.Routine,
     string? ChiefComplaint = null,
     string? RoomOrStation = null,
-    Guid? RoomId = null) : IRequest<QueueItemDto>
-{
-    public CheckInPatientCommand(
-        Guid patientId,
-        string patientName,
-        Guid? appointmentId,
-        Guid? doctorId,
-        string? doctorName,
-        QueuePriority priority,
-        string? chiefComplaint,
-        object? p1,
-        object? p2,
-        object? p3,
-        object? p4,
-        Guid? roomId,
-        string? roomOrStation)
-        : this(patientId, patientName, appointmentId, doctorId, doctorName, priority, chiefComplaint, roomOrStation, roomId)
-    {
-    }
-}
+    Guid? RoomId = null) : IRequest<QueueItemDto>;
 
 public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPatientCommand>
 {

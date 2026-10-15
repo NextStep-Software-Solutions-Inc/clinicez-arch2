@@ -258,4 +258,36 @@ public class CheckInPatientCommandHandlerTests
         result.QueueNumber.Should().Be("Q-001");
         (await context.InteropOutbox.CountAsync()).Should().Be(0);
     }
+
+    [Fact]
+    public void CheckInPatientCommand_ShouldDeserializeFromJson_Successfully()
+    {
+        var json = """
+        {
+            "patientId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+            "patientName": "Juan Dela Cruz",
+            "appointmentId": null,
+            "doctorId": null,
+            "doctorName": null,
+            "priority": 1,
+            "chiefComplaint": "Headache",
+            "roomOrStation": "Room 1",
+            "roomId": "8c2deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6e"
+        }
+        """;
+
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        var command = System.Text.Json.JsonSerializer.Deserialize<CheckInPatientCommand>(json, options);
+
+        command.Should().NotBeNull();
+        command!.PatientId.Should().Be(Guid.Parse("9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"));
+        command.PatientName.Should().Be("Juan Dela Cruz");
+        command.ChiefComplaint.Should().Be("Headache");
+        command.RoomOrStation.Should().Be("Room 1");
+        command.RoomId.Should().Be(Guid.Parse("8c2deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6e"));
+    }
 }
