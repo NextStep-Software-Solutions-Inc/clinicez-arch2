@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
-import * as Updates from 'expo-updates';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
@@ -8,6 +7,15 @@ import Badge from '../ui/Badge';
 import { theme } from '../../constants/theme';
 import { notify, Alert } from '../../utils/feedback';
 import { safeAwait } from '@shared/safe';
+
+function getUpdatesModule(): typeof import('expo-updates') | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('expo-updates');
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Settings Card for inspecting and manually triggering Over-The-Air (OTA) updates.
@@ -21,6 +29,11 @@ export default function AppUpdatesSettingsCard() {
 
   // In development builds (__DEV__) or web, expo-updates does not query the remote channel
   if (__DEV__ || Platform.OS === 'web') {
+    return null;
+  }
+
+  const Updates = getUpdatesModule();
+  if (!Updates) {
     return null;
   }
 

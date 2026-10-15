@@ -1,7 +1,15 @@
 import { useEffect } from 'react';
 import { Alert } from 'react-native';
-import * as Updates from 'expo-updates';
 import { safeAwait } from '@shared/safe';
+
+function getUpdatesModule(): typeof import('expo-updates') | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('expo-updates');
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Checks for and automatically downloads over-the-air (OTA) updates on standalone native apps.
@@ -10,6 +18,9 @@ import { safeAwait } from '@shared/safe';
 export function useOTAUpdate() {
   useEffect(() => {
     async function onFetchUpdateAsync() {
+      const Updates = getUpdatesModule();
+      if (!Updates) return;
+
       const [update, error] = await safeAwait(Updates.checkForUpdateAsync());
 
       if (error) {
