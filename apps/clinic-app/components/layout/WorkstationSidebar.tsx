@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, PressableStateCallbackType, Image, Platform } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
@@ -17,6 +17,12 @@ export interface NavItem {
   badge?: string | number;
   permission?: string;
   roles?: string[];
+}
+
+interface TooltipData {
+  label: string;
+  badge?: string | number;
+  y: number;
 }
 
 export const WORKSTATION_NAV_ITEMS: NavItem[] = [
@@ -54,6 +60,34 @@ export default function WorkstationSidebar({
   const isIconMode = mode === 'icon' || width === theme.sizes.sidebarCollapsedWidth;
   const resolvedWidth = width ?? (isIconMode ? theme.sizes.sidebarCollapsedWidth : theme.sizes.sidebarWidth);
 
+  const [activeTooltip, setActiveTooltip] = useState<TooltipData | null>(null);
+
+  useEffect(() => {
+    if (!isIconMode) {
+      setActiveTooltip(null);
+    }
+  }, [isIconMode]);
+
+  const handleHoverIn = useCallback(
+    (label: string, badge: string | number | undefined, event: any) => {
+      if (!isIconMode) return;
+      const target = event?.currentTarget as HTMLElement | null;
+      if (target && typeof target.getBoundingClientRect === 'function') {
+        const rect = target.getBoundingClientRect();
+        setActiveTooltip({
+          label,
+          badge,
+          y: rect.top + rect.height / 2,
+        });
+      }
+    },
+    [isIconMode],
+  );
+
+  const handleHoverOut = useCallback(() => {
+    setActiveTooltip(null);
+  }, []);
+
   const visibleNavItems = useMemo(() => {
     return WORKSTATION_NAV_ITEMS.filter((item) => {
       if (!user) return true;
@@ -82,7 +116,12 @@ export default function WorkstationSidebar({
       {/* Brand Header */}
       <View style={[styles.brandHeader, isIconMode && styles.brandHeaderIconMode]}>
         <Pressable
-          onPress={isIconMode ? onToggleMode : undefined}
+          onPress={() => {
+            setActiveTooltip(null);
+            if (isIconMode && onToggleMode) onToggleMode();
+          }}
+          onHoverIn={(e) => handleHoverIn('Expand sidebar', undefined, e)}
+          onHoverOut={handleHoverOut}
           disabled={!isIconMode}
           accessibilityRole={isIconMode ? 'button' : undefined}
           accessibilityLabel={isIconMode ? 'Expand sidebar' : `${displayName} logo`}
@@ -139,6 +178,8 @@ export default function WorkstationSidebar({
       <ScrollView
         style={styles.navList}
         contentContainerStyle={[styles.navContent, isIconMode && styles.navContentIconMode]}
+        onScroll={handleHoverOut}
+        scrollEventThrottle={16}
       >
         {visibleNavItems.map((item) => {
           const isActive = currentRoute === item.key;
@@ -147,7 +188,12 @@ export default function WorkstationSidebar({
             return (
               <Pressable
                 key={item.key}
-                onPress={() => onNavigate(item.key)}
+                onPress={() => {
+                  setActiveTooltip(null);
+                  onNavigate(item.key);
+                }}
+                onHoverIn={(e) => handleHoverIn(item.label, item.badge, e)}
+                onHoverOut={handleHoverOut}
                 accessibilityRole="link"
                 accessibilityLabel={item.label}
                 accessibilityState={{ selected: isActive }}
@@ -213,6 +259,28 @@ export default function WorkstationSidebar({
           currentRoute={currentRoute}
         />
       </View>
+
+      {/* Floating Tooltip in Icon Mode */}
+      {isIconMode && activeTooltip ? (
+        <View
+          style={[styles.tooltipContainer, { top: activeTooltip.y }]}
+          {...({ role: 'tooltip' } as any)}
+          pointerEvents="none"
+        >
+          <View style={styles.tooltipArrow} />
+          <ThemedText
+            variant="smallBold"
+            color={theme.colors.textInverted}
+            style={styles.tooltipText}
+            numberOfLines={1}
+          >
+            {activeTooltip.label}
+          </ThemedText>
+          {activeTooltip.badge ? (
+            <Badge label={String(activeTooltip.badge)} variant="primary" size="sm" />
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -374,5 +442,37 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xs,
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  tooltipContainer: {
+    position: Platform.OS === 'web' ? ('fixed' as 'absolute') : 'absolute',
+    left: theme.sizes.sidebarCollapsedWidth + theme.spacing.sm,
+    transform: [{ translateY: -16 }],
+    backgroundColor: theme.colors.surfaceInverse,
+    paddingVertical: theme.spacing.xs + 2,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    zIndex: 99999,
+    shadowColor: theme.colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+    pointerEvents: 'none',
+  },
+  tooltipArrow: {
+    position: 'absolute',
+    left: -4,
+    top: '50%',
+    marginTop: -4,
+    width: 8,
+    height: 8,
+    backgroundColor: theme.colors.surfaceInverse,
+    transform: [{ rotate: '45deg' }],
+  },
+  tooltipText: {
+    letterSpacing: -0.2,
   },
 });
