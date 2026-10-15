@@ -49,7 +49,7 @@ public sealed class DeleteClinicRoomCommandHandler : IRequestHandler<DeleteClini
 
         foreach (var staff in assignedStaff)
         {
-            var currentRooms = staff.GetAssignedRoomIds().ToHashSet();
+            var currentRooms = staff.GetAssignedRoomIds().ToList();
             if (currentRooms.Remove(room.Id))
             {
                 staff.SetAssignedRoomIds(currentRooms);

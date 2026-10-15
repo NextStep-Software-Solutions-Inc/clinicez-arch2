@@ -942,13 +942,13 @@ export default function StaffManagementTab({
                 </ThemedText>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
                   {assignedRoomIds.map((roomId, idx) => {
-                    const room = activeRoomsForRole.find((r) => r.id === roomId);
-                    if (!room) return null;
+                    const room = (rooms || []).find((r) => r.id === roomId) || activeRoomsForRole.find((r) => r.id === roomId);
+                    const roomName = room?.name || 'Assigned Room';
                     const isPrimary = idx === 0;
                     return (
                       <Chip
                         key={roomId}
-                        label={isPrimary ? `${room.name} (Primary)` : room.name}
+                        label={isPrimary ? `${roomName} (Primary)` : roomName}
                         active={isPrimary}
                         onPress={() => {
                           if (!isPrimary) {
@@ -959,6 +959,13 @@ export default function StaffManagementTab({
                     );
                   })}
                 </View>
+              </View>
+            )}
+            {assignedRoomIds.length === 1 && (
+              <View style={{ marginTop: theme.spacing.xs }}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Primary / Default Room: <ThemedText variant="captionBold" color={theme.colors.primary}>{((rooms || []).find((r) => r.id === assignedRoomIds[0]) || activeRoomsForRole.find((r) => r.id === assignedRoomIds[0]))?.name ?? 'Assigned Room'}</ThemedText>
+                </ThemedText>
               </View>
             )}
           </FieldGroup>
@@ -1375,13 +1382,13 @@ export default function StaffManagementTab({
                   </ThemedText>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
                     {assignedRoomIds.map((roomId, idx) => {
-                      const room = activeRoomsForRole.find((r) => r.id === roomId);
-                      if (!room) return null;
+                      const room = (rooms || []).find((r) => r.id === roomId) || activeRoomsForRole.find((r) => r.id === roomId);
+                      const roomName = room?.name || 'Assigned Room';
                       const isPrimary = idx === 0;
                       return (
                         <Chip
                           key={roomId}
-                          label={isPrimary ? `${room.name} (Primary)` : room.name}
+                          label={isPrimary ? `${roomName} (Primary)` : roomName}
                           active={isPrimary}
                           onPress={() => {
                             if (!isPrimary) {
@@ -1392,6 +1399,13 @@ export default function StaffManagementTab({
                       );
                     })}
                   </View>
+                </View>
+              )}
+              {assignedRoomIds.length === 1 && (
+                <View style={{ marginTop: theme.spacing.xs }}>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    Primary / Default Room: <ThemedText variant="captionBold" color={theme.colors.primary}>{((rooms || []).find((r) => r.id === assignedRoomIds[0]) || activeRoomsForRole.find((r) => r.id === assignedRoomIds[0]))?.name ?? 'Assigned Room'}</ThemedText>
+                  </ThemedText>
                 </View>
               )}
             </FieldGroup>

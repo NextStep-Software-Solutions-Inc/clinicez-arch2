@@ -149,14 +149,19 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         }
         else if (request.AssignedRoomIds != null)
         {
-            var targetIds = request.AssignedRoomIds.Where(id => id != Guid.Empty).Distinct().ToHashSet();
+            var targetIds = request.AssignedRoomIds.Where(id => id != Guid.Empty).Distinct().ToList();
             if (_roomRepository != null && targetIds.Count > 0)
             {
+                var targetIdSet = targetIds.ToHashSet();
                 var validRooms = await _roomRepository
-                    .Query(r => r.ClinicId == _clinicContext.ClinicId && targetIds.Contains(r.Id))
+                    .Query(r => r.ClinicId == _clinicContext.ClinicId && targetIdSet.Contains(r.Id))
                     .ToListAsync(cancellationToken);
-                staff.SetAssignedRoomIds(validRooms.Select(r => r.Id));
-                assignedRoomNames = validRooms.Select(r => r.Name).ToList();
+                var validRoomMap = validRooms.ToDictionary(r => r.Id);
+
+                // Preserve the exact caller-specified order so the primary room (index 0) is maintained
+                var orderedValidIds = targetIds.Where(id => validRoomMap.ContainsKey(id)).ToList();
+                staff.SetAssignedRoomIds(orderedValidIds);
+                assignedRoomNames = orderedValidIds.Select(id => validRoomMap[id].Name).ToList();
             }
             else
             {

@@ -101,9 +101,10 @@ public sealed class CreateClinicRoomCommandHandler : IRequestHandler<CreateClini
 
             foreach (var staff in eligibleStaff)
             {
-                var currentRooms = staff.GetAssignedRoomIds().ToHashSet();
-                if (currentRooms.Add(room.Id))
+                var currentRooms = staff.GetAssignedRoomIds().ToList();
+                if (!currentRooms.Contains(room.Id))
                 {
+                    currentRooms.Add(room.Id);
                     staff.SetAssignedRoomIds(currentRooms);
                     staff.UpdatedAt = DateTime.UtcNow;
                     staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";

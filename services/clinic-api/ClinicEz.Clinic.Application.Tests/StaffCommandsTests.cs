@@ -1161,5 +1161,137 @@ public class StaffCommandsTests
         await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
             .WithMessage("*cannot change or downgrade your own clinic role*");
     }
+
+    [Fact]
+    public async Task UpdateStaffMember_SettingPrimaryRoom_PreservesExactOrderAndPrimaryFirst()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+
+        // Room 1 created before Room 2 (PostgreSQL / EF default query order is Room 1, Room 2)
+        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Alpha", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Beta", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.ClinicRooms.AddRangeAsync(room1, room2);
+
+        var doctor = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Gregory",
+            LastName = "House",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-9999",
+            IsActive = true
+        };
+        doctor.SetAssignedRoomIds(new[] { room1.Id, room2.Id });
+        await context.StaffMembers.AddAsync(doctor);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateStaffMemberCommandHandler(staffRepo, roleRepo, uow, clinicContext, null, roomRepo);
+
+        // Setting Room Beta as Primary: [room2.Id, room1.Id]
+        var result = await handler.Handle(new UpdateStaffMemberCommand(
+            doctor.Id,
+            doctor.FirstName,
+            doctor.LastName,
+            null,
+            "Dr.",
+            StaffRole.Doctor,
+            null,
+            "house@clinic.com",
+            null,
+            doctor.PrcLicenseNumber,
+            null,
+            null,
+            "Diagnostics",
+            true,
+            AssignedRoomIds: new[] { room2.Id, room1.Id }
+        ), CancellationToken.None);
+
+        // Order must strictly preserve Room Beta at index 0 (Primary)
+        result.AssignedRoomIds.Should().NotBeNull();
+        result.AssignedRoomIds!.Should().Equal(new[] { room2.Id, room1.Id });
+        result.AssignedRoomNames.Should().NotBeNull();
+        result.AssignedRoomNames!.Should().Equal(new[] { "Room Beta", "Room Alpha" });
+
+        // Database entity must also store Room Beta at index 0 in JSON
+        var refreshedDoctor = await context.StaffMembers.FirstAsync(s => s.Id == doctor.Id);
+        refreshedDoctor.GetAssignedRoomIds().Should().Equal(new[] { room2.Id, room1.Id });
+    }
+
+    [Fact]
+    public async Task CreateStaffMember_SettingPrimaryRoom_PreservesExactOrderAndPrimaryFirst()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var roomRepo = TestDbHelper.CreateRepository<ClinicRoom>(context, sieve);
+
+        var room1 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Alpha", Type = ClinicRoomType.Consultation, DisplayOrder = 1, IsActive = true };
+        var room2 = new ClinicRoom { Id = Guid.NewGuid(), TenantId = tenantId, ClinicId = clinicId, Name = "Room Beta", Type = ClinicRoomType.Consultation, DisplayOrder = 2, IsActive = true };
+        await context.ClinicRooms.AddRangeAsync(room1, room2);
+
+        var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
+        licenseValidator.Validate(Arg.Any<string?>(), clinicId, tenantId)
+            .Returns(ClinicEz.Shared.Licensing.LicenseValidationResult.Success(new ClinicEz.Shared.Licensing.FacilityLicensePayload
+            {
+                FacilityId = clinicId,
+                TenantId = tenantId,
+                Limits = new ClinicEz.Shared.Licensing.FacilityLimits { MaxStaff = 10 }
+            }));
+
+        await context.ClinicSettings.AddAsync(new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            ClinicName = "Test Clinic",
+            LicenseToken = "dummy"
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new CreateStaffMemberCommandHandler(staffRepo, roleRepo, settingsRepo, licenseValidator, uow, clinicContext, null, roomRepo);
+
+        // Assign rooms with Room Beta as Primary: [room2.Id, room1.Id]
+        var result = await handler.Handle(new CreateStaffMemberCommand(
+            "James",
+            "Wilson",
+            null,
+            "Dr.",
+            StaffRole.Doctor,
+            null,
+            "wilson@clinic.com",
+            null,
+            "PRC-8888",
+            null,
+            null,
+            "Oncology",
+            AssignedRoomIds: new[] { room2.Id, room1.Id }
+        ), CancellationToken.None);
+
+        result.AssignedRoomIds.Should().NotBeNull();
+        result.AssignedRoomIds!.Should().Equal(new[] { room2.Id, room1.Id });
+        result.AssignedRoomNames.Should().NotBeNull();
+        result.AssignedRoomNames!.Should().Equal(new[] { "Room Beta", "Room Alpha" });
+
+        var createdInDb = await context.StaffMembers.FirstAsync(s => s.Id == result.Id);
+        createdInDb.GetAssignedRoomIds().Should().Equal(new[] { room2.Id, room1.Id });
+    }
 }
 

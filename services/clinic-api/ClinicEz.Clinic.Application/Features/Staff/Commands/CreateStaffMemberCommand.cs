@@ -180,18 +180,22 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
 
         if (request.AssignedRoomIds is { Count: > 0 })
         {
-            var targetIds = request.AssignedRoomIds.Where(id => id != Guid.Empty).Distinct().ToHashSet();
+            var targetIds = request.AssignedRoomIds.Where(id => id != Guid.Empty).Distinct().ToList();
             if (_roomRepository != null && targetIds.Count > 0)
             {
+                var targetIdSet = targetIds.ToHashSet();
                 var validRooms = await _roomRepository
-                    .Query(r => r.ClinicId == _clinicContext.ClinicId && targetIds.Contains(r.Id))
+                    .Query(r => r.ClinicId == _clinicContext.ClinicId && targetIdSet.Contains(r.Id))
                     .ToListAsync(cancellationToken);
-                validRoomIds = validRooms.Select(r => r.Id).ToList();
-                assignedRoomNames = validRooms.Select(r => r.Name).ToList();
+                var validRoomMap = validRooms.ToDictionary(r => r.Id);
+
+                // Preserve the exact caller-specified order so the primary room (index 0) is maintained
+                validRoomIds = targetIds.Where(id => validRoomMap.ContainsKey(id)).ToList();
+                assignedRoomNames = validRoomIds.Select(id => validRoomMap[id].Name).ToList();
             }
             else
             {
-                validRoomIds = targetIds.ToList();
+                validRoomIds = targetIds;
             }
         }
 

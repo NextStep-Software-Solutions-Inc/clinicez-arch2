@@ -437,6 +437,46 @@ describe('E2E Frontend Suite: Multi-Room Staff Assignment & Routing (Tiers 1-4)'
       expect(drAlice.assignedRoomNames).toContain('Room 2 - General');
     });
 
+    test('F3.3-TC5b: Primary room badge formats first room as (Primary) with variant primary and subsequent as outline', () => {
+      const names = drAlice.assignedRoomNames!;
+      const badges = names.map((roomName, idx) => ({
+        label: idx === 0 && names.length > 1 ? `${roomName} (Primary)` : roomName,
+        variant: idx === 0 ? 'primary' : 'outline',
+      }));
+
+      expect(badges[0]).toEqual({ label: 'Room 1 - Pedia (Primary)', variant: 'primary' });
+      expect(badges[1]).toEqual({ label: 'Room 2 - General', variant: 'outline' });
+    });
+
+    test('F3.3-TC5c: Setting primary room moves tapped roomId to index 0 and sends ordered assignedRoomIds to clinicService', async () => {
+      const origPut = clinicApiClient.put;
+      let capturedPayload: any = null;
+      clinicApiClient.put = (async (_url: string, body: any) => {
+        capturedPayload = body;
+        return [{ id: 'doc-alice', ...drAlice, assignedRoomIds: body.assignedRoomIds }, null];
+      }) as any;
+
+      try {
+        let currentRoomIds = ['rm-1', 'rm-2'];
+        // User taps rm-2 to set as primary
+        const tappedRoomId = 'rm-2';
+        currentRoomIds = [tappedRoomId, ...currentRoomIds.filter((id) => id !== tappedRoomId)];
+        expect(currentRoomIds).toEqual(['rm-2', 'rm-1']);
+
+        await clinicService.updateStaff('doc-alice', {
+          firstName: drAlice.firstName,
+          lastName: drAlice.lastName,
+          role: drAlice.role,
+          assignedRoomIds: currentRoomIds,
+        });
+
+        expect(capturedPayload.assignedRoomIds).toEqual(['rm-2', 'rm-1']);
+        expect(capturedPayload.assignedRoomIds[0]).toBe('rm-2');
+      } finally {
+        clinicApiClient.put = origPut;
+      }
+    });
+
     test('F4.1-TC6: Scoped Station Visibility for Multi-Room Doctor restricts to assigned + shared stations', () => {
       const scoped = computeScopedStations(sampleRooms, drAlice);
       expect(scoped.allPillLabel).toBe('All My Stations');

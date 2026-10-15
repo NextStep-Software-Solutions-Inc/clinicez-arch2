@@ -105,7 +105,7 @@ public sealed class UpdateClinicRoomCommandHandler : IRequestHandler<UpdateClini
 
             foreach (var staff in allStaff)
             {
-                var currentRooms = staff.GetAssignedRoomIds().ToHashSet();
+                var currentRooms = staff.GetAssignedRoomIds().ToList();
                 bool isDesired = desiredIds.Contains(staff.Id);
                 bool hasRoom = currentRooms.Contains(room.Id);
 
