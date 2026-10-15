@@ -74,7 +74,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-sqlite',
     [
       'expo-splash-screen',
-      { image: './assets/splash-icon.png', imageWidth: 200, resizeMode: 'contain', backgroundColor: '#ffffff' },
+      {
+        image: './assets/splash-icon.png',
+        imageWidth: 180,
+        resizeMode: 'contain',
+        backgroundColor: '#ffffff',
+        dark: {
+          image: './assets/splash-icon.png',
+          backgroundColor: '#052E2B',
+        },
+      },
     ],
     [
       'expo-local-authentication',
