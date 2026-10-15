@@ -13,6 +13,8 @@ import { SidebarProvider } from './context/SidebarContext';
 import { FeedbackHost, initModalStackObserver } from './components/ui';
 import { OfflineSyncRunner } from './components/OfflineSyncRunner';
 import ErrorBoundary from './components/ErrorBoundary';
+import { CrashRecoveryBanner } from './components/CrashRecoveryBanner';
+import { initGlobalErrorHandlers } from './services/crashReporter';
 import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
 import { theme } from './constants/theme';
 
@@ -20,7 +22,12 @@ export default function App() {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
 
   React.useEffect(() => {
-    return initModalStackObserver();
+    const unhookErrors = initGlobalErrorHandlers();
+    const unhookModalObserver = initModalStackObserver();
+    return () => {
+      unhookErrors();
+      unhookModalObserver();
+    };
   }, []);
 
   // If the typeface fails to load, fall back to the system font instead of rendering
@@ -41,6 +48,7 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="dark" />
       <ErrorBoundary>
+        <CrashRecoveryBanner />
         <ConnectionGate>
           <FacilityActivationGate>
             <AuthGate>

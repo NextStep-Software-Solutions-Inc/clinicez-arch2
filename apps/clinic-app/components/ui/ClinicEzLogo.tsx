@@ -29,6 +29,7 @@ export function ClinicEzMark({
     const frontPrism = isInverted ? lightColors.primary : lightColors.onPrimary;
     const backPrism = darkColors.primary;
     const monogramFill = isInverted ? bgFill : (bgColor ?? lightColors.primary);
+    const frontTransform = 'translate(26, 42) scale(0.92)';
 
     return (
       <Svg width={size} height={size} viewBox="0 0 380 380">
@@ -36,26 +37,28 @@ export function ClinicEzMark({
         <Path
           d={PRISM_PATH}
           fill={backPrism}
-          transform="translate(52, 62) scale(0.92) rotate(6 160 145)"
+          transform="matrix(0.91496 0.096166 -0.096166 0.91496 66.75 47.34)"
         />
         <Path
           d={PRISM_PATH}
           fill={frontPrism}
-          transform="translate(26, 42) scale(0.92)"
+          transform={frontTransform}
         />
         <Path
           d={E_PATH}
           fill={monogramFill}
-          transform="translate(26, 42) scale(0.92)"
+          transform={frontTransform}
         />
         <Path
           d={Z_PATH}
           fill={monogramFill}
-          transform="translate(26, 42) scale(0.92)"
+          transform={frontTransform}
         />
       </Svg>
     );
   }
+
+  const bareFrontTransform = 'translate(4, 6)';
 
   return (
     <Svg width={size} height={size} viewBox="0 0 360 320">
@@ -63,11 +66,11 @@ export function ClinicEzMark({
         d={PRISM_PATH}
         fill={darkColors.primary}
         opacity={0.9}
-        transform="translate(28, 22) rotate(5.5 160 145)"
+        transform="matrix(0.995396 0.095846 -0.095846 0.995396 42.6342 7.3322)"
       />
-      <Path d={PRISM_PATH} fill={lightColors.primary} transform="translate(4, 6)" />
-      <Path d={E_PATH} fill={lightColors.onPrimary} transform="translate(4, 6)" />
-      <Path d={Z_PATH} fill={lightColors.onPrimary} transform="translate(4, 6)" />
+      <Path d={PRISM_PATH} fill={lightColors.primary} transform={bareFrontTransform} />
+      <Path d={E_PATH} fill={lightColors.onPrimary} transform={bareFrontTransform} />
+      <Path d={Z_PATH} fill={lightColors.onPrimary} transform={bareFrontTransform} />
     </Svg>
   );
 }

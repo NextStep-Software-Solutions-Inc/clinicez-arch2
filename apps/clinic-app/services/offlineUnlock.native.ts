@@ -28,8 +28,10 @@ export const offlineUnlockSupported = true;
 const digest = (input: string) => Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, input);
 
 export async function isUnlockConfigured(): Promise<boolean> {
-  const [salt, hash] = await Promise.all([getSecureItem(SALT_KEY), getSecureItem(HASH_KEY)]);
-  return !!salt && !!hash;
+  const salt = await getSecureItem(SALT_KEY);
+  if (!salt) return false;
+  const hash = await getSecureItem(HASH_KEY);
+  return !!hash;
 }
 
 export async function biometricAvailable(): Promise<boolean> {
@@ -52,20 +54,17 @@ export async function setPin(pin: string, enableBiometric: boolean): Promise<voi
   if (!isValidPin(pin)) throw new Error('The PIN must be exactly 6 digits.');
   const salt = Crypto.randomUUID();
   const hash = await derivePinHash(pin, salt, digest);
-  await Promise.all([
-    setSecureItem(SALT_KEY, salt),
-    setSecureItem(HASH_KEY, hash),
-    setSecureItem(ATTEMPTS_KEY, '0'),
-    setSecureItem(BIOMETRIC_KEY, enableBiometric && (await biometricAvailable()) ? '1' : '0'),
-  ]);
+  const hasBio = enableBiometric && (await biometricAvailable());
+  await setSecureItem(SALT_KEY, salt);
+  await setSecureItem(HASH_KEY, hash);
+  await setSecureItem(ATTEMPTS_KEY, '0');
+  await setSecureItem(BIOMETRIC_KEY, hasBio ? '1' : '0');
 }
 
 export async function verifyPin(pin: string): Promise<PinCheckResult> {
-  const [salt, expected, attemptsRaw] = await Promise.all([
-    getSecureItem(SALT_KEY),
-    getSecureItem(HASH_KEY),
-    getSecureItem(ATTEMPTS_KEY),
-  ]);
+  const salt = await getSecureItem(SALT_KEY);
+  const expected = await getSecureItem(HASH_KEY);
+  const attemptsRaw = await getSecureItem(ATTEMPTS_KEY);
   if (!salt || !expected) return { ok: false, attemptsLeft: 0, lockedOut: true };
 
   const attempts = Number(attemptsRaw) || 0;
@@ -104,12 +103,10 @@ export async function authenticateBiometric(): Promise<boolean> {
 }
 
 export async function clearUnlock(): Promise<void> {
-  await Promise.all([
-    deleteSecureItem(SALT_KEY),
-    deleteSecureItem(HASH_KEY),
-    deleteSecureItem(ATTEMPTS_KEY),
-    deleteSecureItem(BIOMETRIC_KEY),
-  ]);
+  await deleteSecureItem(SALT_KEY);
+  await deleteSecureItem(HASH_KEY);
+  await deleteSecureItem(ATTEMPTS_KEY);
+  await deleteSecureItem(BIOMETRIC_KEY);
 }
 
 async function wipeOfflineAccess(): Promise<void> {

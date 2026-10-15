@@ -113,13 +113,15 @@ function buildAdaptiveMonoSvg() {
 
 function buildSplashSvg() {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 380">
-    <g transform="translate(52, 62) scale(0.92) rotate(6 160 145)">
-      <path fill="#34C3A6" d="${PRISM_PATH}"/>
-    </g>
-    <g transform="translate(26, 42) scale(0.92)">
-      <path fill="#0D6963" d="${PRISM_PATH}"/>
-      <path fill="#FFFFFF" d="${E_PATH}"/>
-      <path fill="#FFFFFF" d="${Z_PATH}"/>
+    <g transform="translate(55, 58) scale(0.70)">
+      <g transform="translate(52, 62) scale(0.92) rotate(6 160 145)">
+        <path fill="#34C3A6" d="${PRISM_PATH}"/>
+      </g>
+      <g transform="translate(26, 42) scale(0.92)">
+        <path fill="#0D6963" d="${PRISM_PATH}"/>
+        <path fill="#FFFFFF" d="${E_PATH}"/>
+        <path fill="#FFFFFF" d="${Z_PATH}"/>
+      </g>
     </g>
   </svg>`;
 }
@@ -176,7 +178,7 @@ async function generateExpoAppAssets(appName, variant) {
   await renderPng(buildAdaptiveBgSvg(variant), 1024, path.join(assetsDir, 'android-icon-background.png'), true);
   await renderPng(buildAdaptiveFgSvg(variant), 1024, path.join(assetsDir, 'android-icon-foreground.png'), false);
   await renderPng(buildAdaptiveMonoSvg(), 1024, path.join(assetsDir, 'android-icon-monochrome.png'), false);
-  await renderPng(buildSplashSvg(), 512, path.join(assetsDir, 'splash-icon.png'), false);
+  await renderPng(buildSplashSvg(), 1024, path.join(assetsDir, 'splash-icon.png'), false);
   await renderPng(buildIconSvg({ variant, rounded: true }), 96, path.join(assetsDir, 'favicon.png'), false);
 }
 

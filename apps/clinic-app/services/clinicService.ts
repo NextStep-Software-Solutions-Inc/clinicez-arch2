@@ -1673,6 +1673,7 @@ export interface ClinicSettingsRecord {
   tvDisplayMaskPatientNames?: boolean;
   enableQueuePushNotifications?: boolean;
   queuePushNotificationThreshold?: number;
+  enableChipLevelQueueCalling?: boolean;
   tenantSlug?: string;
   facilitySlug?: string;
   primaryLogoUrl?: string | null;

@@ -112,28 +112,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setState('booting');
-      const outcome = await restoreSession();
-      if (cancelled) return;
+      try {
+        setState('booting');
+        const outcome = await restoreSession();
+        if (cancelled) return;
 
-      if (outcome.state === 'signedIn') {
-        afterSignIn(outcome.user);
-        return;
-      }
-
-      if (outcome.state === 'offline') {
-        if (await isUnlockConfigured()) {
-          setUser(outcome.user);
-          setOffline(true);
-          setState('locked');
+        if (outcome.state === 'signedIn') {
+          afterSignIn(outcome.user);
           return;
         }
-        // No PIN/biometric was ever set up, so the cached session cannot be opened offline.
-        await discardLocalSession();
-        setNotice('You are offline. Connect to the clinic network to sign in.');
-      }
 
-      await resolveSignedOutState();
+        if (outcome.state === 'offline') {
+          if (await isUnlockConfigured()) {
+            setUser(outcome.user);
+            setOffline(true);
+            setState('locked');
+            return;
+          }
+          // No PIN/biometric was ever set up, so the cached session cannot be opened offline.
+          await discardLocalSession();
+          setNotice('You are offline. Connect to the clinic network to sign in.');
+        }
+
+        await resolveSignedOutState();
+      } catch (err) {
+        console.warn('[AuthContext] Startup initialization error caught:', err);
+        if (!cancelled) {
+          setState('signedOut');
+        }
+      }
     })();
     return () => {
       cancelled = true;

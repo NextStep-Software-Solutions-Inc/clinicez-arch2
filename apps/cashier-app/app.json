@@ -26,6 +26,17 @@
       "favicon": "./assets/favicon.png",
       "backgroundColor": "#F8FAFC",
       "themeColor": "#0D6963"
-    }
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
+    ]
   }
 }

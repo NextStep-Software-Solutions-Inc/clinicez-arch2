@@ -61,6 +61,15 @@ export default ({ config }: ConfigContext): ExpoConfig =>
         'expo-local-authentication',
         'expo-updates',
         [
+            'expo-splash-screen',
+            {
+                image: './assets/splash-icon.png',
+                imageWidth: 200,
+                resizeMode: 'contain',
+                backgroundColor: '#F0FDF9',
+            },
+        ],
+        [
             'expo-notifications',
             {
                 // Replace with a real 96×96 white-on-transparent PNG before releasing.

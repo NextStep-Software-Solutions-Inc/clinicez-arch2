@@ -87,4 +87,10 @@ public sealed class ClinicSettings : BaseEntity
     /// The number of patients ahead in line (1 to 5) that triggers an approaching turn notification to the patient app.
     /// </summary>
     public int QueuePushNotificationThreshold { get; set; } = 2;
+
+    /// <summary>
+    /// Controls whether clinicians can call specific patients directly from individual queue chips.
+    /// Opt-in setting; defaults to false to enforce sequential queue calling unless explicitly enabled.
+    /// </summary>
+    public bool EnableChipLevelQueueCalling { get; set; } = false;
 }

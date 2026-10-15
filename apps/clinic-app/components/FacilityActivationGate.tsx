@@ -13,6 +13,7 @@ import Input from '@ui/Input';
 import Badge, { BadgeVariant } from '@ui/Badge';
 import Icon from '@ui/Icon';
 import Modal from '@ui/Modal';
+import { ClinicEzMark } from './ui/ClinicEzLogo';
 import { clinicService, FacilityLicenseStatus } from '../services/clinicService';
 import { getOfflineGraceHours, getServiceSubdomain, getSetting, isWorkspaceRequired } from '../services/runtimeConfig';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
@@ -527,11 +528,11 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   );
 }
 
-/** Small brand mark: clinic icon in a primary-colored rounded tile. */
+/** Small brand mark: Clinic EZ mark in a squircle. */
 function BrandMark() {
   return (
     <View style={styles.brandTile}>
-      <Icon name="clinic" size={theme.sizes.iconLg} color={theme.colors.onPrimary} />
+      <ClinicEzMark size={theme.sizes.controlLg} variant="squircle" />
     </View>
   );
 }
@@ -592,8 +593,6 @@ const styles = StyleSheet.create({
   brandTile: {
     width: theme.sizes.controlLg,
     height: theme.sizes.controlLg,
-    borderRadius: theme.radii.lg,
-    backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

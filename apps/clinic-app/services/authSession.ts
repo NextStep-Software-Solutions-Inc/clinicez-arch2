@@ -135,11 +135,9 @@ async function persist(tokens: AuthTokens) {
   refreshToken = tokens.refreshToken;
   user = tokens.user;
   offline = false;
-  await Promise.all([
-    setSecureItem(REFRESH_KEY, tokens.refreshToken),
-    setSecureItem(USER_KEY, JSON.stringify(tokens.user)),
-    setSecureItem(LAST_ONLINE_KEY, String(Date.now())),
-  ]);
+  await setSecureItem(REFRESH_KEY, tokens.refreshToken);
+  await setSecureItem(USER_KEY, JSON.stringify(tokens.user));
+  await setSecureItem(LAST_ONLINE_KEY, String(Date.now()));
   emit();
 }
 
@@ -149,7 +147,9 @@ async function clearSession(notify: boolean) {
   refreshToken = null;
   user = null;
   offline = false;
-  await Promise.all([deleteSecureItem(REFRESH_KEY), deleteSecureItem(USER_KEY), deleteSecureItem(LAST_ONLINE_KEY)]);
+  await deleteSecureItem(REFRESH_KEY);
+  await deleteSecureItem(USER_KEY);
+  await deleteSecureItem(LAST_ONLINE_KEY);
   emit();
   if (notify) sessionExpiredHandler?.();
 }
@@ -255,11 +255,9 @@ export type RestoreOutcome =
  * instead of a password.
  */
 export async function restoreSession(): Promise<RestoreOutcome> {
-  const [storedRefresh, storedUser, storedOnline] = await Promise.all([
-    getSecureItem(REFRESH_KEY),
-    getSecureItem(USER_KEY),
-    getSecureItem(LAST_ONLINE_KEY),
-  ]);
+  const storedRefresh = await getSecureItem(REFRESH_KEY);
+  const storedUser = await getSecureItem(USER_KEY);
+  const storedOnline = await getSecureItem(LAST_ONLINE_KEY);
   if (!storedRefresh) return { state: 'signedOut' };
 
   refreshToken = storedRefresh;

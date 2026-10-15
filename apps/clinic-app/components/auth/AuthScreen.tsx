@@ -125,8 +125,6 @@ const styles = StyleSheet.create({
   brandTile: {
     width: theme.sizes.controlLg,
     height: theme.sizes.controlLg,
-    borderRadius: theme.radii.lg,
-    backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },

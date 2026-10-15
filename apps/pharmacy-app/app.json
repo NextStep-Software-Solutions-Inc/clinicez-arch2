@@ -36,6 +36,15 @@
     "plugins": [
       "expo-secure-store",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
         "expo-camera",
         { "cameraPermission": "Clinic EZ Pharmacy uses the camera to scan the QR code on a patient's prescription." }
       ],

@@ -21,6 +21,7 @@ import PatientSearchConfigSection from './PatientSearchConfigSection';
 import EodReconciliationSettingsCard from './EodReconciliationSettingsCard';
 import WaitingAreaTvSettingsCard from './WaitingAreaTvSettingsCard';
 import QueuePushNotificationSettingsCard from './QueuePushNotificationSettingsCard';
+import QueueCallingSettingsCard from './QueueCallingSettingsCard';
 import { ClinicRoomsSettingsCard } from './ClinicRoomsSettingsCard';
 import { useClinic } from '../../context/ClinicContext';
 import { pickClinicLogo } from '../../utils/logoUploader';
@@ -490,6 +491,13 @@ export default function GeneralSettingsTab({
 
       {/* Patient Queue Push Notifications */}
       <QueuePushNotificationSettingsCard
+        settings={settings}
+        onSettingsUpdated={onSettingsUpdated}
+        showSkeletons={showSkeletons}
+      />
+
+      {/* Queue Progression & Direct Calling Controls */}
+      <QueueCallingSettingsCard
         settings={settings}
         onSettingsUpdated={onSettingsUpdated}
         showSkeletons={showSkeletons}

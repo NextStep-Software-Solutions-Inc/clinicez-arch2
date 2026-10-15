@@ -61,6 +61,7 @@ import {
   clinicService,
   computeScopedStations,
   isPatientVisibleToStaff,
+  resolveCallToRoom,
   PatientQueueItem,
   QueueStatus,
   QueueView,
@@ -252,7 +253,8 @@ function CheckRow({ checked, onPress, label, disabled }: CheckRowProps) {
 export default function ConsultationsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { facilityName, accreditationNumber, letterhead, rooms = [] } = useClinic();
+  const { facilityName, accreditationNumber, letterhead, rooms = [], settings } = useClinic();
+  const allowChipLevelCalling = Boolean(settings?.enableChipLevelQueueCalling);
   const { current, staff, reload: reloadStaff } = useStaff();
 
   const activeRooms = useMemo(() => (rooms || []).filter((r) => r.isActive), [rooms]);
@@ -273,6 +275,12 @@ export default function ConsultationsScreen() {
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<PatientQueueItem | null>(null);
+
+  // Call to room modal state
+  const [callModalItem, setCallModalItem] = useState<PatientQueueItem | null>(null);
+  const [selectedCallRoom, setSelectedCallRoom] = useState<string>('Room 1');
+  const [selectedCallRoomId, setSelectedCallRoomId] = useState<string | undefined>(undefined);
+  const [isCallingNext, setIsCallingNext] = useState(false);
 
   // Selected patient context (loaded from the API when a queue item is chosen)
   const [vitals, setVitals] = useState<TriageVitals | null>(null);
@@ -402,6 +410,11 @@ export default function ConsultationsScreen() {
     }
     return patients.filter((p) => p.status !== 'Completed' && p.status !== 'Cancelled' && p.status !== 'NoShow');
   }, [patients, queueViewFilter]);
+
+  const nextEligiblePatient = useMemo(() => {
+    const eligibleStatuses: QueueStatus[] = ['Triaged', 'ReEvaluation', 'Waiting'];
+    return displayedPatients.find((p) => eligibleStatuses.includes(p.status));
+  }, [displayedPatients]);
 
   // PhilHealth Yakap Claim Readiness States (Feature 17)
   const [serverReadiness, setServerReadiness] = useState<YakapClaimReadinessDto | null>(null);
@@ -1036,6 +1049,62 @@ export default function ConsultationsScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params, patients]);
+
+  const handleOpenCallModal = useCallback(
+    (target?: PatientQueueItem) => {
+      const patientToCall = target || nextEligiblePatient;
+      if (!patientToCall) {
+        notify.info('No patients are currently waiting to be called in this queue.');
+        return;
+      }
+      const resolved = resolveCallToRoom({
+        ticket: patientToCall,
+        selectedStation: selectedStationFilter,
+        currentStaff: current,
+        activeRooms,
+        visibleRooms,
+      });
+      setCallModalItem(patientToCall);
+      setSelectedCallRoom(resolved.roomName);
+      setSelectedCallRoomId(resolved.roomId);
+    },
+    [nextEligiblePatient, selectedStationFilter, current, activeRooms, visibleRooms]
+  );
+
+  const handleExecuteCall = useCallback(async () => {
+    if (!callModalItem) return;
+    setIsCallingNext(true);
+    const doctorName = current ? formatStaffName(current) : undefined;
+    const targetRoom = activeRooms.find((r) => r.name === selectedCallRoom || r.id === selectedCallRoomId);
+    const targetRoomId = targetRoom?.id || selectedCallRoomId;
+
+    const [, err] = await clinicService.callQueueItem(
+      callModalItem.id,
+      current?.id,
+      doctorName,
+      selectedCallRoom,
+      targetRoomId,
+    );
+
+    setIsCallingNext(false);
+    if (err) {
+      notify.error(err.message || 'Failed to call patient.');
+      return;
+    }
+
+    notify.success(`${callModalItem.patientName} (${callModalItem.queueNumber}) called to ${selectedCallRoom}.`);
+    const calledItem: PatientQueueItem = {
+      ...callModalItem,
+      status: 'InConsultation' as QueueStatus,
+      doctorId: current?.id,
+      doctorName,
+      roomOrStation: selectedCallRoom,
+      roomId: targetRoomId ?? null,
+    };
+    setCallModalItem(null);
+    await loadQueue();
+    handleSelectPatient(calledItem);
+  }, [callModalItem, current, selectedCallRoom, selectedCallRoomId, activeRooms, loadQueue, handleSelectPatient]);
 
   const runCdsScreening = async (currentPrescriptions: LocalPrescription[]) => {
     if (!selectedPatient) return;
@@ -3189,14 +3258,29 @@ export default function ConsultationsScreen() {
               <ThemedText variant="h3">Patient queue</ThemedText>
               <Badge label={`${displayedPatients.length}`} variant="neutral" size="sm" />
             </View>
-            <Button
-              title="Refresh"
-              icon="refresh"
-              variant="ghost"
-              size="sm"
-              loading={queueLoading}
-              onPress={loadQueue}
-            />
+            <View style={styles.queueHeaderActions}>
+              <Button
+                title={
+                  nextEligiblePatient
+                    ? (isDesktopWorkstation ? `Call next (${nextEligiblePatient.queueNumber})` : `Call ${nextEligiblePatient.queueNumber}`)
+                    : (isDesktopWorkstation ? 'Call next patient' : 'Call next')
+                }
+                icon="bell"
+                variant="primary"
+                size="sm"
+                disabled={!nextEligiblePatient || isCallingNext}
+                loading={isCallingNext}
+                onPress={() => handleOpenCallModal()}
+              />
+              <Button
+                title="Refresh"
+                icon="refresh"
+                variant="ghost"
+                size="sm"
+                loading={queueLoading}
+                onPress={loadQueue}
+              />
+            </View>
           </View>
 
           {/* Queue View Fast Filters & Station Pills */}
@@ -3328,6 +3412,22 @@ export default function ConsultationsScreen() {
                     ) : null}
                     {statusInfo ? (
                       <Badge label={statusInfo.label} variant={statusInfo.variant} size="sm" />
+                    ) : null}
+                    {allowChipLevelCalling && ['Triaged', 'ReEvaluation', 'Waiting'].includes(p.status) ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Call ${p.patientName} to room`}
+                        onPress={(e) => {
+                          e.stopPropagation?.();
+                          handleOpenCallModal(p);
+                        }}
+                        style={styles.chipCallBtn}
+                      >
+                        <Icon name="bell" size={11} color={theme.colors.onPrimary} />
+                        <ThemedText variant="captionBold" color={theme.colors.onPrimary} style={styles.chipCallBtnText}>
+                          Call
+                        </ThemedText>
+                      </Pressable>
                     ) : null}
                   </Pressable>
                 );
@@ -3897,6 +3997,69 @@ export default function ConsultationsScreen() {
           />
         </Modal>
 
+        {/* Call to room modal */}
+        <Modal
+          visible={!!callModalItem}
+          title={`Call ${callModalItem?.patientName || ''}`}
+          subtitle={`Assign examination room or station for Ticket ${callModalItem?.queueNumber || ''}`}
+          maxWidth={480}
+          onClose={() => setCallModalItem(null)}
+          footer={
+            <View style={styles.callModalActions}>
+              <Button
+                title="Cancel"
+                variant="ghost"
+                onPress={() => setCallModalItem(null)}
+              />
+              <Button
+                title={`Call to ${selectedCallRoom}`}
+                variant="primary"
+                icon="bell"
+                loading={isCallingNext}
+                onPress={handleExecuteCall}
+              />
+            </View>
+          }
+        >
+          <View style={styles.callModalContent}>
+            <ThemedText variant="body" color={theme.colors.text}>
+              Confirm or select the destination room for this encounter:
+            </ThemedText>
+
+            <View style={styles.roomOptionGroup}>
+              {visibleRooms.map((room) => {
+                const isSelected = selectedCallRoom === room.name;
+                const isMine =
+                  (current?.assignedRoomIds?.includes(room.id)) || current?.assignedRoomId === room.id;
+                return (
+                  <Pressable
+                    key={room.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${room.name}`}
+                    onPress={() => {
+                      setSelectedCallRoom(room.name);
+                      setSelectedCallRoomId(room.id);
+                    }}
+                    style={[styles.roomOptionCard, isSelected && styles.roomOptionCardActive]}
+                  >
+                    <Icon
+                      name={isSelected ? 'checkCircle' : 'dot'}
+                      size={18}
+                      color={isSelected ? theme.colors.primary : theme.colors.textMuted}
+                    />
+                    <ThemedText
+                      variant="bodyBold"
+                      color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                    >
+                      {room.name}{isMine ? ' (Mine)' : ''}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </Modal>
+
         {/* Edit Patient Demographics Modal */}
         <EditPatientModal
           visible={editPatientModalVisible}
@@ -3954,6 +4117,51 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: theme.spacing.md,
+  },
+  queueHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  chipCallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: theme.radii.xs,
+    backgroundColor: theme.colors.primary,
+    marginLeft: 4,
+  },
+  chipCallBtnText: {
+    fontSize: theme.typography.caption.fontSize,
+    lineHeight: theme.typography.caption.lineHeight,
+  },
+  callModalContent: {
+    gap: theme.spacing.md,
+  },
+  roomOptionGroup: {
+    gap: theme.spacing.xs,
+  },
+  roomOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surfaceSubtle,
+  },
+  roomOptionCardActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primarySubtle,
+  },
+  callModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   actionRow: {
     flexDirection: 'row',

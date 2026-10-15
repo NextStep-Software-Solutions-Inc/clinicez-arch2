@@ -24,13 +24,11 @@ export default function ClinicEzMark({
     const frontPrism = isInverted ? lightColors.primary : lightColors.onPrimary;
     const backPrism = darkColors.primary;
     const monogramFill = isInverted ? lightColors.onPrimary : lightColors.primary;
-    const backTransform = 'translate(52, 62) scale(0.92) rotate(6 160 145)';
     const frontTransform = 'translate(26, 42) scale(0.92)';
-
     return (
       <Svg width={size} height={size} viewBox="0 0 380 380">
         <Rect width="380" height="380" rx="84" fill={bgFill} />
-        <Path d={PRISM_PATH} fill={backPrism} transform={backTransform} />
+        <Path d={PRISM_PATH} fill={backPrism} transform="matrix(0.91496 0.096166 -0.096166 0.91496 66.75 47.34)" />
         <Path d={PRISM_PATH} fill={frontPrism} transform={frontTransform} />
         <Path d={E_PATH} fill={monogramFill} transform={frontTransform} />
         <Path d={Z_PATH} fill={monogramFill} transform={frontTransform} />
@@ -38,7 +36,7 @@ export default function ClinicEzMark({
     );
   }
 
-  const bareBackTransform = 'translate(28, 22) rotate(5.5 160 145)';
+  const bareBackTransform = 'matrix(0.995396 0.095846 -0.095846 0.995396 42.6342 7.3322)';
   const bareFrontTransform = 'translate(4, 6)';
 
   return (

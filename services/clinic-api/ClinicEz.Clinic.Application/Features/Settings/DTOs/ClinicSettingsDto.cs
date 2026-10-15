@@ -40,5 +40,6 @@ public sealed record ClinicSettingsDto(
     bool AutoEodEnabled = true,
     bool TvDisplayMaskPatientNames = true,
     bool EnableQueuePushNotifications = true,
-    int QueuePushNotificationThreshold = 2);
+    int QueuePushNotificationThreshold = 2,
+    bool EnableChipLevelQueueCalling = false);
 

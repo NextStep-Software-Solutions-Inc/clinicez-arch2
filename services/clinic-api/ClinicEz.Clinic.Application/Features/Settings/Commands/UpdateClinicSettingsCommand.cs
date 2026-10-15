@@ -38,7 +38,8 @@ public sealed record UpdateClinicSettingsCommand(
     bool? AutoEodEnabled = null,
     bool? TvDisplayMaskPatientNames = null,
     bool? EnableQueuePushNotifications = null,
-    int? QueuePushNotificationThreshold = null) : IRequest<ClinicSettingsDto>;
+    int? QueuePushNotificationThreshold = null,
+    bool? EnableChipLevelQueueCalling = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -164,6 +165,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.QueuePushNotificationThreshold.HasValue)
             settings.QueuePushNotificationThreshold = Math.Clamp(request.QueuePushNotificationThreshold.Value, 1, 5);
 
+        if (request.EnableChipLevelQueueCalling.HasValue)
+            settings.EnableChipLevelQueueCalling = request.EnableChipLevelQueueCalling.Value;
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -207,7 +211,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.AutoEodEnabled,
             settings.TvDisplayMaskPatientNames,
             settings.EnableQueuePushNotifications,
-            settings.QueuePushNotificationThreshold);
+            settings.QueuePushNotificationThreshold,
+            settings.EnableChipLevelQueueCalling);
     }
 }
 

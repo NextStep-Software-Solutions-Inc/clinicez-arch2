@@ -69,7 +69,10 @@ function AuthGateContent({ children }: { children: React.ReactNode }) {
         const finish = () => setPinPrompt(false);
         return (
           <SetPinScreen
-            onDone={finish}
+            onDone={() => {
+              setDeviceItem(PIN_PROMPT_DISMISSED_KEY, '1');
+              finish();
+            }}
             onSkip={() => {
               setDeviceItem(PIN_PROMPT_DISMISSED_KEY, '1');
               finish();

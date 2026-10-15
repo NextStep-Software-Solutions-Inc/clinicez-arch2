@@ -7,24 +7,43 @@ import * as SecureStore from 'expo-secure-store';
 // SecureStore keys may only contain alphanumerics, ".", "-" and "_".
 const safeKey = (key: string) => key.replace(/[^A-Za-z0-9._-]/g, '_');
 
-export async function getSecureItem(key: string): Promise<string | null> {
-  try {
-    return await SecureStore.getItemAsync(safeKey(key));
-  } catch {
-    return null;
-  }
+// Queue operations sequentially to protect Android Keystore / EncryptedSharedPreferences from concurrency deadlocks
+let opQueue: Promise<any> = Promise.resolve();
+
+function enqueue<T>(task: () => Promise<T>): Promise<T> {
+  const next = opQueue.then(task, task);
+  opQueue = next.catch(() => {});
+  return next;
 }
 
-export async function setSecureItem(key: string, value: string): Promise<void> {
-  await SecureStore.setItemAsync(safeKey(key), value, {
-    keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+export function getSecureItem(key: string): Promise<string | null> {
+  return enqueue(async () => {
+    try {
+      return await SecureStore.getItemAsync(safeKey(key));
+    } catch {
+      return null;
+    }
   });
 }
 
-export async function deleteSecureItem(key: string): Promise<void> {
-  try {
-    await SecureStore.deleteItemAsync(safeKey(key));
-  } catch {
-    // already absent
-  }
+export function setSecureItem(key: string, value: string): Promise<void> {
+  return enqueue(async () => {
+    try {
+      await SecureStore.setItemAsync(safeKey(key), value, {
+        keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+      });
+    } catch (err) {
+      console.warn(`[secureStorage] Failed to set item for key "${key}":`, err);
+    }
+  });
+}
+
+export function deleteSecureItem(key: string): Promise<void> {
+  return enqueue(async () => {
+    try {
+      await SecureStore.deleteItemAsync(safeKey(key));
+    } catch {
+      // already absent
+    }
+  });
 }

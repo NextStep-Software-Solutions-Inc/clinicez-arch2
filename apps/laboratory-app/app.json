@@ -37,6 +37,15 @@
     "plugins": [
       "expo-sqlite",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Clinic EZ Laboratory uses the camera to scan the QR code on a patient's order slip."

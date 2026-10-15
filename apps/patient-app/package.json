@@ -40,6 +40,7 @@
     "expo-notifications": "^56.0.17",
     "expo-secure-store": "~56.0.4",
     "expo-sharing": "^56.0.16",
+    "expo-splash-screen": "~56.0.12",
     "expo-sqlite": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "expo-task-manager": "~56.0.18",
