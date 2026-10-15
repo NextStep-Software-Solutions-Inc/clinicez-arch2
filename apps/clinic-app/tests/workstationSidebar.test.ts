@@ -1,5 +1,5 @@
 // token-guard:ignore-file
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -103,14 +103,6 @@ let mockClinicContext: any = {
 
 (globalThis as any).__mockClinicContext = mockClinicContext;
 
-const clinicContextMockFactory = () => ({
-  useClinic: () => (globalThis as any).__mockClinicContext ?? mockClinicContext,
-  ClinicProvider: ({ children }: any) => children,
-});
-
-mock.module('../context/ClinicContext', clinicContextMockFactory);
-mock.module('@context/ClinicContext', clinicContextMockFactory);
-
 let mockAuthContext = {
   user: {
     id: 'user-1',
@@ -159,8 +151,6 @@ describe('WorkstationSidebar Component', () => {
       can: () => true,
       offline: false,
     };
-    mock.module('../context/ClinicContext', clinicContextMockFactory);
-    mock.module('@context/ClinicContext', clinicContextMockFactory);
     mock.module('../context/AuthContext', () => ({
       useAuth: () => mockAuthContext,
     }));
@@ -305,5 +295,9 @@ describe('WorkstationSidebar Component', () => {
 
     expect(html).toContain('Wave Ambray');
     expect(html).toContain('Clinic Administrator');
+  });
+
+  afterAll(() => {
+    delete (globalThis as any).__mockClinicContext;
   });
 });

@@ -1,5 +1,5 @@
 // token-guard:ignore-file
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -102,9 +102,6 @@ const modalStackingClinicContextFactory = () => ({
   ClinicProvider: ({ children }: any) => children,
 });
 
-mock.module('../context/ClinicContext', modalStackingClinicContextFactory);
-mock.module('@context/ClinicContext', modalStackingClinicContextFactory);
-
 const modalStackingStaffContextFactory = () => ({
   useStaff: () =>
     (globalThis as any).__mockStaffContext ?? {
@@ -160,7 +157,12 @@ const { default: StatutoryImmunizationsTab } = await import('../components/chart
 describe('Modal Stacking System — Nested & Layered Modals', () => {
   beforeEach(() => {
     clearModalStack();
-    (globalThis as any).__mockClinicContext = null;
+    (globalThis as any).__mockClinicContext = {
+      facilityName: 'NextStep OPD',
+      planTier: 'pro',
+      accreditationNumber: 'ACC-12345',
+      settings: { preferredChartLayout: 'centered' },
+    };
     (globalThis as any).__mockStaffContext = null;
   });
 
@@ -1749,6 +1751,10 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
         (globalThis as any).document = originalDoc;
       }
     });
+  });
+
+  afterAll(() => {
+    delete (globalThis as any).__mockClinicContext;
   });
 });
 

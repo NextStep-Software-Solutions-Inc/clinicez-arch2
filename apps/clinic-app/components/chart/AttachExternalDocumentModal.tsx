@@ -9,7 +9,6 @@ import {
 import { TextInput } from '../ui/Text';
 import { Alert, notify } from '../../utils/feedback';
 import { ThemedText, Icon, ValidatedDateInput, validateDateString, Modal } from '../ui';
-import * as DocumentPicker from 'expo-document-picker';
 import { theme } from '../../constants/theme';
 import { useStaff } from '../../context/StaffContext';
 import {
@@ -65,6 +64,7 @@ export default function AttachExternalDocumentModal({
 
   const handlePickDocument = async () => {
     try {
+      const DocumentPicker = await import('expo-document-picker');
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/jpeg', 'image/png'],
         copyToCacheDirectory: true,

@@ -1,4 +1,3 @@
-import * as DocumentPicker from 'expo-document-picker';
 import { Platform } from 'react-native';
 
 export interface PickLogoResult {
@@ -12,6 +11,7 @@ export interface PickLogoResult {
  */
 export async function pickClinicLogo(): Promise<PickLogoResult | null> {
   try {
+    const DocumentPicker = await import('expo-document-picker');
     const result = await DocumentPicker.getDocumentAsync({
       type: ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/*'],
       copyToCacheDirectory: true,

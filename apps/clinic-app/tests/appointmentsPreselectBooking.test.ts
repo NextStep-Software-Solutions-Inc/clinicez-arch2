@@ -1,5 +1,5 @@
 // token-guard:ignore-file
-import { describe, expect, test, mock } from 'bun:test';
+import { describe, expect, test, mock, afterAll } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -146,14 +146,12 @@ mock.module('../context/StaffContext', () => ({
   formatStaffName: (s: any) => `Dr. ${s.name}`,
 }));
 
-mock.module('../context/ClinicContext', () => ({
-  useClinic: () => ({
-    settings: {
-      patientSearchDisplayFieldsJson: JSON.stringify(['patientCode', 'age']),
-    },
-    letterhead: null,
-  }),
-}));
+(globalThis as any).__mockClinicContext = {
+  settings: {
+    patientSearchDisplayFieldsJson: JSON.stringify(['patientCode', 'age']),
+  },
+  letterhead: null,
+};
 
 const {
   default: AppointmentsScreen,
@@ -398,5 +396,9 @@ describe('Book Appointment from Patient List & Post-Booking Success Dialog', () 
     expect(bookModalVisible).toBe(false);
     expect(bookedAppointment).toBeNull();
     expect(formPatient).toBeNull();
+  });
+
+  afterAll(() => {
+    delete (globalThis as any).__mockClinicContext;
   });
 });

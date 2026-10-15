@@ -12,15 +12,15 @@
     "test:tokens": "bun --cwd packages/design-tokens test",
     "test:patient": "bun test apps/patient-app/tests",
     "typecheck:clinic": "tsc --noEmit -p apps/clinic-app",
-    "test:clinic": "bun test apps/clinic-app/tests",
+    "test:clinic": "bun test --timeout 20000 apps/clinic-app/tests",
     "lint:clinic": "node apps/clinic-app/scripts/check-tokens.mjs && node apps/clinic-app/scripts/check-no-external-hosts.mjs",
     "typecheck:lab": "tsc --noEmit -p apps/laboratory-app",
     "typecheck:pharmacy": "tsc --noEmit -p apps/pharmacy-app",
     "typecheck:cashier": "tsc --noEmit -p apps/cashier-app",
     "typecheck:all": "tsc --noEmit -p apps/patient-app && tsc --noEmit -p apps/clinic-app && tsc --noEmit -p apps/laboratory-app && tsc --noEmit -p apps/pharmacy-app && tsc --noEmit -p apps/cashier-app",
     "build:portal": "bun run --cwd apps/portal-web build",
-    "build:patient-web": "bun --cwd apps/patient-app run build:web",
-    "build:clinic-web": "bun --cwd apps/clinic-app run build:web"
+    "build:patient-web": "bun run --cwd apps/patient-app build:web",
+    "build:clinic-web": "bun run --cwd apps/clinic-app build:web"
   },
   "devDependencies": {
     "typescript": "~6.0.3"

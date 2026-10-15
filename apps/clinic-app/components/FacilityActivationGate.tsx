@@ -84,7 +84,11 @@ const FacilityLicenseContext = createContext<LicenseContextValue>({
   switchWorkspace: () => {},
 });
 
-export const useFacilityLicense = () => useContext(FacilityLicenseContext);
+export const useFacilityLicense = (): LicenseContextValue => {
+  const globalMock = (globalThis as any).__mockFacilityLicense;
+  if (globalMock) return globalMock;
+  return useContext(FacilityLicenseContext);
+};
 
 interface FacilityActivationGateProps {
   children: ReactNode;

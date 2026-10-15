@@ -42,7 +42,7 @@ export interface ClinicContextValue {
 
 const EMPTY_LETTERHEAD: Letterhead = { header: '', subHeader: '', address: '', contact: '', footer: '' };
 
-const ClinicContext = createContext<ClinicContextValue>({
+export const ClinicContext = createContext<ClinicContextValue>({
   facilityName: '',
   accreditationNumber: '',
   taxIdentificationNumber: '',
@@ -63,7 +63,11 @@ const ClinicContext = createContext<ClinicContextValue>({
   refreshRooms: async () => {},
 });
 
-export const useClinic = () => useContext(ClinicContext);
+export const useClinic = (): ClinicContextValue => {
+  const globalMock = (globalThis as any).__mockClinicContext;
+  if (globalMock) return globalMock;
+  return useContext(ClinicContext);
+};
 
 /**
  * Supplies the active facility's identity (name, accreditation, plan, letterhead, rooms) to the

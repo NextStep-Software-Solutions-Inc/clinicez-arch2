@@ -75,6 +75,14 @@ export function RecordPaymentDialog({
   const [submitting, setSubmitting] = useState(false);
   const [successResult, setSuccessResult] = useState<RecordManualPaymentResult | null>(null);
 
+  const updateInitialAmount = (planList: BillingPlan[], slug: string, annual: boolean) => {
+    const p = planList.find(x => x.slug === slug);
+    if (!p) return;
+    const mPrice = typeof p.monthlyPrice === "number" ? p.monthlyPrice : (typeof p.priceMonthly === "number" ? p.priceMonthly : parseFloat(String(p.priceMonthly || 0)) || 0);
+    const aPrice = typeof p.annualPrice === "number" ? p.annualPrice : (typeof p.priceAnnually === "number" ? p.priceAnnually : parseFloat(String(p.priceAnnually || 0)) || 0);
+    setAmount(annual ? aPrice : mPrice);
+  };
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -103,15 +111,7 @@ export function RecordPaymentDialog({
     };
 
     fetchPlans();
-  }, [isOpen, tenantId, currentPlanSlug]);
-
-  const updateInitialAmount = (planList: BillingPlan[], slug: string, annual: boolean) => {
-    const p = planList.find(x => x.slug === slug);
-    if (!p) return;
-    const mPrice = typeof p.monthlyPrice === "number" ? p.monthlyPrice : (typeof p.priceMonthly === "number" ? p.priceMonthly : parseFloat(String(p.priceMonthly || 0)) || 0);
-    const aPrice = typeof p.annualPrice === "number" ? p.annualPrice : (typeof p.priceAnnually === "number" ? p.priceAnnually : parseFloat(String(p.priceAnnually || 0)) || 0);
-    setAmount(annual ? aPrice : mPrice);
-  };
+  }, [isOpen, tenantId, currentPlanSlug, isAnnual]);
 
   const handlePlanChange = (slug: string) => {
     setPlanSlug(slug);
