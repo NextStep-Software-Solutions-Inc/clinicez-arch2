@@ -127,7 +127,7 @@ export default function WorkstationSidebar({
           accessibilityLabel={isIconMode ? 'Expand sidebar' : `${displayName} logo`}
           style={(state: InteractionState) => [
             styles.logoBadge,
-            { backgroundColor: primaryColorHex || theme.colors.primary },
+            { backgroundColor: clinicLogo ? 'transparent' : (primaryColorHex || theme.colors.primary) },
             isIconMode && styles.logoBadgeClickable,
             isIconMode && state.hovered && styles.logoBadgeHover,
             isIconMode && state.pressed && styles.logoBadgePressed,
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     width: theme.sizes.controlMd,
     height: theme.sizes.controlMd,
     borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',

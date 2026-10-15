@@ -127,7 +127,8 @@ describe('LogoCropModal Component', () => {
 
     // Modal title & guidance
     expect(markup).toContain('Adjust &amp; Crop Clinic Logo');
-    expect(markup).toContain('Drag image to reposition');
+    expect(markup).toContain('Drag to reposition');
+    expect(markup).toContain('Pinch or scroll to zoom');
     expect(markup).toContain('100%');
 
     // Preset action buttons
@@ -143,5 +144,19 @@ describe('LogoCropModal Component', () => {
     // Modal actions
     expect(markup).toContain('Cancel');
     expect(markup).toContain('Apply &amp; Save Logo');
+  });
+
+  test('displays pinch-to-zoom helper text to guide touch and trackpad users', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(LogoCropModal, {
+        visible: true,
+        imageUri: 'https://example.com/logo.png',
+        onClose: () => {},
+        onConfirm: () => {},
+      })
+    );
+
+    expect(markup).toContain('Pinch or scroll to zoom');
+    expect(markup).toContain('Drag to reposition');
   });
 });

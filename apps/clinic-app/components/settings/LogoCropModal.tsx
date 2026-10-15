@@ -60,16 +60,30 @@ export default function LogoCropModal({
   const [saving, setSaving] = useState<boolean>(false);
 
   const panRef = useRef(pan);
-  const startPanRef = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(zoom);
+  const pinchRef = useRef<{
+    initialDist: number;
+    initialZoom: number;
+    initialMid: { x: number; y: number };
+    initialPan: { x: number; y: number };
+  } | null>(null);
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const viewportWrapperRef = useRef<any>(null);
 
   useEffect(() => {
     panRef.current = pan;
   }, [pan]);
 
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
   // Load natural dimensions when a new image is loaded
   useEffect(() => {
     if (visible && imageUri) {
       setZoom(1);
+      zoomRef.current = 1;
       setPan({ x: 0, y: 0 });
       panRef.current = { x: 0, y: 0 };
 
@@ -79,10 +93,29 @@ export default function LogoCropModal({
     }
   }, [visible, imageUri]);
 
-  const isDraggingRef = useRef(false);
-  const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const getTouchCoords = (t: any) => ({
+    x: t.clientX ?? t.pageX ?? 0,
+    y: t.clientY ?? t.pageY ?? 0,
+  });
+
+  const getTouchesDistance = (t1: any, t2: any) => {
+    const c1 = getTouchCoords(t1);
+    const c2 = getTouchCoords(t2);
+    return Math.hypot(c1.x - c2.x, c1.y - c2.y);
+  };
+
+  const getTouchesMidpoint = (t1: any, t2: any) => {
+    const c1 = getTouchCoords(t1);
+    const c2 = getTouchCoords(t2);
+    return {
+      x: (c1.x + c2.x) / 2,
+      y: (c1.y + c2.y) / 2,
+    };
+  };
 
   const handlePointerDown = (e: any) => {
+    // Only handle mouse pointer down (touch events are handled specifically for multi-touch pinch)
+    if (e.pointerType === 'touch') return;
     isDraggingRef.current = true;
     const clientX = e.clientX ?? e.nativeEvent?.clientX ?? e.nativeEvent?.pageX ?? 0;
     const clientY = e.clientY ?? e.nativeEvent?.clientY ?? e.nativeEvent?.pageY ?? 0;
@@ -95,6 +128,7 @@ export default function LogoCropModal({
   };
 
   const handlePointerMove = (e: any) => {
+    if (e.pointerType === 'touch') return;
     if (!isDraggingRef.current) return;
     const clientX = e.clientX ?? e.nativeEvent?.clientX ?? e.nativeEvent?.pageX ?? 0;
     const clientY = e.clientY ?? e.nativeEvent?.clientY ?? e.nativeEvent?.pageY ?? 0;
@@ -114,40 +148,157 @@ export default function LogoCropModal({
   };
 
   const handleTouchStart = (e: any) => {
-    const touch = e.touches?.[0] || e.nativeEvent?.touches?.[0];
-    if (!touch) return;
-    isDraggingRef.current = true;
-    dragStartRef.current = {
-      x: touch.clientX ?? touch.pageX ?? 0,
-      y: touch.clientY ?? touch.pageY ?? 0,
-      panX: panRef.current.x,
-      panY: panRef.current.y,
-    };
-  };
+    const touches = e.touches || e.nativeEvent?.touches;
+    if (!touches || touches.length === 0) return;
 
-  const handleTouchMove = (e: any) => {
-    if (!isDraggingRef.current) return;
-    const touch = e.touches?.[0] || e.nativeEvent?.touches?.[0];
-    if (!touch) return;
-    const clientX = touch.clientX ?? touch.pageX ?? 0;
-    const clientY = touch.clientY ?? touch.pageY ?? 0;
-    const dx = clientX - dragStartRef.current.x;
-    const dy = clientY - dragStartRef.current.y;
-    setPan({
-      x: Math.round(dragStartRef.current.panX + dx),
-      y: Math.round(dragStartRef.current.panY + dy),
-    });
-  };
-
-  const handleTouchEnd = () => {
-    if (isDraggingRef.current) {
+    // Two-finger touch -> start pinch-to-zoom
+    if (touches.length >= 2) {
+      if (e.cancelable && e.preventDefault) e.preventDefault();
       isDraggingRef.current = false;
-      panRef.current = { ...pan };
+      const dist = getTouchesDistance(touches[0], touches[1]);
+      const mid = getTouchesMidpoint(touches[0], touches[1]);
+      pinchRef.current = {
+        initialDist: dist,
+        initialZoom: zoomRef.current,
+        initialMid: mid,
+        initialPan: { ...panRef.current },
+      };
+      return;
+    }
+
+    // Single-finger touch -> start pan
+    if (touches.length === 1) {
+      pinchRef.current = null;
+      isDraggingRef.current = true;
+      const c = getTouchCoords(touches[0]);
+      dragStartRef.current = {
+        x: c.x,
+        y: c.y,
+        panX: panRef.current.x,
+        panY: panRef.current.y,
+      };
     }
   };
 
+  const handleTouchMove = (e: any) => {
+    const touches = e.touches || e.nativeEvent?.touches;
+    if (!touches || touches.length === 0) return;
+
+    // Two-finger pinch gesture
+    if (touches.length >= 2 && pinchRef.current) {
+      if (e.cancelable && e.preventDefault) e.preventDefault();
+      const currentDist = getTouchesDistance(touches[0], touches[1]);
+      if (pinchRef.current.initialDist > 0) {
+        const factor = currentDist / pinchRef.current.initialDist;
+        const newZoom = Math.min(4, Math.max(0.5, Number((pinchRef.current.initialZoom * factor).toFixed(2))));
+        setZoom(newZoom);
+        zoomRef.current = newZoom;
+
+        // Smooth simultaneous midpoint panning
+        const currentMid = getTouchesMidpoint(touches[0], touches[1]);
+        const midDx = currentMid.x - pinchRef.current.initialMid.x;
+        const midDy = currentMid.y - pinchRef.current.initialMid.y;
+        setPan({
+          x: Math.round(pinchRef.current.initialPan.x + midDx),
+          y: Math.round(pinchRef.current.initialPan.y + midDy),
+        });
+      }
+      return;
+    }
+
+    // Single-finger drag
+    if (touches.length === 1 && isDraggingRef.current) {
+      const c = getTouchCoords(touches[0]);
+      const dx = c.x - dragStartRef.current.x;
+      const dy = c.y - dragStartRef.current.y;
+      setPan({
+        x: Math.round(dragStartRef.current.panX + dx),
+        y: Math.round(dragStartRef.current.panY + dy),
+      });
+    }
+  };
+
+  const handleTouchEnd = (e: any) => {
+    const touches = e.touches || e.nativeEvent?.touches;
+    if (touches && touches.length === 1) {
+      // Transition smoothly from pinch back to 1-finger drag
+      pinchRef.current = null;
+      isDraggingRef.current = true;
+      const c = getTouchCoords(touches[0]);
+      dragStartRef.current = {
+        x: c.x,
+        y: c.y,
+        panX: panRef.current.x,
+        panY: panRef.current.y,
+      };
+      return;
+    }
+
+    if (!touches || touches.length === 0) {
+      pinchRef.current = null;
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        panRef.current = { ...pan };
+      }
+    }
+  };
+
+  const handleWheel = (e: any) => {
+    if (e?.preventDefault) e.preventDefault();
+    if (Platform.OS === 'web') {
+      if (e?.ctrlKey) {
+        // Trackpad pinch-to-zoom sends wheel events with ctrlKey=true
+        const factor = Math.exp(-e.deltaY * 0.01);
+        setZoom((prev) => {
+          const next = Math.min(4, Math.max(0.5, Number((prev * factor).toFixed(2))));
+          zoomRef.current = next;
+          return next;
+        });
+      } else if (e?.deltaY) {
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        setZoom((prev) => {
+          const next = Math.min(4, Math.max(0.5, Number((prev + delta).toFixed(2))));
+          zoomRef.current = next;
+          return next;
+        });
+      }
+    }
+  };
+
+  // Attach non-passive touch listeners on web DOM to cleanly intercept multi-touch pinch gestures
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const el = viewportWrapperRef.current;
+    if (!el) return;
+
+    const onNativeTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2 && e.cancelable) {
+        e.preventDefault();
+      }
+      handleTouchStart(e);
+    };
+
+    const onNativeTouchMove = (e: TouchEvent) => {
+      if (e.touches.length >= 2 && e.cancelable) {
+        e.preventDefault();
+      }
+      handleTouchMove(e);
+    };
+
+    const onNativeTouchEnd = (e: TouchEvent) => {
+      handleTouchEnd(e);
+    };
+
+    const onNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      handleWheel(e);
+    };
+
+    el.addEventListener('touchstart', onNativeTouchStart, { passive: false });
+    el.addEventListener('touchmove', onNativeTouchMove, { passive: false });
+    el.addEventListener('touchend', onNativeTouchEnd, { passive: false });
+    el.addEventListener('touchcancel', onNativeTouchEnd, { passive: false });
+    el.addEventListener('wheel', onNativeWheel, { passive: false });
 
     const onGlobalPointerMove = (e: MouseEvent) => {
       if (!isDraggingRef.current) return;
@@ -168,7 +319,13 @@ export default function LogoCropModal({
 
     window.addEventListener('pointermove', onGlobalPointerMove);
     window.addEventListener('pointerup', onGlobalPointerUp);
+
     return () => {
+      el.removeEventListener('touchstart', onNativeTouchStart);
+      el.removeEventListener('touchmove', onNativeTouchMove);
+      el.removeEventListener('touchend', onNativeTouchEnd);
+      el.removeEventListener('touchcancel', onNativeTouchEnd);
+      el.removeEventListener('wheel', onNativeWheel);
       window.removeEventListener('pointermove', onGlobalPointerMove);
       window.removeEventListener('pointerup', onGlobalPointerUp);
     };
@@ -224,14 +381,6 @@ export default function LogoCropModal({
   const handleReset = () => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
-  };
-
-  const handleWheel = (e: any) => {
-    if (Platform.OS === 'web' && e?.deltaY) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setZoom((prev) => Math.min(Math.max(Number((prev + delta).toFixed(2)), 0.5), 4));
-    }
   };
 
   const handleApply = async () => {
@@ -318,6 +467,7 @@ export default function LogoCropModal({
         {/* Main Crop Area */}
         <View style={styles.cropSection}>
           <View
+            ref={viewportWrapperRef}
             style={[styles.viewportWrapper, Platform.OS === 'web' ? ({ cursor: 'grab' } as any) : null]}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -348,7 +498,7 @@ export default function LogoCropModal({
           </View>
 
           <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.dragHelpText}>
-            Drag image to reposition • Scroll or use controls below to zoom
+            Drag to reposition • Pinch or scroll to zoom
           </ThemedText>
         </View>
 
@@ -498,6 +648,7 @@ const styles = StyleSheet.create({
       web: {
         cursor: 'grab',
         userSelect: 'none',
+        touchAction: 'none',
       } as any,
     }),
   },
@@ -595,7 +746,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: 'transparent',
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
     overflow: 'hidden',
     position: 'relative',
   },
