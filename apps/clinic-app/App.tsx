@@ -15,10 +15,12 @@ import { OfflineSyncRunner } from './components/OfflineSyncRunner';
 import ErrorBoundary from './components/ErrorBoundary';
 import { CrashRecoveryBanner } from './components/CrashRecoveryBanner';
 import { initGlobalErrorHandlers } from './services/crashReporter';
+import { useOTAUpdate } from './hooks/useOTAUpdate';
 import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
 import { theme } from './constants/theme';
 
 export default function App() {
+  useOTAUpdate();
   const [fontsLoaded, fontError] = useFonts(fontAssets);
 
   React.useEffect(() => {

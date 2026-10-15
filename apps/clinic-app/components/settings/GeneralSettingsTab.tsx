@@ -11,6 +11,7 @@ import EmptyState from '../ui/EmptyState';
 import ErrorState from '../ui/ErrorState';
 import { SkeletonList } from '../ui/Skeleton';
 import SecuritySection from './SecuritySection';
+import AppUpdatesSettingsCard from './AppUpdatesSettingsCard';
 import EdgeServerSwitcherSection from './EdgeServerSwitcherSection';
 import { theme } from '../../constants/theme';
 import { DailyEodReport, ClinicSettingsRecord } from '../../services/clinicService';
@@ -508,6 +509,9 @@ export default function GeneralSettingsTab({
 
       {/* Security PIN for offline devices */}
       <SecuritySection />
+
+      {/* Over-The-Air (OTA) App Updates */}
+      <AppUpdatesSettingsCard />
 
       {/* Edge & Server Connectivity */}
       <EdgeServerSwitcherSection />

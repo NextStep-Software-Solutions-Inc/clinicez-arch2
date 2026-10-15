@@ -40,6 +40,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
   scheme: 'clinicez-clinic',
+  runtimeVersion: { policy: 'appVersion' },
+  updates: {
+    fallbackToCacheTimeout: 0,
+    enabled: true,
+    url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
+  },
   ios: {
     supportsTablet: true,
     bundleIdentifier: BUNDLE_ID,
@@ -72,6 +78,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     'expo-secure-store',
     'expo-sqlite',
+    'expo-updates',
     [
       'expo-splash-screen',
       {
