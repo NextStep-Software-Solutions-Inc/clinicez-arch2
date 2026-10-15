@@ -3,7 +3,7 @@ import { useWindowDimensions } from 'react-native';
 import { theme } from '../constants/theme';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
 
-export type SidebarMode = 'open' | 'icon' | 'close';
+export type SidebarMode = 'open' | 'icon';
 
 export const SIDEBAR_MODE_STORAGE_KEY = 'clinicez_workstation_sidebar_mode';
 
@@ -38,7 +38,7 @@ const SidebarContext = createContext<SidebarContextValue>(DEFAULT_SIDEBAR_CONTEX
 export const useSidebar = () => useContext(SidebarContext);
 
 function isValidMode(val: any): val is SidebarMode {
-  return val === 'open' || val === 'icon' || val === 'close';
+  return val === 'open' || val === 'icon';
 }
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
@@ -59,25 +59,22 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const cycleMode = useCallback(() => {
-    let next: SidebarMode;
-    if (mode === 'open') next = 'icon';
-    else if (mode === 'icon') next = 'close';
-    else next = 'open';
-    setMode(next);
+    setMode(mode === 'open' ? 'icon' : 'open');
   }, [mode, setMode]);
 
   const toggleMode = cycleMode;
 
   const openSidebar = useCallback(() => setMode('open'), [setMode]);
   const collapseToIcon = useCallback(() => setMode('icon'), [setMode]);
-  const closeSidebar = useCallback(() => setMode('close'), [setMode]);
+  // Workstation no longer supports a closed drawer state; alias to collapsed icon rail for safety
+  const closeSidebar = collapseToIcon;
 
   const value = useMemo<SidebarContextValue>(
     () => ({
       mode,
       isOpen: mode === 'open',
       isIcon: mode === 'icon',
-      isClosed: mode === 'close',
+      isClosed: false,
       setMode,
       toggleMode,
       cycleMode,

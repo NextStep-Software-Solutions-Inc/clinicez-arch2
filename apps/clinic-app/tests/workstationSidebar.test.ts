@@ -169,7 +169,7 @@ describe('WorkstationSidebar Component', () => {
     // Header has the facility name as the primary title and uppercase tier badge
     expect(html).toContain('NextStep OPD');
     expect(html).toContain('PRO');
-    expect(html).toContain('Clinic workstation');
+    expect(html).not.toContain('Clinic workstation');
   });
 
   test('renders fallback brand title when facility name is unconfigured', () => {

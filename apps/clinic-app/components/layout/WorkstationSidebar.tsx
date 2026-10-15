@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, PressableStateCallbackType, Image } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, PressableStateCallbackType, Image, Platform } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
 import Icon, { IconName } from '../ui/Icon';
@@ -67,10 +67,33 @@ export default function WorkstationSidebar({
   const displayName = facilityName || 'Clinic EZ';
 
   return (
-    <View style={[styles.container, { width: resolvedWidth }]}>
+    <View
+      style={[
+        styles.container,
+        { width: resolvedWidth },
+        Platform.select({
+          web: {
+            transition: 'width 250ms cubic-bezier(0.4, 0, 0.2, 1)',
+            willChange: 'width',
+          } as any,
+        }),
+      ]}
+    >
       {/* Brand Header */}
       <View style={[styles.brandHeader, isIconMode && styles.brandHeaderIconMode]}>
-        <View style={styles.logoBadge}>
+        <Pressable
+          onPress={isIconMode ? onToggleMode : undefined}
+          disabled={!isIconMode}
+          accessibilityRole={isIconMode ? 'button' : undefined}
+          accessibilityLabel={isIconMode ? 'Expand sidebar' : `${displayName} logo`}
+          style={(state: InteractionState) => [
+            styles.logoBadge,
+            isIconMode && styles.logoBadgeClickable,
+            isIconMode && state.hovered && styles.logoBadgeHover,
+            isIconMode && state.pressed && styles.logoBadgePressed,
+          ]}
+          {...(isIconMode ? ({ title: 'Expand sidebar' } as any) : {})}
+        >
           {clinicLogo ? (
             <Image
               source={{ uri: clinicLogo }}
@@ -81,7 +104,7 @@ export default function WorkstationSidebar({
           ) : (
             <Icon name="clinic" size={theme.sizes.iconMd} color={theme.colors.onPrimary} />
           )}
-        </View>
+        </Pressable>
 
         {isIconMode ? null : (
           <View style={styles.brandText}>
@@ -93,9 +116,6 @@ export default function WorkstationSidebar({
                 <Badge label={planTier.toUpperCase()} variant="primary" size="sm" />
               ) : null}
             </View>
-            <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1}>
-              Clinic workstation
-            </ThemedText>
           </View>
         )}
 
@@ -184,7 +204,7 @@ export default function WorkstationSidebar({
         })}
       </ScrollView>
 
-      {/* Footer: User Profile & Expand toggle for icon mode */}
+      {/* Footer: User Profile */}
       <View style={[styles.footer, isIconMode && styles.footerIconMode]}>
         <UserMenu
           variant="card"
@@ -192,20 +212,6 @@ export default function WorkstationSidebar({
           onNavigate={onNavigate}
           currentRoute={currentRoute}
         />
-        {isIconMode && onToggleMode ? (
-          <Pressable
-            onPress={onToggleMode}
-            accessibilityRole="button"
-            accessibilityLabel="Expand sidebar"
-            style={(state: InteractionState) => [
-              styles.expandButton,
-              state.hovered && styles.collapseButtonHover,
-              state.pressed && styles.collapseButtonPressed,
-            ]}
-          >
-            <Icon name="chevronRight" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-          </Pressable>
-        ) : null}
       </View>
     </View>
   );
@@ -218,6 +224,7 @@ const styles = StyleSheet.create({
     borderRightWidth: theme.sizes.borderWidth,
     borderRightColor: theme.colors.border,
     flexDirection: 'column',
+    overflow: 'hidden',
   },
   brandHeader: {
     flexDirection: 'row',
@@ -227,9 +234,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.border,
     gap: theme.spacing.md,
+    overflow: 'hidden',
   },
   brandHeaderIconMode: {
-    paddingHorizontal: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.lg,
     justifyContent: 'center',
     gap: 0,
   },
@@ -242,6 +250,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  logoBadgeClickable: {
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      } as any,
+    }),
+  },
+  logoBadgeHover: {
+    opacity: 0.9,
+    transform: [{ scale: 1.05 }],
+  },
+  logoBadgePressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.96 }],
+  },
   logoImage: {
     width: '100%',
     height: '100%',
@@ -249,11 +272,18 @@ const styles = StyleSheet.create({
   brandText: {
     flex: 1,
     minWidth: 0,
+    overflow: 'hidden',
+    ...Platform.select({
+      web: {
+        whiteSpace: 'nowrap',
+      } as any,
+    }),
   },
   brandTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
+    overflow: 'hidden',
   },
   brandTitle: {
     color: theme.colors.text,
@@ -272,14 +302,6 @@ const styles = StyleSheet.create({
   },
   collapseButtonPressed: {
     opacity: 0.8,
-  },
-  expandButton: {
-    width: '100%',
-    height: theme.sizes.controlSm,
-    borderRadius: theme.radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: theme.spacing.xs,
   },
   navList: {
     flex: 1,
@@ -300,6 +322,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     minHeight: theme.sizes.controlMd,
     borderRadius: theme.radii.md,
+    overflow: 'hidden',
   },
   navItemIconOnly: {
     width: theme.sizes.controlMd + 8,
@@ -333,12 +356,19 @@ const styles = StyleSheet.create({
   },
   navLabel: {
     flex: 1,
+    overflow: 'hidden',
+    ...Platform.select({
+      web: {
+        whiteSpace: 'nowrap',
+      } as any,
+    }),
   },
   footer: {
     padding: theme.spacing.md,
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.border,
     gap: theme.spacing.md,
+    overflow: 'hidden',
   },
   footerIconMode: {
     padding: theme.spacing.xs,

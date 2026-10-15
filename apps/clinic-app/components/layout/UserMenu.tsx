@@ -1,11 +1,13 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, PressableStateCallbackType } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
+
+type InteractionState = PressableStateCallbackType & { hovered?: boolean };
 
 export interface UserMenuProps {
   /** Avatar only (phones). */
@@ -58,11 +60,15 @@ export default function UserMenu({
       accessibilityRole="button"
       accessibilityLabel={`Signed in as ${displayName}. Open my profile and credentials`}
       accessibilityState={{ selected: isSelected }}
-      style={({ pressed }) => [
+      style={(state: InteractionState) => [
         variant === 'card' ? styles.card : styles.pill,
-        variant === 'card' && isSelected && styles.cardActive,
-        pressed && styles.pressed,
+        compact && styles.compactContainer,
+        variant === 'card' && !compact && isSelected && styles.cardActive,
+        compact && isSelected && styles.compactActive,
+        state.hovered && (compact ? styles.compactHover : styles.hover),
+        state.pressed && styles.pressed,
       ]}
+      {...(compact ? ({ title: displayName } as any) : {})}
     >
       <View style={[styles.avatar, isSelected && styles.avatarActive]}>
         <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
@@ -122,6 +128,32 @@ const styles = StyleSheet.create({
   cardActive: {
     backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
+  },
+  compactContainer: {
+    width: theme.sizes.controlMd + 8,
+    minHeight: theme.sizes.controlMd,
+    padding: 0,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    paddingLeft: 0,
+    paddingRight: 0,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: theme.radii.md,
+    gap: 0,
+    maxWidth: undefined,
+  },
+  compactActive: {
+    backgroundColor: theme.colors.primaryLight,
+  },
+  compactHover: {
+    backgroundColor: theme.colors.surfaceSubtle,
+  },
+  hover: {
+    backgroundColor: theme.colors.surfaceSubtle,
   },
   avatar: {
     width: 32,

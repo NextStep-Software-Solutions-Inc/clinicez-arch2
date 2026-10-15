@@ -60,22 +60,19 @@ export default function ResponsiveLayout({
   }
 
   // Workstation View (Tablet / Desktop):
-  // When mode === 'close', WorkstationSidebar is omitted (0px width), allowing mainColumn 100% width
-  const showSidebar = mode !== 'close';
+  // WorkstationSidebar is always rendered in either 'open' or 'icon' mode
   const sidebarWidth =
     mode === 'icon' ? theme.sizes.sidebarCollapsedWidth : theme.sizes.sidebarWidth;
 
   return (
     <View style={styles.desktopContainer}>
-      {showSidebar ? (
-        <WorkstationSidebar
-          currentRoute={currentRouteName}
-          onNavigate={handleNavigate}
-          width={sidebarWidth}
-          mode={mode}
-          onToggleMode={cycleMode}
-        />
-      ) : null}
+      <WorkstationSidebar
+        currentRoute={currentRouteName}
+        onNavigate={handleNavigate}
+        width={sidebarWidth}
+        mode={mode}
+        onToggleMode={cycleMode}
+      />
       <View style={[styles.mainColumn, style]}>
         {!hideHeader && (
           <ClinicHeaderBar

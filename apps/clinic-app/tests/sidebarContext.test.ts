@@ -146,7 +146,7 @@ describe('SidebarContext & SidebarProvider', () => {
   });
 
   test('reads and honors saved preference from deviceStorage', () => {
-    mockStorage.set(SIDEBAR_MODE_STORAGE_KEY, 'close');
+    mockStorage.set(SIDEBAR_MODE_STORAGE_KEY, 'icon');
     mockWindowWidth = 1280;
     let captured: any = null;
 
@@ -162,8 +162,9 @@ describe('SidebarContext & SidebarProvider', () => {
       )
     );
 
-    expect(captured.mode).toBe('close');
-    expect(captured.isClosed).toBe(true);
+    expect(captured.mode).toBe('icon');
+    expect(captured.isIcon).toBe(true);
+    expect(captured.isOpen).toBe(false);
   });
 
   test('setMode updates state and persists to storage', () => {
@@ -184,11 +185,11 @@ describe('SidebarContext & SidebarProvider', () => {
     captured.setMode('icon');
     expect(mockStorage.get(SIDEBAR_MODE_STORAGE_KEY)).toBe('icon');
 
-    captured.setMode('close');
-    expect(mockStorage.get(SIDEBAR_MODE_STORAGE_KEY)).toBe('close');
+    captured.setMode('open');
+    expect(mockStorage.get(SIDEBAR_MODE_STORAGE_KEY)).toBe('open');
   });
 
-  test('cycleMode transitions open -> icon -> close -> open', () => {
+  test('cycleMode transitions open -> icon -> open (binary toggle)', () => {
     let captured: any = null;
 
     const render = () => {
@@ -215,14 +216,7 @@ describe('SidebarContext & SidebarProvider', () => {
     render();
     expect(captured.mode).toBe('icon');
 
-    // Cycle 2: icon -> close
-    captured.cycleMode();
-    expect(mockStorage.get(SIDEBAR_MODE_STORAGE_KEY)).toBe('close');
-
-    render();
-    expect(captured.mode).toBe('close');
-
-    // Cycle 3: close -> open
+    // Cycle 2: icon -> open
     captured.cycleMode();
     expect(mockStorage.get(SIDEBAR_MODE_STORAGE_KEY)).toBe('open');
 
