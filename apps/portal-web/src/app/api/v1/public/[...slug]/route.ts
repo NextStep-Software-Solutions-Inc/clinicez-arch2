@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { joinApiUrl } from "@shared/safe";
 
 const CLINIC_API_URL = (process.env.NEXT_PUBLIC_CLINIC_API_URL || process.env.CLINIC_API_URL || "http://localhost:5245").replace(/\/+$/, "");
+const PORTAL_API_URL = (process.env.NEXT_PUBLIC_API_URL || process.env.PORTAL_API_URL || "http://localhost:5238/api/v1").replace(/\/+$/, "");
 
 export async function GET(
   request: NextRequest,
@@ -10,7 +11,8 @@ export async function GET(
   const resolved = await params;
   const subPath = resolved.slug.join("/");
   const search = request.nextUrl.search;
-  const targetUrl = joinApiUrl(CLINIC_API_URL, `/public/${subPath}${search}`);
+  const baseUrl = subPath.startsWith("directory/") ? PORTAL_API_URL : CLINIC_API_URL;
+  const targetUrl = joinApiUrl(baseUrl, `/public/${subPath}${search}`);
 
   try {
     const res = await fetch(targetUrl, {

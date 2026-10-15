@@ -390,8 +390,15 @@ public class AdminEndpoints : IEndpoint
                         ?? await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
             if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
 
-            var result = await sender.Send(new UpdateAdminSystemSettingsCommand(input, admin.FullName));
-            return Results.Ok(result);
+            try
+            {
+                var result = await sender.Send(new UpdateAdminSystemSettingsCommand(input, admin.FullName));
+                return Results.Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
         })
         .WithName("UpdateAdminSettings")
         .WithDescription("Updates platform-wide system settings and invalidates cache.")

@@ -11,14 +11,15 @@ public sealed class SubscriptionService(
     IApplicationDbContext context,
     IOptions<BillingOptions> billingOptions,
     TimeProvider timeProvider,
-    IEntitlementsPublisher publisher) : ISubscriptionService
+    IEntitlementsPublisher publisher,
+    ISystemSettingsService? settingsService = null) : ISubscriptionService
 {
     public async Task<Subscription> StartTrialAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var existing = await context.Subscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken);
         if (existing is not null) return existing;
 
-        var subscription = await TrialSubscription.CreateAsync(context, billingOptions.Value, timeProvider, tenantId, cancellationToken);
+        var subscription = await TrialSubscription.CreateAsync(context, billingOptions.Value, timeProvider, tenantId, cancellationToken, settingsService);
         await context.SaveChangesAsync(cancellationToken);
         return subscription;
     }

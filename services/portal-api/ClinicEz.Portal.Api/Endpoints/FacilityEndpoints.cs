@@ -481,24 +481,26 @@ public class FacilityEndpoints : IEndpoint
             Guid id,
             UpdateFacilitySettingsRequest request,
             HttpContext httpContext,
-            IApplicationDbContext context) =>
+            IApplicationDbContext context,
+            IFacilityProvisioningPublisher provisioningPublisher,
+            CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
 
             var tenant = await context.Tenants
-                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower() || t.Id.ToString() == request.TenantSlug);
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower() || t.Id.ToString() == request.TenantSlug, ct);
 
             if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
 
             var isOwner = tenant.OwnerId == clerkUserId;
             var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
                 s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active &&
-                (s.Role == WorkspaceMemberRole.Admin || context.StaffMembers.Any(p => p.WorkspaceMemberId == s.Id && p.Role == "Facility Administrator")));
+                (s.Role == WorkspaceMemberRole.Admin || context.StaffMembers.Any(p => p.WorkspaceMemberId == s.Id && p.Role == "Facility Administrator")), ct);
 
             if (!isOwner && !isAdmin) return Results.Forbid();
 
-            var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id);
+            var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id, ct);
             if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
 
             if (!string.IsNullOrWhiteSpace(request.Name)) facility.Name = request.Name.Trim();
@@ -507,7 +509,7 @@ public class FacilityEndpoints : IEndpoint
             {
                 var cleanSlug = GetFacilitiesQueryHandler.GenerateFacilitySlug(request.Slug);
                 var slugExists = await context.Facilities.AnyAsync(f => 
-                    f.Id != id && !f.IsDeleted && f.Slug.ToLower() == cleanSlug.ToLower());
+                    f.Id != id && !f.IsDeleted && f.Slug.ToLower() == cleanSlug.ToLower(), ct);
                 if (slugExists)
                 {
                     return Results.BadRequest(new { Message = $"The facility slug '{cleanSlug}' is already taken. Please choose another unique subdomain slug." });
@@ -532,7 +534,8 @@ public class FacilityEndpoints : IEndpoint
             if (request.NotificationPreferencesJson != null) facility.NotificationPreferencesJson = request.NotificationPreferencesJson;
             facility.UpdatedAt = DateTime.UtcNow;
 
-            await context.SaveChangesAsync(default);
+            await provisioningPublisher.StageDirectoryUpdateAsync(tenant, facility, ct);
+            await context.SaveChangesAsync(ct);
             return Results.Ok(new { Success = true, Message = "Facility settings saved successfully." });
         })
         .RequireAuthorization()

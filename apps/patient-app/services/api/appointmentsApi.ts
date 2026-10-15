@@ -76,3 +76,19 @@ export async function fetchAvailableSlotsLive(
         `/clinics/${clinicId}/providers/${providerId}/slots?${params}`,
     );
 }
+
+export async function rescheduleAppointmentLive(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    appointmentId: string,
+    scheduledAt: string,
+    reason: string,
+): Promise<RemoteAppointment> {
+    const data = await api.post<unknown>(
+        getToken,
+        `/patients/${patientId}/appointments/${appointmentId}/reschedule`,
+        { scheduledAt, reason },
+    );
+    return remoteAppointmentSchema.parse(data);
+}
+

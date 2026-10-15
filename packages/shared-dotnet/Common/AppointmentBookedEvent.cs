@@ -7,6 +7,7 @@ public record AppointmentBookedEvent
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid DraftId { get; init; }
+    public Guid? RescheduledAppointmentId { get; init; }
     public Guid PatientId { get; init; }
     public Guid ClinicId { get; init; }
     public string? TenantId { get; init; }

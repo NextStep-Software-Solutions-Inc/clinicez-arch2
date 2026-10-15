@@ -1,4 +1,5 @@
 using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Licensing;
 using Microsoft.Extensions.Options;
@@ -19,14 +20,23 @@ public interface ILicenseIssuer
 public sealed class LicenseIssuer(
     IFacilityLicenseSigner signer,
     IOptions<LicenseOptions> options,
-    TimeProvider timeProvider) : ILicenseIssuer
+    TimeProvider timeProvider,
+    ISystemSettingsService? settingsService = null) : ILicenseIssuer
 {
     public IssuedLicense Issue(Tenant tenant, Facility facility, EntitlementSnapshot snapshot, FacilityShare share)
     {
         var config = options.Value;
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
-        var expiresAt = now.AddDays(config.EffectiveTtlDays);
+        var ttlDays = config.EffectiveTtlDays;
+        var graceDays = config.GraceDays;
+        if (settingsService is not null)
+        {
+            ttlDays = Math.Max(1, settingsService.GetSettingIntAsync("Licensing:TtlDays", ttlDays).GetAwaiter().GetResult());
+            graceDays = Math.Max(0, settingsService.GetSettingIntAsync("Licensing:GraceDays", graceDays).GetAwaiter().GetResult());
+        }
+
+        var expiresAt = now.AddDays(ttlDays);
         // A cancelled or lapsed workspace never gets a license that outlives what it paid for.
         if (snapshot.Status is SubscriptionStatus.Cancelled or SubscriptionStatus.Expired && snapshot.PeriodEnd is { } periodEnd && periodEnd < expiresAt)
         {
@@ -59,8 +69,8 @@ public sealed class LicenseIssuer(
             ExpiresAtUtc = expiresAt,
             EntitlementVersion = snapshot.Version,
             WorkspaceStatus = snapshot.Status.ToString(),
-            GraceDays = config.GraceDays,
-            ReadOnlyGraceUntil = expiresAt.AddDays(config.GraceDays),
+            GraceDays = graceDays,
+            ReadOnlyGraceUntil = expiresAt.AddDays(graceDays),
             BranchId = facility.BranchId,
             PoolId = tenant.Id
         };

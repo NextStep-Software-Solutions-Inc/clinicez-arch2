@@ -20,7 +20,8 @@
     "typecheck:all": "tsc --noEmit -p apps/patient-app && tsc --noEmit -p apps/clinic-app && tsc --noEmit -p apps/laboratory-app && tsc --noEmit -p apps/pharmacy-app && tsc --noEmit -p apps/cashier-app",
     "build:portal": "bun run --cwd apps/portal-web build",
     "build:patient-web": "bun run --cwd apps/patient-app build:web",
-    "build:clinic-web": "bun run --cwd apps/clinic-app build:web"
+    "build:clinic-web": "bun run --cwd apps/clinic-app build:web",
+    "seed:dev": "powershell -ExecutionPolicy Bypass -File scripts/seed-dev-patients.ps1"
   },
   "devDependencies": {
     "typescript": "~6.0.3"

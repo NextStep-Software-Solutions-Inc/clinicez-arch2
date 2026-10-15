@@ -23,11 +23,15 @@ public sealed class EntitlementRenewalJob(
     IHubOnboardingService hubOnboarding,
     IOptions<LicenseOptions> options,
     TimeProvider timeProvider,
-    ILogger<EntitlementRenewalJob> logger) : IEntitlementRenewalJob
+    ILogger<EntitlementRenewalJob> logger,
+    ISystemSettingsService? settingsService = null) : IEntitlementRenewalJob
 {
     public async Task<int> RenewExpiringAsync(CancellationToken cancellationToken)
     {
-        var horizon = timeProvider.GetUtcNow().UtcDateTime.AddDays(options.Value.RenewBeforeDays);
+        var renewBeforeDays = settingsService is not null
+            ? await settingsService.GetSettingIntAsync("Licensing:RenewBeforeDays", options.Value.RenewBeforeDays, cancellationToken)
+            : options.Value.RenewBeforeDays;
+        var horizon = timeProvider.GetUtcNow().UtcDateTime.AddDays(renewBeforeDays);
 
         var tenantIds = await context.Facilities
             .AsNoTracking()
@@ -55,6 +59,9 @@ public sealed class EntitlementRenewalJob(
     public async Task<int> RevokeLapsedHubClientsAsync(CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
+        var graceDays = settingsService is not null
+            ? await settingsService.GetSettingIntAsync("Licensing:GraceDays", options.Value.GraceDays, cancellationToken)
+            : options.Value.GraceDays;
 
         var tenantIds = await context.EdgeHubClients
             .AsNoTracking()
@@ -70,7 +77,7 @@ public sealed class EntitlementRenewalJob(
         var lapsed = subscriptions
             .Where(s => s.EffectiveStatus(now) == SubscriptionStatus.Expired
                         && s.EntitlementsEndAt is { } end
-                        && end.AddDays(options.Value.GraceDays) < now)
+                        && end.AddDays(graceDays) < now)
             .Select(s => s.TenantId)
             .ToList();
 

@@ -61,7 +61,7 @@ export default function RescheduleScreen({ route }: Props) {
   const { showOfflineAlert } = useOfflineAlert();
 
   const [appointment, setAppointment] = useState<AppointmentItem | null>(null);
-  const { getToken } = useAuth();
+  const { getToken, internalPatientId } = useAuth();
 
   // Fetch appointment detail
   useEffect(() => {
@@ -105,7 +105,14 @@ export default function RescheduleScreen({ route }: Props) {
     const newScheduledAt = new Date(`${selectedDate}T${selectedSlot.time}:00`).toISOString();
 
     const [updated, error] = await safeAwait(
-      rescheduleAppointment(appointmentId, newScheduledAt, reason, db)
+      rescheduleAppointment(
+        appointmentId,
+        newScheduledAt,
+        reason,
+        db,
+        getToken,
+        internalPatientId ?? undefined,
+      )
     );
 
     if (error) {

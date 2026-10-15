@@ -149,13 +149,16 @@ public static class DependencyInjection
         // ── Clerk JWT Bearer Authentication ───────────────────────────────────
         services.AddClerkAuthentication(configuration);
 
-        // ── Dev auto-migration & seeding ──────────────────────────────────────
-        if (env is not null && env.IsDevelopment())
+        // ── Auto-migration (all non-test environments) & dev seeding ──────────
+        if (env is not null && !env.IsEnvironment("Testing"))
         {
             using var scope = services.BuildServiceProvider().CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             dbContext.Database.Migrate();
-            DbSeeder.Seed(dbContext);
+            if (env.IsDevelopment())
+            {
+                DbSeeder.Seed(dbContext);
+            }
         }
 
         return services;

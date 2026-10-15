@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import {
   Building2,
   Smartphone,
@@ -10,24 +10,17 @@ import {
   ShieldCheck,
   CreditCard,
   FileCheck2,
-  ArrowRight,
 } from "lucide-react"
 import { toast } from "sonner"
 import { siteEmails } from "@/config/site"
+import { billingService, BillingPaymentConfig, PlatformBankAccount } from "@/services/billing.service"
+
+export type BankAccountInfo = PlatformBankAccount
 
 interface OfflinePaymentInstructionsCardProps {
   tenantId?: string
-}
-
-interface BankAccountInfo {
-  id: string
-  institution: string
-  accountName: string
-  accountNumber: string
-  copyValue: string
-  branch?: string
-  type: "bank" | "ewallet"
-  badge: string
+  bankAccounts?: BankAccountInfo[]
+  paymentConfig?: BillingPaymentConfig | null
 }
 
 export const OFFLINE_BANK_ACCOUNTS: BankAccountInfo[] = [
@@ -40,6 +33,7 @@ export const OFFLINE_BANK_ACCOUNTS: BankAccountInfo[] = [
     branch: "BGC Corporate Center",
     type: "bank",
     badge: "Commercial Bank",
+    isActive: true,
   },
   {
     id: "bpi",
@@ -50,6 +44,7 @@ export const OFFLINE_BANK_ACCOUNTS: BankAccountInfo[] = [
     branch: "Ayala Triangle",
     type: "bank",
     badge: "Commercial Bank",
+    isActive: true,
   },
   {
     id: "gcash-maya",
@@ -60,14 +55,49 @@ export const OFFLINE_BANK_ACCOUNTS: BankAccountInfo[] = [
     branch: "Merchant QR / Mobile Wallet",
     type: "ewallet",
     badge: "Instant E-Wallet",
+    isActive: true,
   },
 ]
 
 export default function OfflinePaymentInstructionsCard({
   tenantId = "your-tenant-id",
+  bankAccounts,
+  paymentConfig,
 }: OfflinePaymentInstructionsCardProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  const billingEmail = siteEmails.billing || "billing@clinicez.ph"
+  const [liveConfig, setLiveConfig] = useState<BillingPaymentConfig | null>(paymentConfig || null)
+
+  useEffect(() => {
+    if (paymentConfig !== undefined || bankAccounts !== undefined) {
+      if (paymentConfig !== undefined) setLiveConfig(paymentConfig)
+      return
+    }
+    let active = true
+    billingService
+      .getPaymentConfig()
+      .then((cfg) => {
+        if (active && cfg) setLiveConfig(cfg)
+      })
+      .catch(() => {
+        // Retain fallback accounts if unauthenticated or offline
+      })
+    return () => {
+      active = false
+    }
+  }, [paymentConfig, bankAccounts])
+
+  const resolvedAccounts = (
+    bankAccounts ??
+    liveConfig?.bankAccounts ??
+    OFFLINE_BANK_ACCOUNTS
+  ).filter((acct) => acct.isActive !== false)
+
+  const billingEmail =
+    liveConfig?.billingSupportEmail || siteEmails.billing || "billing@clinicez.ph"
+  const corporateName =
+    liveConfig?.corporateName ||
+    resolvedAccounts[0]?.accountName ||
+    "ClinicEZ Digital Health Inc."
 
   const handleCopy = async (key: string, value: string, label: string) => {
     try {
@@ -215,12 +245,12 @@ export default function OfflinePaymentInstructionsCard({
             Official Philippine Bank & E-Wallet Accounts
           </span>
           <span className="text-xs text-muted-foreground">
-            Account Name: <strong className="text-foreground">ClinicEZ Digital Health Inc.</strong>
+            Account Name: <strong className="text-foreground">{corporateName}</strong>
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {OFFLINE_BANK_ACCOUNTS.map((account) => {
+          {resolvedAccounts.map((account) => {
             const isCopied = copiedKey === account.id
             const Icon = account.type === "bank" ? Building2 : Smartphone
 

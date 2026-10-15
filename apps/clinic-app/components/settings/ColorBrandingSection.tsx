@@ -122,7 +122,8 @@ export default function ColorBrandingSection({ onSaved }: ColorBrandingSectionPr
 
   const previewForeground = readableForeground(selectedColor);
   const workspaceDisplayName = workspaceProfile?.displayName || 'Portal Workspace';
-  const hasPendingChanges = selectedColor.toUpperCase() !== primaryColorHex.toUpperCase();
+  const effectivePrimary = primaryColorHex || DEFAULT_CLINIC_BRAND_COLOR;
+  const hasPendingChanges = selectedColor.toUpperCase() !== effectivePrimary.toUpperCase();
 
   return (
     <View style={styles.container}>

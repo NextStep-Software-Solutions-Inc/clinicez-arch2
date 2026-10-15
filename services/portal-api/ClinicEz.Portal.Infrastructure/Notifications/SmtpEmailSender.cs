@@ -68,24 +68,38 @@ internal sealed class SmtpOptionsValidator(IHostEnvironment environment) : IVali
             : ValidateOptionsResult.Success;
 }
 
-public sealed class SmtpEmailSender(IOptions<SmtpOptions> options) : IEmailSender
+public sealed class SmtpEmailSender(
+    IOptions<SmtpOptions> options,
+    ClinicEz.Portal.Application.Interfaces.ISystemSettingsService? settingsService = null) : IEmailSender
 {
     public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
         var smtp = options.Value;
+        var host = smtp.Host;
+        var port = smtp.Port;
+        var fromEmail = smtp.FromEmail;
+        var fromName = smtp.FromName;
+        var defaultReplyTo = smtp.ReplyTo;
+
+        if (settingsService is not null)
+        {
+            fromEmail = await settingsService.GetSettingValueAsync("Mailer:SmtpFromEmail", fromEmail, cancellationToken);
+            fromName = await settingsService.GetSettingValueAsync("Mailer:SmtpFromName", fromName, cancellationToken);
+            defaultReplyTo = await settingsService.GetSettingValueAsync("Mailer:SmtpReplyTo", defaultReplyTo ?? string.Empty, cancellationToken);
+        }
 
         var mime = new MimeMessage();
-        mime.From.Add(new MailboxAddress(DisplayName(smtp, message), smtp.FromEmail));
+        mime.From.Add(new MailboxAddress(DisplayName(fromName, message), fromEmail));
         mime.To.Add(MailboxAddress.Parse(message.To));
 
-        var replyTo = message.ReplyTo ?? smtp.ReplyTo;
+        var replyTo = message.ReplyTo ?? defaultReplyTo;
         if (!string.IsNullOrWhiteSpace(replyTo)) mime.ReplyTo.Add(MailboxAddress.Parse(replyTo));
 
         mime.Subject = message.Subject;
         mime.Body = new BodyBuilder { HtmlBody = message.HtmlBody, TextBody = message.TextBody }.ToMessageBody();
 
         using var client = new SmtpClient();
-        await client.ConnectAsync(smtp.Host, smtp.Port, SocketOptions(smtp), cancellationToken);
+        await client.ConnectAsync(host, port, SocketOptions(smtp), cancellationToken);
         if (!string.IsNullOrEmpty(smtp.User))
         {
             await client.AuthenticateAsync(smtp.User, smtp.Password, cancellationToken);
@@ -95,8 +109,8 @@ public sealed class SmtpEmailSender(IOptions<SmtpOptions> options) : IEmailSende
         await client.DisconnectAsync(true, cancellationToken);
     }
 
-    private static string DisplayName(SmtpOptions smtp, EmailMessage message) =>
-        string.IsNullOrWhiteSpace(message.FromDisplayName) ? smtp.FromName : $"{message.FromDisplayName} (via {smtp.FromName})";
+    private static string DisplayName(string fromName, EmailMessage message) =>
+        string.IsNullOrWhiteSpace(message.FromDisplayName) ? fromName : $"{message.FromDisplayName} (via {fromName})";
 
     private static SecureSocketOptions SocketOptions(SmtpOptions smtp) => smtp.Security switch
     {

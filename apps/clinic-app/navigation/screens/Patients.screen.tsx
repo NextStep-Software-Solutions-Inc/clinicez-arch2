@@ -352,17 +352,19 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [offlinePendingCount, setOfflinePendingCount] = useState(offlineSyncService.getPendingCount());
   const [offlineFailedCount, setOfflineFailedCount] = useState(offlineSyncService.getFailedCount());
   const [syncingOffline, setSyncingOffline] = useState(false);
+  const [pageSize, setPageSize] = useState<number>(50);
 
-  const fetchPatients = useCallback(async (termOverride?: string) => {
+  const fetchPatients = useCallback(async (termOverride?: string, sizeOverride?: number) => {
     const activeSearch = termOverride !== undefined ? termOverride : debouncedSearchTerm;
-    const [data, err] = await clinicService.getPatients(activeSearch || undefined);
+    const activeSize = sizeOverride !== undefined ? sizeOverride : pageSize;
+    const [data, err] = await clinicService.getPatients(activeSearch || undefined, undefined, 1, activeSize);
     if (err) {
       setPatientsError(err.message || 'Unable to load patients.');
       return;
     }
     setPatientsError(null);
     setPatients(data ?? []);
-  }, [debouncedSearchTerm]);
+  }, [debouncedSearchTerm, pageSize]);
 
   useEffect(() => {
     setLoading(true);
@@ -1353,6 +1355,26 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 Showing {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'}
               </ThemedText>
             ) : null}
+            <View style={styles.pageSizeSelector}>
+              {[50, 250, 500, 1000].map((sz) => (
+                <Pressable
+                  key={sz}
+                  style={[styles.pageSizePill, pageSize === sz && styles.pageSizePillActive]}
+                  onPress={() => {
+                    setPageSize(sz);
+                    fetchPatients(undefined, sz);
+                  }}
+                  accessibilityLabel={`Load ${sz} patients`}
+                >
+                  <ThemedText
+                    variant="caption"
+                    style={pageSize === sz ? styles.pageSizeTextActive : styles.pageSizeText}
+                  >
+                    {sz}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
             <SegmentedControl<PatientDirectoryViewMode>
               value={viewMode}
               onChange={handleViewModeChange}
@@ -2596,6 +2618,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: theme.spacing.md,
+  },
+  pageSizeSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.sm,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    gap: 2,
+  },
+  pageSizePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.radii.sm,
+  },
+  pageSizePillActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  pageSizeText: {
+    fontSize: theme.fontSizes.xs,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
+  },
+  pageSizeTextActive: {
+    fontSize: theme.fontSizes.xs,
+    fontWeight: '700',
+    color: theme.colors.textInverted,
   },
   skeletonWrap: {
     padding: theme.spacing.lg,

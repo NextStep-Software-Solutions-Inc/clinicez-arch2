@@ -59,13 +59,75 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
             "[AppointmentBookedHandler] Ingesting appointment booking Draft {DraftId} for Patient {PatientId} at Clinic {ClinicId}",
             message.DraftId, message.PatientId, message.ClinicId);
 
-        // Check if already ingested idempotently
+        // Check if already ingested idempotently or if this is a patient-initiated reschedule request
         var existing = await _dbContext.Appointments
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(a => a.DraftId == message.DraftId && a.ClinicId == clinic.ClinicId, ct);
+            .FirstOrDefaultAsync(a =>
+                a.ClinicId == clinic.ClinicId &&
+                ((message.RescheduledAppointmentId.HasValue && a.Id == message.RescheduledAppointmentId.Value) ||
+                 a.DraftId == message.DraftId), ct);
 
         if (existing != null)
         {
+            if (message.RescheduledAppointmentId.HasValue)
+            {
+                if (message.PreferredDate.HasValue)
+                {
+                    var date = message.PreferredDate.Value;
+                    if (!string.IsNullOrWhiteSpace(message.PreferredTime) &&
+                        TimeOnly.TryParse(message.PreferredTime, out var parsedRescheduleTime))
+                    {
+                        existing.ScheduledAt = new DateTime(date.Year, date.Month, date.Day, parsedRescheduleTime.Hour, parsedRescheduleTime.Minute, 0, DateTimeKind.Utc);
+                    }
+                    else
+                    {
+                        existing.ScheduledAt = new DateTime(date.Year, date.Month, date.Day, 9, 0, 0, DateTimeKind.Utc);
+                    }
+                }
+
+                existing.Status = AppointmentStatus.Pending;
+                if (!string.IsNullOrWhiteSpace(message.Notes))
+                {
+                    existing.Notes = message.Notes;
+                }
+                existing.UpdatedAt = DateTime.UtcNow;
+                _dbContext.Appointments.Update(existing);
+
+                _publisher.Enqueue(
+                    InteropTypes.ClinicAppointmentUpdated,
+                    ClinicParties.Clinic(clinic.TenantId, clinic.ClinicId.ToString()),
+                    Party.ForPatient(message.PatientId.ToString()),
+                    existing.DraftId ?? message.DraftId,
+                    new ClinicAppointmentUpdatedEvent
+                    {
+                        ClinicId = clinic.ClinicId,
+                        TenantId = clinic.TenantId,
+                        PatientId = message.PatientId,
+                        Appointments =
+                        {
+                            new ClinicAppointmentSnapshotDto
+                            {
+                                Id = existing.Id.ToString(),
+                                ClinicId = clinic.ClinicId.ToString(),
+                                ClinicName = clinic.ClinicName,
+                                ServiceType = existing.ServiceType,
+                                ScheduledAt = existing.ScheduledAt.ToString("O"),
+                                DurationMinutes = existing.DurationMinutes,
+                                Status = existing.Status.ToString(),
+                                Notes = existing.Notes,
+                                Subject = existing.Reason,
+                                DraftId = existing.DraftId ?? message.DraftId
+                            }
+                        }
+                    });
+
+                await _dbContext.SaveChangesAsync(ct);
+                _logger.LogInformation(
+                    "[AppointmentBookedHandler] Rescheduled appointment {AppointmentId} for Patient {PatientId} at Clinic {ClinicId} to {ScheduledAt}",
+                    existing.Id, message.PatientId, clinic.ClinicId, existing.ScheduledAt);
+                return;
+            }
+
             _logger.LogInformation("[AppointmentBookedHandler] Appointment for draft {DraftId} already exists ({Id}). Skipping.", message.DraftId, existing.Id);
             return;
         }

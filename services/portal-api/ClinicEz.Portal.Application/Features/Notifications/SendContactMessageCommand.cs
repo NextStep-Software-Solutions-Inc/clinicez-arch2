@@ -26,11 +26,16 @@ public class SendContactMessageCommandValidator : AbstractValidator<SendContactM
 public class SendContactMessageCommandHandler(
     IApplicationDbContext context,
     INotificationService notifications,
-    IConfiguration configuration) : IRequestHandler<SendContactMessageCommand, bool>
+    IConfiguration configuration,
+    ISystemSettingsService? settingsService = null) : IRequestHandler<SendContactMessageCommand, bool>
 {
     public async Task<bool> Handle(SendContactMessageCommand request, CancellationToken cancellationToken)
     {
         var inbox = configuration["Notifications:ContactInbox"]?.Trim();
+        if (string.IsNullOrEmpty(inbox) && settingsService is not null)
+        {
+            inbox = (await settingsService.GetSettingValueAsync("Mailer:ContactInbox", string.Empty, cancellationToken))?.Trim();
+        }
         if (string.IsNullOrEmpty(inbox)) return false;
 
         notifications.RequestEmail(

@@ -382,7 +382,9 @@ public class BranchEndpoints : IEndpoint
             Guid id,
             UpdateBranchRequest request,
             HttpContext httpContext,
-            IApplicationDbContext context) =>
+            IApplicationDbContext context,
+            ClinicEz.Portal.Application.Features.Admin.Services.IFacilityProvisioningPublisher provisioningPublisher,
+            CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId))
@@ -390,13 +392,15 @@ public class BranchEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var branch = await context.Branches.FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted);
+            var branch = await context.Branches
+                .Include(b => b.Facilities)
+                .FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted, ct);
             if (branch == null)
             {
                 return Results.NotFound(new { Message = "Branch not found." });
             }
 
-            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == branch.TenantId);
+            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == branch.TenantId, ct);
             if (tenant == null)
             {
                 return Results.NotFound(new { Message = "Workspace not found." });
@@ -404,7 +408,7 @@ public class BranchEndpoints : IEndpoint
 
             var isOwner = tenant.OwnerId == clerkUserId;
             var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active, ct);
 
             if (!isOwner && !isAdmin)
             {
@@ -425,7 +429,13 @@ public class BranchEndpoints : IEndpoint
             branch.UpdatedAt = DateTime.UtcNow;
             branch.UpdatedBy = clerkUserId;
 
-            await context.SaveChangesAsync(CancellationToken.None);
+            foreach (var fac in branch.Facilities.Where(f => !f.IsDeleted))
+            {
+                fac.Branch = branch;
+                await provisioningPublisher.StageDirectoryUpdateAsync(tenant, fac, ct);
+            }
+
+            await context.SaveChangesAsync(ct);
 
             return Results.Ok(ApiResponse<bool>.Success(true, "Branch updated successfully."));
         })
@@ -439,7 +449,9 @@ public class BranchEndpoints : IEndpoint
             ConfigureBranchPhilHealthRequest request,
             HttpContext httpContext,
             IApplicationDbContext context,
-            IPhilHealthSecretProtector protector) =>
+            IPhilHealthSecretProtector protector,
+            ClinicEz.Portal.Application.Features.Admin.Services.IFacilityProvisioningPublisher provisioningPublisher,
+            CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId))
@@ -447,13 +459,15 @@ public class BranchEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var branch = await context.Branches.FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted);
+            var branch = await context.Branches
+                .Include(b => b.Facilities)
+                .FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted, ct);
             if (branch == null)
             {
                 return Results.NotFound(new { Message = "Branch not found." });
             }
 
-            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == branch.TenantId);
+            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == branch.TenantId, ct);
             if (tenant == null)
             {
                 return Results.NotFound(new { Message = "Workspace not found." });
@@ -461,7 +475,7 @@ public class BranchEndpoints : IEndpoint
 
             var isOwner = tenant.OwnerId == clerkUserId;
             var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active, ct);
 
             if (!isOwner && !isAdmin)
             {
@@ -488,7 +502,13 @@ public class BranchEndpoints : IEndpoint
             branch.UpdatedAt = DateTime.UtcNow;
             branch.UpdatedBy = clerkUserId;
 
-            await context.SaveChangesAsync(CancellationToken.None);
+            foreach (var fac in branch.Facilities.Where(f => !f.IsDeleted))
+            {
+                fac.Branch = branch;
+                await provisioningPublisher.StageDirectoryUpdateAsync(tenant, fac, ct);
+            }
+
+            await context.SaveChangesAsync(ct);
 
             return Results.Ok(ApiResponse<bool>.Success(true, "PhilHealth statutory credentials configured successfully."));
         })

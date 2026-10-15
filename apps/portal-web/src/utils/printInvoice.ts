@@ -1,14 +1,43 @@
-import { BillingInvoice, BillingInfo } from "@/services/billing.service"
+import { BillingInvoice, BillingInfo, BillingPaymentConfig } from "@/services/billing.service"
 import { toast } from "sonner"
 import { siteEmails } from "@/config/site"
 import { lightColors } from "@clinicez/design-tokens"
 
-export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo | null) => {
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;")
+}
+
+export const printInvoice = (
+  invoice: BillingInvoice,
+  billingInfo: BillingInfo | null,
+  paymentConfigOverride?: Partial<BillingPaymentConfig>
+) => {
   const printWindow = window.open("", "_blank")
   if (!printWindow) {
     toast.error("Popup blocker prevented opening the print invoice window.")
     return
   }
+
+  const cfg = { ...billingInfo?.paymentConfig, ...paymentConfigOverride }
+  const corporateName = cfg.corporateName || "ClinicEZ Digital Health Inc."
+  const corporateTin = cfg.corporateTin || "009-876-543-000"
+  const corporateAddress =
+    cfg.corporateAddress ||
+    "Unit 1402, BGC Corporate Center, 11th Avenue, Bonifacio Global City, Taguig City, Metro Manila, Philippines 1634"
+  const birTaxExempt = cfg.birTaxExempt ?? false
+  const birTaxPercentage = cfg.birTaxPercentage ?? 12
+  const isTaxExempt = birTaxExempt || birTaxPercentage <= 0
+  const vatableSales = isTaxExempt
+    ? invoice.amount
+    : invoice.amount > 0
+    ? invoice.amount / (1 + birTaxPercentage / 100)
+    : 0
+  const vatAmount = isTaxExempt ? 0 : invoice.amount - vatableSales
 
   const planName =
     invoice.planSlug.toLowerCase() === "pro"
@@ -34,7 +63,15 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
         )
       ).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
 
-  const formattedAmount = `${invoice.currency} ${invoice.amount.toLocaleString(undefined, {
+  const formattedAmount = `${escapeHtml(invoice.currency)} ${invoice.amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+  const formattedVatableSales = `${escapeHtml(invoice.currency)} ${vatableSales.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+  const formattedVatAmount = `${escapeHtml(invoice.currency)} ${vatAmount.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`
@@ -49,14 +86,15 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
       "Promotional",
     ].includes(invoice.receipt?.paymentMethod ?? "")
 
-  const supportEmail = siteEmails.billing || "billing@clinicez.ph"
+  const supportEmail = cfg.billingSupportEmail || siteEmails.billing || "billing@clinicez.ph"
+  const tinRegistrationLabel = isTaxExempt ? "VAT-Exempt" : "VAT Registered"
 
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>Invoice_${invoice.invoiceNumber}</title>
+        <title>Invoice_${escapeHtml(invoice.invoiceNumber)}</title>
         <style>
           * { box-sizing: border-box; }
           body {
@@ -244,11 +282,10 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
                 Clinic EZ
               </div>
               <div class="company-info">
-                <strong>ClinicEZ Digital Health Inc.</strong><br/>
-                BIR Registered TIN: 009-876-543-000 VAT Registered<br/>
-                Unit 1402, BGC Corporate Center, 11th Avenue, Bonifacio Global City<br/>
-                Taguig City, Metro Manila, Philippines 1634<br/>
-                Billing Support: ${supportEmail}
+                <strong>${escapeHtml(corporateName)}</strong><br/>
+                BIR Registered TIN: ${escapeHtml(corporateTin)} ${tinRegistrationLabel}<br/>
+                ${escapeHtml(corporateAddress)}<br/>
+                Billing Support: ${escapeHtml(supportEmail)}
               </div>
             </div>
             <div class="invoice-title">
@@ -260,34 +297,38 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
                 }
               </div>
               <h1>INVOICE</h1>
-              <div class="doc-number">${invoice.invoiceNumber}</div>
+              <div class="doc-number">${escapeHtml(invoice.invoiceNumber)}</div>
             </div>
           </div>
 
           <div class="details-grid">
             <div class="details-block">
               <h3>Billed To:</h3>
-              <p class="name">${billingInfo?.clinicName || "Clinic Subscriber"}</p>
-              ${billingInfo?.tradingName ? `<p><span class="meta-label">Trading Name:</span> ${billingInfo.tradingName}</p>` : ""}
-              <p><span class="meta-label">TIN / Tax ID:</span> ${billingInfo?.taxId || "000-000-000-000"}</p>
-              <p>${[
-                billingInfo?.streetLine1,
-                billingInfo?.streetLine2,
-                billingInfo?.city,
-                billingInfo?.province,
-                billingInfo?.postalCode,
-                billingInfo?.country || "Philippines"
-              ].filter(Boolean).join(", ")}</p>
+              <p class="name">${escapeHtml(billingInfo?.clinicName || "Clinic Subscriber")}</p>
+              ${billingInfo?.tradingName ? `<p><span class="meta-label">Trading Name:</span> ${escapeHtml(billingInfo.tradingName)}</p>` : ""}
+              <p><span class="meta-label">TIN / Tax ID:</span> ${escapeHtml(billingInfo?.taxId || "000-000-000-000")}</p>
+              <p>${escapeHtml(
+                [
+                  billingInfo?.streetLine1,
+                  billingInfo?.streetLine2,
+                  billingInfo?.city,
+                  billingInfo?.province,
+                  billingInfo?.postalCode,
+                  billingInfo?.country || "Philippines",
+                ]
+                  .filter(Boolean)
+                  .join(", ")
+              )}</p>
             </div>
             <div class="details-block" style="text-align: right;">
               <h3>Invoice Details:</h3>
               <p><span class="meta-label">Invoice Date:</span> ${new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
               <p><span class="meta-label">Billing Cycle:</span> ${cycleLabel}</p>
               <p><span class="meta-label">Coverage Period:</span> ${coverageStart} &ndash; ${coverageEnd}</p>
-              <p><span class="meta-label">Payment Status:</span> <strong>${invoice.status}</strong></p>
+              <p><span class="meta-label">Payment Status:</span> <strong>${escapeHtml(invoice.status)}</strong></p>
               ${
                 invoice.receipt?.receiptNumber
-                  ? `<p><span class="meta-label">Official Receipt No:</span> <strong>${invoice.receipt.receiptNumber}</strong></p>`
+                  ? `<p><span class="meta-label">Official Receipt No:</span> <strong>${escapeHtml(invoice.receipt.receiptNumber)}</strong></p>`
                   : ""
               }
             </div>
@@ -305,7 +346,7 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
             <tbody>
               <tr>
                 <td>
-                  <strong>ClinicEZ Workspace License &ndash; ${planName}</strong><br/>
+                  <strong>ClinicEZ Workspace License &ndash; ${escapeHtml(planName)}</strong><br/>
                   <span style="font-size: 11px; color: ${lightColors.textMuted};">
                     Full access to clinical EMR, doctor rostering, queuing, PhilHealth Konsulta integration, and licensed facilities.
                   </span>
@@ -319,12 +360,16 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
 
           <div class="totals-block">
             <div class="total-row">
-              <span>Subtotal</span>
-              <span>${formattedAmount}</span>
+              <span>${isTaxExempt ? "Subtotal (VAT-Exempt)" : "VATable Sales"}</span>
+              <span>${formattedVatableSales}</span>
             </div>
             <div class="total-row">
-              <span>Value-Added Tax (0% / VAT-Exempt)</span>
-              <span>PHP 0.00</span>
+              <span>${
+                isTaxExempt
+                  ? "Value-Added Tax (0% / VAT-Exempt)"
+                  : `Value-Added Tax (${birTaxPercentage}% VAT)`
+              }</span>
+              <span>${formattedVatAmount}</span>
             </div>
             <div class="total-row grand-total">
               <span>${invoice.status === "Paid" ? "Total Amount Paid" : "Total Amount Due"}</span>
@@ -339,16 +384,16 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
                 <div style="font-weight: 700; margin-bottom: 4px; color: ${lightColors.primary};">
                   Payment Verification Details
                 </div>
-                <div><strong>Payment Method:</strong> ${invoice.receipt.paymentMethod}</div>
+                <div><strong>Payment Method:</strong> ${escapeHtml(invoice.receipt.paymentMethod)}</div>
                 ${
                   invoice.receipt.transactionReference
-                    ? `<div><strong>Transaction Reference:</strong> ${invoice.receipt.transactionReference}</div>`
+                    ? `<div><strong>Transaction Reference:</strong> ${escapeHtml(invoice.receipt.transactionReference)}</div>`
                     : ""
                 }
                 <div><strong>Payment Date:</strong> ${new Date(invoice.receipt.paidAt).toLocaleString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
                 ${
                   invoice.receipt.notes
-                    ? `<div style="margin-top: 4px;"><strong>Admin Memo:</strong> ${invoice.receipt.notes}</div>`
+                    ? `<div style="margin-top: 4px;"><strong>Admin Memo:</strong> ${escapeHtml(invoice.receipt.notes)}</div>`
                     : ""
                 }
               </div>
@@ -357,15 +402,15 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
               ? `
               <div class="payment-meta-box">
                 <div><strong>Automated Payment Gateway:</strong> Xendit Payments Network</div>
-                <div><strong>Reference:</strong> ${invoice.xenditInvoiceId}</div>
+                <div><strong>Reference:</strong> ${escapeHtml(invoice.xenditInvoiceId)}</div>
               </div>
               `
               : ""
           }
 
           <div class="footer">
-            <p>Thank you for choosing ClinicEZ to power your healthcare facility operations. For billing assistance, contact ${supportEmail}.</p>
-            <p style="margin-top: 4px;">&copy; ${new Date().getFullYear()} ClinicEZ Digital Health Inc. All rights reserved.</p>
+            <p>Thank you for choosing ClinicEZ to power your healthcare facility operations. For billing assistance, contact ${escapeHtml(supportEmail)}.</p>
+            <p style="margin-top: 4px;">&copy; ${new Date().getFullYear()} ${escapeHtml(corporateName)} All rights reserved.</p>
           </div>
         </div>
         <script>

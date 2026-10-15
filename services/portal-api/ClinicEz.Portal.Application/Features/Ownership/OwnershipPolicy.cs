@@ -29,7 +29,10 @@ public interface IOwnershipPolicy
     Task SaveAsync(string conflictCode, CancellationToken cancellationToken);
 }
 
-public sealed class OwnershipPolicy(IApplicationDbContext context, IConfiguration configuration) : IOwnershipPolicy
+public sealed class OwnershipPolicy(
+    IApplicationDbContext context,
+    IConfiguration configuration,
+    ISystemSettingsService? settingsService = null) : IOwnershipPolicy
 {
     public int MaxOwnedPerUser => Math.Max(1, configuration.GetValue("Workspace:MaxOwnedPerUser", 1));
 
@@ -45,8 +48,14 @@ public sealed class OwnershipPolicy(IApplicationDbContext context, IConfiguratio
 
     public async Task EnsureCanOwnAsync(string userId, string conflictCode, CancellationToken cancellationToken)
     {
+        var maxOwned = MaxOwnedPerUser;
+        if (settingsService is not null && string.IsNullOrWhiteSpace(configuration["Workspace:MaxOwnedPerUser"]))
+        {
+            maxOwned = Math.Max(1, await settingsService.GetSettingIntAsync("Workspace:MaxOwnedPerUser", maxOwned, cancellationToken));
+        }
+
         var owned = await context.Tenants.CountAsync(t => t.OwnerId == userId, cancellationToken);
-        if (owned >= MaxOwnedPerUser)
+        if (owned >= maxOwned)
         {
             throw ConflictFor(conflictCode);
         }

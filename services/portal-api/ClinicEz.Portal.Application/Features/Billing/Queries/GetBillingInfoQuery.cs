@@ -67,7 +67,8 @@ public record BillingInfoDto(
     bool IsAnnual,
     DateTime? SubscriptionExpiresAt,
     PlanLimitsDto? PlanLimits = null,
-    TenantUsageDto? Usage = null
+    TenantUsageDto? Usage = null,
+    BillingPaymentConfigDto? PaymentConfig = null
 );
 
 public class GetBillingInfoQuery : IRequest<BillingInfoDto?>
@@ -80,7 +81,10 @@ public class GetBillingInfoQuery : IRequest<BillingInfoDto?>
     }
 }
 
-public class GetBillingInfoQueryHandler(IApplicationDbContext context, IEntitlementService entitlementsService) : IRequestHandler<GetBillingInfoQuery, BillingInfoDto?>
+public class GetBillingInfoQueryHandler(
+    IApplicationDbContext context,
+    IEntitlementService entitlementsService,
+    ISystemSettingsService? settingsService = null) : IRequestHandler<GetBillingInfoQuery, BillingInfoDto?>
 {
     public async Task<BillingInfoDto?> Handle(GetBillingInfoQuery request, CancellationToken cancellationToken)
     {
@@ -167,6 +171,10 @@ public class GetBillingInfoQueryHandler(IApplicationDbContext context, IEntitlem
             tenant.MonthlyApiQuotaUsed
         );
 
+        var paymentConfig = settingsService != null
+            ? await settingsService.GetBillingPaymentConfigAsync(cancellationToken)
+            : null;
+
         return new BillingInfoDto(
             subscriptionStatus,
             subscription.PlanSlug,
@@ -185,7 +193,8 @@ public class GetBillingInfoQueryHandler(IApplicationDbContext context, IEntitlem
             isAnnual,
             subscription.PeriodEnd,
             planLimitsDto,
-            usageDto
+            usageDto,
+            paymentConfig
         );
     }
 

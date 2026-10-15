@@ -226,28 +226,62 @@ export default function InvoiceDetailsDialog({
             <h4 className="text-xs font-bold uppercase tracking-wider text-primary border-b border-border/60 pb-1">
               Amount Summary
             </h4>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between text-muted-foreground text-xs">
-                <span>Subtotal</span>
-                <span>{invoice.currency} {invoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-muted-foreground text-xs">
-                <span>Value Added Tax (0% / VAT-Exempt)</span>
-                <span>{invoice.currency} 0.00</span>
-              </div>
-              <div className="flex justify-between border-t border-border/60 pt-2 font-bold text-foreground">
-                <span>
-                  {invoice.status === "Paid" ? "Total Amount Paid" : "Total Amount Due"}
-                </span>
-                <span>{invoice.currency} {invoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-              {invoice.status === "Paid" && (
-                <div className="flex justify-between text-muted-foreground text-xs pt-1">
-                  <span>Settlement Method</span>
-                  <span>{paymentMethod}</span>
+            {(() => {
+              const birTaxExempt = billingInfo?.paymentConfig?.birTaxExempt ?? false
+              const birTaxPercentage = billingInfo?.paymentConfig?.birTaxPercentage ?? 12
+              const isExempt = birTaxExempt || birTaxPercentage <= 0
+              const vatableSales = isExempt
+                ? invoice.amount
+                : invoice.amount / (1 + birTaxPercentage / 100)
+              const vatAmount = isExempt ? 0 : invoice.amount - vatableSales
+
+              return (
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between text-muted-foreground text-xs">
+                    <span>{isExempt ? "Subtotal (VAT-Exempt)" : "VATable Sales"}</span>
+                    <span>
+                      {invoice.currency}{" "}
+                      {vatableSales.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground text-xs">
+                    <span>
+                      {isExempt
+                        ? "Value Added Tax (0% / VAT-Exempt)"
+                        : `Value Added Tax (${birTaxPercentage}%)`}
+                    </span>
+                    <span>
+                      {invoice.currency}{" "}
+                      {vatAmount.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t border-border/60 pt-2 font-bold text-foreground">
+                    <span>
+                      {invoice.status === "Paid" ? "Total Amount Paid" : "Total Amount Due"}
+                    </span>
+                    <span>
+                      {invoice.currency}{" "}
+                      {invoice.amount.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+                  {invoice.status === "Paid" && (
+                    <div className="flex justify-between text-muted-foreground text-xs pt-1">
+                      <span>Settlement Method</span>
+                      <span>{paymentMethod}</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              )
+            })()}
           </div>
         </div>
 
@@ -261,17 +295,13 @@ export default function InvoiceDetailsDialog({
             Close
           </Button>
 
-          {/* View Original External Link ONLY if genuine automated Xendit invoice, NEVER for manual overrides or synthetic IDs */}
+          {/* View Original External Link ONLY if genuine automated Xendit invoice URL, NEVER for manual overrides or synthetic IDs */}
           {!isManualInvoice &&
             !invoice.xenditInvoiceId.startsWith("recy_") &&
             !invoice.xenditInvoiceId.startsWith("MANUAL-") &&
-            (invoice.xenditInvoiceId.startsWith("http") || /^[a-f\d]{24}$/i.test(invoice.xenditInvoiceId)) && (
+            invoice.xenditInvoiceId.startsWith("http") && (
               <a
-                href={
-                  invoice.xenditInvoiceId.startsWith("http")
-                    ? invoice.xenditInvoiceId
-                    : `https://checkout-staging.xendit.co/web/${invoice.xenditInvoiceId}`
-                }
+                href={invoice.xenditInvoiceId}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center rounded-full bg-secondary hover:bg-secondary/80 px-5 text-xs font-semibold text-secondary-foreground transition-colors mr-auto"

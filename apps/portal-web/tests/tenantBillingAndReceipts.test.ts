@@ -338,6 +338,136 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
         globalThis.window.open = originalWindowOpen
       }
     })
+
+    test("M4.3.4: printInvoice and printReceipt honor configurable BIR tax exemption and custom tax percentage from SystemSettings", () => {
+      let writtenHtml = ""
+      const mockWindow = {
+        document: {
+          write: (content: string) => {
+            writtenHtml = content
+          },
+          close: () => {},
+        },
+      }
+      const originalWindowOpen = globalThis.window?.open
+      globalThis.window = {
+        ...globalThis.window,
+        open: () => mockWindow as any,
+      } as any
+
+      // 1. BIR Tax Exempt = true
+      printInvoice(sampleManualInvoice, {
+        ...sampleBillingInfo,
+        paymentConfig: {
+          bankAccounts: OFFLINE_BANK_ACCOUNTS,
+          birTaxExempt: true,
+          birTaxPercentage: 0,
+          corporateName: "NextStep Healthcare Solutions Inc.",
+          corporateTin: "111-222-333-000",
+          corporateAddress: "Makati CBD, Philippines",
+          billingSupportEmail: "finance@nextstep-software.com",
+        },
+      })
+      expect(writtenHtml).toContain("NextStep Healthcare Solutions Inc.")
+      expect(writtenHtml).toContain("111-222-333-000 VAT-Exempt")
+      expect(writtenHtml).toContain("Value-Added Tax (0% / VAT-Exempt)")
+
+      // 2. Custom BIR Tax Percentage = 15%
+      printReceipt(
+        sampleManualReceipt,
+        {
+          ...sampleBillingInfo,
+          paymentConfig: {
+            bankAccounts: OFFLINE_BANK_ACCOUNTS,
+            birTaxExempt: false,
+            birTaxPercentage: 15,
+            corporateName: "NextStep Healthcare Solutions Inc.",
+            corporateTin: "111-222-333-000",
+            corporateAddress: "Makati CBD, Philippines",
+            billingSupportEmail: "finance@nextstep-software.com",
+          },
+        },
+        sampleManualInvoice.planSlug,
+        sampleManualInvoice.isAnnual,
+        sampleManualInvoice.xenditInvoiceId,
+        sampleManualInvoice.invoiceNumber
+      )
+      expect(writtenHtml).toContain("VAT Amount (15%):")
+      expect(writtenHtml).toContain("NextStep Healthcare Solutions Inc.")
+
+      if (originalWindowOpen) {
+        globalThis.window.open = originalWindowOpen
+      }
+    })
+
+    test("M4.3.5: printInvoice and printReceipt escape HTML characters in dynamic tenant fields to prevent XSS", () => {
+      let writtenHtml = ""
+      const mockWindow = {
+        document: {
+          write: (content: string) => {
+            writtenHtml = content
+          },
+          close: () => {},
+        },
+      }
+      const originalWindowOpen = globalThis.window?.open
+      globalThis.window = {
+        ...globalThis.window,
+        open: () => mockWindow as any,
+      } as any
+
+      printInvoice(sampleManualInvoice, {
+        ...sampleBillingInfo,
+        clinicName: '<script>alert("xss")</script> Clinic',
+      })
+      expect(writtenHtml).not.toContain('<script>alert("xss")</script>')
+      expect(writtenHtml).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt; Clinic")
+
+      if (originalWindowOpen) {
+        globalThis.window.open = originalWindowOpen
+      }
+    })
+  })
+
+  describe("Dimension 1B: Dynamic N-Bank Account Rendering from SystemSettings", () => {
+    test("M4.1.5: OfflinePaymentInstructionsCard renders N dynamic bank accounts and filters inactive ones", () => {
+      const customAccounts = [
+        ...OFFLINE_BANK_ACCOUNTS,
+        {
+          id: "metrobank",
+          institution: "Metropolitan Bank & Trust Co. (Metrobank)",
+          accountName: "ClinicEZ Digital Health Inc.",
+          accountNumber: "7788-9900-1122",
+          copyValue: "778899001122",
+          branch: "Makati Head Office",
+          type: "bank" as const,
+          badge: "Commercial Bank",
+          isActive: true,
+        },
+        {
+          id: "unionbank-inactive",
+          institution: "UnionBank of the Philippines",
+          accountName: "ClinicEZ Digital Health Inc.",
+          accountNumber: "1099-2233-4455",
+          copyValue: "109922334455",
+          branch: "Ortigas Center",
+          type: "bank" as const,
+          badge: "Commercial Bank",
+          isActive: false,
+        },
+      ]
+
+      const html = renderToString(
+        React.createElement(OfflinePaymentInstructionsCard, {
+          tenantId: "clinic-st-jude-bgc",
+          bankAccounts: customAccounts,
+        })
+      )
+
+      expect(html).toContain("Metropolitan Bank &amp; Trust Co. (Metrobank)")
+      expect(html).toContain("7788-9900-1122")
+      expect(html).not.toContain("UnionBank of the Philippines")
+    })
   })
 
   // =========================================================================

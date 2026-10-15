@@ -72,6 +72,28 @@ export interface TenantUsage {
   monthlyApiQuotaUsed: number
 }
 
+export interface PlatformBankAccount {
+  id: string
+  institution: string
+  accountName: string
+  accountNumber: string
+  copyValue: string
+  branch?: string
+  type: "bank" | "ewallet"
+  badge: string
+  isActive?: boolean
+}
+
+export interface BillingPaymentConfig {
+  bankAccounts: PlatformBankAccount[]
+  birTaxExempt: boolean
+  birTaxPercentage: number
+  corporateName: string
+  corporateTin: string
+  corporateAddress: string
+  billingSupportEmail: string
+}
+
 export interface BillingInfo {
   subscriptionStatus: string
   subscriptionPlanId: string
@@ -92,6 +114,7 @@ export interface BillingInfo {
   subscriptionExpiresAt?: string
   planLimits?: BillingPlanLimits
   usage?: TenantUsage
+  paymentConfig?: BillingPaymentConfig
 }
 
 export interface CheckoutSessionRequest {
@@ -125,6 +148,10 @@ export const billingService = {
   },
   getPlans: async (): Promise<BillingPlan[]> => {
     const res = await apiClient.get<BillingPlan[]>("/billing/plans")
+    return res.data
+  },
+  getPaymentConfig: async (): Promise<BillingPaymentConfig> => {
+    const res = await apiClient.get<BillingPaymentConfig>("/billing/payment-config")
     return res.data
   },
   getBillingInfo: async (tenantId: string): Promise<BillingInfo> => {

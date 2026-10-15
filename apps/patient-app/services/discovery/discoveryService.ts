@@ -68,64 +68,11 @@ const shareFieldLabels: Record<ShareableFieldKey, string> = {
 
 
 
-const regions = [
-    'Metro Manila',
-    'Central Luzon',
-    'Calabarzon',
-    'Northern Mindanao',
-    'Western Visayas',
-    'Central Visayas',
-    'Bicol Region',
-    'Ilocos Region',
-    'Davao Region',
-    'Cordillera',
-];
+const DEFAULT_PRIVACY_POLICY_URL = 'https://portal.clinicez.com/privacy';
+const DEFAULT_TERMS_URL = 'https://portal.clinicez.com/terms';
 
-const organizationThemes = [
-    'Family Wellness Network',
-    'Care Circle Alliance',
-    'Community Health Collective',
-    'Patient Advocacy Guild',
-    'Telehealth Partner Hub',
-    'Alumni Care Society',
-    'Workforce Wellness Network',
-    'Senior Care Network',
-    'Mothers Care Cooperative',
-    'Chronic Care Alliance',
-    'Student Wellness League',
-    'Regional Care Consortium',
-];
-
-const clinicSpecialties = [
-    'Family Medicine',
-    'Internal Medicine',
-    'Pediatrics',
-    'Cardiology',
-    'OB-GYN',
-    'Dermatology',
-    'Dentistry',
-    'Diagnostics',
-    'Rehabilitation',
-    'Behavioral Health',
-    'Endocrinology',
-    'Pulmonology',
-];
-
-const requiredFieldSets: ShareableFieldKey[][] = [
-    ['fullName', 'mobile', 'email'],
-    ['fullName', 'dateOfBirth', 'mobile'],
-    ['fullName', 'sex', 'mobile', 'email'],
-    ['fullName', 'dateOfBirth', 'sex', 'philhealthId'],
-    ['fullName', 'mobile', 'address'],
-    ['fullName', 'dateOfBirth', 'mobile', 'emergencyContact'],
-];
-
-function slugify(value: string): string {
-    return value
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-}
+const cachedClinicProviders = new Map<string, ClinicProvider[]>();
+const cachedClinicServices = new Map<string, NonNullable<ClinicDetail['services']>>();
 
 function now(): Date {
     return new Date();
@@ -133,139 +80,6 @@ function now(): Date {
 
 function parseMembershipStatus(status?: string | null): 'pending' | 'active' | undefined {
     return status === 'active' || status === 'pending' ? status : undefined;
-}
-
-function getId(prefix: string, index: number): string {
-    return `${prefix}-${String(index + 1).padStart(3, '0')}`;
-}
-
-function getRolesForIndex(index: number): OrganizationRole[] {
-    if (index % 6 === 0) {
-        return [
-            { id: 'member', name: 'Member', description: 'General community access.' },
-            { id: 'coordinator', name: 'Coordinator', description: 'Helps coordinate member programs.' },
-            { id: 'officer', name: 'Officer', description: 'Administrative access for officers.' },
-        ];
-    }
-
-    if (index % 3 === 0) {
-        return [
-            { id: 'member', name: 'Member', description: 'General community access.' },
-            { id: 'lead', name: 'Lead', description: 'Guides member activity and support.' },
-        ];
-    }
-
-    return [
-        { id: 'member', name: 'Member', description: 'General community access.' },
-        { id: 'volunteer', name: 'Volunteer', description: 'Support volunteer participation.' },
-    ];
-}
-
-function getRequiredFieldsForIndex(index: number): ShareableFieldKey[] {
-    return requiredFieldSets[index % requiredFieldSets.length];
-}
-
-function buildOrganizationSeed() {
-    const timestamp = now();
-    const organizationsSeed = Array.from({ length: 120 }, (_, index) => {
-        const region = regions[index % regions.length];
-        const theme = organizationThemes[index % organizationThemes.length];
-        const domain = theme.split(' ')[0];
-        const isPublic = index % 5 !== 0;
-        const slug = slugify(`${domain}-${region}-${index + 1}`);
-        const inviteCode = isPublic ? null : `INV-${String(index + 1).padStart(4, '0')}`;
-        const requiredShareFields = getRequiredFieldsForIndex(index);
-        const roles = getRolesForIndex(index);
-
-        return {
-            id: getId('org', index),
-            slug,
-            name: `${region} ${theme}`,
-            description: `A ${isPublic ? 'public' : 'private'} patient community for ${region.toLowerCase()} members who want coordinated care and partner clinic access.`,
-            logoUrl: `https://picsum.photos/seed/org-logo-${index}/80/80`,
-            coverImageUrl: `https://picsum.photos/seed/org-cover-${index}/400/180`,
-            addressHint: region,
-            isPublic,
-            inviteCode,
-            privacyPolicyUrl: `https://Clinic EZ.app/privacy/${slug}`,
-            termsAndConditionsUrl: `https://Clinic EZ.app/terms/${slug}`,
-            rolesJson: JSON.stringify(roles),
-            requiredShareFieldsJson: JSON.stringify(requiredShareFields),
-            featuredScore: 120 - index,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-            syncedAt: timestamp,
-            serverId: null,
-        };
-    });
-
-    const clinicsSeed = Array.from({ length: 120 }, (_, index) => {
-        const region = regions[index % regions.length];
-        const specialty = clinicSpecialties[index % clinicSpecialties.length];
-        const isPublic = index % 6 !== 0;
-        const supportsAppointments = index % 8 !== 0;
-        const slug = slugify(`${specialty}-${region}-${index + 1}`);
-        const requiredShareFields = getRequiredFieldsForIndex(index + 2);
-
-        return {
-            id: getId('clinic', index),
-            name: `${region} ${specialty} Clinic`,
-            address: `${region}, Philippines`,
-            description: `A ${isPublic ? 'public' : 'private'} ${specialty.toLowerCase()} clinic built for online consultations and follow-up care.`,
-            logoUrl: `https://picsum.photos/seed/clinic-logo-${index}/80/80`,
-            coverImageUrl: `https://picsum.photos/seed/clinic-cover-${index}/400/180`,
-            isPublic,
-            supportsAppointments,
-            inviteCode: isPublic ? null : `CLN-${String(index + 1).padStart(4, '0')}`,
-            privacyPolicyUrl: `https://Clinic EZ.app/privacy/${slug}`,
-            termsAndConditionsUrl: `https://Clinic EZ.app/terms/${slug}`,
-            specialtiesJson: JSON.stringify([specialty, supportsAppointments ? 'Telehealth' : 'Virtual Follow-Up']),
-            requiredShareFieldsJson: JSON.stringify(requiredShareFields),
-            joinedAt: timestamp,
-            syncedAt: timestamp,
-        };
-    });
-
-    const linksSeed = organizationsSeed.flatMap((org, index) => {
-        const firstClinic = clinicsSeed[index % clinicsSeed.length];
-        const secondClinic = clinicsSeed[(index + 11) % clinicsSeed.length];
-        const thirdClinic = clinicsSeed[(index + 27) % clinicsSeed.length];
-
-        return [
-            {
-                id: `${org.id}:${firstClinic.id}`,
-                clinicId: firstClinic.id,
-                organizationId: org.id,
-                relationType: 'partnered' as const,
-                isActive: true,
-                createdAt: timestamp,
-                updatedAt: timestamp,
-                syncedAt: timestamp,
-            },
-            {
-                id: `${org.id}:${secondClinic.id}`,
-                clinicId: secondClinic.id,
-                organizationId: org.id,
-                relationType: index % 3 === 0 ? ('sponsored' as const) : ('partnered' as const),
-                isActive: true,
-                createdAt: timestamp,
-                updatedAt: timestamp,
-                syncedAt: timestamp,
-            },
-            {
-                id: `${org.id}:${thirdClinic.id}`,
-                clinicId: thirdClinic.id,
-                organizationId: org.id,
-                relationType: 'referral' as const,
-                isActive: true,
-                createdAt: timestamp,
-                updatedAt: timestamp,
-                syncedAt: timestamp,
-            },
-        ];
-    });
-
-    return { organizationsSeed, clinicsSeed, linksSeed };
 }
 
 function parseJsonArray<T>(value: string | null | undefined, fallback: T[]): T[] {
@@ -278,41 +92,8 @@ function parseJsonArray<T>(value: string | null | undefined, fallback: T[]): T[]
     }
 }
 
-const providerFirstNames = ['Maria', 'Jose', 'Ana', 'Juan', 'Sofia', 'Carlos', 'Elena', 'Miguel', 'Rosa', 'Luis', 'Patricia', 'Eduardo'];
-const providerLastNames = ['Santos', 'Reyes', 'Cruz', 'Garcia', 'Lopez', 'Bautista', 'Mendoza', 'Torres', 'Ramos', 'Dela Cruz', 'Gonzales', 'Castillo'];
-const providerCredentials = ['MD', 'MD-FPCP', 'MD-FPOGS', 'MD-FPSCC', 'MD-FPCM', 'RN', 'RND', 'RPh', 'DDS', 'PT'];
-
-function buildProvidersForClinic(clinicId: string, clinicName: string, specialty: string): ClinicProvider[] {
-    const baseIndex = parseInt(clinicId.replace('clinic-', ''), 10) - 1;
-    const count = 2 + (baseIndex % 4);
-    return Array.from({ length: count }, (_, i) => {
-        const nameIdx = (baseIndex * 7 + i * 13) % providerFirstNames.length;
-        const lastIdx = (nameIdx + 3) % providerLastNames.length;
-        const credIdx = (baseIndex + i * 3) % providerCredentials.length;
-        const cred = providerCredentials[credIdx];
-        // Generate a deterministic rating between 3.5–5.0
-        const rawRating = 3.5 + ((baseIndex * 3 + i * 7) % 16) * 0.1;
-        const rating = Math.round(rawRating * 10) / 10;
-        return {
-            id: `provider-${clinicId}-${i + 1}`,
-            name: `Dr. ${providerFirstNames[nameIdx]} ${providerLastNames[lastIdx]}`,
-            specialty,
-            avatarUrl: `https://picsum.photos/seed/prov-${clinicId}-${i}/80/80`,
-            bio: `${cred} specializing in ${specialty.toLowerCase()} at ${clinicName}.`,
-            credentials: [cred],
-            rating,
-        } satisfies ClinicProvider;
-    });
-}
-
-
-
 function hasAllConsent(consent: ConsentSelection): boolean {
     return consent.acceptedDataSharing && consent.acceptedPrivacyPolicy && consent.acceptedTermsAndConditions;
-}
-
-function sortByFeatured<T extends { featuredScore: number; name: string }>(items: T[]): T[] {
-    return [...items].sort((a, b) => b.featuredScore - a.featuredScore || a.name.localeCompare(b.name));
 }
 
 function normalizeQuery(query: string): string {
@@ -325,20 +106,12 @@ function searchMatch(value: string, query: string): boolean {
 }
 
 async function withLatency<T>(value: T): Promise<T> {
-    return new Promise((resolve) => {
-        setTimeout(() => resolve(value), 140);
-    });
+    return value;
 }
 
 export async function seedCatalog(): Promise<boolean> {
-    const existing = await db.select({ count: count() }).from(organizations);
-    if ((existing[0]?.count ?? 0) > 0) return false;
-
-    const { organizationsSeed, clinicsSeed, linksSeed } = buildOrganizationSeed();
-    await db.insert(organizations).values(organizationsSeed);
-    await db.insert(clinics).values(clinicsSeed);
-    await db.insert(clinicOrganizationLinks).values(linksSeed);
-    return true;
+    // Offline fake catalog seeding is disabled; catalog entries are synchronized from patient-api.
+    return false;
 }
 
 function mapOrganizationRows(rows: Array<Record<string, any>>) {
@@ -352,8 +125,8 @@ function mapOrganizationRows(rows: Array<Record<string, any>>) {
         coverImageUrl: row.coverImageUrl ?? undefined,
         inviteCode: row.inviteCode ?? undefined,
         addressHint: row.addressHint ?? undefined,
-        privacyPolicyUrl: row.privacyPolicyUrl as string,
-        termsAndConditionsUrl: row.termsAndConditionsUrl as string,
+        privacyPolicyUrl: (row.privacyPolicyUrl as string) || DEFAULT_PRIVACY_POLICY_URL,
+        termsAndConditionsUrl: (row.termsAndConditionsUrl as string) || DEFAULT_TERMS_URL,
         roles: parseJsonArray<OrganizationRole>(row.rolesJson, [{ id: 'member', name: 'Member', description: 'General access.' }]),
         requiredShareFields: parseJsonArray<ShareableFieldKey>(row.requiredShareFieldsJson, ['fullName', 'mobile']),
         partneredClinicIds: [] as string[],
@@ -372,8 +145,8 @@ function mapClinicRows(rows: Array<Record<string, any>>) {
         supportsAppointments: Boolean(row.supportsAppointments ?? true),
         organizationIds: [] as string[],
         requiredShareFields: parseJsonArray<ShareableFieldKey>(row.requiredShareFieldsJson, ['fullName', 'mobile']),
-        privacyPolicyUrl: row.privacyPolicyUrl ?? 'https://Clinic EZ.app/privacy',
-        termsAndConditionsUrl: row.termsAndConditionsUrl ?? 'https://Clinic EZ.app/terms',
+        privacyPolicyUrl: row.privacyPolicyUrl ?? DEFAULT_PRIVACY_POLICY_URL,
+        termsAndConditionsUrl: row.termsAndConditionsUrl ?? DEFAULT_TERMS_URL,
         logoUrl: row.logoUrl ?? undefined,
         coverImageUrl: row.coverImageUrl ?? undefined,
         specialties: parseJsonArray<string>(row.specialtiesJson, []),
@@ -603,8 +376,8 @@ function buildClinicPayload(row: Record<string, any>): ClinicEntity {
         supportsAppointments: Boolean(row.supportsAppointments ?? true),
         organizationIds: [],
         requiredShareFields: parseJsonArray<ShareableFieldKey>(String(row.requiredShareFieldsJson ?? '[]'), ['fullName', 'mobile']),
-        privacyPolicyUrl: String(row.privacyPolicyUrl ?? 'https://Clinic EZ.app/privacy'),
-        termsAndConditionsUrl: String(row.termsAndConditionsUrl ?? 'https://Clinic EZ.app/terms'),
+        privacyPolicyUrl: String(row.privacyPolicyUrl ?? DEFAULT_PRIVACY_POLICY_URL),
+        termsAndConditionsUrl: String(row.termsAndConditionsUrl ?? DEFAULT_TERMS_URL),
         logoUrl: row.logoUrl ?? undefined,
         coverImageUrl: row.coverImageUrl ?? undefined,
         specialties: parseJsonArray<string>(String(row.specialtiesJson ?? '[]'), []),
@@ -686,8 +459,8 @@ async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgS
             logoUrl: org.logoUrl,
             coverImageUrl: org.coverImageUrl,
             addressHint: org.addressHint,
-            privacyPolicyUrl: 'https://Clinic EZ.app/privacy',
-            termsAndConditionsUrl: 'https://Clinic EZ.app/terms',
+            privacyPolicyUrl: DEFAULT_PRIVACY_POLICY_URL,
+            termsAndConditionsUrl: DEFAULT_TERMS_URL,
             rolesJson: org.rolesJson,
             requiredShareFieldsJson: org.requiredShareFieldsJson,
             featuredScore: org.featuredScore,
@@ -802,8 +575,8 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
             coverImageUrl: clinic.coverImageUrl,
             isPublic: clinic.isPublic,
             supportsAppointments: clinic.supportsAppointments,
-            privacyPolicyUrl: 'https://Clinic EZ.app/privacy',
-            termsAndConditionsUrl: 'https://Clinic EZ.app/terms',
+            privacyPolicyUrl: DEFAULT_PRIVACY_POLICY_URL,
+            termsAndConditionsUrl: DEFAULT_TERMS_URL,
             specialtiesJson: clinic.specialtiesJson,
             requiredShareFieldsJson: clinic.requiredShareFieldsJson,
             activeMemberCount: clinic.activeMemberCount,
@@ -934,7 +707,8 @@ export async function listClinics(
                 isJoined,
                 isVisible,
                 membershipStatus: parseMembershipStatus(clinicMembership?.status),
-                healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
+                healthcareProviders: cachedClinicProviders.get(clinic.id) ?? [],
+                services: cachedClinicServices.get(clinic.id) ?? [],
             } as ClinicDetail;
         })
         .filter((clinic) => {
@@ -1054,7 +828,8 @@ export async function loadLocalClinics(
                 isJoined,
                 isVisible,
                 membershipStatus: parseMembershipStatus(clinicMembership?.status),
-                healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
+                healthcareProviders: cachedClinicProviders.get(clinic.id) ?? [],
+                services: cachedClinicServices.get(clinic.id) ?? [],
             } as ClinicDetail;
         })
         .filter((clinic) => {
@@ -1124,8 +899,8 @@ export async function getClinicDetail(patientId: string, clinicId: string): Prom
         isVisible,
         unlockedByOrganizationIds,
         membershipStatus: parseMembershipStatus(membership?.status),
-        healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
-        services: [],
+        healthcareProviders: cachedClinicProviders.get(clinic.id) ?? [],
+        services: cachedClinicServices.get(clinic.id) ?? [],
     };
 }
 
@@ -1485,6 +1260,26 @@ export async function getClinicDetailOnline(
     const remote = await fetchClinicDetailOnline(getToken, clinicId, patientId);
     if (!remote) return null;
 
+    const mappedProviders = (remote.healthcareProviders ?? []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        specialty: p.specialty,
+        avatarUrl: p.avatarUrl ?? undefined,
+        bio: '',
+        credentials: p.professionalLicenseNo ? [p.professionalLicenseNo] : [],
+        rating: 5.0,
+    }));
+    const mappedServices = (remote.services ?? []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description ?? undefined,
+        durationMinutes: s.durationMinutes ?? undefined,
+        price: s.price ?? undefined,
+    }));
+
+    cachedClinicProviders.set(remote.id, mappedProviders);
+    cachedClinicServices.set(remote.id, mappedServices);
+
     return {
         id: remote.id,
         name: remote.name,
@@ -1494,8 +1289,8 @@ export async function getClinicDetailOnline(
         supportsAppointments: remote.supportsAppointments,
         organizationIds: (remote.linkedOrganizations ?? []).map((o) => o.id),
         requiredShareFields: parseJsonArray<ShareableFieldKey>(remote.requiredShareFieldsJson, ['fullName', 'mobile']),
-        privacyPolicyUrl: remote.privacyPolicyUrl ?? 'https://Clinic EZ.app/privacy',
-        termsAndConditionsUrl: remote.termsAndConditionsUrl ?? 'https://Clinic EZ.app/terms',
+        privacyPolicyUrl: remote.privacyPolicyUrl ?? DEFAULT_PRIVACY_POLICY_URL,
+        termsAndConditionsUrl: remote.termsAndConditionsUrl ?? DEFAULT_TERMS_URL,
         logoUrl: remote.logoUrl ?? undefined,
         coverImageUrl: remote.coverImageUrl ?? undefined,
         specialties: parseJsonArray<string>(remote.specialtiesJson, []),
@@ -1519,25 +1314,11 @@ export async function getClinicDetailOnline(
             requiredShareFields: parseJsonArray<ShareableFieldKey>(org.requiredShareFieldsJson, ['fullName', 'mobile']),
             roles: parseJsonArray(org.rolesJson, []),
             partneredClinicIds: [],
-            privacyPolicyUrl: '',
-            termsAndConditionsUrl: '',
+            privacyPolicyUrl: DEFAULT_PRIVACY_POLICY_URL,
+            termsAndConditionsUrl: DEFAULT_TERMS_URL,
         })),
-        healthcareProviders: (remote.healthcareProviders ?? []).map((p) => ({
-            id: p.id,
-            name: p.name,
-            specialty: p.specialty,
-            avatarUrl: p.avatarUrl ?? undefined,
-            bio: '',
-            credentials: p.professionalLicenseNo ? [p.professionalLicenseNo] : [],
-            rating: 5.0,
-        })),
-        services: (remote.services ?? []).map((s) => ({
-            id: s.id,
-            name: s.name,
-            description: s.description ?? undefined,
-            durationMinutes: s.durationMinutes ?? undefined,
-            price: s.price ?? undefined,
-        })),
+        healthcareProviders: mappedProviders,
+        services: mappedServices,
     };
 }
 

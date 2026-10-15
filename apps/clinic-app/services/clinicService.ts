@@ -1810,6 +1810,47 @@ export interface RecordPaymentRequest {
   notes?: string;
 }
 
+export interface PatientSeedResult {
+  patientsCreated: number;
+  encountersCreated: number;
+  prescriptionsCreated: number;
+  medicalCertificatesCreated: number;
+  pastMedicalHistoriesCreated: number;
+  familyHistoriesCreated: number;
+  socialHistoriesCreated: number;
+  surgicalHistoriesCreated: number;
+  reproductiveHistoriesCreated: number;
+  physicalExamProfilesCreated: number;
+  allergiesCreated: number;
+  problemsCreated: number;
+  immunizationsCreated: number;
+  elapsed: string;
+  tenantId: string;
+  clinicId: string;
+  doctorName: string;
+  samplePatientCodes: string[];
+}
+
+export interface SeedStatusResult {
+  clinicId?: string | null;
+  tenantId?: string | null;
+  totalPatients: number;
+  seededPatients: number;
+  totalEncounters: number;
+  totalPrescriptions: number;
+  totalMedCerts: number;
+  medicalHistories: {
+    pastMedicalHistories: number;
+    familyHistories: number;
+    socialHistories: number;
+    surgicalHistories: number;
+    reproductiveHistories: number;
+    allergies: number;
+    problems: number;
+    immunizations: number;
+  };
+}
+
 export const clinicService = {
   // Queue & Walk-In Engine
   async getQueue(paramsOrDate?: string | GetQueueParams, status?: QueueStatus) {
@@ -2892,6 +2933,27 @@ export const clinicService = {
 
   async reverseGamotTransaction(id: string, payload: ReverseGamotPayload) {
     return clinicApiClient.post<GamotLedgerTransaction>(`/yakap/gamot/transactions/${id}/reverse`, payload);
+  },
+
+  // Dev Seeder & Scalability Testing (Development Environment)
+  async seedClinicData(options?: { count?: number; clearExisting?: boolean; clinicId?: string; tenantId?: string }) {
+    const params = new URLSearchParams();
+    if (options?.count) params.append('count', String(options.count));
+    if (options?.clearExisting !== undefined) params.append('clearExisting', String(options.clearExisting));
+    if (options?.clinicId) params.append('clinicId', options.clinicId);
+    if (options?.tenantId) params.append('tenantId', options.tenantId);
+    const qs = params.toString();
+    return clinicApiClient.post<PatientSeedResult>(`/dev/seed-patients${qs ? `?${qs}` : ''}`);
+  },
+
+  async getClinicSeedStatus(clinicId?: string) {
+    const qs = clinicId ? `?clinicId=${encodeURIComponent(clinicId)}` : '';
+    return clinicApiClient.get<SeedStatusResult>(`/dev/seed-status${qs}`);
+  },
+
+  async clearClinicSeedData(clinicId?: string) {
+    const qs = clinicId ? `?clinicId=${encodeURIComponent(clinicId)}` : '';
+    return clinicApiClient.delete<{ clearedCount: number; clinicId?: string }>(`/dev/clear-patients${qs}`);
   }
 };
 

@@ -2,15 +2,20 @@ import HeroBackground from "@/components/HeroBackground"
 import { Metadata } from "next"
 import SecondaryBackgroundImage from "../../../../public/assets/secondary-background.png"
 import HeroFeatured from "@/components/Hero"
-import Shell, { mockClinicsData } from "@/components/Shell"
+import Shell from "@/components/Shell"
 import Suspend from "@/components/Suspend"
+import { directoryService } from "@/services/directory.service"
+
+export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: "Clinics | Clinic EZ V2",
   description: "Find clinics near you and join them to enhance your healthcare experience.",
 }
 
-export default function ClinicsPage() {
+export default async function ClinicsPage() {
+  const clinics = await directoryService.getClinics()
+
   return (
     <main>
       <section className="flex flex-col items-center min-h-screen mt-32">
@@ -22,7 +27,7 @@ export default function ClinicsPage() {
               <p className="text-lg text-gray-500">Loading clinics...</p>
             </div>
           }>
-            <Shell data={mockClinicsData} type="clinics" />
+            <Shell data={clinics} type="clinics" />
           </Suspend>
         </div>
       </section>

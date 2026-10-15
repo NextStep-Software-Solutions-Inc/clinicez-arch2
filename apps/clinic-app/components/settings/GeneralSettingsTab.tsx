@@ -27,6 +27,7 @@ import { pickClinicLogo } from '../../utils/logoUploader';
 import { Alert, notify } from '../../utils/feedback';
 import LogoCropModal from './LogoCropModal';
 import ColorBrandingSection from './ColorBrandingSection';
+import DevDataSeederCard from './DevDataSeederCard';
 
 interface GeneralSettingsTabProps {
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
@@ -57,9 +58,11 @@ interface GeneralSettingsTabProps {
   eodLoadError: string | null;
   onRefreshEod: () => Promise<void>;
   formatPeso: (v: number | undefined | null) => string;
+  onNavigatePatients?: () => void;
 }
 
 export default function GeneralSettingsTab({
+  onNavigatePatients,
   onSettingsUpdated,
   preferredChartLayout = 'modal',
   setPreferredChartLayout,
@@ -500,6 +503,9 @@ export default function GeneralSettingsTab({
 
       {/* Edge & Server Connectivity */}
       <EdgeServerSwitcherSection />
+
+      {/* Dev Data Seeder & Scalability Testing (Clinic-Exclusive) */}
+      <DevDataSeederCard onNavigatePatients={onNavigatePatients} />
 
       {/* Clinic Logo Zoom & Crop Modal */}
       <LogoCropModal

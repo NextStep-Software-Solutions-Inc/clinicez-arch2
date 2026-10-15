@@ -1,0 +1,998 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Clinic.Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
+namespace ClinicEz.Clinic.Infrastructure.Persistence;
+
+public sealed class PatientSeedOptions
+{
+    public int Count { get; set; } = 1000;
+    public string? TenantId { get; set; }
+    public Guid? ClinicId { get; set; }
+    public bool ClearExistingSeededPatients { get; set; } = false;
+    public int BatchSize { get; set; } = 100;
+    public Action<int, int>? ProgressCallback { get; set; }
+}
+
+public sealed class PatientSeedResult
+{
+    public int PatientsCreated { get; set; }
+    public int EncountersCreated { get; set; }
+    public int PrescriptionsCreated { get; set; }
+    public int MedicalCertificatesCreated { get; set; }
+    public int PastMedicalHistoriesCreated { get; set; }
+    public int FamilyHistoriesCreated { get; set; }
+    public int SocialHistoriesCreated { get; set; }
+    public int SurgicalHistoriesCreated { get; set; }
+    public int ReproductiveHistoriesCreated { get; set; }
+    public int PhysicalExamProfilesCreated { get; set; }
+    public int AllergiesCreated { get; set; }
+    public int ProblemsCreated { get; set; }
+    public int ImmunizationsCreated { get; set; }
+    public TimeSpan Elapsed { get; set; }
+    public List<string> SamplePatientCodes { get; set; } = new();
+    public string TenantId { get; set; } = string.Empty;
+    public Guid ClinicId { get; set; }
+    public string DoctorName { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// High-performance Development and Load-Testing Data Seeder.
+/// Seeds 1,000+ realistic Philippine clinical records (demographics, encounters, prescriptions, certificates,
+/// and comprehensive structured medical histories) to test API scalability, database indexing, and browser UI capacity.
+/// </summary>
+public static class DevPatientSeeder
+{
+    private static readonly string[] MaleFirstNames =
+    {
+        "Juan", "Jose", "Antonio", "Angelo", "Gabriel", "Carlo", "Christian", "Miguel", "Joshua", "Mark",
+        "Daniel", "Rafael", "Paolo", "John Paul", "Francis", "Emmanuel", "Ramon", "Eduardo", "Rodrigo", "Ferdinand",
+        "Manuel", "Danilo", "Rolando", "Vicente", "Renato", "Arnel", "Jonathan", "Alexander", "Jerome", "Nathaniel",
+        "Kenneth", "Alden", "Justin", "Enrico", "Dante", "Benedict", "Jomar", "Gerald", "Ronnie", "Dexter",
+        "Jaime", "Dominic", "Lester", "Patrick", "Reynaldo", "Alfonso", "Lorenzo", "Cesar", "Noel", "Richard"
+    };
+
+    private static readonly string[] FemaleFirstNames =
+    {
+        "Maria", "Ana", "Christine", "Angelica", "Bea", "Katherine", "Stephanie", "Camille", "Princess", "Althea",
+        "Rochelle", "Patricia", "Jasmine", "Nicole", "Samantha", "Denise", "Kristine", "Alyssa", "Clarisse", "Bianca",
+        "Giselle", "Maricel", "Rosario", "Teresa", "Carmela", "Lourdes", "Corazon", "Imelda", "Gloria", "Leonora",
+        "Esperanza", "Milagros", "Rowena", "Bernadette", "Marites", "Marilou", "Lorna", "Grace", "Joy", "Cherry",
+        "Gemma", "Vanessa", "Eileen", "Sheila", "Regina", "Aileen", "Hazel", "Abigail", "Lovely", "Diana"
+    };
+
+    private static readonly string[] LastNames =
+    {
+        "Dela Cruz", "Santos", "Reyes", "Garcia", "Mendoza", "Ramos", "Bautista", "Gonzales", "Villanueva", "Fernandez",
+        "Lopez", "Aquino", "Flores", "Rivera", "Castillo", "Tolentino", "Navarro", "Salazar", "Mercado", "De Leon",
+        "Valdez", "Perez", "Soriano", "Corpuz", "Manalo", "Agustin", "Morales", "Santiago", "Pascual", "Cruz",
+        "Delos Santos", "Bernardo", "Ocampo", "Evangelista", "Guerrero", "Domingo", "Roxas", "Enriquez", "Mallari", "Villamor",
+        "Estrada", "Padilla", "Samson", "Pineda", "Miranda", "Concepcion", "Gutierrez", "Magno", "Sarmiento", "Macaraeg"
+    };
+
+    private static readonly (string Street, string Barangay, string City, string Province)[] Locations =
+    {
+        ("142 Katipunan Ave", "Loyola Heights", "Quezon City", "Metro Manila"),
+        ("78 Commonwealth Ave", "Batasan Hills", "Quezon City", "Metro Manila"),
+        ("25 Maginhawa St", "UP Village", "Quezon City", "Metro Manila"),
+        ("512 Taft Avenue", "Ermita", "Manila", "Metro Manila"),
+        ("88 Rizal Avenue", "Santa Cruz", "Manila", "Metro Manila"),
+        ("102 España Blvd", "Sampaloc", "Manila", "Metro Manila"),
+        ("34 Ayala Ave", "San Lorenzo", "Makati City", "Metro Manila"),
+        ("67 Chino Roces Ave", "Pio del Pilar", "Makati City", "Metro Manila"),
+        ("12 BGC High Street", "Fort Bonifacio", "Taguig City", "Metro Manila"),
+        ("45 Shaw Blvd", "Wack-Wack", "Mandaluyong City", "Metro Manila"),
+        ("89 Ortigas Ave", "San Antonio", "Pasig City", "Metro Manila"),
+        ("23 Marcos Highway", "Santolan", "Pasig City", "Metro Manila"),
+        ("15 Alabang-Zapote Rd", "Pamplona", "Las Piñas City", "Metro Manila"),
+        ("66 Dr. A. Santos Ave", "San Dionisio", "Parañaque City", "Metro Manila"),
+        ("22 Sumulong Highway", "Mambugan", "Antipolo City", "Rizal"),
+        ("80 Ortigas Ave Ext", "San Juan", "Taytay", "Rizal"),
+        ("105 Emilio Aguinaldo Hwy", "Palico IV", "Imus City", "Cavite"),
+        ("44 Governor's Drive", "Salitran II", "Dasmariñas City", "Cavite"),
+        ("18 Molino Blvd", "Molino III", "Bacoor City", "Cavite"),
+        ("55 National Highway", "Parian", "Calamba City", "Laguna"),
+        ("92 Balibago Rd", "Balibago", "Santa Rosa City", "Laguna"),
+        ("11 J.P. Laurel Highway", "Mataas Na Lupa", "Lipa City", "Batangas"),
+        ("33 MacArthur Highway", "Dolores", "San Fernando City", "Pampanga"),
+        ("71 Olongapo-Gapan Rd", "San Nicolas", "Angeles City", "Pampanga"),
+        ("29 McArthur Hwy", "Tikay", "Malolos City", "Bulacan"),
+        ("88 Osmeña Blvd", "Capitol Site", "Cebu City", "Cebu"),
+        ("120 Gorordo Ave", "Lahug", "Cebu City", "Cebu"),
+        ("45 J.P. Laurel Ave", "Bajada", "Davao City", "Davao del Sur"),
+        ("60 MacArthur Highway", "Matina", "Davao City", "Davao del Sur")
+    };
+
+    private record ClinicalCaseTemplate(
+        string ChiefComplaint,
+        string Subjective,
+        string Objective,
+        string Assessment,
+        string Plan,
+        string Icd10Code,
+        string DiagnosisDesc,
+        (string Generic, string Brand, string Dosage, string Form, string Sig, int Qty, int Days)[] Prescriptions,
+        string CertDiagnosis,
+        string CertFindings,
+        string CertFitness,
+        int? RestDays,
+        string CertPurpose
+    );
+
+    private static readonly ClinicalCaseTemplate[] CaseTemplates =
+    {
+        // 1. Acute URTI
+        new(
+            ChiefComplaint: "3-day cough, runny nose, and low-grade fever.",
+            Subjective: "Patient presents with a 3-day history of non-productive cough, mild throat irritation, and low-grade fever (max 38.0 C). Denies shortness of breath, chest pain, or hemoptysis. Fluid intake adequate.",
+            Objective: "BP 120/80 mmHg, HR 78 bpm, RR 18 cpm, Temp 37.6 C, SpO2 99%. HEENT: Erythematous posterior pharyngeal wall, no tonsillar exudates. Chest: Clear breath sounds bilaterally, no wheezes or crackles. Heart: Regular rate and rhythm.",
+            Assessment: "Acute Upper Respiratory Tract Infection (viral rhinitis and pharyngitis).",
+            Plan: "1. Adequate oral hydration (2-3L water/day) and rest.\n2. Paracetamol 500mg tab Q4H PRN for fever or headache.\n3. Cetirizine 10mg tab once daily at bedtime for rhinorrhea.\n4. Return if fever persists >3 days or dyspnea ensues.",
+            Icd10Code: "J06.9",
+            DiagnosisDesc: "Acute upper respiratory infection, unspecified",
+            Prescriptions: new[]
+            {
+                ("Paracetamol", "Biogesic", "500mg", "Tablet", "1 tablet every 4 hours as needed for fever or headache", 10, 3),
+                ("Cetirizine", "Zyrtec", "10mg", "Tablet", "1 tablet once daily at bedtime for 5 days", 5, 5)
+            },
+            CertDiagnosis: "Acute Upper Respiratory Tract Infection",
+            CertFindings: "Pharyngeal congestion, mild fever at onset, clear lung fields.",
+            CertFitness: "UnfitToWork",
+            RestDays: 2,
+            CertPurpose: "Employment"
+        ),
+        // 2. Essential Hypertension
+        new(
+            ChiefComplaint: "Routine blood pressure checkup and medication refill.",
+            Subjective: "Follow-up for essential hypertension. Complies with daily medication. Denies blurring of vision, dizziness, occipital headache, palpitations, or orthopnea. Sodium reduction moderately observed.",
+            Objective: "BP 138/86 mmHg, HR 72 bpm, RR 16 cpm, Temp 36.6 C, SpO2 98%. BMI 26.4 kg/m2 (Overweight). Heart: Normal rate, regular rhythm, no murmurs. Lungs: Clear, no rales. Extremities: No bipedal edema, peripheral pulses full and equal.",
+            Assessment: "Essential Hypertension, Stage 1 - Fairly controlled.",
+            Plan: "1. Continue Amlodipine 5mg 1 tab PO OD in the morning.\n2. Reinforce dietary sodium restriction (<2g/day) and 30 mins brisk walking 4x/week.\n3. Monitor home BP morning and evening for 1 week.\n4. Repeat serum creatinine, lipid profile, fasting blood sugar in 3 months.",
+            Icd10Code: "I10",
+            DiagnosisDesc: "Essential (primary) hypertension",
+            Prescriptions: new[]
+            {
+                ("Amlodipine", "Norvasc", "5mg", "Tablet", "1 tablet once daily in the morning", 30, 30),
+                ("Losartan Potassium", "Cozaar", "50mg", "Tablet", "1 tablet once daily in the morning", 30, 30)
+            },
+            CertDiagnosis: "Essential Hypertension - Controlled",
+            CertFindings: "BP 138/86 mmHg, asymptomatic, cardiac exam normal, no focal deficits.",
+            CertFitness: "FitToWork",
+            RestDays: null,
+            CertPurpose: "Employment"
+        ),
+        // 3. Type 2 Diabetes Mellitus
+        new(
+            ChiefComplaint: "Follow-up for diabetes management and lab review.",
+            Subjective: "Established T2DM patient. Reports compliant intake of oral hypoglycemic agents. Latest FBS 128 mg/dL. Denies polydipsia, polyuria, numbness in feet, or blurred vision.",
+            Objective: "BP 125/80 mmHg, HR 74 bpm, RR 18 cpm, Temp 36.5 C. BMI 27.2. Extremities: Monofilament test intact bilaterally on feet, no active ulcers, dorsalis pedis pulses palpable.",
+            Assessment: "Type 2 Diabetes Mellitus - Non-insulin dependent, stable control.",
+            Plan: "1. Continue Metformin 500mg 1 tab BID with meals.\n2. Low glycemic index diet, portion control, regular aerobic exercise.\n3. Daily foot hygiene and inspection.\n4. Follow-up with repeat HbA1c in 3 months.",
+            Icd10Code: "E11.9",
+            DiagnosisDesc: "Type 2 diabetes mellitus without complications",
+            Prescriptions: new[]
+            {
+                ("Metformin", "Glucophage", "500mg", "Tablet", "1 tablet twice daily with meals", 60, 30)
+            },
+            CertDiagnosis: "Type 2 Diabetes Mellitus - Stable",
+            CertFindings: "FBS 128 mg/dL, monofilament test intact, visual acuity unimpaired.",
+            CertFitness: "FitToWork",
+            RestDays: null,
+            CertPurpose: "General"
+        ),
+        // 4. Acute Gastroenteritis
+        new(
+            ChiefComplaint: "Watery diarrhea and abdominal cramps for 1 day.",
+            Subjective: "Patient had 4 episodes of watery, non-bloody bowel movements since yesterday evening after eating street food. Associated with mild crampy periumbilical pain and low-grade fever. Denies persistent vomiting; able to tolerate oral liquids.",
+            Objective: "BP 110/70 mmHg, HR 88 bpm, RR 18 cpm, Temp 37.8 C. Abdomen: Soft, non-distended, hyperactive bowel sounds, mild diffuse tenderness on palpation, no rebound or guarding. Good skin turgor, moist oral mucosa.",
+            Assessment: "Acute Gastroenteritis with Mild Dehydration.",
+            Plan: "1. Oral Rehydration Solution (ORS) 1 sachet per loose stool.\n2. BRAT diet (banana, rice, applesauce, toast), avoid dairy/greasy food.\n3. Paracetamol for fever.\n4. Return if high fever >38.5C, bloody stool, or signs of severe dehydration.",
+            Icd10Code: "A09",
+            DiagnosisDesc: "Infectious gastroenteritis and colitis, unspecified",
+            Prescriptions: new[]
+            {
+                ("Oral Rehydration Salts", "Hydrite", "1 sachet", "Powder", "Dissolve 1 sachet in 1 liter of drinking water, drink after each loose stool", 5, 3),
+                ("Paracetamol", "Biogesic", "500mg", "Tablet", "1 tablet every 6 hours as needed for abdominal ache or fever", 6, 2)
+            },
+            CertDiagnosis: "Acute Gastroenteritis with Mild Dehydration",
+            CertFindings: "Watery diarrhea, hyperactive bowel sounds, mild abdominal tenderness, stable vitals.",
+            CertFitness: "UnfitToWork",
+            RestDays: 3,
+            CertPurpose: "Employment"
+        ),
+        // 5. Bronchial Asthma in Acute Flare
+        new(
+            ChiefComplaint: "Wheezing and shortness of breath since last night.",
+            Subjective: "Patient with known bronchial asthma since childhood. Triggered by recent dust and cold exposure. Reports nocturnal coughing and mild chest tightness. Has been using Salbutamol MDI with partial relief.",
+            Objective: "BP 125/82 mmHg, HR 92 bpm, RR 22 cpm, SpO2 96% on room air. Chest: Bilateral expiratory wheezes, prolonged expiratory phase, no subcostal retractions.",
+            Assessment: "Bronchial Asthma in Acute Exacerbation, Mild-to-Moderate.",
+            Plan: "1. In-clinic nebulization with Salbutamol + Ipratropium 1 nebule completed with good relief.\n2. Salbutamol 100mcg MDI 2 puffs Q4-6H PRN for wheezing.\n3. Short course Prednisone 20mg PO OD for 5 days.\n4. Avoid known allergen/dust triggers.",
+            Icd10Code: "J45.901",
+            DiagnosisDesc: "Unspecified asthma with (acute) exacerbation",
+            Prescriptions: new[]
+            {
+                ("Salbutamol", "Ventolin", "100mcg/dose", "Inhaler", "2 puffs every 4-6 hours as needed for shortness of breath or wheezing", 1, 30),
+                ("Prednisone", "Predsone", "20mg", "Tablet", "1 tablet once daily in the morning after breakfast for 5 days", 5, 5)
+            },
+            CertDiagnosis: "Bronchial Asthma in Acute Flare",
+            CertFindings: "Expiratory wheezing, tachypnea, responsive to bronchodilators, post-treatment SpO2 99%.",
+            CertFitness: "UnfitToWork",
+            RestDays: 3,
+            CertPurpose: "Employment"
+        ),
+        // 6. Gastroesophageal Reflux Disease (GERD)
+        new(
+            ChiefComplaint: "Heartburn and acid regurgitation for 2 weeks.",
+            Subjective: "Burning retrosternal chest sensation aggravated after heavy meals and lying down. Associated with sour taste in mouth. Denies dysphagia, weight loss, or black tarry stools.",
+            Objective: "BP 120/75 mmHg, HR 70 bpm, RR 16 cpm. Abdomen: Flat, soft, mild epigastric tenderness, no organomegaly.",
+            Assessment: "Gastroesophageal Reflux Disease (GERD).",
+            Plan: "1. Omeprazole 20mg 1 cap PO OD 30 minutes before breakfast for 14 days.\n2. Small frequent meals, avoid lying down within 3 hours after eating, avoid coffee/carbonated beverages.",
+            Icd10Code: "K21.9",
+            DiagnosisDesc: "Gastro-esophageal reflux disease without esophagitis",
+            Prescriptions: new[]
+            {
+                ("Omeprazole", "Prilosec", "20mg", "Capsule", "1 capsule once daily 30 minutes before breakfast for 14 days", 14, 14),
+                ("Aluminum Hydroxide + Magnesium Hydroxide", "Maalox", "400mg/400mg", "Chewable Tablet", "1 chewable tablet 1 hour after meals as needed for breakthrough acidity", 15, 7)
+            },
+            CertDiagnosis: "Gastroesophageal Reflux Disease",
+            CertFindings: "Mild epigastric tenderness, negative cardiac workup, classic reflux presentation.",
+            CertFitness: "FitToWork",
+            RestDays: null,
+            CertPurpose: "Employment"
+        ),
+        // 7. Acute Allergic Urticaria
+        new(
+            ChiefComplaint: "Itchy red rashes all over body.",
+            Subjective: "Pruritic erythematous wheals developed 4 hours after consuming shrimp. Denies facial swelling, lip edema, or breathing difficulty.",
+            Objective: "BP 118/76 mmHg, HR 76 bpm. Skin: Multiple erythematous edematous plaques with central clearing on trunk and limbs, no angioedema.",
+            Assessment: "Acute Food-Induced Urticaria (Shellfish).",
+            Plan: "1. Cetirizine 10mg PO OD at night.\n2. Calamine lotion topically for itch.\n3. Avoid all crustaceans and shellfish.",
+            Icd10Code: "L50.0",
+            DiagnosisDesc: "Allergic urticaria",
+            Prescriptions: new[]
+            {
+                ("Cetirizine", "Allerkid/Zyrtec", "10mg", "Tablet", "1 tablet once daily at bedtime for 7 days", 7, 7),
+                ("Hydrocortisone", "H-Cort", "1%", "Cream", "Apply thin layer to affected pruritic skin twice daily for 5 days", 1, 5)
+            },
+            CertDiagnosis: "Acute Allergic Urticaria",
+            CertFindings: "Disseminated urticarial wheals, stable hemodynamics, no respiratory compromise.",
+            CertFitness: "UnfitToWork",
+            RestDays: 2,
+            CertPurpose: "Employment"
+        )
+    };
+
+    private static readonly (string Allergen, AllergyCategory Category, AllergySeverity Severity, string Reaction)[] AllergyTemplates =
+    {
+        ("Amoxicillin", AllergyCategory.Medication, AllergySeverity.Severe, "Facial angioedema and generalized urticaria"),
+        ("Penicillin G", AllergyCategory.Medication, AllergySeverity.LifeThreatening, "Anaphylactic reaction with dyspnea"),
+        ("Aspirin", AllergyCategory.Medication, AllergySeverity.Moderate, "Bronchospasm and wheezing"),
+        ("Shrimp / Prawns", AllergyCategory.Food, AllergySeverity.Moderate, "Perioral itching and diffuse hives"),
+        ("Crab / Crustaceans", AllergyCategory.Food, AllergySeverity.Moderate, "Pruritic macular rash and nausea"),
+        ("Peanuts", AllergyCategory.Food, AllergySeverity.Severe, "Laryngeal edema and bronchospasm"),
+        ("Dust Mites", AllergyCategory.Environmental, AllergySeverity.Mild, "Sneezing, allergic rhinitis, watery eyes"),
+        ("Grass / Weed Pollen", AllergyCategory.Environmental, AllergySeverity.Mild, "Nasal congestion and ocular pruritus"),
+        ("Latex", AllergyCategory.Biologic, AllergySeverity.Moderate, "Contact dermatitis and erythematous papules")
+    };
+
+    private static readonly (string Code, string Title, string Mdisease, ProblemSeverity Severity, bool IsChronic)[] ProblemTemplates =
+    {
+        ("I10", "Essential (primary) hypertension", "001", ProblemSeverity.Moderate, true),
+        ("E11.9", "Type 2 diabetes mellitus without complications", "006", ProblemSeverity.Moderate, true),
+        ("J45.9", "Bronchial asthma, unspecified", "002", ProblemSeverity.Moderate, true),
+        ("E78.5", "Hyperlipidemia, unspecified", "011", ProblemSeverity.Mild, true),
+        ("K21.9", "Gastro-esophageal reflux disease without esophagitis", "998", ProblemSeverity.Mild, false),
+        ("M10.9", "Gout, unspecified", "998", ProblemSeverity.Moderate, true),
+        ("J30.9", "Allergic rhinitis, unspecified", "998", ProblemSeverity.Mild, false),
+        ("K27.9", "Peptic ulcer, site unspecified, unspecified as acute or chronic", "998", ProblemSeverity.Moderate, false)
+    };
+
+    private static readonly (string Library, string Code, string Vaccine, string Manufacturer)[] ImmunizationTemplates =
+    {
+        ("lib_immchild", "C01", "BCG Vaccine", "Serum Institute of India"),
+        ("lib_immchild", "C02", "Hepatitis B Vaccine (Recombinant)", "GlaxoSmithKline"),
+        ("lib_immchild", "C03", "Pentavalent (DTP-HepB-Hib)", "Sanofi Pasteur"),
+        ("lib_immchild", "C04", "Oral Polio Vaccine (bOPV)", "Bio-Farma"),
+        ("lib_immchild", "C07", "Measles-Mumps-Rubella (MMR)", "Merck Sharp & Dohme"),
+        ("lib_immyoungw", "Y01", "Tetanus-Diphtheria (Td)", "Biological E. Limited"),
+        ("lib_immyoungw", "Y02", "Human Papillomavirus (HPV Quadrivalent)", "Merck & Co."),
+        ("lib_immelderly", "E01", "Pneumococcal Polysaccharide (PPSV23)", "Merck Sharp & Dohme"),
+        ("lib_immelderly", "E02", "Influenza Quadrivalent", "Sanofi Pasteur"),
+        ("OtherImm", "999", "COVID-19 mRNA Vaccine (BNT162b2)", "Pfizer-BioNTech")
+    };
+
+    private static readonly (string Procedure, string Hospital, string Findings)[] SurgicalTemplates =
+    {
+        ("Appendectomy", "Philippine General Hospital", "Suppurative appendicitis, uncomplicated removal"),
+        ("Laparoscopic Cholecystectomy", "St. Luke's Medical Center", "Chronic cholecystitis with cholelithiasis (multiple cholesterol stones)"),
+        ("Cesarean Section (Low Transverse)", "The Medical City", "Failure to progress in labor, delivered healthy live infant"),
+        ("Inguinal Herniorrhaphy with Mesh", "Quezon City General Hospital", "Right indirect inguinal hernia, Lichtenstein repair"),
+        ("Tonsillectomy", "East Avenue Medical Center", "Chronic hypertrophic tonsillitis, Grade III obstruction"),
+        ("Excision of Benign Lipoma", "Amang Rodriguez Memorial Hospital", "3x4 cm subcutaneous lipoma, left posterior shoulder, margins clear")
+    };
+
+    public static async Task<PatientSeedResult> SeedAsync(
+        ApplicationDbContext dbContext,
+        PatientSeedOptions options,
+        ILogger? logger = null,
+        CancellationToken ct = default)
+    {
+        var sw = Stopwatch.StartNew();
+        var targetCount = Math.Max(1, options.Count);
+        var batchSize = Math.Max(25, Math.Min(options.BatchSize, 250));
+
+        // 1. Resolve target Clinic and Tenant strictly for this request
+        Guid clinicId;
+        string tenantId;
+        ClinicSettings? existingSettings;
+
+        if (options.ClinicId.HasValue && options.ClinicId.Value != Guid.Empty)
+        {
+            clinicId = options.ClinicId.Value;
+            existingSettings = await dbContext.ClinicSettings.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.ClinicId == clinicId, ct);
+            tenantId = options.TenantId 
+                ?? existingSettings?.TenantId 
+                ?? "tenant_default";
+        }
+        else
+        {
+            existingSettings = await dbContext.ClinicSettings.IgnoreQueryFilters().FirstOrDefaultAsync(ct);
+            clinicId = existingSettings?.ClinicId ?? Guid.Parse("11111111-1111-1111-1111-111111111111");
+            tenantId = options.TenantId ?? existingSettings?.TenantId ?? "tenant_default";
+        }
+
+        if (existingSettings == null)
+        {
+            existingSettings = new ClinicSettings
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ClinicId = clinicId,
+                ClinicName = "Primary Care Clinic",
+                OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM, Sat 8:00 AM - 12:00 PM",
+                LetterheadHeader = "PRIMARY CARE CLINICAL CENTER",
+                LetterheadSubHeader = "Accredited Primary Healthcare & Diagnostics",
+                LetterheadAddress = "123 Health Ave, Brgy. Central, Quezon City",
+                LetterheadContact = "+63 2 8123 4567 | care@primarycare.ph",
+                LicenseToken = "dev-unrestricted-license",
+                PlanTier = "Enterprise",
+                MaxStaffLimit = 50,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "System:DevPatientSeeder"
+            };
+            dbContext.ClinicSettings.Add(existingSettings);
+            await dbContext.SaveChangesAsync(ct);
+            logger?.LogInformation("[DevPatientSeeder] Created ClinicSettings for Clinic: {ClinicId} (Tenant: {TenantId})", clinicId, tenantId);
+        }
+
+        // 2. Ensure default Attending Physician exists for this specific clinic
+        var doctor = await dbContext.StaffMembers.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.ClinicId == clinicId && s.Role == StaffRole.Doctor && !s.IsDeleted, ct);
+
+        if (doctor == null)
+        {
+            doctor = new StaffMember
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ClinicId = clinicId,
+                FirstName = "Jose",
+                LastName = "Rizal",
+                Title = "Dr.",
+                Role = StaffRole.Doctor,
+                Specialty = "Family & Internal Medicine",
+                PrcLicenseNumber = "0098765",
+                PtrNumber = "PTR-2026-8877",
+                S2LicenseNumber = "S2-88776655",
+                Email = $"dr.rizal@{tenantId.Replace(" ", "").ToLowerInvariant()}.ph",
+                PhoneNumber = "0917-555-0101",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "System:DevPatientSeeder"
+            };
+            dbContext.StaffMembers.Add(doctor);
+            await dbContext.SaveChangesAsync(ct);
+            logger?.LogInformation("[DevPatientSeeder] Created default Attending Physician for Clinic {ClinicId}: Dr. Jose Rizal (PRC: 0098765)", clinicId);
+        }
+
+        // 3. Clear existing seeded patients if requested
+        if (options.ClearExistingSeededPatients)
+        {
+            var oldPatients = await dbContext.Patients.IgnoreQueryFilters()
+                .Where(p => p.ClinicId == clinicId && (p.CreatedBy == "System:DevPatientSeeder" || p.CreatedBy == "seeder"))
+                .Select(p => p.Id)
+                .ToListAsync(ct);
+
+            if (oldPatients.Count > 0)
+            {
+                logger?.LogInformation("[DevPatientSeeder] Purging {Count} existing seeded patients and associated records...", oldPatients.Count);
+                foreach (var chunk in oldPatients.Chunk(200))
+                {
+                    var chunkPatients = await dbContext.Patients.IgnoreQueryFilters().Where(p => chunk.Contains(p.Id)).ToListAsync(ct);
+                    dbContext.Patients.RemoveRange(chunkPatients);
+                    await dbContext.SaveChangesAsync(ct);
+                }
+            }
+        }
+
+        // 4. Calculate existing max sequence for PatientCode
+        var year = DateTime.UtcNow.Year;
+        var prefix = $"PAT-{year}-";
+        var existingCodes = await dbContext.Patients.IgnoreQueryFilters()
+            .Where(p => p.ClinicId == clinicId && p.PatientCode.StartsWith(prefix))
+            .Select(p => p.PatientCode)
+            .ToListAsync(ct);
+
+        var currentSeq = 0;
+        foreach (var code in existingCodes)
+        {
+            if (code.Length > prefix.Length && int.TryParse(code[prefix.Length..], out var s) && s > currentSeq)
+            {
+                currentSeq = s;
+            }
+        }
+
+        var result = new PatientSeedResult
+        {
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            DoctorName = $"{doctor.Title} {doctor.FirstName} {doctor.LastName}"
+        };
+
+        var rng = new Random(1337); // Deterministic seed for reproducible testing distributions
+        var totalCreated = 0;
+
+        logger?.LogInformation("[DevPatientSeeder] Starting batch generation of {TargetCount} patients for Clinic {ClinicId} (Tenant: {TenantId})...",
+            targetCount, clinicId, tenantId);
+
+        var now = DateTime.UtcNow;
+
+        while (totalCreated < targetCount)
+        {
+            var currentBatchSize = Math.Min(batchSize, targetCount - totalCreated);
+            var batchPatients = new List<ClinicPatient>(currentBatchSize);
+            var batchPastMedHist = new List<PatientPastMedicalHistory>();
+            var batchFamilyHist = new List<PatientFamilyHistory>();
+            var batchSocialHist = new List<PatientSocialHistory>();
+            var batchSurgHist = new List<PatientSurgicalHistory>();
+            var batchReprodHist = new List<PatientReproductiveHistory>();
+            var batchPhysExam = new List<PatientPhysicalExamProfile>();
+            var batchAllergies = new List<PatientAllergy>();
+            var batchProblems = new List<PatientProblem>();
+            var batchImmunizations = new List<PatientImmunization>();
+            var batchEncounters = new List<ConsultationEncounter>();
+            var batchMedCerts = new List<MedicalCertificate>();
+
+            for (var i = 0; i < currentBatchSize; i++)
+            {
+                currentSeq++;
+                var patientId = Guid.NewGuid();
+                var isFemale = rng.NextDouble() >= 0.48;
+                var firstName = isFemale
+                    ? FemaleFirstNames[rng.Next(FemaleFirstNames.Length)]
+                    : MaleFirstNames[rng.Next(MaleFirstNames.Length)];
+                var middleName = LastNames[rng.Next(LastNames.Length)];
+                var lastName = LastNames[rng.Next(LastNames.Length)];
+                var suffix = !isFemale && rng.NextDouble() < 0.12 ? (rng.Next(2) == 0 ? "Jr." : "III") : null;
+
+                // Age distribution: ~15% pediatric (<18), ~35% young adult (18-39), ~30% middle-aged (40-59), ~20% seniors (60-88)
+                var ageBucket = rng.Next(100);
+                int ageYears;
+                if (ageBucket < 15) ageYears = rng.Next(1, 18);
+                else if (ageBucket < 50) ageYears = rng.Next(18, 40);
+                else if (ageBucket < 80) ageYears = rng.Next(40, 60);
+                else ageYears = rng.Next(60, 89);
+
+                var birthYear = now.Year - ageYears;
+                var birthMonth = rng.Next(1, 13);
+                var birthDay = rng.Next(1, 28);
+                var dateOfBirth = new DateOnly(birthYear, birthMonth, birthDay);
+
+                var civilStatus = ageYears < 18 ? "Single"
+                    : ageYears < 26 ? (rng.NextDouble() < 0.8 ? "Single" : "Married")
+                    : (rng.NextDouble() < 0.65 ? "Married" : (rng.NextDouble() < 0.75 ? "Single" : (rng.NextDouble() < 0.9 ? "Widowed" : "Separated")));
+
+                var loc = Locations[rng.Next(Locations.Length)];
+                var mobilePrefixes = new[] { "0917", "0918", "0919", "0920", "0922", "0927", "0935", "0949", "0998" };
+                var contactNumber = $"{mobilePrefixes[rng.Next(mobilePrefixes.Length)]}-{rng.Next(100, 999)}-{rng.Next(1000, 9999)}";
+                var emailName = $"{firstName.ToLower().Replace(" ", "")}.{lastName.ToLower().Replace(" ", "")}{rng.Next(10, 999)}";
+                var emailDomains = new[] { "gmail.com", "yahoo.com", "outlook.com", "icloud.com" };
+                var email = $"{emailName}@{emailDomains[rng.Next(emailDomains.Length)]}";
+
+                var philHealthNo = $"{rng.Next(10, 25):D2}-{rng.Next(100000000, 999999999)}-{rng.Next(1, 9)}";
+                var seniorCitizenId = ageYears >= 60 ? $"OSCA-{rng.Next(1000, 9999)}-{rng.Next(10000, 99999)}" : null;
+                var pwdId = rng.NextDouble() < 0.06 ? $"PWD-{rng.Next(1000, 9999)}-{rng.Next(10000, 99999)}" : null;
+
+                var bloodTypes = new[] { "O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-" };
+                var bloodType = bloodTypes[rng.Next(bloodTypes.Length)];
+
+                // Summary alerts & chronic flags
+                var hasAlert = rng.NextDouble() < 0.22;
+                var alertStrings = new[] { "Severe Penicillin Allergy", "High Fall Risk", "Anticoagulation Therapy (Warfarin)", "Immunocompromised", "Asthma flare-up risk", "Renal Impairment" };
+                var alerts = hasAlert ? alertStrings[rng.Next(alertStrings.Length)] : null;
+
+                var chronicList = new List<string>();
+                if (ageYears >= 45 && rng.NextDouble() < 0.45) chronicList.Add("Hypertension Stage 2");
+                if (ageYears >= 40 && rng.NextDouble() < 0.30) chronicList.Add("Type 2 Diabetes Mellitus");
+                if (ageYears >= 50 && rng.NextDouble() < 0.25) chronicList.Add("Dyslipidemia");
+                if (rng.NextDouble() < 0.15) chronicList.Add("Bronchial Asthma");
+                var chronicConditions = chronicList.Count > 0 ? string.Join(", ", chronicList) : null;
+
+                var allergiesSummary = rng.NextDouble() < 0.35
+                    ? AllergyTemplates[rng.Next(AllergyTemplates.Length)].Allergen
+                    : null;
+
+                var patientCode = $"{prefix}{currentSeq:D5}";
+                var patient = new ClinicPatient
+                {
+                    Id = patientId,
+                    TenantId = tenantId,
+                    ClinicId = clinicId,
+                    PatientCode = patientCode,
+                    FirstName = firstName,
+                    LastName = lastName,
+                    MiddleName = middleName,
+                    Suffix = suffix,
+                    DateOfBirth = dateOfBirth,
+                    Gender = isFemale ? "Female" : "Male",
+                    CivilStatus = civilStatus,
+                    ContactNumber = contactNumber,
+                    Email = email,
+                    AddressLine = loc.Street,
+                    Barangay = loc.Barangay,
+                    City = loc.City,
+                    Province = loc.Province,
+                    EmergencyContactName = $"{LastNames[rng.Next(LastNames.Length)]}, {MaleFirstNames[rng.Next(MaleFirstNames.Length)]}",
+                    EmergencyContactPhone = $"{mobilePrefixes[rng.Next(mobilePrefixes.Length)]}-{rng.Next(100, 999)}-{rng.Next(1000, 9999)}",
+                    EmergencyContactRelationship = civilStatus == "Married" ? "Spouse" : (ageYears < 25 ? "Mother" : "Sibling"),
+                    PhilHealthNumber = philHealthNo,
+                    SeniorCitizenId = seniorCitizenId,
+                    PwdId = pwdId,
+                    BloodType = bloodType,
+                    Allergies = allergiesSummary,
+                    ChronicConditions = chronicConditions,
+                    Alerts = alerts,
+                    VerificationStatus = rng.NextDouble() < 0.92 ? "Verified" : "PendingVerification",
+                    PersonalMedicalHistoryNotes = chronicConditions != null ? $"Patient maintained on oral therapy. Baseline profile reviewed." : null,
+                    FamilyMedicalHistoryNotes = "Strong familial predisposition to cardiovascular/metabolic conditions in 1st degree relatives.",
+                    CustomFields = new Dictionary<string, object?>
+                    {
+                        { "category", ageYears < 22 ? "Student" : (ageYears >= 60 ? "Retiree" : "Employee") },
+                        { "workplace", loc.City },
+                        { "seeded_batch", "scale_test_1000" }
+                    },
+                    CreatedAt = now.AddDays(-rng.Next(30, 720)),
+                    CreatedBy = "System:DevPatientSeeder",
+                    UpdatedAt = now,
+                    UpdatedBy = "System:DevPatientSeeder"
+                };
+
+                batchPatients.Add(patient);
+                if (result.SamplePatientCodes.Count < 5)
+                {
+                    result.SamplePatientCodes.Add(patientCode);
+                }
+
+                // 4a. Past Medical Histories (1 to 3 items)
+                var medHistCount = rng.Next(1, 4);
+                var pickedProblems = ProblemTemplates.OrderBy(_ => rng.Next()).Take(medHistCount).ToList();
+                foreach (var prob in pickedProblems)
+                {
+                    batchPastMedHist.Add(new PatientPastMedicalHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        ConditionTitle = prob.Title,
+                        PhilHealthMdiseaseCode = prob.Mdisease,
+                        Icd10Code = prob.Code,
+                        SpecificDescription = prob.Title,
+                        OnsetDate = new DateOnly(now.Year - rng.Next(1, 10), rng.Next(1, 13), 1),
+                        IsResolved = !prob.IsChronic && rng.NextDouble() < 0.6,
+                        ClinicalNotes = prob.IsChronic ? "Maintained on prescription therapy." : "Resolved with treatment.",
+                        CreatedAt = patient.CreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                // 4b. Family Histories (1 to 2 items)
+                var famCount = rng.Next(1, 3);
+                var relationships = new[] { "Father", "Mother", "Maternal Grandfather", "Paternal Grandmother", "Sibling" };
+                foreach (var prob in pickedProblems.Take(famCount))
+                {
+                    batchFamilyHist.Add(new PatientFamilyHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        ConditionTitle = prob.Title,
+                        PhilHealthMdiseaseCode = prob.Mdisease,
+                        Icd10Code = prob.Code,
+                        Relationship = relationships[rng.Next(relationships.Length)],
+                        ClinicalNotes = "Diagnosed in middle age, under routine care.",
+                        CreatedAt = patient.CreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                // 4c. Social History
+                if (ageYears >= 16)
+                {
+                    var isSmoker = rng.NextDouble() < 0.20;
+                    var isDrinker = rng.NextDouble() < 0.35;
+                    batchSocialHist.Add(new PatientSocialHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        IsSmoker = isSmoker,
+                        PacksPerDay = isSmoker ? (decimal)(rng.Next(5, 20) * 0.1) : null,
+                        CigarettesPerDay = isSmoker ? rng.Next(5, 20) : null,
+                        YearsSmoking = isSmoker ? rng.Next(2, 25) : null,
+                        SmokingPackYears = isSmoker ? (decimal)rng.Next(2, 20) : null,
+                        IsAlcoholDrinker = isDrinker,
+                        AlcoholDrinksPerWeek = isDrinker ? rng.Next(1, 8) : null,
+                        AlcoholFrequency = isDrinker ? (rng.Next(2) == 0 ? "Occasional" : "Weekly") : "Never",
+                        PhysicalActivityFrequency = rng.Next(3) switch { 0 => "Sedentary", 1 => "Light (1-2x/week)", _ => "Moderate (3-5x/week)" },
+                        DietaryHabits = "Standard Filipino diet, mixed carbohydrates and meats",
+                        CreatedAt = patient.CreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                // 4d. Surgical History (for ~22% of patients)
+                if (ageYears >= 18 && rng.NextDouble() < 0.22)
+                {
+                    var surg = SurgicalTemplates[rng.Next(SurgicalTemplates.Length)];
+                    batchSurgHist.Add(new PatientSurgicalHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        ProcedureName = surg.Procedure,
+                        HospitalName = surg.Hospital,
+                        SurgeryDate = new DateOnly(now.Year - rng.Next(1, 8), rng.Next(1, 13), rng.Next(1, 28)),
+                        Findings = surg.Findings,
+                        Complications = "None reported, uneventful recovery.",
+                        Remarks = "Surgical site well-healed.",
+                        CreatedAt = patient.CreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                // 4e. Reproductive History (for females >= 13)
+                if (isFemale && ageYears >= 13)
+                {
+                    var gravida = ageYears < 20 ? 0 : rng.Next(0, 4);
+                    var para = gravida == 0 ? 0 : Math.Max(0, gravida - rng.Next(0, 2));
+                    batchReprodHist.Add(new PatientReproductiveHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        IsApplicable = true,
+                        MenarcheAge = rng.Next(11, 15),
+                        LastMenstrualPeriod = new DateOnly(now.Year, now.Month, Math.Min(28, rng.Next(1, 29))),
+                        PeriodDurationDays = rng.Next(3, 7),
+                        CycleIntervalDays = rng.Next(26, 32),
+                        PadsPerDay = rng.Next(2, 5),
+                        IsMenopausal = ageYears >= 50,
+                        MenopauseAge = ageYears >= 50 ? rng.Next(48, 54) : null,
+                        ContraceptiveMethod = gravida > 0 ? (rng.Next(2) == 0 ? "Oral Contraceptive Pills" : "None") : "None",
+                        Gravidity = gravida,
+                        Parity = para,
+                        TermBirths = para,
+                        PretermBirths = 0,
+                        Abortions = Math.Max(0, gravida - para),
+                        LivingChildren = para,
+                        DeliveryType = para > 0 ? (rng.Next(2) == 0 ? "Vaginal" : "Cesarean") : null,
+                        CreatedAt = patient.CreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                // 4f. Baseline Physical Exam Profile
+                batchPhysExam.Add(new PatientPhysicalExamProfile
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ClinicId = clinicId,
+                    PatientId = patientId,
+                    GenSurveyId = "1", // Essentially normal / Ambulatory
+                    GenSurveyRemarks = "Conscious, coherent, ambulatory, not in cardiopulmonary distress.",
+                    SkinId = "1",
+                    SkinRemarks = "Warm, good turgor, no active lesions or jaundice.",
+                    HeentId = "11",
+                    HeentRemarks = "Anicteric sclerae, pink palpebral conjunctivae, supple neck, no cervical lymphadenopathy.",
+                    ChestId = "6",
+                    ChestRemarks = "Symmetrical chest expansion, clear breath sounds, no rales or rhonchi.",
+                    HeartId = "5",
+                    HeartRemarks = "Adynamic precordium, normal rate, regular rhythm, normal S1 and S2.",
+                    AbdomenId = "7",
+                    AbdomenRemarks = "Flat, soft, non-tender, normoactive bowel sounds, no palpable organomegaly.",
+                    NeuroId = "6",
+                    NeuroRemarks = "Oriented x 3, intact cranial nerves, motor 5/5 on all extremities.",
+                    RectalId = "1",
+                    RectalRemarks = "Deferred on initial general consultation.",
+                    GuId = "1",
+                    GuRemarks = "No flank tenderness, normal external genitalia.",
+                    CreatedAt = patient.CreatedAt,
+                    CreatedBy = "System:DevPatientSeeder"
+                });
+
+                // 4g. Structured Allergies (for ~40% of patients)
+                if (rng.NextDouble() < 0.40)
+                {
+                    var tmpl = AllergyTemplates[rng.Next(AllergyTemplates.Length)];
+                    batchAllergies.Add(new PatientAllergy
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        Category = tmpl.Category,
+                        Allergen = tmpl.Allergen,
+                        Severity = tmpl.Severity,
+                        ReactionManifestation = tmpl.Reaction,
+                        IsAnaphylactic = tmpl.Severity == AllergySeverity.LifeThreatening,
+                        Status = AllergyStatus.Active,
+                        OnsetDate = new DateOnly(now.Year - rng.Next(1, 15), 1, 1),
+                        Notes = "Documented during clinical intake.",
+                        CreatedAt = patient.CreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                // 4h. Structured Problems (for ~60% of patients)
+                if (rng.NextDouble() < 0.60)
+                {
+                    var prb = ProblemTemplates[rng.Next(ProblemTemplates.Length)];
+                    batchProblems.Add(new PatientProblem
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        Icd10Code = prb.Code,
+                        ProblemTitle = prb.Title,
+                        PhilHealthMdiseaseCode = prb.Mdisease,
+                        Status = ProblemStatus.Active,
+                        Severity = prb.Severity,
+                        IsChronicNcd = prb.IsChronic,
+                        OnsetDate = new DateOnly(now.Year - rng.Next(1, 8), rng.Next(1, 13), 1),
+                        ClinicalNotes = "Regular monitoring at OPD clinic.",
+                        RecordedByDoctorId = doctor.Id,
+                        RecordedByDoctorName = $"{doctor.Title} {doctor.FirstName} {doctor.LastName}",
+                        CreatedAt = patient.CreatedAt,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+                }
+
+                // 4i. Structured Immunizations (1 to 2 records for ~70% of patients)
+                if (rng.NextDouble() < 0.70)
+                {
+                    var immCount = rng.Next(1, 3);
+                    var pickedImms = ImmunizationTemplates.OrderBy(_ => rng.Next()).Take(immCount);
+                    foreach (var imm in pickedImms)
+                    {
+                        batchImmunizations.Add(new PatientImmunization
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            PatientId = patientId,
+                            PatientName = $"{patient.FirstName} {patient.LastName}",
+                            PhilHealthLibrary = imm.Library,
+                            PhilHealthCode = imm.Code,
+                            VaccineName = imm.Vaccine,
+                            Manufacturer = imm.Manufacturer,
+                            LotBatchNumber = $"LOT-{rng.Next(100000, 999999)}",
+                            ExpirationDate = new DateOnly(now.Year + rng.Next(1, 3), rng.Next(1, 13), rng.Next(1, 28)),
+                            DoseSequence = 1,
+                            IsSeriesCompleted = true,
+                            Route = "Intramuscular",
+                            InjectionSite = "Left Deltoid",
+                            AdministeredAtUtc = now.AddDays(-rng.Next(30, 365)),
+                            AdministeredByStaffId = doctor.Id,
+                            AdministeredByStaffName = $"{doctor.Title} {doctor.FirstName} {doctor.LastName}",
+                            AdministeredByPrcLicense = doctor.PrcLicenseNumber,
+                            CreatedAt = patient.CreatedAt,
+                            CreatedBy = "System:DevPatientSeeder"
+                        });
+                    }
+                }
+
+                // 4j. Encounters (1 to 3 encounters per patient)
+                var encounterCount = rng.Next(1, 4);
+                for (var encIdx = 0; encIdx < encounterCount; encIdx++)
+                {
+                    var template = CaseTemplates[rng.Next(CaseTemplates.Length)];
+                    var encounterDate = now.AddDays(-rng.Next(1, 360)).AddMinutes(-rng.Next(60, 480));
+                    var encounterId = Guid.NewGuid();
+                    var rxNumber = $"RX-{encounterDate:yyyyMMdd}-{rng.Next(1000, 9999)}";
+
+                    var encounter = new ConsultationEncounter
+                    {
+                        Id = encounterId,
+                        TenantId = tenantId,
+                        ClinicId = clinicId,
+                        PatientId = patientId,
+                        PatientName = $"{patient.FirstName} {patient.LastName}",
+                        DoctorId = doctor.Id,
+                        DoctorName = $"{doctor.Title} {doctor.FirstName} {doctor.LastName}",
+                        DoctorPrcLicense = doctor.PrcLicenseNumber,
+                        DoctorPtr = doctor.PtrNumber,
+                        DoctorS2License = doctor.S2LicenseNumber,
+                        EncounterDate = encounterDate,
+                        Subjective = template.Subjective,
+                        Objective = template.Objective,
+                        Assessment = template.Assessment,
+                        Plan = template.Plan,
+                        IsSigned = true,
+                        SignedAt = encounterDate.AddMinutes(15),
+                        PrescriptionNumber = rxNumber,
+                        RxPublicVerificationToken = Guid.NewGuid().ToString("N")[..16],
+                        RxDispenseStatus = rng.NextDouble() < 0.65 ? PrescriptionDispenseStatus.DispensedAtPartnerPharmacy : PrescriptionDispenseStatus.Issued,
+                        CreatedAt = encounterDate,
+                        CreatedBy = "System:DevPatientSeeder"
+                    };
+
+                    // Encounter Diagnoses
+                    encounter.Diagnoses.Add(new EncounterDiagnosis
+                    {
+                        Id = Guid.NewGuid(),
+                        ConsultationEncounterId = encounterId,
+                        Icd10Code = template.Icd10Code,
+                        Description = template.DiagnosisDesc,
+                        IsPrimary = true,
+                        CreatedAt = encounterDate,
+                        CreatedBy = "System:DevPatientSeeder"
+                    });
+
+                    // Prescription Items
+                    foreach (var pItem in template.Prescriptions)
+                    {
+                        encounter.Prescriptions.Add(new PrescriptionItem
+                        {
+                            Id = Guid.NewGuid(),
+                            ConsultationEncounterId = encounterId,
+                            GenericName = pItem.Generic,
+                            BrandName = pItem.Brand,
+                            Dosage = pItem.Dosage,
+                            Form = pItem.Form,
+                            Sig = pItem.Sig,
+                            Quantity = pItem.Qty,
+                            DurationDays = pItem.Days,
+                            IsDangerousDrug = false,
+                            CreatedAt = encounterDate,
+                            CreatedBy = "System:DevPatientSeeder"
+                        });
+                        result.PrescriptionsCreated++;
+                    }
+
+                    batchEncounters.Add(encounter);
+                    result.EncountersCreated++;
+
+                    // 4k. Medical Certificate (issued for ~30% of encounters)
+                    if (rng.NextDouble() < 0.32)
+                    {
+                        var certDate = DateOnly.FromDateTime(encounterDate);
+                        var medCert = new MedicalCertificate
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenantId,
+                            ClinicId = clinicId,
+                            CertificateNumber = $"MC-{certDate:yyyyMMdd}-{rng.Next(1000, 9999)}",
+                            PatientId = patientId,
+                            PatientName = $"{patient.FirstName} {patient.LastName}",
+                            ConsultationId = encounterId,
+                            DoctorId = doctor.Id,
+                            DoctorName = $"{doctor.Title} {doctor.FirstName} {doctor.LastName}",
+                            PrcLicenseNumber = doctor.PrcLicenseNumber ?? "0098765",
+                            PtrNumber = doctor.PtrNumber ?? "PTR-2026-8877",
+                            IssueDate = certDate,
+                            Diagnosis = template.CertDiagnosis,
+                            ClinicalFindings = template.CertFindings,
+                            FitnessStatus = template.CertFitness,
+                            RecommendedRestDays = template.RestDays,
+                            RestStartDate = template.RestDays.HasValue ? certDate : null,
+                            RestEndDate = template.RestDays.HasValue ? certDate.AddDays(template.RestDays.Value - 1) : null,
+                            Purpose = template.CertPurpose,
+                            Remarks = "Official medical certification issued after complete physical evaluation.",
+                            IsSigned = true,
+                            SignedAt = encounterDate.AddMinutes(20),
+                            CreatedAt = encounterDate,
+                            CreatedBy = "System:DevPatientSeeder"
+                        };
+                        batchMedCerts.Add(medCert);
+                        result.MedicalCertificatesCreated++;
+                    }
+                }
+            }
+
+            // 5. Persist this batch
+            dbContext.Patients.AddRange(batchPatients);
+            dbContext.PatientPastMedicalHistories.AddRange(batchPastMedHist);
+            dbContext.PatientFamilyHistories.AddRange(batchFamilyHist);
+            dbContext.PatientSocialHistories.AddRange(batchSocialHist);
+            dbContext.PatientSurgicalHistories.AddRange(batchSurgHist);
+            dbContext.PatientReproductiveHistories.AddRange(batchReprodHist);
+            dbContext.PatientPhysicalExamProfiles.AddRange(batchPhysExam);
+            dbContext.PatientAllergies.AddRange(batchAllergies);
+            dbContext.PatientProblems.AddRange(batchProblems);
+            dbContext.PatientImmunizations.AddRange(batchImmunizations);
+            dbContext.Consultations.AddRange(batchEncounters);
+            dbContext.MedicalCertificates.AddRange(batchMedCerts);
+
+            await dbContext.SaveChangesAsync(ct);
+
+            // Detach tracked entities to keep EF Core change tracker lightweight and fast
+            dbContext.ChangeTracker.Clear();
+
+            totalCreated += currentBatchSize;
+            result.PatientsCreated += currentBatchSize;
+            result.PastMedicalHistoriesCreated += batchPastMedHist.Count;
+            result.FamilyHistoriesCreated += batchFamilyHist.Count;
+            result.SocialHistoriesCreated += batchSocialHist.Count;
+            result.SurgicalHistoriesCreated += batchSurgHist.Count;
+            result.ReproductiveHistoriesCreated += batchReprodHist.Count;
+            result.PhysicalExamProfilesCreated += batchPhysExam.Count;
+            result.AllergiesCreated += batchAllergies.Count;
+            result.ProblemsCreated += batchProblems.Count;
+            result.ImmunizationsCreated += batchImmunizations.Count;
+
+            options.ProgressCallback?.Invoke(totalCreated, targetCount);
+            logger?.LogInformation("[DevPatientSeeder] Batch committed: {TotalCreated}/{TargetCount} patients ({Percent:F1}%)...",
+                totalCreated, targetCount, (double)totalCreated / targetCount * 100);
+        }
+
+        // 6. Update patient code sequence tracker in DB so future regular registrations don't collide
+        var tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.ClinicId == clinicId && t.Year == year, ct);
+
+        if (tracker == null)
+        {
+            dbContext.PatientCodeSequenceTrackers.Add(new PatientCodeSequenceTracker
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ClinicId = clinicId,
+                Year = year,
+                CurrentSequence = currentSeq,
+                LastAssignedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "System:DevPatientSeeder"
+            });
+        }
+        else if (tracker.CurrentSequence < currentSeq)
+        {
+            tracker.CurrentSequence = currentSeq;
+            tracker.LastAssignedAt = DateTime.UtcNow;
+            tracker.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+
+        sw.Stop();
+        result.Elapsed = sw.Elapsed;
+
+        logger?.LogInformation("[DevPatientSeeder] Complete! Successfully seeded {Patients} patients, {Encounters} encounters, {Prescriptions} prescriptions, {Certs} medical certificates in {Elapsed:F2}s.",
+            result.PatientsCreated, result.EncountersCreated, result.PrescriptionsCreated, result.MedicalCertificatesCreated, result.Elapsed.TotalSeconds);
+
+        return result;
+    }
+}

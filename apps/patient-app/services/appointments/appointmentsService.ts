@@ -90,10 +90,10 @@ function localBookingToAppointmentItem(
     };
 }
 
-function remoteToLocalItem(remote: RemoteAppointment): AppointmentItem {
+function remoteToLocalItem(remote: RemoteAppointment, patientId = ''): AppointmentItem {
     return {
         id: remote.id,
-        patientId: '',
+        patientId,
         clinic: {
             id: remote.clinicId,
             name: remote.clinicName,
@@ -267,7 +267,7 @@ export async function fetchAppointments(
 
     try {
         const res = await fetchAppointmentsLive(getToken, patientId);
-        const apiItems = res.items.map(remoteToLocalItem);
+        const apiItems = res.items.map((item) => remoteToLocalItem(item, patientId));
 
         apiItems.sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
 
@@ -359,6 +359,8 @@ export async function rescheduleAppointment(
     newScheduledAt: string,
     reason: string,
     db: ExpoSQLiteDatabase<any>,
+    getToken?: () => Promise<string | null>,
+    patientId?: string,
 ): Promise<AppointmentItem | null> {
     const network = await NetInfo.fetch();
     if (!network.isConnected) {
@@ -367,6 +369,27 @@ export async function rescheduleAppointment(
 
     const existing = await getAppointmentDetail(appointmentId, db);
     if (!existing) return null;
+
+    let resolvedPatientId = patientId || existing.patientId;
+    if (!resolvedPatientId) {
+        const rows = await db
+            .select({ patientId: appointments.patientId })
+            .from(appointments)
+            .where(eq(appointments.id, appointmentId));
+        if (rows.length > 0 && rows[0].patientId) {
+            resolvedPatientId = String(rows[0].patientId);
+        }
+    }
+
+    if (getToken && resolvedPatientId) {
+        await rescheduleAppointmentLive(
+            getToken,
+            resolvedPatientId,
+            appointmentId,
+            newScheduledAt,
+            reason.trim(),
+        );
+    }
 
     const now = new Date().toISOString();
     const rescheduleNote = reason.trim()
@@ -379,6 +402,7 @@ export async function rescheduleAppointment(
 
     const updated: AppointmentItem = {
         ...existing,
+        patientId: resolvedPatientId || existing.patientId,
         scheduledAt: newScheduledAt,
         status: 'pending',
         notes: updatedNotes,
@@ -424,7 +448,7 @@ export async function rescheduleAppointment(
     return updated;
 }
 
-import { fetchAvailableSlotsLive } from '../api/appointmentsApi';
+import { fetchAvailableSlotsLive, rescheduleAppointmentLive } from '../api/appointmentsApi';
 import { safeRun } from '@shared/safe';
 
 /**

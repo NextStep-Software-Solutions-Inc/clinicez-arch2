@@ -9,7 +9,8 @@ namespace ClinicEz.Portal.Application.Features.Entitlements;
 public sealed class EntitlementService(
     IApplicationDbContext context,
     IOptions<BillingOptions> billingOptions,
-    TimeProvider timeProvider) : IEntitlementService
+    TimeProvider timeProvider,
+    ISystemSettingsService? settingsService = null) : IEntitlementService
 {
     public async Task<EntitlementSnapshot> ResolveAsync(Guid tenantId, CancellationToken cancellationToken)
     {
@@ -83,7 +84,7 @@ public sealed class EntitlementService(
 
     private async Task<Subscription> StartTrialAsync(Guid tenantId, CancellationToken cancellationToken)
     {
-        var created = await TrialSubscription.CreateAsync(context, billingOptions.Value, timeProvider, tenantId, cancellationToken);
+        var created = await TrialSubscription.CreateAsync(context, billingOptions.Value, timeProvider, tenantId, cancellationToken, settingsService);
         try
         {
             await context.SaveChangesAsync(cancellationToken);
@@ -108,13 +109,26 @@ internal static class TrialSubscription
         BillingOptions options,
         TimeProvider timeProvider,
         Guid tenantId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ISystemSettingsService? settingsService = null)
     {
+        var defaultPlanSlug = options.DefaultPlanSlug;
+        if (string.IsNullOrWhiteSpace(defaultPlanSlug) && settingsService is not null)
+        {
+            defaultPlanSlug = await settingsService.GetSettingValueAsync("Billing:DefaultPlanSlug", string.Empty, cancellationToken);
+        }
+
+        var trialDays = options.TrialDays;
+        if (settingsService is not null)
+        {
+            trialDays = await settingsService.GetSettingIntAsync("Billing:TrialDays", trialDays, cancellationToken);
+        }
+
         var plans = context.Plans.AsNoTracking();
         Plan? plan = null;
-        if (!string.IsNullOrWhiteSpace(options.DefaultPlanSlug))
+        if (!string.IsNullOrWhiteSpace(defaultPlanSlug))
         {
-            plan = await plans.FirstOrDefaultAsync(p => p.Slug == options.DefaultPlanSlug, cancellationToken);
+            plan = await plans.FirstOrDefaultAsync(p => p.Slug == defaultPlanSlug, cancellationToken);
         }
 
         plan ??= await plans.OrderBy(p => p.Rank).FirstOrDefaultAsync(cancellationToken)
@@ -133,7 +147,7 @@ internal static class TrialSubscription
             TenantId = tenantId,
             PlanId = plan.Id,
             Status = SubscriptionStatus.Trialing,
-            TrialEndsAt = trialStart.AddDays(options.TrialDays),
+            TrialEndsAt = trialStart.AddDays(trialDays),
             EntitlementVersion = 1
         };
         context.Subscriptions.Add(subscription);

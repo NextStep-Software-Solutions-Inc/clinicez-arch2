@@ -2,15 +2,20 @@ import HeroBackground from "@/components/HeroBackground"
 import { Metadata } from "next"
 import MainBackgroundImage from "../../../../public/assets/main-background.png"
 import HeroFeatured from "@/components/Hero"
-import Shell, { mockOrganizationsData } from "@/components/Shell"
+import Shell from "@/components/Shell"
 import Suspend from "@/components/Suspend"
+import { directoryService } from "@/services/directory.service"
+
+export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: "Organizations | Clinic EZ V2",
   description: "Explore various organizations that you can join to enhance your healthcare experience.",
 }
 
-export default function OrganizationPage() {
+export default async function OrganizationPage() {
+  const organizations = await directoryService.getOrganizations()
+
   return (
     <main>
       <section className="flex flex-col items-center min-h-screen mt-32">
@@ -22,7 +27,7 @@ export default function OrganizationPage() {
               <p className="text-lg text-gray-500">Loading organizations...</p>
             </div>
           }>
-            <Shell data={mockOrganizationsData} type="organizations" />
+            <Shell data={organizations} type="organizations" />
           </Suspend>
         </div>
       </section>

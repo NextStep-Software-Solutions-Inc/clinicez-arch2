@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Interfaces;
@@ -19,6 +21,51 @@ public sealed class SystemSettingsService(
     private const string CacheKeyAll = "SystemSettings:All";
     private static readonly TimeSpan CacheSlidingExpiration = TimeSpan.FromMinutes(5);
 
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true
+    };
+
+    public static readonly IReadOnlyList<PlatformBankAccountDto> DefaultBankAccounts =
+    [
+        new(
+            Id: "bdo",
+            Institution: "BDO Unibank",
+            AccountName: "ClinicEZ Digital Health Inc.",
+            AccountNumber: "0012-3456-7890",
+            CopyValue: "0012-3456-7890",
+            Branch: "BGC Corporate Center",
+            Type: "bank",
+            Badge: "Commercial Bank",
+            IsActive: true
+        ),
+        new(
+            Id: "bpi",
+            Institution: "Bank of the Philippine Islands (BPI)",
+            AccountName: "ClinicEZ Digital Health Inc.",
+            AccountNumber: "4321-8765-09",
+            CopyValue: "4321-8765-09",
+            Branch: "Ayala Triangle",
+            Type: "bank",
+            Badge: "Commercial Bank",
+            IsActive: true
+        ),
+        new(
+            Id: "gcash-maya",
+            Institution: "GCash / Maya",
+            AccountName: "ClinicEZ Digital Health",
+            AccountNumber: "0917-123-EZPH (0917-123-3974)",
+            CopyValue: "0917-123-3974",
+            Branch: "Merchant QR / Mobile Wallet",
+            Type: "ewallet",
+            Badge: "Instant E-Wallet",
+            IsActive: true
+        )
+    ];
+
+    private static readonly string DefaultBankAccountsJson = JsonSerializer.Serialize(DefaultBankAccounts, JsonOptions);
+
     private static readonly List<(string Key, string Value, string Category, string Description)> SystemDefaults =
     [
         ("Licensing:TtlDays", "30", "Licensing", "Default license validity duration in days."),
@@ -26,6 +73,13 @@ public sealed class SystemSettingsService(
         ("Licensing:RenewBeforeDays", "7", "Licensing", "Threshold window in days to automatically renew licenses on heartbeat."),
         ("Billing:TrialDays", "14", "Billing", "Default workspace trial period in days upon registration."),
         ("Billing:DefaultPlanSlug", "starter", "Billing", "Default subscription plan tier assigned to new workspaces."),
+        ("Billing:BankAccountsJson", DefaultBankAccountsJson, "Billing", "JSON array of settlement bank and e-wallet accounts displayed to tenants for offline transfers."),
+        ("Billing:BirTaxExempt", "false", "Billing", "When true, platform subscription billing and official receipts are treated as BIR VAT-Exempt (0% VAT)."),
+        ("Billing:BirTaxPercentage", "12", "Billing", "BIR Value Added Tax (VAT) percentage applied to vatable subscription invoices and receipts (e.g., 12 for 12%)."),
+        ("Billing:CorporateName", "ClinicEZ Digital Health Inc.", "Billing", "Registered corporate entity name printed on BIR billing statements and official receipts."),
+        ("Billing:CorporateTin", "009-876-543-000", "Billing", "Registered BIR Tax Identification Number (TIN) printed on billing statements and official receipts."),
+        ("Billing:CorporateAddress", "Unit 1402, BGC Corporate Center, 11th Avenue, Bonifacio Global City, Taguig City, Metro Manila, Philippines 1634", "Billing", "Registered corporate business address printed on billing statements and official receipts."),
+        ("Billing:SupportEmail", "billing@clinicez.ph", "Billing", "Billing support email address where tenants send payment proof and remittance inquiries."),
         ("Workspace:MaxOwnedPerUser", "1", "Workspace", "Maximum number of owned active workspaces allowed per user."),
         ("Storage:LabUploadMaxFileBytes", "10485760", "Storage", "Maximum file size allowed for public patient lab report uploads (in bytes)."),
         ("Storage:LabUploadRateLimitPermits", "5", "Storage", "Maximum permits allowed per rate limit window for public lab uploads."),
@@ -75,13 +129,71 @@ public sealed class SystemSettingsService(
 
     public async Task<int> GetSettingIntAsync(string key, int defaultValue, CancellationToken ct = default)
     {
-        var valStr = await GetSettingValueAsync(key, defaultValue.ToString(), ct);
-        return int.TryParse(valStr, out var parsed) ? parsed : defaultValue;
+        var valStr = await GetSettingValueAsync(key, defaultValue.ToString(CultureInfo.InvariantCulture), ct);
+        return int.TryParse(valStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : defaultValue;
+    }
+
+    public async Task<long> GetSettingLongAsync(string key, long defaultValue, CancellationToken ct = default)
+    {
+        var valStr = await GetSettingValueAsync(key, defaultValue.ToString(CultureInfo.InvariantCulture), ct);
+        return long.TryParse(valStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : defaultValue;
+    }
+
+    public async Task<bool> GetSettingBoolAsync(string key, bool defaultValue, CancellationToken ct = default)
+    {
+        var valStr = await GetSettingValueAsync(key, defaultValue ? "true" : "false", ct);
+        return bool.TryParse(valStr, out var parsed) ? parsed : defaultValue;
+    }
+
+    public async Task<decimal> GetSettingDecimalAsync(string key, decimal defaultValue, CancellationToken ct = default)
+    {
+        var valStr = await GetSettingValueAsync(key, defaultValue.ToString(CultureInfo.InvariantCulture), ct);
+        return decimal.TryParse(valStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) ? parsed : defaultValue;
+    }
+
+    public async Task<BillingPaymentConfigDto> GetBillingPaymentConfigAsync(CancellationToken ct = default)
+    {
+        var bankJson = await GetSettingValueAsync("Billing:BankAccountsJson", DefaultBankAccountsJson, ct);
+        IReadOnlyList<PlatformBankAccountDto> accounts;
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<List<PlatformBankAccountDto>>(bankJson, JsonOptions);
+            accounts = parsed is not null
+                ? parsed.Where(a => a.IsActive).ToList()
+                : [];
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to deserialize Billing:BankAccountsJson; falling back to default bank accounts.");
+            accounts = DefaultBankAccounts;
+        }
+
+        var birTaxExempt = await GetSettingBoolAsync("Billing:BirTaxExempt", false, ct);
+        var birTaxPercentage = await GetSettingDecimalAsync("Billing:BirTaxPercentage", 12m, ct);
+        var corporateName = await GetSettingValueAsync("Billing:CorporateName", "ClinicEZ Digital Health Inc.", ct);
+        var corporateTin = await GetSettingValueAsync("Billing:CorporateTin", "009-876-543-000", ct);
+        var corporateAddress = await GetSettingValueAsync(
+            "Billing:CorporateAddress",
+            "Unit 1402, BGC Corporate Center, 11th Avenue, Bonifacio Global City, Taguig City, Metro Manila, Philippines 1634",
+            ct);
+        var supportEmail = await GetSettingValueAsync("Billing:SupportEmail", "billing@clinicez.ph", ct);
+
+        return new BillingPaymentConfigDto(
+            BankAccounts: accounts,
+            BirTaxExempt: birTaxExempt,
+            BirTaxPercentage: birTaxExempt ? 0m : Math.Clamp(birTaxPercentage, 0m, 100m),
+            CorporateName: corporateName,
+            CorporateTin: corporateTin,
+            CorporateAddress: corporateAddress,
+            BillingSupportEmail: supportEmail
+        );
     }
 
     public async Task UpdateSettingsAsync(IDictionary<string, string> settings, string updatedBy, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(settings);
+
+        ValidateSettings(settings);
 
         await EnsureDefaultsSeededAsync(ct);
 
@@ -115,6 +227,56 @@ public sealed class SystemSettingsService(
         await dbContext.SaveChangesAsync(ct);
         cache.Remove(CacheKeyAll);
         logger.LogInformation("SystemSettings updated by {UpdatedBy}. Cache invalidated.", updatedBy);
+    }
+
+    private static void ValidateSettings(IDictionary<string, string> settings)
+    {
+        foreach (var (key, rawValue) in settings)
+        {
+            var val = rawValue?.Trim() ?? string.Empty;
+
+            if (string.Equals(key, "Billing:BankAccountsJson", StringComparison.OrdinalIgnoreCase))
+            {
+                List<PlatformBankAccountDto>? accounts;
+                try
+                {
+                    accounts = JsonSerializer.Deserialize<List<PlatformBankAccountDto>>(val, JsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    throw new ArgumentException($"Billing:BankAccountsJson must be a valid JSON array of bank accounts: {ex.Message}", ex);
+                }
+
+                if (accounts is null)
+                {
+                    throw new ArgumentException("Billing:BankAccountsJson cannot be null.");
+                }
+
+                foreach (var account in accounts)
+                {
+                    if (string.IsNullOrWhiteSpace(account.Institution) ||
+                        string.IsNullOrWhiteSpace(account.AccountName) ||
+                        string.IsNullOrWhiteSpace(account.AccountNumber))
+                    {
+                        throw new ArgumentException("Each bank account must specify Institution, AccountName, and AccountNumber.");
+                    }
+                }
+            }
+            else if (string.Equals(key, "Billing:BirTaxExempt", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!bool.TryParse(val, out _))
+                {
+                    throw new ArgumentException("Billing:BirTaxExempt must be 'true' or 'false'.");
+                }
+            }
+            else if (string.Equals(key, "Billing:BirTaxPercentage", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!decimal.TryParse(val, NumberStyles.Number, CultureInfo.InvariantCulture, out var pct) || pct < 0m || pct > 100m)
+                {
+                    throw new ArgumentException("Billing:BirTaxPercentage must be a valid percentage between 0 and 100.");
+                }
+            }
+        }
     }
 
     private async Task EnsureDefaultsSeededAsync(CancellationToken ct)

@@ -183,6 +183,15 @@ public class BillingEndpoints : IEndpoint
         .WithDescription("Retrieves a list of available billing plans.")
         .WithTags("Billing");
 
+        group.MapGet("/payment-config", async (ISystemSettingsService settingsService, System.Threading.CancellationToken ct) =>
+        {
+            var config = await settingsService.GetBillingPaymentConfigAsync(ct);
+            return Results.Ok(config);
+        })
+        .WithName("GetBillingPaymentConfig")
+        .WithDescription("Retrieves platform offline bank accounts, BIR tax exemption/percentage settings, and corporate invoicing details.")
+        .WithTags("Billing");
+
         group.MapPost("/webhook", async (
             Microsoft.AspNetCore.Http.HttpContext httpContext,
             ClinicEz.Portal.Application.Features.Billing.Commands.XenditWebhookPayload payload,

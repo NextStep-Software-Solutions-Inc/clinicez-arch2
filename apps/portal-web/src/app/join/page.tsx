@@ -1,8 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { KeyRound, ArrowRight, Sparkles, Building2, ShieldCheck } from "lucide-react";
+
+function SelectedFacilityBanner() {
+  const searchParams = useSearchParams();
+  const facility = searchParams.get("facility")?.trim();
+  if (!facility) return null;
+
+  return (
+    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-muted border border-border rounded-xl text-xs font-medium text-foreground">
+      <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+      <span>
+        Selected facility: <strong className="font-mono uppercase">{facility}</strong>
+      </span>
+    </div>
+  );
+}
 
 export default function JoinLandingPage() {
   const router = useRouter();
@@ -34,6 +49,9 @@ export default function JoinLandingPage() {
           <p className="text-sm text-muted-foreground max-w-sm mx-auto">
             Please enter your clinic&apos;s secured Join Passcode to begin patient intake and pre-registration.
           </p>
+          <Suspense fallback={null}>
+            <SelectedFacilityBanner />
+          </Suspense>
         </div>
 
         {/* Card */}

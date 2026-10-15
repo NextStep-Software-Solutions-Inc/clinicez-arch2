@@ -394,6 +394,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             eodLoadError={eodLoadError}
             onRefreshEod={onRefresh}
             formatPeso={formatPeso}
+            onNavigatePatients={() => navigation.navigate('Patients')}
           />
         )}
 
