@@ -95,6 +95,105 @@ export interface AdminSystemSettingDto {
   updatedBy?: string;
 }
 
+export interface BillingPlan {
+  id: string;
+  planId?: string;
+  name: string;
+  slug: string;
+  description: string;
+  monthlyPrice: number;
+  annualPrice: number;
+  priceMonthly?: string | number;
+  priceAnnually?: string | number;
+  rank: number;
+  version: number;
+  isArchived?: boolean;
+  highlighted?: boolean;
+  requiresCheckout?: boolean;
+  features: string[];
+  limits: Record<string, number>;
+  enabledFeatures: string[];
+  activeSubscribersCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateBillingPlanPayload {
+  name: string;
+  slug: string;
+  description: string;
+  monthlyPrice?: number;
+  priceMonthly?: number;
+  annualPrice?: number;
+  priceAnnually?: number;
+  rank: number;
+  features?: string[];
+  isHighlighted?: boolean;
+  requiresCheckout?: boolean;
+  limits: Record<string, number>;
+  enabledFeatures: string[];
+}
+
+export interface UpdateBillingPlanPayload {
+  name: string;
+  slug: string;
+  description: string;
+  monthlyPrice?: number;
+  priceMonthly?: number;
+  annualPrice?: number;
+  priceAnnually?: number;
+  rank: number;
+  features?: string[];
+  isHighlighted?: boolean;
+  requiresCheckout?: boolean;
+  limits: Record<string, number>;
+  enabledFeatures: string[];
+}
+
+export interface TenantOverridesDto {
+  tenantId: string;
+  tenantSlug?: string;
+  planSlug?: string;
+  planName?: string;
+  subscriptionStatus?: string;
+  entitlementVersion?: number;
+  overrides?: Record<string, number | null | boolean>;
+  baselineLimits?: Record<string, number>;
+  baselineFeatures?: string[];
+  limits: Record<string, number | null>;
+  features: Record<string, boolean>;
+  effectiveLimits: Record<string, number>;
+  effectiveFeatures: string[];
+  reason?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface UpdateTenantOverridesPayload {
+  limits: Record<string, number | null>;
+  features: Record<string, boolean>;
+  reason?: string | null;
+}
+
+export interface RecordManualPaymentPayload {
+  planSlug: string;
+  isAnnual: boolean;
+  paymentMethod: string;
+  transactionReference?: string;
+  amount: number;
+  notes?: string;
+  paymentDate?: string;
+}
+
+export interface RecordManualPaymentResult {
+  success: boolean;
+  invoiceNumber: string;
+  receiptNumber: string;
+  status: string;
+  subscriptionExpiresAt: string;
+  entitlementVersion: number;
+  facilitiesLicensed: number;
+}
+
 export const adminService = {
   getMe: async (): Promise<AdminMeDto> => {
     const res = await apiClient.get<AdminMeDto>("/admin/me");
@@ -223,6 +322,115 @@ export const adminService = {
 
   updateSettings: async (settings: Record<string, string>): Promise<AdminSystemSettingDto[]> => {
     const res = await apiClient.put<AdminSystemSettingDto[]>("/admin/settings", settings);
+    return res.data;
+  },
+
+  getPlans: async (): Promise<BillingPlan[]> => {
+    const res = await apiClient.get<any[]>("/admin/plans");
+    return res.data.map((p) => {
+      const monthly = typeof p.priceMonthly === "number" ? p.priceMonthly : (p.priceMonthly === "Custom" ? 0 : parseFloat(p.priceMonthly) || 0);
+      const annual = typeof p.priceAnnually === "number" ? p.priceAnnually : (p.priceAnnually === "Custom" ? 0 : parseFloat(p.priceAnnually) || 0);
+      return {
+        id: p.planId || p.id,
+        planId: p.planId || (p.id?.length === 36 ? p.id : undefined),
+        slug: p.slug || p.id,
+        name: p.name,
+        description: p.description,
+        monthlyPrice: p.monthlyPrice ?? monthly,
+        annualPrice: p.annualPrice ?? annual,
+        priceMonthly: p.priceMonthly,
+        priceAnnually: p.priceAnnually,
+        rank: p.rank ?? 0,
+        version: p.version ?? 1,
+        isArchived: false,
+        highlighted: p.highlighted ?? p.isHighlighted ?? false,
+        requiresCheckout: p.requiresCheckout ?? false,
+        features: p.features || [],
+        limits: p.limits || {},
+        enabledFeatures: p.enabledFeatures || [],
+        activeSubscribersCount: p.activeSubscribersCount ?? 0,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+      };
+    });
+  },
+
+  createPlan: async (payload: CreateBillingPlanPayload): Promise<{ id: string } | BillingPlan> => {
+    const body = {
+      name: payload.name,
+      slug: payload.slug,
+      description: payload.description,
+      rank: payload.rank,
+      priceMonthly: payload.priceMonthly ?? payload.monthlyPrice ?? 0,
+      priceAnnually: payload.priceAnnually ?? payload.annualPrice ?? 0,
+      isHighlighted: payload.isHighlighted ?? false,
+      requiresCheckout: payload.requiresCheckout ?? false,
+      features: payload.features ?? [],
+      limits: payload.limits ?? {},
+      enabledFeatures: payload.enabledFeatures ?? [],
+    };
+    const res = await apiClient.post<{ id: string }>("/admin/plans", body);
+    return res.data;
+  },
+
+  updatePlan: async (id: string, payload: UpdateBillingPlanPayload): Promise<boolean> => {
+    const body = {
+      id,
+      name: payload.name,
+      slug: payload.slug,
+      description: payload.description,
+      rank: payload.rank,
+      priceMonthly: payload.priceMonthly ?? payload.monthlyPrice ?? 0,
+      priceAnnually: payload.priceAnnually ?? payload.annualPrice ?? 0,
+      isHighlighted: payload.isHighlighted ?? false,
+      requiresCheckout: payload.requiresCheckout ?? false,
+      features: payload.features ?? [],
+      limits: payload.limits ?? {},
+      enabledFeatures: payload.enabledFeatures ?? [],
+    };
+    const res = await apiClient.put<any>(`/admin/plans/${id}`, body);
+    return res.data?.success ?? true;
+  },
+
+  deletePlan: async (id: string): Promise<boolean> => {
+    const res = await apiClient.delete<any>(`/admin/plans/${id}`);
+    return res.data?.success ?? true;
+  },
+
+  getTenantOverrides: async (tenantId: string): Promise<TenantOverridesDto> => {
+    const res = await apiClient.get<TenantOverridesDto>(`/admin/tenants/${tenantId}/overrides`);
+    const data = res.data;
+    return {
+      ...data,
+      overrides: {
+        ...(data.limits || {}),
+        ...(data.features || {}),
+      },
+      baselineLimits: data.baselineLimits ?? {},
+      baselineFeatures: data.baselineFeatures ?? [],
+      effectiveLimits: data.effectiveLimits ?? {},
+      effectiveFeatures: data.effectiveFeatures ?? [],
+    };
+  },
+
+  updateTenantOverrides: async (tenantId: string, payload: UpdateTenantOverridesPayload): Promise<TenantOverridesDto> => {
+    const res = await apiClient.put<TenantOverridesDto>(`/admin/tenants/${tenantId}/overrides`, payload);
+    const data = res.data;
+    return {
+      ...data,
+      overrides: {
+        ...(data.limits || {}),
+        ...(data.features || {}),
+      },
+      baselineLimits: data.baselineLimits ?? {},
+      baselineFeatures: data.baselineFeatures ?? [],
+      effectiveLimits: data.effectiveLimits ?? {},
+      effectiveFeatures: data.effectiveFeatures ?? [],
+    };
+  },
+
+  recordManualPayment: async (tenantId: string, payload: RecordManualPaymentPayload): Promise<RecordManualPaymentResult> => {
+    const res = await apiClient.post<RecordManualPaymentResult>(`/admin/tenants/${tenantId}/record-payment`, payload);
     return res.data;
   }
 };

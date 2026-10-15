@@ -76,13 +76,15 @@ public class UpdateBillingPlanCommandHandler(IApplicationDbContext context, IEnt
         if (grantsChanged)
         {
             plan.Version++;
-            var subscriptions = await context.Subscriptions.Where(s => s.PlanId == plan.Id).ToListAsync(cancellationToken);
+            var subscriptions = await context.Subscriptions
+                .Where(s => s.PlanId == plan.Id && !s.IsDeleted)
+                .ToListAsync(cancellationToken);
             foreach (var subscription in subscriptions)
             {
                 subscription.EntitlementVersion++;
             }
 
-            subscribedTenants = subscriptions.Select(s => s.TenantId).ToList();
+            subscribedTenants = subscriptions.Select(s => s.TenantId).Distinct().ToList();
         }
 
         await context.SaveChangesAsync(cancellationToken);

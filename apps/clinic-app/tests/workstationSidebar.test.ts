@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 (globalThis as any).__DEV__ = true;
 
 const createMockComponent = (name: string) => {
-  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, value, onPress, title }: any) =>
+  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, value, onPress, title, source, resizeMode }: any) =>
     React.createElement(
       'div',
       {
@@ -16,6 +16,7 @@ const createMockComponent = (name: string) => {
         ...(placeholder ? { 'data-placeholder': placeholder } : {}),
         ...(value !== undefined ? { 'data-value': value } : {}),
         ...(title ? { 'data-title': title } : {}),
+        ...(source?.uri ? { 'data-src': source.uri } : {}),
         onClick: onPress,
       },
       title ?? placeholder ?? children
@@ -96,8 +97,10 @@ let mockClinicContext: any = {
   facilityName: 'NextStep OPD',
   planTier: 'pro',
   accreditationNumber: 'ACC-12345',
+  clinicLogo: null,
   settings: { preferredChartLayout: 'centered' },
 };
+
 (globalThis as any).__mockClinicContext = mockClinicContext;
 
 const clinicContextMockFactory = () => ({
@@ -141,6 +144,7 @@ describe('WorkstationSidebar Component', () => {
       facilityName: 'NextStep OPD',
       planTier: 'pro',
       accreditationNumber: 'ACC-12345',
+      clinicLogo: null,
       settings: { preferredChartLayout: 'centered' },
     };
     (globalThis as any).__mockClinicContext = mockClinicContext;
@@ -164,7 +168,7 @@ describe('WorkstationSidebar Component', () => {
     mock.module('@context/StaffContext', staffContextMockFactory);
   });
 
-  test('renders Clinic EZ brand and elevates plan tier badge to top header', () => {
+  test('renders active clinic name and elevates plan tier badge to top header', () => {
     const html = renderToStaticMarkup(
       React.createElement(WorkstationSidebar, {
         currentRoute: 'Patients',
@@ -172,33 +176,38 @@ describe('WorkstationSidebar Component', () => {
       })
     );
 
-    // Header has brand title and uppercase tier badge
+    // Header has the facility name as the primary title and uppercase tier badge
+    expect(html).toContain('NextStep OPD');
+    expect(html).toContain('PRO');
+    expect(html).toContain('Clinic workstation');
+  });
+
+  test('renders fallback brand title when facility name is unconfigured', () => {
+    mockClinicContext = {
+      facilityName: '',
+      planTier: 'pro',
+      accreditationNumber: '',
+      clinicLogo: null,
+    };
+    (globalThis as any).__mockClinicContext = mockClinicContext;
+
+    const html = renderToStaticMarkup(
+      React.createElement(WorkstationSidebar, {
+        currentRoute: 'Patients',
+        onNavigate: () => {},
+      })
+    );
+
     expect(html).toContain('Clinic EZ');
     expect(html).toContain('PRO');
-    expect(html).toContain('NextStep OPD');
   });
 
-  test('removes redundant clinic name from the bottom footer', () => {
-    const html = renderToStaticMarkup(
-      React.createElement(WorkstationSidebar, {
-        currentRoute: 'Patients',
-        onNavigate: () => {},
-      })
-    );
-
-    // NextStep OPD should only appear once in the whole sidebar (in the top brand header)
-    const matches = html.match(/NextStep OPD/g) || [];
-    expect(matches.length).toBe(1);
-
-    // The old footer format with accreditation or standalone pro text at the bottom is gone
-    expect(html).not.toContain('Accreditation ACC-12345');
-  });
-
-  test('handles enterprise plan tier badge formatting', () => {
+  test('handles enterprise plan tier badge formatting with clinic name', () => {
     mockClinicContext = {
       facilityName: 'St. Jude General Hospital',
       planTier: 'enterprise',
       accreditationNumber: '',
+      clinicLogo: null,
       settings: { preferredChartLayout: 'centered' },
     };
     (globalThis as any).__mockClinicContext = mockClinicContext;
@@ -210,11 +219,8 @@ describe('WorkstationSidebar Component', () => {
       })
     );
 
-    expect(html).toContain('Clinic EZ');
-    expect(html).toContain('ENTERPRISE');
     expect(html).toContain('St. Jude General Hospital');
-    const matches = html.match(/St. Jude General Hospital/g) || [];
-    expect(matches.length).toBe(1);
+    expect(html).toContain('ENTERPRISE');
   });
 
   test('renders cleanly without badge when planTier is empty', () => {
@@ -222,6 +228,7 @@ describe('WorkstationSidebar Component', () => {
       facilityName: 'Community Clinic',
       planTier: '',
       accreditationNumber: '',
+      clinicLogo: null,
       settings: { preferredChartLayout: 'centered' },
     };
     (globalThis as any).__mockClinicContext = mockClinicContext;
@@ -233,23 +240,59 @@ describe('WorkstationSidebar Component', () => {
       })
     );
 
-    expect(html).toContain('Clinic EZ');
     expect(html).toContain('Community Clinic');
     expect(html).not.toContain('PRO');
     expect(html).not.toContain('ENTERPRISE');
   });
 
-  test('renders all standard workstation navigation items', () => {
+  test('renders custom clinic logo image when clinicLogo is provided', () => {
+    mockClinicContext = {
+      facilityName: 'Metro Health Care',
+      planTier: 'pro',
+      clinicLogo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    };
+    (globalThis as any).__mockClinicContext = mockClinicContext;
+
+    const html = renderToStaticMarkup(
+      React.createElement(WorkstationSidebar, {
+        currentRoute: 'Dashboard',
+        onNavigate: () => {},
+      })
+    );
+
+    expect(html).toContain('data-component="Image"');
+    expect(html).toContain('Metro Health Care logo');
+    expect(html).toContain('data:image/png;base64');
+  });
+
+  test('renders all standard workstation navigation items in expanded mode', () => {
     const html = renderToStaticMarkup(
       React.createElement(WorkstationSidebar, {
         currentRoute: 'Patients',
         onNavigate: () => {},
+        mode: 'open',
       })
     );
 
     for (const item of WORKSTATION_NAV_ITEMS) {
       expect(html).toContain(item.label);
     }
+  });
+
+  test('renders compact icon-rail mode (72px) without label texts', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(WorkstationSidebar, {
+        currentRoute: 'Patients',
+        onNavigate: () => {},
+        mode: 'icon',
+        width: 72,
+      })
+    );
+
+    // In icon mode, labels are in title/accessibility attributes, not rendered in body text
+    expect(html).toContain('data-title="Patients"');
+    expect(html).toContain('aria-label="Patients"');
+    expect(html).not.toContain('Clinic workstation');
   });
 
   test('renders active user menu in footer', () => {

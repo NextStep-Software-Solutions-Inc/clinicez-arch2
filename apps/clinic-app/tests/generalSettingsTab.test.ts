@@ -65,6 +65,14 @@ mock.module('react-native', () => ({
     Text: createMockComponent('Animated.Text'),
   },
   Alert: { alert: () => {} },
+  NativeEventEmitter: class {
+    addListener() { return { remove: () => {} }; }
+    removeAllListeners() {}
+  },
+}));
+
+mock.module('expo-document-picker', () => ({
+  getDocumentAsync: () => Promise.resolve({ canceled: true, assets: null }),
 }));
 
 mock.module('react-native-svg', () => ({

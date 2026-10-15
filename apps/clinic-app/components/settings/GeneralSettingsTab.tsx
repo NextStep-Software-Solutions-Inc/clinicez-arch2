@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Pressable, Image } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
@@ -22,6 +22,9 @@ import EodReconciliationSettingsCard from './EodReconciliationSettingsCard';
 import WaitingAreaTvSettingsCard from './WaitingAreaTvSettingsCard';
 import QueuePushNotificationSettingsCard from './QueuePushNotificationSettingsCard';
 import { ClinicRoomsSettingsCard } from './ClinicRoomsSettingsCard';
+import { useClinic } from '../../context/ClinicContext';
+import { pickClinicLogo } from '../../utils/logoUploader';
+import { Alert, notify } from '../../utils/feedback';
 
 interface GeneralSettingsTabProps {
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
@@ -84,6 +87,60 @@ export default function GeneralSettingsTab({
   onRefreshEod,
   formatPeso,
 }: GeneralSettingsTabProps) {
+  const { clinicLogo, setClinicLogo } = useClinic();
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const handlePickLogo = async () => {
+    setUploadingLogo(true);
+    try {
+      const res = await pickClinicLogo();
+      if (!res) {
+        setUploadingLogo(false);
+        return;
+      }
+      if (res.error) {
+        Alert.alert('Logo upload failed', res.error);
+        setUploadingLogo(false);
+        return;
+      }
+      if (res.dataUri) {
+        const success = await setClinicLogo(res.dataUri);
+        if (success) {
+          notify.success('Clinic logo updated and saved to database.');
+        } else {
+          Alert.alert('Logo saved locally', 'Logo updated on device, but could not sync to server database.');
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Upload error', err?.message || 'Failed to select image.');
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    Alert.alert(
+      'Remove clinic logo',
+      'Are you sure you want to remove the custom clinic logo and revert to the default icon?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setUploadingLogo(true);
+            try {
+              await setClinicLogo(null);
+              notify.success('Clinic logo removed.');
+            } finally {
+              setUploadingLogo(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Clinic profile and letterhead */}
@@ -167,6 +224,60 @@ export default function GeneralSettingsTab({
               </View>
             </View>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Clinic Branding & Logo */}
+      <Card>
+        <CardHeader
+          title="Clinic Branding & Logo"
+          subtitle="Customize your clinic's logo displayed in the navigation sidebar, workstation header, and official documents"
+        />
+        <CardContent>
+          <View style={styles.brandingRow}>
+            <View style={styles.logoPreviewContainer}>
+              {clinicLogo ? (
+                <Image
+                  source={{ uri: clinicLogo }}
+                  style={styles.logoPreviewImage}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={styles.logoPlaceholder}>
+                  <Icon name="clinic" size={theme.sizes.iconLg} color={theme.colors.primary} />
+                </View>
+              )}
+            </View>
+            <View style={styles.brandingInfo}>
+              <ThemedText variant="bodyBold" color={theme.colors.text}>
+                {clinicName || 'Clinic Logo'}
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                {clinicLogo
+                  ? 'Custom logo active and synced to clinic database. Supported formats: PNG, JPEG, SVG, WebP (max 2MB).'
+                  : 'No custom logo configured. The default Clinic EZ medical glyph is currently displayed.'}
+              </ThemedText>
+              <View style={styles.brandingActions}>
+                <Button
+                  title={clinicLogo ? 'Change logo' : 'Upload logo'}
+                  icon="upload"
+                  onPress={handlePickLogo}
+                  loading={uploadingLogo}
+                  size="sm"
+                />
+                {clinicLogo ? (
+                  <Button
+                    title="Remove"
+                    variant="outline"
+                    icon="trash"
+                    onPress={handleRemoveLogo}
+                    disabled={uploadingLogo}
+                    size="sm"
+                  />
+                ) : null}
+              </View>
+            </View>
+          </View>
         </CardContent>
       </Card>
 
@@ -484,5 +595,43 @@ const styles = StyleSheet.create({
   },
   layoutDescription: {
     lineHeight: 18,
+  },
+  brandingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xl,
+    paddingVertical: theme.spacing.sm,
+  },
+  logoPreviewContainer: {
+    width: theme.sizes.controlLg * 2,
+    height: theme.sizes.controlLg * 2,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  logoPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  logoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryLight,
+  },
+  brandingInfo: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  brandingActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
   },
 });

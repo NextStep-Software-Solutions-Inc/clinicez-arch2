@@ -12,6 +12,7 @@ public static class Permissions
     public const string ManageRoles = "manage:roles";
     public const string ManageAdmins = "manage:admins";
     public const string ManageSettings = "manage:settings";
+    public const string ManagePlans = "manage:plans";
 
     public static readonly IReadOnlyList<string> All = new List<string>
     {
@@ -22,6 +23,7 @@ public static class Permissions
         ManageBlogs,
         ManageRoles,
         ManageAdmins,
-        ManageSettings
+        ManageSettings,
+        ManagePlans
     }.AsReadOnly();
 }

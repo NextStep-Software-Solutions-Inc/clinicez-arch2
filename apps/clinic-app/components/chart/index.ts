@@ -60,6 +60,9 @@ export type { AdministerVaccineModalProps } from './AdministerVaccineModal';
 export { default as HistoricalVaccineModal } from './HistoricalVaccineModal';
 export type { HistoricalVaccineModalProps } from './HistoricalVaccineModal';
 
+export { default as AttachExternalDocumentModal } from './AttachExternalDocumentModal';
+export type { AttachExternalDocumentModalProps } from './AttachExternalDocumentModal';
+
 export {
   default as OrganSystemsExamSection,
   OrganSystemRow,

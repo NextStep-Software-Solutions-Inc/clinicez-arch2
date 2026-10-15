@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 export interface WorkstationShortcutHandlers {
   onNavigate?: (route: string) => void;
   onPrint?: () => void;
+  onToggleSidebar?: () => void;
 }
 
 const ROUTE_MAP: Record<string, string> = {
@@ -28,6 +29,18 @@ export function useWorkstationShortcuts(handlers: WorkstationShortcutHandlers) {
           target.tagName === 'TEXTAREA' ||
           target.isContentEditable);
 
+      // Ctrl + B or Cmd + B, or Alt + S: Toggle Sidebar Mode
+      if (
+        ((event.ctrlKey || event.metaKey) && (event.key === 'b' || event.key === 'B')) ||
+        (event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 's' || event.key === 'S'))
+      ) {
+        if (handlers.onToggleSidebar) {
+          event.preventDefault();
+          handlers.onToggleSidebar();
+          return;
+        }
+      }
+
       // Alt + Number (1-7): Quick Switch Module
       if (event.altKey && !event.ctrlKey && !event.metaKey && ROUTE_MAP[event.key]) {
         event.preventDefault();
@@ -48,5 +61,5 @@ export function useWorkstationShortcuts(handlers: WorkstationShortcutHandlers) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [handlers.onNavigate, handlers.onPrint]);
+  }, [handlers.onNavigate, handlers.onPrint, handlers.onToggleSidebar]);
 }

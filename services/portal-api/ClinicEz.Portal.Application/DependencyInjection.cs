@@ -12,6 +12,7 @@ public static class DependencyInjection
         services.AddScoped<Features.Workspace.IWorkspaceAccessService, Features.Workspace.WorkspaceAccessService>();
         services.AddScoped<Features.Integrations.IWebhookDispatcher, Features.Integrations.WebhookDispatcher>();
         services.AddScoped<Features.Integrations.IApiKeyValidator, Features.Integrations.ApiKeyValidator>();
+        services.AddScoped<Features.Billing.Services.IDocumentNumberGenerator, Features.Billing.Services.DocumentNumberGenerator>();
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
         services.AddMediatR(config =>
         {

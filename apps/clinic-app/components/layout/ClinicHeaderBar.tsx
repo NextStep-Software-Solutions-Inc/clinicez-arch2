@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle, Pressable, PressableStateCallbackType } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 import UserMenu from './UserMenu';
 import { theme } from '../../constants/theme';
 import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
+import { useSidebar } from '../../context/SidebarContext';
 
 export interface ClinicHeaderBarProps {
   /** Page title. This is the single source of the page heading - screens must not repeat it in the body. */
@@ -17,6 +18,8 @@ export interface ClinicHeaderBarProps {
   style?: ViewStyle;
 }
 
+type InteractionState = PressableStateCallbackType & { hovered?: boolean };
+
 export default function ClinicHeaderBar({
   title,
   subtitle,
@@ -25,6 +28,7 @@ export default function ClinicHeaderBar({
 }: ClinicHeaderBarProps) {
   const { facilityName } = useClinic();
   const { isCompact } = useBreakpoint();
+  const { mode, cycleMode } = useSidebar();
 
   const currentDate = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
@@ -35,9 +39,37 @@ export default function ClinicHeaderBar({
 
   const resolvedSubtitle = subtitle ?? facilityName;
 
+  const toggleTitle =
+    mode === 'close'
+      ? 'Open sidebar (Ctrl+B)'
+      : mode === 'icon'
+      ? 'Expand sidebar (Ctrl+B)'
+      : 'Collapse sidebar to icon rail (Ctrl+B)';
+
   return (
     <View style={[styles.container, style]}>
       <View style={styles.leftSection}>
+        {!isCompact && (
+          <Pressable
+            onPress={cycleMode}
+            accessibilityRole="button"
+            accessibilityLabel={toggleTitle}
+            style={(state: InteractionState) => [
+              styles.sidebarToggle,
+              mode === 'close' && styles.sidebarToggleActive,
+              state.hovered && styles.sidebarToggleHover,
+              state.pressed && styles.sidebarTogglePressed,
+            ]}
+            {...({ title: toggleTitle } as any)}
+          >
+            <Icon
+              name={mode === 'close' ? 'menu' : mode === 'icon' ? 'chevronRight' : 'chevronLeft'}
+              size={theme.sizes.iconMd}
+              color={mode === 'close' ? theme.colors.primary : theme.colors.textSecondary}
+            />
+          </Pressable>
+        )}
+
         <View style={styles.titleBlock}>
           <ThemedText variant={isCompact ? 'title' : 'h2'} numberOfLines={1}>
             {title || facilityName || 'Clinic EZ'}
@@ -85,9 +117,33 @@ const styles = StyleSheet.create({
   leftSection: {
     flex: 1,
     minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  sidebarToggle: {
+    width: theme.sizes.controlMd,
+    height: theme.sizes.controlMd,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sidebarToggleActive: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primaryBorder,
+  },
+  sidebarToggleHover: {
+    backgroundColor: theme.colors.surfaceHighlight,
+  },
+  sidebarTogglePressed: {
+    opacity: 0.8,
   },
   titleBlock: {
     minWidth: 0,
+    flex: 1,
   },
   rightSection: {
     flexDirection: 'row',

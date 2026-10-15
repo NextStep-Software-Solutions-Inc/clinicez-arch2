@@ -40,6 +40,7 @@ import {
   StatutoryImmunizationsTab,
   HealthProfilesTab,
   ExternalDocumentVaultTab,
+  AttachExternalDocumentModal,
 } from '../../components/chart';
 import EditPatientModal from '../../components/patient/EditPatientModal';
 import { formatLongAge } from '../../utils/age';
@@ -292,6 +293,15 @@ export default function ConsultationsScreen() {
 
   // Split-Screen & Longitudinal Chart Review States (Feature 21)
   type ChartReviewTab = 'summary' | 'encounters' | 'diagnostics' | 'procedures' | 'immunizations' | 'profiles' | 'vault';
+  const CHART_TAB_DESCRIPTIONS: Record<ChartReviewTab, string> = {
+    summary: 'Executive clinical summary, problems, and vital trends',
+    encounters: 'Timeline of historical clinical visits and SOAP documentation',
+    diagnostics: 'Diagnostic laboratory orders, results, and specimen requisitions',
+    procedures: 'Nursing procedures, treatments, and clinical interventions',
+    immunizations: 'Statutory immunizations, schedules, and adverse events (AEFI)',
+    profiles: 'Past medical history, surgical, social, and NCD risk profiles',
+    vault: 'External document vault, outside imaging films, and clearances',
+  };
   const [activeChartTab, setActiveChartTab] = useState<ChartReviewTab>(() => {
     const saved = getSessionItem('clinicez_consultations_active_chart_tab') as ChartReviewTab | null;
     if (saved && ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault'].includes(saved)) {
@@ -305,6 +315,7 @@ export default function ConsultationsScreen() {
     setSessionItem('clinicez_consultations_active_chart_tab', tab);
   };
   const [mobileWorkstationView, setMobileWorkstationView] = useState<'soap' | 'chart'>('soap');
+  const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
 
   // Multi-Provider Queue Room / Station & Status Filter States (Persistent per staff)
   const staffKey = current?.id ? `clinicez:consultations:${current.id}` : 'clinicez:consultations:default';
@@ -2018,9 +2029,11 @@ export default function ConsultationsScreen() {
     <View style={styles.longitudinalChartContainer}>
       <Card>
         <CardHeader
-          title="Longitudinal Chart"
-          subtitle="Comprehensive 7-tab historical record"
+          title="Patient Medical Chart"
+          subtitle={CHART_TAB_DESCRIPTIONS[activeChartTab] || 'Historical clinical chart & records'}
           icon="folder"
+          truncateTitle
+          truncateSubtitle
         />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chartTabsRow}>
           {[
@@ -2161,6 +2174,7 @@ export default function ConsultationsScreen() {
           patient={patientRecord}
           patientId={selectedPatient?.patientId}
           attachments={patientChart?.attachments || []}
+          onUploadDocument={() => setUploadDocModalVisible(true)}
           onVerifyAttachment={handleVerifyAttachment}
           onDownloadAttachment={handleDownloadAttachment}
           onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
@@ -3497,7 +3511,7 @@ export default function ConsultationsScreen() {
                     onChange={(v) => setMobileWorkstationView(v as 'soap' | 'chart')}
                     options={[
                       { value: 'soap', label: 'Documentation (SOAP)' },
-                      { value: 'chart', label: 'Longitudinal Chart (7 Tabs)' },
+                      { value: 'chart', label: 'Patient Medical Chart (7 Tabs)' },
                     ]}
                   />
                 </View>
@@ -3508,6 +3522,19 @@ export default function ConsultationsScreen() {
             )}
           </>
         ) : null}
+
+        {/* Attach External Physical Document Modal */}
+        <AttachExternalDocumentModal
+          visible={uploadDocModalVisible}
+          patient={patientRecord || (selectedPatient as any)}
+          patientId={selectedPatient?.patientId || patientRecord?.id}
+          onClose={() => setUploadDocModalVisible(false)}
+          onAttachmentUploaded={async () => {
+            if (selectedPatient) {
+              await loadPatientContext(selectedPatient);
+            }
+          }}
+        />
 
         {/* Medical certificate modal */}
         <Modal

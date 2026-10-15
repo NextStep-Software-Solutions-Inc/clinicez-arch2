@@ -17,7 +17,8 @@ import {
   IconSun,
   IconMoon,
   IconMenu2,
-  IconAdjustments
+  IconAdjustments,
+  IconCreditCard
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 
@@ -166,6 +167,12 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       permission: "view:tenants"
     },
     {
+      title: "Plans",
+      href: "/admin/plans",
+      icon: IconCreditCard,
+      permission: "manage:plans"
+    },
+    {
       title: "Leads",
       href: "/admin/leads",
       icon: IconAddressBook,
@@ -195,7 +202,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       icon: IconAdjustments,
       permission: "view:tenants"
     }
-  ].filter(item => hasPermission(item.permission));
+  ].filter(item => hasPermission(item.permission) || (item.permission === "manage:plans" && (hasPermission("manage:tenants") || hasPermission("view:tenants"))));
 
   const SidebarContent = () => (
     <>

@@ -239,7 +239,10 @@ public class DeliveryTests
     {
         await using var hub = await HubApp.StartCloudAsync();
 
-        var expired = InteropEnvelope.Create(Chatter, W.A1Clinic, W.A2Lab, Guid.NewGuid(), new { }, ttl: TimeSpan.FromSeconds(-5));
+        var expired = InteropEnvelope.Create(Chatter, W.A1Clinic, W.A2Lab, Guid.NewGuid(), new { }) with
+        {
+            ExpiresAtUtc = hub.Clock.GetUtcNow().UtcDateTime - TimeSpan.FromSeconds(5)
+        };
         (await hub.SendAsync("clinic", expired)).Reason.Should().Be("expired");
 
         var shortLived = InteropEnvelope.Create(Chatter, W.A1Clinic, W.A2Lab, Guid.NewGuid(), new { }, ttl: TimeSpan.FromMinutes(1));

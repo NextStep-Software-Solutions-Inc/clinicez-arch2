@@ -22,9 +22,19 @@ export interface CardHeaderProps {
   /** IconName (e.g. "patients"). Legacy emoji glyphs are still resolved for old call sites. */
   icon?: string;
   style?: ViewStyle;
+  truncateTitle?: boolean;
+  truncateSubtitle?: boolean;
 }
 
-export function CardHeader({ title, subtitle, rightAction, icon, style }: CardHeaderProps) {
+export function CardHeader({
+  title,
+  subtitle,
+  rightAction,
+  icon,
+  style,
+  truncateTitle,
+  truncateSubtitle,
+}: CardHeaderProps) {
   return (
     <View style={[styles.header, style]}>
       <View style={styles.titleRow}>
@@ -34,11 +44,22 @@ export function CardHeader({ title, subtitle, rightAction, icon, style }: CardHe
           </View>
         ) : null}
         <View style={styles.titleText}>
-          <ThemedText variant="h3" style={styles.title}>
+          <ThemedText
+            variant="h3"
+            style={styles.title}
+            numberOfLines={truncateTitle ? 1 : undefined}
+            ellipsizeMode={truncateTitle ? 'tail' : undefined}
+          >
             {title}
           </ThemedText>
           {subtitle ? (
-            <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.subtitle}>
+            <ThemedText
+              variant="caption"
+              color={theme.colors.textMuted}
+              style={styles.subtitle}
+              numberOfLines={truncateSubtitle ? 1 : undefined}
+              ellipsizeMode={truncateSubtitle ? 'tail' : undefined}
+            >
               {subtitle}
             </ThemedText>
           ) : null}
@@ -119,7 +140,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    minWidth: 200,
+    minWidth: 0,
     gap: theme.spacing.md,
   },
   headerIcon: {
@@ -129,9 +150,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primarySubtle,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   titleText: {
     flex: 1,
+    minWidth: 0,
   },
   title: {
     color: theme.colors.text,

@@ -859,3 +859,47 @@ In `Queue.screen.tsx`, replace the hardcoded `STATIONS` and Call to Room modal o
 - [ ] `Consultations.screen.tsx` and `Queue.screen.tsx` dynamically scope visible station pills by role and `assignedRoomIds`, with zero hardcoded room arrays remaining in `Queue.screen.tsx`.
 - [ ] `pnpm --filter clinic-app test -- --runTestsByPath services/__tests__/clinicRoomsAndRouting.test.ts` passes with unit tests covering scoped station visibility by role (single-room doctor, multi-room doctor, assigned nurse, floating staff) and 4-step call-to-room resolution.
 - [ ] `pnpm --filter clinic-app typecheck` and `pnpm lint:tokens` pass with 0 errors and zero raw hex color violations.
+
+
+## 2026-10-15T00:07:44Z
+
+Implement payment override (manual payment recording with official invoice/receipt generation and workspace licensing activation) and full plan, feature, and entitlement management across Portal API (.NET 10) and Portal Web (Next.js 16).
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+
+## Requirements
+
+### R1. SuperAdmin Payment Override & Activation
+Provide an administrative capability to record manual/offline payments (Bank Transfer, GCash/Maya, Check, Cash, Promotional) for a tenant workspace.
+- Generate an official `BillingInvoice` (marked `Paid`) with sequential numbering.
+- Generate an official `PaymentReceipt` with payment method and transaction reference details.
+- Activate the workspace subscription on the selected plan with the appropriate expiration date (1 month or 1 year) and stage cryptographic facility licenses.
+
+### R2. Tenant Billing Guidance
+In the tenant workspace console (`/{tenant}/dashboard/billing`), provide offline payment instructions (Bank Deposit / GCash details) and ensure recorded manual invoices and receipts appear seamlessly in the Billing History table and details modal.
+
+### R3. Plan, Feature & Entitlement Management UI
+In the SuperAdmin Portal (`/admin/plans`), deliver full administrative management for plans and entitlements following ClinicEZ design tokens (`@clinicez/design-tokens`):
+- Configure plan pricing (monthly/annual), rank, and checkout requirements.
+- Manage marketing features (`PlanFeature`).
+- Manage quantitative limits (clinics, labs, pharmacies, staff, patients, consultations, API quotas).
+- Manage capability feature flags (teleconsultation, e-prescriptions, LIS, PMS, PhilHealth Konsulta, multi-terminal sync, cross-tenant interop).
+- Support per-workspace custom entitlement overrides on `/admin/tenants/[slug]`.
+
+## Acceptance Criteria
+
+### Payment Override
+- [ ] SuperAdmin can record an offline payment for any tenant workspace via `POST /admin/tenants/{id}/record-payment`.
+- [ ] A `BillingInvoice` with status `Paid` and a `PaymentReceipt` are persisted in PostgreSQL.
+- [ ] The tenant's `Subscription.Status` updates to `Active` and facility licenses are re-staged.
+- [ ] The tenant workspace billing history immediately reflects the generated invoice and downloadable receipt.
+
+### Plan & Entitlement Management
+- [ ] SuperAdmin can view, create, and update plans and their limits/features at `/admin/plans`.
+- [ ] Updating plan entitlements increments the plan version, updates all subscribed workspaces, and re-issues facility licenses.
+- [ ] SuperAdmin can view and apply workspace-specific entitlement overrides at `/admin/tenants/[slug]`.
+- [ ] All new UI components adhere strictly to `@clinicez/design-tokens` without hardcoded arbitrary hex values.
+
+### Build & Verification
+- [ ] All unit and integration tests pass: `dotnet test CLINICEZ.sln`.
+- [ ] Portal frontend passes typecheck and production build: `bun run typecheck:all` and `bun run build:portal`.

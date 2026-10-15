@@ -20,7 +20,11 @@ public record BillingPlanDto(
     bool RequiresCheckout,
     int Rank,
     Dictionary<string, long> Limits,
-    List<string> EnabledFeatures
+    List<string> EnabledFeatures,
+    Guid? PlanId = null,
+    string? Slug = null,
+    int Version = 1,
+    int ActiveSubscribersCount = 0
 );
 
 public class GetBillingPlansQuery : IRequest<List<BillingPlanDto>> { }
@@ -34,6 +38,12 @@ public class GetBillingPlansQueryHandler(IApplicationDbContext context) : IReque
             .Include(p => p.Entitlements)
             .OrderBy(p => p.Rank)
             .ToListAsync(cancellationToken);
+
+        var subscriberCounts = await context.Subscriptions
+            .Where(s => !s.IsDeleted)
+            .GroupBy(s => s.PlanId)
+            .Select(g => new { PlanId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.PlanId, g => g.Count, cancellationToken);
 
         return plans.Select(p => new BillingPlanDto(
             p.Slug,
@@ -51,7 +61,11 @@ public class GetBillingPlansQueryHandler(IApplicationDbContext context) : IReque
             p.Entitlements
                 .Where(e => e.Kind == EntitlementKind.Feature && e.Enabled == true)
                 .Select(e => e.Key)
-                .ToList()
+                .ToList(),
+            p.Id,
+            p.Slug,
+            p.Version,
+            subscriberCounts.GetValueOrDefault(p.Id, 0)
         )).ToList();
     }
 }

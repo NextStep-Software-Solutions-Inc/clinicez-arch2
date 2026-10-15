@@ -2,8 +2,12 @@ import { apiClient } from "@/transport/apiClient"
 
 export interface BillingPlan {
   id: string
+  planId?: string
+  slug?: string
   name: string
   description: string
+  monthlyPrice?: number
+  annualPrice?: number
   priceMonthly: string | number
   priceAnnually: string | number
   features: string[]
@@ -11,11 +15,24 @@ export interface BillingPlan {
   requiresCheckout: boolean
   /** Ordering of the plan ladder; a higher rank is a higher tier. */
   rank: number
+  /** Plan configuration version */
+  version?: number
+  isArchived?: boolean
+  activeSubscribersCount?: number
   /** Limit key (`limit.*`) to ceiling; a negative value means unlimited. */
   limits: Record<string, number>
   /** Keys (`feature.*`) of the features the plan includes. */
   enabledFeatures: string[]
 }
+
+export type {
+  CreateBillingPlanPayload,
+  UpdateBillingPlanPayload,
+  TenantOverridesDto,
+  UpdateTenantOverridesPayload,
+  RecordManualPaymentPayload,
+  RecordManualPaymentResult,
+} from "./admin.service"
 
 export interface PaymentReceipt {
   receiptNumber: string
@@ -24,6 +41,8 @@ export interface PaymentReceipt {
   paidAt: string
   expiryDate: string
   paymentMethod: string
+  transactionReference?: string
+  notes?: string
 }
 
 export interface BillingInvoice {

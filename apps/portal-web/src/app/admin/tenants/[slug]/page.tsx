@@ -21,8 +21,12 @@ import {
   IconArrowLeft,
   IconActivity,
   IconSettings,
-  IconFolder
+  IconFolder,
+  IconReceipt,
+  IconAdjustments
 } from "@tabler/icons-react";
+import { TenantEntitlementsCard } from "@/components/admin/TenantEntitlementsCard";
+import { RecordPaymentDialog } from "@/components/admin/RecordPaymentDialog";
 
 export default function TenantDetailPage() {
   const { hasPermission } = useAdmin();
@@ -34,7 +38,8 @@ export default function TenantDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toggleLoading, setToggleLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"subscription" | "usage">("subscription");
+  const [activeTab, setActiveTab] = useState<"subscription" | "usage" | "entitlements">("subscription");
+  const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
 
   // Telemetry Overriding States
   const [isEditing, setIsEditing] = useState(false);
@@ -256,6 +261,13 @@ export default function TenantDetailPage() {
                   <IconCopy className="h-4 w-4 mr-2" />
                   Copy Domain Link
                 </Button>
+                <Button
+                  onClick={() => setIsRecordPaymentOpen(true)}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl py-5 shadow-xs cursor-pointer text-xs"
+                >
+                  <IconReceipt className="h-4 w-4 mr-2" />
+                  Record Manual Payment
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -280,6 +292,18 @@ export default function TenantDetailPage() {
                 </span>
               </button>
               <button
+                onClick={() => setActiveTab("entitlements")}
+                className={`flex-1 py-4 text-xs font-bold transition-all border-b-2 ${activeTab === "entitlements"
+                  ? "border-primary text-slate-800 dark:text-white"
+                  : "border-transparent text-slate-400 hover:text-slate-700 dark:hover:text-slate-350"
+                  }`}
+              >
+                <span className="flex items-center justify-center gap-1.5">
+                  <IconAdjustments className="h-4 w-4" />
+                  Entitlements &amp; Overrides
+                </span>
+              </button>
+              <button
                 onClick={() => setActiveTab("usage")}
                 className={`flex-1 py-4 text-xs font-bold transition-all border-b-2 ${activeTab === "usage"
                   ? "border-primary text-slate-800 dark:text-white"
@@ -288,7 +312,7 @@ export default function TenantDetailPage() {
               >
                 <span className="flex items-center justify-center gap-1.5">
                   <IconActivity className="h-4 w-4" />
-                  Usage & Telemetry
+                  Usage &amp; Telemetry
                 </span>
               </button>
             </div>
@@ -325,6 +349,22 @@ export default function TenantDetailPage() {
                         )}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Manual Payment Action */}
+                  <div className="pt-6 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-emerald-500/5 dark:bg-emerald-950/10 p-5 rounded-2xl border border-emerald-500/10">
+                    <div className="text-xs text-muted-foreground">
+                      <p className="font-bold text-slate-800 dark:text-slate-200 mb-0.5">Offline / Manual Payment Recording</p>
+                      Record manual bank deposits, GCash/Maya, checks, cash, or promo sponsorships to generate official invoices and receipts, activate subscriptions, and stage facility licenses.
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => setIsRecordPaymentOpen(true)}
+                      className="rounded-xl text-xs font-bold shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer py-5 px-5"
+                    >
+                      <IconReceipt className="h-4 w-4 mr-1.5" />
+                      Record Manual Payment
+                    </Button>
                   </div>
 
                   {canToggle && (
@@ -498,11 +538,33 @@ export default function TenantDetailPage() {
                   )}
                 </div>
               )}
+
+              {activeTab === "entitlements" && (
+                <TenantEntitlementsCard
+                  tenantId={tenant.id}
+                  tenantSlug={tenant.tenantSlug}
+                  onSaved={loadTenantDetails}
+                  embedded={true}
+                />
+              )}
             </CardContent>
           </Card>
         </div>
 
       </div>
+
+      {/* Manual Payment Recording Modal */}
+      <RecordPaymentDialog
+        isOpen={isRecordPaymentOpen}
+        onClose={() => setIsRecordPaymentOpen(false)}
+        onSuccess={() => {
+          loadTenantDetails();
+        }}
+        tenantId={tenant.id}
+        tenantSlug={tenant.tenantSlug}
+        clinicName={tenant.clinicName}
+        currentPlanSlug={tenant.subscriptionPlanId}
+      />
     </div>
   );
 }

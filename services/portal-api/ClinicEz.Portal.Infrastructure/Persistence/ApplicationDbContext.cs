@@ -115,9 +115,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(f => f.PlanId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<BillingInvoice>()
-            .HasIndex(i => i.XenditInvoiceId)
-            .IsUnique();
+        modelBuilder.Entity<BillingInvoice>(entity =>
+        {
+            entity.HasIndex(i => i.XenditInvoiceId)
+                .IsUnique();
+
+            entity.HasIndex(i => i.InvoiceNumber)
+                .IsUnique();
+        });
 
         modelBuilder.Entity<BlogArticle>()
             .HasIndex(b => b.Slug)
@@ -137,17 +142,24 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(i => i.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        modelBuilder.Entity<PaymentReceipt>()
-            .HasOne(r => r.Invoice)
-            .WithOne()
-            .HasForeignKey<PaymentReceipt>(r => r.InvoiceId)
-            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<PaymentReceipt>(entity =>
+        {
+            entity.HasOne(r => r.Invoice)
+                .WithOne()
+                .HasForeignKey<PaymentReceipt>(r => r.InvoiceId)
+                .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<PaymentReceipt>()
-            .HasOne(r => r.Tenant)
-            .WithMany()
-            .HasForeignKey(r => r.TenantId)
-            .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(r => r.Tenant)
+                .WithMany()
+                .HasForeignKey(r => r.TenantId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(r => r.ReceiptNumber)
+                .IsUnique();
+
+            entity.Property(r => r.TransactionReference).HasMaxLength(256);
+            entity.Property(r => r.Notes).HasMaxLength(2000);
+        });
 
         modelBuilder.Entity<Branch>(entity =>
         {

@@ -9,6 +9,7 @@ import { ConnectionGate } from './components/connection/ConnectionGate';
 import { AuthGate } from './components/auth/AuthGate';
 import { ClinicProvider } from './context/ClinicContext';
 import { StaffProvider } from './context/StaffContext';
+import { SidebarProvider } from './context/SidebarContext';
 import { FeedbackHost, initModalStackObserver } from './components/ui';
 import { OfflineSyncRunner } from './components/OfflineSyncRunner';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -45,8 +46,10 @@ export default function App() {
             <AuthGate>
               <ClinicProvider>
                 <StaffProvider>
-                  <OfflineSyncRunner />
-                  <Navigation linking={linkingOptions} theme={navigationTheme} />
+                  <SidebarProvider>
+                    <OfflineSyncRunner />
+                    <Navigation linking={linkingOptions} theme={navigationTheme} />
+                  </SidebarProvider>
                 </StaffProvider>
               </ClinicProvider>
             </AuthGate>

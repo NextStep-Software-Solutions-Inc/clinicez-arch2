@@ -19,7 +19,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("main")
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -183,6 +183,9 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("InvoiceNumber")
+                        .IsUnique();
 
                     b.HasIndex("TenantId");
 
@@ -1065,6 +1068,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<DateTime>("PaidAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1079,6 +1086,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("TransactionReference")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1088,6 +1099,9 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("InvoiceId")
+                        .IsUnique();
+
+                    b.HasIndex("ReceiptNumber")
                         .IsUnique();
 
                     b.HasIndex("TenantId");

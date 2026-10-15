@@ -1,6 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { clinicService, ClinicRoom, ClinicSettingsRecord, FacilityLicenseStatus } from '../services/clinicService';
 import { useFacilityLicense } from '../components/FacilityActivationGate';
+import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
+import { theme } from '../constants/theme';
+
+export const CLINIC_LOGO_STORAGE_KEY = 'clinicez_clinic_logo';
 
 export interface Letterhead {
   header: string;
@@ -25,6 +29,11 @@ export interface ClinicContextValue {
   rooms: ClinicRoom[];
   /** Print/receipt letterhead, sourced from settings - never hardcoded. */
   letterhead: Letterhead;
+  /** Clinic custom logo URL / base64 data URI, backed by database settings and cached locally. */
+  clinicLogo: string | null;
+  /** Brand primary accent color from database settings. */
+  primaryColorHex: string;
+  setClinicLogo: (logoUri: string | null) => Promise<boolean>;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -45,6 +54,9 @@ const ClinicContext = createContext<ClinicContextValue>({
   license: null,
   rooms: [],
   letterhead: EMPTY_LETTERHEAD,
+  clinicLogo: null,
+  primaryColorHex: theme.colors.primary,
+  setClinicLogo: async () => false,
   loading: false,
   error: null,
   refresh: async () => {},
@@ -60,6 +72,7 @@ export const useClinic = () => useContext(ClinicContext);
 export function ClinicProvider({ children }: { children: React.ReactNode }) {
   const { license } = useFacilityLicense();
   const [settings, setSettings] = useState<ClinicSettingsRecord | null>(null);
+  const [localLogo, setLocalLogo] = useState<string | null>(() => getDeviceItem(CLINIC_LOGO_STORAGE_KEY));
   const [rooms, setRooms] = useState<ClinicRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +94,13 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       setError(err.message || 'Unable to load clinic settings.');
     } else {
       setSettings(data);
+      if (data?.primaryLogoUrl) {
+        setLocalLogo(data.primaryLogoUrl);
+        setDeviceItem(CLINIC_LOGO_STORAGE_KEY, data.primaryLogoUrl);
+      } else if (data && data.primaryLogoUrl === null) {
+        setLocalLogo(null);
+        setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
+      }
       setError(null);
     }
     if (Array.isArray(roomsData)) {
@@ -92,6 +112,23 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refresh();
   }, [refresh, license?.clinicId]);
+
+  const setClinicLogo = useCallback(async (logoUri: string | null): Promise<boolean> => {
+    setLocalLogo(logoUri);
+    setDeviceItem(CLINIC_LOGO_STORAGE_KEY, logoUri);
+    try {
+      const [updated, err] = await clinicService.updateSettings({
+        primaryLogoUrl: logoUri ?? '',
+      });
+      if (!err && updated) {
+        setSettings(updated);
+        return true;
+      }
+      return !err;
+    } catch {
+      return false;
+    }
+  }, []);
 
   const value = useMemo<ClinicContextValue>(
     () => ({
@@ -112,12 +149,15 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
         contact: settings?.letterheadContact || '',
         footer: settings?.letterheadFooter || '',
       },
+      clinicLogo: localLogo || settings?.primaryLogoUrl || null,
+      primaryColorHex: settings?.primaryColorHex || theme.colors.primary,
+      setClinicLogo,
       loading,
       error,
       refresh,
       refreshRooms,
     }),
-    [settings, license, rooms, loading, error, refresh, refreshRooms],
+    [settings, license, rooms, localLogo, setClinicLogo, loading, error, refresh, refreshRooms],
   );
 
   return <ClinicContext.Provider value={value}>{children}</ClinicContext.Provider>;

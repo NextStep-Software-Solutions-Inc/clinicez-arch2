@@ -16,7 +16,10 @@ public record PaymentReceiptDto(
     decimal AmountPaid,
     DateTime PaidAt,
     DateTime ExpiryDate,
-    string PaymentMethod
+    string PaymentMethod,
+    string Currency = "PHP",
+    string? TransactionReference = null,
+    string? Notes = null
 );
 
 public record BillingInvoiceDto(
@@ -106,7 +109,10 @@ public class GetBillingInfoQueryHandler(IApplicationDbContext context, IEntitlem
                     r.AmountPaid,
                     r.PaidAt,
                     r.ExpiryDate,
-                    r.PaymentMethod
+                    r.PaymentMethod,
+                    r.Currency,
+                    r.TransactionReference,
+                    r.Notes
                 );
             }
 

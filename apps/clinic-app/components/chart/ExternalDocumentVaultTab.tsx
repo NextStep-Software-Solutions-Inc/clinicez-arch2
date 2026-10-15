@@ -133,15 +133,30 @@ export default function ExternalDocumentVaultTab({
       {/* TOP CONTROLS & STATUS / CATEGORY FILTERS                                  */}
       {/* ========================================================================= */}
       <View style={styles.topBar}>
+        <View style={styles.actionsRow}>
+          <Pressable onPress={handleUpload} style={styles.uploadBtn}>
+            <Icon name="upload" size={14} color={theme.colors.onPrimary} />
+            <ThemedText variant="captionBold" color={theme.colors.onPrimary} numberOfLines={1}>
+              Attach External Document
+            </ThemedText>
+          </Pressable>
+        </View>
+
         <View style={styles.filtersWrapper}>
           {/* Status Filter Chips */}
-          <View style={styles.statusFilterRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.statusFilterRow}
+            style={styles.filterScrollView}
+          >
             <Pressable
               onPress={() => setStatusFilter('ALL')}
               style={[styles.statusChip, statusFilter === 'ALL' && styles.statusChip_active]}
             >
               <ThemedText
                 variant="captionBold"
+                numberOfLines={1}
                 color={statusFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
                 All ({attachments.length})
@@ -159,6 +174,7 @@ export default function ExternalDocumentVaultTab({
               {pendingCount > 0 && <Icon name="alert" size={12} color={theme.colors.warningText} />}
               <ThemedText
                 variant="captionBold"
+                numberOfLines={1}
                 color={
                   statusFilter === 'PENDING'
                     ? theme.colors.primaryDark
@@ -177,6 +193,7 @@ export default function ExternalDocumentVaultTab({
             >
               <ThemedText
                 variant="captionBold"
+                numberOfLines={1}
                 color={statusFilter === 'VERIFIED' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
                 Verified ({verifiedCount})
@@ -189,21 +206,28 @@ export default function ExternalDocumentVaultTab({
             >
               <ThemedText
                 variant="captionBold"
+                numberOfLines={1}
                 color={statusFilter === 'REJECTED' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
                 Rejected ({rejectedCount})
               </ThemedText>
             </Pressable>
-          </View>
+          </ScrollView>
 
           {/* Record Category Filter Chips */}
-          <View style={styles.filterRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+            style={styles.filterScrollView}
+          >
             <Pressable
               onPress={() => setSelectedCategory('ALL')}
               style={[styles.filterBtn, selectedCategory === 'ALL' && styles.filterBtn_active]}
             >
               <ThemedText
                 variant="captionBold"
+                numberOfLines={1}
                 color={selectedCategory === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
                 All Records ({attachments.length})
@@ -216,6 +240,7 @@ export default function ExternalDocumentVaultTab({
             >
               <ThemedText
                 variant="captionBold"
+                numberOfLines={1}
                 color={selectedCategory === 'OutsideChestXRay' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
                 Outside Chest X-Ray
@@ -228,6 +253,7 @@ export default function ExternalDocumentVaultTab({
             >
               <ThemedText
                 variant="captionBold"
+                numberOfLines={1}
                 color={selectedCategory === 'COR' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
                 Cert of Registration (COR)
@@ -240,20 +266,14 @@ export default function ExternalDocumentVaultTab({
             >
               <ThemedText
                 variant="captionBold"
+                numberOfLines={1}
                 color={selectedCategory === 'OutsideLab' ? theme.colors.primaryDark : theme.colors.textSecondary}
               >
                 Outside Labs
               </ThemedText>
             </Pressable>
-          </View>
+          </ScrollView>
         </View>
-
-        <Pressable onPress={handleUpload} style={styles.uploadBtn}>
-          <Icon name="upload" size={14} color={theme.colors.onPrimary} />
-          <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-            Attach External Document
-          </ThemedText>
-        </Pressable>
       </View>
 
       {/* ========================================================================= */}
@@ -446,25 +466,31 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.lg,
   },
   topBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
     marginBottom: theme.spacing.md,
   },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
   filtersWrapper: {
-    flex: 1,
     gap: theme.spacing.xs,
+  },
+  filterScrollView: {
+    flexGrow: 0,
   },
   statusFilterRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
+    paddingVertical: 2,
   },
   statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     gap: 4,
     paddingVertical: 4,
     paddingHorizontal: 10,
@@ -483,10 +509,13 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
     gap: theme.spacing.xs,
+    paddingVertical: 2,
   },
   filterBtn: {
+    flexShrink: 0,
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: theme.radii.full,
@@ -501,6 +530,7 @@ const styles = StyleSheet.create({
   uploadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
     gap: 4,
     backgroundColor: theme.colors.primary,
     paddingVertical: 6,

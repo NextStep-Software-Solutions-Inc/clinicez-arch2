@@ -19,6 +19,7 @@ import PlansTabContent from "./components/PlansTabContent"
 import BillingHistoryContent from "./components/BillingHistoryContent"
 import OrganizationDetailsContent from "./components/OrganizationDetailsContent"
 import PaymentMethodContent from "./components/PaymentMethodContent"
+import OfflinePaymentInstructionsCard from "./components/OfflinePaymentInstructionsCard"
 
 export default function BillingDashboardClient({ tenantId }: { tenantId: string }) {
   const router = useRouter()
@@ -58,6 +59,7 @@ export default function BillingDashboardClient({ tenantId }: { tenantId: string 
             <TabsTrigger value="billing" className="px-4 sm:px-6 py-2 text-xs font-semibold shrink-0 whitespace-nowrap">Billing History</TabsTrigger>
             <TabsTrigger value="organization" className="px-4 sm:px-6 py-2 text-xs font-semibold shrink-0 whitespace-nowrap">Organization Details</TabsTrigger>
             <TabsTrigger value="payment" className="px-4 sm:px-6 py-2 text-xs font-semibold shrink-0 whitespace-nowrap">Payment Method</TabsTrigger>
+            <TabsTrigger value="offline" className="px-4 sm:px-6 py-2 text-xs font-semibold shrink-0 whitespace-nowrap">Bank Transfer & Offline</TabsTrigger>
           </TabsList>
         </div>
 
@@ -87,6 +89,11 @@ export default function BillingDashboardClient({ tenantId }: { tenantId: string 
           <Suspense fallback={<PaymentMethodSkeleton />}>
             <PaymentMethodContent tenantId={tenantId} />
           </Suspense>
+        </TabsContent>
+
+        {/* 5. OFFLINE BANK TRANSFER INSTRUCTIONS TAB CONTENT */}
+        <TabsContent value="offline" className="outline-none space-y-6">
+          <OfflinePaymentInstructionsCard tenantId={tenantId} />
         </TabsContent>
       </Tabs>
     </div>

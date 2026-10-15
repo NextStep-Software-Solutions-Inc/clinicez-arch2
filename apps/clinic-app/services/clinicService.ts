@@ -1675,6 +1675,8 @@ export interface ClinicSettingsRecord {
   queuePushNotificationThreshold?: number;
   tenantSlug?: string;
   facilitySlug?: string;
+  primaryLogoUrl?: string | null;
+  primaryColorHex?: string;
 }
 
 export interface ReconcileEodResult {

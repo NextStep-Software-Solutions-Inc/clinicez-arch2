@@ -17,4 +17,6 @@ public class PaymentReceipt : BaseEntity
     public DateTime PaidAt { get; set; }
     public DateTime ExpiryDate { get; set; }
     public string PaymentMethod { get; set; } = "E-Wallet";
+    public string? TransactionReference { get; set; }
+    public string? Notes { get; set; }
 }

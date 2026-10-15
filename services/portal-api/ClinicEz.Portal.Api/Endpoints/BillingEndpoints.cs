@@ -210,34 +210,5 @@ public class BillingEndpoints : IEndpoint
         .WithName("ProcessXenditWebhook")
         .WithDescription("Webhook receiver endpoint for Xendit payment callback events.")
         .WithTags("Billing");
-
-        // Admin Endpoints for Plan CRUD
-        group.MapPost("/plans", async (CreateBillingPlanCommand command, ISender sender) =>
-        {
-            var result = await sender.Send(command);
-            return Results.Ok(new { Id = result });
-        })
-        .WithName("CreateBillingPlan")
-        .WithDescription("Creates a new billing plan (Admin only).")
-        .WithTags("Billing");
-
-        group.MapPut("/plans/{id:guid}", async (Guid id, UpdateBillingPlanCommand command, ISender sender) =>
-        {
-            if (id != command.Id) return Results.BadRequest("Id mismatch");
-            var success = await sender.Send(command);
-            return success ? Results.Ok() : Results.NotFound();
-        })
-        .WithName("UpdateBillingPlan")
-        .WithDescription("Updates an existing billing plan by ID (Admin only).")
-        .WithTags("Billing");
-
-        group.MapDelete("/plans/{id:guid}", async (Guid id, ISender sender) =>
-        {
-            var success = await sender.Send(new DeleteBillingPlanCommand { Id = id });
-            return success ? Results.Ok() : Results.NotFound();
-        })
-        .WithName("DeleteBillingPlan")
-        .WithDescription("Deletes a billing plan by ID (Admin only).")
-        .WithTags("Billing");
     }
 }

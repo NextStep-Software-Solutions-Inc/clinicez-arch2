@@ -4,7 +4,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Admin.Commands;
+using ClinicEz.Portal.Application.Features.Admin.Commands.RecordManualPayment;
+using ClinicEz.Portal.Application.Features.Admin.Commands.UpdateTenantOverrides;
+using ClinicEz.Portal.Application.Features.Admin.DTOs;
 using ClinicEz.Portal.Application.Features.Admin.Queries;
+using ClinicEz.Portal.Application.Features.Admin.Queries.GetTenantOverrides;
+using ClinicEz.Portal.Application.Features.Billing.Commands;
+using ClinicEz.Portal.Application.Features.Billing.Queries;
 using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Domain.Constants;
 using ClinicEz.Portal.Domain.Entities;
@@ -93,6 +99,36 @@ public class AdminEndpoints : IEndpoint
         })
         .WithName("ToggleTenantSubscription")
         .WithDescription("Toggles tenant subscription state between ACTIVE and TRIALING (SuperAdmin scope).")
+        .WithTags("Admin");
+
+        // 5c. POST /admin/tenants/{id}/record-payment
+        group.MapPost("/tenants/{id}/record-payment", async (
+            Guid id, 
+            RecordManualPaymentRequest request, 
+            HttpContext httpContext, 
+            ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ToggleSubscription, httpContext, sender)
+                        ?? await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var command = new RecordManualPaymentCommand(
+                id,
+                request.PlanSlug,
+                request.IsAnnual,
+                request.PaymentMethod,
+                request.TransactionReference,
+                request.Amount,
+                request.Notes,
+                request.PaymentDate,
+                admin.FullName
+            );
+
+            var result = await sender.Send(command);
+            return result != null ? Results.Ok(result) : Results.NotFound("Tenant or Plan not found");
+        })
+        .WithName("RecordManualPayment")
+        .WithDescription("Records a manual offline payment, generates invoice and receipt, and activates workspace subscription and licenses (SuperAdmin scope).")
         .WithTags("Admin");
 
         // 5b. POST /admin/tenants/{id}/usage
@@ -360,6 +396,93 @@ public class AdminEndpoints : IEndpoint
         .WithName("UpdateAdminSettings")
         .WithDescription("Updates platform-wide system settings and invalidates cache.")
         .WithTags("Admin");
+
+        // 20. Plan Management Endpoints (SuperAdmin scope)
+        group.MapGet("/plans", async (HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManagePlans, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await sender.Send(new GetBillingPlansQuery());
+            return Results.Ok(result);
+        })
+        .WithName("AdminGetBillingPlans")
+        .WithDescription("Retrieves all commercial billing plans with admin metrics.")
+        .WithTags("Admin");
+
+        group.MapPost("/plans", async (CreateBillingPlanCommand command, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManagePlans, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await sender.Send(command);
+            return Results.Created($"/admin/plans/{result}", new { Id = result });
+        })
+        .WithName("AdminCreateBillingPlan")
+        .WithDescription("Creates a new commercial billing plan (SuperAdmin scope).")
+        .WithTags("Admin");
+
+        group.MapPut("/plans/{id:guid}", async (Guid id, UpdateBillingPlanCommand command, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManagePlans, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            if (id != command.Id) return Results.BadRequest("Id mismatch");
+            var success = await sender.Send(command);
+            return success ? Results.Ok(new { Success = true }) : Results.NotFound();
+        })
+        .WithName("AdminUpdateBillingPlan")
+        .WithDescription("Updates an existing billing plan, bumps plan version, and cascades license re-issuance (SuperAdmin scope).")
+        .WithTags("Admin");
+
+        group.MapDelete("/plans/{id:guid}", async (Guid id, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManagePlans, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var success = await sender.Send(new DeleteBillingPlanCommand { Id = id });
+            return success ? Results.Ok(new { Success = true }) : Results.NotFound();
+        })
+        .WithName("AdminDeleteBillingPlan")
+        .WithDescription("Deletes an unused billing plan by ID (SuperAdmin scope).")
+        .WithTags("Admin");
+
+        // 21. Tenant Entitlement Overrides Endpoints (SuperAdmin scope)
+        group.MapGet("/tenants/{id:guid}/overrides", async (Guid id, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await sender.Send(new GetTenantOverridesQuery(id));
+            return result != null ? Results.Ok(result) : Results.NotFound("Tenant not found");
+        })
+        .WithName("GetTenantOverrides")
+        .WithDescription("Retrieves custom per-workspace entitlement overrides and effective limits/features.")
+        .WithTags("Admin");
+
+        group.MapPut("/tenants/{id:guid}/overrides", async (
+            Guid id,
+            UpdateTenantOverridesRequest request,
+            HttpContext httpContext,
+            ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var command = new UpdateTenantOverridesCommand(
+                id,
+                request.Limits,
+                request.Features,
+                request.Reason,
+                admin.FullName
+            );
+
+            var result = await sender.Send(command);
+            return result != null ? Results.Ok(result) : Results.NotFound("Tenant not found");
+        })
+        .WithName("UpdateTenantOverrides")
+        .WithDescription("Updates custom per-workspace entitlement overrides, increments entitlement version, and re-stages facility licenses (SuperAdmin scope).")
+        .WithTags("Admin");
     }
 
     private static async Task<AdminMeResponse?> CheckPermissionAsync(
@@ -390,3 +513,14 @@ public record UpdateTenantUsageRequest(
     int MonthlyApiQuotaUsed, 
     int MonthlyApiQuotaLimit
 );
+
+public record RecordManualPaymentRequest(
+    string PlanSlug,
+    bool IsAnnual,
+    string PaymentMethod,
+    string? TransactionReference,
+    decimal Amount,
+    string? Notes,
+    DateTime? PaymentDate = null
+);
+

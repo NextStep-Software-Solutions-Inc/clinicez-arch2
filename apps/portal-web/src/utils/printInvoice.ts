@@ -1,6 +1,7 @@
 import { BillingInvoice, BillingInfo } from "@/services/billing.service"
 import { toast } from "sonner"
-import { siteEmails } from "@/config/site";
+import { siteEmails } from "@/config/site"
+import { lightColors } from "@clinicez/design-tokens"
 
 export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo | null) => {
   const printWindow = window.open("", "_blank")
@@ -9,171 +10,229 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
     return
   }
 
-  const planName = invoice.planSlug.toLowerCase() === "pro" ? "Professional Plan" : "Starter Plan"
+  const planName =
+    invoice.planSlug.toLowerCase() === "pro"
+      ? "Professional Plan"
+      : invoice.planSlug.toLowerCase() === "enterprise"
+      ? "Enterprise Health Plan"
+      : "Starter Plan"
   const cycleLabel = invoice.isAnnual ? "Annual" : "Monthly"
-  const coverageStart = new Date(invoice.createdAt).toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' })
-  const coverageEnd = new Date(new Date(invoice.createdAt).setMonth(new Date(invoice.createdAt).getMonth() + (invoice.isAnnual ? 12 : 1))).toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' })
+  const coverageStart = new Date(invoice.createdAt).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+  const coverageEnd = invoice.receipt?.expiryDate
+    ? new Date(invoice.receipt.expiryDate).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : new Date(
+        new Date(invoice.createdAt).setMonth(
+          new Date(invoice.createdAt).getMonth() + (invoice.isAnnual ? 12 : 1)
+        )
+      ).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
 
-  const formattedAmount = `${invoice.currency} ${invoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const formattedAmount = `${invoice.currency} ${invoice.amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+
+  const isManual =
+    invoice.xenditInvoiceId.startsWith("MANUAL-") ||
+    [
+      "Bank Transfer",
+      "GCash/Maya",
+      "Check",
+      "Cash",
+      "Promotional",
+    ].includes(invoice.receipt?.paymentMethod ?? "")
+
+  const supportEmail = siteEmails.billing || "billing@clinicez.ph"
 
   printWindow.document.write(`
+    <!DOCTYPE html>
     <html>
       <head>
+        <meta charset="utf-8" />
         <title>Invoice_${invoice.invoiceNumber}</title>
         <style>
+          * { box-sizing: border-box; }
           body {
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            color: #1e293b;
+            color: ${lightColors.text};
+            background-color: ${lightColors.surface};
             margin: 0;
-            padding: 40px;
+            padding: 32px;
             line-height: 1.5;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .container {
-            max-width: 800px;
+            max-width: 820px;
             margin: 0 auto;
-            border: 1px solid #e2e8f0;
+            border: 1px solid ${lightColors.border};
             border-radius: 16px;
-            padding: 40px;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            padding: 36px;
+            background-color: ${lightColors.surface};
           }
           .header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            border-bottom: 2px solid #f1f5f9;
-            padding-bottom: 24px;
-            margin-bottom: 32px;
+            border-bottom: 2px solid ${lightColors.borderLight};
+            padding-bottom: 20px;
+            margin-bottom: 28px;
           }
           .logo {
             font-size: 24px;
             font-weight: 800;
-            color: #2563eb;
+            color: ${lightColors.primary};
             display: flex;
             align-items: center;
             gap: 8px;
+            letter-spacing: -0.5px;
           }
-          .receipt-title {
+          .company-info {
+            margin: 6px 0 0 0;
+            font-size: 11px;
+            color: ${lightColors.textSecondary};
+            line-height: 1.4;
+          }
+          .invoice-title {
             text-align: right;
           }
-          .receipt-title h1 {
+          .invoice-title h1 {
             margin: 0;
-            font-size: 28px;
+            font-size: 26px;
             font-weight: 900;
-            color: #0f172a;
+            color: ${lightColors.text};
             text-transform: uppercase;
             letter-spacing: 1px;
           }
-          .receipt-title p {
+          .invoice-title .doc-number {
             margin: 4px 0 0 0;
+            font-family: monospace;
             font-size: 14px;
-            color: #64748b;
+            font-weight: 700;
+            color: ${lightColors.primary};
           }
           .details-grid {
             display: grid;
-            grid-template-cols: 1fr 1fr;
-            gap: 32px;
-            margin-bottom: 40px;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+            margin-bottom: 32px;
           }
           .details-block h3 {
-            margin: 0 0 12px 0;
-            font-size: 12px;
-            font-weight: 700;
+            margin: 0 0 8px 0;
+            font-size: 11px;
+            font-weight: 800;
             text-transform: uppercase;
-            color: #64748b;
-            letter-spacing: 0.5px;
+            color: ${lightColors.textMuted};
+            letter-spacing: 0.8px;
           }
           .details-block p {
-            margin: 4px 0;
-            font-size: 14px;
+            margin: 3px 0;
+            font-size: 13px;
+            color: ${lightColors.text};
           }
           .details-block .name {
             font-weight: 700;
-            font-size: 16px;
-            color: #0f172a;
+            font-size: 15px;
+            color: ${lightColors.text};
+          }
+          .details-block .meta-label {
+            color: ${lightColors.textMuted};
+            font-size: 12px;
+          }
+          .status-badge {
+            display: inline-block;
+            font-weight: 800;
+            font-size: 12px;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            margin-bottom: 8px;
+          }
+          .status-paid {
+            background-color: ${lightColors.successBg};
+            color: ${lightColors.successText};
+            border: 1px solid ${lightColors.successBorder};
+          }
+          .status-issued {
+            background-color: ${lightColors.infoBg};
+            color: ${lightColors.infoText};
+            border: 1px solid ${lightColors.infoBorder};
           }
           .table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 40px;
+            margin-bottom: 28px;
           }
           .table th {
-            background-color: #f8fafc;
-            color: #64748b;
-            font-size: 12px;
-            font-weight: 700;
+            background-color: ${lightColors.surfaceMuted};
+            color: ${lightColors.textMuted};
+            font-size: 11px;
+            font-weight: 800;
             text-transform: uppercase;
-            padding: 14px;
-            border-bottom: 1px solid #e2e8f0;
+            letter-spacing: 0.5px;
+            padding: 12px 14px;
+            border-bottom: 1px solid ${lightColors.border};
             text-align: left;
           }
           .table td {
-            padding: 16px 14px;
-            border-bottom: 1px solid #f1f5f9;
-            font-size: 14px;
+            padding: 14px;
+            border-bottom: 1px solid ${lightColors.borderLight};
+            font-size: 13px;
           }
-          .table td.right {
-            text-align: right;
-          }
-          .table th.right {
+          .table td.right, .table th.right {
             text-align: right;
           }
           .totals-block {
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            margin-top: 24px;
+            margin-top: 20px;
           }
           .total-row {
             display: flex;
-            width: 300px;
+            width: 320px;
             justify-content: space-between;
-            padding: 8px 0;
-            font-size: 14px;
+            padding: 6px 0;
+            font-size: 13px;
+            color: ${lightColors.textSecondary};
           }
           .total-row.grand-total {
-            border-top: 2px solid #e2e8f0;
-            padding-top: 16px;
-            margin-top: 8px;
-            font-size: 20px;
+            border-top: 2px solid ${lightColors.border};
+            padding-top: 12px;
+            margin-top: 6px;
+            font-size: 18px;
             font-weight: 800;
-            color: #0f172a;
+            color: ${lightColors.text};
+          }
+          .payment-meta-box {
+            margin-top: 24px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background-color: ${lightColors.surfaceMuted};
+            border: 1px solid ${lightColors.border};
+            font-size: 12px;
+          }
+          .payment-meta-box strong {
+            color: ${lightColors.text};
           }
           .footer {
-            margin-top: 60px;
-            border-top: 1px solid #e2e8f0;
-            padding-top: 24px;
+            margin-top: 40px;
+            border-top: 1px solid ${lightColors.borderLight};
+            padding-top: 20px;
             text-align: center;
-            font-size: 12px;
-            color: #94a3b8;
-          }
-          .status-stamp {
-            display: inline-block;
-            border: 3px solid #3b82f6;
-            color: #3b82f6;
-            font-weight: 800;
-            font-size: 14px;
-            text-transform: uppercase;
-            padding: 6px 12px;
-            border-radius: 6px;
-            margin-bottom: 16px;
-            transform: rotate(-5deg);
-          }
-          .paid-stamp {
-            display: inline-block;
-            border: 3px solid #10b981;
-            color: #10b981;
-            font-weight: 800;
-            font-size: 14px;
-            text-transform: uppercase;
-            padding: 6px 12px;
-            border-radius: 6px;
-            margin-bottom: 16px;
-            transform: rotate(-5deg);
+            font-size: 11px;
+            color: ${lightColors.textMuted};
           }
           @media print {
-            body { padding: 0; }
-            .container { border: none; box-shadow: none; padding: 0; }
-            .no-print { display: none; }
+            body { padding: 0; background: none; }
+            .container { border: none; box-shadow: none; padding: 16px; max-width: 100%; }
           }
         </style>
       </head>
@@ -182,56 +241,77 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
           <div class="header">
             <div>
               <div class="logo">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: #2563eb; margin-right: 8px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                 Clinic EZ
               </div>
-              <p style="margin: 8px 0 0 0; font-size: 12px; color: #64748b;">NextStep Software Corporation<br/>Pasig City, Metro Manila, Philippines</p>
+              <div class="company-info">
+                <strong>ClinicEZ Digital Health Inc.</strong><br/>
+                BIR Registered TIN: 009-876-543-000 VAT Registered<br/>
+                Unit 1402, BGC Corporate Center, 11th Avenue, Bonifacio Global City<br/>
+                Taguig City, Metro Manila, Philippines 1634<br/>
+                Billing Support: ${supportEmail}
+              </div>
             </div>
-            <div class="receipt-title">
-              ${invoice.status === "Paid" 
-                ? '<div class="paid-stamp">PAID</div>' 
-                : '<div class="status-stamp">ISSUED</div>'
-              }
+            <div class="invoice-title">
+              <div>
+                ${
+                  invoice.status === "Paid"
+                    ? '<span class="status-badge status-paid">PAID</span>'
+                    : '<span class="status-badge status-issued">ISSUED</span>'
+                }
+              </div>
               <h1>INVOICE</h1>
-              <p>No: ${invoice.invoiceNumber}</p>
+              <div class="doc-number">${invoice.invoiceNumber}</div>
             </div>
           </div>
 
           <div class="details-grid">
             <div class="details-block">
               <h3>Billed To:</h3>
-              <p class="name">${billingInfo?.clinicName || "Clinic Owner"}</p>
-              ${billingInfo?.tradingName ? `<p>Trading Name: ${billingInfo.tradingName}</p>` : ""}
-              ${billingInfo?.taxId ? `<p>TIN/Tax ID: ${billingInfo.taxId}</p>` : ""}
-              <p>${billingInfo?.streetLine1 || ""}${billingInfo?.streetLine2 ? ", " + billingInfo.streetLine2 : ""}</p>
-              <p>${billingInfo?.city || ""}, ${billingInfo?.province || ""} ${billingInfo?.postalCode || ""}</p>
-              <p>${billingInfo?.country || ""}</p>
+              <p class="name">${billingInfo?.clinicName || "Clinic Subscriber"}</p>
+              ${billingInfo?.tradingName ? `<p><span class="meta-label">Trading Name:</span> ${billingInfo.tradingName}</p>` : ""}
+              <p><span class="meta-label">TIN / Tax ID:</span> ${billingInfo?.taxId || "000-000-000-000"}</p>
+              <p>${[
+                billingInfo?.streetLine1,
+                billingInfo?.streetLine2,
+                billingInfo?.city,
+                billingInfo?.province,
+                billingInfo?.postalCode,
+                billingInfo?.country || "Philippines"
+              ].filter(Boolean).join(", ")}</p>
             </div>
             <div class="details-block" style="text-align: right;">
-              <h3>Invoice Info:</h3>
-              <p><strong>Invoice Date:</strong> ${new Date(invoice.createdAt).toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-              <p><strong>Xendit Invoice ID:</strong> ${invoice.xenditInvoiceId}</p>
-              <p><strong>Status:</strong> ${invoice.status === "Paid" ? "Paid (Reference: " + (invoice.receipt?.receiptNumber ?? "N/A") + ")" : "Issued (Pending Payment)"}</p>
+              <h3>Invoice Details:</h3>
+              <p><span class="meta-label">Invoice Date:</span> ${new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
+              <p><span class="meta-label">Billing Cycle:</span> ${cycleLabel}</p>
+              <p><span class="meta-label">Coverage Period:</span> ${coverageStart} &ndash; ${coverageEnd}</p>
+              <p><span class="meta-label">Payment Status:</span> <strong>${invoice.status}</strong></p>
+              ${
+                invoice.receipt?.receiptNumber
+                  ? `<p><span class="meta-label">Official Receipt No:</span> <strong>${invoice.receipt.receiptNumber}</strong></p>`
+                  : ""
+              }
             </div>
           </div>
 
           <table class="table">
             <thead>
               <tr>
-                <th>Description</th>
-                <th>Billing Cycle</th>
+                <th>Description / Service</th>
+                <th>Cycle</th>
                 <th>Coverage Period</th>
-                <th class="right">Total</th>
+                <th class="right">Amount (PHP)</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>
-                  <strong>${planName} Subscription</strong><br/>
-                  <span style="font-size: 12px; color: #64748b;">Full access to Clinic EZ ${planName} features.</span>
+                  <strong>ClinicEZ Workspace License &ndash; ${planName}</strong><br/>
+                  <span style="font-size: 11px; color: ${lightColors.textMuted};">
+                    Full access to clinical EMR, doctor rostering, queuing, PhilHealth Konsulta integration, and licensed facilities.
+                  </span>
                 </td>
                 <td>${cycleLabel}</td>
-                <td>${coverageStart} - ${coverageEnd}</td>
+                <td>${coverageStart} &ndash; ${coverageEnd}</td>
                 <td class="right">${formattedAmount}</td>
               </tr>
             </tbody>
@@ -239,22 +319,53 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
 
           <div class="totals-block">
             <div class="total-row">
-              <span style="color: #64748b;">Subtotal</span>
+              <span>Subtotal</span>
               <span>${formattedAmount}</span>
             </div>
             <div class="total-row">
-              <span style="color: #64748b;">Tax / VAT (0%)</span>
+              <span>Value-Added Tax (0% / VAT-Exempt)</span>
               <span>PHP 0.00</span>
             </div>
             <div class="total-row grand-total">
-              <span>Amount Due</span>
+              <span>${invoice.status === "Paid" ? "Total Amount Paid" : "Total Amount Due"}</span>
               <span>${formattedAmount}</span>
             </div>
           </div>
 
+          ${
+            invoice.status === "Paid" && invoice.receipt
+              ? `
+              <div class="payment-meta-box">
+                <div style="font-weight: 700; margin-bottom: 4px; color: ${lightColors.primary};">
+                  Payment Verification Details
+                </div>
+                <div><strong>Payment Method:</strong> ${invoice.receipt.paymentMethod}</div>
+                ${
+                  invoice.receipt.transactionReference
+                    ? `<div><strong>Transaction Reference:</strong> ${invoice.receipt.transactionReference}</div>`
+                    : ""
+                }
+                <div><strong>Payment Date:</strong> ${new Date(invoice.receipt.paidAt).toLocaleString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                ${
+                  invoice.receipt.notes
+                    ? `<div style="margin-top: 4px;"><strong>Admin Memo:</strong> ${invoice.receipt.notes}</div>`
+                    : ""
+                }
+              </div>
+              `
+              : !isManual && !invoice.xenditInvoiceId.startsWith("recy_")
+              ? `
+              <div class="payment-meta-box">
+                <div><strong>Automated Payment Gateway:</strong> Xendit Payments Network</div>
+                <div><strong>Reference:</strong> ${invoice.xenditInvoiceId}</div>
+              </div>
+              `
+              : ""
+          }
+
           <div class="footer">
-            <p>Thank you for subscribing to Clinic EZ!${siteEmails.billing ? ` For billing support, email ${siteEmails.billing}.` : ""}</p>
-            <p style="margin-top: 8px;">&copy; ${new Date().getFullYear()} NextStep Software Corporation. All rights reserved.</p>
+            <p>Thank you for choosing ClinicEZ to power your healthcare facility operations. For billing assistance, contact ${supportEmail}.</p>
+            <p style="margin-top: 4px;">&copy; ${new Date().getFullYear()} ClinicEZ Digital Health Inc. All rights reserved.</p>
           </div>
         </div>
         <script>
