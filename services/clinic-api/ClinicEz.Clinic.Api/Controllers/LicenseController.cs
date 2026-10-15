@@ -25,7 +25,9 @@ public record FacilityLicenseStatusDto(
     bool IsTampered,
     string? ErrorMessage,
     string? PrimaryLogoUrl = null,
-    string? PrimaryColorHex = null);
+    string? PrimaryColorHex = null,
+    string? TenantSlug = null,
+    string? FacilitySlug = null);
 
 [ApiController]
 [Route("api/v1/clinic/license")]
@@ -233,7 +235,9 @@ public sealed class LicenseController : ControllerBase
             validation.IsTampered,
             validation.ErrorMessage,
             settings?.PrimaryLogoUrl,
-            settings?.PrimaryColorHex);
+            settings?.PrimaryColorHex,
+            settings?.TenantSlug ?? validation.Payload?.TenantSlug ?? lookupInfo?.Slug,
+            settings?.FacilitySlug ?? lookupInfo?.FacilitySlug);
 
         return Ok(ApiResponse<FacilityLicenseStatusDto>.Success(dto));
     }
@@ -403,7 +407,9 @@ public sealed class LicenseController : ControllerBase
             validation.IsTampered,
             validation.ErrorMessage,
             settings.PrimaryLogoUrl,
-            settings.PrimaryColorHex);
+            settings.PrimaryColorHex,
+            settings.TenantSlug ?? payload?.TenantSlug,
+            settings.FacilitySlug ?? facilitySlug);
 
         return Ok(ApiResponse<FacilityLicenseStatusDto>.Success(dto, "Facility license successfully applied and verified."));
     }

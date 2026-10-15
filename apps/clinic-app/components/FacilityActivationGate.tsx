@@ -136,7 +136,11 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
           setError(err.message || 'Unable to communicate with clinic service.');
         }
       } else if (res) {
-        if (res.clinicId) {
+        const resolvedSlug = res.tenantSlug || res.facilitySlug;
+        if (resolvedSlug && !currentWorkspace) {
+          setActiveTenantContext(resolvedSlug, String(res.clinicId));
+          setActiveWorkspace(resolvedSlug);
+        } else if (res.clinicId) {
           setActiveClinicId(String(res.clinicId), currentWorkspace ?? undefined);
         }
         if (res.primaryLogoUrl) {
@@ -144,7 +148,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         } else if (res.primaryLogoUrl === null) {
           setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
         }
-        cacheLicense(res, currentWorkspace);
+        cacheLicense(res, currentWorkspace || resolvedSlug);
         setLicense(res);
       }
     } catch (e: any) {
@@ -219,7 +223,11 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       if (err) {
         setSubmitError(err.message || 'License verification failed.');
       } else if (res) {
-        if (res.clinicId) {
+        const resolvedSlug = res.tenantSlug || res.facilitySlug;
+        if (resolvedSlug) {
+          setActiveTenantContext(resolvedSlug, String(res.clinicId));
+          setActiveWorkspace(resolvedSlug);
+        } else if (res.clinicId) {
           setActiveClinicId(String(res.clinicId), activeWorkspace || undefined);
         }
         if (res.primaryLogoUrl) {
@@ -227,7 +235,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         } else if (res.primaryLogoUrl === null) {
           setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
         }
-        cacheLicense(res, activeWorkspace);
+        cacheLicense(res, activeWorkspace || resolvedSlug);
         setLicense(res);
         setTokenInput('');
         setModalVisible(false);

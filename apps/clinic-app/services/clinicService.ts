@@ -171,6 +171,8 @@ export interface FacilityLicenseStatus {
   errorMessage?: string;
   primaryLogoUrl?: string | null;
   primaryColorHex?: string | null;
+  tenantSlug?: string | null;
+  facilitySlug?: string | null;
 }
 
 export interface PatientQueueItem {

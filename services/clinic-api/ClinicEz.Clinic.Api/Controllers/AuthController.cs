@@ -32,8 +32,11 @@ public sealed class AuthController : ControllerBase
     private string? TenantHeader =>
         Request.Headers.TryGetValue("X-Tenant-Id", out var v) && !string.IsNullOrWhiteSpace(v) ? v.ToString().Trim() : null;
 
+    private string? ClinicIdHeader =>
+        Request.Headers.TryGetValue("X-Clinic-Id", out var c) && !string.IsNullOrWhiteSpace(c) ? c.ToString().Trim() : null;
+
     private string? WorkspaceHeader =>
-        FacilityHeader ?? TenantHeader;
+        FacilityHeader ?? TenantHeader ?? ClinicIdHeader;
 
     [HttpGet("status")]
     [AllowAnonymous]
