@@ -54,7 +54,7 @@ export default function WorkstationSidebar({
   mode = 'open',
   onToggleMode,
 }: WorkstationSidebarProps) {
-  const { facilityName, planTier, clinicLogo } = useClinic();
+  const { facilityName, planTier, clinicLogo, primaryColorHex } = useClinic();
   const { user, can } = useAuth();
 
   const isIconMode = mode === 'icon' || width === theme.sizes.sidebarCollapsedWidth;
@@ -127,6 +127,7 @@ export default function WorkstationSidebar({
           accessibilityLabel={isIconMode ? 'Expand sidebar' : `${displayName} logo`}
           style={(state: InteractionState) => [
             styles.logoBadge,
+            { backgroundColor: primaryColorHex || theme.colors.primary },
             isIconMode && styles.logoBadgeClickable,
             isIconMode && state.hovered && styles.logoBadgeHover,
             isIconMode && state.pressed && styles.logoBadgePressed,
@@ -209,9 +210,11 @@ export default function WorkstationSidebar({
                   <Icon
                     name={item.icon}
                     size={theme.sizes.iconMd}
-                    color={isActive ? theme.colors.primary : theme.colors.textMuted}
+                    color={isActive ? (primaryColorHex || theme.colors.primary) : theme.colors.textMuted}
                   />
-                  {item.badge ? <View style={styles.badgeDot} /> : null}
+                  {item.badge ? (
+                    <View style={[styles.badgeDot, { backgroundColor: primaryColorHex || theme.colors.primary }]} />
+                  ) : null}
                 </View>
               </Pressable>
             );
@@ -233,11 +236,11 @@ export default function WorkstationSidebar({
               <Icon
                 name={item.icon}
                 size={theme.sizes.iconMd}
-                color={isActive ? theme.colors.primary : theme.colors.textMuted}
+                color={isActive ? (primaryColorHex || theme.colors.primary) : theme.colors.textMuted}
               />
               <ThemedText
                 variant={isActive ? 'bodyBold' : 'body'}
-                color={isActive ? theme.colors.primary : theme.colors.textSecondary}
+                color={isActive ? (primaryColorHex || theme.colors.primary) : theme.colors.textSecondary}
                 style={styles.navLabel}
               >
                 {item.label}

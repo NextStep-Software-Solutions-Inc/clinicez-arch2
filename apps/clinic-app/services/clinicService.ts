@@ -1679,6 +1679,21 @@ export interface ClinicSettingsRecord {
   primaryColorHex?: string;
 }
 
+export interface WorkspaceProfile {
+  tenantSlug: string;
+  version?: number;
+  displayName: string;
+  logoUrl?: string | null;
+  accentColorHex?: string | null;
+  timeZoneId?: string;
+  locale?: string;
+  dateFormat?: string;
+  currencyCode?: string;
+  dpoName?: string | null;
+  dpoEmail?: string | null;
+  privacyNoticeUrl?: string | null;
+}
+
 export interface ReconcileEodResult {
   reconciledCount: number;
   reconciliationDate: string;
@@ -2729,6 +2744,10 @@ export const clinicService = {
 
   async updateSettings(payload: Partial<ClinicSettingsRecord>) {
     return clinicApiClient.put<ClinicSettingsRecord>('/settings', payload);
+  },
+
+  async getWorkspaceProfile() {
+    return clinicApiClient.get<WorkspaceProfile>('/settings/workspace-profile');
   },
 
   getReceptionPlacardPdfUrl(params?: { qrUrl?: string; joinCode?: string; expiresAt?: string }) {

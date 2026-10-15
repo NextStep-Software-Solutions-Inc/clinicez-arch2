@@ -26,6 +26,7 @@ import { useClinic } from '../../context/ClinicContext';
 import { pickClinicLogo } from '../../utils/logoUploader';
 import { Alert, notify } from '../../utils/feedback';
 import LogoCropModal from './LogoCropModal';
+import ColorBrandingSection from './ColorBrandingSection';
 
 interface GeneralSettingsTabProps {
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
@@ -247,8 +248,8 @@ export default function GeneralSettingsTab({
       {/* Clinic Branding & Logo */}
       <Card>
         <CardHeader
-          title="Clinic Branding & Logo"
-          subtitle="Customize your clinic's logo displayed in the navigation sidebar, workstation header, and official documents"
+          title="Clinic Branding & Visual Identity"
+          subtitle="Customize your clinic's logo and color palette across navigation, workstation headers, and official documents"
         />
         <CardContent>
           <View style={styles.brandingRow}>
@@ -295,6 +296,11 @@ export default function GeneralSettingsTab({
               </View>
             </View>
           </View>
+
+          <View style={styles.brandingDivider} />
+
+          {/* Color Branding (Portal Workspace Auto-Inheritance & Clinic Override) */}
+          <ColorBrandingSection onSaved={() => onSettingsUpdated?.(settings!)} />
         </CardContent>
       </Card>
 
@@ -661,5 +667,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     marginTop: theme.spacing.sm,
+  },
+  brandingDivider: {
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+    marginVertical: theme.spacing.lg,
   },
 });

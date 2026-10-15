@@ -117,7 +117,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.LetterheadFooter != null)
             settings.LetterheadFooter = string.IsNullOrWhiteSpace(request.LetterheadFooter) ? null : request.LetterheadFooter.Trim();
 
-        if (!string.IsNullOrWhiteSpace(request.PrimaryColorHex))
+        if (request.PrimaryColorHex != null)
             settings.PrimaryColorHex = request.PrimaryColorHex.Trim();
 
         if (request.PrimaryLogoUrl != null)
