@@ -25,6 +25,7 @@ import { ClinicRoomsSettingsCard } from './ClinicRoomsSettingsCard';
 import { useClinic } from '../../context/ClinicContext';
 import { pickClinicLogo } from '../../utils/logoUploader';
 import { Alert, notify } from '../../utils/feedback';
+import LogoCropModal from './LogoCropModal';
 
 interface GeneralSettingsTabProps {
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
@@ -89,6 +90,8 @@ export default function GeneralSettingsTab({
 }: GeneralSettingsTabProps) {
   const { clinicLogo, setClinicLogo } = useClinic();
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [cropModalVisible, setCropModalVisible] = useState(false);
+  const [pendingLogoUri, setPendingLogoUri] = useState<string | null>(null);
 
   const handlePickLogo = async () => {
     setUploadingLogo(true);
@@ -104,17 +107,31 @@ export default function GeneralSettingsTab({
         return;
       }
       if (res.dataUri) {
-        const success = await setClinicLogo(res.dataUri);
-        if (success) {
-          notify.success('Clinic logo updated and saved to database.');
-        } else {
-          Alert.alert('Logo saved locally', 'Logo updated on device, but could not sync to server database.');
-        }
+        setPendingLogoUri(res.dataUri);
+        setCropModalVisible(true);
       }
     } catch (err: any) {
       Alert.alert('Upload error', err?.message || 'Failed to select image.');
     } finally {
       setUploadingLogo(false);
+    }
+  };
+
+  const handleConfirmCroppedLogo = async (croppedUri: string) => {
+    setCropModalVisible(false);
+    setUploadingLogo(true);
+    try {
+      const success = await setClinicLogo(croppedUri);
+      if (success) {
+        notify.success('Clinic logo updated and saved to database.');
+      } else {
+        Alert.alert('Logo saved locally', 'Logo updated on device, but could not sync to server database.');
+      }
+    } catch (err: any) {
+      Alert.alert('Save error', err?.message || 'Failed to save logo.');
+    } finally {
+      setUploadingLogo(false);
+      setPendingLogoUri(null);
     }
   };
 
@@ -477,6 +494,17 @@ export default function GeneralSettingsTab({
 
       {/* Edge & Server Connectivity */}
       <EdgeServerSwitcherSection />
+
+      {/* Clinic Logo Zoom & Crop Modal */}
+      <LogoCropModal
+        visible={cropModalVisible}
+        imageUri={pendingLogoUri}
+        onClose={() => {
+          setCropModalVisible(false);
+          setPendingLogoUri(null);
+        }}
+        onConfirm={handleConfirmCroppedLogo}
+      />
     </View>
   );
 }
