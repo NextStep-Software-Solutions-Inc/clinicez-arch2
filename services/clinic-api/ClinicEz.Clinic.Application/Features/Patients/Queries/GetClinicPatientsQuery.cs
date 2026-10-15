@@ -17,6 +17,7 @@ public sealed record GetClinicPatientsQuery(
     string? SearchTerm = null,
     bool? HasAlerts = null,
     string? VerificationStatus = null,
+    string? FilterMode = null,
     int PageNumber = 1,
     int PageSize = 50) : IRequest<IReadOnlyList<ClinicPatientDto>>;
 
@@ -46,11 +47,20 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
                 (p.PwdId != null && p.PwdId.Contains(term)));
         }
 
-        if (request.HasAlerts == true)
+        if (request.HasAlerts == true || string.Equals(request.FilterMode, "ALERTS", StringComparison.OrdinalIgnoreCase))
         {
             query = query.Where(p =>
                 !string.IsNullOrWhiteSpace(p.Alerts) ||
                 !string.IsNullOrWhiteSpace(p.Allergies));
+        }
+
+        if (string.Equals(request.FilterMode, "SENIOR_PWD", StringComparison.OrdinalIgnoreCase))
+        {
+            var seniorCutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-60));
+            query = query.Where(p =>
+                !string.IsNullOrWhiteSpace(p.SeniorCitizenId) ||
+                !string.IsNullOrWhiteSpace(p.PwdId) ||
+                p.DateOfBirth <= seniorCutoff);
         }
 
         if (!string.IsNullOrWhiteSpace(request.VerificationStatus))

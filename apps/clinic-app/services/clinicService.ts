@@ -2493,10 +2493,17 @@ export const clinicService = {
   },
 
   // Patients Directory & Master Patient Index
-  async getPatients(search?: string, hasAlerts?: boolean, page: number = 1, pageSize: number = 50) {
+  async getPatients(
+    search?: string,
+    hasAlerts?: boolean,
+    page: number = 1,
+    pageSize: number = 50,
+    filterMode?: string
+  ) {
     const params = new URLSearchParams();
     if (search) params.append('search', search);
     if (typeof hasAlerts === 'boolean') params.append('hasAlerts', String(hasAlerts));
+    if (filterMode) params.append('filterMode', filterMode);
     params.append('page', String(page));
     params.append('pageSize', String(pageSize));
     const qs = params.toString();

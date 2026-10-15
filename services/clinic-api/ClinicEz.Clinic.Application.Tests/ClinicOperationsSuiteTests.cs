@@ -101,6 +101,141 @@ public class ClinicOperationsSuiteTests
     }
 
     [Fact]
+    public async Task SearchPatients_FilterModeAndPaging_ShouldFilterCorrectly()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var regHandler = new RegisterClinicPatientCommandHandler(repo, uow, _clinicContext);
+        var searchHandler = new GetClinicPatientsQueryHandler(repo);
+
+        // Patient 1: Regular adult, no alerts, no senior/pwd
+        await regHandler.Handle(new RegisterClinicPatientCommand(
+            FirstName: "Carlos",
+            LastName: "Tan",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(1995, 3, 10),
+            Gender: "Male",
+            CivilStatus: null,
+            ContactNumber: "09181111111",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null), CancellationToken.None);
+
+        // Patient 2: Young adult with allergy alert
+        await regHandler.Handle(new RegisterClinicPatientCommand(
+            FirstName: "Bea",
+            LastName: "Alonzo",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(1998, 8, 12),
+            Gender: "Female",
+            CivilStatus: null,
+            ContactNumber: "09182222222",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: null,
+            BloodType: null,
+            Allergies: "Penicillin",
+            ChronicConditions: null,
+            Alerts: "Severe allergy"), CancellationToken.None);
+
+        // Patient 3: Senior Citizen (>60 yrs old and SeniorCitizenId)
+        await regHandler.Handle(new RegisterClinicPatientCommand(
+            FirstName: "Danilo",
+            LastName: "Santos",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(1955, 1, 1),
+            Gender: "Male",
+            CivilStatus: null,
+            ContactNumber: "09183333333",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: "OSCA-98765",
+            PwdId: null,
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null), CancellationToken.None);
+
+        // Patient 4: PWD patient
+        await regHandler.Handle(new RegisterClinicPatientCommand(
+            FirstName: "Eduardo",
+            LastName: "Villar",
+            MiddleName: null,
+            Suffix: null,
+            DateOfBirth: new DateOnly(2000, 4, 15),
+            Gender: "Male",
+            CivilStatus: null,
+            ContactNumber: "09184444444",
+            Email: null,
+            AddressLine: null,
+            Barangay: null,
+            City: null,
+            Province: null,
+            EmergencyContactName: null,
+            EmergencyContactPhone: null,
+            EmergencyContactRelationship: null,
+            PhilHealthNumber: null,
+            SeniorCitizenId: null,
+            PwdId: "PWD-44556",
+            BloodType: null,
+            Allergies: null,
+            ChronicConditions: null,
+            Alerts: null), CancellationToken.None);
+
+        // Test FilterMode = ALERTS
+        var alertsResult = await searchHandler.Handle(new GetClinicPatientsQuery(FilterMode: "ALERTS"), CancellationToken.None);
+        alertsResult.Should().HaveCount(1);
+        alertsResult[0].LastName.Should().Be("Alonzo");
+
+        // Test FilterMode = SENIOR_PWD
+        var seniorPwdResult = await searchHandler.Handle(new GetClinicPatientsQuery(FilterMode: "SENIOR_PWD"), CancellationToken.None);
+        seniorPwdResult.Should().HaveCount(2);
+        seniorPwdResult.Select(p => p.LastName).Should().Contain(new[] { "Santos", "Villar" });
+
+        // Test Pagination: PageSize = 2, PageNumber = 1
+        var page1 = await searchHandler.Handle(new GetClinicPatientsQuery(PageNumber: 1, PageSize: 2), CancellationToken.None);
+        page1.Should().HaveCount(2);
+
+        // PageSize = 2, PageNumber = 2
+        var page2 = await searchHandler.Handle(new GetClinicPatientsQuery(PageNumber: 2, PageSize: 2), CancellationToken.None);
+        page2.Should().HaveCount(2);
+
+        // Ensure page 1 and page 2 do not overlap
+        var page1Ids = page1.Select(p => p.Id).ToHashSet();
+        page2.All(p => !page1Ids.Contains(p.Id)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Appointments_CreateRescheduleAndCancel_ShouldTransitionCorrectly()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);

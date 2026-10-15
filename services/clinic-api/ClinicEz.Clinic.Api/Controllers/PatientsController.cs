@@ -30,11 +30,12 @@ public sealed class PatientsController : ControllerBase
         [FromQuery] string? search,
         [FromQuery] bool? hasAlerts,
         [FromQuery] string? verificationStatus,
+        [FromQuery] string? filterMode,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetClinicPatientsQuery(search, hasAlerts, verificationStatus, page, pageSize), ct);
+        var result = await _sender.Send(new GetClinicPatientsQuery(search, hasAlerts, verificationStatus, filterMode, page, pageSize), ct);
         return Ok(ApiResponse<IReadOnlyList<ClinicPatientDto>>.Success(result));
     }
 

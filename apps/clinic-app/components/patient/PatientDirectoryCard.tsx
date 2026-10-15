@@ -164,7 +164,7 @@ export function PatientDirectoryTableHeader() {
   );
 }
 
-export default function PatientDirectoryCard({
+function PatientDirectoryCard({
   patient,
   mode = 'card',
   isDesktopGrid = false,
@@ -715,3 +715,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
   },
 });
+
+export default React.memo(PatientDirectoryCard);

@@ -6,6 +6,8 @@ import {
   RefreshControl,
   Pressable,
   ActivityIndicator,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from 'react-native';
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
@@ -352,19 +354,87 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [offlinePendingCount, setOfflinePendingCount] = useState(offlineSyncService.getPendingCount());
   const [offlineFailedCount, setOfflineFailedCount] = useState(offlineSyncService.getFailedCount());
   const [syncingOffline, setSyncingOffline] = useState(false);
-  const [pageSize, setPageSize] = useState<number>(50);
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const isLoadingMoreRef = useRef<boolean>(false);
 
-  const fetchPatients = useCallback(async (termOverride?: string, sizeOverride?: number) => {
+  const fetchPatients = useCallback(async (termOverride?: string, filterOverride?: PatientFilter) => {
     const activeSearch = termOverride !== undefined ? termOverride : debouncedSearchTerm;
-    const activeSize = sizeOverride !== undefined ? sizeOverride : pageSize;
-    const [data, err] = await clinicService.getPatients(activeSearch || undefined, undefined, 1, activeSize);
+    const activeFilter = filterOverride !== undefined ? filterOverride : filterMode;
+    const hasAlertsFilter = activeFilter === 'ALERTS' ? true : undefined;
+    const serverFilterMode = (activeFilter === 'ALERTS' || activeFilter === 'SENIOR_PWD') ? activeFilter : undefined;
+
+    setPage(1);
+    const [data, err] = await clinicService.getPatients(
+      activeSearch || undefined,
+      hasAlertsFilter,
+      1,
+      PAGE_SIZE,
+      serverFilterMode
+    );
     if (err) {
       setPatientsError(err.message || 'Unable to load patients.');
       return;
     }
     setPatientsError(null);
-    setPatients(data ?? []);
-  }, [debouncedSearchTerm, pageSize]);
+    const items = data ?? [];
+    setPatients(items);
+    setHasMore(items.length === PAGE_SIZE);
+  }, [debouncedSearchTerm, filterMode]);
+
+  const loadMorePatients = useCallback(async () => {
+    if (isLoadingMoreRef.current || loadingMore || loading || !hasMore) return;
+    isLoadingMoreRef.current = true;
+    setLoadingMore(true);
+
+    const nextPage = page + 1;
+    const activeSearch = debouncedSearchTerm;
+    const hasAlertsFilter = filterMode === 'ALERTS' ? true : undefined;
+    const serverFilterMode = (filterMode === 'ALERTS' || filterMode === 'SENIOR_PWD') ? filterMode : undefined;
+
+    const [data, err] = await clinicService.getPatients(
+      activeSearch || undefined,
+      hasAlertsFilter,
+      nextPage,
+      PAGE_SIZE,
+      serverFilterMode
+    );
+
+    setLoadingMore(false);
+    isLoadingMoreRef.current = false;
+
+    if (err) {
+      return;
+    }
+
+    const newItems = data ?? [];
+    if (newItems.length > 0) {
+      setPatients((prev) => {
+        if (!prev) return newItems;
+        const existingIds = new Set(prev.map((p) => p.id));
+        const deduped = newItems.filter((p) => !existingIds.has(p.id));
+        return [...prev, ...deduped];
+      });
+      setPage(nextPage);
+    }
+
+    if (newItems.length < PAGE_SIZE) {
+      setHasMore(false);
+    }
+  }, [page, hasMore, loadingMore, loading, debouncedSearchTerm, filterMode]);
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+      const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 350;
+      if (isNearBottom && hasMore && !loadingMore && !loading) {
+        loadMorePatients();
+      }
+    },
+    [hasMore, loadingMore, loading, loadMorePatients]
+  );
 
   useEffect(() => {
     setLoading(true);
@@ -1273,6 +1343,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
+        onScroll={handleScroll}
+        scrollEventThrottle={32}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
       {/* Offline outbox sync banner */}
@@ -1352,29 +1424,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           <View style={styles.toolbarRight}>
             {patients !== null ? (
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Showing {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'}
+                {filteredPatients.length} loaded{hasMore ? ' • Scroll for more' : ''}
               </ThemedText>
             ) : null}
-            <View style={styles.pageSizeSelector}>
-              {[50, 250, 500, 1000].map((sz) => (
-                <Pressable
-                  key={sz}
-                  style={[styles.pageSizePill, pageSize === sz && styles.pageSizePillActive]}
-                  onPress={() => {
-                    setPageSize(sz);
-                    fetchPatients(undefined, sz);
-                  }}
-                  accessibilityLabel={`Load ${sz} patients`}
-                >
-                  <ThemedText
-                    variant="caption"
-                    style={pageSize === sz ? styles.pageSizeTextActive : styles.pageSizeText}
-                  >
-                    {sz}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
             <SegmentedControl<PatientDirectoryViewMode>
               value={viewMode}
               onChange={handleViewModeChange}
@@ -1464,6 +1516,32 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               onAddToQueue={handleQueueCheckIn}
             />
           ))}
+        </View>
+      )}
+
+      {/* Infinite Scroll Load More Footer */}
+      {patients && patients.length > 0 && (
+        <View style={styles.infiniteScrollFooter}>
+          {loadingMore ? (
+            <View style={styles.loadingMoreRow}>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+              <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                Loading more patients (50 at a time)...
+              </ThemedText>
+            </View>
+          ) : hasMore ? (
+            <Button
+              title="Load more patients"
+              variant="ghost"
+              size="sm"
+              icon="chevronDown"
+              onPress={loadMorePatients}
+            />
+          ) : (
+            <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.endOfListText}>
+              All {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'} loaded
+            </ThemedText>
+          )}
         </View>
       )}
 
@@ -2619,33 +2697,21 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: theme.spacing.md,
   },
-  pageSizeSelector: {
+  infiniteScrollFooter: {
+    paddingVertical: theme.spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  loadingMoreRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.radii.sm,
-    padding: 2,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-    gap: 2,
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
   },
-  pageSizePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: theme.radii.sm,
-  },
-  pageSizePillActive: {
-    backgroundColor: theme.colors.primary,
-  },
-  pageSizeText: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '600',
-    color: theme.colors.textMuted,
-  },
-  pageSizeTextActive: {
-    fontSize: theme.fontSizes.xs,
-    fontWeight: '700',
-    color: theme.colors.textInverted,
+  endOfListText: {
+    fontStyle: 'italic',
+    paddingVertical: theme.spacing.sm,
   },
   skeletonWrap: {
     padding: theme.spacing.lg,
