@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Button, Icon, Badge, ValidatedDateInput, validateDateString, Modal } from '../ui';
+import { notify } from '../../utils/feedback';
 import { useStaff } from '../../context/StaffContext';
 import { PHILHEALTH_STATUTORY_VACCINES } from './StatutoryImmunizationsTab';
 import type {
@@ -128,26 +129,34 @@ export default function AdministerVaccineModal({
 
     if (!lotBatchNumber.trim()) {
       setValidationError('Lot / Batch number is required.');
+      notify.error('Lot / Batch number is required.');
       return;
     }
 
     const expValidation = validateDateString(expirationDate, { boundaryMode: 'futureOrToday' });
     if (!expValidation.isValid) {
-      setValidationError(expValidation.errorMessage || 'Valid future expiration date required (YYYY-MM-DD).');
+      const err = expValidation.errorMessage || 'Valid future expiration date required (YYYY-MM-DD).';
+      setValidationError(err);
+      notify.error(err);
       return;
     }
 
     const seqNum = parseInt(doseSequence, 10);
     if (isNaN(seqNum) || seqNum < 1) {
       setValidationError('Dose sequence must be a positive integer (e.g. 1, 2, 3).');
+      notify.error('Dose sequence must be a positive integer (e.g. 1, 2, 3).');
       return;
     }
 
     const adminName = staffName.trim() || currentName || 'Staff Clinician';
     if (!adminName) {
       setValidationError('Administering clinician name is required.');
+      notify.error('Administering clinician name is required.');
       return;
     }
+
+    const isValidGuid = (val?: string | null) =>
+      Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
 
     setSubmitting(true);
     try {
@@ -164,7 +173,7 @@ export default function AdministerVaccineModal({
         route,
         injectionSite,
         administeredAtUtc: new Date().toISOString(),
-        administeredByStaffId: currentStaff?.id || 'staff-auto',
+        administeredByStaffId: isValidGuid(currentStaff?.id) ? currentStaff!.id : (currentStaff?.id || '00000000-0000-0000-0000-000000000000'),
         administeredByStaffName: adminName,
         administeredByPrcLicense: prcLicense.trim() || undefined,
         remarks: remarks.trim() || undefined,
@@ -174,7 +183,9 @@ export default function AdministerVaccineModal({
       onSuccess?.();
       onClose();
     } catch (err: any) {
-      setValidationError(err?.message || 'Failed to record vaccine administration.');
+      const msg = err?.message || 'Failed to record vaccine administration.';
+      setValidationError(msg);
+      notify.error(msg);
     } finally {
       setSubmitting(false);
     }

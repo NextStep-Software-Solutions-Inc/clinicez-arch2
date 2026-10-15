@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Button, Icon, Badge, ValidatedDateInput, validateDateString, Modal } from '../ui';
+import { notify } from '../../utils/feedback';
 import { PHILHEALTH_STATUTORY_VACCINES } from './StatutoryImmunizationsTab';
 import { COHORTS, VACCINE_ROUTES, INJECTION_SITES } from './AdministerVaccineModal';
 import type {
@@ -96,13 +97,16 @@ export default function HistoricalVaccineModal({
 
     const adminDateValidation = validateDateString(administeredDate, { boundaryMode: 'pastOrToday' });
     if (!adminDateValidation.isValid) {
-      setValidationError(adminDateValidation.errorMessage || 'Valid past or today administration date required (YYYY-MM-DD).');
+      const err = adminDateValidation.errorMessage || 'Valid past or today administration date required (YYYY-MM-DD).';
+      setValidationError(err);
+      notify.error(err);
       return;
     }
 
     const seqNum = parseInt(doseSequence, 10);
     if (isNaN(seqNum) || seqNum < 1) {
       setValidationError('Dose sequence must be a positive integer (e.g. 1, 2, 3).');
+      notify.error('Dose sequence must be a positive integer (e.g. 1, 2, 3).');
       return;
     }
 
@@ -126,7 +130,9 @@ export default function HistoricalVaccineModal({
       onSuccess?.();
       onClose();
     } catch (err: any) {
-      setValidationError(err?.message || 'Failed to record historical immunization.');
+      const msg = err?.message || 'Failed to record historical immunization.';
+      setValidationError(msg);
+      notify.error(msg);
     } finally {
       setSubmitting(false);
     }

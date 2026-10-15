@@ -56,7 +56,7 @@ public sealed class ImmunizationsController : ControllerBase
             Route: request.Route,
             InjectionSite: request.InjectionSite,
             AdministeredAtUtc: request.AdministeredAtUtc,
-            AdministeredByStaffId: request.AdministeredByStaffId,
+            AdministeredByStaffId: request.AdministeredByStaffId ?? Guid.Empty,
             AdministeredByStaffName: request.AdministeredByStaffName,
             AdministeredByPrcLicense: request.AdministeredByPrcLicense,
             Remarks: request.Remarks);
@@ -124,7 +124,7 @@ public sealed record AdministerVaccineRequest(
     string Route,
     string InjectionSite,
     DateTime AdministeredAtUtc,
-    Guid AdministeredByStaffId,
+    Guid? AdministeredByStaffId,
     string AdministeredByStaffName,
     string? AdministeredByPrcLicense,
     string? Remarks

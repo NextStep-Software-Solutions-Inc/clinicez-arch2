@@ -1947,6 +1947,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           const [, err] = await clinicService.administerVaccine(selectedPatient.id, payload);
           if (err) {
             notify.error(err.message || 'Could not record vaccine administration.');
+            throw new Error(err.message || 'Could not record vaccine administration.');
           } else {
             notify.success('Vaccine administration recorded.');
             handleOpenChart(selectedPatient, activeChartTab);
@@ -1957,6 +1958,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           const [, err] = await clinicService.recordHistoricalImmunization(selectedPatient.id, payload);
           if (err) {
             notify.error(err.message || 'Could not record historical immunization.');
+            throw new Error(err.message || 'Could not record historical immunization.');
           } else {
             notify.success('Historical immunization added.');
             handleOpenChart(selectedPatient, activeChartTab);
@@ -1967,6 +1969,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
           const [, err] = await clinicService.recordImmunizationAefi(selectedPatient.id, immId, payload);
           if (err) {
             notify.error(err.message || 'Could not record adverse reaction.');
+            throw new Error(err.message || 'Could not record adverse reaction.');
           } else {
             notify.success('Adverse event (AEFI) recorded.');
             handleOpenChart(selectedPatient, activeChartTab);

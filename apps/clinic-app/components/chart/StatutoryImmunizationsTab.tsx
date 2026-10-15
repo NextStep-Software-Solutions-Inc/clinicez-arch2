@@ -4,6 +4,8 @@ import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState, Button, Modal } from '../ui';
 import AdministerVaccineModal from './AdministerVaccineModal';
 import HistoricalVaccineModal from './HistoricalVaccineModal';
+import { clinicService } from '../../services/clinicService';
+import { notify } from '../../utils/feedback';
 import type {
   ClinicPatient,
   PatientDemographics,
@@ -111,16 +113,31 @@ export default function StatutoryImmunizationsTab({
     if (!targetAefiImm) return;
     setSubmittingAefi(true);
     try {
+      const aefiPayload: RecordAefiPayload = {
+        adverseReactionSeverity: aefiSeverity,
+        adverseReactionRemarks: aefiRemarks,
+        recordedAtUtc: new Date().toISOString(),
+      };
       if (onRecordAefi) {
-        await onRecordAefi(targetAefiImm.id, {
-          adverseReactionSeverity: aefiSeverity,
-          adverseReactionRemarks: aefiRemarks,
-          recordedAtUtc: new Date().toISOString(),
-        });
+        await onRecordAefi(targetAefiImm.id, aefiPayload);
+      } else {
+        const targetPatientId = patientId || patient?.id;
+        if (!targetPatientId) {
+          notify.error('No patient selected for recording adverse reaction.');
+          return;
+        }
+        const [, err] = await clinicService.recordImmunizationAefi(targetPatientId, targetAefiImm.id, aefiPayload);
+        if (err) {
+          notify.error(err.message || 'Could not record adverse reaction.');
+          return;
+        }
+        notify.success('Adverse event (AEFI) recorded.');
       }
       setAefiModalVisible(false);
       setTargetAefiImm(null);
       if (onRefreshChart) onRefreshChart();
+    } catch (err: any) {
+      notify.error(err?.message || 'Could not record adverse reaction.');
     } finally {
       setSubmittingAefi(false);
     }
@@ -442,6 +459,18 @@ export default function StatutoryImmunizationsTab({
         onAdministerVaccine={async (payload) => {
           if (onAdministerVaccine) {
             await onAdministerVaccine(payload);
+          } else {
+            const targetPatientId = patientId || patient?.id;
+            if (!targetPatientId) {
+              notify.error('No patient selected for vaccine administration.');
+              throw new Error('No patient selected for vaccine administration.');
+            }
+            const [, err] = await clinicService.administerVaccine(targetPatientId, payload);
+            if (err) {
+              notify.error(err.message || 'Could not record vaccine administration.');
+              throw new Error(err.message || 'Could not record vaccine administration.');
+            }
+            notify.success('Vaccine administration recorded.');
           }
           if (onRefreshChart) {
             onRefreshChart();
@@ -461,6 +490,18 @@ export default function StatutoryImmunizationsTab({
         onRecordHistoricalVaccine={async (payload) => {
           if (onRecordHistoricalVaccine) {
             await onRecordHistoricalVaccine(payload);
+          } else {
+            const targetPatientId = patientId || patient?.id;
+            if (!targetPatientId) {
+              notify.error('No patient selected for recording historical immunization.');
+              throw new Error('No patient selected for recording historical immunization.');
+            }
+            const [, err] = await clinicService.recordHistoricalImmunization(targetPatientId, payload);
+            if (err) {
+              notify.error(err.message || 'Could not record historical immunization.');
+              throw new Error(err.message || 'Could not record historical immunization.');
+            }
+            notify.success('Historical immunization added.');
           }
           if (onRefreshChart) {
             onRefreshChart();

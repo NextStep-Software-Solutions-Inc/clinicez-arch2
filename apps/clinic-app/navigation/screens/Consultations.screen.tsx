@@ -2034,6 +2034,54 @@ export default function ConsultationsScreen() {
           patientId={selectedPatient?.patientId}
           demographics={patientChart?.demographics}
           immunizations={patientChart?.immunizations || []}
+          onAdministerVaccine={async (payload) => {
+            const targetPatientId = selectedPatient?.patientId || patientRecord?.id;
+            if (!targetPatientId) {
+              notify.error('No patient selected for vaccine administration.');
+              throw new Error('No patient selected for vaccine administration.');
+            }
+            const [, err] = await clinicService.administerVaccine(targetPatientId, payload);
+            if (err) {
+              notify.error(err.message || 'Could not record vaccine administration.');
+              throw new Error(err.message || 'Could not record vaccine administration.');
+            }
+            notify.success('Vaccine administration recorded.');
+            if (selectedPatient) {
+              await loadPatientContext(selectedPatient);
+            }
+          }}
+          onRecordHistoricalVaccine={async (payload) => {
+            const targetPatientId = selectedPatient?.patientId || patientRecord?.id;
+            if (!targetPatientId) {
+              notify.error('No patient selected for recording historical immunization.');
+              throw new Error('No patient selected for recording historical immunization.');
+            }
+            const [, err] = await clinicService.recordHistoricalImmunization(targetPatientId, payload);
+            if (err) {
+              notify.error(err.message || 'Could not record historical immunization.');
+              throw new Error(err.message || 'Could not record historical immunization.');
+            }
+            notify.success('Historical immunization added.');
+            if (selectedPatient) {
+              await loadPatientContext(selectedPatient);
+            }
+          }}
+          onRecordAefi={async (immId, payload) => {
+            const targetPatientId = selectedPatient?.patientId || patientRecord?.id;
+            if (!targetPatientId) {
+              notify.error('No patient selected for recording adverse reaction.');
+              throw new Error('No patient selected for recording adverse reaction.');
+            }
+            const [, err] = await clinicService.recordImmunizationAefi(targetPatientId, immId, payload);
+            if (err) {
+              notify.error(err.message || 'Could not record adverse reaction.');
+              throw new Error(err.message || 'Could not record adverse reaction.');
+            }
+            notify.success('Adverse event (AEFI) recorded.');
+            if (selectedPatient) {
+              await loadPatientContext(selectedPatient);
+            }
+          }}
           onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
         />
       )}
