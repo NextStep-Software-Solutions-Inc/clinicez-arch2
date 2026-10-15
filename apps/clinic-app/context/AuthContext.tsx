@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import {
   AuthUser,
   BootstrapInput,
@@ -166,12 +167,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // While working on a cached session, keep trying to reach the server so the device resumes normal operation.
+  // Pauses when backgrounded to prevent wake locks and battery drain.
   useEffect(() => {
     if (!offline || state !== 'signedIn') return undefined;
-    const timer = setInterval(() => {
-      resumeOnline();
-    }, OFFLINE_RETRY_MS);
-    return () => clearInterval(timer);
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let isAppActive = AppState.currentState === 'active';
+
+    const startTimer = () => {
+      if (timer) clearInterval(timer);
+      timer = setInterval(() => {
+        if (isAppActive) {
+          resumeOnline();
+        }
+      }, OFFLINE_RETRY_MS);
+    };
+
+    const stopTimer = () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    const handleAppState = (nextState: AppStateStatus) => {
+      isAppActive = nextState === 'active';
+      if (isAppActive) {
+        resumeOnline();
+        startTimer();
+      } else {
+        stopTimer();
+      }
+    };
+
+    const appStateSub = AppState.addEventListener('change', handleAppState);
+
+    if (isAppActive) {
+      startTimer();
+    }
+
+    return () => {
+      stopTimer();
+      appStateSub.remove();
+    };
   }, [offline, state]);
 
   const login = useCallback(

@@ -128,7 +128,24 @@ export function isServerConfigured(): boolean {
 
 /** Whether users must pick a cloud workspace (multi-tenant SaaS host) before signing in. */
 export function isWorkspaceRequired(): boolean {
-  if (isNative) return false;
+  if (isNative) {
+    const serverUrl = getStoredServerUrl() ?? configuredApiUrl();
+    if (!serverUrl) return false;
+    try {
+      const url = new URL(serverUrl);
+      const host = url.hostname.toLowerCase();
+      // If it's a private IP address or localhost, it's an on-prem single-tenant server
+      const isLan =
+        host.includes('local') ||
+        host.startsWith('127.') ||
+        host.startsWith('192.168.') ||
+        host.startsWith('10.') ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+      return !isLan;
+    } catch {
+      return false;
+    }
+  }
   if (getSetting('EXPO_PUBLIC_BASE_DOMAIN')) return true;
   const hostname = typeof window !== 'undefined' ? window.location?.hostname : '';
   return !!hostname && parseServiceHost(hostname, getServiceSubdomain()) !== null;

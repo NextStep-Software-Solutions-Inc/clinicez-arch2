@@ -20,8 +20,10 @@ export interface UserMenuProps {
   currentRoute?: string;
 }
 
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+function initialsOf(name?: string | null): string {
+  const clean = (name ?? '').trim();
+  if (!clean) return '?';
+  const parts = clean.split(/\s+/).filter(Boolean);
   const letters = `${parts[0]?.[0] ?? ''}${parts.length > 1 ? parts[parts.length - 1][0] : ''}`;
   return letters.toUpperCase() || '?';
 }
@@ -44,7 +46,7 @@ export default function UserMenu({
 
   const role = user.roleName || user.role;
   const isSelected = currentRoute === 'Profile';
-  const displayName = staffCurrent ? formatStaffName(staffCurrent) : user.name;
+  const displayName = staffCurrent ? formatStaffName(staffCurrent) : (user.name || 'Staff');
 
   const handlePress = () => {
     if (onNavigate) {

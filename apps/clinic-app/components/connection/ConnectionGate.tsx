@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
-import { setActiveTenantContext, clearActiveTenantContext, isValidTenantSlug, setTenantStorage } from '@shared/safe';
+import { setActiveTenantContext, clearActiveTenantContext, isValidTenantSlug, setTenantStorage, resolveTenantContext, getStoredTenantSlug } from '@shared/safe';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { theme } from '../../constants/theme';
@@ -115,7 +115,10 @@ function ServerSetupScreen({
   onCancel?: () => void;
 }) {
   const [address, setAddress] = useState(initialUrl);
-  const [workspace, setWorkspace] = useState('');
+  const [workspace, setWorkspace] = useState(() => {
+    const ctx = resolveTenantContext();
+    return ctx.tenantSlug || ctx.facilitySlug || getStoredTenantSlug() || '';
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -128,6 +131,26 @@ function ServerSetupScreen({
     const slug = workspace.trim().toLowerCase();
     if (slug && !isValidTenantSlug(slug)) {
       setError('That workspace name is not valid. Leave it empty for a clinic-owned server.');
+      return;
+    }
+
+    // Cloud servers require a workspace slug
+    let isCloudHost = false;
+    try {
+      const h = new URL(normalized).hostname.toLowerCase();
+      isCloudHost = !(
+        h.includes('local') ||
+        h.startsWith('127.') ||
+        h.startsWith('192.168.') ||
+        h.startsWith('10.') ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h)
+      );
+    } catch {
+      // ignore
+    }
+
+    if (isCloudHost && !slug) {
+      setError('Please enter your clinic workspace name (e.g. nextstep) for cloud servers.');
       return;
     }
 

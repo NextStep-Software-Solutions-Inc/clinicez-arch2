@@ -34,6 +34,7 @@ const tabIcon = (name: IconName) => ({ color }: { focused: boolean; color: Color
 );
 
 const Tab = createBottomTabNavigator({
+  implementation: 'custom',
   tabBar: (props: BottomTabBarProps) => <ResponsiveTabBar {...props} />,
   screenOptions: {
     headerShown: false,

@@ -28,7 +28,11 @@ export function setDeviceItem(key: string, value: string | null) {
   if (value === null) {
     memory.delete(key);
     try {
-      Storage.removeItem(key)?.catch?.(() => {});
+      if (typeof Storage.removeItemSync === 'function') {
+        Storage.removeItemSync(key);
+      } else {
+        Storage.removeItem(key)?.catch?.(() => {});
+      }
     } catch {
       // ignore - nothing persisted to remove
     }
@@ -36,7 +40,11 @@ export function setDeviceItem(key: string, value: string | null) {
   }
   memory.set(key, value);
   try {
-    Storage.setItem(key, value)?.catch?.(() => {});
+    if (typeof Storage.setItemSync === 'function') {
+      Storage.setItemSync(key, value);
+    } else {
+      Storage.setItem(key, value)?.catch?.(() => {});
+    }
   } catch {
     // ignore - the in-memory copy still holds it for this session
   }
@@ -48,7 +56,11 @@ export const setSessionItem = setDeviceItem;
 export function clearDeviceStorage() {
   memory.clear();
   try {
-    Storage.clear?.()?.catch?.(() => {});
+    if (typeof Storage.clearSync === 'function') {
+      Storage.clearSync();
+    } else {
+      Storage.clear?.()?.catch?.(() => {});
+    }
   } catch {
     // ignore
   }

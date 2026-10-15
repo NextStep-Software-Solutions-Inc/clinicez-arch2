@@ -25,7 +25,7 @@ export interface UseClinicNotificationsReturn {
 export function useClinicNotifications(
   options: UseClinicNotificationsOptions = {}
 ): UseClinicNotificationsReturn {
-  const { pollingIntervalMs = 20_000, autoPoll = true } = options;
+  const { pollingIntervalMs = 45_000, autoPoll = true } = options;
   const { settings } = useClinic();
 
   const [notifications, setNotifications] = useState<ClinicStaffNotification[]>([]);

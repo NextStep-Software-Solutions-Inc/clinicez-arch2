@@ -67,7 +67,7 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
     if (!user) return null;
     const match = staff.find((s) => s.id === user.id);
     if (match) return match;
-    const parts = user.name.trim().split(/\s+/).filter(Boolean);
+    const parts = (user?.name ?? '').trim().split(/\s+/).filter(Boolean);
     const lastName = parts.length > 1 ? parts[parts.length - 1] : '';
     const firstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0] ?? '';
     return {

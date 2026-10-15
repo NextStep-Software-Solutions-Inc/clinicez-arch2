@@ -65,6 +65,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       monochromeImage: './assets/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
+    permissions: [
+      'android.permission.INTERNET',
+      'android.permission.ACCESS_NETWORK_STATE',
+      'android.permission.CAMERA',
+      'android.permission.USE_BIOMETRIC',
+      'android.permission.USE_FINGERPRINT',
+      'android.permission.VIBRATE',
+    ],
   },
   web: {
     bundler: 'metro',
