@@ -44,6 +44,9 @@ export default function LoginScreen() {
     <AuthScreen
       title="Sign in"
       subtitle={license?.clinicName ? `Welcome to ${license.clinicName}.` : 'Sign in to your clinic workstation.'}
+      clinicName={license?.clinicName}
+      clinicLogo={license?.primaryLogoUrl}
+      primaryColor={license?.primaryColorHex}
       footer={
         changeServer ? (
           <View>

@@ -70,3 +70,5 @@ export {
   ModalStackContext,
   type ModalStackContextValue,
 } from './modalStack';
+export { default as ClinicEzLogo, ClinicEzMark, CoBrandedLogo, getClinicInitials, type ClinicEzMarkProps, type CoBrandedLogoProps } from './ClinicEzLogo';
+

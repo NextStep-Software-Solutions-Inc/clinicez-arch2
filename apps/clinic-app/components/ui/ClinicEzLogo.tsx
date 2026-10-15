@@ -104,3 +104,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 });
+
+export { default as CoBrandedLogo, getClinicInitials, type CoBrandedLogoProps } from './CoBrandedLogo';
+

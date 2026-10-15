@@ -3,22 +3,33 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 're
 import { theme } from '../../constants/theme';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
-import { ClinicEzMark } from '../ui/ClinicEzLogo';
+import { CoBrandedLogo } from '../ui/ClinicEzLogo';
+import { useFacilityLicense } from '../FacilityActivationGate';
+import { getDeviceItem } from '../../utils/deviceStorage';
+import { CLINIC_LOGO_STORAGE_KEY } from '../../context/ClinicContext';
 
-/** Shared chrome for sign-in, setup and unlock screens: centered card with the Clinic EZ brand mark. */
+export interface AuthScreenProps {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+  topRight?: ReactNode;
+  footer?: ReactNode;
+  clinicLogo?: string | null;
+  clinicName?: string | null;
+  primaryColor?: string | null;
+}
+
+/** Shared chrome for sign-in, setup and unlock screens: centered card with personalized co-branded logo. */
 export function AuthScreen({
   title,
   subtitle,
   children,
   topRight,
   footer,
-}: {
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-  topRight?: ReactNode;
-  footer?: ReactNode;
-}) {
+  clinicLogo,
+  clinicName,
+  primaryColor,
+}: AuthScreenProps) {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
@@ -28,7 +39,11 @@ export function AuthScreen({
       >
         <View style={styles.card}>
           <View style={styles.topRow}>
-            <BrandMark />
+            <BrandMark
+              clinicLogo={clinicLogo}
+              clinicName={clinicName}
+              primaryColor={primaryColor}
+            />
             {topRight}
           </View>
           <View style={styles.header}>
@@ -47,13 +62,38 @@ export function AuthScreen({
   );
 }
 
-export function BrandMark() {
+export interface BrandMarkProps {
+  clinicLogo?: string | null;
+  clinicName?: string | null;
+  primaryColor?: string | null;
+  size?: number;
+}
+
+export function BrandMark({
+  clinicLogo,
+  clinicName,
+  primaryColor,
+  size = theme.sizes.controlLg,
+}: BrandMarkProps = {}) {
+  const { license } = useFacilityLicense();
+  const effectiveClinicName = clinicName !== undefined ? clinicName : license?.clinicName;
+  const effectiveClinicLogo =
+    clinicLogo !== undefined
+      ? clinicLogo
+      : (license?.primaryLogoUrl ?? getDeviceItem(CLINIC_LOGO_STORAGE_KEY));
+  const effectivePrimaryColor =
+    primaryColor !== undefined ? primaryColor : (license?.primaryColorHex ?? null);
+
   return (
-    <View style={styles.brandTile}>
-      <ClinicEzMark size={theme.sizes.controlLg} variant="squircle" />
-    </View>
+    <CoBrandedLogo
+      clinicLogo={effectiveClinicLogo}
+      clinicName={effectiveClinicName}
+      primaryColor={effectivePrimaryColor}
+      size={size}
+    />
   );
 }
+
 
 /** Inline error message in the shared emergency colors. */
 export function ErrorNotice({ message }: { message: string }) {

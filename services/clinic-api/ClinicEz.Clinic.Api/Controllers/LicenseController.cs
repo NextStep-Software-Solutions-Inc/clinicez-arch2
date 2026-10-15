@@ -23,7 +23,9 @@ public record FacilityLicenseStatusDto(
     System.Collections.Generic.List<string> EnabledFeatures,
     DateTime? ExpiresAtUtc,
     bool IsTampered,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    string? PrimaryLogoUrl = null,
+    string? PrimaryColorHex = null);
 
 [ApiController]
 [Route("api/v1/clinic/license")]
@@ -111,7 +113,9 @@ public sealed class LicenseController : ControllerBase
                     defaultFeatures,
                     null,
                     false,
-                    null);
+                    null,
+                    settings?.PrimaryLogoUrl,
+                    settings?.PrimaryColorHex);
 
                 return Ok(ApiResponse<FacilityLicenseStatusDto>.Success(unactivatedDto));
             }
@@ -173,7 +177,9 @@ public sealed class LicenseController : ControllerBase
                     defaultFeatures,
                     null,
                     false,
-                    null);
+                    null,
+                    settings?.PrimaryLogoUrl,
+                    settings?.PrimaryColorHex);
 
                 return Ok(ApiResponse<FacilityLicenseStatusDto>.Success(unactivatedDto));
             }
@@ -225,7 +231,9 @@ public sealed class LicenseController : ControllerBase
             features,
             validation.Payload?.ExpiresAtUtc ?? settings?.LicenseExpiresAt,
             validation.IsTampered,
-            validation.ErrorMessage);
+            validation.ErrorMessage,
+            settings?.PrimaryLogoUrl,
+            settings?.PrimaryColorHex);
 
         return Ok(ApiResponse<FacilityLicenseStatusDto>.Success(dto));
     }
@@ -393,7 +401,9 @@ public sealed class LicenseController : ControllerBase
             features,
             payload?.ExpiresAtUtc ?? settings.LicenseExpiresAt,
             validation.IsTampered,
-            validation.ErrorMessage);
+            validation.ErrorMessage,
+            settings.PrimaryLogoUrl,
+            settings.PrimaryColorHex);
 
         return Ok(ApiResponse<FacilityLicenseStatusDto>.Success(dto, "Facility license successfully applied and verified."));
     }

@@ -13,10 +13,11 @@ import Input from '@ui/Input';
 import Badge, { BadgeVariant } from '@ui/Badge';
 import Icon from '@ui/Icon';
 import Modal from '@ui/Modal';
-import { ClinicEzMark } from './ui/ClinicEzLogo';
+import { ClinicEzMark, CoBrandedLogo } from './ui/ClinicEzLogo';
 import { clinicService, FacilityLicenseStatus } from '../services/clinicService';
 import { getOfflineGraceHours, getServiceSubdomain, getSetting, isWorkspaceRequired } from '../services/runtimeConfig';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
+import { CLINIC_LOGO_STORAGE_KEY } from '../context/ClinicContext';
 import {
   resolveTenantContext,
   setActiveTenantContext,
@@ -138,6 +139,11 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         if (res.clinicId) {
           setActiveClinicId(String(res.clinicId), currentWorkspace ?? undefined);
         }
+        if (res.primaryLogoUrl) {
+          setDeviceItem(CLINIC_LOGO_STORAGE_KEY, res.primaryLogoUrl);
+        } else if (res.primaryLogoUrl === null) {
+          setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
+        }
         cacheLicense(res, currentWorkspace);
         setLicense(res);
       }
@@ -215,6 +221,11 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       } else if (res) {
         if (res.clinicId) {
           setActiveClinicId(String(res.clinicId), activeWorkspace || undefined);
+        }
+        if (res.primaryLogoUrl) {
+          setDeviceItem(CLINIC_LOGO_STORAGE_KEY, res.primaryLogoUrl);
+        } else if (res.primaryLogoUrl === null) {
+          setDeviceItem(CLINIC_LOGO_STORAGE_KEY, null);
         }
         cacheLicense(res, activeWorkspace);
         setLicense(res);
@@ -528,12 +539,21 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   );
 }
 
-/** Small brand mark: Clinic EZ mark in a squircle. */
-function BrandMark() {
+/** Brand mark with optional co-branding support. */
+function BrandMark({
+  clinicLogo,
+  clinicName,
+}: { clinicLogo?: string | null; clinicName?: string | null } = {}) {
+  const cached = readCachedLicense();
+  const effectiveLogo = clinicLogo ?? cached?.primaryLogoUrl ?? getDeviceItem(CLINIC_LOGO_STORAGE_KEY);
+  const effectiveName = clinicName ?? cached?.clinicName;
   return (
-    <View style={styles.brandTile}>
-      <ClinicEzMark size={theme.sizes.controlLg} variant="squircle" />
-    </View>
+    <CoBrandedLogo
+      clinicLogo={effectiveLogo}
+      clinicName={effectiveName}
+      size={theme.sizes.controlLg}
+      variant="squircle"
+    />
   );
 }
 
