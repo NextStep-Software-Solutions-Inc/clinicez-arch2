@@ -24,6 +24,7 @@ import { useConnection } from '../../components/connection/ConnectionGate';
 import { clinicService } from '../../services/clinicService';
 import { notify } from '@utils/feedback';
 import { validatePasswordPolicy } from '../../services/passwordPolicy';
+import { useTextScale, TEXT_SCALE_OPTIONS } from '../../context/TextScaleContext';
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -36,6 +37,7 @@ export default function ProfileScreen() {
   const { current: staffCurrent, reload: reloadStaff } = useStaff();
   const { facilityName, planTier } = useClinic();
   const { serverLabel } = useConnection();
+  const { preset, scale, setPreset } = useTextScale();
 
   // Profile Form State
   const [title, setTitle] = useState('');
@@ -455,6 +457,77 @@ export default function ProfileScreen() {
           </CardContent>
         </Card>
 
+        {/* Section: Workstation Display & Text Size */}
+        <Card>
+          <CardHeader
+            title="Workstation Display & Text Size"
+            subtitle="Adjust typography scale to fit your tablet or desktop screen comfortably"
+          />
+          <CardContent style={styles.cardSection}>
+            <View style={styles.presetOptionsGrid}>
+              {TEXT_SCALE_OPTIONS.map((opt) => {
+                const isSelected = preset === opt.preset;
+                return (
+                  <Pressable
+                    key={opt.preset}
+                    onPress={() => {
+                      setPreset(opt.preset);
+                      notify.info(`Workstation text size updated to ${opt.label}`);
+                    }}
+                    style={[
+                      styles.presetCard,
+                      isSelected && styles.presetCardActive,
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: isSelected }}
+                    accessibilityLabel={opt.label}
+                  >
+                    <View style={styles.presetHeader}>
+                      <ThemedText
+                        variant="bodyBold"
+                        color={isSelected ? theme.colors.primary : theme.colors.text}
+                      >
+                        {opt.label}
+                      </ThemedText>
+                      {isSelected ? (
+                        <Badge label="Active" variant="primary" size="xs" />
+                      ) : null}
+                    </View>
+                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                      {opt.description}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Live Typography Preview */}
+            <View style={styles.previewBox}>
+              <View style={styles.previewHeaderRow}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  LIVE TYPOGRAPHY PREVIEW
+                </ThemedText>
+                <Badge label={`${Math.round(scale * 100)}% Scale`} variant="neutral" size="xs" />
+              </View>
+
+              <View style={styles.previewCard}>
+                <View style={styles.previewTopRow}>
+                  <Badge label="Q-001" variant="primary" size="sm" />
+                  <ThemedText variant="bodyBold" numberOfLines={1}>
+                    Bernardo, Carlo V.
+                  </ThemedText>
+                  <ThemedText variant="small" color={theme.colors.textMuted}>
+                    · Dr. Wave Ambray
+                  </ThemedText>
+                </View>
+                <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  General consultation · Vitals: BP 120/80 mmHg · HR 72 bpm · Room 1
+                </ThemedText>
+              </View>
+            </View>
+          </CardContent>
+        </Card>
+
         {/* Section 4: Workstation Session & System Info */}
         <Card>
           <CardHeader
@@ -642,5 +715,57 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     flexDirection: 'row',
     justifyContent: 'flex-start',
+  },
+  presetOptionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  presetCard: {
+    flex: 1,
+    minWidth: 200,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    gap: theme.spacing.xs,
+  },
+  presetCardActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primarySubtle,
+  },
+  presetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  previewBox: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    gap: theme.spacing.sm,
+  },
+  previewHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  previewCard: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.xs,
+  },
+  previewTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
 });

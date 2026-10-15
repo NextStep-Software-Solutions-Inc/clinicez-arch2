@@ -10,6 +10,7 @@ import { useClinic } from '../../context/ClinicContext';
 import { useAuth } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import { SidebarMode } from '../../context/SidebarContext';
+import { useSafeInsets } from '../../utils/useSafeInsets';
 
 export interface NavItem {
   key: string;
@@ -57,6 +58,7 @@ export default function WorkstationSidebar({
 }: WorkstationSidebarProps) {
   const { facilityName, planTier, clinicLogo, primaryColorHex } = useClinic();
   const { user, can } = useAuth();
+  const insets = useSafeInsets();
 
   const isIconMode = mode === 'icon' || width === theme.sizes.sidebarCollapsedWidth;
   const resolvedWidth = width ?? (isIconMode ? theme.sizes.sidebarCollapsedWidth : theme.sizes.sidebarWidth);
@@ -115,7 +117,16 @@ export default function WorkstationSidebar({
       ]}
     >
       {/* Brand Header */}
-      <View style={[styles.brandHeader, isIconMode && styles.brandHeaderIconMode]}>
+      <View
+        style={[
+          styles.brandHeader,
+          isIconMode && styles.brandHeaderIconMode,
+          insets.top > 0 && {
+            paddingTop: insets.top,
+            minHeight: theme.sizes.headerHeight + insets.top,
+          },
+        ]}
+      >
         <Pressable
           onPress={() => {
             setActiveTooltip(null);
@@ -264,7 +275,13 @@ export default function WorkstationSidebar({
       </ScrollView>
 
       {/* Footer: User Profile */}
-      <View style={[styles.footer, isIconMode && styles.footerIconMode]}>
+      <View
+        style={[
+          styles.footer,
+          isIconMode && styles.footerIconMode,
+          insets.bottom > 0 && { paddingBottom: insets.bottom + theme.spacing.xs },
+        ]}
+      >
         <UserMenu
           variant="card"
           compact={isIconMode}

@@ -7,6 +7,7 @@ import { theme } from '../../constants/theme';
 import { useWorkstationShortcuts } from '../../utils/workstationShortcuts';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { useSidebar } from '../../context/SidebarContext';
+import { useSafeInsets } from '../../utils/useSafeInsets';
 
 export interface ResponsiveLayoutProps {
   children: React.ReactNode;
@@ -25,6 +26,7 @@ export default function ResponsiveLayout({
   hideHeader = false,
   style,
 }: ResponsiveLayoutProps) {
+  const insets = useSafeInsets();
   const { isWorkstation } = useBreakpoint();
   const navigation = useNavigation<any>();
   const route = useRoute();
@@ -46,7 +48,13 @@ export default function ResponsiveLayout({
   if (!isWorkstation) {
     // Mobile View: Plain container (bottom tab bar is rendered by React Navigation)
     return (
-      <View style={[styles.mobileContainer, style]}>
+      <View
+        style={[
+          styles.mobileContainer,
+          hideHeader && insets.top > 0 && { paddingTop: insets.top },
+          style,
+        ]}
+      >
         {!hideHeader && (headerTitle || rightAction) ? (
           <ClinicHeaderBar
             title={headerTitle}
@@ -54,7 +62,7 @@ export default function ResponsiveLayout({
             rightAction={rightAction}
           />
         ) : null}
-        <View style={styles.content}>{children}</View>
+        <View style={[styles.content, insets.bottom > 0 && { paddingBottom: insets.bottom }]}>{children}</View>
       </View>
     );
   }
@@ -73,7 +81,13 @@ export default function ResponsiveLayout({
         mode={mode}
         onToggleMode={cycleMode}
       />
-      <View style={[styles.mainColumn, style]}>
+      <View
+        style={[
+          styles.mainColumn,
+          hideHeader && insets.top > 0 && { paddingTop: insets.top },
+          style,
+        ]}
+      >
         {!hideHeader && (
           <ClinicHeaderBar
             title={headerTitle}
@@ -81,7 +95,7 @@ export default function ResponsiveLayout({
             rightAction={rightAction}
           />
         )}
-        <View style={styles.content}>{children}</View>
+        <View style={[styles.content, insets.bottom > 0 && { paddingBottom: insets.bottom }]}>{children}</View>
       </View>
     </View>
   );

@@ -7,6 +7,7 @@ import ClinicNotificationCenterModal from '../notifications/ClinicNotificationCe
 import { useClinicNotifications } from '../../hooks/useClinicNotifications';
 import { theme } from '../../constants/theme';
 import { useBreakpoint } from '../../utils/useBreakpoint';
+import { useSafeInsets } from '../../utils/useSafeInsets';
 
 export interface ClinicHeaderBarProps {
   /** Page title. This is the single source of the page heading - screens must not repeat it in the body. */
@@ -24,6 +25,7 @@ export default function ClinicHeaderBar({
   rightAction,
   style,
 }: ClinicHeaderBarProps) {
+  const insets = useSafeInsets();
   const { isCompact } = useBreakpoint();
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -45,7 +47,16 @@ export default function ClinicHeaderBar({
   });
 
   return (
-    <View style={[styles.container, style]}>
+    <View
+      style={[
+        styles.container,
+        insets.top > 0 && {
+          paddingTop: theme.spacing.md + insets.top,
+          minHeight: theme.sizes.headerHeight + insets.top,
+        },
+        style,
+      ]}
+    >
       <View style={styles.leftSection}>
         <View style={styles.titleBlock}>
           <ThemedText variant={isCompact ? 'title' : 'h2'} numberOfLines={1}>
