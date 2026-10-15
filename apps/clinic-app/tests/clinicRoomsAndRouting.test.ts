@@ -96,6 +96,7 @@ const {
   resolveWalkInDoctorRoomSelection,
 } = await import('../services/clinicService');
 const { ClinicRoomsSettingsCard } = await import('../components/settings/ClinicRoomsSettingsCard');
+const { getDeviceItem, setDeviceItem } = await import('../utils/deviceStorage');
 
 describe('ClinicRoom Domain Entity & Multi-Room Routing — Frontend Suite', () => {
   test('1. clinicService.getRooms calls GET /rooms with activeOnly query param', async () => {
@@ -544,6 +545,128 @@ describe('ClinicRoom Domain Entity & Multi-Room Routing — Frontend Suite', () 
     const res = resolveWalkInDoctorRoomSelection(doctor, activeRooms);
     expect(res.preselectedRoomId).toBe('room-2');
     expect(res.doctorRoomIds).toEqual(['room-2', 'room-1']);
+  });
+
+  test('14. computeScopedStations with activeView scopes stations dynamically', () => {
+    const activeRooms: ClinicRoom[] = [
+      { id: 'room-1', name: 'Room 1', type: 'Consultation', isActive: true, displayOrder: 1, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-2', name: 'Room 2', type: 'Consultation', isActive: true, displayOrder: 2, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-triage', name: 'Triage Station', type: 'Triage', isActive: true, displayOrder: 3, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-tx', name: 'Treatment Room', type: 'Treatment', isActive: true, displayOrder: 4, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+    ];
+    const doctor = {
+      id: 'doc-1',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Alice',
+      lastName: 'Cruz',
+      role: 'Doctor' as const,
+      assignedRoomIds: ['room-1'],
+      assignedRoomNames: ['Room 1'],
+      isActive: true,
+      createdAt: '',
+    };
+
+    // MyRoom view scopes to doctor's assigned consult rooms
+    const myRoomScope = computeScopedStations(activeRooms, doctor, 'MyRoom');
+    expect(myRoomScope.allPillLabel).toBe('All My Rooms');
+    expect(myRoomScope.visibleRooms.map((r) => r.id)).toEqual(['room-1']);
+
+    // PendingProcedure view scopes to Treatment/Procedure rooms
+    const procScope = computeScopedStations(activeRooms, doctor, 'PendingProcedure');
+    expect(procScope.allPillLabel).toBe('All Procedure Stations');
+    expect(procScope.visibleRooms.map((r) => r.id)).toEqual(['room-tx']);
+
+    // Triage view scopes to Triage rooms
+    const triageScope = computeScopedStations(activeRooms, doctor, 'Triage');
+    expect(triageScope.allPillLabel).toBe('All Triage Stations');
+    expect(triageScope.visibleRooms.map((r) => r.id)).toEqual(['room-triage']);
+
+    // All view includes assigned consult rooms + shared stations
+    const allScope = computeScopedStations(activeRooms, doctor, 'All');
+    expect(allScope.allPillLabel).toBe('All My Stations');
+    expect(allScope.visibleRooms.map((r) => r.id)).toEqual(['room-1', 'room-triage', 'room-tx']);
+  });
+
+  test('15. Station reset logic resets invalid station when switching views', () => {
+    const activeRooms: ClinicRoom[] = [
+      { id: 'room-1', name: 'Room 1', type: 'Consultation', isActive: true, displayOrder: 1, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+      { id: 'room-tx', name: 'Treatment Room', type: 'Treatment', isActive: true, displayOrder: 2, tenantId: 't1', clinicId: 'c1', assignedStaffCount: 1, createdAt: '' },
+    ];
+    const doctor = {
+      id: 'doc-1',
+      tenantId: 't1',
+      clinicId: 'c1',
+      firstName: 'Bob',
+      lastName: 'Ong',
+      role: 'Doctor' as const,
+      assignedRoomIds: ['room-1'],
+      assignedRoomNames: ['Room 1'],
+      isActive: true,
+      createdAt: '',
+    };
+
+    // Helper imitating screen station validation on view change
+    const checkStationValid = (currentStation: string, view: any) => {
+      const scope = computeScopedStations(activeRooms, doctor, view);
+      if (currentStation === 'ALL') return true;
+      return scope.visibleRooms.some((r) => r.name === currentStation || r.id === currentStation);
+    };
+
+    // In 'All' view, Treatment Room is valid
+    expect(checkStationValid('Treatment Room', 'All')).toBe(true);
+
+    // Switching to 'MyRoom', Treatment Room is no longer valid (should reset to 'ALL')
+    expect(checkStationValid('Treatment Room', 'MyRoom')).toBe(false);
+
+    // In 'MyRoom', Room 1 is valid
+    expect(checkStationValid('Room 1', 'MyRoom')).toBe(true);
+
+    // Switching to 'PendingProcedure', Room 1 is no longer valid (should reset to 'ALL')
+    expect(checkStationValid('Room 1', 'PendingProcedure')).toBe(false);
+  });
+
+  test('16. Active queue filters exclude Completed, Cancelled, and NoShow encounters', () => {
+    const mockQueue = [
+      { id: 'q1', status: 'Triaged', patientName: 'Ready Patient' },
+      { id: 'q2', status: 'InConsultation', patientName: 'Consult Patient' },
+      { id: 'q3', status: 'PendingProcedure', patientName: 'Procedure Patient' },
+      { id: 'q4', status: 'ReEvaluation', patientName: 'Re-eval Patient' },
+      { id: 'q5', status: 'Completed', patientName: 'Completed Patient' },
+      { id: 'q6', status: 'Cancelled', patientName: 'Cancelled Patient' },
+      { id: 'q7', status: 'NoShow', patientName: 'NoShow Patient' },
+    ];
+
+    // Workstation Active filter
+    const activePatients = mockQueue.filter(
+      (p) => p.status !== 'Completed' && p.status !== 'Cancelled' && p.status !== 'NoShow'
+    );
+    expect(activePatients.map((p) => p.id)).toEqual(['q1', 'q2', 'q3', 'q4']);
+
+    // Completed pill filter
+    const completedPatients = mockQueue.filter((p) => p.status === 'Completed');
+    expect(completedPatients.map((p) => p.id)).toEqual(['q5']);
+
+    // Retirement on finalize encounter
+    let currentActive = [...activePatients];
+    const encounterSignedPatientId = 'q2';
+    currentActive = currentActive.filter((p) => p.id !== encounterSignedPatientId);
+    expect(currentActive.map((p) => p.id)).toEqual(['q1', 'q3', 'q4']);
+  });
+
+  test('17. Device storage persistence saves and restores workstation view and station filters', () => {
+    const staffId = 'staff-persistent-test-123';
+    const viewKey = `clinicez:consultations:${staffId}:queueView`;
+    const stationKey = `clinicez:consultations:${staffId}:station`;
+    const statusKey = `clinicez:consultations:${staffId}:status`;
+
+    setDeviceItem(viewKey, 'MyRoom');
+    setDeviceItem(stationKey, 'Room 1');
+    setDeviceItem(statusKey, 'Triaged');
+
+    expect(getDeviceItem(viewKey)).toBe('MyRoom');
+    expect(getDeviceItem(stationKey)).toBe('Room 1');
+    expect(getDeviceItem(statusKey)).toBe('Triaged');
   });
 });
 

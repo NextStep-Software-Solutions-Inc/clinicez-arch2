@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -20,6 +20,7 @@ import {
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { notify } from '@utils/feedback';
+import { getDeviceItem, setDeviceItem } from '../../utils/deviceStorage';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
 import {
@@ -43,20 +44,71 @@ export default function QueueScreen() {
   const { rooms = [] } = useClinic();
 
   const activeRooms = useMemo(() => (rooms || []).filter((r) => r.isActive), [rooms]);
+
+  const staffKey = currentStaff?.id ? `clinicez:queue:${currentStaff.id}` : 'clinicez:queue:default';
+
+  // Filters with persistence
+  const [selectedView, setSelectedView] = useState<QueueView>(() => {
+    const saved = getDeviceItem(`${staffKey}:view`);
+    if (saved === 'All' || saved === 'MyRoom' || saved === 'WaitingForDoctor' || saved === 'Triage' || saved === 'PendingProcedure') {
+      return saved as QueueView;
+    }
+    return 'All';
+  });
+  const [selectedStation, setSelectedStation] = useState<string>(() => {
+    return getDeviceItem(`${staffKey}:station`) || 'ALL';
+  });
+
+  const didApplyStaffDefaults = useRef(false);
+  useEffect(() => {
+    if (didApplyStaffDefaults.current || !currentStaff || activeRooms.length === 0) return;
+    didApplyStaffDefaults.current = true;
+    const staffStorageKey = `clinicez:queue:${currentStaff.id}`;
+    const savedView = getDeviceItem(`${staffStorageKey}:view`);
+    const savedStation = getDeviceItem(`${staffStorageKey}:station`);
+
+    if (savedView === 'All' || savedView === 'MyRoom' || savedView === 'WaitingForDoctor' || savedView === 'Triage' || savedView === 'PendingProcedure') {
+      setSelectedView(savedView as QueueView);
+    }
+    if (savedStation) {
+      setSelectedStation(savedStation);
+    }
+  }, [currentStaff, activeRooms]);
+
   const { visibleRooms, allPillLabel } = useMemo(
-    () => computeScopedStations(activeRooms, currentStaff),
-    [activeRooms, currentStaff],
+    () => computeScopedStations(activeRooms, currentStaff, selectedView),
+    [activeRooms, currentStaff, selectedView],
   );
+
+  const handleViewChange = (newView: QueueView) => {
+    setSelectedView(newView);
+    if (currentStaff?.id) {
+      setDeviceItem(`clinicez:queue:${currentStaff.id}:view`, newView);
+    }
+    const nextScope = computeScopedStations(activeRooms, currentStaff, newView);
+    if (
+      selectedStation !== 'ALL' &&
+      !nextScope.visibleRooms.some((r) => r.name === selectedStation || r.id === selectedStation)
+    ) {
+      setSelectedStation('ALL');
+      if (currentStaff?.id) {
+        setDeviceItem(`clinicez:queue:${currentStaff.id}:station`, 'ALL');
+      }
+    }
+  };
+
+  const handleStationChange = (stationName: string) => {
+    setSelectedStation(stationName);
+    if (currentStaff?.id) {
+      setDeviceItem(`clinicez:queue:${currentStaff.id}:station`, stationName);
+    }
+  };
 
   const [queue, setQueue] = useState<PatientQueueItem[]>([]);
   const [metrics, setMetrics] = useState<QueueMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Filters
-  const [selectedStation, setSelectedStation] = useState<string>('ALL');
-  const [selectedView, setSelectedView] = useState<QueueView>('All');
 
   // Call to room modal
   const [callModalItem, setCallModalItem] = useState<PatientQueueItem | null>(null);
@@ -225,7 +277,7 @@ export default function QueueScreen() {
           </ThemedText>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillScroll}>
             <Pressable
-              onPress={() => setSelectedStation('ALL')}
+              onPress={() => handleStationChange('ALL')}
               style={[
                 styles.stationPill,
                 selectedStation === 'ALL' && styles.stationPillActive,
@@ -244,7 +296,7 @@ export default function QueueScreen() {
               return (
                 <Pressable
                   key={room.id}
-                  onPress={() => setSelectedStation(room.name)}
+                  onPress={() => handleStationChange(room.name)}
                   style={[
                     styles.stationPill,
                     isSelected && styles.stationPillActive,
@@ -274,7 +326,7 @@ export default function QueueScreen() {
                 { value: 'PendingProcedure', label: 'Procedure Bay' },
               ]}
               value={selectedView}
-              onChange={setSelectedView}
+              onChange={handleViewChange}
             />
           </View>
           <Button

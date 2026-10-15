@@ -78,8 +78,8 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
             var view = request.View.Trim();
             if (view.Equals("MyRoom", StringComparison.OrdinalIgnoreCase))
             {
-                // Items assigned to the clinician or room that are actively in workflow
-                query = query.Where(q => q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow);
+                // Items assigned to the clinician or room that are actively in workflow (exclude cancelled, no-show, and completed)
+                query = query.Where(q => q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow && q.Status != QueueStatus.Completed);
             }
             else if (view.Equals("WaitingForDoctor", StringComparison.OrdinalIgnoreCase))
             {
@@ -103,8 +103,8 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
         }
         else
         {
-            // Default: show active queue (not cancelled or no-show)
-            query = query.Where(q => q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow);
+            // Default: show active queue (not cancelled, no-show, or completed)
+            query = query.Where(q => q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow && q.Status != QueueStatus.Completed);
         }
 
         var items = await query

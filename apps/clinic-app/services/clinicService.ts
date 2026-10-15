@@ -3352,8 +3352,23 @@ export interface ScopedStationConfig {
 export function computeScopedStations(
   activeRooms: ClinicRoom[],
   currentStaff: StaffMember | null,
+  activeView?: QueueView,
 ): ScopedStationConfig {
   if (!currentStaff) {
+    if (activeView === 'PendingProcedure') {
+      const treatmentRooms = activeRooms.filter((r) => r.type === 'Treatment');
+      return {
+        visibleRooms: treatmentRooms.length > 0 ? treatmentRooms : activeRooms,
+        allPillLabel: 'All Procedure Stations',
+      };
+    }
+    if (activeView === 'Triage') {
+      const triageRooms = activeRooms.filter((r) => r.type === 'Triage');
+      return {
+        visibleRooms: triageRooms.length > 0 ? triageRooms : activeRooms,
+        allPillLabel: 'All Triage Stations',
+      };
+    }
     return { visibleRooms: activeRooms, allPillLabel: 'All Stations' };
   }
 
@@ -3361,6 +3376,51 @@ export function computeScopedStations(
   const isDoctor = currentStaff.role === 'Doctor';
   const isNurse = currentStaff.role === 'Nurse';
 
+  // 1. "My Room" View: Show strictly clinician's assigned rooms
+  if (activeView === 'MyRoom') {
+    if (assignedIds.length > 0) {
+      const myRooms = activeRooms.filter((r) => assignedIds.includes(r.id));
+      return {
+        visibleRooms: myRooms.length > 0 ? myRooms : activeRooms,
+        allPillLabel: isDoctor ? 'All My Rooms' : 'All My Stations',
+        defaultStationId: assignedIds[0],
+        defaultStationName: activeRooms.find((r) => r.id === assignedIds[0])?.name,
+      };
+    }
+    const consultRooms = activeRooms.filter((r) => r.type === 'Consultation');
+    return {
+      visibleRooms: consultRooms.length > 0 ? consultRooms : activeRooms,
+      allPillLabel: 'All Rooms',
+    };
+  }
+
+  // 2. "Pending Procedure" View: Show Treatment / Procedure stations only
+  if (activeView === 'PendingProcedure') {
+    const treatmentRooms = activeRooms.filter((r) => r.type === 'Treatment');
+    const roomsToShow = treatmentRooms.length > 0 ? treatmentRooms : activeRooms;
+    const assignedTx = roomsToShow.find((r) => assignedIds.includes(r.id));
+    return {
+      visibleRooms: roomsToShow,
+      allPillLabel: 'All Procedure Stations',
+      defaultStationId: assignedTx?.id ?? roomsToShow[0]?.id,
+      defaultStationName: assignedTx?.name ?? roomsToShow[0]?.name,
+    };
+  }
+
+  // 3. "Triage" View: Show Triage stations only
+  if (activeView === 'Triage') {
+    const triageRooms = activeRooms.filter((r) => r.type === 'Triage');
+    const roomsToShow = triageRooms.length > 0 ? triageRooms : activeRooms;
+    const assignedTriage = roomsToShow.find((r) => assignedIds.includes(r.id));
+    return {
+      visibleRooms: roomsToShow,
+      allPillLabel: 'All Triage Stations',
+      defaultStationId: assignedTriage?.id ?? roomsToShow[0]?.id,
+      defaultStationName: assignedTriage?.name ?? roomsToShow[0]?.name,
+    };
+  }
+
+  // 4. Default / "WaitingForDoctor" / "All" View
   if (isDoctor && assignedIds.length > 0) {
     const visible = activeRooms.filter(
       (r) => assignedIds.includes(r.id) || r.type === 'Triage' || r.type === 'Treatment',
