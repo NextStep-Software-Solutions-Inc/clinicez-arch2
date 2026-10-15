@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X, Stethoscope } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { ClinicEzLogo } from "@/components/ClinicEzLogo";
 
 export function Navigation() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -24,10 +25,10 @@ export function Navigation() {
         
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 group shrink-0">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground shrink-0">
-            <Stethoscope className="h-5 w-5" />
-          </div>
-          <span className="text-xl font-bold tracking-tight whitespace-nowrap">Clinic EZ</span>
+          <ClinicEzLogo
+            markClassName="h-8 w-9 shrink-0 transition-transform group-hover:scale-105"
+            textClassName="text-xl font-bold tracking-tight whitespace-nowrap"
+          />
         </Link>
 
         {/* Desktop Nav */}

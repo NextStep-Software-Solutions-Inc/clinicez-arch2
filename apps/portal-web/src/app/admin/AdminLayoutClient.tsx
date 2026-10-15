@@ -21,6 +21,7 @@ import {
   IconCreditCard
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
+import { ClinicEzMark } from "@/components/ClinicEzLogo";
 
 interface AdminContextType {
   admin: AdminMeDto | null;
@@ -200,17 +201,19 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       title: "Platform Settings",
       href: "/admin/settings",
       icon: IconAdjustments,
-      permission: "view:tenants"
+      permission: "manage:settings"
     }
-  ].filter(item => hasPermission(item.permission) || (item.permission === "manage:plans" && (hasPermission("manage:tenants") || hasPermission("view:tenants"))));
+  ].filter(item =>
+    hasPermission(item.permission) ||
+    (item.permission === "manage:plans" && (hasPermission("manage:tenants") || hasPermission("view:tenants"))) ||
+    (item.permission === "manage:settings" && hasPermission("manage:tenants"))
+  );
 
   const SidebarContent = () => (
     <>
       {/* Header */}
       <div className="h-16 flex items-center px-6 border-b border-slate-100 dark:border-slate-800 gap-3">
-        <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-primary to-violet-500 flex items-center justify-center shadow-md">
-          <span className="text-white font-extrabold text-lg">EZ</span>
-        </div>
+        <ClinicEzMark variant="squircle" className="h-9 w-9 shrink-0 shadow-sm" />
         <div>
           <span className="block font-black text-sm tracking-wide bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
             CLINIC EZ

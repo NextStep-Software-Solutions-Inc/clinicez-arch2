@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Stethoscope, Facebook, Twitter, Instagram, Linkedin, Heart } from "lucide-react";
+import { Facebook, Twitter, Instagram, Linkedin, Heart } from "lucide-react";
+import { ClinicEzLogo } from "@/components/ClinicEzLogo";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -12,10 +13,7 @@ export function Footer() {
           {/* Brand & Newsletter */}
           <div className="lg:col-span-2 flex flex-col">
             <Link href="/" className="flex items-center gap-2 group w-fit mb-6">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Stethoscope className="h-5 w-5" />
-              </div>
-              <span className="text-xl font-bold tracking-tight">Clinic EZ</span>
+              <ClinicEzLogo className="h-7 w-auto" />
             </Link>
             <p className="text-muted-foreground text-sm leading-relaxed mb-6 max-w-sm">
               The all-in-one unified portal for clinics, laboratories, and pharmacies. Modernize your healthcare facility today.

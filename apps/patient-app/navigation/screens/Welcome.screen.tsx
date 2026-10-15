@@ -6,6 +6,7 @@ import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import Card from '@ui/Card';
 import { AppIcon } from '@ui/Icon';
+import ClinicEzMark from '@ui/ClinicEzMark';
 
 export default function WelcomeScreen() {
   const navigation = useNavigation<any>();
@@ -14,9 +15,12 @@ export default function WelcomeScreen() {
   return (
     <View style={[styles.page, { backgroundColor: colors.background, paddingHorizontal: spacing.xl, paddingVertical: spacing['3xl'] }]}>
       <View style={[styles.hero, { gap: spacing.md }]}>
-        <ThemedText variant="captionBold" color="primary" style={styles.brand}>
-          Clinic EZ
-        </ThemedText>
+        <View style={[styles.featureHeader, { gap: spacing.sm }]}>
+          <ClinicEzMark size={36} variant="inverted" />
+          <ThemedText variant="captionBold" color="primary" style={styles.brand}>
+            Clinic EZ
+          </ThemedText>
+        </View>
         <ThemedText variant="display">
           Healthcare made simple, personal, and mobile.
         </ThemedText>

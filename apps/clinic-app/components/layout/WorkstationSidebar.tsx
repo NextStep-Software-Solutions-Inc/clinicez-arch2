@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable, ScrollView, PressableStateCallbackType, Im
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
 import Icon, { IconName } from '../ui/Icon';
+import { ClinicEzMark } from '../ui/ClinicEzLogo';
 import UserMenu from './UserMenu';
 import { theme } from '../../constants/theme';
 import { useClinic } from '../../context/ClinicContext';
@@ -142,7 +143,11 @@ export default function WorkstationSidebar({
               accessibilityLabel={`${displayName} logo`}
             />
           ) : (
-            <Icon name="clinic" size={theme.sizes.iconMd} color={theme.colors.onPrimary} />
+            <ClinicEzMark
+              size={theme.sizes.controlMd}
+              variant="squircle"
+              bgColor={primaryColorHex || theme.colors.primary}
+            />
           )}
         </Pressable>
 

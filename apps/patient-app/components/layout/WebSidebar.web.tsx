@@ -3,6 +3,7 @@ import { useUser } from '@clerk/expo';
 import type { NavigationState, ParamListBase } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import { AppIcon } from '@ui/Icon';
+import ClinicEzMark from '@ui/ClinicEzMark';
 import { dialog } from '@utils/dialog';
 import { useAuth } from 'contexts/AuthContext';
 import { useNotificationContext } from 'contexts/NotificationContext';
@@ -129,20 +130,7 @@ export default function WebSidebar({ state, navigation, collapsed }: WebSidebarP
           { paddingHorizontal: collapsed ? 0 : spacing.sm, justifyContent: collapsed ? 'center' : 'flex-start' },
         ]}
       >
-        <View
-          style={{
-            width: sizes.controlMd,
-            height: sizes.controlMd,
-            borderRadius: radii.md,
-            backgroundColor: colors.primary,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <ThemedText variant="h3" color="onPrimary">
-            C
-          </ThemedText>
-        </View>
+        <ClinicEzMark size={sizes.controlMd} variant="inverted" />
         {!collapsed && (
           <View style={{ marginLeft: spacing.md }}>
             <ThemedText variant="h3">Clinic EZ</ThemedText>

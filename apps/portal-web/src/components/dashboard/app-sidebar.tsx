@@ -33,6 +33,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { NavSecondary } from "./nav-secondary"
+import { ClinicEzMark } from "@/components/ClinicEzLogo"
 
 export function AppSidebar({ 
   name, 
@@ -126,7 +127,7 @@ export function AppSidebar({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={logoUrl} alt="" className="!size-5 rounded object-contain" referrerPolicy="no-referrer" />
                 ) : (
-                  <IconInnerShadowTop className="!size-5 text-primary" />
+                  <ClinicEzMark variant="squircle" className="!size-6 shrink-0" />
                 )}
                 <span className="text-base font-bold text-foreground truncate">{displayName} | Workspace</span>
               </a>

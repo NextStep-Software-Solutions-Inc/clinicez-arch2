@@ -1,4 +1,4 @@
-﻿// token-guard:ignore-file (native Expo build configuration colours)
+// token-guard:ignore-file (native Expo build configuration colours)
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
 const EAS_PROJECT_ID = 'b73e0d31-2001-40df-b1a1-0482faebb5b1';
@@ -37,7 +37,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
     },
     android: {
         adaptiveIcon: {
-            backgroundColor: '#E6F4FE',
+            backgroundColor: '#F0FDF9',
             foregroundImage: './assets/android-icon-foreground.png',
             backgroundImage: './assets/android-icon-background.png',
             monochromeImage: './assets/android-icon-monochrome.png',
@@ -52,6 +52,8 @@ export default ({ config }: ConfigContext): ExpoConfig =>
     web: {
         favicon: './assets/favicon.png',
         bundler: 'metro',
+        backgroundColor: '#F0FDF9',
+        themeColor: '#0D6963',
     },
     plugins: [
         '@clerk/expo',
@@ -64,7 +66,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
                 // Replace with a real 96×96 white-on-transparent PNG before releasing.
                 // The file must exist at build time or the build will fail.
                 // icon: './assets/notification-icon.png',
-                color: '#3B82F6',
+                color: '#0D6963',
                 defaultChannel: 'default',
                 sounds: [],
                 // Enables background push delivery on iOS (content-available: 1).

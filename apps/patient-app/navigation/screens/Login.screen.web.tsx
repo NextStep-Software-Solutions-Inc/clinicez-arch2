@@ -8,6 +8,7 @@ import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import Card from '@ui/Card';
 import Input from '@ui/Input';
+import ClinicEzMark from '@ui/ClinicEzMark';
 
 export default function LoginScreenWeb() {
   const navigation = useNavigation<any>();
@@ -67,6 +68,7 @@ export default function LoginScreenWeb() {
       <View style={[styles.cardContainer, { maxWidth: sizes.dialogWidth, gap: spacing.xl }]}>
         {/* Brand Header */}
         <View style={[styles.brandHeader, { gap: spacing.sm }]}>
+          <ClinicEzMark size={52} variant="inverted" />
           <View
             style={[
               styles.logoBadge,
