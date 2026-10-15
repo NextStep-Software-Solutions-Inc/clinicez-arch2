@@ -68,6 +68,7 @@ import QueueConflictModal from '../../components/queue/QueueConflictModal';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
 import { formatLongAge } from '../../utils/age';
 import { useBreakpoint } from '../../utils/useBreakpoint';
+import { useVirtualList } from '../../utils/useVirtualList';
 import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
 import {
   type MemberType,
@@ -360,6 +361,14 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const isLoadingMoreRef = useRef<boolean>(false);
 
+  // Virtualization & scroll tracking
+  const [scrollY, setScrollY] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(800);
+  const [listTopOffset, setListTopOffset] = useState(180);
+  const lastScrollYRef = useRef(0);
+  const viewportHeightRef = useRef(800);
+  const scrollViewRef = useRef<ScrollView>(null);
+
   const fetchPatients = useCallback(async (termOverride?: string, filterOverride?: PatientFilter) => {
     const activeSearch = termOverride !== undefined ? termOverride : debouncedSearchTerm;
     const activeFilter = filterOverride !== undefined ? filterOverride : filterMode;
@@ -367,6 +376,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     const serverFilterMode = (activeFilter === 'ALERTS' || activeFilter === 'SENIOR_PWD') ? activeFilter : undefined;
 
     setPage(1);
+    setScrollY(0);
+    lastScrollYRef.current = 0;
     const [data, err] = await clinicService.getPatients(
       activeSearch || undefined,
       hasAlertsFilter,
@@ -428,6 +439,19 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+
+      // Update scroll position for virtualizer (throttled to 25px steps to avoid unnecessary re-renders)
+      const currentY = Math.max(0, contentOffset.y);
+      if (Math.abs(currentY - lastScrollYRef.current) >= 25 || currentY === 0) {
+        lastScrollYRef.current = currentY;
+        setScrollY(currentY);
+      }
+      if (layoutMeasurement.height > 0 && Math.abs(layoutMeasurement.height - viewportHeightRef.current) >= 50) {
+        viewportHeightRef.current = layoutMeasurement.height;
+        setViewportHeight(layoutMeasurement.height);
+      }
+
+      // Near-bottom detection for infinite scroll
       const isNearBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 350;
       if (isNearBottom && hasMore && !loadingMore && !loading) {
         loadMorePatients();
@@ -1294,6 +1318,36 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     return true;
   });
 
+  const isTable = effectiveViewMode === 'table';
+  const itemHeight = isTable ? 64 : 270;
+  const itemsPerRow = isTable ? 1 : isDesktop ? 2 : 1;
+
+  const virtualWindow = useVirtualList({
+    items: filteredPatients,
+    itemHeight,
+    viewportHeight,
+    scrollY,
+    listTopOffset,
+    itemsPerRow,
+    overscan: isTable ? 8 : 4,
+  });
+
+  const visibleCardRows = useMemo(() => {
+    if (isTable) return [];
+    const rows: Array<{ key: string; items: ClinicPatient[] }> = [];
+    const slice = virtualWindow.visibleItems;
+    const step = isDesktop ? 2 : 1;
+    for (let i = 0; i < slice.length; i += step) {
+      const pair = slice.slice(i, i + step);
+      const globalRowIndex = Math.floor((virtualWindow.startIndex + i) / step);
+      rows.push({
+        key: `card-row-${globalRowIndex}-${pair[0].id}`,
+        items: pair,
+      });
+    }
+    return rows;
+  }, [isTable, virtualWindow.visibleItems, virtualWindow.startIndex, isDesktop]);
+
   const handleResetFilters = () => {
     setSearchTerm('');
     setDebouncedSearchTerm('');
@@ -1341,10 +1395,11 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       }
     >
       <ScrollView
+        ref={scrollViewRef}
         style={styles.container}
         contentContainerStyle={styles.content}
         onScroll={handleScroll}
-        scrollEventThrottle={32}
+        scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
       {/* Offline outbox sync banner */}
@@ -1468,9 +1523,20 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.tableScrollContent}
           >
-            <View style={styles.tableInner}>
+            <View
+              style={styles.tableInner}
+              onLayout={(e) => {
+                const layoutY = e.nativeEvent.layout.y;
+                if (layoutY > 0 && Math.abs(layoutY - listTopOffset) > 10) {
+                  setListTopOffset(layoutY);
+                }
+              }}
+            >
               <PatientDirectoryTableHeader />
-              {filteredPatients.map((item) => (
+              {virtualWindow.paddingTop > 0 && (
+                <View style={{ height: virtualWindow.paddingTop, width: '100%' }} />
+              )}
+              {virtualWindow.visibleItems.map((item) => (
                 <PatientDirectoryCard
                   key={item.id}
                   patient={item}
@@ -1490,32 +1556,59 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   onAddToQueue={handleQueueCheckIn}
                 />
               ))}
+              {virtualWindow.paddingBottom > 0 && (
+                <View style={{ height: virtualWindow.paddingBottom, width: '100%' }} />
+              )}
             </View>
           </ScrollView>
         </Card>
       ) : (
-        <View style={styles.list}>
-          {filteredPatients.map((item) => (
-            <PatientDirectoryCard
-              key={item.id}
-              patient={item}
-              mode="card"
-              isDesktopGrid={isDesktop}
-              checkingIn={checkingInPatientId === item.id}
-              disableCheckIn={!!checkingInPatientId}
-              onOpenChart={(p) => handleOpenChart(p)}
-              onEditDemographics={handleOpenEditDemographics}
-              onOpenPhilHealth={handleOpenPhilHealthProfile}
-              onBookAppointment={(p) =>
-                navigation.navigate('Appointments', {
-                  patientId: p.id,
-                  patientName: p.fullName,
-                  patientCode: p.patientCode,
-                })
-              }
-              onAddToQueue={handleQueueCheckIn}
-            />
+        <View
+          style={styles.virtualListContainer}
+          onLayout={(e) => {
+            const layoutY = e.nativeEvent.layout.y;
+            if (layoutY > 0 && Math.abs(layoutY - listTopOffset) > 10) {
+              setListTopOffset(layoutY);
+            }
+          }}
+        >
+          {virtualWindow.paddingTop > 0 && (
+            <View style={{ height: virtualWindow.paddingTop, width: '100%' }} />
+          )}
+          {visibleCardRows.map((row) => (
+            <View
+              key={row.key}
+              style={isDesktop ? styles.cardRowDesktop : styles.cardRowMobile}
+            >
+              {row.items.map((item) => (
+                <PatientDirectoryCard
+                  key={item.id}
+                  patient={item}
+                  mode="card"
+                  isDesktopGrid={isDesktop}
+                  checkingIn={checkingInPatientId === item.id}
+                  disableCheckIn={!!checkingInPatientId}
+                  onOpenChart={(p) => handleOpenChart(p)}
+                  onEditDemographics={handleOpenEditDemographics}
+                  onOpenPhilHealth={handleOpenPhilHealthProfile}
+                  onBookAppointment={(p) =>
+                    navigation.navigate('Appointments', {
+                      patientId: p.id,
+                      patientName: p.fullName,
+                      patientCode: p.patientCode,
+                    })
+                  }
+                  onAddToQueue={handleQueueCheckIn}
+                />
+              ))}
+              {isDesktop && row.items.length === 1 && (
+                <View style={styles.cardRowPlaceholder} />
+              )}
+            </View>
           ))}
+          {virtualWindow.paddingBottom > 0 && (
+            <View style={{ height: virtualWindow.paddingBottom, width: '100%' }} />
+          )}
         </View>
       )}
 
@@ -2720,6 +2813,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.lg,
+  },
+  virtualListContainer: {
+    width: '100%',
+  },
+  cardRowDesktop: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    gap: theme.spacing.lg,
+    width: '100%',
+    marginBottom: theme.spacing.lg,
+  },
+  cardRowMobile: {
+    flexDirection: 'column',
+    width: '100%',
+    marginBottom: theme.spacing.lg,
+  },
+  cardRowPlaceholder: {
+    flexBasis: '48.8%',
+    width: '48.8%',
+    maxWidth: '49%',
   },
   tableCard: {
     padding: 0,

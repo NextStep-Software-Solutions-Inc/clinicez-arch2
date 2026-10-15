@@ -63,6 +63,7 @@ mock.module('../constants/fonts', () => ({
 const { clinicService } = await import('../services/clinicService');
 const { clinicApiClient } = await import('../services/apiClient');
 const { default: PatientDirectoryCard } = await import('../components/patient/PatientDirectoryCard');
+const { calculateVirtualWindow } = await import('../utils/useVirtualList');
 
 describe('Patient Directory Scalability & Infinite Scroll Contract', () => {
   test('1. clinicService.getPatients serializes page, pageSize=50 default, filterMode, and search correctly', async () => {
@@ -129,5 +130,90 @@ describe('Patient Directory Scalability & Infinite Scroll Contract', () => {
     expect(screenCode).toContain('Loading more patients (50 at a time)...');
     expect(screenCode).toContain('Load more patients');
     expect(screenCode).toContain("All {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'} loaded");
+  });
+
+  test('4. calculateVirtualWindow windows 10,000 items in Card mode (itemsPerRow=2) with constant DOM footprint', () => {
+    // Top of list: scrollY = 0
+    const topWindow = calculateVirtualWindow({
+      totalCount: 10000,
+      itemHeight: 270,
+      viewportHeight: 800,
+      scrollY: 0,
+      listTopOffset: 180,
+      itemsPerRow: 2,
+      overscan: 4,
+    });
+
+    expect(topWindow.isVirtualizing).toBe(true);
+    expect(topWindow.startIndex).toBe(0);
+    expect(topWindow.endIndex).toBe(14); // 7 rows * 2 = 14 items
+    expect(topWindow.visibleCount).toBe(14);
+    expect(topWindow.paddingTop).toBe(0);
+    expect(topWindow.totalRows).toBe(5000);
+    expect(topWindow.totalHeight).toBe(5000 * 270);
+    // Height invariant: paddingTop + visibleRows * itemHeight + paddingBottom === totalHeight
+    expect(topWindow.paddingTop + (topWindow.visibleCount / 2) * 270 + topWindow.paddingBottom).toBe(topWindow.totalHeight);
+
+    // Deep scroll: scrollY = 50,000
+    const deepWindow = calculateVirtualWindow({
+      totalCount: 10000,
+      itemHeight: 270,
+      viewportHeight: 800,
+      scrollY: 50000,
+      listTopOffset: 180,
+      itemsPerRow: 2,
+      overscan: 4,
+    });
+
+    expect(deepWindow.isVirtualizing).toBe(true);
+    expect(deepWindow.startIndex).toBeGreaterThan(0);
+    // Even with 10,000 records, only ~20-24 items are mounted in DOM!
+    expect(deepWindow.visibleCount).toBeLessThanOrEqual(30);
+    expect(deepWindow.paddingTop).toBeGreaterThan(0);
+    expect(deepWindow.paddingBottom).toBeGreaterThan(0);
+    expect(deepWindow.paddingTop + (deepWindow.visibleCount / 2) * 270 + deepWindow.paddingBottom).toBe(deepWindow.totalHeight);
+  });
+
+  test('5. calculateVirtualWindow windows 10,000 items in Table mode (itemsPerRow=1) with exact row heights', () => {
+    const tableWindow = calculateVirtualWindow({
+      totalCount: 10000,
+      itemHeight: 64,
+      viewportHeight: 800,
+      scrollY: 10000,
+      listTopOffset: 180,
+      itemsPerRow: 1,
+      overscan: 8,
+    });
+
+    expect(tableWindow.isVirtualizing).toBe(true);
+    expect(tableWindow.startIndex).toBeGreaterThan(0);
+    // Only ~30 rows in DOM instead of 10,000!
+    expect(tableWindow.visibleCount).toBeLessThanOrEqual(40);
+    expect(tableWindow.paddingTop + tableWindow.visibleCount * 64 + tableWindow.paddingBottom).toBe(tableWindow.totalHeight);
+    expect(tableWindow.totalHeight).toBe(640000);
+  });
+
+  test('6. Patients.screen.tsx integrates list virtualization into both Table and Card render trees', () => {
+    const screenCode = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
+
+    // 6.1 Virtualization hook import and usage
+    expect(screenCode).toContain("import { useVirtualList } from '../../utils/useVirtualList';");
+    expect(screenCode).toContain('const virtualWindow = useVirtualList({');
+    expect(screenCode).toContain('items: filteredPatients,');
+
+    // 6.2 Virtual spacers for Card mode
+    expect(screenCode).toContain('styles.virtualListContainer');
+    expect(screenCode).toContain('virtualWindow.paddingTop > 0');
+    expect(screenCode).toContain('virtualWindow.paddingBottom > 0');
+    expect(screenCode).toContain('visibleCardRows.map');
+
+    // 6.3 Virtual spacers for Table mode
+    expect(screenCode).toContain('virtualWindow.visibleItems.map');
+
+    // 6.4 Dynamic offset measurement via onLayout
+    expect(screenCode).toContain('setListTopOffset(layoutY)');
+
+    // 6.5 Throttled scroll tracking
+    expect(screenCode).toContain('setScrollY(currentY)');
   });
 });
