@@ -51,6 +51,10 @@ mock.module('react-native', () => ({
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
   NativeModules: {},
+  NativeEventEmitter: class {
+    addListener() { return { remove: () => {} }; }
+    removeAllListeners() {}
+  },
   Animated: {
     Value: class {
       constructor(public val: any) {}
