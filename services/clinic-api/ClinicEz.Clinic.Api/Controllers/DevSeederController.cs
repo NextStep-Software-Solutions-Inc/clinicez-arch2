@@ -166,7 +166,12 @@ public sealed class DevSeederController : ControllerBase
         }
 
         var totalPatients = await patientsQuery.CountAsync(ct);
-        var seededPatients = await patientsQuery.CountAsync(p => p.CreatedBy == "System:DevPatientSeeder" || p.CreatedBy == "seeder", ct);
+        var seededPatients = await patientsQuery.CountAsync(p =>
+            p.CreatedBy == "System:DevPatientSeeder" ||
+            p.CreatedBy == "seeder" ||
+            p.CreatedBy == "System:DevSeeder" ||
+            p.PatientCode.StartsWith("PAT-") ||
+            (p.Email != null && p.Email.Contains("@clinicez.ph")), ct);
         var totalEncounters = await encountersQuery.CountAsync(ct);
         var totalPrescriptions = await prescriptionsQuery.CountAsync(ct);
         var totalMedCerts = await medCertsQuery.CountAsync(ct);
@@ -204,11 +209,13 @@ public sealed class DevSeederController : ControllerBase
 
     /// <summary>
     /// Deletes development-seeded patient records for the specified or active clinic.
+    /// When purgeAll is true, deletes all patient records belonging to the clinic.
     /// </summary>
     [HttpDelete("clear-patients")]
     [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<object>>> ClearSeededPatients(
         [FromQuery] Guid? clinicId = null,
+        [FromQuery] bool purgeAll = false,
         CancellationToken ct = default)
     {
         if (!IsDevAuthorized())
@@ -218,33 +225,22 @@ public sealed class DevSeederController : ControllerBase
         }
 
         var targetClinicId = ResolveClinicId(clinicId);
-        IQueryable<ClinicPatient> query = _dbContext.Patients.IgnoreQueryFilters()
-            .Where(p => p.CreatedBy == "System:DevPatientSeeder" || p.CreatedBy == "seeder");
-
-        if (targetClinicId.HasValue && targetClinicId.Value != Guid.Empty)
+        if (!targetClinicId.HasValue || targetClinicId.Value == Guid.Empty)
         {
-            var cid = targetClinicId.Value;
-            query = query.Where(p => p.ClinicId == cid);
+            return BadRequest(ApiResponse<object>.Fail("A valid Clinic ID must be provided or resolved from the clinic context."));
         }
 
-        var seededIds = await query.Select(p => p.Id).ToListAsync(ct);
-
-        if (seededIds.Count == 0)
-        {
-            return Ok(ApiResponse<object>.Success(new { clearedCount = 0, clinicId = targetClinicId }, "No seeded patients found to clear for this clinic."));
-        }
-
-        foreach (var chunk in seededIds.Chunk(200))
-        {
-            var chunkPatients = await _dbContext.Patients.IgnoreQueryFilters()
-                .Where(p => chunk.Contains(p.Id))
-                .ToListAsync(ct);
-            _dbContext.Patients.RemoveRange(chunkPatients);
-            await _dbContext.SaveChangesAsync(ct);
-        }
+        var resolvedTenantId = ResolveTenantId(null);
+        var clearedCount = await DevPatientSeeder.PurgeClinicTestRecordsAsync(
+            _dbContext,
+            targetClinicId.Value,
+            resolvedTenantId,
+            purgeAll,
+            _logger,
+            ct);
 
         return Ok(ApiResponse<object>.Success(
-            new { clearedCount = seededIds.Count, clinicId = targetClinicId },
-            $"Successfully purged {seededIds.Count:N0} seeded development patient records for clinic {targetClinicId}."));
+            new { clearedCount, clinicId = targetClinicId.Value, purgeAll },
+            $"Successfully purged {clearedCount:N0} records for clinic {targetClinicId.Value}."));
     }
 }

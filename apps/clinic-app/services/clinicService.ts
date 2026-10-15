@@ -2943,7 +2943,11 @@ export const clinicService = {
     if (options?.clinicId) params.append('clinicId', options.clinicId);
     if (options?.tenantId) params.append('tenantId', options.tenantId);
     const qs = params.toString();
-    return clinicApiClient.post<PatientSeedResult>(`/dev/seed-patients${qs ? `?${qs}` : ''}`);
+    return clinicApiClient.post<PatientSeedResult>(
+      `/dev/seed-patients${qs ? `?${qs}` : ''}`,
+      null,
+      { timeout: 300_000 }
+    );
   },
 
   async getClinicSeedStatus(clinicId?: string) {
@@ -2951,9 +2955,24 @@ export const clinicService = {
     return clinicApiClient.get<SeedStatusResult>(`/dev/seed-status${qs}`);
   },
 
-  async clearClinicSeedData(clinicId?: string) {
-    const qs = clinicId ? `?clinicId=${encodeURIComponent(clinicId)}` : '';
-    return clinicApiClient.delete<{ clearedCount: number; clinicId?: string }>(`/dev/clear-patients${qs}`);
+  async clearClinicSeedData(options?: { clinicId?: string; purgeAll?: boolean } | string) {
+    let clinicId: string | undefined;
+    let purgeAll = false;
+    if (typeof options === 'string') {
+      clinicId = options;
+    } else if (options) {
+      clinicId = options.clinicId;
+      purgeAll = !!options.purgeAll;
+    }
+
+    const params = new URLSearchParams();
+    if (clinicId) params.append('clinicId', clinicId);
+    if (purgeAll) params.append('purgeAll', 'true');
+    const qs = params.toString();
+    return clinicApiClient.delete<{ clearedCount: number; clinicId?: string; purgeAll?: boolean }>(
+      `/dev/clear-patients${qs ? `?${qs}` : ''}`,
+      { timeout: 300_000 }
+    );
   }
 };
 

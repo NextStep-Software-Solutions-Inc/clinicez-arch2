@@ -84,24 +84,40 @@ export default function DevDataSeederCard({ onNavigatePatients }: DevDataSeederC
   const handleClear = () => {
     if (!activeClinicId) return;
 
+    const hasSeeded = (status?.seededPatients ?? 0) > 0;
+    const hasAnyPatients = (status?.totalPatients ?? 0) > 0;
+
+    if (!hasSeeded && !hasAnyPatients) {
+      notify.info('No patient records found to clear.');
+      return;
+    }
+
+    const title = hasSeeded ? 'Purge Clinic Test Data' : 'Reset Clinic Patient Records';
+    const message = hasSeeded
+      ? `Are you sure you want to delete all test patient records generated for "${activeClinicName}"? Non-test patients and clinic settings will be preserved.`
+      : `No tagged test records were detected, but "${activeClinicName}" has ${status?.totalPatients} patient records. Do you want to purge all patient records for this clinic to reset for load testing?`;
+
     Alert.alert(
-      'Purge Clinic Test Data',
-      `Are you sure you want to delete all test patient records generated for "${activeClinicName}"? Non-test patients and settings will be preserved.`,
+      title,
+      message,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Purge Test Data',
+          text: hasSeeded ? 'Purge Test Data' : 'Purge All Records',
           style: 'destructive',
           onPress: async () => {
             setClearing(true);
-            const [res, err] = await clinicService.clearClinicSeedData(activeClinicId);
+            const [res, err] = await clinicService.clearClinicSeedData({
+              clinicId: activeClinicId,
+              purgeAll: !hasSeeded,
+            });
             setClearing(false);
             if (err) {
               notify.error(err.message || 'Failed to purge clinic test records.');
               return;
             }
             notify.success(
-              `Purged ${res?.clearedCount ?? 0} test patient records for this clinic.`
+              `Purged ${res?.clearedCount ?? 0} patient records for this clinic.`
             );
             setLastResult(null);
             fetchStatus();
@@ -329,7 +345,7 @@ export default function DevDataSeederCard({ onNavigatePatients }: DevDataSeederC
               variant="outline"
               icon="trash"
               loading={clearing}
-              disabled={seeding || clearing || !activeClinicId || !status?.seededPatients}
+              disabled={seeding || clearing || !activeClinicId || (!status?.seededPatients && !status?.totalPatients)}
               onPress={handleClear}
             />
 

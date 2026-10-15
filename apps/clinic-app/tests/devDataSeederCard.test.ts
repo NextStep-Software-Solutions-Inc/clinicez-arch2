@@ -105,6 +105,7 @@ mock.module('../constants/fonts', () => ({
 
 const { default: DevDataSeederCard } = await import('../components/settings/DevDataSeederCard');
 const { clinicService } = await import('../services/clinicService');
+const { clinicApiClient } = await import('../services/apiClient');
 
 describe('DevDataSeederCard — Clinic-Exclusive Data Seeder Component', () => {
   afterAll(() => {
@@ -144,5 +145,29 @@ describe('DevDataSeederCard — Clinic-Exclusive Data Seeder Component', () => {
     expect(typeof clinicService.seedClinicData).toBe('function');
     expect(typeof clinicService.getClinicSeedStatus).toBe('function');
     expect(typeof clinicService.clearClinicSeedData).toBe('function');
+  });
+
+  test('5. clearClinicSeedData supports both string clinicId and object options with purgeAll', async () => {
+    let capturedUrl = '';
+    let capturedConfig: any = null;
+    const originalDelete = clinicApiClient.delete;
+    (clinicApiClient as any).delete = async (url: string, config?: any) => {
+      capturedUrl = url;
+      capturedConfig = config;
+      return [{ clearedCount: 5, clinicId: 'test-clinic-id' }, null];
+    };
+
+    try {
+      await clinicService.clearClinicSeedData('test-clinic-id');
+      expect(capturedUrl).toContain('clinicId=test-clinic-id');
+      expect(capturedConfig?.timeout).toBe(300_000);
+
+      await clinicService.clearClinicSeedData({ clinicId: 'test-clinic-id', purgeAll: true });
+      expect(capturedUrl).toContain('clinicId=test-clinic-id');
+      expect(capturedUrl).toContain('purgeAll=true');
+      expect(capturedConfig?.timeout).toBe(300_000);
+    } finally {
+      (clinicApiClient as any).delete = originalDelete;
+    }
   });
 });

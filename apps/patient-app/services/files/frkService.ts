@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import { aesDecryptBase64, aesEncrypt, base64ToBytes, deriveAesKeyBase64, generateAesKeyBase64 } from './aes';
 import { storage } from '@utils/storage';
 import { db } from '@db/index';
@@ -17,12 +18,13 @@ function getFrkSecureKey(patientId: string) {
   return `${FRK_KEY_PREFIX}_${patientId}`;
 }
 
-// Generate a random 16-character FRK (e.g. ABCD-EFGH-IJKL-MNOP)
+// Generate a cryptographically random 16-character FRK (e.g. ABCD-EFGH-IJKL-MNOP)
 export function generateFrk() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const randomBytes = Crypto.getRandomBytes(16);
   let frk = '';
   for (let i = 0; i < 16; i++) {
-    frk += chars.charAt(Math.floor(Math.random() * chars.length));
+    frk += chars.charAt(randomBytes[i] % chars.length);
   }
   return `${frk.slice(0, 4)}-${frk.slice(4, 8)}-${frk.slice(8, 12)}-${frk.slice(12, 16)}`;
 }

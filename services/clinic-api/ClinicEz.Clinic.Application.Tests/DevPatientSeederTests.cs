@@ -213,4 +213,132 @@ public class DevPatientSeederTests
         var countAfter = await context.Patients.IgnoreQueryFilters().CountAsync(p => p.ClinicId == clinicId);
         Assert.Equal(15, countAfter);
     }
+
+    [Fact]
+    public async Task PurgeClinicTestRecordsAsync_Removes_Test_Patients_And_Cascades_To_Child_Entities()
+    {
+        // Arrange
+        var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
+        var clinicId = Guid.NewGuid();
+
+        // 1. Seed 10 test patients
+        await DevPatientSeeder.SeedAsync(context, new PatientSeedOptions
+        {
+            Count = 10,
+            TenantId = "tenant_test",
+            ClinicId = clinicId
+        });
+
+        // 2. Add 1 manual real patient (not seeded)
+        var realPatientId = Guid.NewGuid();
+        context.Patients.Add(new ClinicPatient
+        {
+            Id = realPatientId,
+            TenantId = "tenant_test",
+            ClinicId = clinicId,
+            PatientCode = "REG-2026-00001",
+            FirstName = "Maria",
+            LastName = "Santos",
+            ContactNumber = "0917-123-4567",
+            DateOfBirth = new DateOnly(1990, 1, 1),
+            Gender = "Female",
+            CreatedBy = "staff-user-123"
+        });
+        await context.SaveChangesAsync();
+
+        // Act: Purge with purgeAll = false
+        var cleared = await DevPatientSeeder.PurgeClinicTestRecordsAsync(context, clinicId, "tenant_test", purgeAll: false);
+
+        // Assert
+        Assert.Equal(10, cleared);
+
+        var remainingPatients = await context.Patients.IgnoreQueryFilters().Where(p => p.ClinicId == clinicId).ToListAsync();
+        Assert.Single(remainingPatients);
+        Assert.Equal(realPatientId, remainingPatients[0].Id);
+
+        // All child entities for seeded patients must have been purged
+        var remainingEncounters = await context.Consultations.IgnoreQueryFilters().Where(c => c.ClinicId == clinicId).ToListAsync();
+        Assert.Empty(remainingEncounters);
+
+        var remainingCerts = await context.MedicalCertificates.IgnoreQueryFilters().Where(c => c.ClinicId == clinicId).ToListAsync();
+        Assert.Empty(remainingCerts);
+    }
+
+    [Fact]
+    public async Task PurgeClinicTestRecordsAsync_With_PurgeAll_Clears_All_Clinic_Records()
+    {
+        // Arrange
+        var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
+        var clinicId = Guid.NewGuid();
+
+        // Seed 5 test patients
+        await DevPatientSeeder.SeedAsync(context, new PatientSeedOptions
+        {
+            Count = 5,
+            TenantId = "tenant_test",
+            ClinicId = clinicId
+        });
+
+        // Add 1 manual patient with a different prefix and creator
+        context.Patients.Add(new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant_test",
+            ClinicId = clinicId,
+            PatientCode = "CUSTOM-999",
+            FirstName = "Juan",
+            LastName = "Dela Cruz",
+            ContactNumber = "0918-987-6543",
+            DateOfBirth = new DateOnly(1985, 5, 20),
+            Gender = "Male",
+            CreatedBy = "admin"
+        });
+        await context.SaveChangesAsync();
+
+        // Act: Purge with purgeAll = true
+        var cleared = await DevPatientSeeder.PurgeClinicTestRecordsAsync(context, clinicId, "tenant_test", purgeAll: true);
+
+        // Assert: All 6 patients removed
+        Assert.Equal(6, cleared);
+
+        var remainingPatients = await context.Patients.IgnoreQueryFilters().Where(p => p.ClinicId == clinicId).CountAsync();
+        Assert.Equal(0, remainingPatients);
+
+        var remainingEncounters = await context.Consultations.IgnoreQueryFilters().Where(c => c.ClinicId == clinicId).CountAsync();
+        Assert.Equal(0, remainingEncounters);
+
+        var remainingCerts = await context.MedicalCertificates.IgnoreQueryFilters().Where(c => c.ClinicId == clinicId).CountAsync();
+        Assert.Equal(0, remainingCerts);
+    }
+
+    [Fact]
+    public async Task SeedAsync_Generates_Unique_Certificate_And_Prescription_Numbers()
+    {
+        // Arrange
+        var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
+        var clinicId = Guid.NewGuid();
+
+        // Act: Seed 50 patients (generates dozens of certs and prescriptions)
+        var result = await DevPatientSeeder.SeedAsync(context, new PatientSeedOptions
+        {
+            Count = 50,
+            TenantId = "tenant_test",
+            ClinicId = clinicId
+        });
+
+        // Assert
+        var certNumbers = await context.MedicalCertificates.IgnoreQueryFilters()
+            .Where(m => m.ClinicId == clinicId)
+            .Select(m => m.CertificateNumber)
+            .ToListAsync();
+
+        Assert.Equal(certNumbers.Count, certNumbers.Distinct().Count());
+
+        var rxNumbers = await context.Consultations.IgnoreQueryFilters()
+            .Where(c => c.ClinicId == clinicId && c.PrescriptionNumber != null)
+            .Select(c => c.PrescriptionNumber!)
+            .ToListAsync();
+
+        Assert.Equal(rxNumbers.Count, rxNumbers.Distinct().Count());
+    }
 }

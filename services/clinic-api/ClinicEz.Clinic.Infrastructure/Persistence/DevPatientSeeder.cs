@@ -329,6 +329,12 @@ public static class DevPatientSeeder
         var targetCount = Math.Max(1, options.Count);
         var batchSize = Math.Max(25, Math.Min(options.BatchSize, 250));
 
+        // Configure extended command timeout for high-volume relational operations
+        if (dbContext.Database.IsRelational())
+        {
+            dbContext.Database.SetCommandTimeout(300);
+        }
+
         // 1. Resolve target Clinic and Tenant strictly for this request
         Guid clinicId;
         string tenantId;
@@ -404,27 +410,14 @@ public static class DevPatientSeeder
             logger?.LogInformation("[DevPatientSeeder] Created default Attending Physician for Clinic {ClinicId}: Dr. Jose Rizal (PRC: 0098765)", clinicId);
         }
 
-        // 3. Clear existing seeded patients if requested
+        // 3. Clear existing seeded patients if requested using cascading relational cleanup
         if (options.ClearExistingSeededPatients)
         {
-            var oldPatients = await dbContext.Patients.IgnoreQueryFilters()
-                .Where(p => p.ClinicId == clinicId && (p.CreatedBy == "System:DevPatientSeeder" || p.CreatedBy == "seeder"))
-                .Select(p => p.Id)
-                .ToListAsync(ct);
-
-            if (oldPatients.Count > 0)
-            {
-                logger?.LogInformation("[DevPatientSeeder] Purging {Count} existing seeded patients and associated records...", oldPatients.Count);
-                foreach (var chunk in oldPatients.Chunk(200))
-                {
-                    var chunkPatients = await dbContext.Patients.IgnoreQueryFilters().Where(p => chunk.Contains(p.Id)).ToListAsync(ct);
-                    dbContext.Patients.RemoveRange(chunkPatients);
-                    await dbContext.SaveChangesAsync(ct);
-                }
-            }
+            logger?.LogInformation("[DevPatientSeeder] Purging existing test records for clinic {ClinicId} prior to seeding...", clinicId);
+            await PurgeClinicTestRecordsAsync(dbContext, clinicId, tenantId, purgeAll: false, logger, ct);
         }
 
-        // 4. Calculate existing max sequence for PatientCode
+        // 4. Calculate existing max sequence for PatientCode and sync with tracker
         var year = DateTime.UtcNow.Year;
         var prefix = $"PAT-{year}-";
         var existingCodes = await dbContext.Patients.IgnoreQueryFilters()
@@ -440,6 +433,18 @@ public static class DevPatientSeeder
                 currentSeq = s;
             }
         }
+
+        var tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(t => t.ClinicId == clinicId && t.TenantId == tenantId && t.Year == year, ct);
+
+        if (tracker != null && tracker.CurrentSequence > currentSeq)
+        {
+            currentSeq = tracker.CurrentSequence;
+        }
+
+        // Monotonic sequence baselines for collision-free certificate and prescription codes
+        var currentRxSeq = (await dbContext.Consultations.IgnoreQueryFilters().CountAsync(c => c.ClinicId == clinicId, ct)) + 1;
+        var currentCertSeq = (await dbContext.MedicalCertificates.IgnoreQueryFilters().CountAsync(m => m.ClinicId == clinicId, ct)) + 1;
 
         var result = new PatientSeedResult
         {
@@ -823,7 +828,7 @@ public static class DevPatientSeeder
                     var template = CaseTemplates[rng.Next(CaseTemplates.Length)];
                     var encounterDate = now.AddDays(-rng.Next(1, 360)).AddMinutes(-rng.Next(60, 480));
                     var encounterId = Guid.NewGuid();
-                    var rxNumber = $"RX-{encounterDate:yyyyMMdd}-{rng.Next(1000, 9999)}";
+                    var rxNumber = $"RX-{encounterDate:yyyyMMdd}-{currentRxSeq++:D5}-{Guid.NewGuid().ToString("N")[..4].ToUpperInvariant()}";
 
                     var encounter = new ConsultationEncounter
                     {
@@ -896,7 +901,7 @@ public static class DevPatientSeeder
                             Id = Guid.NewGuid(),
                             TenantId = tenantId,
                             ClinicId = clinicId,
-                            CertificateNumber = $"MC-{certDate:yyyyMMdd}-{rng.Next(1000, 9999)}",
+                            CertificateNumber = $"MC-{certDate:yyyyMMdd}-{currentCertSeq++:D5}-{Guid.NewGuid().ToString("N")[..4].ToUpperInvariant()}",
                             PatientId = patientId,
                             PatientName = $"{patient.FirstName} {patient.LastName}",
                             ConsultationId = encounterId,
@@ -961,7 +966,7 @@ public static class DevPatientSeeder
         }
 
         // 6. Update patient code sequence tracker in DB so future regular registrations don't collide
-        var tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
+        tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
             .FirstOrDefaultAsync(t => t.TenantId == tenantId && t.ClinicId == clinicId && t.Year == year, ct);
 
         if (tracker == null)
@@ -994,5 +999,203 @@ public static class DevPatientSeeder
             result.PatientsCreated, result.EncountersCreated, result.PrescriptionsCreated, result.MedicalCertificatesCreated, result.Elapsed.TotalSeconds);
 
         return result;
+    }
+
+    /// <summary>
+    /// Purges development seeded patient records and all dependent entities (consultations, prescriptions,
+    /// diagnoses, certificates, medical histories, exam profiles, allergies, problems, immunizations, and vitals)
+    /// in relational foreign-key dependency order for the target clinic.
+    /// </summary>
+    public static async Task<int> PurgeClinicTestRecordsAsync(
+        ApplicationDbContext dbContext,
+        Guid clinicId,
+        string? tenantId = null,
+        bool purgeAll = false,
+        ILogger? logger = null,
+        CancellationToken ct = default)
+    {
+        if (dbContext.Database.IsRelational())
+        {
+            dbContext.Database.SetCommandTimeout(300);
+        }
+
+        IQueryable<ClinicPatient> query = dbContext.Patients.IgnoreQueryFilters()
+            .Where(p => p.ClinicId == clinicId);
+
+        if (!purgeAll)
+        {
+            query = query.Where(p =>
+                p.CreatedBy == "System:DevPatientSeeder" ||
+                p.CreatedBy == "seeder" ||
+                p.CreatedBy == "System:DevSeeder" ||
+                p.PatientCode.StartsWith("PAT-") ||
+                (p.Email != null && p.Email.Contains("@clinicez.ph")));
+        }
+
+        var patientIds = await query.Select(p => p.Id).ToListAsync(ct);
+
+        logger?.LogInformation("[DevPatientSeeder] Purging {Count} patients for clinic {ClinicId} (PurgeAll: {PurgeAll})...",
+            patientIds.Count, clinicId, purgeAll);
+
+        if (patientIds.Count > 0)
+        {
+            foreach (var chunk in patientIds.Chunk(100))
+            {
+                var chunkList = chunk.ToList();
+
+                // 1. Encounter Diagnoses & Prescriptions
+                var encounterIds = await dbContext.Consultations.IgnoreQueryFilters()
+                    .Where(c => c.ClinicId == clinicId && chunkList.Contains(c.PatientId))
+                    .Select(c => c.Id)
+                    .ToListAsync(ct);
+
+                if (encounterIds.Count > 0)
+                {
+                    var diagnoses = await dbContext.Diagnoses.IgnoreQueryFilters()
+                        .Where(d => encounterIds.Contains(d.ConsultationEncounterId))
+                        .ToListAsync(ct);
+                    if (diagnoses.Count > 0) dbContext.Diagnoses.RemoveRange(diagnoses);
+
+                    var prescriptions = await dbContext.Prescriptions.IgnoreQueryFilters()
+                        .Where(p => encounterIds.Contains(p.ConsultationEncounterId))
+                        .ToListAsync(ct);
+                    if (prescriptions.Count > 0) dbContext.Prescriptions.RemoveRange(prescriptions);
+                }
+
+                // 2. Encounters & Medical Certificates
+                var encounters = await dbContext.Consultations.IgnoreQueryFilters()
+                    .Where(c => c.ClinicId == clinicId && chunkList.Contains(c.PatientId))
+                    .ToListAsync(ct);
+                if (encounters.Count > 0) dbContext.Consultations.RemoveRange(encounters);
+
+                var medCerts = await dbContext.MedicalCertificates.IgnoreQueryFilters()
+                    .Where(m => m.ClinicId == clinicId && chunkList.Contains(m.PatientId))
+                    .ToListAsync(ct);
+                if (medCerts.Count > 0) dbContext.MedicalCertificates.RemoveRange(medCerts);
+
+                // 3. Structured medical histories, immunizations, allergies, problems
+                var pastHist = await dbContext.PatientPastMedicalHistories.IgnoreQueryFilters()
+                    .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId))
+                    .ToListAsync(ct);
+                if (pastHist.Count > 0) dbContext.PatientPastMedicalHistories.RemoveRange(pastHist);
+
+                var famHist = await dbContext.PatientFamilyHistories.IgnoreQueryFilters()
+                    .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId))
+                    .ToListAsync(ct);
+                if (famHist.Count > 0) dbContext.PatientFamilyHistories.RemoveRange(famHist);
+
+                var socHist = await dbContext.PatientSocialHistories.IgnoreQueryFilters()
+                    .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId))
+                    .ToListAsync(ct);
+                if (socHist.Count > 0) dbContext.PatientSocialHistories.RemoveRange(socHist);
+
+                var surgHist = await dbContext.PatientSurgicalHistories.IgnoreQueryFilters()
+                    .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId))
+                    .ToListAsync(ct);
+                if (surgHist.Count > 0) dbContext.PatientSurgicalHistories.RemoveRange(surgHist);
+
+                var reproHist = await dbContext.PatientReproductiveHistories.IgnoreQueryFilters()
+                    .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId))
+                    .ToListAsync(ct);
+                if (reproHist.Count > 0) dbContext.PatientReproductiveHistories.RemoveRange(reproHist);
+
+                var physExam = await dbContext.PatientPhysicalExamProfiles.IgnoreQueryFilters()
+                    .Where(h => h.ClinicId == clinicId && chunkList.Contains(h.PatientId))
+                    .ToListAsync(ct);
+                if (physExam.Count > 0) dbContext.PatientPhysicalExamProfiles.RemoveRange(physExam);
+
+                var allergies = await dbContext.PatientAllergies.IgnoreQueryFilters()
+                    .Where(a => a.ClinicId == clinicId && chunkList.Contains(a.PatientId))
+                    .ToListAsync(ct);
+                if (allergies.Count > 0) dbContext.PatientAllergies.RemoveRange(allergies);
+
+                var problems = await dbContext.PatientProblems.IgnoreQueryFilters()
+                    .Where(p => p.ClinicId == clinicId && chunkList.Contains(p.PatientId))
+                    .ToListAsync(ct);
+                if (problems.Count > 0) dbContext.PatientProblems.RemoveRange(problems);
+
+                var imms = await dbContext.PatientImmunizations.IgnoreQueryFilters()
+                    .Where(i => i.ClinicId == clinicId && chunkList.Contains(i.PatientId))
+                    .ToListAsync(ct);
+                if (imms.Count > 0) dbContext.PatientImmunizations.RemoveRange(imms);
+
+                var triageVitals = await dbContext.TriageVitals.IgnoreQueryFilters()
+                    .Where(v => v.ClinicId == clinicId && chunkList.Contains(v.PatientId))
+                    .ToListAsync(ct);
+                if (triageVitals.Count > 0) dbContext.TriageVitals.RemoveRange(triageVitals);
+
+                var queueItems = await dbContext.QueueItems.IgnoreQueryFilters()
+                    .Where(q => q.ClinicId == clinicId && chunkList.Contains(q.PatientId))
+                    .ToListAsync(ct);
+                if (queueItems.Count > 0) dbContext.QueueItems.RemoveRange(queueItems);
+
+                // 4. Finally delete the patients
+                var patients = await dbContext.Patients.IgnoreQueryFilters()
+                    .Where(p => chunkList.Contains(p.Id))
+                    .ToListAsync(ct);
+                if (patients.Count > 0) dbContext.Patients.RemoveRange(patients);
+
+                await dbContext.SaveChangesAsync(ct);
+                dbContext.ChangeTracker.Clear();
+            }
+        }
+
+        // 5. Clean any orphaned records for this clinic if purgeAll is true
+        if (purgeAll)
+        {
+            var orphanCerts = await dbContext.MedicalCertificates.IgnoreQueryFilters()
+                .Where(m => m.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanCerts.Count > 0) dbContext.MedicalCertificates.RemoveRange(orphanCerts);
+
+            var orphanConsults = await dbContext.Consultations.IgnoreQueryFilters()
+                .Where(c => c.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanConsults.Count > 0)
+            {
+                var oIds = orphanConsults.Select(c => c.Id).ToList();
+                var oDiag = await dbContext.Diagnoses.IgnoreQueryFilters().Where(d => oIds.Contains(d.ConsultationEncounterId)).ToListAsync(ct);
+                if (oDiag.Count > 0) dbContext.Diagnoses.RemoveRange(oDiag);
+                var oPresc = await dbContext.Prescriptions.IgnoreQueryFilters().Where(p => oIds.Contains(p.ConsultationEncounterId)).ToListAsync(ct);
+                if (oPresc.Count > 0) dbContext.Prescriptions.RemoveRange(oPresc);
+                dbContext.Consultations.RemoveRange(orphanConsults);
+            }
+
+            var orphanImms = await dbContext.PatientImmunizations.IgnoreQueryFilters().Where(i => i.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanImms.Count > 0) dbContext.PatientImmunizations.RemoveRange(orphanImms);
+
+            var orphanProbs = await dbContext.PatientProblems.IgnoreQueryFilters().Where(p => p.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanProbs.Count > 0) dbContext.PatientProblems.RemoveRange(orphanProbs);
+
+            var orphanAllergies = await dbContext.PatientAllergies.IgnoreQueryFilters().Where(a => a.ClinicId == clinicId).ToListAsync(ct);
+            if (orphanAllergies.Count > 0) dbContext.PatientAllergies.RemoveRange(orphanAllergies);
+
+            await dbContext.SaveChangesAsync(ct);
+            dbContext.ChangeTracker.Clear();
+        }
+
+        // 6. Reset or synchronize sequence tracker
+        var year = DateTime.UtcNow.Year;
+        var prefix = $"PAT-{year}-";
+        var remainingMaxSeq = 0;
+        var remainingCodes = await dbContext.Patients.IgnoreQueryFilters()
+            .Where(p => p.ClinicId == clinicId && p.PatientCode.StartsWith(prefix))
+            .Select(p => p.PatientCode)
+            .ToListAsync(ct);
+
+        foreach (var code in remainingCodes)
+        {
+            if (code.Length > prefix.Length && int.TryParse(code[prefix.Length..], out var s) && s > remainingMaxSeq)
+                remainingMaxSeq = s;
+        }
+
+        var tracker = await dbContext.PatientCodeSequenceTrackers.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(t => t.ClinicId == clinicId && (tenantId == null || t.TenantId == tenantId) && t.Year == year, ct);
+        if (tracker != null)
+        {
+            tracker.CurrentSequence = remainingMaxSeq;
+            tracker.LastAssignedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(ct);
+        }
+
+        return patientIds.Count;
     }
 }

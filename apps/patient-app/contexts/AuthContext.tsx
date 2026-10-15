@@ -1,19 +1,32 @@
 import { createContext, useCallback, useContext, useState, useEffect, useRef, ReactNode } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import { useAuth as useClerkAuth, useClerk, useUser } from '@clerk/expo';
+import * as Crypto from 'expo-crypto';
 import { storage as SecureStore } from '../utils/storage';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { Platform } from 'react-native';
 import { getPatientByClerkId, createPatient } from '../services/api/patientApi';
 import { upsertPatientSummary } from '../db/hydrate';
+import { clearAllData } from '../db/seedDemoData';
 
 const PIN_KEY = 'app_pin';
+const PIN_SALT_KEY = 'app_pin_salt';
 const HAS_PIN_KEY = 'has_pin';
 const BIOMETRICS_ENABLED_KEY = 'biometrics_enabled';
 const LOCK_TIMEOUT_KEY = 'lock_timeout';
 const INTERNAL_PATIENT_ID_KEY = 'internal_patient_id';
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
 const WEB_IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 min default idle timeout on web
+
+async function hashPinWithSalt(pin: string, saltHex: string): Promise<string> {
+  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, `${saltHex}:${pin}`);
+}
+
+function generateSaltHex(): string {
+  const bytes = Crypto.getRandomBytes(16);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -251,11 +264,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   const logout = async () => {
-    await signOut();
+    const currentPatientId = internalPatientId ?? (await SecureStore.getItemAsync(INTERNAL_PATIENT_ID_KEY).catch(() => null));
+    await clearAllData().catch((err) => {
+      console.warn('[AuthContext] Failed to wipe local SQLite data on logout:', err);
+    });
+    const keysToDelete = [
+      INTERNAL_PATIENT_ID_KEY,
+      PIN_KEY,
+      PIN_SALT_KEY,
+      HAS_PIN_KEY,
+      ...(currentPatientId
+        ? [`patient_mak_key_${currentPatientId}`, `patient_frk_key_${currentPatientId}`]
+        : []),
+    ];
+    await Promise.all(keysToDelete.map((key) => SecureStore.deleteItemAsync(key).catch(() => {})));
+    setHasPIN(false);
     setIsLocked(false);
     setInternalPatientId(null);
     setVerificationError(null);
-    await SecureStore.deleteItemAsync(INTERNAL_PATIENT_ID_KEY).catch(() => {});
+    await signOut();
   };
 
   const lock = () => setIsLocked(true);
@@ -277,8 +304,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [clearLockTimer, scheduleLock]);
 
   const savePin = async (pin: string) => {
+    const saltHex = generateSaltHex();
+    const hashedPin = await hashPinWithSalt(pin, saltHex);
     await Promise.all([
-      SecureStore.setItemAsync(PIN_KEY, pin),
+      SecureStore.setItemAsync(PIN_SALT_KEY, saltHex),
+      SecureStore.setItemAsync(PIN_KEY, hashedPin),
       SecureStore.setItemAsync(HAS_PIN_KEY, 'true'),
     ]);
     setHasPIN(true);
@@ -286,8 +316,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const verifyPin = async (pin: string): Promise<boolean> => {
-    const stored = await SecureStore.getItemAsync(PIN_KEY);
+    const [stored, saltHex] = await Promise.all([
+      SecureStore.getItemAsync(PIN_KEY),
+      SecureStore.getItemAsync(PIN_SALT_KEY),
+    ]);
+    if (!stored) {
+      return false;
+    }
+    if (saltHex) {
+      const candidateHash = await hashPinWithSalt(pin, saltHex);
+      if (stored === candidateHash) {
+        setIsLocked(false);
+        return true;
+      }
+      return false;
+    }
+    // Backwards-compatible migration path for pre-existing unhashed PINs
     if (stored === pin) {
+      await savePin(pin);
       setIsLocked(false);
       return true;
     }

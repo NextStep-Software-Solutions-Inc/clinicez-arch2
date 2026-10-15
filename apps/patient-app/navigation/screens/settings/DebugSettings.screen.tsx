@@ -47,8 +47,13 @@ export default function DebugSettingsScreen() {
   };
 
   useEffect(() => {
+    if (!__DEV__) return;
     refreshStoreValues();
   }, []);
+
+  if (!__DEV__) {
+    return null;
+  }
 
   const handleOnboardingToggle = async (value: boolean) => {
     if (!value) {
