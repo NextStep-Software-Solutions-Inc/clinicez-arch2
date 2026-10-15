@@ -37,7 +37,7 @@ export default function ProfileScreen() {
   const { current: staffCurrent, reload: reloadStaff } = useStaff();
   const { facilityName, planTier } = useClinic();
   const { serverLabel } = useConnection();
-  const { preset, scale, setPreset } = useTextScale();
+  const { preset, scale, setPreset, stepDown, stepUp } = useTextScale();
 
   // Profile Form State
   const [title, setTitle] = useState('');
@@ -461,9 +461,52 @@ export default function ProfileScreen() {
         <Card>
           <CardHeader
             title="Workstation Display & Text Size"
-            subtitle="Adjust typography scale to fit your tablet or desktop screen comfortably"
+            subtitle="Adjust typography scale to fit your tablet or desktop screen comfortably (down to 60%)"
           />
           <CardContent style={styles.cardSection}>
+            {/* Fine adjustment stepper */}
+            <View style={styles.stepperContainer}>
+              <View style={styles.stepperInfo}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  FINE ADJUSTMENT (5% STEPS)
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Scale from 60% (Ultra Compact) to 130% (Extra Large)
+                </ThemedText>
+              </View>
+
+              <View style={styles.stepperControls}>
+                <Button
+                  title="-5%"
+                  variant="outline"
+                  size="sm"
+                  icon="minus"
+                  onPress={stepDown}
+                  disabled={scale <= 0.601}
+                />
+                <View style={styles.stepperValueBadge}>
+                  <ThemedText variant="bodyBold" color={theme.colors.primary}>
+                    {Math.round(scale * 100)}%
+                  </ThemedText>
+                </View>
+                <Button
+                  title="+5%"
+                  variant="outline"
+                  size="sm"
+                  icon="plus"
+                  onPress={stepUp}
+                  disabled={scale >= 1.299}
+                />
+                <Button
+                  title="Reset (100%)"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setPreset('standard')}
+                  disabled={scale === 1.0}
+                />
+              </View>
+            </View>
+
             <View style={styles.presetOptionsGrid}>
               {TEXT_SCALE_OPTIONS.map((opt) => {
                 const isSelected = preset === opt.preset;
@@ -715,6 +758,38 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     flexDirection: 'row',
     justifyContent: 'flex-start',
+  },
+  stepperContainer: {
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  stepperInfo: {
+    gap: 2,
+  },
+  stepperControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  stepperValueBadge: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    minWidth: 64,
+    alignItems: 'center',
   },
   presetOptionsGrid: {
     flexDirection: 'row',

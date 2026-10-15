@@ -43,18 +43,22 @@ describe('useSafeInsets Fallback', () => {
 });
 
 describe('TextScaleContext & Presets', () => {
-  it('defines 4 canonical typography scale presets', () => {
-    expect(TEXT_SCALE_OPTIONS).toHaveLength(4);
+  it('defines 6 canonical typography scale presets including down to 60%', () => {
+    expect(TEXT_SCALE_OPTIONS).toHaveLength(6);
     const presets = TEXT_SCALE_OPTIONS.map((o) => o.preset);
+    expect(presets).toContain('micro');
+    expect(presets).toContain('tiny');
     expect(presets).toContain('compact');
     expect(presets).toContain('standard');
     expect(presets).toContain('large');
     expect(presets).toContain('xlarge');
   });
 
-  it('compact scale is 0.85 (85%) and standard is 1.0 (100%)', () => {
+  it('micro scale is 0.6 (60%), compact is 0.85 (85%), and standard is 1.0 (100%)', () => {
+    const micro = TEXT_SCALE_OPTIONS.find((o) => o.preset === 'micro');
     const compact = TEXT_SCALE_OPTIONS.find((o) => o.preset === 'compact');
     const standard = TEXT_SCALE_OPTIONS.find((o) => o.preset === 'standard');
+    expect(micro?.scale).toBe(0.6);
     expect(compact?.scale).toBe(0.85);
     expect(standard?.scale).toBe(1.0);
   });
