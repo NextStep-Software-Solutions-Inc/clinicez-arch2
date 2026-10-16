@@ -4638,6 +4638,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");
 
+                    b.Property<decimal?>("BodyLengthCm")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");
 
@@ -4657,6 +4661,14 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<int?>("DiastolicBp")
                         .HasColumnType("integer");
 
+                    b.Property<string>("GrowthZScoreCategory")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("GrowthZScoreCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<decimal?>("HeadCircumferenceCm")
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)");
@@ -4668,11 +4680,19 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)");
 
+                    b.Property<decimal?>("HipCircumferenceCm")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsMeasuredRecumbent")
                         .HasColumnType("boolean");
+
+                    b.Property<decimal?>("LimbsCircumferenceCm")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
 
                     b.Property<decimal?>("MidUpperArmCircumferenceCm")
                         .HasPrecision(6, 2)
@@ -4694,14 +4714,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("PhilHealthZScoreCategory")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("PhilHealthZScoreCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
                     b.Property<string>("PreAssessmentNotes")
                         .HasColumnType("text");
 
@@ -4720,6 +4732,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<int?>("RespiratoryRateBreathsPerMin")
                         .HasColumnType("integer");
+
+                    b.Property<decimal?>("SkinfoldThicknessMm")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
 
                     b.Property<int?>("SystolicBp")
                         .HasColumnType("integer");
@@ -4749,6 +4765,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("VisualAcuityRight")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<decimal?>("WaistCircumferenceCm")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
 
                     b.Property<decimal?>("WeightKg")
                         .HasPrecision(6, 2)
