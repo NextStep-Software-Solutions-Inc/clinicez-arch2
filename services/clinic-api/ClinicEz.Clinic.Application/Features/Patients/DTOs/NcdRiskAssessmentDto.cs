@@ -1,6 +1,32 @@
 using System;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ClinicEz.Clinic.Application.Features.Patients.DTOs;
+
+public sealed class BooleanOrStringYnxJsonConverter : JsonConverter<string>
+{
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.True) return "Y";
+        if (reader.TokenType == JsonTokenType.False) return "N";
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var str = reader.GetString();
+            if (string.IsNullOrWhiteSpace(str)) return "N";
+            var upper = str.Trim().ToUpperInvariant();
+            if (upper == "TRUE") return "Y";
+            if (upper == "FALSE") return "N";
+            return upper;
+        }
+        return "N";
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+    {
+        writer.WriteStringValue(value);
+    }
+}
 
 public sealed record NcdRiskAssessmentDto(
     Guid Id,
@@ -53,6 +79,7 @@ public sealed record SaveNcdRiskAssessmentRequest(
     bool ThreeServingsVegetablesDaily = false,
     bool TwoToThreeServingsFruitDaily = false,
     bool PhysicalActivityAtLeast150MinsWeekly = false,
+    [property: JsonConverter(typeof(BooleanOrStringYnxJsonConverter))]
     string DiagnosedDiabetes = "N",
     bool HasPolyphagia = false,
     bool HasPolydipsia = false,

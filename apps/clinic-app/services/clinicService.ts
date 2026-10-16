@@ -1177,7 +1177,7 @@ export interface NcdRiskAssessment {
   threeServingsVegetablesDaily?: boolean;
   twoToThreeServingsFruitDaily?: boolean;
   physicalActivityAtLeast150MinsWeekly?: boolean;
-  diagnosedDiabetes?: boolean;
+  diagnosedDiabetes?: string | boolean;
   hasPolyphagia?: boolean;
   hasPolydipsia?: boolean;
   hasPolyuria?: boolean;
@@ -1219,7 +1219,7 @@ export interface SaveNcdRiskAssessmentPayload {
   threeServingsVegetablesDaily?: boolean;
   twoToThreeServingsFruitDaily?: boolean;
   physicalActivityAtLeast150MinsWeekly?: boolean;
-  diagnosedDiabetes?: boolean;
+  diagnosedDiabetes?: string | boolean;
   hasPolyphagia?: boolean;
   hasPolydipsia?: boolean;
   hasPolyuria?: boolean;

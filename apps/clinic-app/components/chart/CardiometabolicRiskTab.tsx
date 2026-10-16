@@ -168,7 +168,7 @@ export default function CardiometabolicRiskTab({
     setTwoToThreeServingsFruitDaily(data.twoToThreeServingsFruitDaily ?? true);
     setPhysicalActivityAtLeast150MinsWeekly(data.physicalActivityAtLeast150MinsWeekly ?? true);
 
-    setDiagnosedDiabetes(!!data.diagnosedDiabetes);
+    setDiagnosedDiabetes(data.diagnosedDiabetes === 'Y' || (data.diagnosedDiabetes as any) === true);
     setHasPolyphagia(!!data.hasPolyphagia);
     setHasPolydipsia(!!data.hasPolydipsia);
     setHasPolyuria(!!data.hasPolyuria);
@@ -276,7 +276,7 @@ export default function CardiometabolicRiskTab({
         twoToThreeServingsFruitDaily,
         physicalActivityAtLeast150MinsWeekly,
 
-        diagnosedDiabetes,
+        diagnosedDiabetes: diagnosedDiabetes ? 'Y' : 'N',
         hasPolyphagia,
         hasPolydipsia,
         hasPolyuria,
