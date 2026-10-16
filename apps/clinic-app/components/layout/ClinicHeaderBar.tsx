@@ -8,6 +8,7 @@ import { useClinicNotifications } from '../../hooks/useClinicNotifications';
 import { theme } from '../../constants/theme';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { useSafeInsets } from '../../utils/useSafeInsets';
+import { useUiDensity } from '../../context/UiDensityContext';
 
 export interface ClinicHeaderBarProps {
   /** Page title. This is the single source of the page heading - screens must not repeat it in the body. */
@@ -27,6 +28,7 @@ export default function ClinicHeaderBar({
 }: ClinicHeaderBarProps) {
   const insets = useSafeInsets();
   const { isCompact } = useBreakpoint();
+  const { multiplier, headerHeight } = useUiDensity();
   const [modalVisible, setModalVisible] = useState(false);
 
   const {
@@ -46,13 +48,22 @@ export default function ClinicHeaderBar({
     year: 'numeric',
   });
 
+  const padV = Math.max(6, Math.round(theme.spacing.md * multiplier));
+  const padH = Math.max(12, Math.round(theme.spacing.xl * multiplier));
+  const minH = headerHeight;
+
   return (
     <View
       style={[
         styles.container,
+        multiplier !== 1 && {
+          minHeight: minH,
+          paddingHorizontal: padH,
+          paddingVertical: padV,
+        },
         insets.top > 0 && {
-          paddingTop: theme.spacing.md + insets.top,
-          minHeight: theme.sizes.headerHeight + insets.top,
+          paddingTop: padV + insets.top,
+          minHeight: minH + insets.top,
         },
         style,
       ]}

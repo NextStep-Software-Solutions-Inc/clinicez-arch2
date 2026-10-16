@@ -15,6 +15,7 @@ import { OfflineSyncRunner } from './components/OfflineSyncRunner';
 import ErrorBoundary from './components/ErrorBoundary';
 import { CrashRecoveryBanner } from './components/CrashRecoveryBanner';
 import { TextScaleProvider } from './context/TextScaleContext';
+import { UiDensityProvider } from './context/UiDensityContext';
 import { initGlobalErrorHandlers } from './services/crashReporter';
 import { useOTAUpdate } from './hooks/useOTAUpdate';
 import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
@@ -52,21 +53,23 @@ export default function App() {
       <StatusBar style="dark" />
       <ErrorBoundary>
         <TextScaleProvider>
-          <CrashRecoveryBanner />
-          <ConnectionGate>
-            <FacilityActivationGate>
-              <AuthGate>
-                <ClinicProvider>
-                  <StaffProvider>
-                    <SidebarProvider>
-                      <OfflineSyncRunner />
-                      <Navigation linking={linkingOptions} theme={navigationTheme} />
-                    </SidebarProvider>
-                  </StaffProvider>
-                </ClinicProvider>
-              </AuthGate>
-            </FacilityActivationGate>
-          </ConnectionGate>
+          <UiDensityProvider>
+            <CrashRecoveryBanner />
+            <ConnectionGate>
+              <FacilityActivationGate>
+                <AuthGate>
+                  <ClinicProvider>
+                    <StaffProvider>
+                      <SidebarProvider>
+                        <OfflineSyncRunner />
+                        <Navigation linking={linkingOptions} theme={navigationTheme} />
+                      </SidebarProvider>
+                    </StaffProvider>
+                  </ClinicProvider>
+                </AuthGate>
+              </FacilityActivationGate>
+            </ConnectionGate>
+          </UiDensityProvider>
         </TextScaleProvider>
       </ErrorBoundary>
       <FeedbackHost />

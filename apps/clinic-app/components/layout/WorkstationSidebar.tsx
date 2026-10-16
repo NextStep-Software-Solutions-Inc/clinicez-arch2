@@ -11,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import { SidebarMode } from '../../context/SidebarContext';
 import { useSafeInsets } from '../../utils/useSafeInsets';
+import { useUiDensity } from '../../context/UiDensityContext';
 
 export interface NavItem {
   key: string;
@@ -59,9 +60,10 @@ export default function WorkstationSidebar({
   const { facilityName, planTier, clinicLogo, primaryColorHex } = useClinic();
   const { user, can } = useAuth();
   const insets = useSafeInsets();
+  const { sidebarWidth: densitySidebarWidth, multiplier } = useUiDensity();
 
   const isIconMode = mode === 'icon' || width === theme.sizes.sidebarCollapsedWidth;
-  const resolvedWidth = width ?? (isIconMode ? theme.sizes.sidebarCollapsedWidth : theme.sizes.sidebarWidth);
+  const resolvedWidth = width ?? (isIconMode ? theme.sizes.sidebarCollapsedWidth : densitySidebarWidth);
 
   const [activeTooltip, setActiveTooltip] = useState<TooltipData | null>(null);
 
@@ -103,6 +105,28 @@ export default function WorkstationSidebar({
 
   const displayName = facilityName || 'Clinic EZ';
 
+  const densityNavItemStyle =
+    multiplier !== 1
+      ? {
+          minHeight: Math.max(30, Math.round(theme.sizes.controlMd * multiplier)),
+          paddingHorizontal: Math.max(8, Math.round(theme.spacing.md * multiplier)),
+          gap: Math.max(6, Math.round(theme.spacing.md * multiplier)),
+        }
+      : null;
+
+  const densityIconOnlyStyle =
+    multiplier !== 1
+      ? {
+          minHeight: Math.max(30, Math.round(theme.sizes.controlMd * multiplier)),
+          width: Math.max(36, Math.round((theme.sizes.controlMd + 8) * multiplier)),
+        }
+      : null;
+
+  const baseHeaderMinH =
+    multiplier !== 1
+      ? Math.max(46, Math.round(theme.sizes.headerHeight * multiplier))
+      : theme.sizes.headerHeight;
+
   return (
     <View
       style={[
@@ -121,9 +145,13 @@ export default function WorkstationSidebar({
         style={[
           styles.brandHeader,
           isIconMode && styles.brandHeaderIconMode,
+          multiplier !== 1 && {
+            minHeight: baseHeaderMinH,
+            paddingHorizontal: Math.max(8, Math.round(theme.spacing.md * multiplier)),
+          },
           insets.top > 0 && {
             paddingTop: insets.top,
-            minHeight: theme.sizes.headerHeight + insets.top,
+            minHeight: baseHeaderMinH + insets.top,
           },
         ]}
       >
@@ -221,6 +249,7 @@ export default function WorkstationSidebar({
                 accessibilityState={{ selected: isActive }}
                 style={(state: InteractionState) => [
                   styles.navItemIconOnly,
+                  densityIconOnlyStyle,
                   state.hovered && !isActive && styles.navItemHover,
                   isActive && styles.navItemActive,
                   state.pressed && styles.navItemPressed,
@@ -249,6 +278,7 @@ export default function WorkstationSidebar({
               accessibilityState={{ selected: isActive }}
               style={(state: InteractionState) => [
                 styles.navItem,
+                densityNavItemStyle,
                 state.hovered && !isActive && styles.navItemHover,
                 isActive && styles.navItemActive,
                 state.pressed && styles.navItemPressed,

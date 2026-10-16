@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { theme } from '@constants/theme';
 import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString } from '@ui';
@@ -9,14 +9,12 @@ import {
   NcdRiskAssessment,
   SaveNcdRiskAssessmentPayload,
 } from '../../services/clinicService';
-
-interface CardiometabolicRiskTabProps {
-  patient: ClinicPatient;
-  initialLatestAssessment?: NcdRiskAssessment;
-  onRefreshChart?: () => void;
-}
-
-type RiskBandType = 'BandA' | 'BandB' | 'BandC' | 'BandD' | 'BandE';
+import {
+  calculatePhilPenRisk,
+  percentageToRiskBand,
+  RISK_BAND_MIDPOINTS,
+  type RiskBandType,
+} from '../../utils/philpenCalculator';
 
 const RISK_BAND_META: Record<RiskBandType, { label: string; desc: string; badgeVariant: 'success' | 'info' | 'warning' | 'urgent' | 'emergency'; color: string; bg: string }> = {
   BandA: { label: 'Band A (<10%)', desc: 'Low 10-Year CVD Risk', badgeVariant: 'success', color: theme.colors.successText, bg: theme.colors.successBg },
@@ -25,6 +23,12 @@ const RISK_BAND_META: Record<RiskBandType, { label: string; desc: string; badgeV
   BandD: { label: 'Band D (30-<40%)', desc: 'Very High 10-Year CVD Risk', badgeVariant: 'urgent', color: theme.colors.urgentText, bg: theme.colors.urgentBg },
   BandE: { label: 'Band E (>=40%)', desc: 'Critical / Extreme CVD Risk', badgeVariant: 'emergency', color: theme.colors.emergencyText, bg: theme.colors.emergencyBg },
 };
+
+export interface CardiometabolicRiskTabProps {
+  patient: ClinicPatient;
+  initialLatestAssessment?: NcdRiskAssessment;
+  onRefreshChart?: () => void;
+}
 
 export default function CardiometabolicRiskTab({
   patient,
@@ -39,6 +43,7 @@ export default function CardiometabolicRiskTab({
   // Assessment Form State
   const [riskBand, setRiskBand] = useState<RiskBandType>('BandA');
   const [riskScorePercent, setRiskScorePercent] = useState('');
+  const [isManuallyOverridden, setIsManuallyOverridden] = useState(false);
   const [assessedByStaffName, setAssessedByStaffName] = useState('');
   const [remarks, setRemarks] = useState('');
 
@@ -83,11 +88,78 @@ export default function CardiometabolicRiskTab({
   const [urineProteinValue, setUrineProteinValue] = useState('Negative');
   const [urineProteinDate, setUrineProteinDate] = useState('');
 
+  // Extract vitals and smoking status for DOH PHILPEN calculation
+  const pAny = patient as any;
+  const latestVitals = pAny.vitalsHistory && pAny.vitalsHistory.length > 0 ? pAny.vitalsHistory[0] : null;
+  const isSmoker = pAny.socialHistory?.isSmoker ?? false;
+
+  // Real-time calculation using the official DOH PHILPEN statutory scoring engine
+  const philpenCalc = useMemo(() => {
+    return calculatePhilPenRisk({
+      ageYears: patient.age,
+      gender: patient.gender,
+      isSmoker,
+      systolicBp: latestVitals?.systolicBp,
+      diastolicBp: latestVitals?.diastolicBp,
+      diagnosedDiabetes,
+      fastingBloodSugarMgDl: parseFloat(fastingBloodSugarMgDl) || undefined,
+      totalCholesterolMgDl: parseFloat(totalCholesterolMgDl) || undefined,
+      bodyMassIndex: latestVitals?.bmi,
+      hasAnginaOrHeartAttack: hasHistoryAnginaHeartAttack,
+      hasStrokeOrTia: hasHistoryStrokeOrTia,
+      severeChestPainOver30Mins,
+      transientNeurologicalDeficits,
+    });
+  }, [
+    patient.age,
+    patient.gender,
+    isSmoker,
+    latestVitals?.systolicBp,
+    latestVitals?.diastolicBp,
+    latestVitals?.bmi,
+    diagnosedDiabetes,
+    fastingBloodSugarMgDl,
+    totalCholesterolMgDl,
+    hasHistoryAnginaHeartAttack,
+    hasHistoryStrokeOrTia,
+    severeChestPainOver30Mins,
+    transientNeurologicalDeficits,
+  ]);
+
+  // Real-time typing sync: typing "15" immediately converts to Band B (10-<20%)
+  const handleRiskPercentageChange = (txt: string) => {
+    setRiskScorePercent(txt);
+    setIsManuallyOverridden(true);
+    const parsed = parseFloat(txt);
+    if (!isNaN(parsed) && parsed >= 0) {
+      const derivedBand = percentageToRiskBand(parsed);
+      setRiskBand(derivedBand);
+    }
+  };
+
+  // Clicking a risk band chip syncs riskBand and representative midpoint percentage
+  const handleBandSelect = (bandKey: RiskBandType) => {
+    setRiskBand(bandKey);
+    setIsManuallyOverridden(true);
+    const parsed = parseFloat(riskScorePercent);
+    if (isNaN(parsed) || percentageToRiskBand(parsed) !== bandKey) {
+      setRiskScorePercent(String(RISK_BAND_MIDPOINTS[bandKey]));
+    }
+  };
+
+  // One-click apply from PHILPEN statutory survey computation
+  const handleApplyCalculatedRisk = () => {
+    setIsManuallyOverridden(false);
+    setRiskBand(philpenCalc.riskBand);
+    setRiskScorePercent(String(philpenCalc.calculatedScorePercent));
+  };
+
   const populateLatest = (data: NcdRiskAssessment) => {
     if (data.riskBand && data.riskBand in RISK_BAND_META) {
       setRiskBand(data.riskBand as RiskBandType);
     }
     setRiskScorePercent(data.calculatedRiskScorePercent != null ? String(data.calculatedRiskScorePercent) : '');
+    setIsManuallyOverridden(true);
     setAssessedByStaffName(data.assessedByStaffName || '');
     setRemarks(data.remarks || '');
 
@@ -157,6 +229,24 @@ export default function CardiometabolicRiskTab({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patient.id]);
+
+  // If no prior assessment is recorded, auto-seed with PhilPEN computation
+  useEffect(() => {
+    if (assessments.length === 0 && !initialLatestAssessment && !isManuallyOverridden) {
+      setRiskBand(philpenCalc.riskBand);
+      setRiskScorePercent(String(philpenCalc.calculatedScorePercent));
+    }
+  }, [assessments.length, initialLatestAssessment, isManuallyOverridden, philpenCalc.riskBand, philpenCalc.calculatedScorePercent]);
+
+  // When a crisis override occurs (established CVD / stroke / hypertensive emergency), auto-elevate to Band E
+  useEffect(() => {
+    if (philpenCalc.crisisOverrideApplied) {
+      setRiskBand('BandE');
+      if (!isManuallyOverridden || !riskScorePercent) {
+        setRiskScorePercent(String(philpenCalc.calculatedScorePercent));
+      }
+    }
+  }, [philpenCalc.crisisOverrideApplied, philpenCalc.calculatedScorePercent, isManuallyOverridden, riskScorePercent]);
 
   const handleSaveAssessment = async () => {
     if (fastingBloodSugarDate && fastingBloodSugarDate.trim()) {
@@ -293,7 +383,7 @@ export default function CardiometabolicRiskTab({
                   styles.bandChipBtn,
                   isSelected && { backgroundColor: meta.color },
                 ]}
-                onPress={() => setRiskBand(bandKey)}
+                onPress={() => handleBandSelect(bandKey)}
               >
                 <ThemedText
                   variant="smallBold"
@@ -304,6 +394,42 @@ export default function CardiometabolicRiskTab({
               </Pressable>
             );
           })}
+        </View>
+
+        {/* Crisis Override Alert */}
+        {philpenCalc.crisisOverrideApplied && (
+          <View style={styles.overrideAlertBanner}>
+            <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+            <View style={{ flex: 1 }}>
+              <ThemedText variant="captionBold" color={theme.colors.emergency}>
+                PHILPEN CLINICAL CRISIS OVERRIDE ACTIVE
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.emergency}>
+                {philpenCalc.overrideReason}
+              </ThemedText>
+            </View>
+          </View>
+        )}
+
+        {/* Algorithm vs Manual Status Row */}
+        <View style={styles.autoCalcRow}>
+          <View style={styles.autoCalcInfo}>
+            <Icon name="activity" size={14} color={currentMeta.color} />
+            <ThemedText variant="caption" color={currentMeta.color}>
+              PhilPEN Survey Computed: <ThemedText variant="captionBold" color={currentMeta.color}>
+                {philpenCalc.riskBand.replace('Band', 'Band ')} ({philpenCalc.calculatedScorePercent}%)
+              </ThemedText>
+              {isManuallyOverridden ? ' • (Custom manual input)' : ' • (Live computed)'}
+            </ThemedText>
+          </View>
+          {isManuallyOverridden && (
+            <Pressable style={styles.autoSyncBtn} onPress={handleApplyCalculatedRisk}>
+              <Icon name="refresh" size={12} color={theme.colors.primary} />
+              <ThemedText variant="captionBold" color={theme.colors.primary}>
+                Auto-Calculate
+              </ThemedText>
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -324,7 +450,7 @@ export default function CardiometabolicRiskTab({
               label="Specific Risk Percentage (%)"
               placeholder="e.g. 15"
               value={riskScorePercent}
-              onChangeText={setRiskScorePercent}
+              onChangeText={handleRiskPercentageChange}
               keyboardType="numeric"
             />
           </View>
@@ -815,6 +941,45 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.borderLight,
+  },
+  overrideAlertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.emergencySubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.emergencyBorder,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+  },
+  autoCalcRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  autoCalcInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flex: 1,
+  },
+  autoSyncBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
   },
   sectionCard: {
     backgroundColor: theme.colors.surface,

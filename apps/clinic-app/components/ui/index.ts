@@ -50,6 +50,11 @@ export {
   type ServiceSelectProps,
 } from './ServiceSelect';
 export {
+  default as Select,
+  type SelectProps,
+  type SelectOption,
+} from './Select';
+export {
   useModalStack,
   registerModal,
   attachPortalElement,

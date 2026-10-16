@@ -8,6 +8,7 @@ import { useWorkstationShortcuts } from '../../utils/workstationShortcuts';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { useSidebar } from '../../context/SidebarContext';
 import { useSafeInsets } from '../../utils/useSafeInsets';
+import { useUiDensity } from '../../context/UiDensityContext';
 
 export interface ResponsiveLayoutProps {
   children: React.ReactNode;
@@ -69,8 +70,9 @@ export default function ResponsiveLayout({
 
   // Workstation View (Tablet / Desktop):
   // WorkstationSidebar is always rendered in either 'open' or 'icon' mode
+  const { sidebarWidth: densitySidebarWidth } = useUiDensity();
   const sidebarWidth =
-    mode === 'icon' ? theme.sizes.sidebarCollapsedWidth : theme.sizes.sidebarWidth;
+    mode === 'icon' ? theme.sizes.sidebarCollapsedWidth : densitySidebarWidth;
 
   return (
     <View style={styles.desktopContainer}>

@@ -3,6 +3,7 @@ import { View, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import ThemedText from './ThemedText';
 import { IconSlot, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
+import { useUiDensity } from '../../context/UiDensityContext';
 
 export interface CardProps {
   children: React.ReactNode;
@@ -11,8 +12,17 @@ export interface CardProps {
 }
 
 export function Card({ children, style, variant = 'default' }: CardProps) {
+  const { multiplier, cardPadding } = useUiDensity();
   const variantStyles = getCardVariantStyles(variant);
-  return <View style={[styles.card, variantStyles, style]}>{children}</View>;
+  const densityStyles =
+    multiplier !== 1
+      ? {
+          padding: cardPadding,
+          gap: Math.max(6, Math.round(theme.spacing.md * multiplier)),
+          borderRadius: Math.max(6, Math.round(theme.radii.lg * multiplier)),
+        }
+      : null;
+  return <View style={[styles.card, variantStyles, densityStyles, style]}>{children}</View>;
 }
 
 export interface CardHeaderProps {
@@ -35,12 +45,26 @@ export function CardHeader({
   truncateTitle,
   truncateSubtitle,
 }: CardHeaderProps) {
+  const { multiplier } = useUiDensity();
+  const densityHeaderStyle =
+    multiplier !== 1
+      ? {
+          paddingBottom: Math.max(6, Math.round(theme.spacing.md * multiplier)),
+          rowGap: Math.max(4, Math.round(theme.spacing.sm * multiplier)),
+        }
+      : null;
+  const iconTileDim =
+    multiplier !== 1
+      ? Math.max(26, Math.round((theme.sizes.controlMd - theme.spacing.xs) * multiplier))
+      : theme.sizes.controlMd - theme.spacing.xs;
+  const iconSize = multiplier < 0.8 ? theme.sizes.iconSm : theme.sizes.iconMd;
+
   return (
-    <View style={[styles.header, style]}>
+    <View style={[styles.header, densityHeaderStyle, style]}>
       <View style={styles.titleRow}>
         {resolveIconName(icon) ? (
-          <View style={styles.headerIcon}>
-            <IconSlot value={icon} size={theme.sizes.iconMd} color={theme.colors.primary} />
+          <View style={[styles.headerIcon, multiplier !== 1 && { width: iconTileDim, height: iconTileDim }]}>
+            <IconSlot value={icon} size={iconSize} color={theme.colors.primary} />
           </View>
         ) : null}
         <View style={styles.titleText}>
@@ -76,7 +100,14 @@ export interface CardContentProps {
 }
 
 export function CardContent({ children, style }: CardContentProps) {
-  return <View style={[styles.content, style]}>{children}</View>;
+  const { multiplier } = useUiDensity();
+  const densityStyle =
+    multiplier !== 1
+      ? {
+          gap: Math.max(6, Math.round(theme.spacing.md * multiplier)),
+        }
+      : null;
+  return <View style={[styles.content, densityStyle, style]}>{children}</View>;
 }
 
 export interface CardFooterProps {
@@ -85,7 +116,15 @@ export interface CardFooterProps {
 }
 
 export function CardFooter({ children, style }: CardFooterProps) {
-  return <View style={[styles.footer, style]}>{children}</View>;
+  const { multiplier } = useUiDensity();
+  const densityStyle =
+    multiplier !== 1
+      ? {
+          paddingTop: Math.max(6, Math.round(theme.spacing.md * multiplier)),
+          gap: Math.max(4, Math.round(theme.spacing.sm * multiplier)),
+        }
+      : null;
+  return <View style={[styles.footer, densityStyle, style]}>{children}</View>;
 }
 
 function getCardVariantStyles(variant: 'default' | 'elevated' | 'outlined' | 'subtle') {

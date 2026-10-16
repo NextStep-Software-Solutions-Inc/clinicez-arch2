@@ -25,6 +25,7 @@ import { clinicService } from '../../services/clinicService';
 import { notify } from '@utils/feedback';
 import { validatePasswordPolicy } from '../../services/passwordPolicy';
 import { useTextScale, TEXT_SCALE_OPTIONS } from '../../context/TextScaleContext';
+import { useUiDensity, UI_DENSITY_OPTIONS } from '../../context/UiDensityContext';
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -37,6 +38,7 @@ export default function ProfileScreen() {
   const { current: staffCurrent, reload: reloadStaff } = useStaff();
   const { facilityName, planTier } = useClinic();
   const { serverLabel } = useConnection();
+  const { density, setDensity } = useUiDensity();
   const { preset, scale, setPreset, stepDown, stepUp } = useTextScale();
 
   // Profile Form State
@@ -457,100 +459,172 @@ export default function ProfileScreen() {
           </CardContent>
         </Card>
 
-        {/* Section: Workstation Display & Text Size */}
+        {/* Section: Workstation Display & Ergonomics */}
         <Card>
           <CardHeader
-            title="Workstation Display & Text Size"
-            subtitle="Adjust typography scale to fit your tablet or desktop screen comfortably (down to 60%)"
+            title="Workstation Display & Ergonomics"
+            subtitle="Configure UI layout density (cards, buttons, sidebar) and text scaling for your device"
           />
           <CardContent style={styles.cardSection}>
-            {/* Fine adjustment stepper */}
-            <View style={styles.stepperContainer}>
-              <View style={styles.stepperInfo}>
+            {/* Subsection 1: Layout Density */}
+            <View style={styles.densitySection}>
+              <View style={styles.sectionHeaderRow}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  FINE ADJUSTMENT (5% STEPS)
+                  WORKSTATION UI DENSITY (CARDS, BUTTONS & SIDEBAR)
                 </ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Scale from 60% (Ultra Compact) to 130% (Extra Large)
-                </ThemedText>
+                <Badge
+                  label={
+                    density === 'ultraCompact'
+                      ? 'Ultra Compact (70%)'
+                      : density === 'compact'
+                      ? 'Compact (85%)'
+                      : 'Standard (100%)'
+                  }
+                  variant="primary"
+                  size="xs"
+                />
               </View>
 
-              <View style={styles.stepperControls}>
-                <Button
-                  title="-5%"
-                  variant="outline"
-                  size="sm"
-                  icon="minus"
-                  onPress={stepDown}
-                  disabled={scale <= 0.601}
-                />
-                <View style={styles.stepperValueBadge}>
-                  <ThemedText variant="bodyBold" color={theme.colors.primary}>
-                    {Math.round(scale * 100)}%
-                  </ThemedText>
-                </View>
-                <Button
-                  title="+5%"
-                  variant="outline"
-                  size="sm"
-                  icon="plus"
-                  onPress={stepUp}
-                  disabled={scale >= 1.299}
-                />
-                <Button
-                  title="Reset (100%)"
-                  variant="ghost"
-                  size="sm"
-                  onPress={() => setPreset('standard')}
-                  disabled={scale === 1.0}
-                />
+              <View style={styles.presetOptionsGrid}>
+                {UI_DENSITY_OPTIONS.map((opt) => {
+                  const isSelected = density === opt.density;
+                  return (
+                    <Pressable
+                      key={opt.density}
+                      onPress={() => {
+                        setDensity(opt.density);
+                        notify.info(`Workstation layout density updated to ${opt.label}`);
+                      }}
+                      style={[styles.presetCard, isSelected && styles.presetCardActive]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected }}
+                      accessibilityLabel={opt.label}
+                    >
+                      <View style={styles.presetHeader}>
+                        <ThemedText
+                          variant="bodyBold"
+                          color={isSelected ? theme.colors.primary : theme.colors.text}
+                        >
+                          {opt.label}
+                        </ThemedText>
+                        {isSelected ? <Badge label="Active" variant="primary" size="xs" /> : null}
+                      </View>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        {opt.description}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
               </View>
             </View>
 
-            <View style={styles.presetOptionsGrid}>
-              {TEXT_SCALE_OPTIONS.map((opt) => {
-                const isSelected = preset === opt.preset;
-                return (
-                  <Pressable
-                    key={opt.preset}
-                    onPress={() => {
-                      setPreset(opt.preset);
-                      notify.info(`Workstation text size updated to ${opt.label}`);
-                    }}
-                    style={[
-                      styles.presetCard,
-                      isSelected && styles.presetCardActive,
-                    ]}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: isSelected }}
-                    accessibilityLabel={opt.label}
-                  >
-                    <View style={styles.presetHeader}>
-                      <ThemedText
-                        variant="bodyBold"
-                        color={isSelected ? theme.colors.primary : theme.colors.text}
-                      >
-                        {opt.label}
-                      </ThemedText>
-                      {isSelected ? (
-                        <Badge label="Active" variant="primary" size="xs" />
-                      ) : null}
-                    </View>
-                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      {opt.description}
+            <View style={styles.densityDivider} />
+
+            {/* Subsection 2: Text Size Scale */}
+            <View style={styles.densitySection}>
+              <View style={styles.sectionHeaderRow}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  WORKSTATION TEXT SIZE SCALING
+                </ThemedText>
+                <Badge label={`${Math.round(scale * 100)}% Font Scale`} variant="neutral" size="xs" />
+              </View>
+
+              {/* Fine adjustment stepper */}
+              <View style={styles.stepperContainer}>
+                <View style={styles.stepperInfo}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    FINE ADJUSTMENT (5% STEPS)
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Scale text from 60% (Ultra Compact) to 130% (Extra Large)
+                  </ThemedText>
+                </View>
+
+                <View style={styles.stepperControls}>
+                  <Button
+                    title="-5%"
+                    variant="outline"
+                    size="sm"
+                    icon="minus"
+                    onPress={stepDown}
+                    disabled={scale <= 0.601}
+                  />
+                  <View style={styles.stepperValueBadge}>
+                    <ThemedText variant="bodyBold" color={theme.colors.primary}>
+                      {Math.round(scale * 100)}%
                     </ThemedText>
-                  </Pressable>
-                );
-              })}
+                  </View>
+                  <Button
+                    title="+5%"
+                    variant="outline"
+                    size="sm"
+                    icon="plus"
+                    onPress={stepUp}
+                    disabled={scale >= 1.299}
+                  />
+                  <Button
+                    title="Reset (100%)"
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => setPreset('standard')}
+                    disabled={scale === 1.0}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.presetOptionsGrid}>
+                {TEXT_SCALE_OPTIONS.map((opt) => {
+                  const isSelected = preset === opt.preset;
+                  return (
+                    <Pressable
+                      key={opt.preset}
+                      onPress={() => {
+                        setPreset(opt.preset);
+                        notify.info(`Workstation text size updated to ${opt.label}`);
+                      }}
+                      style={[styles.presetCard, isSelected && styles.presetCardActive]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected }}
+                      accessibilityLabel={opt.label}
+                    >
+                      <View style={styles.presetHeader}>
+                        <ThemedText
+                          variant="bodyBold"
+                          color={isSelected ? theme.colors.primary : theme.colors.text}
+                        >
+                          {opt.label}
+                        </ThemedText>
+                        {isSelected ? <Badge label="Active" variant="primary" size="xs" /> : null}
+                      </View>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        {opt.description}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
 
             {/* Live Typography Preview */}
             <View style={styles.previewBox}>
               <View style={styles.previewHeaderRow}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  LIVE TYPOGRAPHY PREVIEW
+                  LIVE WORKSTATION PREVIEW (DENSITY & TEXT)
                 </ThemedText>
-                <Badge label={`${Math.round(scale * 100)}% Scale`} variant="neutral" size="xs" />
+                <View style={styles.stepperControls}>
+                  <Badge
+                    label={
+                      density === 'ultraCompact'
+                        ? '70% Density'
+                        : density === 'compact'
+                        ? '85% Density'
+                        : '100% Density'
+                    }
+                    variant="primary"
+                    size="xs"
+                  />
+                  <Badge label={`${Math.round(scale * 100)}% Font`} variant="neutral" size="xs" />
+                </View>
               </View>
 
               <View style={styles.previewCard}>
@@ -758,6 +832,21 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     flexDirection: 'row',
     justifyContent: 'flex-start',
+  },
+  densitySection: {
+    gap: theme.spacing.sm,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  densityDivider: {
+    height: theme.sizes.borderWidth,
+    backgroundColor: theme.colors.borderLight,
+    marginVertical: theme.spacing.sm,
   },
   stepperContainer: {
     padding: theme.spacing.md,

@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { theme } from '@constants/theme';
-import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString } from '@ui';
+import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, Select } from '@ui';
 import { Alert } from '@utils/feedback';
+import {
+  PHILHEALTH_DELIVERY_TYPE_OPTIONS,
+  PHILHEALTH_CONTRACEPTIVE_OPTIONS,
+  normalizeDeliveryType,
+  normalizeContraceptiveMethod,
+} from '../../constants/reproductiveHealth';
 import {
   clinicService,
   ClinicPatient,
@@ -62,7 +68,7 @@ export default function ReproductiveHealthTab({
     setIsMenopausal(data.isMenopausal);
     setMenopauseAge(data.menopauseAge != null ? String(data.menopauseAge) : '');
 
-    setContraceptiveMethod(data.contraceptiveMethod || 'None');
+    setContraceptiveMethod(normalizeContraceptiveMethod(data.contraceptiveMethod));
     setReceivedFamilyPlanningCounseling(data.receivedFamilyPlanningCounseling);
 
     setGravidity(data.gravidity != null ? String(data.gravidity) : '0');
@@ -71,7 +77,7 @@ export default function ReproductiveHealthTab({
     setPretermBirths(data.pretermBirths != null ? String(data.pretermBirths) : '0');
     setAbortions(data.abortions != null ? String(data.abortions) : '0');
     setLivingChildren(data.livingChildren != null ? String(data.livingChildren) : '0');
-    setDeliveryType(data.deliveryType || 'Normal Spontaneous Vaginal');
+    setDeliveryType(normalizeDeliveryType(data.deliveryType));
     setHadPreEclampsiaHypertension(data.hadPreEclampsiaHypertension);
     setRemarks(data.remarks || '');
   };
@@ -396,11 +402,16 @@ export default function ReproductiveHealthTab({
           </View>
         </View>
 
-        <Input
+        <Select
           label="Most Recent Delivery Type"
-          placeholder="e.g. Normal Spontaneous Vaginal, Low Transverse Cesarean"
           value={deliveryType}
-          onChangeText={setDeliveryType}
+          onSelect={setDeliveryType}
+          options={PHILHEALTH_DELIVERY_TYPE_OPTIONS}
+          modalTitle="Select Most Recent Delivery Type"
+          modalSubtitle="PhilHealth Konsulta (pDeliveryTyp) statutory options"
+          icon="baby"
+          placeholder="Select delivery type..."
+          allowCustom
         />
 
         <View style={styles.switchRow}>
@@ -432,11 +443,16 @@ export default function ReproductiveHealthTab({
       <View style={styles.sectionCard}>
         <ThemedText variant="h3">Contraception & Family Planning</ThemedText>
 
-        <Input
+        <Select
           label="Contraceptive Method in Use"
-          placeholder="e.g. None, Oral Contraceptives, IUD, Injectable Depo, Barrier"
           value={contraceptiveMethod}
-          onChangeText={setContraceptiveMethod}
+          onSelect={setContraceptiveMethod}
+          options={PHILHEALTH_CONTRACEPTIVE_OPTIONS}
+          modalTitle="Select Contraceptive Method"
+          modalSubtitle="DOH Family Planning Program & PhilHealth Yakap (pBirthCtrlMethod)"
+          icon="shield"
+          placeholder="Select contraceptive method..."
+          allowCustom
         />
 
         <View style={styles.switchRow}>

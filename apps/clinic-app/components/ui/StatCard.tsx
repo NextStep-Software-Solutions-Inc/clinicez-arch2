@@ -3,6 +3,7 @@ import { View, StyleSheet, ViewStyle } from 'react-native';
 import ThemedText from './ThemedText';
 import Icon, { IconSlot, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
+import { useUiDensity } from '../../context/UiDensityContext';
 
 export interface StatCardProps {
   label: string;
@@ -27,15 +28,30 @@ export default function StatCard({
   valueColor,
   style,
 }: StatCardProps) {
+  const { multiplier, cardPadding } = useUiDensity();
+  const densityCardStyle =
+    multiplier !== 1
+      ? {
+          padding: cardPadding,
+          borderRadius: Math.max(6, Math.round(theme.radii.lg * multiplier)),
+          minWidth: Math.max(100, Math.round(140 * multiplier)),
+        }
+      : null;
+  const iconTileDim =
+    multiplier !== 1
+      ? Math.max(20, Math.round((theme.sizes.controlSm - theme.spacing.xs) * multiplier))
+      : theme.sizes.controlSm - theme.spacing.xs;
+  const iconSize = multiplier < 0.8 ? 14 : theme.sizes.iconSm;
+
   return (
-    <View style={[styles.card, style]}>
+    <View style={[styles.card, densityCardStyle, style]}>
       <View style={styles.topRow}>
         <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.label}>
           {label}
         </ThemedText>
         {resolveIconName(icon) ? (
-          <View style={styles.iconTile}>
-            <IconSlot value={icon} size={theme.sizes.iconSm} color={theme.colors.primary} />
+          <View style={[styles.iconTile, multiplier !== 1 && { width: iconTileDim, height: iconTileDim }]}>
+            <IconSlot value={icon} size={iconSize} color={theme.colors.primary} />
           </View>
         ) : null}
       </View>

@@ -11,6 +11,7 @@ import {
 import ThemedText from './ThemedText';
 import { IconSlot, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
+import { useUiDensity } from '../../context/UiDensityContext';
 
 export type ButtonVariant =
   | 'primary'
@@ -50,10 +51,17 @@ export default function Button({
   onPress,
   ...rest
 }: ButtonProps) {
+  const { multiplier } = useUiDensity();
   const variantStyles = getButtonVariantStyles(variant);
-  const sizeStyles = getButtonSizeStyles(size);
+  const sizeStyles = getButtonSizeStyles(size, multiplier);
   const showLeftIcon = !loading && !!resolveIconName(icon);
   const showRightIcon = !loading && !!resolveIconName(rightIcon);
+  const densityBaseStyle =
+    multiplier !== 1
+      ? {
+          gap: Math.max(4, Math.round(theme.spacing.sm * multiplier)),
+        }
+      : null;
 
   return (
     <Pressable
@@ -62,6 +70,7 @@ export default function Button({
       hitSlop={size === 'lg' ? undefined : theme.spacing.xs}
       style={(state: InteractionState) => [
         styles.buttonBase,
+        densityBaseStyle,
         variantStyles.container,
         sizeStyles.container,
         state.hovered && !disabled && variantStyles.hover,
@@ -138,38 +147,38 @@ function getButtonVariantStyles(variant: ButtonVariant) {
   }
 }
 
-function getButtonSizeStyles(size: ButtonSize) {
+function getButtonSizeStyles(size: ButtonSize, multiplier: number = 1) {
   switch (size) {
     case 'sm':
       return {
         container: {
-          minHeight: theme.sizes.controlSm,
-          paddingHorizontal: theme.spacing.md,
-          borderRadius: theme.radii.sm,
+          minHeight: Math.max(24, Math.round(theme.sizes.controlSm * multiplier)),
+          paddingHorizontal: Math.max(8, Math.round(theme.spacing.md * multiplier)),
+          borderRadius: Math.max(4, Math.round(theme.radii.sm * multiplier)),
         },
         text: theme.typography.captionBold,
-        iconSize: theme.sizes.iconSm,
+        iconSize: multiplier < 0.8 ? 14 : theme.sizes.iconSm,
       };
     case 'lg':
       return {
         container: {
-          minHeight: theme.sizes.controlLg,
-          paddingHorizontal: theme.spacing['2xl'],
-          borderRadius: theme.radii.md,
+          minHeight: Math.max(34, Math.round(theme.sizes.controlLg * multiplier)),
+          paddingHorizontal: Math.max(14, Math.round(theme.spacing['2xl'] * multiplier)),
+          borderRadius: Math.max(6, Math.round(theme.radii.md * multiplier)),
         },
         text: theme.typography.h3,
-        iconSize: theme.sizes.iconMd,
+        iconSize: multiplier < 0.8 ? 18 : theme.sizes.iconMd,
       };
     case 'md':
     default:
       return {
         container: {
-          minHeight: theme.sizes.controlMd,
-          paddingHorizontal: theme.spacing.lg,
-          borderRadius: theme.radii.md,
+          minHeight: Math.max(28, Math.round(theme.sizes.controlMd * multiplier)),
+          paddingHorizontal: Math.max(10, Math.round(theme.spacing.lg * multiplier)),
+          borderRadius: Math.max(6, Math.round(theme.radii.md * multiplier)),
         },
         text: theme.typography.bodyBold,
-        iconSize: theme.sizes.iconSm,
+        iconSize: multiplier < 0.8 ? 14 : theme.sizes.iconSm,
       };
   }
 }

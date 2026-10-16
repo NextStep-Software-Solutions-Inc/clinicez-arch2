@@ -11,6 +11,7 @@ import ThemedText from './ThemedText';
 import { TextInput } from './Text';
 import { IconSlot, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
+import { useUiDensity } from '../../context/UiDensityContext';
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -44,8 +45,27 @@ export default function Input({
   editable,
   ...rest
 }: InputProps) {
+  const { multiplier } = useUiDensity();
   const [isFocused, setIsFocused] = useState(false);
   const isEditable = disabled !== undefined ? !disabled : (editable ?? true);
+
+  const densityWrapperStyle =
+    multiplier !== 1
+      ? {
+          minHeight: rest.multiline
+            ? Math.max(50, Math.round((theme.sizes.controlLg + theme.sizes.controlMd) * multiplier))
+            : Math.max(28, Math.round(theme.sizes.controlMd * multiplier)),
+          paddingHorizontal: Math.max(8, Math.round(theme.spacing.md * multiplier)),
+          borderRadius: Math.max(4, Math.round(theme.radii.md * multiplier)),
+        }
+      : null;
+
+  const densityInputStyle =
+    multiplier !== 1
+      ? {
+          paddingVertical: Math.max(2, Math.round(theme.spacing.sm * multiplier)),
+        }
+      : null;
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -59,6 +79,7 @@ export default function Input({
       <View
         style={[
           styles.inputWrapper,
+          densityWrapperStyle,
           isFocused && styles.inputFocused,
           disabled ? styles.inputDisabled : null,
           error ? styles.inputError : null,
@@ -74,7 +95,7 @@ export default function Input({
         <TextInput
           ref={inputRef}
           editable={isEditable}
-          style={[styles.input, inputStyle]}
+          style={[styles.input, densityInputStyle, inputStyle]}
           placeholderTextColor={theme.colors.textLight}
           onFocus={(e) => {
             setIsFocused(true);
