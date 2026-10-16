@@ -176,42 +176,49 @@ public sealed class YakapPatientProfileController : ControllerBase
 
         var isDependentDefault = isPediatric;
 
+        static string FormatYn(bool? val) => val switch
+        {
+            true => "Y",
+            false => "N",
+            null => string.Empty
+        };
+
         // Map NCD Answers from relational NcdRiskAssessment if available
         var ncdAnswers = relNcd != null
             ? new YakapNcdAnswersDto(
-                Qid1Yn: relNcd.EatsProcessedFoodWeekly ? "Y" : "N",
-                Qid2Yn: relNcd.ThreeServingsVegetablesDaily ? "Y" : "N",
-                Qid3Yn: relNcd.TwoToThreeServingsFruitDaily ? "Y" : "N",
-                Qid4Yn: relNcd.PhysicalActivityAtLeast150MinsWeekly ? "Y" : "N",
-                Qid5Ynx: relNcd.DiagnosedDiabetes ?? "N",
-                Qid6Yn: relNcd.HasPolyphagia ? "Y" : "N",
-                Qid7Yn: relNcd.HasPolydipsia ? "Y" : "N",
-                Qid8Yn: relNcd.HasPolyuria ? "Y" : "N",
-                Qid9Yn: relNcd.HasChestPain ? "Y" : "N",
-                Qid10Yn: relNcd.PainInCenterOfChestOrLeftArm ? "Y" : "N",
-                Qid11Yn: relNcd.PainWhenWalkingUphill ? "Y" : "N",
-                Qid12Yn: relNcd.SlowsDownWhenPainOccurs ? "Y" : "N",
-                Qid13Yn: relNcd.PainRelievedWithin10Mins ? "Y" : "N",
-                Qid14Yn: relNcd.PainRelievedByNitrates ? "Y" : "N",
-                Qid15Yn: relNcd.SevereChestPainOver30Mins ? "Y" : "N",
-                Qid16Yn: relNcd.TransientNeurologicalDeficits ? "Y" : "N",
+                Qid1Yn: FormatYn(relNcd.EatsProcessedFoodWeekly),
+                Qid2Yn: FormatYn(relNcd.ThreeServingsVegetablesDaily),
+                Qid3Yn: FormatYn(relNcd.TwoToThreeServingsFruitDaily),
+                Qid4Yn: FormatYn(relNcd.PhysicalActivityAtLeast150MinsWeekly),
+                Qid5Ynx: relNcd.DiagnosedDiabetes ?? string.Empty,
+                Qid6Yn: FormatYn(relNcd.HasPolyphagia),
+                Qid7Yn: FormatYn(relNcd.HasPolydipsia),
+                Qid8Yn: FormatYn(relNcd.HasPolyuria),
+                Qid9Yn: FormatYn(relNcd.HasChestPain),
+                Qid10Yn: relNcd.HasChestPain == true ? FormatYn(relNcd.PainInCenterOfChestOrLeftArm) : string.Empty,
+                Qid11Yn: relNcd.HasChestPain == true ? FormatYn(relNcd.PainWhenWalkingUphill) : string.Empty,
+                Qid12Yn: (relNcd.HasChestPain == true && relNcd.PainWhenWalkingUphill == true) ? FormatYn(relNcd.SlowsDownWhenPainOccurs) : string.Empty,
+                Qid13Yn: (relNcd.HasChestPain == true && relNcd.PainWhenWalkingUphill == true) ? FormatYn(relNcd.PainRelievedWithin10Mins) : string.Empty,
+                Qid14Yn: (relNcd.HasChestPain == true && relNcd.PainWhenWalkingUphill == true) ? FormatYn(relNcd.PainRelievedByNitrates) : string.Empty,
+                Qid15Yn: FormatYn(relNcd.SevereChestPainOver30Mins),
+                Qid16Yn: FormatYn(relNcd.TransientNeurologicalDeficits),
                 Qid17Abcde: !string.IsNullOrWhiteSpace(relNcd.RiskBand) ? relNcd.RiskBand.Replace("Band", "") : "A",
-                Qid18Yn: relNcd.DiabetesMedicationStatus ?? "N",
-                Qid19Yn: relNcd.HasRaisedBloodGlucose ? "Y" : "N",
-                Qid19Fbsmg: relNcd.FastingBloodSugarMgDl?.ToString() ?? string.Empty,
-                Qid19Fbsmmol: relNcd.FastingBloodSugarMmolL?.ToString() ?? string.Empty,
-                Qid19Fbsdate: relNcd.FastingBloodSugarDate?.ToString("yyyy-MM-dd") ?? string.Empty,
-                Qid20Yn: relNcd.HasRaisedBloodLipids ? "Y" : "N",
-                Qid20Choleval: relNcd.TotalCholesterolMgDl?.ToString() ?? string.Empty,
-                Qid20Choledate: relNcd.TotalCholesterolDate?.ToString("yyyy-MM-dd") ?? string.Empty,
-                Qid21Yn: relNcd.UrineKetonesPresent ? "Y" : "N",
-                Qid21Ketonval: relNcd.UrineKetonesValue ?? string.Empty,
-                Qid21Ketondate: relNcd.UrineKetonesDate?.ToString("yyyy-MM-dd") ?? string.Empty,
-                Qid22Yn: relNcd.UrineProteinPresent ? "Y" : "N",
-                Qid22Proteinval: relNcd.UrineProteinValue ?? string.Empty,
-                Qid22Proteindate: relNcd.UrineProteinDate?.ToString("yyyy-MM-dd") ?? string.Empty,
-                Qid23Yn: relNcd.HasHistoryAnginaHeartAttack ? "Y" : "N",
-                Qid24Yn: relNcd.HasHistoryStrokeOrTia ? "Y" : "N")
+                Qid18Yn: relNcd.DiagnosedDiabetes == "Y" ? (relNcd.DiabetesMedicationStatus ?? string.Empty) : string.Empty,
+                Qid19Yn: FormatYn(relNcd.HasRaisedBloodGlucose),
+                Qid19Fbsmg: relNcd.HasRaisedBloodGlucose == true ? (relNcd.FastingBloodSugarMgDl?.ToString() ?? string.Empty) : string.Empty,
+                Qid19Fbsmmol: relNcd.HasRaisedBloodGlucose == true ? (relNcd.FastingBloodSugarMmolL?.ToString() ?? string.Empty) : string.Empty,
+                Qid19Fbsdate: relNcd.HasRaisedBloodGlucose == true ? (relNcd.FastingBloodSugarDate?.ToString("yyyy-MM-dd") ?? string.Empty) : string.Empty,
+                Qid20Yn: FormatYn(relNcd.HasRaisedBloodLipids),
+                Qid20Choleval: relNcd.HasRaisedBloodLipids == true ? (relNcd.TotalCholesterolMgDl?.ToString() ?? string.Empty) : string.Empty,
+                Qid20Choledate: relNcd.HasRaisedBloodLipids == true ? (relNcd.TotalCholesterolDate?.ToString("yyyy-MM-dd") ?? string.Empty) : string.Empty,
+                Qid21Yn: FormatYn(relNcd.UrineKetonesPresent),
+                Qid21Ketonval: relNcd.UrineKetonesPresent == true ? (relNcd.UrineKetonesValue ?? string.Empty) : string.Empty,
+                Qid21Ketondate: relNcd.UrineKetonesPresent == true ? (relNcd.UrineKetonesDate?.ToString("yyyy-MM-dd") ?? string.Empty) : string.Empty,
+                Qid22Yn: FormatYn(relNcd.UrineProteinPresent),
+                Qid22Proteinval: relNcd.UrineProteinPresent == true ? (relNcd.UrineProteinValue ?? string.Empty) : string.Empty,
+                Qid22Proteindate: relNcd.UrineProteinPresent == true ? (relNcd.UrineProteinDate?.ToString("yyyy-MM-dd") ?? string.Empty) : string.Empty,
+                Qid23Yn: FormatYn(relNcd.HasHistoryAnginaHeartAttack),
+                Qid24Yn: FormatYn(relNcd.HasHistoryStrokeOrTia))
             : new YakapNcdAnswersDto();
 
         var profile = new PhilHealthPatientProfileDto

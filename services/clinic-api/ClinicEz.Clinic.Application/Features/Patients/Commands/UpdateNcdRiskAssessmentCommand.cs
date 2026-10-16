@@ -17,36 +17,36 @@ public sealed record UpdateNcdRiskAssessmentCommand(
     Guid? ConsultationEncounterId = null,
     Guid? AssessedByStaffId = null,
     string? AssessedByStaffName = null,
-    bool EatsProcessedFoodWeekly = false,
-    bool ThreeServingsVegetablesDaily = false,
-    bool TwoToThreeServingsFruitDaily = false,
-    bool PhysicalActivityAtLeast150MinsWeekly = false,
-    string DiagnosedDiabetes = "N",
-    bool HasPolyphagia = false,
-    bool HasPolydipsia = false,
-    bool HasPolyuria = false,
+    bool? EatsProcessedFoodWeekly = null,
+    bool? ThreeServingsVegetablesDaily = null,
+    bool? TwoToThreeServingsFruitDaily = null,
+    bool? PhysicalActivityAtLeast150MinsWeekly = null,
+    string? DiagnosedDiabetes = null,
+    bool? HasPolyphagia = null,
+    bool? HasPolydipsia = null,
+    bool? HasPolyuria = null,
     string? DiabetesMedicationStatus = null,
-    bool HasRaisedBloodGlucose = false,
+    bool? HasRaisedBloodGlucose = null,
     decimal? FastingBloodSugarMgDl = null,
     decimal? FastingBloodSugarMmolL = null,
     DateOnly? FastingBloodSugarDate = null,
-    bool HasChestPain = false,
-    bool PainInCenterOfChestOrLeftArm = false,
-    bool PainWhenWalkingUphill = false,
-    bool SlowsDownWhenPainOccurs = false,
-    bool PainRelievedWithin10Mins = false,
-    bool PainRelievedByNitrates = false,
-    bool SevereChestPainOver30Mins = false,
-    bool TransientNeurologicalDeficits = false,
-    bool HasRaisedBloodLipids = false,
+    bool? HasChestPain = null,
+    bool? PainInCenterOfChestOrLeftArm = null,
+    bool? PainWhenWalkingUphill = null,
+    bool? SlowsDownWhenPainOccurs = null,
+    bool? PainRelievedWithin10Mins = null,
+    bool? PainRelievedByNitrates = null,
+    bool? SevereChestPainOver30Mins = null,
+    bool? TransientNeurologicalDeficits = null,
+    bool? HasRaisedBloodLipids = null,
     decimal? TotalCholesterolMgDl = null,
     DateOnly? TotalCholesterolDate = null,
-    bool HasHistoryAnginaHeartAttack = false,
-    bool HasHistoryStrokeOrTia = false,
-    bool UrineKetonesPresent = false,
+    bool? HasHistoryAnginaHeartAttack = null,
+    bool? HasHistoryStrokeOrTia = null,
+    bool? UrineKetonesPresent = null,
     string? UrineKetonesValue = null,
     DateOnly? UrineKetonesDate = null,
-    bool UrineProteinPresent = false,
+    bool? UrineProteinPresent = null,
     string? UrineProteinValue = null,
     DateOnly? UrineProteinDate = null,
     string RiskBand = "BandA",
@@ -90,11 +90,11 @@ public sealed class UpdateNcdRiskAssessmentCommandHandler : IRequestHandler<Upda
         }
 
         var riskBand = request.RiskBand;
-        if (request.HasHistoryAnginaHeartAttack || request.HasHistoryStrokeOrTia)
+        if (request.HasHistoryAnginaHeartAttack == true || request.HasHistoryStrokeOrTia == true)
         {
             riskBand = "BandE";
         }
-        else if (request.SevereChestPainOver30Mins || request.TransientNeurologicalDeficits)
+        else if (request.SevereChestPainOver30Mins == true || request.TransientNeurologicalDeficits == true)
         {
             riskBand = "BandD";
         }
@@ -102,6 +102,69 @@ public sealed class UpdateNcdRiskAssessmentCommandHandler : IRequestHandler<Upda
         {
             riskBand = "BandA";
         }
+
+        // Skip logic sanitization for follow-up questions
+        var normalizedDiabetes = string.IsNullOrWhiteSpace(request.DiagnosedDiabetes) ? null : request.DiagnosedDiabetes.Trim().ToUpperInvariant();
+        var diabetesMedStatus = normalizedDiabetes == "Y" ? request.DiabetesMedicationStatus?.Trim().ToUpperInvariant() : null;
+
+        var hasChestPain = request.HasChestPain;
+        bool? painCenterLeft = null;
+        bool? painWalking = null;
+        bool? slowsDown = null;
+        bool? relieved10Mins = null;
+        bool? relievedNitrates = null;
+        bool? relieved10MinsOrNitrates = null;
+
+        if (hasChestPain == null && (request.PainInCenterOfChestOrLeftArm.HasValue || request.PainWhenWalkingUphill.HasValue))
+        {
+            hasChestPain = true;
+        }
+
+        if (hasChestPain == true)
+        {
+            painCenterLeft = request.PainInCenterOfChestOrLeftArm;
+            painWalking = request.PainWhenWalkingUphill;
+            if (painWalking == true)
+            {
+                slowsDown = request.SlowsDownWhenPainOccurs;
+                relieved10Mins = request.PainRelievedWithin10Mins;
+                relievedNitrates = request.PainRelievedByNitrates;
+                relieved10MinsOrNitrates = (relieved10Mins == true) || (relievedNitrates == true);
+            }
+        }
+
+        var hasRaisedGlucose = request.HasRaisedBloodGlucose;
+        if (hasRaisedGlucose == null && (request.FastingBloodSugarMgDl.HasValue || request.FastingBloodSugarMmolL.HasValue || request.FastingBloodSugarDate.HasValue))
+        {
+            hasRaisedGlucose = true;
+        }
+        var fbsMg = hasRaisedGlucose == false ? null : request.FastingBloodSugarMgDl;
+        var fbsMmol = hasRaisedGlucose == false ? null : request.FastingBloodSugarMmolL;
+        var fbsDate = hasRaisedGlucose == false ? null : request.FastingBloodSugarDate;
+
+        var hasRaisedLipids = request.HasRaisedBloodLipids;
+        if (hasRaisedLipids == null && (request.TotalCholesterolMgDl.HasValue || request.TotalCholesterolDate.HasValue))
+        {
+            hasRaisedLipids = true;
+        }
+        var cholMg = hasRaisedLipids == false ? null : request.TotalCholesterolMgDl;
+        var cholDate = hasRaisedLipids == false ? null : request.TotalCholesterolDate;
+
+        var ketonesPresent = request.UrineKetonesPresent;
+        if (ketonesPresent == null && (!string.IsNullOrWhiteSpace(request.UrineKetonesValue) || request.UrineKetonesDate.HasValue))
+        {
+            ketonesPresent = true;
+        }
+        var ketonesVal = ketonesPresent == false ? null : request.UrineKetonesValue?.Trim();
+        var ketonesDate = ketonesPresent == false ? null : request.UrineKetonesDate;
+
+        var proteinPresent = request.UrineProteinPresent;
+        if (proteinPresent == null && (!string.IsNullOrWhiteSpace(request.UrineProteinValue) || request.UrineProteinDate.HasValue))
+        {
+            proteinPresent = true;
+        }
+        var proteinVal = proteinPresent == false ? null : request.UrineProteinValue?.Trim();
+        var proteinDate = proteinPresent == false ? null : request.UrineProteinDate;
 
         if (request.AssessmentDate.HasValue) entity.AssessmentDate = request.AssessmentDate.Value;
         if (request.ConsultationEncounterId.HasValue) entity.ConsultationEncounterId = request.ConsultationEncounterId;
@@ -113,38 +176,38 @@ public sealed class UpdateNcdRiskAssessmentCommandHandler : IRequestHandler<Upda
         entity.TwoToThreeServingsFruitDaily = request.TwoToThreeServingsFruitDaily;
         entity.PhysicalActivityAtLeast150MinsWeekly = request.PhysicalActivityAtLeast150MinsWeekly;
 
-        entity.DiagnosedDiabetes = string.IsNullOrWhiteSpace(request.DiagnosedDiabetes) ? "N" : request.DiagnosedDiabetes.Trim().ToUpperInvariant();
+        entity.DiagnosedDiabetes = normalizedDiabetes;
         entity.HasPolyphagia = request.HasPolyphagia;
         entity.HasPolydipsia = request.HasPolydipsia;
         entity.HasPolyuria = request.HasPolyuria;
-        entity.DiabetesMedicationStatus = request.DiabetesMedicationStatus?.Trim().ToUpperInvariant();
-        entity.HasRaisedBloodGlucose = request.HasRaisedBloodGlucose;
-        entity.FastingBloodSugarMgDl = request.FastingBloodSugarMgDl;
-        entity.FastingBloodSugarMmolL = request.FastingBloodSugarMmolL;
-        entity.FastingBloodSugarDate = request.FastingBloodSugarDate;
+        entity.DiabetesMedicationStatus = diabetesMedStatus;
+        entity.HasRaisedBloodGlucose = hasRaisedGlucose;
+        entity.FastingBloodSugarMgDl = fbsMg;
+        entity.FastingBloodSugarMmolL = fbsMmol;
+        entity.FastingBloodSugarDate = fbsDate;
 
-        entity.HasChestPain = request.HasChestPain;
-        entity.PainInCenterOfChestOrLeftArm = request.PainInCenterOfChestOrLeftArm;
-        entity.PainWhenWalkingUphill = request.PainWhenWalkingUphill;
-        entity.SlowsDownWhenPainOccurs = request.SlowsDownWhenPainOccurs;
-        entity.PainRelievedWithin10Mins = request.PainRelievedWithin10Mins;
-        entity.PainRelievedByNitrates = request.PainRelievedByNitrates;
-        entity.PainRelievedWithin10MinsOrNitrates = request.PainRelievedWithin10Mins || request.PainRelievedByNitrates;
+        entity.HasChestPain = hasChestPain;
+        entity.PainInCenterOfChestOrLeftArm = painCenterLeft;
+        entity.PainWhenWalkingUphill = painWalking;
+        entity.SlowsDownWhenPainOccurs = slowsDown;
+        entity.PainRelievedWithin10Mins = relieved10Mins;
+        entity.PainRelievedByNitrates = relievedNitrates;
+        entity.PainRelievedWithin10MinsOrNitrates = relieved10MinsOrNitrates;
         entity.SevereChestPainOver30Mins = request.SevereChestPainOver30Mins;
         entity.TransientNeurologicalDeficits = request.TransientNeurologicalDeficits;
 
-        entity.HasRaisedBloodLipids = request.HasRaisedBloodLipids;
-        entity.TotalCholesterolMgDl = request.TotalCholesterolMgDl;
-        entity.TotalCholesterolDate = request.TotalCholesterolDate;
+        entity.HasRaisedBloodLipids = hasRaisedLipids;
+        entity.TotalCholesterolMgDl = cholMg;
+        entity.TotalCholesterolDate = cholDate;
         entity.HasHistoryAnginaHeartAttack = request.HasHistoryAnginaHeartAttack;
         entity.HasHistoryStrokeOrTia = request.HasHistoryStrokeOrTia;
 
-        entity.UrineKetonesPresent = request.UrineKetonesPresent;
-        entity.UrineKetonesValue = request.UrineKetonesValue?.Trim();
-        entity.UrineKetonesDate = request.UrineKetonesDate;
-        entity.UrineProteinPresent = request.UrineProteinPresent;
-        entity.UrineProteinValue = request.UrineProteinValue?.Trim();
-        entity.UrineProteinDate = request.UrineProteinDate;
+        entity.UrineKetonesPresent = ketonesPresent;
+        entity.UrineKetonesValue = ketonesVal;
+        entity.UrineKetonesDate = ketonesDate;
+        entity.UrineProteinPresent = proteinPresent;
+        entity.UrineProteinValue = proteinVal;
+        entity.UrineProteinDate = proteinDate;
 
         entity.RiskBand = riskBand;
         entity.CalculatedRiskScorePercent = request.CalculatedRiskScorePercent;

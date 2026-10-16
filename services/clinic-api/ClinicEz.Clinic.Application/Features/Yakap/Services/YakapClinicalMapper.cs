@@ -1055,38 +1055,46 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             return string.Empty;
         }
 
+        var q5 = GetVal("ncd_qid5") != string.Empty ? GetVal("ncd_qid5") : GetVal("qid5_ynx");
+        var q9 = GetVal("ncd_qid9") != string.Empty ? GetVal("ncd_qid9") : GetVal("qid9_yn");
+        var q11 = GetVal("ncd_qid11") != string.Empty ? GetVal("ncd_qid11") : GetVal("qid11_yn");
+        var q19 = GetVal("ncd_qid19") != string.Empty ? GetVal("ncd_qid19") : GetVal("qid19_yn");
+        var q20 = GetVal("ncd_qid20") != string.Empty ? GetVal("ncd_qid20") : GetVal("qid20_yn");
+        var q21 = GetVal("ncd_qid21") != string.Empty ? GetVal("ncd_qid21") : GetVal("qid21_yn");
+        var q22 = GetVal("ncd_qid22") != string.Empty ? GetVal("ncd_qid22") : GetVal("qid22_yn");
+
         return new YakapNcdAnswersDto(
             Qid1Yn: GetVal("ncd_qid1") != string.Empty ? GetVal("ncd_qid1") : GetVal("qid1_yn"),
             Qid2Yn: GetVal("ncd_qid2") != string.Empty ? GetVal("ncd_qid2") : GetVal("qid2_yn"),
             Qid3Yn: GetVal("ncd_qid3") != string.Empty ? GetVal("ncd_qid3") : GetVal("qid3_yn"),
             Qid4Yn: GetVal("ncd_qid4") != string.Empty ? GetVal("ncd_qid4") : GetVal("qid4_yn"),
-            Qid5Ynx: GetVal("ncd_qid5") != string.Empty ? GetVal("ncd_qid5") : GetVal("qid5_ynx"),
+            Qid5Ynx: q5,
             Qid6Yn: GetVal("ncd_qid6") != string.Empty ? GetVal("ncd_qid6") : GetVal("qid6_yn"),
             Qid7Yn: GetVal("ncd_qid7") != string.Empty ? GetVal("ncd_qid7") : GetVal("qid7_yn"),
             Qid8Yn: GetVal("ncd_qid8") != string.Empty ? GetVal("ncd_qid8") : GetVal("qid8_yn"),
-            Qid9Yn: GetVal("ncd_qid9") != string.Empty ? GetVal("ncd_qid9") : GetVal("qid9_yn"),
-            Qid10Yn: GetVal("ncd_qid10") != string.Empty ? GetVal("ncd_qid10") : GetVal("qid10_yn"),
-            Qid11Yn: GetVal("ncd_qid11") != string.Empty ? GetVal("ncd_qid11") : GetVal("qid11_yn"),
-            Qid12Yn: GetVal("ncd_qid12") != string.Empty ? GetVal("ncd_qid12") : GetVal("qid12_yn"),
-            Qid13Yn: GetVal("ncd_qid13") != string.Empty ? GetVal("ncd_qid13") : GetVal("qid13_yn"),
-            Qid14Yn: GetVal("ncd_qid14") != string.Empty ? GetVal("ncd_qid14") : GetVal("qid14_yn"),
+            Qid9Yn: q9,
+            Qid10Yn: q9 == "Y" ? (GetVal("ncd_qid10") != string.Empty ? GetVal("ncd_qid10") : GetVal("qid10_yn")) : string.Empty,
+            Qid11Yn: q9 == "Y" ? q11 : string.Empty,
+            Qid12Yn: (q9 == "Y" && q11 == "Y") ? (GetVal("ncd_qid12") != string.Empty ? GetVal("ncd_qid12") : GetVal("qid12_yn")) : string.Empty,
+            Qid13Yn: (q9 == "Y" && q11 == "Y") ? (GetVal("ncd_qid13") != string.Empty ? GetVal("ncd_qid13") : GetVal("qid13_yn")) : string.Empty,
+            Qid14Yn: (q9 == "Y" && q11 == "Y") ? (GetVal("ncd_qid14") != string.Empty ? GetVal("ncd_qid14") : GetVal("qid14_yn")) : string.Empty,
             Qid15Yn: GetVal("ncd_qid15") != string.Empty ? GetVal("ncd_qid15") : GetVal("qid15_yn"),
             Qid16Yn: GetVal("ncd_qid16") != string.Empty ? GetVal("ncd_qid16") : GetVal("qid16_yn"),
             Qid17Abcde: GetVal("ncd_qid17") != string.Empty ? GetVal("ncd_qid17") : GetVal("qid17_abcde"),
-            Qid18Yn: GetVal("ncd_qid18") != string.Empty ? GetVal("ncd_qid18") : GetVal("qid18_yn"),
-            Qid19Yn: GetVal("ncd_qid19") != string.Empty ? GetVal("ncd_qid19") : GetVal("qid19_yn"),
-            Qid19Fbsmg: GetVal("ncd_fbs_mgdl") != string.Empty ? GetVal("ncd_fbs_mgdl") : GetVal("qid19_fbsmg"),
-            Qid19Fbsmmol: GetVal("ncd_fbs_mmol") != string.Empty ? GetVal("ncd_fbs_mmol") : GetVal("qid19_fbsmmol"),
-            Qid19Fbsdate: GetVal("ncd_fbs_date") != string.Empty ? GetVal("ncd_fbs_date") : GetVal("qid19_fbsdate"),
-            Qid20Yn: GetVal("ncd_qid20") != string.Empty ? GetVal("ncd_qid20") : GetVal("qid20_yn"),
-            Qid20Choleval: GetVal("ncd_chole_val") != string.Empty ? GetVal("ncd_chole_val") : GetVal("qid20_choleval"),
-            Qid20Choledate: GetVal("ncd_chole_date") != string.Empty ? GetVal("ncd_chole_date") : GetVal("qid20_choledate"),
-            Qid21Yn: GetVal("ncd_qid21") != string.Empty ? GetVal("ncd_qid21") : GetVal("qid21_yn"),
-            Qid21Ketonval: GetVal("ncd_keton_val") != string.Empty ? GetVal("ncd_keton_val") : GetVal("qid21_ketonval"),
-            Qid21Ketondate: GetVal("ncd_keton_date") != string.Empty ? GetVal("ncd_keton_date") : GetVal("qid21_ketondate"),
-            Qid22Yn: GetVal("ncd_qid22") != string.Empty ? GetVal("ncd_qid22") : GetVal("qid22_yn"),
-            Qid22Proteinval: GetVal("ncd_protein_val") != string.Empty ? GetVal("ncd_protein_val") : GetVal("qid22_proteinval"),
-            Qid22Proteindate: GetVal("ncd_protein_date") != string.Empty ? GetVal("ncd_protein_date") : GetVal("qid22_proteindate"),
+            Qid18Yn: q5 == "Y" ? (GetVal("ncd_qid18") != string.Empty ? GetVal("ncd_qid18") : GetVal("qid18_yn")) : string.Empty,
+            Qid19Yn: q19,
+            Qid19Fbsmg: q19 == "Y" ? (GetVal("ncd_fbs_mgdl") != string.Empty ? GetVal("ncd_fbs_mgdl") : GetVal("qid19_fbsmg")) : string.Empty,
+            Qid19Fbsmmol: q19 == "Y" ? (GetVal("ncd_fbs_mmol") != string.Empty ? GetVal("ncd_fbs_mmol") : GetVal("qid19_fbsmmol")) : string.Empty,
+            Qid19Fbsdate: q19 == "Y" ? (GetVal("ncd_fbs_date") != string.Empty ? GetVal("ncd_fbs_date") : GetVal("qid19_fbsdate")) : string.Empty,
+            Qid20Yn: q20,
+            Qid20Choleval: q20 == "Y" ? (GetVal("ncd_chole_val") != string.Empty ? GetVal("ncd_chole_val") : GetVal("qid20_choleval")) : string.Empty,
+            Qid20Choledate: q20 == "Y" ? (GetVal("ncd_chole_date") != string.Empty ? GetVal("ncd_chole_date") : GetVal("qid20_choledate")) : string.Empty,
+            Qid21Yn: q21,
+            Qid21Ketonval: q21 == "Y" ? (GetVal("ncd_keton_val") != string.Empty ? GetVal("ncd_keton_val") : GetVal("qid21_ketonval")) : string.Empty,
+            Qid21Ketondate: q21 == "Y" ? (GetVal("ncd_keton_date") != string.Empty ? GetVal("ncd_keton_date") : GetVal("qid21_ketondate")) : string.Empty,
+            Qid22Yn: q22,
+            Qid22Proteinval: q22 == "Y" ? (GetVal("ncd_protein_val") != string.Empty ? GetVal("ncd_protein_val") : GetVal("qid22_proteinval")) : string.Empty,
+            Qid22Proteindate: q22 == "Y" ? (GetVal("ncd_protein_date") != string.Empty ? GetVal("ncd_protein_date") : GetVal("qid22_proteindate")) : string.Empty,
             Qid23Yn: GetVal("ncd_qid23") != string.Empty ? GetVal("ncd_qid23") : GetVal("qid23_yn"),
             Qid24Yn: GetVal("ncd_qid24") != string.Empty ? GetVal("ncd_qid24") : GetVal("qid24_yn"));
     }

@@ -20,3 +20,13 @@ export type {
 
 export { default as RecordVitalsModal } from './RecordVitalsModal';
 export type { RecordVitalsModalProps } from './RecordVitalsModal';
+
+export {
+  OrderCatalogSearchModal,
+  default as OrderCatalogSearchModalComponent,
+} from './OrderCatalogSearchModal';
+export type {
+  OrderCatalogItemPayload,
+  OrderCatalogSearchModalProps,
+} from './OrderCatalogSearchModal';
+

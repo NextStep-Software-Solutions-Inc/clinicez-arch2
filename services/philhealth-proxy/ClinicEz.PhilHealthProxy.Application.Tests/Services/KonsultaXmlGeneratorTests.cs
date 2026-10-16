@@ -221,6 +221,66 @@ public sealed class KonsultaXmlGeneratorTests
         KonsultaXmlGenerator.FormatSoapTransNumber(accreNo, date, 1).Should().Be("SH9000000120261000001");
     }
 
+    [Fact]
+    public void GenerateTranche1Xml_SkippedNcdQuestions_LeavesAttributesBlankAndPassesDtd()
+    {
+        var baseDoc = CreateSampleDocument();
+        // Patient with No chest pain, No diabetes medication, No raised biomarkers (so child questions are skipped/blank)
+        var skippedNcdAnswers = new YakapNcdAnswers(
+            Qid1Yn: "Y",
+            Qid2Yn: "N",
+            Qid3Yn: "Y",
+            Qid4Yn: "N",
+            Qid5Ynx: "N",
+            Qid6Yn: "N",
+            Qid7Yn: "N",
+            Qid8Yn: "N",
+            Qid9Yn: "N", // Chest pain negative
+            Qid10Yn: "", // Skipped
+            Qid11Yn: "", // Skipped
+            Qid12Yn: "", // Skipped
+            Qid13Yn: "", // Skipped
+            Qid14Yn: "", // Skipped
+            Qid15Yn: "Y",
+            Qid16Yn: "N",
+            Qid17Abcde: "A",
+            Qid18Yn: "", // Skipped (No diagnosed diabetes)
+            Qid19Yn: "N",
+            Qid19Fbsmg: "",
+            Qid19Fbsmmol: "",
+            Qid19Fbsdate: "",
+            Qid20Yn: "N",
+            Qid20Choleval: "",
+            Qid20Choledate: "",
+            Qid21Yn: "N",
+            Qid21Ketonval: "",
+            Qid21Ketondate: "",
+            Qid22Yn: "N",
+            Qid22Proteinval: "",
+            Qid22Proteindate: "",
+            Qid23Yn: "N",
+            Qid24Yn: "N");
+
+        var profileWithSkippedNcd = baseDoc.Profiles[0] with { NcdAnswers = skippedNcdAnswers };
+        var doc = baseDoc with { Profiles = new[] { profileWithSkippedNcd } };
+
+        var xml = _generator.GenerateTranche1Xml(doc);
+
+        xml.Should().NotBeNullOrWhiteSpace();
+        xml.Should().Contain("pQid9_Yn=\"N\"");
+        xml.Should().Contain("pQid10_Yn=\"\"");
+        xml.Should().Contain("pQid11_Yn=\"\"");
+        xml.Should().Contain("pQid12_Yn=\"\"");
+        xml.Should().Contain("pQid13_Yn=\"\"");
+        xml.Should().Contain("pQid14_Yn=\"\"");
+        xml.Should().Contain("pQid18_Yn=\"\"");
+        xml.Should().Contain("pQid19_Fbsmg=\"\"");
+
+        // Strict DTD validation confirms empty string satisfies CDATA #REQUIRED
+        var valResult = _validator.ValidateReportXml(xml);
+        valResult.IsValid.Should().BeTrue(string.Join("; ", valResult.Errors.Select(e => e.Message)));
+    }
+
     public static YakapReportDocument CreateSampleDocument()
     {
         return new YakapReportDocument(

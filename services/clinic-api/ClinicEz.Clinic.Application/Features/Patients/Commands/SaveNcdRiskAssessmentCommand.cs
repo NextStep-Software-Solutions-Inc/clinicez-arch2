@@ -16,36 +16,36 @@ public sealed record SaveNcdRiskAssessmentCommand(
     Guid? ConsultationEncounterId = null,
     Guid? AssessedByStaffId = null,
     string? AssessedByStaffName = null,
-    bool EatsProcessedFoodWeekly = false,
-    bool ThreeServingsVegetablesDaily = false,
-    bool TwoToThreeServingsFruitDaily = false,
-    bool PhysicalActivityAtLeast150MinsWeekly = false,
-    string DiagnosedDiabetes = "N",
-    bool HasPolyphagia = false,
-    bool HasPolydipsia = false,
-    bool HasPolyuria = false,
+    bool? EatsProcessedFoodWeekly = null,
+    bool? ThreeServingsVegetablesDaily = null,
+    bool? TwoToThreeServingsFruitDaily = null,
+    bool? PhysicalActivityAtLeast150MinsWeekly = null,
+    string? DiagnosedDiabetes = null,
+    bool? HasPolyphagia = null,
+    bool? HasPolydipsia = null,
+    bool? HasPolyuria = null,
     string? DiabetesMedicationStatus = null,
-    bool HasRaisedBloodGlucose = false,
+    bool? HasRaisedBloodGlucose = null,
     decimal? FastingBloodSugarMgDl = null,
     decimal? FastingBloodSugarMmolL = null,
     DateOnly? FastingBloodSugarDate = null,
-    bool HasChestPain = false,
-    bool PainInCenterOfChestOrLeftArm = false,
-    bool PainWhenWalkingUphill = false,
-    bool SlowsDownWhenPainOccurs = false,
-    bool PainRelievedWithin10Mins = false,
-    bool PainRelievedByNitrates = false,
-    bool SevereChestPainOver30Mins = false,
-    bool TransientNeurologicalDeficits = false,
-    bool HasRaisedBloodLipids = false,
+    bool? HasChestPain = null,
+    bool? PainInCenterOfChestOrLeftArm = null,
+    bool? PainWhenWalkingUphill = null,
+    bool? SlowsDownWhenPainOccurs = null,
+    bool? PainRelievedWithin10Mins = null,
+    bool? PainRelievedByNitrates = null,
+    bool? SevereChestPainOver30Mins = null,
+    bool? TransientNeurologicalDeficits = null,
+    bool? HasRaisedBloodLipids = null,
     decimal? TotalCholesterolMgDl = null,
     DateOnly? TotalCholesterolDate = null,
-    bool HasHistoryAnginaHeartAttack = false,
-    bool HasHistoryStrokeOrTia = false,
-    bool UrineKetonesPresent = false,
+    bool? HasHistoryAnginaHeartAttack = null,
+    bool? HasHistoryStrokeOrTia = null,
+    bool? UrineKetonesPresent = null,
     string? UrineKetonesValue = null,
     DateOnly? UrineKetonesDate = null,
-    bool UrineProteinPresent = false,
+    bool? UrineProteinPresent = null,
     string? UrineProteinValue = null,
     DateOnly? UrineProteinDate = null,
     string RiskBand = "BandA",
@@ -92,11 +92,11 @@ public sealed class SaveNcdRiskAssessmentCommandHandler : IRequestHandler<SaveNc
 
         // Determine effective RiskBand (incorporating PhilPEN crisis overrides)
         var riskBand = request.RiskBand;
-        if (request.HasHistoryAnginaHeartAttack || request.HasHistoryStrokeOrTia)
+        if (request.HasHistoryAnginaHeartAttack == true || request.HasHistoryStrokeOrTia == true)
         {
             riskBand = "BandE"; // Maximum CVD risk for established vascular disease
         }
-        else if (request.SevereChestPainOver30Mins || request.TransientNeurologicalDeficits)
+        else if (request.SevereChestPainOver30Mins == true || request.TransientNeurologicalDeficits == true)
         {
             riskBand = "BandD"; // Urgent symptomatic risk
         }
@@ -104,6 +104,69 @@ public sealed class SaveNcdRiskAssessmentCommandHandler : IRequestHandler<SaveNc
         {
             riskBand = "BandA";
         }
+
+        // Skip logic sanitization for follow-up questions
+        var normalizedDiabetes = string.IsNullOrWhiteSpace(request.DiagnosedDiabetes) ? null : request.DiagnosedDiabetes.Trim().ToUpperInvariant();
+        var diabetesMedStatus = normalizedDiabetes == "Y" ? request.DiabetesMedicationStatus?.Trim().ToUpperInvariant() : null;
+
+        var hasChestPain = request.HasChestPain;
+        bool? painCenterLeft = null;
+        bool? painWalking = null;
+        bool? slowsDown = null;
+        bool? relieved10Mins = null;
+        bool? relievedNitrates = null;
+        bool? relieved10MinsOrNitrates = null;
+
+        if (hasChestPain == null && (request.PainInCenterOfChestOrLeftArm.HasValue || request.PainWhenWalkingUphill.HasValue))
+        {
+            hasChestPain = true;
+        }
+
+        if (hasChestPain == true)
+        {
+            painCenterLeft = request.PainInCenterOfChestOrLeftArm;
+            painWalking = request.PainWhenWalkingUphill;
+            if (painWalking == true)
+            {
+                slowsDown = request.SlowsDownWhenPainOccurs;
+                relieved10Mins = request.PainRelievedWithin10Mins;
+                relievedNitrates = request.PainRelievedByNitrates;
+                relieved10MinsOrNitrates = (relieved10Mins == true) || (relievedNitrates == true);
+            }
+        }
+
+        var hasRaisedGlucose = request.HasRaisedBloodGlucose;
+        if (hasRaisedGlucose == null && (request.FastingBloodSugarMgDl.HasValue || request.FastingBloodSugarMmolL.HasValue || request.FastingBloodSugarDate.HasValue))
+        {
+            hasRaisedGlucose = true;
+        }
+        var fbsMg = hasRaisedGlucose == false ? null : request.FastingBloodSugarMgDl;
+        var fbsMmol = hasRaisedGlucose == false ? null : request.FastingBloodSugarMmolL;
+        var fbsDate = hasRaisedGlucose == false ? null : request.FastingBloodSugarDate;
+
+        var hasRaisedLipids = request.HasRaisedBloodLipids;
+        if (hasRaisedLipids == null && (request.TotalCholesterolMgDl.HasValue || request.TotalCholesterolDate.HasValue))
+        {
+            hasRaisedLipids = true;
+        }
+        var cholMg = hasRaisedLipids == false ? null : request.TotalCholesterolMgDl;
+        var cholDate = hasRaisedLipids == false ? null : request.TotalCholesterolDate;
+
+        var ketonesPresent = request.UrineKetonesPresent;
+        if (ketonesPresent == null && (!string.IsNullOrWhiteSpace(request.UrineKetonesValue) || request.UrineKetonesDate.HasValue))
+        {
+            ketonesPresent = true;
+        }
+        var ketonesVal = ketonesPresent == false ? null : request.UrineKetonesValue?.Trim();
+        var ketonesDate = ketonesPresent == false ? null : request.UrineKetonesDate;
+
+        var proteinPresent = request.UrineProteinPresent;
+        if (proteinPresent == null && (!string.IsNullOrWhiteSpace(request.UrineProteinValue) || request.UrineProteinDate.HasValue))
+        {
+            proteinPresent = true;
+        }
+        var proteinVal = proteinPresent == false ? null : request.UrineProteinValue?.Trim();
+        var proteinDate = proteinPresent == false ? null : request.UrineProteinDate;
 
         var entity = new NcdRiskAssessment
         {
@@ -119,35 +182,35 @@ public sealed class SaveNcdRiskAssessmentCommandHandler : IRequestHandler<SaveNc
             ThreeServingsVegetablesDaily = request.ThreeServingsVegetablesDaily,
             TwoToThreeServingsFruitDaily = request.TwoToThreeServingsFruitDaily,
             PhysicalActivityAtLeast150MinsWeekly = request.PhysicalActivityAtLeast150MinsWeekly,
-            DiagnosedDiabetes = string.IsNullOrWhiteSpace(request.DiagnosedDiabetes) ? "N" : request.DiagnosedDiabetes.Trim().ToUpperInvariant(),
+            DiagnosedDiabetes = normalizedDiabetes,
             HasPolyphagia = request.HasPolyphagia,
             HasPolydipsia = request.HasPolydipsia,
             HasPolyuria = request.HasPolyuria,
-            DiabetesMedicationStatus = request.DiabetesMedicationStatus?.Trim().ToUpperInvariant(),
-            HasRaisedBloodGlucose = request.HasRaisedBloodGlucose,
-            FastingBloodSugarMgDl = request.FastingBloodSugarMgDl,
-            FastingBloodSugarMmolL = request.FastingBloodSugarMmolL,
-            FastingBloodSugarDate = request.FastingBloodSugarDate,
-            HasChestPain = request.HasChestPain,
-            PainInCenterOfChestOrLeftArm = request.PainInCenterOfChestOrLeftArm,
-            PainWhenWalkingUphill = request.PainWhenWalkingUphill,
-            SlowsDownWhenPainOccurs = request.SlowsDownWhenPainOccurs,
-            PainRelievedWithin10Mins = request.PainRelievedWithin10Mins,
-            PainRelievedByNitrates = request.PainRelievedByNitrates,
-            PainRelievedWithin10MinsOrNitrates = request.PainRelievedWithin10Mins || request.PainRelievedByNitrates,
+            DiabetesMedicationStatus = diabetesMedStatus,
+            HasRaisedBloodGlucose = hasRaisedGlucose,
+            FastingBloodSugarMgDl = fbsMg,
+            FastingBloodSugarMmolL = fbsMmol,
+            FastingBloodSugarDate = fbsDate,
+            HasChestPain = hasChestPain,
+            PainInCenterOfChestOrLeftArm = painCenterLeft,
+            PainWhenWalkingUphill = painWalking,
+            SlowsDownWhenPainOccurs = slowsDown,
+            PainRelievedWithin10Mins = relieved10Mins,
+            PainRelievedByNitrates = relievedNitrates,
+            PainRelievedWithin10MinsOrNitrates = relieved10MinsOrNitrates,
             SevereChestPainOver30Mins = request.SevereChestPainOver30Mins,
             TransientNeurologicalDeficits = request.TransientNeurologicalDeficits,
-            HasRaisedBloodLipids = request.HasRaisedBloodLipids,
-            TotalCholesterolMgDl = request.TotalCholesterolMgDl,
-            TotalCholesterolDate = request.TotalCholesterolDate,
+            HasRaisedBloodLipids = hasRaisedLipids,
+            TotalCholesterolMgDl = cholMg,
+            TotalCholesterolDate = cholDate,
             HasHistoryAnginaHeartAttack = request.HasHistoryAnginaHeartAttack,
             HasHistoryStrokeOrTia = request.HasHistoryStrokeOrTia,
-            UrineKetonesPresent = request.UrineKetonesPresent,
-            UrineKetonesValue = request.UrineKetonesValue?.Trim(),
-            UrineKetonesDate = request.UrineKetonesDate,
-            UrineProteinPresent = request.UrineProteinPresent,
-            UrineProteinValue = request.UrineProteinValue?.Trim(),
-            UrineProteinDate = request.UrineProteinDate,
+            UrineKetonesPresent = ketonesPresent,
+            UrineKetonesValue = ketonesVal,
+            UrineKetonesDate = ketonesDate,
+            UrineProteinPresent = proteinPresent,
+            UrineProteinValue = proteinVal,
+            UrineProteinDate = proteinDate,
             RiskBand = riskBand,
             CalculatedRiskScorePercent = request.CalculatedRiskScorePercent,
             Remarks = request.Remarks?.Trim(),

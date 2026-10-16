@@ -681,7 +681,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.DiagnosedDiabetes).IsRequired().HasMaxLength(10).HasDefaultValue("N");
+            entity.Property(e => e.DiagnosedDiabetes).HasMaxLength(10);
             entity.Property(e => e.DiabetesMedicationStatus).HasMaxLength(10);
             entity.Property(e => e.FastingBloodSugarMgDl).HasPrecision(6, 2);
             entity.Property(e => e.FastingBloodSugarMmolL).HasPrecision(6, 2);

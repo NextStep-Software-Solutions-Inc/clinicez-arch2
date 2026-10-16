@@ -903,3 +903,42 @@ In the SuperAdmin Portal (`/admin/plans`), deliver full administrative managemen
 ### Build & Verification
 - [ ] All unit and integration tests pass: `dotnet test CLINICEZ.sln`.
 - [ ] Portal frontend passes typecheck and production build: `bun run typecheck:all` and `bun run build:portal`.
+
+
+## 2026-10-16T03:07:34Z
+
+# Teamwork Project Prompt — Dynamic Lab Orders & In-Clinic Procedures
+
+Implement dual diagnostic fulfillment (In-House Clinic vs. Outside Laboratory), automatic clinic invoice billing for in-house tests, dynamic catalog search modal, and past encounter rehydration in ClinicEZ Consultation workstation.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+
+## Requirements
+
+### R1. Dual Fulfillment Modes for Diagnostic Orders
+- In Consultations.screen.tsx, upgrade orderedLabs to structured objects containing serviceItemId, code, name, category, standardPrice, philHealthCode, and fulfillmentMode: 'in_house' | 'outside'.
+- In-House tests (e.g., RBS fingerstick, ECG, rapid dipsticks) perform immediate clinical order and route to the clinic Cashier invoice (billItems).
+- Outside Laboratory tests (e.g., CBC, Lipid, Pap Smear) generate external requisition slips (createLabOrder) and are NOT billed on the clinic consultation invoice.
+
+### R2. Fee Schedule Search Modal & Quick-Select Chips (Hybrid UX)
+- Retain top frequently ordered items as 1-click quick-access chips on the consultation cards.
+- Add + Add test and + Add procedure buttons that open OrderCatalogSearchModal.tsx.
+- Modal allows searching the clinic fee schedule by name, code, or PhilHealth code, selecting fulfillment mode, and adding optional clinical notes/fasting instructions.
+- Enforce ClinicEZ UI/UX expert standards (@clinicez/design-tokens, teal #0D6963, semantic states, no hardcoded colors).
+
+### R3. Cashier Invoice Billing Integration
+- In handleSignEncounter, include consultation fee, in-clinic procedures, and in-house diagnostic tests (subject to PhilHealth Yakap ₱0 co-pay) in createInvoice.
+- Outside lab orders must not be billed on the clinic invoice.
+
+### R4. Past Encounter Rehydration
+- When opening an existing signed encounter in loadPatientContext, rehydrate orderedLabs and orderedProcedures so clinicians see what was ordered.
+
+## Acceptance Criteria
+
+- [ ] Diagnostic tests can be toggled between In-House and Outside Lab.
+- [ ] In-House diagnostic tests appear as line items in the clinic Cashier invoice upon signing.
+- [ ] Outside laboratory orders do NOT appear as line items on the clinic invoice.
+- [ ] PhilHealth Yakap covered in-house tests apply ₱0 patient co-pay.
+- [ ] OrderCatalogSearchModal filters catalog items and supports adding tests/procedures with custom clinical notes.
+- [ ] Previously signed encounters rehydrate ordered tests and procedures accurately upon opening.
+- [ ] Automated tests in consultationsDynamicOrders.test.ts pass cleanly.
