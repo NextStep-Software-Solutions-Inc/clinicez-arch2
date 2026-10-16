@@ -1652,6 +1652,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("HomeInstructions")
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -2609,13 +2612,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("character varying(10)");
 
                     b.Property<string>("DiagnosedDiabetes")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasDefaultValue("N");
+                        .HasColumnType("character varying(10)");
 
-                    b.Property<bool>("EatsProcessedFoodWeekly")
+                    b.Property<bool?>("EatsProcessedFoodWeekly")
                         .HasColumnType("boolean");
 
                     b.Property<DateOnly?>("FastingBloodSugarDate")
@@ -2629,52 +2629,52 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)");
 
-                    b.Property<bool>("HasChestPain")
+                    b.Property<bool?>("HasChestPain")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasHistoryAnginaHeartAttack")
+                    b.Property<bool?>("HasHistoryAnginaHeartAttack")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasHistoryStrokeOrTia")
+                    b.Property<bool?>("HasHistoryStrokeOrTia")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasPolydipsia")
+                    b.Property<bool?>("HasPolydipsia")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasPolyphagia")
+                    b.Property<bool?>("HasPolyphagia")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasPolyuria")
+                    b.Property<bool?>("HasPolyuria")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasRaisedBloodGlucose")
+                    b.Property<bool?>("HasRaisedBloodGlucose")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("HasRaisedBloodLipids")
+                    b.Property<bool?>("HasRaisedBloodLipids")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("PainInCenterOfChestOrLeftArm")
+                    b.Property<bool?>("PainInCenterOfChestOrLeftArm")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("PainRelievedByNitrates")
+                    b.Property<bool?>("PainRelievedByNitrates")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("PainRelievedWithin10Mins")
+                    b.Property<bool?>("PainRelievedWithin10Mins")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("PainRelievedWithin10MinsOrNitrates")
+                    b.Property<bool?>("PainRelievedWithin10MinsOrNitrates")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("PainWhenWalkingUphill")
+                    b.Property<bool?>("PainWhenWalkingUphill")
                         .HasColumnType("boolean");
 
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("PhysicalActivityAtLeast150MinsWeekly")
+                    b.Property<bool?>("PhysicalActivityAtLeast150MinsWeekly")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Remarks")
@@ -2688,10 +2688,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("character varying(50)")
                         .HasDefaultValue("BandA");
 
-                    b.Property<bool>("SevereChestPainOver30Mins")
+                    b.Property<bool?>("SevereChestPainOver30Mins")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("SlowsDownWhenPainOccurs")
+                    b.Property<bool?>("SlowsDownWhenPainOccurs")
                         .HasColumnType("boolean");
 
                     b.Property<string>("TenantId")
@@ -2699,7 +2699,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<bool>("ThreeServingsVegetablesDaily")
+                    b.Property<bool?>("ThreeServingsVegetablesDaily")
                         .HasColumnType("boolean");
 
                     b.Property<DateOnly?>("TotalCholesterolDate")
@@ -2709,10 +2709,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasPrecision(6, 2)
                         .HasColumnType("numeric(6,2)");
 
-                    b.Property<bool>("TransientNeurologicalDeficits")
+                    b.Property<bool?>("TransientNeurologicalDeficits")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("TwoToThreeServingsFruitDaily")
+                    b.Property<bool?>("TwoToThreeServingsFruitDaily")
                         .HasColumnType("boolean");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -2724,7 +2724,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<DateOnly?>("UrineKetonesDate")
                         .HasColumnType("date");
 
-                    b.Property<bool>("UrineKetonesPresent")
+                    b.Property<bool?>("UrineKetonesPresent")
                         .HasColumnType("boolean");
 
                     b.Property<string>("UrineKetonesValue")
@@ -2734,7 +2734,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<DateOnly?>("UrineProteinDate")
                         .HasColumnType("date");
 
-                    b.Property<bool>("UrineProteinPresent")
+                    b.Property<bool?>("UrineProteinPresent")
                         .HasColumnType("boolean");
 
                     b.Property<string>("UrineProteinValue")
@@ -4702,6 +4702,12 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("PreAssessmentNotes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PreAssessmentRemarks")
+                        .HasColumnType("text");
+
                     b.Property<Guid>("QueueItemId")
                         .HasColumnType("uuid");
 
@@ -4726,6 +4732,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TriageAcuityReason")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
