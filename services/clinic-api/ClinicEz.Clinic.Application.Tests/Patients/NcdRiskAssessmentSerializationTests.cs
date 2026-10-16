@@ -8,7 +8,8 @@ public class NcdRiskAssessmentSerializationTests
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
     [Theory]
@@ -73,5 +74,82 @@ public class NcdRiskAssessmentSerializationTests
         Assert.Equal("BandA", result.RiskBand);
         Assert.Equal(6.5m, result.CalculatedRiskScorePercent);
         Assert.Equal("Nurse Joy", result.AssessedByStaffName);
+    }
+
+    [Fact]
+    public void Deserializes_AssessmentDate_WhenProvided()
+    {
+        var json = """
+        {
+            "assessmentDate": "2026-10-16T08:30:00Z",
+            "assessedByStaffName": "Dr. Santos"
+        }
+        """;
+
+        var result = JsonSerializer.Deserialize<SaveNcdRiskAssessmentRequest>(json, JsonOptions);
+
+        Assert.NotNull(result);
+        Assert.Equal("Dr. Santos", result.AssessedByStaffName);
+        Assert.NotNull(result.AssessmentDate);
+        Assert.Equal(2026, result.AssessmentDate.Value.Year);
+        Assert.Equal(10, result.AssessmentDate.Value.Month);
+        Assert.Equal(16, result.AssessmentDate.Value.Day);
+    }
+
+    [Fact]
+    public void NcdRiskAssessmentDto_Serializes_AssessmentDate_And_CreatedAt()
+    {
+        var assessmentDate = new DateTime(2026, 10, 16, 8, 30, 0, DateTimeKind.Utc);
+        var createdAt = new DateTime(2026, 10, 16, 8, 35, 0, DateTimeKind.Utc);
+
+        var dto = new NcdRiskAssessmentDto(
+            Id: Guid.NewGuid(),
+            PatientId: Guid.NewGuid(),
+            ConsultationEncounterId: null,
+            AssessmentDate: assessmentDate,
+            AssessedByStaffId: null,
+            AssessedByStaffName: "Dr. Santos",
+            EatsProcessedFoodWeekly: false,
+            ThreeServingsVegetablesDaily: true,
+            TwoToThreeServingsFruitDaily: true,
+            PhysicalActivityAtLeast150MinsWeekly: true,
+            DiagnosedDiabetes: "N",
+            HasPolyphagia: false,
+            HasPolydipsia: false,
+            HasPolyuria: false,
+            DiabetesMedicationStatus: null,
+            HasRaisedBloodGlucose: false,
+            FastingBloodSugarMgDl: null,
+            FastingBloodSugarMmolL: null,
+            FastingBloodSugarDate: null,
+            HasChestPain: false,
+            PainInCenterOfChestOrLeftArm: false,
+            PainWhenWalkingUphill: false,
+            SlowsDownWhenPainOccurs: false,
+            PainRelievedWithin10Mins: false,
+            PainRelievedByNitrates: false,
+            SevereChestPainOver30Mins: false,
+            TransientNeurologicalDeficits: false,
+            HasRaisedBloodLipids: false,
+            TotalCholesterolMgDl: null,
+            TotalCholesterolDate: null,
+            HasHistoryAnginaHeartAttack: false,
+            HasHistoryStrokeOrTia: false,
+            UrineKetonesPresent: false,
+            UrineKetonesValue: null,
+            UrineKetonesDate: null,
+            UrineProteinPresent: false,
+            UrineProteinValue: null,
+            UrineProteinDate: null,
+            RiskBand: "BandA",
+            CalculatedRiskScorePercent: 5.0m,
+            Remarks: "Normal",
+            CreatedAt: createdAt);
+
+        var json = JsonSerializer.Serialize(dto, JsonOptions);
+
+        Assert.Contains("assessmentDate", json);
+        Assert.Contains("createdAt", json);
+        Assert.Contains("Dr. Santos", json);
     }
 }

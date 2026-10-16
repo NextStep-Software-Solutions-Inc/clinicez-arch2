@@ -535,7 +535,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                     ncd.HasRaisedBloodLipids, ncd.TotalCholesterolMgDl, ncd.TotalCholesterolDate,
                     ncd.HasHistoryAnginaHeartAttack, ncd.HasHistoryStrokeOrTia, ncd.UrineKetonesPresent,
                     ncd.UrineKetonesValue, ncd.UrineKetonesDate, ncd.UrineProteinPresent, ncd.UrineProteinValue,
-                    ncd.UrineProteinDate, ncd.RiskBand, ncd.CalculatedRiskScorePercent, ncd.Remarks);
+                    ncd.UrineProteinDate, ncd.RiskBand, ncd.CalculatedRiskScorePercent, ncd.Remarks, ncd.CreatedAt);
             }
         }
 

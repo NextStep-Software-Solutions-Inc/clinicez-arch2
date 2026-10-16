@@ -69,7 +69,8 @@ public sealed record NcdRiskAssessmentDto(
     DateOnly? UrineProteinDate,
     string RiskBand,
     decimal? CalculatedRiskScorePercent,
-    string? Remarks);
+    string? Remarks,
+    DateTime? CreatedAt = null);
 
 public sealed record SaveNcdRiskAssessmentRequest(
     Guid? ConsultationEncounterId = null,
@@ -110,4 +111,5 @@ public sealed record SaveNcdRiskAssessmentRequest(
     DateOnly? UrineProteinDate = null,
     string RiskBand = "BandA",
     decimal? CalculatedRiskScorePercent = null,
-    string? Remarks = null);
+    string? Remarks = null,
+    DateTime? AssessmentDate = null);

@@ -436,7 +436,8 @@ public sealed class PatientsController : ControllerBase
             request.UrineProteinDate,
             request.RiskBand,
             request.CalculatedRiskScorePercent,
-            request.Remarks);
+            request.Remarks,
+            request.AssessmentDate);
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<NcdRiskAssessmentDto>.Success(result, "NCD risk assessment recorded successfully."));
     }

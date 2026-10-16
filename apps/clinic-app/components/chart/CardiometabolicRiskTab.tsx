@@ -9,6 +9,8 @@ import {
   NcdRiskAssessment,
   SaveNcdRiskAssessmentPayload,
 } from '../../services/clinicService';
+import { useAuth } from '../../context/AuthContext';
+import { useStaff } from '../../context/StaffContext';
 import {
   calculatePhilPenRisk,
   percentageToRiskBand,
@@ -35,6 +37,11 @@ export default function CardiometabolicRiskTab({
   initialLatestAssessment,
   onRefreshChart,
 }: CardiometabolicRiskTabProps) {
+  const { user } = useAuth();
+  const { current: currentStaff, currentName } = useStaff();
+  const authedClinicianName = currentName || (user?.name ?? '').trim();
+  const authedStaffId = currentStaff?.id || user?.id;
+
   const [assessments, setAssessments] = useState<NcdRiskAssessment[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,8 +51,16 @@ export default function CardiometabolicRiskTab({
   const [riskBand, setRiskBand] = useState<RiskBandType>('BandA');
   const [riskScorePercent, setRiskScorePercent] = useState('');
   const [isManuallyOverridden, setIsManuallyOverridden] = useState(false);
-  const [assessedByStaffName, setAssessedByStaffName] = useState('');
+  const [assessmentDate, setAssessmentDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [assessedByStaffName, setAssessedByStaffName] = useState(authedClinicianName);
   const [remarks, setRemarks] = useState('');
+
+  // Auto-sync assessedByStaffName with authed user if empty or previously generic 'Clinician'
+  useEffect(() => {
+    if ((!assessedByStaffName || assessedByStaffName === 'Clinician') && authedClinicianName) {
+      setAssessedByStaffName(authedClinicianName);
+    }
+  }, [authedClinicianName]);
 
   // Q1 - Q4 Lifestyle / Nutrition
   const [eatsProcessedFoodWeekly, setEatsProcessedFoodWeekly] = useState(false);
@@ -160,7 +175,19 @@ export default function CardiometabolicRiskTab({
     }
     setRiskScorePercent(data.calculatedRiskScorePercent != null ? String(data.calculatedRiskScorePercent) : '');
     setIsManuallyOverridden(true);
-    setAssessedByStaffName(data.assessedByStaffName || '');
+    if (data.assessedByStaffName && data.assessedByStaffName !== 'Clinician') {
+      setAssessedByStaffName(data.assessedByStaffName);
+    } else if (authedClinicianName) {
+      setAssessedByStaffName(authedClinicianName);
+    } else {
+      setAssessedByStaffName(data.assessedByStaffName || '');
+    }
+
+    const recDate = data.assessmentDate || data.createdAt;
+    if (recDate) {
+      setAssessmentDate(recDate.split('T')[0]);
+    }
+
     setRemarks(data.remarks || '');
 
     setEatsProcessedFoodWeekly(!!data.eatsProcessedFoodWeekly);
@@ -249,6 +276,13 @@ export default function CardiometabolicRiskTab({
   }, [philpenCalc.crisisOverrideApplied, philpenCalc.calculatedScorePercent, isManuallyOverridden, riskScorePercent]);
 
   const handleSaveAssessment = async () => {
+    if (assessmentDate && assessmentDate.trim()) {
+      const dateCheck = validateDateString(assessmentDate, { boundaryMode: 'pastOrToday' });
+      if (!dateCheck.isValid) {
+        Alert.alert('Invalid Assessment Date', dateCheck.errorMessage || 'Please enter a valid assessment date not in the future.');
+        return;
+      }
+    }
     if (fastingBloodSugarDate && fastingBloodSugarDate.trim()) {
       const fbsCheck = validateDateString(fastingBloodSugarDate, { boundaryMode: 'pastOrToday' });
       if (!fbsCheck.isValid) {
@@ -265,10 +299,17 @@ export default function CardiometabolicRiskTab({
     }
     setSaving(true);
     try {
+      const clinicianSnapshot = assessedByStaffName.trim() || authedClinicianName || 'Clinician';
+      const effectiveAssessmentDate = assessmentDate && assessmentDate.trim()
+        ? new Date(assessmentDate).toISOString()
+        : new Date().toISOString();
+
       const payload: SaveNcdRiskAssessmentPayload = {
         riskBand,
         calculatedRiskScorePercent: parseFloat(riskScorePercent) || undefined,
-        assessedByStaffName: assessedByStaffName.trim() || undefined,
+        assessmentDate: effectiveAssessmentDate,
+        assessedByStaffId: authedStaffId,
+        assessedByStaffName: clinicianSnapshot,
         remarks: remarks.trim() || undefined,
 
         eatsProcessedFoodWeekly,
@@ -443,6 +484,15 @@ export default function CardiometabolicRiskTab({
               placeholder="e.g. Dr. Santos / Nurse Joy"
               value={assessedByStaffName}
               onChangeText={setAssessedByStaffName}
+            />
+          </View>
+          <View style={styles.gridItem}>
+            <ValidatedDateInput
+              label="Assessment Date"
+              placeholder="YYYY-MM-DD"
+              value={assessmentDate}
+              onChangeText={setAssessmentDate}
+              boundaryMode="pastOrToday"
             />
           </View>
           <View style={styles.gridItem}>
@@ -880,11 +930,15 @@ export default function CardiometabolicRiskTab({
           <ThemedText variant="h3">Prior PhilPEN Assessments History</ThemedText>
           {assessments.slice(1).map((a) => {
             const bMeta = RISK_BAND_META[a.riskBand as RiskBandType] || RISK_BAND_META.BandA;
+            const rawDate = a.assessmentDate || a.createdAt;
+            const formattedDate = rawDate && !isNaN(new Date(rawDate).getTime())
+              ? new Date(rawDate).toLocaleDateString()
+              : new Date().toLocaleDateString();
             return (
-              <View key={a.id} style={styles.historyRow}>
+              <Pressable key={a.id} style={styles.historyRow} onPress={() => populateLatest(a)}>
                 <View style={{ flex: 1 }}>
                   <ThemedText variant="bodyBold" color={theme.colors.text}>
-                    {new Date(a.createdAt).toLocaleDateString()} • {a.assessedByStaffName || 'Clinician'}
+                    {formattedDate} • {a.assessedByStaffName?.trim() || 'Clinician'}
                   </ThemedText>
                   <ThemedText variant="small" color={theme.colors.textSecondary}>
                     {a.calculatedRiskScorePercent ? `Score: ${a.calculatedRiskScorePercent}% • ` : ''}
@@ -892,7 +946,7 @@ export default function CardiometabolicRiskTab({
                   </ThemedText>
                 </View>
                 <Badge label={bMeta.label} variant={bMeta.badgeVariant} />
-              </View>
+              </Pressable>
             );
           })}
         </View>

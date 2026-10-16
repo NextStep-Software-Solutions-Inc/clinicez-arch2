@@ -50,7 +50,8 @@ public sealed record SaveNcdRiskAssessmentCommand(
     DateOnly? UrineProteinDate = null,
     string RiskBand = "BandA",
     decimal? CalculatedRiskScorePercent = null,
-    string? Remarks = null) : IRequest<NcdRiskAssessmentDto>;
+    string? Remarks = null,
+    DateTime? AssessmentDate = null) : IRequest<NcdRiskAssessmentDto>;
 
 public sealed class SaveNcdRiskAssessmentCommandValidator : AbstractValidator<SaveNcdRiskAssessmentCommand>
 {
@@ -111,7 +112,7 @@ public sealed class SaveNcdRiskAssessmentCommandHandler : IRequestHandler<SaveNc
             ClinicId = _clinicContext.ClinicId,
             PatientId = request.PatientId,
             ConsultationEncounterId = request.ConsultationEncounterId,
-            AssessmentDate = DateTime.UtcNow,
+            AssessmentDate = request.AssessmentDate ?? DateTime.UtcNow,
             AssessedByStaffId = request.AssessedByStaffId ?? _clinicContext.StaffId,
             AssessedByStaffName = request.AssessedByStaffName?.Trim() ?? "Clinician",
             EatsProcessedFoodWeekly = request.EatsProcessedFoodWeekly,
@@ -198,6 +199,7 @@ public sealed class SaveNcdRiskAssessmentCommandHandler : IRequestHandler<SaveNc
             entity.UrineProteinDate,
             entity.RiskBand,
             entity.CalculatedRiskScorePercent,
-            entity.Remarks);
+            entity.Remarks,
+            entity.CreatedAt);
     }
 }

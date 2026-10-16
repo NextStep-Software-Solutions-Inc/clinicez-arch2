@@ -76,6 +76,7 @@ public sealed class GetPatientNcdRiskAssessmentsQueryHandler : IRequestHandler<G
             entity.UrineProteinDate,
             entity.RiskBand,
             entity.CalculatedRiskScorePercent,
-            entity.Remarks)).ToList();
+            entity.Remarks,
+            entity.CreatedAt)).ToList();
     }
 }

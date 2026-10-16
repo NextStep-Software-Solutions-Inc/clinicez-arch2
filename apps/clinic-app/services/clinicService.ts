@@ -1171,6 +1171,7 @@ export interface NcdRiskAssessment {
   clinicId: string;
   patientId: string;
   consultationEncounterId?: string;
+  assessmentDate?: string;
   assessedByStaffId?: string;
   assessedByStaffName?: string;
   eatsProcessedFoodWeekly?: boolean;
@@ -1208,11 +1209,12 @@ export interface NcdRiskAssessment {
   riskBand: 'BandA' | 'BandB' | 'BandC' | 'BandD' | 'BandE';
   calculatedRiskScorePercent?: number;
   remarks?: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface SaveNcdRiskAssessmentPayload {
   consultationEncounterId?: string;
+  assessmentDate?: string;
   assessedByStaffId?: string;
   assessedByStaffName?: string;
   eatsProcessedFoodWeekly?: boolean;
