@@ -264,6 +264,13 @@ export interface TriageVitals {
   zScoreWeightForLength?: number;
   philHealthZScoreCategory?: string;
   philHealthZScoreCode?: string;
+  growthZScoreCategory?: string;
+  growthZScoreCode?: string;
+  waistCircumferenceCm?: number;
+  hipCircumferenceCm?: number;
+  bodyLengthCm?: number;
+  skinfoldThicknessMm?: number;
+  limbsCircumferenceCm?: number;
   preAssessmentNotes?: string;
   preAssessmentRemarks?: string;
   triageAcuityReason?: string;
@@ -1787,6 +1794,13 @@ export interface RecordTriageRequest {
   zScoreWeightForLength?: number;
   philHealthZScoreCategory?: string;
   philHealthZScoreCode?: string;
+  growthZScoreCategory?: string;
+  growthZScoreCode?: string;
+  waistCircumferenceCm?: number;
+  hipCircumferenceCm?: number;
+  bodyLengthCm?: number;
+  skinfoldThicknessMm?: number;
+  limbsCircumferenceCm?: number;
   preAssessmentNotes?: string;
   preAssessmentRemarks?: string;
   triageAcuityReason?: string;

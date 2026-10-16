@@ -8,9 +8,13 @@ public sealed record WhoZScoreEvaluation(
     decimal? WeightForAgeZScore,
     decimal? HeightForAgeZScore,
     decimal? WeightForHeightZScore,
-    string? PhilHealthZScoreCategory,
-    string? PhilHealthZScoreCode,
-    string? Interpretation);
+    string? GrowthZScoreCategory,
+    string? GrowthZScoreCode,
+    string? Interpretation)
+{
+    public string? PhilHealthZScoreCategory => GrowthZScoreCategory;
+    public string? PhilHealthZScoreCode => GrowthZScoreCode;
+}
 
 public interface IWhoZScoreCalculator
 {

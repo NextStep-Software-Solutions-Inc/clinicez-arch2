@@ -151,12 +151,18 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             if (DateOnly.FromDateTime(encDate) < birthDate.AddYears(ageYears))
                 ageYears--;
 
+            int ageMonths = (encDate.Year - birthDate.Year) * 12 + encDate.Month - birthDate.Month;
+            if (encDate.Day < birthDate.Day)
+                ageMonths--;
+            if (ageMonths < 0) ageMonths = 0;
+
             bool isFemale = patient.Gender.StartsWith("F", StringComparison.OrdinalIgnoreCase);
             bool isPediatric = ageYears < 18;
+            bool isNcdEligible = ageYears >= 25; // PhilHealth Konsulta Data Dictionary: NCDQANS for Patient Aged 25 Years Old
             bool isSenior = ageYears >= 60;
 
-            // Physical exam pertinence (age-responsive: pediatric anthropometrics vs adult waist/hip)
-            var pePertinent = MapPhysicalExam(vitals, customProfile, isPediatric);
+            // Physical exam pertinence (demographic-responsive: infant vs under-5 vs adult)
+            var pePertinent = MapPhysicalExam(vitals, customProfile, ageMonths, ageYears);
 
             List<PatientProblem>? relProblems = null;
             problemsMap?.TryGetValue(patient.Id, out relProblems);
@@ -218,7 +224,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                 ? relPhysicalExam.GenSurveyRemarks
                 : (customProfile?.GenSurveyRemarks ?? string.Empty);
 
-            var ncdAnswers = isPediatric
+            var ncdAnswers = !isNcdEligible
                 ? new YakapNcdAnswersDto("N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "N", "A", "N", "N", "", "", "", "N", "", "", "N", "", "", "N", "", "", "N", "N")
                 : (ncdMap != null && ncdMap.TryGetValue(patient.Id, out var patientNcd))
                     ? patientNcd
@@ -323,7 +329,18 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                 foreach (var encounter in patientEncounters)
                 {
                     vitalsMap.TryGetValue(encounter.Id, out var encVitals);
-                    var encPe = MapPhysicalExam(encVitals ?? vitals);
+
+                    var encDateItem = encounter.EncounterDate;
+                    int encAgeYears = encDateItem.Year - birthDate.Year;
+                    if (DateOnly.FromDateTime(encDateItem) < birthDate.AddYears(encAgeYears))
+                        encAgeYears--;
+
+                    int encAgeMonths = (encDateItem.Year - birthDate.Year) * 12 + encDateItem.Month - birthDate.Month;
+                    if (encDateItem.Day < birthDate.Day)
+                        encAgeMonths--;
+                    if (encAgeMonths < 0) encAgeMonths = 0;
+
+                    var encPe = MapPhysicalExam(encVitals ?? vitals, customProfile, encAgeMonths, encAgeYears);
 
                     var icdCodes = encounter.Diagnoses.Count > 0
                         ? encounter.Diagnoses.Select(d => d.Icd10Code).Distinct().ToList()
@@ -937,27 +954,108 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
     private static YakapPhysicalExamPertinentDto MapPhysicalExam(
         TriageVitals? vitals,
         PhilHealthPatientProfileDto? customProfile = null,
-        bool isPediatric = false)
+        int ageMonths = 0,
+        int ageYears = 0)
     {
+        bool isInfant = ageMonths <= 24;
+        bool isUnderFive = ageMonths <= 60;
+
+        // Visual acuity (older children & adults)
+        var leftVision = customProfile?.VisualAcuityLeft
+            ?? vitals?.VisualAcuityLeft
+            ?? string.Empty;
+        var rightVision = customProfile?.VisualAcuityRight
+            ?? vitals?.VisualAcuityRight
+            ?? string.Empty;
+
+        // Systolic & Diastolic BP (blank if not taken, e.g. infants)
+        var systolic = customProfile?.Systolic
+            ?? (vitals?.SystolicBp > 0 ? vitals.SystolicBp.Value.ToString() : string.Empty);
+        var diastolic = customProfile?.Diastolic
+            ?? (vitals?.DiastolicBp > 0 ? vitals.DiastolicBp.Value.ToString() : string.Empty);
+
+        var hr = customProfile?.HeartRate
+            ?? (vitals?.HeartRateBpm > 0 ? vitals.HeartRateBpm.Value.ToString() : string.Empty);
+        var rr = customProfile?.RespiratoryRate
+            ?? (vitals?.RespiratoryRateBreathsPerMin > 0 ? vitals.RespiratoryRateBreathsPerMin.Value.ToString() : (vitals?.RespiratoryRate > 0 ? vitals.RespiratoryRate.Value.ToString() : string.Empty));
+        var temp = customProfile?.Temperature
+            ?? (vitals?.TemperatureCelsius > 0 ? vitals.TemperatureCelsius.Value.ToString("F1") : string.Empty);
+
+        // Weight
+        var weight = customProfile?.WeightKg
+            ?? (vitals?.WeightKg > 0 ? (vitals.WeightKg.Value % 1 == 0 ? vitals.WeightKg.Value.ToString("F0") : vitals.WeightKg.Value.ToString("0.#")) : string.Empty);
+
+        // Height, Length, and BMI
+        // PhilHealth eKAS/eSER Annex B standard: For infants <= 24m, pHeight="0", pBMI="0", and pLength contains recumbent body length.
+        string height;
+        string length;
+        string bmi;
+
+        if (isInfant)
+        {
+            var effectiveLength = vitals?.BodyLengthCm ?? vitals?.HeightCm;
+            length = customProfile?.LengthCm
+                ?? (effectiveLength > 0 ? (effectiveLength.Value % 1 == 0 ? effectiveLength.Value.ToString("F0") : effectiveLength.Value.ToString("0.#")) : string.Empty);
+            height = customProfile?.HeightCm ?? "0";
+            bmi = customProfile?.Bmi ?? "0";
+        }
+        else
+        {
+            length = string.Empty;
+            height = customProfile?.HeightCm
+                ?? (vitals?.HeightCm > 0 ? (vitals.HeightCm.Value % 1 == 0 ? vitals.HeightCm.Value.ToString("F0") : vitals.HeightCm.Value.ToString("0.#")) : string.Empty);
+            bmi = customProfile?.Bmi
+                ?? (vitals?.Bmi > 0 ? vitals.Bmi.Value.ToString("F1") : string.Empty);
+        }
+
+        // Anthropometrics (Head Circumference & MUAC required for 0-24m, Skinfold/Limbs optional)
+        var headCirc = (isInfant || isUnderFive)
+            ? (customProfile?.HeadCircCm ?? (vitals?.HeadCircumferenceCm > 0 ? vitals.HeadCircumferenceCm.Value.ToString("0.#") : string.Empty))
+            : string.Empty;
+
+        var muac = (isInfant || isUnderFive)
+            ? (customProfile?.MuacCm ?? (vitals?.MidUpperArmCircumferenceCm > 0 ? vitals.MidUpperArmCircumferenceCm.Value.ToString("0.#") : string.Empty))
+            : string.Empty;
+
+        var skinfold = (isInfant || isUnderFive)
+            ? (customProfile?.SkinfoldThicknessMm ?? (vitals?.SkinfoldThicknessMm > 0 ? vitals.SkinfoldThicknessMm.Value.ToString("0.#") : string.Empty))
+            : string.Empty;
+
+        var limbs = (isInfant || isUnderFive)
+            ? (vitals?.LimbsCircumferenceCm > 0 ? vitals.LimbsCircumferenceCm.Value.ToString("0.#") : string.Empty)
+            : string.Empty;
+
+        // Waist & Hip (Adult central obesity or infant if measured)
+        var waist = customProfile?.WaistCm
+            ?? (vitals?.WaistCircumferenceCm > 0 ? vitals.WaistCircumferenceCm.Value.ToString("0.#") : string.Empty);
+
+        var hip = customProfile?.HipCm
+            ?? (vitals?.HipCircumferenceCm > 0 ? vitals.HipCircumferenceCm.Value.ToString("0.#") : string.Empty);
+
+        // Z-score (Only for under-5: <= 60 months)
+        var zScore = isUnderFive
+            ? (customProfile?.ZScore ?? vitals?.GrowthZScoreCode ?? string.Empty)
+            : string.Empty;
+
         return new YakapPhysicalExamPertinentDto(
-            Systolic: customProfile?.Systolic ?? (vitals?.SystolicBp?.ToString() ?? string.Empty),
-            Diastolic: customProfile?.Diastolic ?? (vitals?.DiastolicBp?.ToString() ?? string.Empty),
-            Hr: customProfile?.HeartRate ?? (vitals?.HeartRateBpm?.ToString() ?? string.Empty),
-            Rr: customProfile?.RespiratoryRate ?? (vitals?.RespiratoryRateBreathsPerMin?.ToString() ?? string.Empty),
-            Temp: customProfile?.Temperature ?? (vitals?.TemperatureCelsius?.ToString("F1") ?? string.Empty),
-            Height: customProfile?.HeightCm ?? (vitals?.HeightCm?.ToString("F0") ?? string.Empty),
-            Weight: customProfile?.WeightKg ?? (vitals?.WeightKg?.ToString("F0") ?? string.Empty),
-            BMI: customProfile?.Bmi ?? (vitals?.Bmi?.ToString("F1") ?? string.Empty),
-            ZScore: customProfile?.ZScore ?? string.Empty,
-            LeftVision: customProfile?.VisualAcuityLeft ?? string.Empty,
-            RightVision: customProfile?.VisualAcuityRight ?? string.Empty,
-            Length: customProfile?.LengthCm ?? (vitals?.HeightCm?.ToString("F0") ?? string.Empty),
-            HeadCirc: customProfile?.HeadCircCm ?? string.Empty,
-            SkinfoldThickness: customProfile?.SkinfoldThicknessMm ?? string.Empty,
-            Waist: customProfile?.WaistCm ?? string.Empty,
-            Hip: customProfile?.HipCm ?? string.Empty,
-            Limbs: string.Empty,
-            MidUpperArmCirc: customProfile?.MuacCm ?? string.Empty,
+            Systolic: systolic,
+            Diastolic: diastolic,
+            Hr: hr,
+            Rr: rr,
+            Temp: temp,
+            Height: height,
+            Weight: weight,
+            BMI: bmi,
+            ZScore: zScore,
+            LeftVision: leftVision,
+            RightVision: rightVision,
+            Length: length,
+            HeadCirc: headCirc,
+            SkinfoldThickness: skinfold,
+            Waist: waist,
+            Hip: hip,
+            Limbs: limbs,
+            MidUpperArmCirc: muac,
             ReportStatus: "U",
             DeficiencyRemarks: string.Empty);
     }

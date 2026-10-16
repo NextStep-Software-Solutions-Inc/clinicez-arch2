@@ -403,7 +403,25 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             v.WeightKg,
             v.Bmi,
             v.PainScore,
-            v.Notes
+            v.Notes,
+            v.VisualAcuityLeft,
+            v.VisualAcuityRight,
+            v.HeadCircumferenceCm,
+            v.MidUpperArmCircumferenceCm,
+            v.IsMeasuredRecumbent,
+            v.ZScoreWeightForAge,
+            v.ZScoreLengthForAge,
+            v.ZScoreWeightForLength,
+            v.GrowthZScoreCategory,
+            v.GrowthZScoreCode,
+            v.WaistCircumferenceCm,
+            v.HipCircumferenceCm,
+            v.BodyLengthCm,
+            v.SkinfoldThicknessMm,
+            v.LimbsCircumferenceCm,
+            v.PreAssessmentNotes,
+            v.PreAssessmentRemarks,
+            v.TriageAcuityReason
         )).ToList();
 
         var procedureDtos = procedures.Select(p => new ClinicalProcedureDto(

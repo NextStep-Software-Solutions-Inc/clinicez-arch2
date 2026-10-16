@@ -260,13 +260,34 @@ public sealed class ValidateConsultationYakapReadinessQueryHandler : IRequestHan
         }
         else
         {
+            bool isInfant = false;
+            if (patient != null)
+            {
+                var encDate = encounter.EncounterDate;
+                var birthDate = patient.DateOfBirth;
+                int ageMonths = (encDate.Year - birthDate.Year) * 12 + encDate.Month - birthDate.Month;
+                if (encDate.Day < birthDate.Day)
+                    ageMonths--;
+                if (ageMonths <= 24)
+                    isInfant = true;
+            }
+
             var missingVitalsList = new List<string>();
-            if (!vitals.SystolicBp.HasValue || vitals.SystolicBp <= 0) missingVitalsList.Add("Systolic BP");
-            if (!vitals.DiastolicBp.HasValue || vitals.DiastolicBp <= 0) missingVitalsList.Add("Diastolic BP");
+            if (!isInfant)
+            {
+                if (!vitals.SystolicBp.HasValue || vitals.SystolicBp <= 0) missingVitalsList.Add("Systolic BP");
+                if (!vitals.DiastolicBp.HasValue || vitals.DiastolicBp <= 0) missingVitalsList.Add("Diastolic BP");
+                if (!vitals.HeightCm.HasValue || vitals.HeightCm <= 0) missingVitalsList.Add("Height");
+            }
+            else
+            {
+                var effectiveLength = vitals.BodyLengthCm ?? vitals.HeightCm;
+                if (!effectiveLength.HasValue || effectiveLength <= 0) missingVitalsList.Add("Body Length / Height");
+            }
+
             if (!vitals.HeartRateBpm.HasValue || vitals.HeartRateBpm <= 0) missingVitalsList.Add("Heart Rate");
             if (!vitals.RespiratoryRateBreathsPerMin.HasValue && !vitals.RespiratoryRate.HasValue) missingVitalsList.Add("Respiratory Rate");
             if (!vitals.TemperatureCelsius.HasValue || vitals.TemperatureCelsius <= 0) missingVitalsList.Add("Temperature");
-            if (!vitals.HeightCm.HasValue || vitals.HeightCm <= 0) missingVitalsList.Add("Height");
             if (!vitals.WeightKg.HasValue || vitals.WeightKg <= 0) missingVitalsList.Add("Weight");
 
             if (missingVitalsList.Count > 0)

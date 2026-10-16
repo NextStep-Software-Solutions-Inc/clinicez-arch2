@@ -42,8 +42,13 @@ interface VitalsFormState {
   pain: string;
   height: string;
   weight: string;
+  bodyLength: string;
   headCircumference: string;
   midUpperArmCircumference: string;
+  skinfoldThickness: string;
+  limbsCircumference: string;
+  waistCircumference: string;
+  hipCircumference: string;
   visualAcuityLeft: string;
   visualAcuityRight: string;
   notes: string;
@@ -63,8 +68,13 @@ const EMPTY_VITALS_FORM: VitalsFormState = {
   pain: '',
   height: '',
   weight: '',
+  bodyLength: '',
   headCircumference: '',
   midUpperArmCircumference: '',
+  skinfoldThickness: '',
+  limbsCircumference: '',
+  waistCircumference: '',
+  hipCircumference: '',
   visualAcuityLeft: '',
   visualAcuityRight: '',
   notes: '',
@@ -98,8 +108,75 @@ export default function RecordVitalsModal({
   const [saving, setSaving] = useState(false);
   const [zScorePreview, setZScorePreview] = useState<PediatricZScoreResult | null>(null);
 
-  const isPediatric = useMemo(() => {
-    return patient ? patient.age < 19 : false;
+  // Demographic cohort resolution: age brackets and gender awareness
+  const cohort = useMemo(() => {
+    if (!patient) {
+      return {
+        ageMonths: 0,
+        ageYears: 30,
+        isInfant: false,
+        isUnderFive: false,
+        isPediatric: false,
+        isAdult: true,
+        isSenior: false,
+        isFemale: false,
+        label: 'Adult Patient',
+        sublabel: 'Standard adult vitals & risk screening',
+      };
+    }
+
+    const female = (patient.gender || '').toLowerCase().startsWith('f');
+    let years = patient.age;
+    let months = patient.age * 12;
+
+    if (patient.dateOfBirth) {
+      const dob = new Date(patient.dateOfBirth);
+      const now = new Date();
+      years = now.getFullYear() - dob.getFullYear();
+      if (now < new Date(now.getFullYear(), dob.getMonth(), dob.getDate())) {
+        years--;
+      }
+      months = (now.getFullYear() - dob.getFullYear()) * 12 + now.getMonth() - dob.getMonth();
+      if (now.getDate() < dob.getDate()) {
+        months--;
+      }
+      if (months < 0) months = 0;
+    }
+
+    const isInfant = months <= 24;
+    const isUnderFive = months <= 60;
+    const isPediatric = years < 18;
+    const isAdult = years >= 18;
+    const isSenior = years >= 60;
+
+    let label = 'Adult (18–59yo)';
+    let sublabel = 'Standard adult vitals, BMI & central obesity screening';
+    if (isInfant) {
+      label = `Infant (${months} mo)`;
+      sublabel = 'Recumbent length, MUAC & head circumference required';
+    } else if (isUnderFive) {
+      label = `Child Under 5 (${months} mo / ${years}yo)`;
+      sublabel = 'WHO 2006 growth curves & standing/recumbent posture';
+    } else if (isPediatric) {
+      label = `Pediatric (${years}yo)`;
+      sublabel = 'Standard pediatric triage';
+    } else if (isSenior) {
+      label = `Senior Citizen (${years}yo)`;
+      sublabel = 'Geriatric vitals, central obesity & NCD risk screening';
+    }
+
+    return {
+      ageMonths: months,
+      ageYears: years,
+      isInfant,
+      isUnderFive,
+      isPediatric,
+      isAdult,
+      isSenior,
+      isFemale: female,
+      label,
+      sublabel,
+    };
   }, [patient]);
 
   // Pre-fill form when modal opens
@@ -116,33 +193,45 @@ export default function RecordVitalsModal({
           pain: existingVitals.painScore != null ? String(existingVitals.painScore) : '',
           height: existingVitals.heightCm != null ? String(existingVitals.heightCm) : '',
           weight: existingVitals.weightKg != null ? String(existingVitals.weightKg) : '',
+          bodyLength: existingVitals.bodyLengthCm != null
+            ? String(existingVitals.bodyLengthCm)
+            : (cohort.isInfant && existingVitals.heightCm != null ? String(existingVitals.heightCm) : ''),
           headCircumference: existingVitals.headCircumferenceCm != null ? String(existingVitals.headCircumferenceCm) : '',
           midUpperArmCircumference: existingVitals.midUpperArmCircumferenceCm != null ? String(existingVitals.midUpperArmCircumferenceCm) : '',
+          skinfoldThickness: existingVitals.skinfoldThicknessMm != null ? String(existingVitals.skinfoldThicknessMm) : '',
+          limbsCircumference: existingVitals.limbsCircumferenceCm != null ? String(existingVitals.limbsCircumferenceCm) : '',
+          waistCircumference: existingVitals.waistCircumferenceCm != null ? String(existingVitals.waistCircumferenceCm) : '',
+          hipCircumference: existingVitals.hipCircumferenceCm != null ? String(existingVitals.hipCircumferenceCm) : '',
           visualAcuityLeft: existingVitals.visualAcuityLeft || '',
           visualAcuityRight: existingVitals.visualAcuityRight || '',
           notes: existingVitals.notes || '',
-          posture: existingVitals.isMeasuredRecumbent ? 'RECUMBENT' : 'STANDING',
+          posture: existingVitals.isMeasuredRecumbent || cohort.isInfant ? 'RECUMBENT' : 'STANDING',
           preAssessmentNotes: existingVitals.preAssessmentNotes || '',
           preAssessmentRemarks: existingVitals.preAssessmentRemarks || '',
           triagePriority: (existingVitals.triageAcuityReason as any) || 'Routine',
         });
       } else {
-        setForm(EMPTY_VITALS_FORM);
+        setForm({
+          ...EMPTY_VITALS_FORM,
+          posture: cohort.isInfant ? 'RECUMBENT' : 'STANDING',
+        });
       }
       setZScorePreview(null);
     }
-  }, [visible, existingVitals]);
+  }, [visible, existingVitals, cohort.isInfant]);
 
-  // Live BMI calculation
+  // Live BMI calculation (for patients with standing height)
   const calculatedBmi = useMemo(() => {
-    const h = parseOptionalFloat(form.height);
+    const effectiveHeight = cohort.isInfant
+      ? parseOptionalFloat(form.bodyLength) || parseOptionalFloat(form.height)
+      : parseOptionalFloat(form.height);
     const w = parseOptionalFloat(form.weight);
-    if (h && w && h > 0) {
-      const heightM = h / 100;
+    if (effectiveHeight && w && effectiveHeight > 0) {
+      const heightM = effectiveHeight / 100;
       return Math.round((w / (heightM * heightM)) * 10) / 10;
     }
     return undefined;
-  }, [form.height, form.weight]);
+  }, [form.height, form.bodyLength, form.weight, cohort.isInfant]);
 
   const bmiCategory = useMemo(() => {
     if (!calculatedBmi) return null;
@@ -152,24 +241,55 @@ export default function RecordVitalsModal({
     return { label: 'Obese', variant: 'emergency' as const };
   }, [calculatedBmi]);
 
-  // Debounced Z-score preview for pediatric patients
+  // Live Adult Sex-Differentiated Central Obesity & WHR Risk Evaluation
+  const centralObesity = useMemo(() => {
+    const waist = parseOptionalFloat(form.waistCircumference);
+    const hip = parseOptionalFloat(form.hipCircumference);
+    if (!waist || waist <= 0) return null;
+
+    // Statutory Asian / Philippine cutoffs: Male >= 90 cm, Female >= 80 cm
+    const cutoff = cohort.isFemale ? 80 : 90;
+    const isObeseRisk = waist >= cutoff;
+
+    let whr: number | undefined = undefined;
+    let whrRisk = false;
+    if (hip && hip > 0) {
+      whr = Math.round((waist / hip) * 100) / 100;
+      // WHR cutoffs: Male > 0.90, Female > 0.85
+      whrRisk = cohort.isFemale ? whr > 0.85 : whr > 0.90;
+    }
+
+    return {
+      waist,
+      cutoff,
+      isObeseRisk,
+      whr,
+      whrRisk,
+      genderLabel: cohort.isFemale ? 'Female' : 'Male',
+    };
+  }, [form.waistCircumference, form.hipCircumference, cohort.isFemale]);
+
+  // Debounced WHO Z-score calculation for children under 5 (0–60 months)
   useEffect(() => {
-    if (!isPediatric || !patient?.dateOfBirth) return;
-    const h = parseOptionalFloat(form.height);
+    if (!cohort.isUnderFive || !patient?.dateOfBirth) return;
+    const effectiveLen = cohort.isInfant
+      ? parseOptionalFloat(form.bodyLength) || parseOptionalFloat(form.height)
+      : parseOptionalFloat(form.height);
     const w = parseOptionalFloat(form.weight);
-    if (!h && !w) {
+    if (!effectiveLen && !w) {
       setZScorePreview(null);
       return;
     }
 
     let active = true;
     const timer = setTimeout(async () => {
+      const isRecumbent = cohort.isInfant || form.posture === 'RECUMBENT';
       const [res] = await clinicService.calculatePediatricZScore({
         dateOfBirth: patient.dateOfBirth,
-        gender: patient.gender === 'Female' || patient.gender === 'F' ? 'Female' : 'Male',
+        gender: cohort.isFemale ? 'Female' : 'Male',
         weightKg: w ?? 0,
-        lengthOrHeightCm: h ?? 0,
-        isMeasuredRecumbent: form.posture === 'RECUMBENT',
+        lengthOrHeightCm: effectiveLen ?? 0,
+        isMeasuredRecumbent: isRecumbent,
       });
       if (active) {
         setZScorePreview(res ?? null);
@@ -180,7 +300,7 @@ export default function RecordVitalsModal({
       active = false;
       clearTimeout(timer);
     };
-  }, [form.height, form.weight, form.posture, patient, isPediatric]);
+  }, [form.height, form.bodyLength, form.weight, form.posture, patient, cohort.isUnderFive, cohort.isInfant, cohort.isFemale]);
 
   const updateField = (key: keyof VitalsFormState, val: string) => {
     setForm((prev) => ({ ...prev, [key]: val }));
@@ -198,13 +318,24 @@ export default function RecordVitalsModal({
     const respiratoryRateBreathsPerMin = parseOptionalInt(form.rr);
     const temperatureCelsius = parseOptionalFloat(form.temp);
     const oxygenSaturationPercent = parseOptionalInt(form.spo2);
-    const heightCm = parseOptionalFloat(form.height);
+    let heightCm = parseOptionalFloat(form.height);
+    let bodyLengthCm = parseOptionalFloat(form.bodyLength);
     const weightKg = parseOptionalFloat(form.weight);
     const painScore = parseOptionalInt(form.pain);
-    const visualAcuityLeft = form.visualAcuityLeft.trim() || undefined;
-    const visualAcuityRight = form.visualAcuityRight.trim() || undefined;
     const headCircumferenceCm = parseOptionalFloat(form.headCircumference);
     const midUpperArmCircumferenceCm = parseOptionalFloat(form.midUpperArmCircumference);
+    const skinfoldThicknessMm = parseOptionalFloat(form.skinfoldThickness);
+    const limbsCircumferenceCm = parseOptionalFloat(form.limbsCircumference);
+    const waistCircumferenceCm = parseOptionalFloat(form.waistCircumference);
+    const hipCircumferenceCm = parseOptionalFloat(form.hipCircumference);
+    const visualAcuityLeft = form.visualAcuityLeft.trim() || undefined;
+    const visualAcuityRight = form.visualAcuityRight.trim() || undefined;
+
+    // For infants, body length is primary recumbent measurement; sync to height if empty
+    if (cohort.isInfant) {
+      if (bodyLengthCm && !heightCm) heightCm = bodyLengthCm;
+      if (heightCm && !bodyLengthCm) bodyLengthCm = heightCm;
+    }
 
     const hasAnyVital = [
       systolicBp,
@@ -214,10 +345,15 @@ export default function RecordVitalsModal({
       temperatureCelsius,
       oxygenSaturationPercent,
       heightCm,
+      bodyLengthCm,
       weightKg,
       painScore,
       headCircumferenceCm,
       midUpperArmCircumferenceCm,
+      skinfoldThicknessMm,
+      limbsCircumferenceCm,
+      waistCircumferenceCm,
+      hipCircumferenceCm,
     ].some((v) => v !== undefined) || !!visualAcuityLeft || !!visualAcuityRight;
 
     if (!hasAnyVital) {
@@ -235,6 +371,7 @@ export default function RecordVitalsModal({
       respiratoryRateBreathsPerMin,
       oxygenSaturationPercent,
       heightCm,
+      bodyLengthCm,
       weightKg,
       painScore,
       notes: form.notes.trim() || undefined,
@@ -242,10 +379,16 @@ export default function RecordVitalsModal({
       visualAcuityRight,
       headCircumferenceCm,
       midUpperArmCircumferenceCm,
-      isMeasuredRecumbent: form.posture === 'RECUMBENT',
+      skinfoldThicknessMm,
+      limbsCircumferenceCm,
+      waistCircumferenceCm,
+      hipCircumferenceCm,
+      isMeasuredRecumbent: cohort.isInfant || form.posture === 'RECUMBENT',
       zScoreWeightForAge: zScorePreview?.weightForAgeZScore,
       zScoreLengthForAge: zScorePreview?.heightForAgeZScore,
       zScoreWeightForLength: zScorePreview?.weightForHeightZScore,
+      growthZScoreCategory: zScorePreview?.philHealthZScoreCategory,
+      growthZScoreCode: zScorePreview?.philHealthZScoreCode,
       philHealthZScoreCategory: zScorePreview?.philHealthZScoreCategory,
       philHealthZScoreCode: zScorePreview?.philHealthZScoreCode,
       preAssessmentNotes: form.preAssessmentNotes.trim() || undefined,
@@ -271,13 +414,13 @@ export default function RecordVitalsModal({
     <Modal
       visible={visible}
       onClose={onClose}
-      title="Record Vitals"
+      title="Record Vitals & Anthropometrics"
       subtitle={
         patient
           ? `${patient.fullName} (${patient.age}yo ${patient.gender}) • Code: ${patient.patientCode || 'PAT'}`
           : 'Consultation triage vitals'
       }
-      maxWidth={600}
+      maxWidth={640}
       footer={
         <View style={styles.modalFooter}>
           <Button
@@ -297,19 +440,43 @@ export default function RecordVitalsModal({
       }
     >
       <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Demographic Cohort Banner */}
+        <View style={styles.cohortBanner}>
+          <View style={styles.cohortHeader}>
+            <View style={styles.cohortPills}>
+              <Badge
+                label={cohort.label}
+                variant={cohort.isInfant ? 'purple' : cohort.isUnderFive ? 'info' : 'primary'}
+                size="sm"
+              />
+              <Badge
+                label={cohort.isFemale ? 'Female' : 'Male'}
+                variant="neutral"
+                size="sm"
+              />
+            </View>
+            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+              {cohort.sublabel}
+            </ThemedText>
+          </View>
+        </View>
+
         {/* Section 1: Standard Vital Signs */}
         <View style={styles.sectionHeader}>
           <Icon name="heartPulse" size={16} color={theme.colors.primary} />
           <ThemedText variant="smallBold" color={theme.colors.text}>
             Standard Vital Signs
           </ThemedText>
+          {cohort.isInfant ? (
+            <Badge label="Infant: BP Optional" variant="neutral" size="xs" />
+          ) : null}
         </View>
 
         <View style={styles.formGrid}>
           <View style={styles.gridItem}>
             <Input
-              label="Systolic BP (mmHg)"
-              placeholder="e.g. 120"
+              label={cohort.isInfant ? 'Systolic BP (optional)' : 'Systolic BP (mmHg)'}
+              placeholder={cohort.isInfant ? 'Optional for infants' : 'e.g. 120'}
               value={form.bpSys}
               onChangeText={(txt) => updateField('bpSys', txt)}
               keyboardType="number-pad"
@@ -317,8 +484,8 @@ export default function RecordVitalsModal({
           </View>
           <View style={styles.gridItem}>
             <Input
-              label="Diastolic BP (mmHg)"
-              placeholder="e.g. 80"
+              label={cohort.isInfant ? 'Diastolic BP (optional)' : 'Diastolic BP (mmHg)'}
+              placeholder={cohort.isInfant ? 'Optional for infants' : 'e.g. 80'}
               value={form.bpDia}
               onChangeText={(txt) => updateField('bpDia', txt)}
               keyboardType="number-pad"
@@ -335,7 +502,7 @@ export default function RecordVitalsModal({
           </View>
           <View style={styles.gridItem}>
             <Input
-              label="Respiratory rate (/min)"
+              label="Respiratory rate (/min) *"
               placeholder="e.g. 18"
               value={form.rr}
               onChangeText={(txt) => updateField('rr', txt)}
@@ -371,42 +538,106 @@ export default function RecordVitalsModal({
           </View>
         </View>
 
-        {/* Section 2: Anthropometrics & BMI */}
+        {/* Section 2: Anthropometrics & Demographic Growth Screening */}
         <View style={styles.sectionHeader}>
           <Icon name="activity" size={16} color={theme.colors.primary} />
           <ThemedText variant="smallBold" color={theme.colors.text}>
-            Anthropometrics &amp; BMI
+            {cohort.isInfant
+              ? 'Infant Anthropometrics (0–24 Months)'
+              : cohort.isUnderFive
+                ? 'Under-5 Anthropometrics & Growth'
+                : 'Anthropometrics & Body Composition'}
           </ThemedText>
-          {calculatedBmi && bmiCategory ? (
+          {calculatedBmi && bmiCategory && !cohort.isInfant ? (
             <Badge label={`BMI: ${calculatedBmi} (${bmiCategory.label})`} variant={bmiCategory.variant} size="sm" />
           ) : null}
         </View>
 
         <View style={styles.formGrid}>
-          <View style={styles.gridItem}>
-            <Input
-              label="Height / Length (cm)"
-              placeholder="e.g. 165"
-              value={form.height}
-              onChangeText={(txt) => updateField('height', txt)}
-              keyboardType="decimal-pad"
-            />
-          </View>
-          <View style={styles.gridItem}>
-            <Input
-              label="Weight (kg)"
-              placeholder="e.g. 60.5"
-              value={form.weight}
-              onChangeText={(txt) => updateField('weight', txt)}
-              keyboardType="decimal-pad"
-            />
-          </View>
-          {isPediatric ? (
+          {cohort.isInfant ? (
             <>
               <View style={styles.gridItem}>
                 <Input
-                  label="Head circumference (cm)"
-                  placeholder="e.g. 42"
+                  label="Recumbent Body Length (cm) *"
+                  placeholder="e.g. 52.5"
+                  value={form.bodyLength}
+                  onChangeText={(txt) => {
+                    updateField('bodyLength', txt);
+                    if (!form.height) updateField('height', txt);
+                  }}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Weight (kg) *"
+                  placeholder="e.g. 4.2"
+                  value={form.weight}
+                  onChangeText={(txt) => updateField('weight', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Head Circumference (cm) *"
+                  placeholder="e.g. 36.5"
+                  value={form.headCircumference}
+                  onChangeText={(txt) => updateField('headCircumference', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="MUAC Mid-Upper Arm (cm) *"
+                  placeholder="e.g. 11.5"
+                  value={form.midUpperArmCircumference}
+                  onChangeText={(txt) => updateField('midUpperArmCircumference', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Skinfold Thickness (mm)"
+                  placeholder="Optional, e.g. 6.0"
+                  value={form.skinfoldThickness}
+                  onChangeText={(txt) => updateField('skinfoldThickness', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Limbs Circumference (cm)"
+                  placeholder="Optional, e.g. 15.0"
+                  value={form.limbsCircumference}
+                  onChangeText={(txt) => updateField('limbsCircumference', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </>
+          ) : cohort.isUnderFive ? (
+            <>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Standing Height / Length (cm)"
+                  placeholder="e.g. 95.0"
+                  value={form.height}
+                  onChangeText={(txt) => updateField('height', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Weight (kg)"
+                  placeholder="e.g. 14.2"
+                  value={form.weight}
+                  onChangeText={(txt) => updateField('weight', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Head Circumference (cm)"
+                  placeholder="e.g. 48.0"
                   value={form.headCircumference}
                   onChangeText={(txt) => updateField('headCircumference', txt)}
                   keyboardType="decimal-pad"
@@ -422,13 +653,81 @@ export default function RecordVitalsModal({
                 />
               </View>
             </>
-          ) : null}
+          ) : (
+            <>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Height (cm)"
+                  placeholder="e.g. 165"
+                  value={form.height}
+                  onChangeText={(txt) => updateField('height', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Weight (kg)"
+                  placeholder="e.g. 62.5"
+                  value={form.weight}
+                  onChangeText={(txt) => updateField('weight', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label={`Waist Circumference (cm)${cohort.isAdult ? ` [${cohort.isFemale ? 'F < 80' : 'M < 90'}]` : ''}`}
+                  placeholder={cohort.isFemale ? 'Target < 80 cm' : 'Target < 90 cm'}
+                  value={form.waistCircumference}
+                  onChangeText={(txt) => updateField('waistCircumference', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Input
+                  label="Hip Circumference (cm)"
+                  placeholder="e.g. 96"
+                  value={form.hipCircumference}
+                  onChangeText={(txt) => updateField('hipCircumference', txt)}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </>
+          )}
         </View>
 
-        {isPediatric ? (
+        {/* Central Obesity & WHR Risk Badges (for adults) */}
+        {cohort.isAdult && centralObesity ? (
+          <View style={styles.centralObesityContainer}>
+            <View style={styles.badgeRow}>
+              {centralObesity.isObeseRisk ? (
+                <Badge
+                  label={`Central Obesity Risk (${centralObesity.genderLabel} ≥ ${centralObesity.cutoff} cm)`}
+                  variant="emergency"
+                  size="sm"
+                />
+              ) : (
+                <Badge
+                  label={`Waist Normal (${centralObesity.genderLabel} < ${centralObesity.cutoff} cm)`}
+                  variant="success"
+                  size="sm"
+                />
+              )}
+              {centralObesity.whr ? (
+                <Badge
+                  label={`WHR: ${centralObesity.whr} (${centralObesity.whrRisk ? 'High Risk' : 'Normal'})`}
+                  variant={centralObesity.whrRisk ? 'warning' : 'success'}
+                  size="sm"
+                />
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Measurement Posture for Under-5 children */}
+        {cohort.isUnderFive && !cohort.isInfant ? (
           <View style={styles.postureContainer}>
-            <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
-              Measurement Posture (WHO standard)
+            <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: theme.spacing.xs }}>
+              Measurement Posture (WHO 2006 Standard)
             </ThemedText>
             <SegmentedControl<MeasurementPosture>
               value={form.posture}
@@ -438,6 +737,55 @@ export default function RecordVitalsModal({
                 { value: 'RECUMBENT', label: 'Recumbent length (lying)' },
               ]}
             />
+          </View>
+        ) : null}
+
+        {/* Live WHO Z-Score Growth Evaluation Card */}
+        {cohort.isUnderFive && zScorePreview ? (
+          <View style={styles.zScoreCard}>
+            <View style={styles.zScoreHeader}>
+              <Icon name="checkCircle" size={14} color={theme.colors.primaryDark} />
+              <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                WHO Growth Assessment (Sex-Differentiated)
+              </ThemedText>
+              <Badge
+                label={zScorePreview.philHealthZScoreCategory || 'Evaluated'}
+                variant={
+                  (zScorePreview.philHealthZScoreCategory || '').includes('Severe')
+                    ? 'emergency'
+                    : zScorePreview.philHealthZScoreCategory === 'Normal'
+                      ? 'success'
+                      : 'warning'
+                }
+                size="sm"
+              />
+            </View>
+            <View style={styles.zScoreGrid}>
+              <View style={styles.zScoreItem}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>Weight-for-Age</ThemedText>
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  {zScorePreview.weightForAgeZScore != null ? `${zScorePreview.weightForAgeZScore} SD` : '—'}
+                </ThemedText>
+              </View>
+              <View style={styles.zScoreItem}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>Length/Height-for-Age</ThemedText>
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  {zScorePreview.heightForAgeZScore != null ? `${zScorePreview.heightForAgeZScore} SD` : '—'}
+                </ThemedText>
+              </View>
+              <View style={styles.zScoreItem}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>Weight-for-Length</ThemedText>
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  {zScorePreview.weightForHeightZScore != null ? `${zScorePreview.weightForHeightZScore} SD` : '—'}
+                </ThemedText>
+              </View>
+              <View style={styles.zScoreItem}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>Statutory Code</ThemedText>
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  {zScorePreview.philHealthZScoreCode || '01'}
+                </ThemedText>
+              </View>
+            </View>
           </View>
         ) : null}
 
@@ -488,7 +836,7 @@ export default function RecordVitalsModal({
         </View>
 
         <View style={styles.prioritySection}>
-          <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: theme.spacing.xs }}>
             Triage Acuity Priority
           </ThemedText>
           <SegmentedControl<'Routine' | 'Urgent' | 'Emergency'>
@@ -504,7 +852,7 @@ export default function RecordVitalsModal({
 
         {/* Clinical Observation Quick Chips */}
         <View style={styles.chipsSection}>
-          <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: theme.spacing.xs }}>
             Pre-assessment Observations (tap to add to remarks)
           </ThemedText>
           <View style={styles.chipsRow}>
@@ -582,6 +930,22 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: theme.spacing.sm,
   },
+  cohortBanner: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  cohortHeader: {
+    gap: theme.spacing.xs,
+  },
+  cohortPills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -598,9 +962,44 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 160,
   },
+  centralObesityContainer: {
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    alignItems: 'center',
+  },
   postureContainer: {
     marginTop: theme.spacing.xs,
     marginBottom: theme.spacing.xs,
+  },
+  zScoreCard: {
+    backgroundColor: theme.colors.primaryLighter,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  zScoreHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.xs,
+  },
+  zScoreGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+  },
+  zScoreItem: {
+    flex: 1,
+    minWidth: 120,
   },
   prioritySection: {
     marginTop: theme.spacing.xs,
@@ -613,11 +1012,11 @@ const styles = StyleSheet.create({
   chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: theme.spacing.xs,
   },
   observationChip: {
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 5,
+    paddingVertical: theme.spacing.xs,
     borderRadius: theme.radii.full,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -630,6 +1029,6 @@ const styles = StyleSheet.create({
   chipContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: theme.spacing.xs,
   },
 });

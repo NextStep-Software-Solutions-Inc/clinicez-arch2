@@ -1938,8 +1938,15 @@ export default function ConsultationsScreen() {
             ? { label: 'BP', value: `${vitals.systolicBp}/${vitals.diastolicBp}` }
             : null,
           vitals.heartRateBpm != null ? { label: 'HR', value: `${vitals.heartRateBpm} bpm` } : null,
+          (vitals.respiratoryRateBreathsPerMin != null || (vitals as any).respiratoryRate != null)
+            ? { label: 'RR', value: `${vitals.respiratoryRateBreathsPerMin ?? (vitals as any).respiratoryRate}/min` }
+            : null,
           vitals.temperatureCelsius != null ? { label: 'Temp', value: `${vitals.temperatureCelsius}°C` } : null,
           vitals.oxygenSaturationPercent != null ? { label: 'SpO2', value: `${vitals.oxygenSaturationPercent}%` } : null,
+          vitals.bodyLengthCm != null
+            ? { label: 'Length', value: `${vitals.bodyLengthCm} cm` }
+            : (vitals.heightCm != null ? { label: 'Height', value: `${vitals.heightCm} cm` } : null),
+          vitals.weightKg != null ? { label: 'Weight', value: `${vitals.weightKg} kg` } : null,
           vitals.bmi != null ? { label: 'BMI', value: `${vitals.bmi}` } : null,
           vitals.painScore != null ? { label: 'Pain', value: `${vitals.painScore}/10` } : null,
         ]
@@ -1977,14 +1984,27 @@ export default function ConsultationsScreen() {
 
     const primaryDiagPresent = selectedDiagnoses.some((d) => d.isPrimary);
 
-    const vitalsComp = !!(
-      vitals?.systolicBp &&
-      vitals?.diastolicBp &&
-      vitals?.heartRateBpm &&
-      vitals?.temperatureCelsius &&
-      vitals?.heightCm &&
-      vitals?.weightKg
-    );
+    const dob = patientRecord?.dateOfBirth;
+    let ageMonths = (patientRecord?.age ?? 30) * 12;
+    if (dob) {
+      const birth = new Date(dob);
+      const now = new Date();
+      ageMonths = (now.getFullYear() - birth.getFullYear()) * 12 + now.getMonth() - birth.getMonth();
+      if (now.getDate() < birth.getDate()) ageMonths--;
+      if (ageMonths < 0) ageMonths = 0;
+    }
+    const isInfant = ageMonths <= 24;
+
+    const hasRr = !!(vitals?.respiratoryRateBreathsPerMin || (vitals as any)?.respiratoryRate);
+    const hasHr = !!vitals?.heartRateBpm;
+    const hasTemp = !!vitals?.temperatureCelsius;
+    const hasWeight = !!vitals?.weightKg;
+    const hasLengthOrHeight = !!(vitals?.heightCm || vitals?.bodyLengthCm);
+    const hasBp = !!(vitals?.systolicBp && vitals?.diastolicBp);
+
+    const vitalsComp = isInfant
+      ? !!(hasHr && hasRr && hasTemp && hasWeight && hasLengthOrHeight)
+      : !!(hasBp && hasHr && hasRr && hasTemp && hasWeight && hasLengthOrHeight);
 
     const hasDangerousDrug = prescriptions.some((p) => p.isDangerousDrug);
     const s2Valid = !hasDangerousDrug || !!(doctorS2.trim() || signerStaff?.s2LicenseNumber?.trim());
@@ -2000,7 +2020,13 @@ export default function ConsultationsScreen() {
     if (hasOtherCode && !otherValid) missing.push('Description is required when other complaint is reported.');
     if (!peComplete) missing.push('Comprehensive physical examination and general survey must be completed.');
     if (!primaryDiagPresent) missing.push('At least one diagnosis must be designated Primary ICD-10.');
-    if (!vitalsComp) missing.push('Complete triage vitals required (BP, HR, Temp, Height, Weight).');
+    if (!vitalsComp) {
+      if (isInfant) {
+        missing.push('Complete infant triage vitals required (HR, RR, Temp, Weight, Length/Height).');
+      } else {
+        missing.push('Complete triage vitals required (BP, HR, RR, Temp, Height, Weight).');
+      }
+    }
     if (!s2Valid) missing.push('Doctor S2 License number is required for PDEA controlled drugs.');
 
     const ready =

@@ -785,7 +785,7 @@ public sealed class KonsultaXmlGenerator : IKonsultaXmlGenerator
         return element;
     }
 
-    private static XElement BuildPepertElement(YakapPhysicalExamPertinent pe) =>
+    private static XElement BuildPepertElement(PhysicalExamVitals pe) =>
         new("PEPERT",
             new XAttribute("pSystolic", pe.Systolic),
             new XAttribute("pDiastolic", pe.Diastolic),

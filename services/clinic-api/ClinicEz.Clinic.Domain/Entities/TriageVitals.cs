@@ -77,6 +77,28 @@ public sealed class TriageVitals : BaseEntity
         set => ZScoreWeightForLength = value;
     }
 
-    public string? PhilHealthZScoreCategory { get; set; }
-    public string? PhilHealthZScoreCode { get; set; }
+    // Anthropometrics & Body Composition (Adult Metabolic Risk & Pediatric Growth)
+    public decimal? WaistCircumferenceCm { get; set; }
+    public decimal? HipCircumferenceCm { get; set; }
+    public decimal? BodyLengthCm { get; set; }
+    public decimal? SkinfoldThicknessMm { get; set; }
+    public decimal? LimbsCircumferenceCm { get; set; }
+
+    // WHO Child Growth Standards (0 to 60 Months)
+    public string? GrowthZScoreCategory { get; set; }
+    public string? GrowthZScoreCode { get; set; }
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public string? PhilHealthZScoreCategory
+    {
+        get => GrowthZScoreCategory;
+        set => GrowthZScoreCategory = value;
+    }
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public string? PhilHealthZScoreCode
+    {
+        get => GrowthZScoreCode;
+        set => GrowthZScoreCode = value;
+    }
 }

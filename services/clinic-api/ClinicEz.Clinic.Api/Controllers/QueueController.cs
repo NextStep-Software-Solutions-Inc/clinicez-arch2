@@ -93,8 +93,18 @@ public sealed class QueueController : ControllerBase
             request.ZScoreWeightForAge,
             request.ZScoreLengthForAge,
             request.ZScoreWeightForLength,
+            request.GrowthZScoreCategory ?? request.PhilHealthZScoreCategory,
+            request.GrowthZScoreCode ?? request.PhilHealthZScoreCode,
             request.PhilHealthZScoreCategory,
-            request.PhilHealthZScoreCode);
+            request.PhilHealthZScoreCode,
+            request.WaistCircumferenceCm,
+            request.HipCircumferenceCm,
+            request.BodyLengthCm,
+            request.SkinfoldThicknessMm,
+            request.LimbsCircumferenceCm,
+            request.PreAssessmentNotes,
+            request.PreAssessmentRemarks,
+            request.TriageAcuityReason);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<TriageVitalsDto>.Success(result, "Triage vitals recorded successfully."));
@@ -213,7 +223,17 @@ public sealed record RecordTriageRequest(
     decimal? ZScoreWeightForAge = null,
     decimal? ZScoreLengthForAge = null,
     decimal? ZScoreWeightForLength = null,
+    string? GrowthZScoreCategory = null,
+    string? GrowthZScoreCode = null,
     string? PhilHealthZScoreCategory = null,
-    string? PhilHealthZScoreCode = null);
+    string? PhilHealthZScoreCode = null,
+    decimal? WaistCircumferenceCm = null,
+    decimal? HipCircumferenceCm = null,
+    decimal? BodyLengthCm = null,
+    decimal? SkinfoldThicknessMm = null,
+    decimal? LimbsCircumferenceCm = null,
+    string? PreAssessmentNotes = null,
+    string? PreAssessmentRemarks = null,
+    string? TriageAcuityReason = null);
 
 public sealed record CallQueueRequest(Guid? DoctorId, string? DoctorName, string? RoomOrStation = null, Guid? RoomId = null);

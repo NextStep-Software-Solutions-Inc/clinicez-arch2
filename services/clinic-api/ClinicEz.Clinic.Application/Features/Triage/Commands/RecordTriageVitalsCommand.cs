@@ -34,8 +34,15 @@ public sealed record RecordTriageVitalsCommand(
     decimal? ZScoreWeightForAge = null,
     decimal? ZScoreLengthForAge = null,
     decimal? ZScoreWeightForLength = null,
+    string? GrowthZScoreCategory = null,
+    string? GrowthZScoreCode = null,
     string? PhilHealthZScoreCategory = null,
     string? PhilHealthZScoreCode = null,
+    decimal? WaistCircumferenceCm = null,
+    decimal? HipCircumferenceCm = null,
+    decimal? BodyLengthCm = null,
+    decimal? SkinfoldThicknessMm = null,
+    decimal? LimbsCircumferenceCm = null,
     string? PreAssessmentNotes = null,
     string? PreAssessmentRemarks = null,
     string? TriageAcuityReason = null) : IRequest<TriageVitalsDto>;
@@ -102,10 +109,11 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
         var zWeightForAge = request.ZScoreWeightForAge;
         var zLengthForAge = request.ZScoreLengthForAge;
         var zWeightForLength = request.ZScoreWeightForLength;
-        var zCategory = request.PhilHealthZScoreCategory;
-        var zCode = request.PhilHealthZScoreCode;
+        var zCategory = request.GrowthZScoreCategory ?? request.PhilHealthZScoreCategory;
+        var zCode = request.GrowthZScoreCode ?? request.PhilHealthZScoreCode;
 
-        if (zWeightForAge == null && _zScoreCalculator != null && request.HeightCm is > 0 && request.WeightKg is > 0)
+        var effectiveLengthHeight = request.BodyLengthCm ?? request.HeightCm;
+        if (zWeightForAge == null && _zScoreCalculator != null && effectiveLengthHeight is > 0 && request.WeightKg is > 0)
         {
             var patient = await _patientRepository.Query(p => p.Id == queueItem.PatientId && p.ClinicId == _clinicContext.ClinicId)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -114,17 +122,17 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
                 var evaluation = _zScoreCalculator.Calculate(
                     patient.DateOfBirth,
                     patient.Gender,
-                    request.HeightCm.Value,
+                    effectiveLengthHeight.Value,
                     request.WeightKg.Value,
-                    request.IsMeasuredRecumbent);
+                    request.IsMeasuredRecumbent || request.BodyLengthCm.HasValue);
 
                 if (evaluation != null)
                 {
                     zWeightForAge = evaluation.WeightForAgeZScore;
                     zLengthForAge = evaluation.HeightForAgeZScore;
                     zWeightForLength = evaluation.WeightForHeightZScore;
-                    zCategory = evaluation.PhilHealthZScoreCategory;
-                    zCode = evaluation.PhilHealthZScoreCode;
+                    zCategory = evaluation.GrowthZScoreCategory;
+                    zCode = evaluation.GrowthZScoreCode;
                 }
             }
         }
@@ -158,11 +166,16 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
                 HeadCircumferenceCm = request.HeadCircumferenceCm,
                 MidUpperArmCircumferenceCm = request.MidUpperArmCircumferenceCm,
                 IsMeasuredRecumbent = request.IsMeasuredRecumbent,
+                WaistCircumferenceCm = request.WaistCircumferenceCm,
+                HipCircumferenceCm = request.HipCircumferenceCm,
+                BodyLengthCm = request.BodyLengthCm,
+                SkinfoldThicknessMm = request.SkinfoldThicknessMm,
+                LimbsCircumferenceCm = request.LimbsCircumferenceCm,
                 ZScoreWeightForAge = zWeightForAge,
                 ZScoreLengthForAge = zLengthForAge,
                 ZScoreWeightForLength = zWeightForLength,
-                PhilHealthZScoreCategory = zCategory,
-                PhilHealthZScoreCode = zCode,
+                GrowthZScoreCategory = zCategory,
+                GrowthZScoreCode = zCode,
                 PreAssessmentNotes = request.PreAssessmentNotes?.Trim(),
                 PreAssessmentRemarks = request.PreAssessmentRemarks?.Trim(),
                 TriageAcuityReason = request.TriageAcuityReason?.Trim(),
@@ -193,11 +206,16 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             vitals.HeadCircumferenceCm = request.HeadCircumferenceCm ?? vitals.HeadCircumferenceCm;
             vitals.MidUpperArmCircumferenceCm = request.MidUpperArmCircumferenceCm ?? vitals.MidUpperArmCircumferenceCm;
             vitals.IsMeasuredRecumbent = request.IsMeasuredRecumbent;
+            vitals.WaistCircumferenceCm = request.WaistCircumferenceCm ?? vitals.WaistCircumferenceCm;
+            vitals.HipCircumferenceCm = request.HipCircumferenceCm ?? vitals.HipCircumferenceCm;
+            vitals.BodyLengthCm = request.BodyLengthCm ?? vitals.BodyLengthCm;
+            vitals.SkinfoldThicknessMm = request.SkinfoldThicknessMm ?? vitals.SkinfoldThicknessMm;
+            vitals.LimbsCircumferenceCm = request.LimbsCircumferenceCm ?? vitals.LimbsCircumferenceCm;
             vitals.ZScoreWeightForAge = zWeightForAge ?? vitals.ZScoreWeightForAge;
             vitals.ZScoreLengthForAge = zLengthForAge ?? vitals.ZScoreLengthForAge;
             vitals.ZScoreWeightForLength = zWeightForLength ?? vitals.ZScoreWeightForLength;
-            vitals.PhilHealthZScoreCategory = zCategory ?? vitals.PhilHealthZScoreCategory;
-            vitals.PhilHealthZScoreCode = zCode ?? vitals.PhilHealthZScoreCode;
+            vitals.GrowthZScoreCategory = zCategory ?? vitals.GrowthZScoreCategory;
+            vitals.GrowthZScoreCode = zCode ?? vitals.GrowthZScoreCode;
             vitals.PreAssessmentNotes = request.PreAssessmentNotes?.Trim() ?? vitals.PreAssessmentNotes;
             vitals.PreAssessmentRemarks = request.PreAssessmentRemarks?.Trim() ?? vitals.PreAssessmentRemarks;
             vitals.TriageAcuityReason = request.TriageAcuityReason?.Trim() ?? vitals.TriageAcuityReason;
@@ -245,8 +263,13 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             vitals.ZScoreWeightForAge,
             vitals.ZScoreLengthForAge,
             vitals.ZScoreWeightForLength,
-            vitals.PhilHealthZScoreCategory,
-            vitals.PhilHealthZScoreCode,
+            vitals.GrowthZScoreCategory,
+            vitals.GrowthZScoreCode,
+            vitals.WaistCircumferenceCm,
+            vitals.HipCircumferenceCm,
+            vitals.BodyLengthCm,
+            vitals.SkinfoldThicknessMm,
+            vitals.LimbsCircumferenceCm,
             vitals.PreAssessmentNotes,
             vitals.PreAssessmentRemarks,
             vitals.TriageAcuityReason);

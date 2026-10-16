@@ -205,8 +205,8 @@ public sealed class WhoZScoreCalculator : IWhoZScoreCalculator
             WeightForAgeZScore: zWeightForAge,
             HeightForAgeZScore: zHeightForAge,
             WeightForHeightZScore: zWeightForHeight,
-            PhilHealthZScoreCategory: category,
-            PhilHealthZScoreCode: code,
+            GrowthZScoreCategory: category,
+            GrowthZScoreCode: code,
             Interpretation: interpretation);
     }
 

@@ -80,7 +80,7 @@ public sealed record YakapPregnancyHistory(
     string ReportStatus = "U",
     string DeficiencyRemarks = "");
 
-public sealed record YakapPhysicalExamPertinent(
+public sealed record PhysicalExamVitals(
     string Systolic,
     string Diastolic,
     string Hr,
@@ -101,6 +101,35 @@ public sealed record YakapPhysicalExamPertinent(
     string? MidUpperArmCirc = "",
     string ReportStatus = "U",
     string DeficiencyRemarks = "");
+
+public sealed record YakapPhysicalExamPertinent(
+    string Systolic,
+    string Diastolic,
+    string Hr,
+    string Rr,
+    string Temp,
+    string Height,
+    string Weight,
+    string BMI,
+    string? ZScore = "",
+    string? LeftVision = "",
+    string? RightVision = "",
+    string? Length = "",
+    string? HeadCirc = "",
+    string? SkinfoldThickness = "",
+    string? Waist = "",
+    string? Hip = "",
+    string? Limbs = "",
+    string? MidUpperArmCirc = "",
+    string ReportStatus = "U",
+    string DeficiencyRemarks = "")
+{
+    public static implicit operator PhysicalExamVitals(YakapPhysicalExamPertinent d) =>
+        new(d.Systolic, d.Diastolic, d.Hr, d.Rr, d.Temp, d.Height, d.Weight, d.BMI, d.ZScore, d.LeftVision, d.RightVision, d.Length, d.HeadCirc, d.SkinfoldThickness, d.Waist, d.Hip, d.Limbs, d.MidUpperArmCirc, d.ReportStatus, d.DeficiencyRemarks);
+
+    public static implicit operator YakapPhysicalExamPertinent(PhysicalExamVitals d) =>
+        new(d.Systolic, d.Diastolic, d.Hr, d.Rr, d.Temp, d.Height, d.Weight, d.BMI, d.ZScore, d.LeftVision, d.RightVision, d.Length, d.HeadCirc, d.SkinfoldThickness, d.Waist, d.Hip, d.Limbs, d.MidUpperArmCirc, d.ReportStatus, d.DeficiencyRemarks);
+}
 
 public sealed record YakapPhysicalExamMisc(
     string? SkinId,
@@ -184,7 +213,7 @@ public sealed record YakapProfile(
     IReadOnlyList<YakapImmunization> Immunizations,
     YakapMenstrualHistory MenstrualHistory,
     YakapPregnancyHistory PregnancyHistory,
-    YakapPhysicalExamPertinent PhysicalExam,
+    PhysicalExamVitals PhysicalExam,
     string BloodType,
     string GenSurveyId,
     string? GenSurveyRem,
@@ -224,7 +253,7 @@ public sealed record YakapSoap(
     string SignsSymptoms,
     string? OtherComplaint,
     string? PainSite,
-    YakapPhysicalExamPertinent PhysicalExam,
+    PhysicalExamVitals PhysicalExam,
     IReadOnlyList<YakapPhysicalExamMisc> PhysicalExamMiscs,
     YakapPhysicalExamSpecific PhysicalExamSpecifics,
     IReadOnlyList<string> IcdCodes,

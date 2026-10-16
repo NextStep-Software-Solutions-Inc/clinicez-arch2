@@ -350,8 +350,13 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.ZScoreWeightForAge).HasPrecision(5, 2);
             entity.Property(e => e.ZScoreLengthForAge).HasPrecision(5, 2);
             entity.Property(e => e.ZScoreWeightForLength).HasPrecision(5, 2);
-            entity.Property(e => e.PhilHealthZScoreCategory).HasMaxLength(50);
-            entity.Property(e => e.PhilHealthZScoreCode).HasMaxLength(50);
+            entity.Property(e => e.WaistCircumferenceCm).HasPrecision(6, 2);
+            entity.Property(e => e.HipCircumferenceCm).HasPrecision(6, 2);
+            entity.Property(e => e.BodyLengthCm).HasPrecision(6, 2);
+            entity.Property(e => e.SkinfoldThicknessMm).HasPrecision(6, 2);
+            entity.Property(e => e.LimbsCircumferenceCm).HasPrecision(6, 2);
+            entity.Property(e => e.GrowthZScoreCategory).HasMaxLength(50);
+            entity.Property(e => e.GrowthZScoreCode).HasMaxLength(50);
         });
 
         modelBuilder.Entity<ConsultationEncounter>(entity =>

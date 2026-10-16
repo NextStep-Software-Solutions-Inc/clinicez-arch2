@@ -82,7 +82,7 @@ public sealed record YakapPregnancyHistoryDto(
     string ReportStatus = "U",
     string DeficiencyRemarks = "");
 
-public sealed record YakapPhysicalExamPertinentDto(
+public sealed record ClinicalVitalsDto(
     string Systolic,
     string Diastolic,
     string Hr,
@@ -103,6 +103,35 @@ public sealed record YakapPhysicalExamPertinentDto(
     string? MidUpperArmCirc = "",
     string ReportStatus = "U",
     string DeficiencyRemarks = "");
+
+public sealed record YakapPhysicalExamPertinentDto(
+    string Systolic,
+    string Diastolic,
+    string Hr,
+    string Rr,
+    string Temp,
+    string Height,
+    string Weight,
+    string BMI,
+    string? ZScore = "",
+    string? LeftVision = "",
+    string? RightVision = "",
+    string? Length = "",
+    string? HeadCirc = "",
+    string? SkinfoldThickness = "",
+    string? Waist = "",
+    string? Hip = "",
+    string? Limbs = "",
+    string? MidUpperArmCirc = "",
+    string ReportStatus = "U",
+    string DeficiencyRemarks = "")
+{
+    public static implicit operator ClinicalVitalsDto(YakapPhysicalExamPertinentDto d) =>
+        new(d.Systolic, d.Diastolic, d.Hr, d.Rr, d.Temp, d.Height, d.Weight, d.BMI, d.ZScore, d.LeftVision, d.RightVision, d.Length, d.HeadCirc, d.SkinfoldThickness, d.Waist, d.Hip, d.Limbs, d.MidUpperArmCirc, d.ReportStatus, d.DeficiencyRemarks);
+
+    public static implicit operator YakapPhysicalExamPertinentDto(ClinicalVitalsDto d) =>
+        new(d.Systolic, d.Diastolic, d.Hr, d.Rr, d.Temp, d.Height, d.Weight, d.BMI, d.ZScore, d.LeftVision, d.RightVision, d.Length, d.HeadCirc, d.SkinfoldThickness, d.Waist, d.Hip, d.Limbs, d.MidUpperArmCirc, d.ReportStatus, d.DeficiencyRemarks);
+}
 
 public sealed record YakapPhysicalExamMiscDto(
     string? SkinId,
@@ -186,7 +215,7 @@ public sealed record YakapProfileDto(
     IReadOnlyList<YakapImmunizationDto> Immunizations,
     YakapMenstrualHistoryDto MenstrualHistory,
     YakapPregnancyHistoryDto PregnancyHistory,
-    YakapPhysicalExamPertinentDto PhysicalExam,
+    ClinicalVitalsDto PhysicalExam,
     string BloodType,
     string GenSurveyId,
     string? GenSurveyRem,
@@ -226,7 +255,7 @@ public sealed record YakapSoapDto(
     string SignsSymptoms,
     string? OtherComplaint,
     string? PainSite,
-    YakapPhysicalExamPertinentDto PhysicalExam,
+    ClinicalVitalsDto PhysicalExam,
     IReadOnlyList<YakapPhysicalExamMiscDto> PhysicalExamMiscs,
     YakapPhysicalExamSpecificDto PhysicalExamSpecifics,
     IReadOnlyList<string> IcdCodes,
