@@ -31,5 +31,6 @@ public sealed record PublicQueueDisplayDto(
     IReadOnlyList<UpcomingTicketDto> UpNext,
     bool MaskPatientNames,
     DateTime GeneratedAtUtc,
-    int PatientsWaitingCount
+    int PatientsWaitingCount,
+    string? LogoUrl = null
 );

@@ -7,15 +7,14 @@ import {
   VolumeX,
   Maximize2,
   Minimize2,
-  Activity,
   Clock,
   User,
   Stethoscope,
   MapPin,
   AlertCircle,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
+import { ClinicEzMark } from "@/components/ClinicEzLogo";
 import { PublicQueueDisplayData, ServingTicket, UpcomingTicket } from "./types";
 import {
   isAudioMuted,
@@ -30,6 +29,7 @@ interface QueueDisplayClientProps {
   tenantSlug?: string;
   facilitySlug?: string;
   clinicId?: string;
+  logoUrl?: string;
 }
 
 export default function QueueDisplayClient({
@@ -37,6 +37,7 @@ export default function QueueDisplayClient({
   tenantSlug,
   facilitySlug,
   clinicId,
+  logoUrl,
 }: QueueDisplayClientProps) {
   const [data, setData] = useState<PublicQueueDisplayData | undefined>(initialData);
   const [loading, setLoading] = useState<boolean>(!initialData);
@@ -47,6 +48,13 @@ export default function QueueDisplayClient({
   const [currentDate, setCurrentDate] = useState<string>("");
   const [lastUpdatedTime, setLastUpdatedTime] = useState<number>(Date.now());
   const [pulseActive, setPulseActive] = useState<boolean>(false);
+  const [logoError, setLogoError] = useState<boolean>(false);
+
+  const clinicLogo = data?.logoUrl || logoUrl;
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [clinicLogo]);
 
   // Failure backoff counter
   const failureCountRef = useRef<number>(0);
@@ -216,12 +224,29 @@ export default function QueueDisplayClient({
       >
         {/* Left: Facility Brand & Live Pill */}
         <div className="flex items-center gap-4">
-          <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl shadow-inner"
-            style={{ backgroundColor: darkColors.primary, color: darkColors.onPrimary }}
-          >
-            <Activity className="w-7 h-7" />
-          </div>
+          {clinicLogo && !logoError ? (
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden border shadow-inner shrink-0"
+              style={{
+                backgroundColor: darkColors.surfaceHighlight,
+                borderColor: darkColors.border,
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={clinicLogo}
+                alt={data?.clinicName || "Clinic Logo"}
+                onError={() => setLogoError(true)}
+                className="w-full h-full object-contain p-1"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          ) : (
+            <ClinicEzMark
+              variant="squircle"
+              className="w-12 h-12 rounded-xl shrink-0 shadow-inner"
+            />
+          )}
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               {data?.clinicName || "ClinicEZ Healthcare"}
@@ -259,7 +284,8 @@ export default function QueueDisplayClient({
               type="button"
               onClick={handleToggleMute}
               title={muted ? "Sound Muted (Click to enable)" : "Sound Active (Click to mute)"}
-              className="p-3 rounded-xl border transition-all duration-150 flex items-center gap-2 cursor-pointer hover:opacity-90 active:scale-95"
+              aria-label={muted ? "Unmute audio" : "Mute audio"}
+              className="p-3 rounded-xl border transition-all duration-150 flex items-center justify-center cursor-pointer hover:opacity-90 active:scale-95"
               style={{
                 backgroundColor: muted ? darkColors.surfaceHighlight : darkColors.primarySubtle,
                 borderColor: muted ? darkColors.border : darkColors.primaryBorder,
@@ -267,9 +293,6 @@ export default function QueueDisplayClient({
               }}
             >
               {muted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
-              <span className="hidden md:inline text-xs font-bold uppercase tracking-wider">
-                {muted ? "Muted" : "Sound On"}
-              </span>
             </button>
 
             {/* Fullscreen Toggle */}
@@ -310,16 +333,13 @@ export default function QueueDisplayClient({
         {/* Left Column (Flex 3 / 60%): NOW SERVING */}
         <section className="lg:col-span-3 flex flex-col gap-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Sparkles className="w-8 h-8" style={{ color: darkColors.primary }} />
-              <div>
-                <h2 className="text-[clamp(1.75rem,2.8vw,3.25rem)] font-extrabold uppercase tracking-tight">
-                  Now Serving
-                </h2>
-                <p className="text-sm sm:text-base font-medium" style={{ color: darkColors.textMuted }}>
-                  Kasalukuyang Tinatawag
-                </p>
-              </div>
+            <div>
+              <h2 className="text-[clamp(1.75rem,2.8vw,3.25rem)] font-extrabold uppercase tracking-tight">
+                Now Serving
+              </h2>
+              <p className="text-sm sm:text-base font-medium" style={{ color: darkColors.textMuted }}>
+                Kasalukuyang Tinatawag
+              </p>
             </div>
             {primaryServing && (
               <span

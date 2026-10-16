@@ -22,6 +22,7 @@ export interface PublicQueueDisplayData {
   clinicName: string;
   tenantSlug?: string | null;
   facilitySlug?: string | null;
+  logoUrl?: string | null;
   nowServing: ServingTicket[];
   upNext: UpcomingTicket[];
   maskPatientNames: boolean;

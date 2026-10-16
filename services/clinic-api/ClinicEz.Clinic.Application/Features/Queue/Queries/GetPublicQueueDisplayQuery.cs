@@ -147,7 +147,8 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
             UpNext: upNext,
             MaskPatientNames: mask,
             GeneratedAtUtc: DateTime.UtcNow,
-            PatientsWaitingCount: upNext.Count
+            PatientsWaitingCount: upNext.Count,
+            LogoUrl: clinic.PrimaryLogoUrl
         );
     }
 

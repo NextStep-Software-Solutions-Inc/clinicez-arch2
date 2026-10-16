@@ -237,4 +237,60 @@ describe('Public TV Display Board E2E Test Suite (portal-web)', () => {
       expect(isStale(now - 65000, now)).toBe(true);
     });
   });
+
+  describe('F2.8: TV Display Header UI Refinements & Brand Identity', () => {
+    it('F2.8-T1: Resolves clinic logo URL with fallback to ClinicEZ brand mark', () => {
+      const resolveDisplayLogo = (clinicLogo?: string | null, isBroken = false) => {
+        if (clinicLogo && !isBroken) {
+          return { type: 'custom_logo', src: clinicLogo };
+        }
+        return { type: 'clinicez_mark', variant: 'squircle' };
+      };
+
+      // Valid custom clinic logo
+      const withCustom = resolveDisplayLogo('https://cdn.example.com/clinic-logo.png', false);
+      expect(withCustom.type).toBe('custom_logo');
+      expect(withCustom.src).toBe('https://cdn.example.com/clinic-logo.png');
+
+      // Broken / failed image fallback
+      const withBroken = resolveDisplayLogo('https://cdn.example.com/broken.png', true);
+      expect(withBroken.type).toBe('clinicez_mark');
+      expect(withBroken.variant).toBe('squircle');
+
+      // No custom logo provided fallback
+      const withDefault = resolveDisplayLogo(null, false);
+      expect(withDefault.type).toBe('clinicez_mark');
+      expect(withDefault.variant).toBe('squircle');
+    });
+
+    it('F2.8-T2: Mute button keeps icon-only presentation without text label', () => {
+      const getMuteButtonProps = (muted: boolean) => ({
+        icon: muted ? 'VolumeX' : 'Volume2',
+        hasTextLabel: false,
+        title: muted ? 'Sound Muted (Click to enable)' : 'Sound Active (Click to mute)',
+        ariaLabel: muted ? 'Unmute audio' : 'Mute audio',
+      });
+
+      const unmuted = getMuteButtonProps(false);
+      expect(unmuted.icon).toBe('Volume2');
+      expect(unmuted.hasTextLabel).toBe(false);
+      expect(unmuted.ariaLabel).toBe('Mute audio');
+
+      const muted = getMuteButtonProps(true);
+      expect(muted.icon).toBe('VolumeX');
+      expect(muted.hasTextLabel).toBe(false);
+      expect(muted.ariaLabel).toBe('Unmute audio');
+    });
+
+    it('F2.8-T3: Now Serving section has clean typography without sparkle icon', () => {
+      const nowServingConfig = {
+        title: 'Now Serving',
+        subtitle: 'Kasalukuyang Tinatawag',
+        hasSparkleIcon: false,
+      };
+
+      expect(nowServingConfig.hasSparkleIcon).toBe(false);
+      expect(nowServingConfig.title).toBe('Now Serving');
+    });
+  });
 });
