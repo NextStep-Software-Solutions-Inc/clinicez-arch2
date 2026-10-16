@@ -72,6 +72,12 @@ mock.module('react-native', () => ({
   },
 }));
 
+mock.module('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+  SafeAreaProvider: ({ children }: any) => children,
+  SafeAreaView: createMockComponent('SafeAreaView'),
+}));
+
 mock.module('@react-navigation/native', () => ({
   useNavigation: () => ({
     navigate: () => {},

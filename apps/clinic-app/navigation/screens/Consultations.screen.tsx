@@ -4141,7 +4141,7 @@ export default function ConsultationsScreen() {
             patient={patientRecord}
             queueItemId={selectedPatient.id}
             currentStaffId={signer?.id}
-            currentStaffName={signerStaff?.name || signer?.name}
+            currentStaffName={signerStaff ? formatStaffName(signerStaff) : signer?.name}
             existingVitals={vitals}
             onSuccess={(recordedVitals) => {
               setVitals(recordedVitals);

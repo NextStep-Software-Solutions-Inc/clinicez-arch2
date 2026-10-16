@@ -51,32 +51,188 @@ public sealed class PatientSeedResult
 /// </summary>
 public static class DevPatientSeeder
 {
-    private static readonly string[] MaleFirstNames =
+    private static readonly string[] SingleMaleFirstNames =
     {
         "Juan", "Jose", "Antonio", "Angelo", "Gabriel", "Carlo", "Christian", "Miguel", "Joshua", "Mark",
-        "Daniel", "Rafael", "Paolo", "John Paul", "Francis", "Emmanuel", "Ramon", "Eduardo", "Rodrigo", "Ferdinand",
+        "Daniel", "Rafael", "Paolo", "Francis", "Emmanuel", "Ramon", "Eduardo", "Rodrigo", "Ferdinand",
         "Manuel", "Danilo", "Rolando", "Vicente", "Renato", "Arnel", "Jonathan", "Alexander", "Jerome", "Nathaniel",
         "Kenneth", "Alden", "Justin", "Enrico", "Dante", "Benedict", "Jomar", "Gerald", "Ronnie", "Dexter",
-        "Jaime", "Dominic", "Lester", "Patrick", "Reynaldo", "Alfonso", "Lorenzo", "Cesar", "Noel", "Richard"
+        "Jaime", "Dominic", "Lester", "Patrick", "Reynaldo", "Alfonso", "Lorenzo", "Cesar", "Noel", "Richard",
+        "Andres", "Emilio", "Apolinario", "Melchor", "Marcelo", "Gregorio", "Artemio", "Teodoro", "Salvador", "Hermogenes",
+        "Guillermo", "Bonifacio", "Felipe", "Mariano", "Crispulo", "Basilio", "Severino", "Leon", "Esteban", "Isagani",
+        "Joaquin", "Mateo", "Lucas", "Diego", "Leonardo", "Fernando", "Sebastian", "Santiago", "Nicolas", "Alejandro",
+        "Javier", "Tomas", "Carlos", "Roberto", "Alberto", "Ignacio", "Ricardo", "Bernardo", "Benjamin", "Ruben",
+        "Edgardo", "Ernesto", "Rodolfo", "Felix", "Mario", "Alfredo", "Rogelio", "Arturo", "Victor", "Raul",
+        "Nestor", "Oscar", "Gil", "Lito", "Boy", "Jun", "Nonoy", "Joel", "Marlon", "Jeffrey",
+        "Marvin", "Ryan", "Bryan", "Dennis", "Randy", "Allan", "Darwin", "Alvin", "Roderick", "Joseph",
+        "Ian", "Kevin", "Oliver", "Vincent", "Adrian", "Tristan", "Ethan", "Liam", "Kyle", "Noah",
+        "Marcus", "Zachary", "Aaron", "Russell", "Neil", "Lance", "Sean", "Dave", "Paul", "Peter",
+        "Eric", "Carl", "Roy", "Elmer", "Gerry", "Rommel", "Rowell", "Rey", "Rodel"
     };
 
-    private static readonly string[] FemaleFirstNames =
+    private static readonly string[] CompoundMaleFirstNames =
+    {
+        "John Paul", "Mark Anthony", "John Michael", "Christian Dave", "Jose Mari", "Juan Carlo", "Mark Joseph", "Angelo Gabriel",
+        "Dave Allen", "Karl Vincent", "Prince Harry", "John Lloyd", "Jan Carl", "Mark Louie", "John Mark", "Carl Angelo",
+        "John David", "Marc Christian", "James Patrick", "Paul Vincent", "John Lester", "Ian Gabriel", "John Patrick", "Charles Kevin",
+        "Mark Lester", "John Carlo", "Neil Joshua", "John Eric", "John Christopher", "Mark Allen", "John Kevin", "John Kenneth",
+        "Renz Michael", "Jan Michael", "Gian Carlo", "Mark Angelo", "John Rey", "Mark Gil", "John Robert", "Dave Matthew",
+        "King Arthur", "Prince Carl", "John Raymond", "Mark Francis", "Jose Luis", "Juan Miguel", "Jose Antonio", "Juan Paolo",
+        "Kurt Russell", "John Benedict", "Mark Jason", "Christian Paul", "John Vincent", "Marc Anthony", "Kim Joshua", "John Gabriel",
+        "Mark Daniel", "Jan Paul", "Christian James", "Sean Patrick", "Mark Lawrence", "John Philip", "Jan Robert", "Mark Steven",
+        "Carl Patrick", "John Edward", "Mark Kenneth", "Marc Joseph", "John Dominic", "John Frederick", "Mark Dennis", "John Ronald",
+        "Paul Anthony", "Jan Kenneth", "Mark Ryan", "John Oliver", "Carl Jason", "John Russell", "Mark Gerald", "Prince Joshua"
+    };
+
+    private static readonly string[] HeritageMaleFirstNames =
+    {
+        "Bayani", "Datu", "Makisig", "Lakan", "Kidlat", "Sinag", "Bagani", "Alab", "Malakas", "Amihan",
+        "Dakila", "Magtanggol", "Silang", "Lapu", "Maypagasa", "Magiting", "Tagumpay", "Kislap", "Diwa", "Tala",
+        "Giting", "Haraya", "Banyuhay", "Siklab", "Kalasag", "Agila", "Banahaw", "Mayon", "Arayat", "Apo"
+    };
+
+    private static readonly string[] SingleFemaleFirstNames =
     {
         "Maria", "Ana", "Christine", "Angelica", "Bea", "Katherine", "Stephanie", "Camille", "Princess", "Althea",
         "Rochelle", "Patricia", "Jasmine", "Nicole", "Samantha", "Denise", "Kristine", "Alyssa", "Clarisse", "Bianca",
         "Giselle", "Maricel", "Rosario", "Teresa", "Carmela", "Lourdes", "Corazon", "Imelda", "Gloria", "Leonora",
         "Esperanza", "Milagros", "Rowena", "Bernadette", "Marites", "Marilou", "Lorna", "Grace", "Joy", "Cherry",
-        "Gemma", "Vanessa", "Eileen", "Sheila", "Regina", "Aileen", "Hazel", "Abigail", "Lovely", "Diana"
+        "Gemma", "Vanessa", "Eileen", "Sheila", "Regina", "Aileen", "Hazel", "Abigail", "Lovely", "Diana",
+        "Remedios", "Dolores", "Concepcion", "Socorro", "Pilar", "Paz", "Luz", "Nieves", "Consuelo", "Carmen",
+        "Mercedes", "Soledad", "Amalia", "Natividad", "Purificacion", "Asuncion", "Encarnacion", "Victoria", "Cristina", "Isabel",
+        "Elena", "Rosa", "Catalina", "Juana", "Lucia", "Clara", "Angela", "Andrea", "Sofia", "Gabriela",
+        "Veronica", "Cecilia", "Monica", "Felicitas", "Jacinta", "Rita", "Flordeliza", "Rosalinda", "Perlita", "Estrella",
+        "Aurora", "Ligaya", "Liwayway", "Nenita", "Evangeline", "Charito", "Vilma", "Nora", "Sharon", "Regine",
+        "Lea", "Judy", "Claudine", "Angel", "Marian", "Sarah", "Toni", "Alex", "Kathryn", "Nadine",
+        "Liza", "Julia", "Janella", "Francine", "Belle", "Yassi", "Sue", "Gabbi", "Kyline", "Jillian",
+        "Xyriel", "Miles", "Shaina", "Maja", "Kim", "Erich", "Carla", "Heart", "Solenn", "Anne",
+        "Coleen", "Karylle", "Iya", "Megan", "Catriona", "Pia", "Kylie", "Ruffa", "Sunshine", "Danica",
+        "Ciara", "Cheska", "Gladys", "Dimples", "Melai", "Pokwang", "Eugene", "Nova", "Charo", "Dawn"
     };
 
-    private static readonly string[] LastNames =
+    private static readonly string[] CompoundFemaleFirstNames =
     {
+        "Mary Joy", "Maria Elena", "Princess Joy", "Ana Marie", "Angelica Rose", "Ma. Cristina", "Sarah Jane", "Mary Grace",
+        "Jenny Rose", "Maria Clara", "Bea Bianca", "Kristine Mae", "Mary Anne", "Anna Patricia", "Maria Teresa", "Lovely Ann",
+        "Joy Marie", "Lady Diane", "Mary Jane", "Rose Marie", "Maria Lourdes", "Princess Nicole", "Angelica May", "Mary Rose",
+        "Ana Liza", "Maria Carmen", "Cherry Ann", "Mary Christine", "Ella Mae", "Mary Elizabeth", "Princess Sarah", "Ma. Victoria",
+        "Joanna Marie", "Maria Isabel", "Mary Flor", "Anna Katrina", "Donna May", "Maria Fe", "Maria Cielo", "Mary Jean",
+        "Princess Mae", "Anna Sophia", "Maria Rosario", "Angelica Joy", "Mary Claire", "Maria Dolores", "Jenny Lyn", "Rica Mae",
+        "Maria Stella", "Mary Lou", "Ma. Angela", "Princess Dianne", "Anna Luisa", "Maria Luisa", "Mary Ann", "Maria Corazon",
+        "Honey Grace", "Maria Socorro", "Angelica Faith", "Mary Faith", "Ana Fe", "Maria Divina", "Princess Angela", "Maria Leonora",
+        "Mary Love", "Anna Theresa", "Maria Concepcion", "Lovely Joy", "Ma. Theresa", "Princess Kate", "Mary Divine", "Maria Aurora",
+        "Angelica Grace", "Mary Sunshine", "Ana Carmina", "Maria Cecilia", "Apple Mae", "Princess Lorraine", "Mary Pearl", "Maria Paz"
+    };
+
+    private static readonly string[] HeritageFemaleFirstNames =
+    {
+        "Tala", "Mayumi", "Paraluman", "Malaya", "Luningning", "Hiraya", "Mutya", "Likha", "Dalisay", "Liwayway",
+        "Diwa", "Bituin", "Marikit", "Amihan", "Sinag", "Kagandahan", "Hiyas", "Sampaguita", "Ilaya", "Lualhati",
+        "Mithi", "Alon", "Araw", "Ligaya", "Dalagangbukid", "Lulay", "Kundiman", "Silayan", "Mayari", "Jasmin"
+    };
+
+    public static readonly string[] MaleFirstNames = SingleMaleFirstNames
+        .Concat(CompoundMaleFirstNames)
+        .Concat(HeritageMaleFirstNames)
+        .Distinct()
+        .ToArray();
+
+    public static readonly string[] FemaleFirstNames = SingleFemaleFirstNames
+        .Concat(CompoundFemaleFirstNames)
+        .Concat(HeritageFemaleFirstNames)
+        .Distinct()
+        .ToArray();
+
+    public static readonly string[] LastNames =
+    {
+        // Spanish-Filipino Classic & Widespread
         "Dela Cruz", "Santos", "Reyes", "Garcia", "Mendoza", "Ramos", "Bautista", "Gonzales", "Villanueva", "Fernandez",
         "Lopez", "Aquino", "Flores", "Rivera", "Castillo", "Tolentino", "Navarro", "Salazar", "Mercado", "De Leon",
         "Valdez", "Perez", "Soriano", "Corpuz", "Manalo", "Agustin", "Morales", "Santiago", "Pascual", "Cruz",
         "Delos Santos", "Bernardo", "Ocampo", "Evangelista", "Guerrero", "Domingo", "Roxas", "Enriquez", "Mallari", "Villamor",
-        "Estrada", "Padilla", "Samson", "Pineda", "Miranda", "Concepcion", "Gutierrez", "Magno", "Sarmiento", "Macaraeg"
+        "Estrada", "Padilla", "Samson", "Pineda", "Miranda", "Concepcion", "Gutierrez", "Magno", "Sarmiento", "Macaraeg",
+        "Del Rosario", "De Silva", "San Jose", "Del Mundo", "San Pedro", "Del Monte", "De Guzman", "San Juan", "Santa Maria", "De Castro",
+        "De Chavez", "Del Prado", "San Mateo", "Del Fierro", "De Vera", "San Diego", "De Jesus", "De Mesa", "Del Castillo", "De Asis",
+        "Aguilar", "Alcantara", "Alvarado", "Alvarez", "Angeles", "Antonio", "Arce", "Arellano", "Arrieta", "Atienza",
+        "Avila", "Ballesteros", "Baluyot", "Barrientos", "Bartolome", "Beltran", "Benitez", "Blanco", "Bonifacio", "Borja",
+        "Bravo", "Buenaventura", "Buencamino", "Buenaflor", "Bustamante", "Caballero", "Cabrera", "Calderon", "Camacho", "Campos",
+        "Canlas", "Capistrano", "Carandang", "Carreon", "Casanova", "Castañeda", "Castro", "Cervantes", "Clemente", "Coloma",
+        "Cordero", "Coronel", "Cortes", "Cortez", "Crisostomo", "Cuevas", "Custodio", "Dacanay", "David", "De Gracia",
+        "Delgado", "Diaz", "Dionisio", "Donato", "Dulay", "Duran", "Echevarria", "Elises", "Encarnacion", "Enrique",
+        "Escalante", "Escudero", "Espina", "Espino", "Espinosa", "Espiritu", "Estanislao", "Esteban", "Eugenio", "Fabian",
+        "Fajardo", "Feliciano", "Felix", "Fernando", "Ferrer", "Figueroa", "Fonacier", "Fontanilla", "Francisco", "Frias",
+        "Fuentes", "Gabriel", "Galang", "Gallardo", "Gallego", "Galvez", "Gamboa", "Garchitorena", "Garces", "Gaspar",
+        "Gavino", "Generoso", "Geronimo", "Gil", "Gomez", "Gonzaga", "Granados", "Gregorio", "Guevarra", "Guidote",
+        "Guillen", "Guinto", "Guzman", "Hermoso", "Hernandez", "Herrera", "Hilario", "Hipolito", "Ignacio", "Imperial",
+        "Inocencio", "Jacinto", "Javier", "Jimenez", "Joaquin", "Jose", "Jovellanos", "Juarez", "Juliano", "Jurado",
+        "Labao", "Labrador", "Laconico", "Lagman", "Laguardia", "Lapid", "Laurel", "Laureano", "Ledesma", "Legaspi",
+        "Leonor", "Lerma", "Leyva", "Llamas", "Lontok", "Lorenzo", "Lozada", "Lozano", "Lucero", "Luciano",
+        "Lugtu", "Luna", "Macalalad", "Macapinlac", "Maceda", "Madrigal", "Magallanes", "Magat", "Magboo", "Maglalang",
+        "Magpayo", "Malit", "Mallonga", "Mamaril", "Manahan", "Manalastas", "Manalili", "Manansala", "Mangahas", "Maniago",
+        "Manuel", "Manzano", "Marasigan", "Marcelino", "Marcelo", "Mariano", "Marquez", "Martelino", "Martin", "Martinez",
+        "Mateo", "Matias", "Medrano", "Mejia", "Melendres", "Mendez", "Mendigoria", "Mendiola", "Meneses", "Meraña",
+        "Merilles", "Mijares", "Mirasol", "Molina", "Monasterio", "Mondragon", "Montano", "Montecillo", "Montenegro", "Monterola",
+        "Montes", "Montilla", "Morato", "Morelos", "Moreno", "Muñoz", "Mutuc", "Narciso", "Natividad", "Naval",
+        "Navea", "Nazario", "Nepomuceno", "Nicolas", "Nolasco", "Noriega", "Novicio", "Nuñez", "Obispo", "Ochoa",
+        "Olivares", "Oliveros", "Ongpauco", "Ordona", "Ordoñez", "Orendain", "Orosa", "Ortega", "Ortiz", "Pabalan",
+        "Pablo", "Pacheco", "Paderanga", "Padolina", "Pagdilao", "Paguia", "Paguirigan", "Paguio", "Palacios", "Palma",
+        "Palo", "Palomares", "Pamintuan", "Panlilio", "Paragas", "Paras", "Pardo", "Paredes", "Pastor", "Patinio",
+        "Patricio", "Pelayo", "Peña", "Peñaranda", "Peralta", "Perdigon", "Pimentel", "Pingol", "Pinlac", "Pinto",
+        "Pioquinto", "Pizarro", "Plata", "Policarpio", "Ponce", "Portillo", "Prado", "Prieto", "Prudencio", "Pugeda",
+        "Pulido", "Puno", "Quevedo", "Quijano", "Quimpo", "Quirino", "Quizon", "Rabanal", "Ramirez", "Rances",
+        "Raval", "Recto", "Regala", "Regalado", "Relucio", "Resurreccion", "Rey", "Ribas", "Ricarte", "Rico",
+        "Rios", "Rivas", "Robredo", "Robles", "Roco", "Rodas", "Rodriguez", "Roldan", "Roman", "Romero",
+        "Ronquillo", "Rosales", "Rosario", "Rovira", "Ruiz", "Sabater", "Sacay", "Sagun", "Salamanca", "Salas",
+        "Salcedo", "Saldana", "Sales", "Salgado", "Salinas", "Salvador", "Samaniego", "Sampang", "San Agustin", "Sanchez",
+        "Sandoval", "Sangalang", "Santana", "Santillan", "Saplala", "Saquilayan", "Sarmenta", "Saturnino", "Sauco", "Sayoc",
+        "Sebastian", "Segovia", "Sembrano", "Señeres", "Serrano", "Sevilla", "Silverio", "Silvestre", "Simeon", "Simon",
+        "Solis", "Soliven", "Somera", "Soria", "Soto", "Suarez", "Tablante", "Tadeo", "Tagle", "Talavera",
+        "Tamayo", "Tancinco", "Tangco", "Tayag", "Tejada", "Teodoro", "Tiangco", "Timbol", "Tinio", "Tioseco",
+        "Tongco", "Torralba", "Torre", "Torres", "Trajano", "Trinidad", "Tuason", "Tungol", "Urbano", "Urgino",
+        "Urrutia", "Valbuena", "Valderrama", "Valdes", "Valdivia", "Valencia", "Valenzuela", "Valera", "Valero", "Valle",
+        "Vallejo", "Varela", "Vargas", "Vasquez", "Velasco", "Velasquez", "Velez", "Veloso", "Ventura", "Vera",
+        "Vergel", "Vergara", "Vicente", "Victorio", "Vidad", "Vidal", "Villa", "Villacorta", "Villafuerte", "Villalon",
+        "Villaluz", "Villamin", "Villar", "Villareal", "Villaroman", "Villaruel", "Villegas", "Vinluan", "Viola", "Yabut",
+        "Yambao", "Ybañez", "Ylagan", "Yllana", "Ynchausti", "Yñiguez", "Yulo", "Zamora", "Zapata", "Zarate",
+        "Zarraga", "Zavalla", "Zialcita", "Zulueta",
+
+        // Indigenous, Tagalog, Kapampangan, Pangasinan
+        "Agbayani", "Agpalo", "Balagtas", "Batungbacal", "Calalang", "Catacutan", "Dagohoy", "Datu", "Dimalanta", "Dimaculangan",
+        "Dimagiba", "Gatus", "Gatdula", "Kalaw", "Lakandula", "Lapulapu", "Mabini", "Macapagal", "Macaspac", "Magbanua",
+        "Magtanggol", "Malabanan", "Mangubat", "Masangkay", "Panganiban", "Salonga", "Silang", "Soliman", "Sumulong",
+
+        // Ilocano and Northern Luzon
+        "Agcaoili", "Cabotaje", "Cariño", "Crispino", "Farinas", "Madamba", "Marcos", "Quinto", "Singson", "Umali",
+
+        // Visayan & Mindanao
+        "Abellana", "Alviola", "Balili", "Cabilao", "Cañete", "Cuenco", "Dacalos", "Maglasang", "Osmeña", "Rama", "Suico", "Villacarlos",
+
+        // Chinese-Filipino (Chinoy) Surnames & Hispanized Chinese
+        "Ang", "Chan", "Cheng", "Choa", "Chua", "Co", "Cojuangco", "Cua", "Dee", "Dizon", "Dy", "Gan",
+        "Go", "Gokongwei", "King", "Ko", "Kua", "Lacson", "Lao", "Lichauco", "Lim", "Ong", "Po", "See",
+        "Siy", "Sy", "Tan", "Tantoco", "Tecson", "Tee", "Tiu", "Tuazon", "Ty", "Uy", "Yap", "Yuchengco"
     };
+
+    private static string GenerateRealisticFirstName(Random rng, bool isFemale)
+    {
+        var roll = rng.NextDouble();
+        if (isFemale)
+        {
+            if (roll < 0.55)
+                return SingleFemaleFirstNames[rng.Next(SingleFemaleFirstNames.Length)];
+            if (roll < 0.90)
+                return CompoundFemaleFirstNames[rng.Next(CompoundFemaleFirstNames.Length)];
+            return HeritageFemaleFirstNames[rng.Next(HeritageFemaleFirstNames.Length)];
+        }
+        else
+        {
+            if (roll < 0.55)
+                return SingleMaleFirstNames[rng.Next(SingleMaleFirstNames.Length)];
+            if (roll < 0.90)
+                return CompoundMaleFirstNames[rng.Next(CompoundMaleFirstNames.Length)];
+            return HeritageMaleFirstNames[rng.Next(HeritageMaleFirstNames.Length)];
+        }
+    }
 
     private static readonly (string Street, string Barangay, string City, string Province)[] Locations =
     {
@@ -446,6 +602,14 @@ public static class DevPatientSeeder
         var currentRxSeq = (await dbContext.Consultations.IgnoreQueryFilters().CountAsync(c => c.ClinicId == clinicId, ct)) + 1;
         var currentCertSeq = (await dbContext.MedicalCertificates.IgnoreQueryFilters().CountAsync(m => m.ClinicId == clinicId, ct)) + 1;
 
+        // Track existing (FirstName, LastName) combinations in this clinic to guarantee zero duplicate pairs
+        var existingClinicFullNames = (await dbContext.Patients.IgnoreQueryFilters()
+            .Where(p => p.ClinicId == clinicId)
+            .Select(p => new { p.FirstName, p.LastName })
+            .ToListAsync(ct))
+            .Select(p => $"{p.FirstName.Trim().ToLowerInvariant()}|{p.LastName.Trim().ToLowerInvariant()}")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var result = new PatientSeedResult
         {
             TenantId = tenantId,
@@ -481,13 +645,33 @@ public static class DevPatientSeeder
             {
                 currentSeq++;
                 var patientId = Guid.NewGuid();
-                var isFemale = rng.NextDouble() >= 0.48;
-                var firstName = isFemale
-                    ? FemaleFirstNames[rng.Next(FemaleFirstNames.Length)]
-                    : MaleFirstNames[rng.Next(MaleFirstNames.Length)];
-                var middleName = LastNames[rng.Next(LastNames.Length)];
-                var lastName = LastNames[rng.Next(LastNames.Length)];
-                var suffix = !isFemale && rng.NextDouble() < 0.12 ? (rng.Next(2) == 0 ? "Jr." : "III") : null;
+
+                bool isFemale;
+                string firstName;
+                string lastName;
+                var nameAttempts = 0;
+                do
+                {
+                    isFemale = rng.NextDouble() >= 0.48;
+                    firstName = GenerateRealisticFirstName(rng, isFemale);
+                    lastName = LastNames[rng.Next(LastNames.Length)];
+                    nameAttempts++;
+                } while (!existingClinicFullNames.Add($"{firstName.Trim().ToLowerInvariant()}|{lastName.Trim().ToLowerInvariant()}") && nameAttempts < 100);
+
+                if (nameAttempts >= 100)
+                {
+                    firstName = $"{firstName} {rng.Next(1, 99)}";
+                    existingClinicFullNames.Add($"{firstName.Trim().ToLowerInvariant()}|{lastName.Trim().ToLowerInvariant()}");
+                }
+
+                // Middle name represents maternal maiden surname in the Philippines and must be distinct from lastName
+                string middleName;
+                do
+                {
+                    middleName = LastNames[rng.Next(LastNames.Length)];
+                } while (string.Equals(middleName, lastName, StringComparison.OrdinalIgnoreCase));
+
+                var suffix = !isFemale && rng.NextDouble() < 0.12 ? (rng.Next(3) switch { 0 => "Jr.", 1 => "III", _ => "II" }) : null;
 
                 // Age distribution: ~15% pediatric (<18), ~35% young adult (18-39), ~30% middle-aged (40-59), ~20% seniors (60-88)
                 var ageBucket = rng.Next(100);
@@ -509,7 +693,7 @@ public static class DevPatientSeeder
                 var loc = Locations[rng.Next(Locations.Length)];
                 var mobilePrefixes = new[] { "0917", "0918", "0919", "0920", "0922", "0927", "0935", "0949", "0998" };
                 var contactNumber = $"{mobilePrefixes[rng.Next(mobilePrefixes.Length)]}-{rng.Next(100, 999)}-{rng.Next(1000, 9999)}";
-                var emailName = $"{firstName.ToLower().Replace(" ", "")}.{lastName.ToLower().Replace(" ", "")}{rng.Next(10, 999)}";
+                var emailName = $"{firstName.ToLowerInvariant().Replace(" ", "")}.{lastName.ToLowerInvariant().Replace(" ", "")}{rng.Next(10, 999)}";
                 var emailDomains = new[] { "gmail.com", "yahoo.com", "outlook.com", "icloud.com" };
                 var email = $"{emailName}@{emailDomains[rng.Next(emailDomains.Length)]}";
 
@@ -536,6 +720,11 @@ public static class DevPatientSeeder
                     ? AllergyTemplates[rng.Next(AllergyTemplates.Length)].Allergen
                     : null;
 
+                var emergencyFirstName = rng.Next(2) == 0
+                    ? MaleFirstNames[rng.Next(MaleFirstNames.Length)]
+                    : FemaleFirstNames[rng.Next(FemaleFirstNames.Length)];
+                var emergencyLastName = LastNames[rng.Next(LastNames.Length)];
+
                 var patientCode = $"{prefix}{currentSeq:D5}";
                 var patient = new ClinicPatient
                 {
@@ -556,7 +745,7 @@ public static class DevPatientSeeder
                     Barangay = loc.Barangay,
                     City = loc.City,
                     Province = loc.Province,
-                    EmergencyContactName = $"{LastNames[rng.Next(LastNames.Length)]}, {MaleFirstNames[rng.Next(MaleFirstNames.Length)]}",
+                    EmergencyContactName = $"{emergencyLastName}, {emergencyFirstName}",
                     EmergencyContactPhone = $"{mobilePrefixes[rng.Next(mobilePrefixes.Length)]}-{rng.Next(100, 999)}-{rng.Next(1000, 9999)}",
                     EmergencyContactRelationship = civilStatus == "Married" ? "Spouse" : (ageYears < 25 ? "Mother" : "Sibling"),
                     PhilHealthNumber = philHealthNo,

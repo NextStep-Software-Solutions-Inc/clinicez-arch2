@@ -341,4 +341,112 @@ public class DevPatientSeederTests
 
         Assert.Equal(rxNumbers.Count, rxNumbers.Distinct().Count());
     }
+
+    [Fact]
+    public async Task SeedAsync_Guarantees_Unique_FirstName_LastName_Combinations_In_Clinic()
+    {
+        // Arrange
+        var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
+        var clinicId = Guid.NewGuid();
+        var targetCount = 120;
+
+        // Act: Seed 120 patients
+        var result = await DevPatientSeeder.SeedAsync(context, new PatientSeedOptions
+        {
+            Count = targetCount,
+            TenantId = "tenant_test",
+            ClinicId = clinicId,
+            BatchSize = 60
+        });
+
+        // Assert
+        Assert.Equal(targetCount, result.PatientsCreated);
+
+        var patients = await context.Patients.IgnoreQueryFilters()
+            .Where(p => p.ClinicId == clinicId)
+            .ToListAsync();
+
+        Assert.Equal(targetCount, patients.Count);
+
+        // 1. Ensure NO two patients in the clinic share the same (FirstName, LastName) combination
+        var duplicateNamePairs = patients
+            .GroupBy(p => $"{p.FirstName.Trim().ToLowerInvariant()}|{p.LastName.Trim().ToLowerInvariant()}")
+            .Where(g => g.Count() > 1)
+            .Select(g => new { Key = g.Key, Count = g.Count() })
+            .ToList();
+
+        Assert.Empty(duplicateNamePairs);
+
+        // 2. Ensure middle name is always distinct from last name (mother's maiden surname != paternal surname)
+        Assert.All(patients, p =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(p.FirstName));
+            Assert.False(string.IsNullOrWhiteSpace(p.LastName));
+            Assert.False(string.IsNullOrWhiteSpace(p.MiddleName));
+            Assert.NotEqual(p.LastName.Trim(), p.MiddleName!.Trim(), StringComparer.OrdinalIgnoreCase);
+
+            // Directory full name format: "LastName, FirstName M."
+            // Verify that first and last name alone distinguish the patient without relying on middle initial
+            var middleInitial = !string.IsNullOrWhiteSpace(p.MiddleName) ? $" {p.MiddleName.Trim()[0]}." : "";
+            var directoryName = $"{p.LastName}, {p.FirstName}{middleInitial}";
+            Assert.False(string.IsNullOrWhiteSpace(directoryName));
+        });
+    }
+
+    [Fact]
+    public async Task SeedAsync_Preserves_Uniqueness_Across_Multiple_Incremental_Batches_In_Same_Clinic()
+    {
+        // Arrange
+        var (context, _, _) = TestDbHelper.CreateTestContext(_clinicContext);
+        var clinicId = Guid.NewGuid();
+
+        // Act: Seed Batch 1 (40 patients)
+        await DevPatientSeeder.SeedAsync(context, new PatientSeedOptions
+        {
+            Count = 40,
+            TenantId = "tenant_test",
+            ClinicId = clinicId,
+            BatchSize = 40
+        });
+
+        // Act: Seed Batch 2 (40 patients incrementally without clearing)
+        await DevPatientSeeder.SeedAsync(context, new PatientSeedOptions
+        {
+            Count = 40,
+            TenantId = "tenant_test",
+            ClinicId = clinicId,
+            BatchSize = 40,
+            ClearExistingSeededPatients = false
+        });
+
+        // Assert: 80 total patients with zero duplicate (FirstName, LastName) pairs
+        var patients = await context.Patients.IgnoreQueryFilters()
+            .Where(p => p.ClinicId == clinicId)
+            .ToListAsync();
+
+        Assert.Equal(80, patients.Count);
+
+        var duplicateNamePairs = patients
+            .GroupBy(p => $"{p.FirstName.Trim().ToLowerInvariant()}|{p.LastName.Trim().ToLowerInvariant()}")
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        Assert.Empty(duplicateNamePairs);
+    }
+
+    [Fact]
+    public void DevPatientSeeder_NameCatalogs_AreDiverse_And_Richly_Populated()
+    {
+        // Assert: Verify rich Philippine name catalogs (hundreds of distinct entries)
+        Assert.True(DevPatientSeeder.MaleFirstNames.Length >= 200);
+        Assert.True(DevPatientSeeder.FemaleFirstNames.Length >= 200);
+        Assert.True(DevPatientSeeder.LastNames.Length >= 300);
+
+        // Surnames must cover diverse Filipino naming traditions
+        Assert.Contains(DevPatientSeeder.LastNames, s => s == "Dela Cruz"); // Spanish-Filipino
+        Assert.Contains(DevPatientSeeder.LastNames, s => s == "Dimaculangan"); // Indigenous/Tagalog
+        Assert.Contains(DevPatientSeeder.LastNames, s => s == "Agcaoili"); // Ilocano
+        Assert.Contains(DevPatientSeeder.LastNames, s => s == "Osmeña"); // Visayan
+        Assert.Contains(DevPatientSeeder.LastNames, s => s == "Cojuangco" || s == "Tan" || s == "Lim"); // Chinoy
+    }
 }

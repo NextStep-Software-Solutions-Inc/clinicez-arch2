@@ -15,13 +15,11 @@ import {
   type RecordTriageRequest,
   type TriageVitals,
   type ClinicPatient,
-} from '../../services/clinicService';
-import { notify } from '../../utils/notifications';
-import {
-  calculatePediatricZScores,
   type PediatricZScoreResult,
-  type MeasurementPosture,
-} from '../../utils/pediatricZScoreCalculator';
+} from '../../services/clinicService';
+import { notify } from '../../utils/feedback';
+
+export type MeasurementPosture = 'STANDING' | 'RECUMBENT';
 
 export interface RecordVitalsModalProps {
   visible: boolean;
@@ -157,12 +155,12 @@ export default function RecordVitalsModal({
 
     let active = true;
     const timer = setTimeout(async () => {
-      const [, res] = await calculatePediatricZScores({
+      const [res] = await clinicService.calculatePediatricZScore({
         dateOfBirth: patient.dateOfBirth,
-        sex: patient.gender === 'Female' || patient.gender === 'F' ? 'Female' : 'Male',
-        weightKg: w,
-        heightCm: h,
-        posture: form.posture,
+        gender: patient.gender === 'Female' || patient.gender === 'F' ? 'Female' : 'Male',
+        weightKg: w ?? 0,
+        lengthOrHeightCm: h ?? 0,
+        isMeasuredRecumbent: form.posture === 'RECUMBENT',
       });
       if (active) {
         setZScorePreview(res ?? null);

@@ -248,7 +248,12 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
 
   const passedCount = statutoryConditions.filter((c) => c.isValid).length;
 
-  const spinAnim = useRef(new Animated.Value(0)).current;
+  let spinAnim: any;
+  try {
+    spinAnim = useRef(new Animated.Value(0)).current;
+  } catch {
+    spinAnim = new Animated.Value(0);
+  }
 
   const handleRevalidate = () => {
     spinAnim.setValue(0);
