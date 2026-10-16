@@ -43,6 +43,7 @@ import {
   AttachExternalDocumentModal,
 } from '../../components/chart';
 import EditPatientModal from '../../components/patient/EditPatientModal';
+import { extractPhilHealthProfileData } from '../../components/patient/memberType';
 import { formatLongAge } from '../../utils/age';
 import { getSessionItem, setSessionItem, getDeviceItem, setDeviceItem } from '../../utils/deviceStorage';
 import {
@@ -51,6 +52,7 @@ import {
   PhysicalExamFindings,
   YakapClaimReadinessCard,
   StatutorySectionKey,
+  RecordVitalsModal,
 } from '../../components/consultation';
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
@@ -428,6 +430,9 @@ export default function ConsultationsScreen() {
   const soapPaneOffsetY = useRef<number>(0);
 
   const handleJumpToSection = (section: StatutorySectionKey) => {
+    if (section === 'vitals') {
+      setRecordVitalsModalVisible(true);
+    }
     if (mobileWorkstationView !== 'soap') {
       setMobileWorkstationView('soap');
     }
@@ -470,6 +475,7 @@ export default function ConsultationsScreen() {
   const [orderedLabs, setOrderedLabs] = useState<string[]>([]);
   const [orderedProcedures, setOrderedProcedures] = useState<string[]>([]);
   const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
+  const [recordVitalsModalVisible, setRecordVitalsModalVisible] = useState(false);
 
   // New Prescription Form State
   const [showAddRx, setShowAddRx] = useState(false);
@@ -483,7 +489,7 @@ export default function ConsultationsScreen() {
 
   // PhilHealth Yakap Tagging & Statutory Mapping State
   const [isYakapEligible, setIsYakapEligible] = useState<boolean>(false);
-  const [philHealthAtc, setPhilHealthAtc] = useState<string>('ATC-2026-KON01');
+  const [philHealthAtc, setPhilHealthAtc] = useState<string>('WALKEDIN');
   const [selectedSymptomCodes, setSelectedSymptomCodes] = useState<string[]>([]);
   const [symptomOtherDesc, setSymptomOtherDesc] = useState<string>('');
   const [symptomPainSite, setSymptomPainSite] = useState<string>('');
@@ -876,7 +882,7 @@ export default function ConsultationsScreen() {
     } else {
       setPatientRecord(record);
       setRecordError(null);
-      setIsYakapEligible(Boolean(record.philHealthNumber));
+      setIsYakapEligible(false);
     }
 
     const [chartData] = chartRes;
@@ -1003,7 +1009,7 @@ export default function ConsultationsScreen() {
     setLabOrders([]);
     setLabError(null);
     setIsYakapEligible(false);
-    setPhilHealthAtc('ATC-2026-KON01');
+    setPhilHealthAtc('WALKEDIN');
     setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
   };
 
@@ -1492,8 +1498,8 @@ export default function ConsultationsScreen() {
         philHealthOtherComplaint: isYakapEligible && otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
         philHealthPainSite: isYakapEligible && painSymptomSelected ? symptomPainSite : undefined,
         doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
-        philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'ATC-2026-KON01') : undefined,
-        generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2') : undefined,
+        philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'WALKEDIN') : undefined,
+        generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurveyId || (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2')) : undefined,
         generalSurveyRemarks: isYakapEligible ? physicalExamFindings.generalSurveyRemarks : undefined,
         physicalExamFindingsJson: isYakapEligible ? JSON.stringify(physicalExamFindings) : undefined,
         diagnoses: selectedDiagnoses.map((d) => ({
@@ -1534,8 +1540,8 @@ export default function ConsultationsScreen() {
         philHealthOtherComplaint: isYakapEligible && otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
         philHealthPainSite: isYakapEligible && painSymptomSelected ? symptomPainSite : undefined,
         doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
-        philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'ATC-2026-KON01') : undefined,
-        generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2') : undefined,
+        philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'WALKEDIN') : undefined,
+        generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurveyId || (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2')) : undefined,
         generalSurveyRemarks: isYakapEligible ? physicalExamFindings.generalSurveyRemarks : undefined,
         physicalExamFindingsJson: isYakapEligible ? JSON.stringify(physicalExamFindings) : undefined,
         diagnoses: selectedDiagnoses.map((d) => ({
@@ -1570,7 +1576,7 @@ export default function ConsultationsScreen() {
       ptrNumber: doctorPtr.trim() || signerStaff?.ptrNumber,
       s2LicenseNumber: finalS2,
       doctorPhilHealthPan: finalPan,
-      philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'ATC-2026-KON01') : undefined,
+      philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'WALKEDIN') : undefined,
     });
     if (signErr) {
       setIsSigning(false);
@@ -1836,6 +1842,28 @@ export default function ConsultationsScreen() {
   const isYakapReady = isYakapEligible
     ? (serverReadiness ? serverReadiness.isReady : localEvaluation.isReady)
     : true;
+
+  const philHealthEligibility = useMemo(() => {
+    if (!patientRecord) {
+      return { canToggle: false, reason: 'Patient record loading' };
+    }
+    const pin = (
+      patientRecord.philHealthNumber ||
+      (patientRecord as any).pin ||
+      patientChart?.demographics?.philHealthNumber ||
+      ''
+    ).trim();
+    if (!pin) {
+      return { canToggle: false, reason: 'Missing PhilHealth PIN' };
+    }
+    const phProfile = extractPhilHealthProfileData(patientRecord.customFields, patientRecord);
+    if (phProfile.memberType === 'DD') {
+      if (!phProfile.principalFullName?.trim() || !phProfile.principalPin?.trim()) {
+        return { canToggle: false, reason: 'Dependent missing sponsor details' };
+      }
+    }
+    return { canToggle: true, reason: null };
+  }, [patientRecord, patientChart?.demographics?.philHealthNumber]);
 
   const latestExecutedProcedure = useMemo(() => {
     const list = patientChart?.proceduresHistory || [];
@@ -2378,13 +2406,26 @@ export default function ConsultationsScreen() {
                       </ThemedText>
                     </View>
                     {!isSigned ? (
-                      <Button
-                        title="Switch to PhilHealth Konsulta"
-                        size="sm"
-                        variant="outline"
-                        icon="shield"
-                        onPress={() => setIsYakapEligible(true)}
-                      />
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, flexWrap: 'wrap' }}>
+                        {!philHealthEligibility.canToggle && philHealthEligibility.reason ? (
+                          <Badge label={philHealthEligibility.reason} variant="warning" size="sm" icon="alert" />
+                        ) : null}
+                        <Button
+                          title="Switch to PhilHealth Konsulta"
+                          size="sm"
+                          variant="outline"
+                          icon="shield"
+                          disabled={!philHealthEligibility.canToggle}
+                          onPress={() => {
+                            if (philHealthEligibility.canToggle) {
+                              setIsYakapEligible(true);
+                              if (!philHealthAtc.trim() || philHealthAtc === 'ATC-2026-KON01') {
+                                setPhilHealthAtc('WALKEDIN');
+                              }
+                            }
+                          }}
+                        />
+                      </View>
                     ) : null}
                   </View>
                 </Card>
@@ -2398,15 +2439,19 @@ export default function ConsultationsScreen() {
                       <Icon name="shield" size={theme.sizes.iconMd} color={theme.colors.primary} />
                       <View style={styles.flex}>
                         <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-                          PhilHealth Konsulta Encounter Active
+                          PhilHealth Yakap consultation
                         </ThemedText>
-                        <ThemedText variant="small" color={theme.colors.primary}>
+                        <ThemedText
+                          variant="small"
+                          color={theme.colors.primary}
+                          numberOfLines={1}
+                          ellipsizeMode="middle"
+                        >
                           Encounter reference numbers are automatically generated and linked upon signing
                         </ThemedText>
                       </View>
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
-                      <Badge label={isYakapReady ? 'Claim Ready' : 'Incomplete'} variant={isYakapReady ? 'success' : 'warning'} />
                       {!isSigned ? (
                         <Button
                           title="Switch to Standard"
@@ -2422,7 +2467,7 @@ export default function ConsultationsScreen() {
                   <View style={{ marginTop: theme.spacing.xs }}>
                     <Input
                       label="Authorization Transaction Code (ATC)"
-                      placeholder="e.g. ATC-2026-99214"
+                      placeholder="e.g. WALKEDIN or ATC-2026-99214"
                       value={philHealthAtc}
                       onChangeText={setPhilHealthAtc}
                       editable={!isSigned}
@@ -2502,7 +2547,21 @@ export default function ConsultationsScreen() {
               }
             }}>
               <Card>
-                <CardHeader title="Objective" subtitle="Physical findings, auscultation and examination" />
+                <CardHeader
+                  title="Objective"
+                  subtitle="Physical findings, auscultation and examination"
+                  rightAction={
+                    !isSigned ? (
+                      <Button
+                        title="Record Vitals"
+                        icon="activity"
+                        size="sm"
+                        variant="outline"
+                        onPress={() => setRecordVitalsModalVisible(true)}
+                      />
+                    ) : undefined
+                  }
+                />
                 <Input
                   multiline
                   placeholder="Physical examination and clinical observations"
@@ -3478,6 +3537,7 @@ export default function ConsultationsScreen() {
                 loading={contextLoading}
                 onPressRefresh={() => loadPatientContext(selectedPatient)}
                 onPressEdit={() => setEditPatientModalVisible(true)}
+                onPressRecordVitals={() => setRecordVitalsModalVisible(true)}
               />
             </View>
 
@@ -4072,6 +4132,24 @@ export default function ConsultationsScreen() {
             }
           }}
         />
+
+        {/* Record Vitals Modal */}
+        {selectedPatient && (
+          <RecordVitalsModal
+            visible={recordVitalsModalVisible}
+            onClose={() => setRecordVitalsModalVisible(false)}
+            patient={patientRecord}
+            queueItemId={selectedPatient.id}
+            currentStaffId={signer?.id}
+            currentStaffName={signerStaff?.name || signer?.name}
+            existingVitals={vitals}
+            onSuccess={(recordedVitals) => {
+              setVitals(recordedVitals);
+              notify.success('Vitals recorded successfully.');
+              setRecordVitalsModalVisible(false);
+            }}
+          />
+        )}
       </ScrollView>
     </ResponsiveLayout>
   );

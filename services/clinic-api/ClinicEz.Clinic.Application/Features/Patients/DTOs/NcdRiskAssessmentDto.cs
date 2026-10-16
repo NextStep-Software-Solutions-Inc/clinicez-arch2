@@ -70,7 +70,17 @@ public sealed record NcdRiskAssessmentDto(
     string RiskBand,
     decimal? CalculatedRiskScorePercent,
     string? Remarks,
-    DateTime? CreatedAt = null);
+    DateTime? CreatedAt = null,
+    string? CreatedBy = null,
+    DateTime? UpdatedAt = null,
+    string? UpdatedBy = null,
+    bool IsDeleted = false,
+    DateTime? DeletedAt = null,
+    string? DeletedBy = null,
+    string? VoidReason = null);
+
+public sealed record VoidNcdRiskAssessmentRequest(
+    string? Reason = null);
 
 public sealed record SaveNcdRiskAssessmentRequest(
     Guid? ConsultationEncounterId = null,

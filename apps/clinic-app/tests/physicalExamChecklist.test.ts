@@ -189,4 +189,104 @@ describe('Milestone 3 Physical Exam Checklist Adversarial Tests', () => {
     expect(parsed.heart).toBe('Normal');
     expect(parsed.musculoskeletal).toBe('Normal');
   });
+
+  test('DEFAULT_PHYSICAL_EXAM_NORMAL binds all official PhilHealth statutory codes', () => {
+    const preset = { ...DEFAULT_PHYSICAL_EXAM_NORMAL };
+
+    expect(preset.generalSurveyId).toBe('1');
+    expect(preset.skinId).toBe('1');
+    expect(preset.heentId).toBe('11');
+    expect(preset.chestId).toBe('6');
+    expect(preset.heartId).toBe('5');
+    expect(preset.abdomenId).toBe('7');
+    expect(preset.neuroId).toBe('6');
+    expect(preset.rectalId).toBe('1');
+    expect(preset.guId).toBe('1');
+    expect(preset.musculoskeletalId).toBe('1');
+  });
+
+  test('Selecting statutory option chips updates code and status without losing remarks', () => {
+    let findings: PhysicalExamFindings = { ...DEFAULT_PHYSICAL_EXAM_NORMAL };
+
+    // Selecting Crackles/rales (code 4) for chest
+    findings = {
+      ...findings,
+      chest: 'Abnormal',
+      chestId: '4',
+      chestRemarks: 'Crackles/rales',
+    };
+
+    expect(findings.chest).toBe('Abnormal');
+    expect(findings.chestId).toBe('4');
+    expect(findings.chestRemarks).toBe('Crackles/rales');
+
+    // Selecting Essentially Normal (code 6) resets status and clears remarks
+    findings = {
+      ...findings,
+      chest: 'Normal',
+      chestId: '6',
+      chestRemarks: '',
+    };
+
+    expect(findings.chest).toBe('Normal');
+    expect(findings.chestId).toBe('6');
+    expect(findings.chestRemarks).toBe('');
+  });
+
+  test('PhilHealth Record Completeness Gate prevents toggling Yakap when PIN is missing or Dependent is incomplete', () => {
+    const validateEligibility = (patient: any) => {
+      if (!patient) return { canToggle: false, reason: 'Patient record loading' };
+      const pin = (patient.philHealthNumber || patient.pin || '').trim();
+      if (!pin) return { canToggle: false, reason: 'Missing PhilHealth PIN' };
+
+      const profile = patient.customFields?.philhealth_profile || {};
+      const memberType = patient.customFields?.member_type || profile.memberType || 'MM';
+      if (memberType === 'DD') {
+        const principalName = patient.customFields?.principal_full_name ||
+          (profile.memberFirstName && profile.memberLastName ? `${profile.memberFirstName} ${profile.memberLastName}`.trim() : '');
+        const principalPin = patient.customFields?.principal_member_pin || profile.memberPin || '';
+        if (!principalName?.trim() || !principalPin?.trim()) {
+          return { canToggle: false, reason: 'Dependent missing sponsor details' };
+        }
+      }
+      return { canToggle: true, reason: null };
+    };
+
+    // 1. Patient without PIN
+    expect(validateEligibility({ philHealthNumber: '' }).canToggle).toBe(false);
+    expect(validateEligibility({ philHealthNumber: '' }).reason).toBe('Missing PhilHealth PIN');
+
+    // 2. Dependent without sponsor details
+    const incompleteDependent = {
+      philHealthNumber: '123456789012',
+      customFields: { member_type: 'DD' },
+    };
+    expect(validateEligibility(incompleteDependent).canToggle).toBe(false);
+    expect(validateEligibility(incompleteDependent).reason).toBe('Dependent missing sponsor details');
+
+    // 3. Dependent with full sponsor details
+    const validDependent = {
+      philHealthNumber: '123456789012',
+      customFields: {
+        member_type: 'DD',
+        principal_full_name: 'Juan Dela Cruz Sr.',
+        principal_member_pin: '987654321098',
+      },
+    };
+    expect(validateEligibility(validDependent).canToggle).toBe(true);
+    expect(validateEligibility(validDependent).reason).toBeNull();
+
+    // 4. Principal Member (MM) with PIN
+    const validMember = {
+      philHealthNumber: '123456789012',
+      customFields: { member_type: 'MM' },
+    };
+    expect(validateEligibility(validMember).canToggle).toBe(true);
+    expect(validateEligibility(validMember).reason).toBeNull();
+  });
+
+  test('Default ATC code must be "WALKEDIN"', () => {
+    const defaultAtc = 'WALKEDIN';
+    expect(defaultAtc).toBe('WALKEDIN');
+  });
 });

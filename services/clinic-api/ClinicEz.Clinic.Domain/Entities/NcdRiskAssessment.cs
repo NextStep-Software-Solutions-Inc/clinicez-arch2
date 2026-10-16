@@ -78,4 +78,6 @@ public sealed class NcdRiskAssessment : BaseEntity
     public decimal? CalculatedRiskScorePercent { get; set; }
 
     public string? Remarks { get; set; }
+
+    public string? VoidReason { get; set; }
 }

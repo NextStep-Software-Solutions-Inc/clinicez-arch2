@@ -2741,6 +2741,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("VoidReason")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PatientId");

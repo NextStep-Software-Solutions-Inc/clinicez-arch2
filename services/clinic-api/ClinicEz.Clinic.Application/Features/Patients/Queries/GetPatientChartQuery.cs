@@ -364,8 +364,23 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 p.DurationDays,
                 p.Refills,
                 p.IsDangerousDrug,
-                p.Remarks
-            )).ToList()
+                p.Remarks,
+                p.PhilHealthDrugCode
+            )).ToList(),
+            c.IsYakapEligible,
+            c.PhilHealthSignSympCode,
+            c.PhilHealthOtherComplaint,
+            c.PhilHealthPainSite,
+            c.PhilHealthCaseNo ?? c.HciCaseNo,
+            c.PhilHealthSoapTransNo ?? c.SoapTransNo,
+            c.DoctorPhilHealthPan,
+            c.PhilHealthAtc,
+            c.HciCaseNo ?? c.PhilHealthCaseNo,
+            c.HciTransNo,
+            c.SoapTransNo ?? c.PhilHealthSoapTransNo,
+            c.GeneralSurveyId,
+            c.GeneralSurveyRemarks,
+            c.PhysicalExamFindingsJson
         )).ToList();
 
         var vitalsDtos = vitals.Select(v => new TriageVitalsDto(

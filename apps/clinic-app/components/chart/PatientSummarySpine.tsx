@@ -59,6 +59,8 @@ export interface PatientSummarySpineProps {
   onPressEdit?: () => void;
   /** Optional callback to refresh patient data */
   onPressRefresh?: () => void;
+  /** Optional callback to record/update triage vitals */
+  onPressRecordVitals?: () => void;
 }
 
 export function evaluateBloodPressure(systolic?: number, diastolic?: number): VitalsThresholdResult {
@@ -299,6 +301,7 @@ export default function PatientSummarySpine({
   defaultCollapsed = false,
   onPressEdit,
   onPressRefresh,
+  onPressRecordVitals,
 }: PatientSummarySpineProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed || compact || variant === 'compact');
 
@@ -685,12 +688,27 @@ export default function PatientSummarySpine({
                   Latest Triage Vitals
                 </ThemedText>
               </View>
-              {latestVitals?.recordedAt ? (
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  {new Date(latestVitals.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  {latestVitals.recordedByNurseName ? ` by ${latestVitals.recordedByNurseName}` : ''}
-                </ThemedText>
-              ) : null}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+                {latestVitals?.recordedAt ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    {new Date(latestVitals.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {latestVitals.recordedByNurseName ? ` by ${latestVitals.recordedByNurseName}` : ''}
+                  </ThemedText>
+                ) : null}
+                {onPressRecordVitals ? (
+                  <Pressable
+                    onPress={onPressRecordVitals}
+                    style={styles.editDemographicsBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={latestVitals ? 'Update Vitals' : 'Record Vitals'}
+                  >
+                    <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                    <ThemedText variant="captionBold" color={theme.colors.primary}>
+                      {latestVitals ? 'Update Vitals' : 'Record Vitals'}
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
 
             {latestVitals ? (
@@ -885,9 +903,24 @@ export default function PatientSummarySpine({
                 </View>
               </View>
             ) : (
-              <ThemedText variant="caption" color={theme.colors.textMuted} style={{ fontStyle: 'italic' }}>
-                No triage vitals recorded for today.
-              </ThemedText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 2 }}>
+                <ThemedText variant="caption" color={theme.colors.textMuted} style={{ fontStyle: 'italic' }}>
+                  No triage vitals recorded for today.
+                </ThemedText>
+                {onPressRecordVitals ? (
+                  <Pressable
+                    onPress={onPressRecordVitals}
+                    style={styles.editDemographicsBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Record Vitals"
+                  >
+                    <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                    <ThemedText variant="captionBold" color={theme.colors.primary}>
+                      Record Vitals
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
             )}
 
             {/* WHO Pediatric Z-Scores Sub-Strip (Children < 19 yrs) */}

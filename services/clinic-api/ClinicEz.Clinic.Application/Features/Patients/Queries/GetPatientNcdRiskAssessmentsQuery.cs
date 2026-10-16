@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.Patients.Queries;
 
-public sealed record GetPatientNcdRiskAssessmentsQuery(Guid PatientId) : IRequest<List<NcdRiskAssessmentDto>>;
+public sealed record GetPatientNcdRiskAssessmentsQuery(Guid PatientId, bool IncludeVoided = false) : IRequest<List<NcdRiskAssessmentDto>>;
 
 public sealed class GetPatientNcdRiskAssessmentsQueryHandler : IRequestHandler<GetPatientNcdRiskAssessmentsQuery, List<NcdRiskAssessmentDto>>
 {
@@ -31,7 +31,11 @@ public sealed class GetPatientNcdRiskAssessmentsQueryHandler : IRequestHandler<G
     {
         await _legacyIngestion.EnsureIngestedAsync(request.PatientId, cancellationToken);
 
-        var entries = await _ncdRepo.Query(n => n.PatientId == request.PatientId)
+        var query = request.IncludeVoided
+            ? _ncdRepo.Query(n => n.PatientId == request.PatientId, ignoreQueryFilters: true)
+            : _ncdRepo.Query(n => n.PatientId == request.PatientId);
+
+        var entries = await query
             .OrderByDescending(n => n.AssessmentDate)
             .ToListAsync(cancellationToken);
 
@@ -77,6 +81,13 @@ public sealed class GetPatientNcdRiskAssessmentsQueryHandler : IRequestHandler<G
             entity.RiskBand,
             entity.CalculatedRiskScorePercent,
             entity.Remarks,
-            entity.CreatedAt)).ToList();
+            entity.CreatedAt,
+            entity.CreatedBy,
+            entity.UpdatedAt,
+            entity.UpdatedBy,
+            entity.IsDeleted,
+            entity.DeletedAt,
+            entity.DeletedBy,
+            entity.VoidReason)).ToList();
     }
 }

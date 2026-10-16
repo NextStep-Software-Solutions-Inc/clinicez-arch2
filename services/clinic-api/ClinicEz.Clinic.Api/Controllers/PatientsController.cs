@@ -384,9 +384,10 @@ public sealed class PatientsController : ControllerBase
     [HasPermission(ClinicPermissions.PatientsRead)]
     public async Task<ActionResult<ApiResponse<List<NcdRiskAssessmentDto>>>> GetNcdRiskAssessments(
         Guid patientId,
-        CancellationToken ct)
+        [FromQuery] bool includeVoided = false,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetPatientNcdRiskAssessmentsQuery(patientId), ct);
+        var result = await _sender.Send(new GetPatientNcdRiskAssessmentsQuery(patientId, includeVoided), ct);
         return Ok(ApiResponse<List<NcdRiskAssessmentDto>>.Success(result));
     }
 
@@ -440,6 +441,73 @@ public sealed class PatientsController : ControllerBase
             request.AssessmentDate);
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<NcdRiskAssessmentDto>.Success(result, "NCD risk assessment recorded successfully."));
+    }
+
+    [HttpPut("{patientId:guid}/ncd-risk-assessment/{assessmentId:guid}")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<NcdRiskAssessmentDto>>> UpdateNcdRiskAssessment(
+        Guid patientId,
+        Guid assessmentId,
+        [FromBody] SaveNcdRiskAssessmentRequest request,
+        CancellationToken ct)
+    {
+        var command = new UpdateNcdRiskAssessmentCommand(
+            assessmentId,
+            patientId,
+            request.ConsultationEncounterId,
+            request.AssessedByStaffId,
+            request.AssessedByStaffName,
+            request.EatsProcessedFoodWeekly,
+            request.ThreeServingsVegetablesDaily,
+            request.TwoToThreeServingsFruitDaily,
+            request.PhysicalActivityAtLeast150MinsWeekly,
+            request.DiagnosedDiabetes,
+            request.HasPolyphagia,
+            request.HasPolydipsia,
+            request.HasPolyuria,
+            request.DiabetesMedicationStatus,
+            request.HasRaisedBloodGlucose,
+            request.FastingBloodSugarMgDl,
+            request.FastingBloodSugarMmolL,
+            request.FastingBloodSugarDate,
+            request.HasChestPain,
+            request.PainInCenterOfChestOrLeftArm,
+            request.PainWhenWalkingUphill,
+            request.SlowsDownWhenPainOccurs,
+            request.PainRelievedWithin10Mins,
+            request.PainRelievedByNitrates,
+            request.SevereChestPainOver30Mins,
+            request.TransientNeurologicalDeficits,
+            request.HasRaisedBloodLipids,
+            request.TotalCholesterolMgDl,
+            request.TotalCholesterolDate,
+            request.HasHistoryAnginaHeartAttack,
+            request.HasHistoryStrokeOrTia,
+            request.UrineKetonesPresent,
+            request.UrineKetonesValue,
+            request.UrineKetonesDate,
+            request.UrineProteinPresent,
+            request.UrineProteinValue,
+            request.UrineProteinDate,
+            request.RiskBand,
+            request.CalculatedRiskScorePercent,
+            request.Remarks,
+            request.AssessmentDate);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<NcdRiskAssessmentDto>.Success(result, "NCD risk assessment updated successfully."));
+    }
+
+    [HttpDelete("{patientId:guid}/ncd-risk-assessment/{assessmentId:guid}")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<bool>>> VoidNcdRiskAssessment(
+        Guid patientId,
+        Guid assessmentId,
+        [FromQuery] string? reason = null,
+        CancellationToken ct = default)
+    {
+        var actor = User.FindFirst("name")?.Value ?? User.Identity?.Name;
+        var result = await _sender.Send(new VoidNcdRiskAssessmentCommand(assessmentId, patientId, reason, actor), ct);
+        return Ok(ApiResponse<bool>.Success(result, "NCD risk assessment voided successfully."));
     }
 
     // --- Pediatric WHO Z-Score Calculation Endpoint ---

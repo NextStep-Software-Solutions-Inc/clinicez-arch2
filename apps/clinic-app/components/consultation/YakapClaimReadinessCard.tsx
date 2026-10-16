@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import React, { useRef } from 'react';
+import { View, StyleSheet, Pressable, Animated } from 'react-native';
 import {
   ThemedText,
   Badge,
@@ -10,6 +10,7 @@ import {
   Icon,
 } from '../ui';
 import { theme } from '../../constants/theme';
+import { notify } from '../../utils/feedback';
 import type { YakapClaimReadinessDto } from '../../services/clinicService';
 
 export type StatutorySectionKey =
@@ -163,7 +164,7 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
   const missingFields = serverReadiness ? serverReadiness.missingFields : localEvaluation.missingFields;
   const warnings = serverReadiness ? serverReadiness.warnings : localEvaluation.warnings;
 
-  const statutoryConditions: YakapConditionItem[] = [
+  const preliminaryConditions: YakapConditionItem[] = [
     {
       key: 'pan',
       sectionKey: 'doctor-pan',
@@ -229,9 +230,16 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
         ? 'Prescriptions must match PhilHealth formulary (or record no medications needed)'
         : 'Doctor S2 license required for PDEA dangerous drugs',
     },
+  ];
+
+  const firstIncomplete = preliminaryConditions.find((c) => !c.isValid);
+  const readySectionKey: StatutorySectionKey = firstIncomplete ? firstIncomplete.sectionKey : 'atc';
+
+  const statutoryConditions: YakapConditionItem[] = [
+    ...preliminaryConditions,
     {
       key: 'ready',
-      sectionKey: 'atc',
+      sectionKey: readySectionKey,
       label: 'Overall Consultation Readiness',
       isValid: isReady,
       missingReason: 'All requirements must pass before signing',
@@ -239,6 +247,24 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
   ];
 
   const passedCount = statutoryConditions.filter((c) => c.isValid).length;
+
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  const handleRevalidate = () => {
+    spinAnim.setValue(0);
+    Animated.timing(spinAnim, {
+      toValue: 1,
+      duration: 650,
+      useNativeDriver: false,
+    }).start();
+    notify.info('PhilHealth Yakap claim readiness checklist revalidated.');
+    onRevalidate();
+  };
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const resolveMissingSection = (text: string): StatutorySectionKey => {
     if (!text || typeof text !== 'string') return 'atc';
@@ -288,20 +314,24 @@ export const YakapClaimReadinessCard: React.FC<YakapClaimReadinessCardProps> = (
         subtitle="Pre-flight consultation and claim readiness checklist"
         rightAction={
           <View style={styles.headerRight}>
-            <Badge
-              label={isReady ? '10/10 Claim Ready' : `${passedCount}/10 Requirements Complete`}
-              variant={isReady ? 'success' : 'emergency'}
-              size="md"
-            />
             {!isSigned && (
-              <Button
-                title="Revalidate"
-                icon="refresh"
-                size="sm"
-                variant="ghost"
-                loading={isValidating}
-                onPress={onRevalidate}
-              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Revalidate checklist"
+                disabled={isValidating}
+                onPress={handleRevalidate}
+                style={({ pressed }: any) => [
+                  styles.revalidateButton,
+                  pressed && styles.revalidateButtonPressed,
+                ]}
+              >
+                <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                  <Icon name="refresh" size={16} color={theme.colors.primary} />
+                </Animated.View>
+                <ThemedText variant="smallBold" color={theme.colors.primary}>
+                  Revalidate
+                </ThemedText>
+              </Pressable>
             )}
           </View>
         }
@@ -458,6 +488,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
+  },
+  revalidateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  revalidateButtonPressed: {
+    backgroundColor: theme.colors.primaryLighter,
+    borderColor: theme.colors.primary,
   },
   progressContainer: {
     marginBottom: theme.spacing.md,

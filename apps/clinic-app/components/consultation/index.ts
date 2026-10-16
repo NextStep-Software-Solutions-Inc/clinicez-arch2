@@ -17,3 +17,6 @@ export type {
   YakapConditionItem,
   YakapClaimReadinessCardProps,
 } from './YakapClaimReadinessCard';
+
+export { default as RecordVitalsModal } from './RecordVitalsModal';
+export type { RecordVitalsModalProps } from './RecordVitalsModal';

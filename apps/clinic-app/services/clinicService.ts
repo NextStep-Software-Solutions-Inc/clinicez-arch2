@@ -1210,6 +1210,13 @@ export interface NcdRiskAssessment {
   calculatedRiskScorePercent?: number;
   remarks?: string;
   createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  voidReason?: string;
 }
 
 export interface SaveNcdRiskAssessmentPayload {
@@ -2393,12 +2400,22 @@ export const clinicService = {
   },
 
   // NCD Risk Assessment
-  async getNcdRiskAssessments(patientId: string) {
-    return clinicApiClient.get<NcdRiskAssessment[]>(`/patients/${patientId}/ncd-risk-assessment`);
+  async getNcdRiskAssessments(patientId: string, includeVoided = false) {
+    const qs = includeVoided ? '?includeVoided=true' : '';
+    return clinicApiClient.get<NcdRiskAssessment[]>(`/patients/${patientId}/ncd-risk-assessment${qs}`);
   },
 
   async saveNcdRiskAssessment(patientId: string, payload: SaveNcdRiskAssessmentPayload) {
     return clinicApiClient.post<NcdRiskAssessment>(`/patients/${patientId}/ncd-risk-assessment`, payload);
+  },
+
+  async updateNcdRiskAssessment(patientId: string, assessmentId: string, payload: SaveNcdRiskAssessmentPayload) {
+    return clinicApiClient.put<NcdRiskAssessment>(`/patients/${patientId}/ncd-risk-assessment/${assessmentId}`, payload);
+  },
+
+  async voidNcdRiskAssessment(patientId: string, assessmentId: string, reason?: string) {
+    const qs = reason ? `?reason=${encodeURIComponent(reason)}` : '';
+    return clinicApiClient.delete<boolean>(`/patients/${patientId}/ncd-risk-assessment/${assessmentId}${qs}`);
   },
 
   // Pediatric WHO Z-Score Calculation
