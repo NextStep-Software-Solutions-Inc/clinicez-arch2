@@ -14,6 +14,7 @@ mock.module('react-native', () => ({
   Text: 'Text',
   Switch: 'Switch',
   TouchableOpacity: 'TouchableOpacity',
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
   Vibration: { vibrate: () => {} },
 }));

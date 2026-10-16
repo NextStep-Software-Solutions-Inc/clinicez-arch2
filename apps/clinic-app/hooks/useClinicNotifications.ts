@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import * as ReactNative from 'react-native';
+
+const AppState = (ReactNative as any).AppState ?? (ReactNative as any).default?.AppState;
 import {
   clinicService,
   ClinicStaffNotification,
@@ -144,7 +147,9 @@ export function useClinicNotifications(
       }
     };
 
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    const subscription = AppState?.addEventListener
+      ? AppState.addEventListener('change', handleAppStateChange)
+      : { remove: () => {} };
 
     const handleVisibilityChange = () => {
       if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -167,7 +172,7 @@ export function useClinicNotifications(
 
     return () => {
       if (timer) clearInterval(timer);
-      subscription.remove();
+      subscription?.remove?.();
       if (Platform.OS === 'web' && typeof document !== 'undefined') {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       }

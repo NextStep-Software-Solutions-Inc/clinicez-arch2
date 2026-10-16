@@ -1,8 +1,11 @@
 import { useEffect } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { type AppStateStatus } from 'react-native';
+import * as ReactNative from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { offlineSyncService } from '../services/offlineSyncService';
 import { notify } from '../utils/feedback';
+
+const AppState = (ReactNative as any).AppState ?? (ReactNative as any).default?.AppState;
 
 /** How often queued items are retried while the app is active (items in backoff are skipped until due). */
 const SYNC_INTERVAL_MS = 60_000;
@@ -16,7 +19,7 @@ export function OfflineSyncRunner() {
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;
-    let isAppActive = AppState.currentState === 'active';
+    let isAppActive = (AppState?.currentState ?? 'active') === 'active';
 
     const run = async () => {
       if (cancelled || !isAppActive || offlineSyncService.getPendingCount() === 0) return;
@@ -55,7 +58,9 @@ export function OfflineSyncRunner() {
       }
     };
 
-    const appStateSub = AppState.addEventListener('change', handleAppState);
+    const appStateSub = AppState?.addEventListener
+      ? AppState.addEventListener('change', handleAppState)
+      : { remove: () => {} };
 
     if (isAppActive) {
       startTimer();
@@ -66,7 +71,7 @@ export function OfflineSyncRunner() {
       cancelled = true;
       stopTimer();
       unsubscribeNet();
-      appStateSub.remove();
+      appStateSub?.remove?.();
     };
   }, []);
 

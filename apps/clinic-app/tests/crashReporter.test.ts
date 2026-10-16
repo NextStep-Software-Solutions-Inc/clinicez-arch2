@@ -5,6 +5,7 @@ mock.module('react-native', () => ({
   Dimensions: {
     get: () => ({ width: 1280, height: 800 }),
   },
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: {
     OS: 'android',
     Version: 34,

@@ -33,6 +33,7 @@ mock.module('react-native', () => ({
   RefreshControl: 'RefreshControl',
   Dimensions: { get: () => ({ width: 1280, height: 800 }), addEventListener: () => ({ remove: () => {} }) },
   useWindowDimensions: () => ({ width: 1280, height: 800 }),
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },

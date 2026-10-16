@@ -1,5 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { type AppStateStatus } from 'react-native';
+import * as ReactNative from 'react-native';
+
+const AppState = (ReactNative as any).AppState ?? (ReactNative as any).default?.AppState;
 import {
   AuthUser,
   BootstrapInput,
@@ -171,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!offline || state !== 'signedIn') return undefined;
     let timer: ReturnType<typeof setInterval> | null = null;
-    let isAppActive = AppState.currentState === 'active';
+    let isAppActive = (AppState?.currentState ?? 'active') === 'active';
 
     const startTimer = () => {
       if (timer) clearInterval(timer);
@@ -199,7 +202,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    const appStateSub = AppState.addEventListener('change', handleAppState);
+    const appStateSub = AppState?.addEventListener
+      ? AppState.addEventListener('change', handleAppState)
+      : { remove: () => {} };
 
     if (isAppActive) {
       startTimer();
@@ -207,7 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       stopTimer();
-      appStateSub.remove();
+      appStateSub?.remove?.();
     };
   }, [offline, state]);
 

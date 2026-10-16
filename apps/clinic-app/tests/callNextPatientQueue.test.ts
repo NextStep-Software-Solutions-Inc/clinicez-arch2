@@ -35,6 +35,7 @@ mock.module('react-native', () => ({
     addEventListener: () => ({ remove: () => {} }),
   },
   useWindowDimensions: () => ({ width: 1280, height: 800 }),
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
   Alert: { alert: () => {} },
 }));

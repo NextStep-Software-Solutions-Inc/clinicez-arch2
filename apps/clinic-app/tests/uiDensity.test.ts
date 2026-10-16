@@ -21,6 +21,7 @@ mock.module('react-native', () => ({
   Touchable: { Mixin: {} },
   ActivityIndicator: createMockComponent('ActivityIndicator'),
   processColor: (c: any) => c,
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
 }));
 

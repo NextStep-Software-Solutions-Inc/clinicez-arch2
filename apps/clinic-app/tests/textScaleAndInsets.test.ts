@@ -15,6 +15,7 @@ mock.module('react-native', () => ({
   View: createMockComponent('View'),
   Text: createMockComponent('Text'),
   TextInput: createMockComponent('TextInput'),
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
 }));
 

@@ -30,6 +30,7 @@ mock.module('react-native', () => ({
   Modal: createMockComponent('Modal'),
   KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
   Image: createMockComponent('Image'),
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
 }));
 

@@ -35,6 +35,7 @@ mock.module('react-native', () => ({
   ActivityIndicator: createMockComponent('ActivityIndicator'),
   Modal: createMockComponent('Modal'),
   KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
   Touchable: { Mixin: {} },
   TurboModuleRegistry: { get: () => null, getEnforcing: () => null },

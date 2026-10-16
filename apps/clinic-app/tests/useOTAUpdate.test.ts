@@ -13,6 +13,7 @@ mock.module('react-native', () => ({
       mockAlertCalls.push({ title, message, buttons });
     },
   },
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: {
     OS: 'android',
   },
