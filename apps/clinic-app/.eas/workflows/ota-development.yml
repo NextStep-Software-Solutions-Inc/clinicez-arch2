@@ -1,0 +1,14 @@
+name: Development OTA Update
+
+on:
+  push:
+    branches:
+      - 'development'
+
+jobs:
+  update:
+    name: Publish Development
+    type: update
+    environment: development
+    params:
+      branch: development
