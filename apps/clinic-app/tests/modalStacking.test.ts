@@ -33,6 +33,7 @@ mock.module('react-native', () => ({
   Text: createMockComponent('Text'),
   ActivityIndicator: createMockComponent('ActivityIndicator'),
   Modal: createMockComponent('Modal'),
+  Image: createMockComponent('Image'),
   KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
   Dimensions: {
     get: () => ({ width: 1280, height: 800 }),

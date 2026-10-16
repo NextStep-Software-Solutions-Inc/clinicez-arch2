@@ -264,6 +264,9 @@ export interface TriageVitals {
   zScoreWeightForLength?: number;
   philHealthZScoreCategory?: string;
   philHealthZScoreCode?: string;
+  preAssessmentNotes?: string;
+  preAssessmentRemarks?: string;
+  triageAcuityReason?: string;
 }
 
 export interface EncounterDiagnosis {
@@ -303,6 +306,7 @@ export interface ConsultationRecord {
   objective: string;
   assessment: string;
   plan: string;
+  homeInstructions?: string;
   doctorPrcLicense?: string;
   doctorPtr?: string;
   doctorS2License?: string;
@@ -1783,6 +1787,9 @@ export interface RecordTriageRequest {
   zScoreWeightForLength?: number;
   philHealthZScoreCategory?: string;
   philHealthZScoreCode?: string;
+  preAssessmentNotes?: string;
+  preAssessmentRemarks?: string;
+  triageAcuityReason?: string;
 }
 
 export interface CreateConsultationRequest {
@@ -1796,6 +1803,7 @@ export interface CreateConsultationRequest {
   objective?: string;
   assessment?: string;
   plan?: string;
+  homeInstructions?: string;
   diagnoses?: Array<{ icd10Code: string; description: string; isPrimary?: boolean }>;
   prescriptions?: Array<{
     genericName: string;

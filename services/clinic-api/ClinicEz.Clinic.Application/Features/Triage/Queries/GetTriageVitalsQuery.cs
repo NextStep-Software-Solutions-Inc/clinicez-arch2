@@ -53,6 +53,19 @@ public sealed class GetTriageVitalsQueryHandler : IRequestHandler<GetTriageVital
             vitals.WeightKg,
             vitals.Bmi,
             vitals.PainScore,
-            vitals.Notes);
+            vitals.Notes,
+            vitals.VisualAcuityLeft,
+            vitals.VisualAcuityRight,
+            vitals.HeadCircumferenceCm,
+            vitals.MidUpperArmCircumferenceCm,
+            vitals.IsMeasuredRecumbent,
+            vitals.ZScoreWeightForAge,
+            vitals.ZScoreLengthForAge,
+            vitals.ZScoreWeightForLength,
+            vitals.PhilHealthZScoreCategory,
+            vitals.PhilHealthZScoreCode,
+            vitals.PreAssessmentNotes,
+            vitals.PreAssessmentRemarks,
+            vitals.TriageAcuityReason);
     }
 }

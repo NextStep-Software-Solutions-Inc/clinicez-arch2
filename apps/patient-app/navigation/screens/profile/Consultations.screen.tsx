@@ -52,9 +52,7 @@ export default function ConsultationsScreen() {
             <ProfileReadOnlyField label="Primary Diagnosis" value={item.primaryDiagnosis} />
             <ProfileReadOnlyField label="ICD-10 Code" value={item.icd10Code} />
             <ProfileReadOnlyField label="Secondary Diagnoses" value={item.secondaryDiagnoses} />
-            <ProfileReadOnlyField label="SOAP Notes" value={item.soapNotes} />
-            <ProfileReadOnlyField label="Treatment Plan" value={item.treatmentPlan} />
-            <ProfileReadOnlyField label="Follow-up Instructions" value={item.followUpInstructions} />
+            <ProfileReadOnlyField label="Home Instructions" value={item.homeInstructions ?? item.followUpInstructions} />
             <ProfileReadOnlyField label="Follow-up Date" value={item.followUpDate} />
             <ProfileReadOnlyField label="Referral Issued" value={item.referralIssued} />
           </View>

@@ -31,4 +31,7 @@ public sealed record TriageVitalsDto(
     decimal? ZScoreLengthForAge = null,
     decimal? ZScoreWeightForLength = null,
     string? PhilHealthZScoreCategory = null,
-    string? PhilHealthZScoreCode = null);
+    string? PhilHealthZScoreCode = null,
+    string? PreAssessmentNotes = null,
+    string? PreAssessmentRemarks = null,
+    string? TriageAcuityReason = null);

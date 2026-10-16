@@ -53,6 +53,8 @@ import {
   YakapClaimReadinessCard,
   StatutorySectionKey,
   RecordVitalsModal,
+  OrderCatalogSearchModal,
+  OrderCatalogItemPayload,
 } from '../../components/consultation';
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
@@ -100,6 +102,19 @@ interface LocalDiagnosis {
   description: string;
   isPrimary: boolean;
 }
+
+export interface LocalLabOrder {
+  serviceItemId?: string;
+  code?: string;
+  name: string;
+  category: string;
+  standardPrice: number;
+  philHealthCode?: string;
+  fulfillmentMode: 'in_house' | 'outside';
+  instructions?: string;
+}
+
+const IN_HOUSE_RAPID_TEST_REGEX = /fingerstick|ecg|dipstick|rapid|rbs|urinalysis/i;
 
 export interface StatutorySymptom {
   code: string;
@@ -460,6 +475,7 @@ export default function ConsultationsScreen() {
   const [objective, setObjective] = useState('');
   const [assessment, setAssessment] = useState('');
   const [plan, setPlan] = useState('');
+  const [homeInstructions, setHomeInstructions] = useState('');
 
   // ICD-10 Search & Selection
   const [icdQuery, setIcdQuery] = useState('');
@@ -472,8 +488,10 @@ export default function ConsultationsScreen() {
   const [prescriptions, setPrescriptions] = useState<LocalPrescription[]>([]);
 
   // Diagnostic Lab Orders & In-Clinic Procedures
-  const [orderedLabs, setOrderedLabs] = useState<string[]>([]);
+  const [orderedLabs, setOrderedLabs] = useState<LocalLabOrder[]>([]);
   const [orderedProcedures, setOrderedProcedures] = useState<string[]>([]);
+  const [orderSearchModalVisible, setOrderSearchModalVisible] = useState(false);
+  const [orderSearchInitialCategory, setOrderSearchInitialCategory] = useState<'Diagnostic' | 'Procedure' | 'All'>('All');
   const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
   const [recordVitalsModalVisible, setRecordVitalsModalVisible] = useState(false);
 
@@ -716,7 +734,7 @@ export default function ConsultationsScreen() {
       philHealthNumber: patientRecord.philHealthNumber,
       patientAllergies: patientRecord.allergies || undefined,
       clinicalDiagnosis: assessment || undefined,
-      specialInstructions: plan || undefined,
+      specialInstructions: homeInstructions.trim() || plan || undefined,
       items: prescriptions.map((p, idx) => ({
         itemId: p.id || `item-${idx}`,
         genericName: p.genericName,
@@ -882,7 +900,6 @@ export default function ConsultationsScreen() {
     } else {
       setPatientRecord(record);
       setRecordError(null);
-      setIsYakapEligible(false);
     }
 
     const [chartData] = chartRes;
@@ -901,6 +918,7 @@ export default function ConsultationsScreen() {
         if (existingEncounter.objective) setObjective(existingEncounter.objective);
         if (existingEncounter.assessment) setAssessment(existingEncounter.assessment);
         if (existingEncounter.plan) setPlan(existingEncounter.plan);
+        if (existingEncounter.homeInstructions) setHomeInstructions(existingEncounter.homeInstructions);
         if (existingEncounter.diagnoses?.length) {
           setSelectedDiagnoses(
             existingEncounter.diagnoses.map((d) => ({
@@ -955,6 +973,110 @@ export default function ConsultationsScreen() {
             // Keep default PE findings on malformed JSON
           }
         }
+
+        // Rehydrate orderedLabs from invoice diagnostic items (in-house) and lab orders (outside)
+        const rehydratedLabs: LocalLabOrder[] = [];
+        const existingInvoice = chartData.invoicesHistory?.find(
+          (inv) =>
+            (existingEncounter.id && inv.consultationId === existingEncounter.id) ||
+            (p.id && inv.queueItemId === p.id)
+        );
+
+        if (existingInvoice?.lineItems?.length) {
+          const diagItems = existingInvoice.lineItems.filter(
+            (item) => (item.category || '').toLowerCase() === 'diagnostic'
+          );
+          for (const item of diagItems) {
+            const cleanName = item.description
+              ? item.description.replace(/\s*\(PhilHealth Yakap.*?\)$/i, '').trim()
+              : item.description;
+            const matchedDiag = diagnosticCatalog.find(
+              (d) =>
+                (item.serviceItemId && d.id === item.serviceItemId) ||
+                (item.itemCode && d.code === item.itemCode) ||
+                d.name.toLowerCase() === cleanName.toLowerCase()
+            );
+            rehydratedLabs.push({
+              serviceItemId: item.serviceItemId || matchedDiag?.id,
+              code: item.itemCode || matchedDiag?.code,
+              name: matchedDiag?.name || cleanName,
+              category: item.category || matchedDiag?.category || 'Diagnostic',
+              standardPrice: matchedDiag?.standardPrice ?? item.unitPrice,
+              philHealthCode: matchedDiag?.philHealthCode,
+              fulfillmentMode: 'in_house',
+            });
+          }
+        }
+
+        const existingLabOrders = chartData.labOrdersHistory?.filter(
+          (lo) =>
+            (existingEncounter.id && lo.consultationId === existingEncounter.id) ||
+            (p.id && (lo as any).queueItemId === p.id)
+        );
+        if (existingLabOrders?.length) {
+          for (const lo of existingLabOrders) {
+            if (lo.items?.length) {
+              for (const item of lo.items) {
+                const matchedDiag = diagnosticCatalog.find(
+                  (d) => d.name.toLowerCase() === item.testName.toLowerCase()
+                );
+                rehydratedLabs.push({
+                  serviceItemId: matchedDiag?.id,
+                  code: matchedDiag?.code,
+                  name: item.testName,
+                  category: item.category || matchedDiag?.category || 'Diagnostic',
+                  standardPrice: matchedDiag?.standardPrice ?? 0,
+                  philHealthCode: matchedDiag?.philHealthCode,
+                  fulfillmentMode: 'outside',
+                  instructions: item.instructions,
+                });
+              }
+            } else if (lo.testName) {
+              const matchedDiag = diagnosticCatalog.find(
+                (d) => d.name.toLowerCase() === lo.testName?.toLowerCase()
+              );
+              rehydratedLabs.push({
+                serviceItemId: matchedDiag?.id,
+                code: matchedDiag?.code,
+                name: lo.testName,
+                category: matchedDiag?.category || 'Diagnostic',
+                standardPrice: matchedDiag?.standardPrice ?? 0,
+                philHealthCode: matchedDiag?.philHealthCode,
+                fulfillmentMode: 'outside',
+                instructions: lo.notes,
+              });
+            }
+          }
+        }
+
+        // Deduplicate rehydratedLabs by name
+        const uniqueLabs: LocalLabOrder[] = [];
+        const seenLabNames = new Set<string>();
+        for (const lab of rehydratedLabs) {
+          const lower = lab.name.toLowerCase();
+          if (!seenLabNames.has(lower)) {
+            seenLabNames.add(lower);
+            uniqueLabs.push(lab);
+          }
+        }
+        setOrderedLabs(uniqueLabs);
+
+        // Rehydrate orderedProcedures from proceduresHistory and invoice line items
+        const existingProcedures = chartData.proceduresHistory?.filter(
+          (proc) =>
+            (existingEncounter.id && proc.consultationId === existingEncounter.id) ||
+            (p.id && proc.queueItemId === p.id)
+        );
+        const procNamesFromHistory = (existingProcedures || []).map((pr) => pr.procedureName).filter(Boolean);
+        const procNamesFromInvoice = (existingInvoice?.lineItems || [])
+          .filter((li) => {
+            const cat = (li.category || '').toLowerCase();
+            return cat === 'procedure' || cat === 'nursingservice';
+          })
+          .map((li) => li.description)
+          .filter(Boolean);
+        const uniqueProcs = Array.from(new Set([...procNamesFromHistory, ...procNamesFromInvoice]));
+        setOrderedProcedures(uniqueProcs);
       }
     } else {
       setPatientChart(null);
@@ -980,6 +1102,7 @@ export default function ConsultationsScreen() {
     setObjective('');
     setAssessment('');
     setPlan('');
+    setHomeInstructions('');
     setSelectedDiagnoses([]);
     setPrescriptions([]);
     setOrderedLabs([]);
@@ -1024,6 +1147,7 @@ export default function ConsultationsScreen() {
     setObjective('');
     setAssessment('');
     setPlan('');
+    setHomeInstructions('');
     setSelectedDiagnoses([]);
     setPrescriptions([]);
     setOrderedLabs([]);
@@ -1368,8 +1492,79 @@ export default function ConsultationsScreen() {
     setSelectedDiagnoses((prev) => prev.filter((d) => d.icd10Code !== code));
   };
 
-  const handleToggleLab = (labName: string) => {
-    setOrderedLabs((prev) => (prev.includes(labName) ? prev.filter((l) => l !== labName) : [...prev, labName]));
+  const handleToggleLab = (diagOrName: ClinicServiceItem | string) => {
+    const item: ClinicServiceItem | undefined =
+      typeof diagOrName === 'string'
+        ? diagnosticCatalog.find((d) => d.name.toLowerCase() === diagOrName.toLowerCase()) ||
+          activeCatalog.find((c) => c.name.toLowerCase() === diagOrName.toLowerCase())
+        : diagOrName;
+
+    const testName = typeof diagOrName === 'string' ? diagOrName : diagOrName.name;
+
+    setOrderedLabs((prev) => {
+      const exists = prev.some((l) => l.name.toLowerCase() === testName.toLowerCase());
+      if (exists) {
+        return prev.filter((l) => l.name.toLowerCase() !== testName.toLowerCase());
+      }
+      const matchTarget = item ? `${item.name} ${item.code || ''} ${item.description || ''}` : testName;
+      const isHeuristicInHouse = IN_HOUSE_RAPID_TEST_REGEX.test(matchTarget);
+
+      const newLab: LocalLabOrder = {
+        serviceItemId: item?.id,
+        code: item?.code,
+        name: testName,
+        category: item?.category || 'Diagnostic',
+        standardPrice: item?.standardPrice ?? 0,
+        philHealthCode: item?.philHealthCode,
+        fulfillmentMode: isHeuristicInHouse ? 'in_house' : 'outside',
+      };
+      return [...prev, newLab];
+    });
+  };
+
+  const handleToggleLabFulfillmentMode = (testName: string) => {
+    if (isSigned) return;
+    setOrderedLabs((prev) =>
+      prev.map((lab) =>
+        lab.name.toLowerCase() === testName.toLowerCase()
+          ? { ...lab, fulfillmentMode: lab.fulfillmentMode === 'in_house' ? 'outside' : 'in_house' }
+          : lab
+      )
+    );
+  };
+
+  const handleRemoveLab = (testName: string) => {
+    if (isSigned) return;
+    setOrderedLabs((prev) => prev.filter((lab) => lab.name.toLowerCase() !== testName.toLowerCase()));
+  };
+
+  const handleSelectCatalogOrder = (order: OrderCatalogItemPayload) => {
+    const isDiagnostic = (order.category || '').toLowerCase().includes('diagnostic');
+    if (isDiagnostic) {
+      setOrderedLabs((prev) => {
+        if (prev.some((l) => l.name.toLowerCase() === order.name.toLowerCase())) {
+          return prev;
+        }
+        const newLab: LocalLabOrder = {
+          serviceItemId: order.serviceItemId,
+          code: order.code,
+          name: order.name,
+          category: order.category || 'Diagnostic',
+          standardPrice: order.standardPrice,
+          philHealthCode: order.philHealthCode,
+          fulfillmentMode: order.fulfillmentMode || 'outside',
+          instructions: order.instructions,
+        };
+        return [...prev, newLab];
+      });
+    } else {
+      setOrderedProcedures((prev) => {
+        if (prev.some((p) => p.toLowerCase() === order.name.toLowerCase())) {
+          return prev;
+        }
+        return [...prev, order.name];
+      });
+    }
   };
 
   const handleToggleProcedure = (procName: string) => {
@@ -1493,6 +1688,7 @@ export default function ConsultationsScreen() {
         objective,
         assessment,
         plan,
+        homeInstructions: homeInstructions.trim() || undefined,
         isYakapEligible,
         philHealthSignSympCode: isYakapEligible ? selectedSymptomCodes.join(',') : undefined,
         philHealthOtherComplaint: isYakapEligible && otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
@@ -1535,6 +1731,7 @@ export default function ConsultationsScreen() {
         objective,
         assessment,
         plan,
+        homeInstructions: homeInstructions.trim() || undefined,
         isYakapEligible,
         philHealthSignSympCode: isYakapEligible ? selectedSymptomCodes.join(',') : undefined,
         philHealthOtherComplaint: isYakapEligible && otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
@@ -1598,8 +1795,12 @@ export default function ConsultationsScreen() {
 
     const followUpIssues: string[] = [];
 
-    // Auto-create Diagnostic Lab Requisitions if labs were ordered
-    if (orderedLabs.length > 0) {
+    // Partition orderedLabs into Outside Laboratory orders vs In-House Clinic tests
+    const outsideLabs = orderedLabs.filter((l) => l.fulfillmentMode === 'outside');
+    const inHouseLabs = orderedLabs.filter((l) => l.fulfillmentMode === 'in_house');
+
+    // Auto-create Diagnostic Lab Requisitions ONLY for outside labs
+    if (outsideLabs.length > 0) {
       const [, labErr] = await clinicService.createLabOrder({
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
@@ -1607,9 +1808,10 @@ export default function ConsultationsScreen() {
         orderedByDoctorId: doctor.id,
         orderedByDoctorName: doctor.name,
         clinicalDiagnosis: assessment,
-        items: orderedLabs.map((l) => ({
-          testName: l,
-          category: diagnosticCatalog.find((d) => d.name === l)?.category ?? 'Diagnostic',
+        items: outsideLabs.map((l) => ({
+          testName: l.name,
+          category: l.category || (diagnosticCatalog.find((d) => d.name === l.name)?.category ?? 'Diagnostic'),
+          instructions: l.instructions,
         })),
       });
       if (labErr) followUpIssues.push('laboratory requisition');
@@ -1661,6 +1863,24 @@ export default function ConsultationsScreen() {
           quantity: 1,
         });
       }
+    }
+    for (const inHouseLab of inHouseLabs) {
+      const matchedDiag = diagnosticCatalog.find((d) => d.name.toLowerCase() === inHouseLab.name.toLowerCase());
+      const philHealthCode = inHouseLab.philHealthCode || matchedDiag?.philHealthCode;
+      const isCoveredByYakap = Boolean(isYakapEligible && philHealthCode);
+      const unitPrice = isCoveredByYakap ? 0 : (inHouseLab.standardPrice ?? matchedDiag?.standardPrice ?? 0);
+      const description = isCoveredByYakap
+        ? `${inHouseLab.name} (PhilHealth Yakap - ₱0 Co-pay)`
+        : inHouseLab.name;
+
+      billItems.push({
+        serviceItemId: inHouseLab.serviceItemId || matchedDiag?.id,
+        itemCode: inHouseLab.code || matchedDiag?.code,
+        description,
+        category: inHouseLab.category || matchedDiag?.category || 'Diagnostic',
+        unitPrice,
+        quantity: 1,
+      });
     }
     if (billItems.length > 0) {
       const [, invoiceErr] = await clinicService.createInvoice({
@@ -2122,6 +2342,30 @@ export default function ConsultationsScreen() {
     }
   };
 
+  // Dedicated lightweight chart refresh that does not re-initialize encounter state or trigger skeleton states
+  const refreshPatientChart = useCallback(async (explicitPatientId?: string) => {
+    const patientId = explicitPatientId || selectedPatient?.patientId || patientRecord?.id;
+    if (!patientId) return;
+    const [chartData, chartErr] = await clinicService.getPatientChart(patientId);
+    if (!chartErr && chartData) {
+      setPatientChart(chartData);
+    }
+  }, [selectedPatient?.patientId, patientRecord?.id]);
+
+  // Specialized refresh for Diagnostics tab that reloads chart + lab orders without touching encounter SOAP
+  const refreshDiagnosticsTab = useCallback(async () => {
+    const patientId = selectedPatient?.patientId || patientRecord?.id;
+    if (!patientId) return;
+    const [chartRes, labRes] = await Promise.all([
+      clinicService.getPatientChart(patientId),
+      clinicService.getLabOrders(patientId),
+    ]);
+    const [chartData] = chartRes;
+    if (chartData) setPatientChart(chartData);
+    const [labData, labErr] = labRes;
+    if (!labErr && labData) setLabOrders(labData);
+  }, [selectedPatient?.patientId, patientRecord?.id]);
+
   const renderLongitudinalChartContent = () => (
     <View style={styles.longitudinalChartContainer}>
       <Card>
@@ -2172,7 +2416,7 @@ export default function ConsultationsScreen() {
           patient={patientRecord}
           chart={patientChart}
           onNavigateTab={(tab: any) => handleSelectChartTab(tab)}
-          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+          onRefreshChart={refreshPatientChart}
         />
       )}
       {activeChartTab === 'encounters' && (
@@ -2180,7 +2424,7 @@ export default function ConsultationsScreen() {
           patient={patientRecord}
           patientId={selectedPatient?.patientId}
           consultations={patientChart?.consultations || []}
-          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+          onRefreshChart={refreshPatientChart}
         />
       )}
       {activeChartTab === 'diagnostics' && (
@@ -2188,7 +2432,7 @@ export default function ConsultationsScreen() {
           patient={patientRecord}
           patientId={selectedPatient?.patientId}
           labOrders={labOrders}
-          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+          onRefreshChart={refreshDiagnosticsTab}
         />
       )}
       {activeChartTab === 'procedures' && (
@@ -2196,7 +2440,7 @@ export default function ConsultationsScreen() {
           patient={patientRecord}
           patientId={selectedPatient?.patientId}
           procedures={patientChart?.proceduresHistory || []}
-          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+          onRefreshChart={refreshPatientChart}
         />
       )}
       {activeChartTab === 'immunizations' && (
@@ -2218,7 +2462,7 @@ export default function ConsultationsScreen() {
             }
             notify.success('Vaccine administration recorded.');
             if (selectedPatient) {
-              await loadPatientContext(selectedPatient);
+              await refreshPatientChart();
             }
           }}
           onRecordHistoricalVaccine={async (payload) => {
@@ -2234,7 +2478,7 @@ export default function ConsultationsScreen() {
             }
             notify.success('Historical immunization added.');
             if (selectedPatient) {
-              await loadPatientContext(selectedPatient);
+              await refreshPatientChart();
             }
           }}
           onRecordAefi={async (immId, payload) => {
@@ -2250,10 +2494,10 @@ export default function ConsultationsScreen() {
             }
             notify.success('Adverse event (AEFI) recorded.');
             if (selectedPatient) {
-              await loadPatientContext(selectedPatient);
+              await refreshPatientChart();
             }
           }}
-          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+          onRefreshChart={refreshPatientChart}
         />
       )}
       {activeChartTab === 'profiles' && (
@@ -2263,7 +2507,7 @@ export default function ConsultationsScreen() {
           socialHistory={patientChart?.socialHistory}
           reproductiveHistory={patientChart?.reproductiveHistory}
           latestNcdAssessment={patientChart?.latestNcdAssessment}
-          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+          onRefreshChart={refreshPatientChart}
         />
       )}
       {activeChartTab === 'vault' && (
@@ -2274,7 +2518,7 @@ export default function ConsultationsScreen() {
           onUploadDocument={() => setUploadDocModalVisible(true)}
           onVerifyAttachment={handleVerifyAttachment}
           onDownloadAttachment={handleDownloadAttachment}
-          onRefreshChart={() => selectedPatient && loadPatientContext(selectedPatient)}
+          onRefreshChart={refreshPatientChart}
         />
       )}
     </View>
@@ -2477,6 +2721,53 @@ export default function ConsultationsScreen() {
               </View>
             )}
 
+            {/* Nurse Pre-Assessment & Triage Handoff Banner */}
+            {Boolean(vitals?.preAssessmentNotes || vitals?.preAssessmentRemarks || vitals?.triageAcuityReason) ? (
+              <Card style={styles.handoffBannerCard}>
+                <View style={styles.handoffBannerHeader}>
+                  <View style={styles.handoffTitleRow}>
+                    <Icon name="consultations" size={16} color={theme.colors.primary} />
+                    <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                      Nurse Pre-Assessment &amp; Triage Handoff
+                    </ThemedText>
+                  </View>
+                  {vitals?.triageAcuityReason ? (
+                    <Badge
+                      label={`Triage: ${vitals.triageAcuityReason}`}
+                      variant={
+                        vitals.triageAcuityReason === 'Emergency'
+                          ? 'emergency'
+                          : vitals.triageAcuityReason === 'Urgent'
+                          ? 'warning'
+                          : 'routine'
+                      }
+                      size="sm"
+                    />
+                  ) : null}
+                </View>
+                {vitals?.preAssessmentRemarks ? (
+                  <View style={styles.handoffRow}>
+                    <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                      Observations:
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.text} style={styles.flex}>
+                      {vitals.preAssessmentRemarks}
+                    </ThemedText>
+                  </View>
+                ) : null}
+                {vitals?.preAssessmentNotes ? (
+                  <View style={styles.handoffRow}>
+                    <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                      Triage Remarks:
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.text} style={styles.flex}>
+                      {vitals.preAssessmentNotes}
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </Card>
+            ) : null}
+
             {/* S - Subjective */}
             <View onLayout={(e) => { sectionOffsets.current['symptoms'] = e.nativeEvent.layout.y; }}>
               <Card>
@@ -2484,7 +2775,11 @@ export default function ConsultationsScreen() {
                   title="Subjective"
                   subtitle="Chief complaint and history of present illness"
                   rightAction={
-                    isYakapEligible ? <Badge label="PhilHealth complaint required" variant="info" /> : undefined
+                    isYakapEligible ? (
+                      <Badge label="PhilHealth complaint required" variant="info" />
+                    ) : (
+                      <Badge label="Internal Clinical Chart" variant="neutral" size="sm" />
+                    )
                   }
                 />
                 {isYakapEligible ? (
@@ -2682,6 +2977,21 @@ export default function ConsultationsScreen() {
                 title={`Laboratory orders (${orderedLabs.length})`}
                 icon="lab"
                 subtitle="Selected tests create a requisition for the laboratory when the encounter is signed"
+                rightAction={
+                  !isSigned ? (
+                    <Button
+                      title="+ Add test"
+                      icon="plus"
+                      variant="secondary"
+                      size="sm"
+                      onPress={() => {
+                        setOrderSearchInitialCategory('Diagnostic');
+                        setOrderSearchModalVisible(true);
+                      }}
+                      testID="consultation-add-lab-test-btn"
+                    />
+                  ) : null
+                }
               />
               {catalogLoading && diagnosticCatalog.length === 0 ? (
                 <SkeletonList rows={1} rowHeight={theme.sizes.controlMd} />
@@ -2697,13 +3007,70 @@ export default function ConsultationsScreen() {
                       tone="success"
                       label={`${diag.name} (₱${diag.standardPrice.toFixed(0)})`}
                       meta={isYakapEligible && diag.philHealthCode ? 'PhilHealth Covered' : undefined}
-                      selected={orderedLabs.includes(diag.name)}
+                      selected={orderedLabs.some((l) => l.name.toLowerCase() === diag.name.toLowerCase())}
                       disabled={isSigned}
                       onPress={() => handleToggleLab(diag.name)}
                     />
                   ))}
                 </View>
-              )}              {catalogError ? (
+              )}
+              {/* Selected Lab Orders List */}
+              {orderedLabs.length > 0 ? (
+                <View style={styles.orderedLabsList}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.orderedSectionTitle}>
+                    Selected Tests ({orderedLabs.length}):
+                  </ThemedText>
+                  {orderedLabs.map((lab) => {
+                    const isInHouse = lab.fulfillmentMode === 'in_house';
+                    const isYakapCopayFree = Boolean(isYakapEligible && lab.philHealthCode && isInHouse);
+                    return (
+                      <View key={lab.name} style={styles.orderedLabItem}>
+                        <View style={styles.orderedLabMainCol}>
+                          <View style={styles.orderedLabHeaderRow}>
+                            <ThemedText variant="bodyBold" color={theme.colors.text}>
+                              {lab.name}
+                            </ThemedText>
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Fulfillment mode: ${isInHouse ? 'In-House' : 'Outside Lab'}. Click to toggle.`}
+                              disabled={isSigned}
+                              onPress={() => handleToggleLabFulfillmentMode(lab.name)}
+                            >
+                              <Badge
+                                label={isInHouse ? 'In-House' : 'Outside Lab'}
+                                variant={isInHouse ? 'success' : 'info'}
+                                size="sm"
+                              />
+                            </Pressable>
+                            {isYakapCopayFree ? (
+                              <Badge label="PhilHealth ₱0 Co-pay" variant="success" size="sm" />
+                            ) : isInHouse && lab.standardPrice > 0 ? (
+                              <Badge label={`₱${lab.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                            ) : null}
+                          </View>
+                          {lab.instructions ? (
+                            <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.orderedLabNotes}>
+                              Notes: {lab.instructions}
+                            </ThemedText>
+                          ) : null}
+                        </View>
+                        {!isSigned ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${lab.name}`}
+                            onPress={() => handleRemoveLab(lab.name)}
+                            hitSlop={theme.spacing.sm}
+                            style={styles.orderedLabDeleteBtn}
+                          >
+                            <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+              {catalogError ? (
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
                   The clinic's tests could not be loaded: {catalogError}
                 </ThemedText>
@@ -2719,6 +3086,21 @@ export default function ConsultationsScreen() {
                 title={`In-clinic procedures (${orderedProcedures.length})`}
                 icon="medical"
                 subtitle="Orders go to the nurse station for immediate treatment"
+                rightAction={
+                  !isSigned ? (
+                    <Button
+                      title="+ Add procedure"
+                      icon="plus"
+                      variant="secondary"
+                      size="sm"
+                      onPress={() => {
+                        setOrderSearchInitialCategory('Procedure');
+                        setOrderSearchModalVisible(true);
+                      }}
+                      testID="consultation-add-procedure-btn"
+                    />
+                  ) : null
+                }
               />
               {catalogLoading && procedureCatalog.length === 0 ? (
                 <SkeletonList rows={1} rowHeight={theme.sizes.controlMd} />
@@ -2739,6 +3121,17 @@ export default function ConsultationsScreen() {
                       onPress={() => handleToggleProcedure(proc.name)}
                     />
                   ))}
+                  {orderedProcedures
+                    .filter((p) => !procedureCatalog.some((pc) => pc.name.toLowerCase() === p.toLowerCase()))
+                    .map((procName) => (
+                      <ToggleChip
+                        key={procName}
+                        label={procName}
+                        selected={true}
+                        disabled={isSigned}
+                        onPress={() => handleToggleProcedure(procName)}
+                      />
+                    ))}
                 </View>
               )}
               {orderedProcedures.length > 0 && !isSigned ? (
@@ -2774,7 +3167,11 @@ export default function ConsultationsScreen() {
 
             {/* P - Plan */}
             <Card>
-              <CardHeader title="Plan" subtitle="Treatment, lifestyle counseling and follow-up" />
+              <CardHeader
+                title="Plan (Internal)"
+                subtitle="Clinical treatment, diagnostic ordering rationale, and physician notes"
+                rightAction={<Badge label="Internal Clinical Chart" variant="neutral" size="sm" />}
+              />
               <Input
                 multiline
                 placeholder="Treatment plan, requested tests, dietary advice"
@@ -3057,6 +3454,63 @@ export default function ConsultationsScreen() {
                 </Card>
               ) : null}
             </Card>
+            </View>
+
+            {/* Patient-Facing Home Instructions */}
+            <View onLayout={(e) => { sectionOffsets.current['home-instructions'] = e.nativeEvent.layout.y; }}>
+              <Card style={styles.homeInstructionsCard}>
+                <CardHeader
+                  title="Home Instructions"
+                  subtitle="Patient-facing guidance, precautions, rest, and discharge instructions"
+                  icon="file"
+                  rightAction={<Badge label="Visible to Patient" variant="success" size="sm" />}
+                />
+                <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: theme.spacing.xs }}>
+                  These instructions will be displayed directly in the patient&apos;s portal/app and printed on their visit summary.
+                </ThemedText>
+
+                {/* Quick Instruction Presets */}
+                {!isSigned ? (
+                  <View style={styles.presetsSection}>
+                    <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
+                      Quick presets:
+                    </ThemedText>
+                    <View style={styles.chipsRow}>
+                      {[
+                        'Hydration & Rest (8+ glasses water daily)',
+                        'Low Salt & Low Fat Diet',
+                        'Warning Signs: Return immediately if fever > 38.5°C or acute chest pain occurs',
+                        'Strict Medication Compliance: Complete the full course as prescribed',
+                        'Wound Care: Keep area clean, dry, and change dressing daily',
+                      ].map((preset) => (
+                        <Pressable
+                          key={preset}
+                          onPress={() => {
+                            setHomeInstructions((prev) =>
+                              prev.trim() ? `${prev.trim()}\n• ${preset}` : `• ${preset}`
+                            );
+                          }}
+                          style={styles.presetChip}
+                        >
+                          <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                            + {preset.split(':')[0].split('(')[0].trim()}
+                          </ThemedText>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
+                <Input
+                  multiline
+                  placeholder="Specific instructions for home care, red flag warnings, activity limits, return schedule..."
+                  accessibilityLabel="Home Instructions"
+                  value={homeInstructions}
+                  onChangeText={setHomeInstructions}
+                  editable={!isSigned}
+                  inputStyle={styles.textArea}
+                />
+              </Card>
             </View>
 
             {/* Attending physician credentials (Feature 18) */}
@@ -3691,7 +4145,7 @@ export default function ConsultationsScreen() {
           onClose={() => setUploadDocModalVisible(false)}
           onAttachmentUploaded={async () => {
             if (selectedPatient) {
-              await loadPatientContext(selectedPatient);
+              await refreshPatientChart();
             }
           }}
         />
@@ -4150,12 +4604,62 @@ export default function ConsultationsScreen() {
             }}
           />
         )}
+
+        {/* Order Catalog Search Modal */}
+        <OrderCatalogSearchModal
+          visible={orderSearchModalVisible}
+          onClose={() => setOrderSearchModalVisible(false)}
+          catalog={activeCatalog}
+          initialCategory={orderSearchInitialCategory}
+          isYakapEligible={isYakapEligible}
+          onSelectOrder={handleSelectCatalogOrder}
+          alreadyOrderedNames={[...orderedLabs.map((l) => l.name), ...orderedProcedures]}
+          alreadyOrderedCodes={orderedLabs.map((l) => l.code).filter(Boolean) as string[]}
+        />
       </ScrollView>
     </ResponsiveLayout>
   );
 }
 
 const styles = StyleSheet.create({
+  orderedLabsList: {
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+    gap: theme.spacing.xs,
+  },
+  orderedSectionTitle: {
+    marginBottom: theme.spacing.xs,
+  },
+  orderedLabItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.sm,
+  },
+  orderedLabMainCol: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  orderedLabHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  orderedLabNotes: {
+    fontStyle: 'italic',
+  },
+  orderedLabDeleteBtn: {
+    padding: theme.spacing.xs,
+  },
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -4685,5 +5189,46 @@ const styles = StyleSheet.create({
   procedureHandoffRow: {
     marginTop: theme.spacing.sm,
     alignItems: 'flex-start',
+  },
+  handoffBannerCard: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+    borderWidth: theme.sizes.borderWidth,
+    borderLeftWidth: 4,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  handoffBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.xs,
+  },
+  handoffTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  handoffRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  homeInstructionsCard: {
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
+  },
+  presetsSection: {
+    marginVertical: theme.spacing.xs,
+  },
+  presetChip: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 5,
+    borderRadius: theme.radii.full,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
   },
 });

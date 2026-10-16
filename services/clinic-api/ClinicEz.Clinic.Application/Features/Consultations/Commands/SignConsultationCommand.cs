@@ -403,6 +403,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             encounter.Objective,
             encounter.Assessment,
             encounter.Plan,
+            encounter.HomeInstructions,
             encounter.DoctorPrcLicense,
             encounter.DoctorPtr,
             encounter.DoctorS2License,

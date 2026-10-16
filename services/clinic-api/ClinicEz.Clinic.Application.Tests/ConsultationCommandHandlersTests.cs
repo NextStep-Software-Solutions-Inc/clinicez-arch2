@@ -918,4 +918,113 @@ public class ConsultationCommandHandlersTests
         await act.Should().ThrowAsync<ConflictException>()
             .WithMessage("*already been signed and locked*");
     }
+
+    [Fact]
+    public async Task CreateConsultation_WithHomeInstructions_PersistsAndReturnsHomeInstructions()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var patientId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var consultationRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+
+        var handler = new CreateConsultationCommandHandler(consultationRepo, queueRepo, uow, clinicContext);
+
+        var command = new CreateConsultationCommand(
+            patientId,
+            "Juan Dela Cruz",
+            doctorId,
+            "Dr. Gomez",
+            null,
+            null,
+            "Fever and chills",
+            "Temp 38.5C",
+            "Viral Syndrome",
+            "Rest, Paracetamol PRN",
+            null,
+            null,
+            HomeInstructions: "Drink 2L water daily, cold sponge bath, return if fever persists > 3 days.");
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.HomeInstructions.Should().Be("Drink 2L water daily, cold sponge bath, return if fever persists > 3 days.");
+        result.Plan.Should().Be("Rest, Paracetamol PRN");
+
+        var persisted = await context.Consultations.FindAsync(result.Id);
+        persisted.Should().NotBeNull();
+        persisted!.HomeInstructions.Should().Be("Drink 2L water daily, cold sponge bath, return if fever persists > 3 days.");
+    }
+
+    [Fact]
+    public async Task UpdateConsultation_WithHomeInstructions_UpdatesAndReturnsHomeInstructions()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var encounterId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var consultationRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var diagnosisRepo = TestDbHelper.CreateRepository<EncounterDiagnosis>(context, sieve);
+        var prescriptionRepo = TestDbHelper.CreateRepository<PrescriptionItem>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var initialEncounter = new ConsultationEncounter
+        {
+            Id = encounterId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            PatientId = patientId,
+            PatientName = "Juan Dela Cruz",
+            DoctorId = doctorId,
+            DoctorName = "Dr. Gomez",
+            Subjective = "Initial subjective",
+            Plan = "Initial plan",
+            HomeInstructions = "Initial home instructions",
+            IsSigned = false
+        };
+        await context.Consultations.AddAsync(initialEncounter);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateConsultationCommandHandler(
+            consultationRepo, diagnosisRepo, prescriptionRepo, uow, clinicContext, staffRepo, settingsRepo);
+
+        var command = new UpdateConsultationCommand(
+            encounterId,
+            "Updated subjective",
+            "Updated objective",
+            "Updated assessment",
+            "Updated plan",
+            HomeInstructions: "Updated home instructions: strict medication compliance.");
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.HomeInstructions.Should().Be("Updated home instructions: strict medication compliance.");
+        result.Plan.Should().Be("Updated plan");
+
+        var persisted = await context.Consultations.FindAsync(encounterId);
+        persisted.Should().NotBeNull();
+        persisted!.HomeInstructions.Should().Be("Updated home instructions: strict medication compliance.");
+    }
 }

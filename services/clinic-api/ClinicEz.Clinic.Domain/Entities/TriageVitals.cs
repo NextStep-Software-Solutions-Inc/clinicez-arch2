@@ -38,6 +38,11 @@ public sealed class TriageVitals : BaseEntity
     public int? PainScore { get; set; } // 0-10
     public string? Notes { get; set; }
 
+    // Pre-Assessment & Nursing Triage Observations
+    public string? PreAssessmentNotes { get; set; }
+    public string? PreAssessmentRemarks { get; set; }
+    public string? TriageAcuityReason { get; set; }
+
     // Visual Acuity (Snellen format: "20/20", "20/40", "CF", etc.)
     public string? VisualAcuityLeft { get; set; }
     public string? VisualAcuityRight { get; set; }

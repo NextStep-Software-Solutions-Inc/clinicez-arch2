@@ -44,6 +44,7 @@ public sealed record CreateConsultationCommand(
     string? Plan = null,
     List<DiagnosisInput>? Diagnoses = null,
     List<PrescriptionInput>? Prescriptions = null,
+    string? HomeInstructions = null,
     bool IsYakapEligible = false,
     string? PhilHealthSignSympCode = null,
     string? PhilHealthOtherComplaint = null,
@@ -154,6 +155,7 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             encounter.Objective = request.Objective ?? string.Empty;
             encounter.Assessment = request.Assessment ?? string.Empty;
             encounter.Plan = request.Plan ?? string.Empty;
+            if (request.HomeInstructions != null) encounter.HomeInstructions = request.HomeInstructions;
             encounter.IsYakapEligible = request.IsYakapEligible;
             encounter.PhilHealthSignSympCode = request.PhilHealthSignSympCode;
             encounter.PhilHealthOtherComplaint = request.PhilHealthOtherComplaint;
@@ -232,6 +234,7 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
                 Objective = request.Objective ?? string.Empty,
                 Assessment = request.Assessment ?? string.Empty,
                 Plan = request.Plan ?? string.Empty,
+                HomeInstructions = request.HomeInstructions,
                 IsYakapEligible = request.IsYakapEligible,
                 PhilHealthSignSympCode = request.PhilHealthSignSympCode,
                 PhilHealthOtherComplaint = request.PhilHealthOtherComplaint,
@@ -355,6 +358,7 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             encounter.Objective,
             encounter.Assessment,
             encounter.Plan,
+            encounter.HomeInstructions,
             encounter.DoctorPrcLicense,
             encounter.DoctorPtr,
             encounter.DoctorS2License,

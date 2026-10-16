@@ -24,11 +24,14 @@ public sealed class ConsultationEncounter : BaseEntity
 
     public DateTime EncounterDate { get; set; } = DateTime.UtcNow;
 
-    // Structured SOAP Documentation
+    // Structured SOAP Documentation (Confidential / Clinician Only)
     public string Subjective { get; set; } = string.Empty;
     public string Objective { get; set; } = string.Empty;
     public string Assessment { get; set; } = string.Empty;
     public string Plan { get; set; } = string.Empty;
+
+    // Patient-Facing Home & Discharge Instructions (Exposed to patient portal and discharge slips)
+    public string? HomeInstructions { get; set; }
 
     // Physician credential snapshot at encounter signing
     public string? DoctorPrcLicense { get; set; }

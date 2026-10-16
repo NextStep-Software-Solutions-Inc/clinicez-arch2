@@ -173,6 +173,8 @@ export async function seedDemoHealthRecords(patientId: string, clerkUserId: stri
                 'S: Headache in late afternoons, no chest pain. O: BP 148/94, HR 82, no focal deficits. A: Stage 1 hypertension. P: Start amlodipine and lifestyle changes.',
             treatmentPlan:
                 'Initiate amlodipine 5 mg once daily, sodium reduction, 150 minutes/week moderate activity.',
+            homeInstructions:
+                'Hydration & rest, low-salt diet, take amlodipine 5mg once daily every morning, bring blood pressure log on next visit.',
             followUpInstructions: 'Bring 2-week blood pressure log and return for medication review.',
             followUpDate: toDate(d14),
             referralIssued: 'No',
@@ -195,6 +197,8 @@ export async function seedDemoHealthRecords(patientId: string, clerkUserId: stri
                 'S: Fewer headaches, compliant with meds. O: BP 134/86, fasting glucose mildly elevated. A: Improved BP trend. P: Continue current regimen and monitor.',
             treatmentPlan:
                 'Continue amlodipine, reinforce DASH-style diet, monitor fasting blood sugar with repeat lab in 3 months.',
+            homeInstructions:
+                'Continue DASH diet, maintain daily physical exercise, and return in 1 month or earlier if BP > 140/90.',
             followUpInstructions: 'Return in 1 month or earlier for persistent BP > 140/90.',
             followUpDate: toDate(d3),
             referralIssued: 'No',

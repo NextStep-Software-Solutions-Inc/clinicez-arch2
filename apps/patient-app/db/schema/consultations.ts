@@ -22,6 +22,7 @@ export const consultations = sqliteTable('consultations', {
   secondaryDiagnoses: text('secondary_diagnoses'),
   soapNotes: text('soap_notes'),
   treatmentPlan: text('treatment_plan'),
+  homeInstructions: text('home_instructions'),
   followUpInstructions: text('follow_up_instructions'),
   followUpDate: text('follow_up_date'), // YYYY-MM-DD
   referralIssued: text('referral_issued'),

@@ -35,7 +35,10 @@ public sealed record RecordTriageVitalsCommand(
     decimal? ZScoreLengthForAge = null,
     decimal? ZScoreWeightForLength = null,
     string? PhilHealthZScoreCategory = null,
-    string? PhilHealthZScoreCode = null) : IRequest<TriageVitalsDto>;
+    string? PhilHealthZScoreCode = null,
+    string? PreAssessmentNotes = null,
+    string? PreAssessmentRemarks = null,
+    string? TriageAcuityReason = null) : IRequest<TriageVitalsDto>;
 
 public sealed class RecordTriageVitalsCommandValidator : AbstractValidator<RecordTriageVitalsCommand>
 {
@@ -160,6 +163,9 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
                 ZScoreWeightForLength = zWeightForLength,
                 PhilHealthZScoreCategory = zCategory,
                 PhilHealthZScoreCode = zCode,
+                PreAssessmentNotes = request.PreAssessmentNotes?.Trim(),
+                PreAssessmentRemarks = request.PreAssessmentRemarks?.Trim(),
+                TriageAcuityReason = request.TriageAcuityReason?.Trim(),
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = _clinicContext.StaffId?.ToString() ?? "Nurse"
             };
@@ -192,6 +198,9 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             vitals.ZScoreWeightForLength = zWeightForLength ?? vitals.ZScoreWeightForLength;
             vitals.PhilHealthZScoreCategory = zCategory ?? vitals.PhilHealthZScoreCategory;
             vitals.PhilHealthZScoreCode = zCode ?? vitals.PhilHealthZScoreCode;
+            vitals.PreAssessmentNotes = request.PreAssessmentNotes?.Trim() ?? vitals.PreAssessmentNotes;
+            vitals.PreAssessmentRemarks = request.PreAssessmentRemarks?.Trim() ?? vitals.PreAssessmentRemarks;
+            vitals.TriageAcuityReason = request.TriageAcuityReason?.Trim() ?? vitals.TriageAcuityReason;
             vitals.UpdatedAt = DateTime.UtcNow;
             vitals.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Nurse";
 
@@ -237,6 +246,9 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             vitals.ZScoreLengthForAge,
             vitals.ZScoreWeightForLength,
             vitals.PhilHealthZScoreCategory,
-            vitals.PhilHealthZScoreCode);
+            vitals.PhilHealthZScoreCode,
+            vitals.PreAssessmentNotes,
+            vitals.PreAssessmentRemarks,
+            vitals.TriageAcuityReason);
     }
 }

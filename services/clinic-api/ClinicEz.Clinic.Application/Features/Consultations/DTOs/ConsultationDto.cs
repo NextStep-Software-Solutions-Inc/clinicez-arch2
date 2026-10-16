@@ -39,6 +39,7 @@ public sealed record ConsultationEncounterDto(
     string Objective,
     string Assessment,
     string Plan,
+    string? HomeInstructions,
     string? DoctorPrcLicense,
     string? DoctorPtr,
     string? DoctorS2License,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Linking } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Linking, Pressable } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
   ThemedText,
@@ -135,6 +135,8 @@ interface TriageForm {
   posture: MeasurementPosture;
   notes: string;
   priority: QueuePriority;
+  preAssessmentNotes: string;
+  preAssessmentRemarks: string;
 }
 
 const EMPTY_TRIAGE: TriageForm = {
@@ -154,6 +156,8 @@ const EMPTY_TRIAGE: TriageForm = {
   posture: 'STANDING',
   notes: '',
   priority: 'Routine',
+  preAssessmentNotes: '',
+  preAssessmentRemarks: '',
 };
 
 function DataRow({ label, value, emphasize }: { label: string; value: string | number; emphasize?: boolean }) {
@@ -564,6 +568,9 @@ export default function DashboardScreen() {
       zScoreWeightForLength: zScorePreview?.weightForHeightZScore,
       philHealthZScoreCategory: zScorePreview?.philHealthZScoreCategory,
       philHealthZScoreCode: zScorePreview?.philHealthZScoreCode,
+      preAssessmentNotes: triage.preAssessmentNotes.trim() || undefined,
+      preAssessmentRemarks: triage.preAssessmentRemarks.trim() || undefined,
+      triageAcuityReason: triage.priority,
     };
 
     setSavingTriage(true);
@@ -1560,9 +1567,17 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* Nursing Pre-Assessment & Acuity */}
+        <View style={styles.triageSectionHeader}>
+          <Icon name="consultations" size={16} color={theme.colors.primary} />
+          <ThemedText variant="smallBold" color={theme.colors.text}>
+            Nursing Pre-Assessment & Acuity
+          </ThemedText>
+        </View>
+
         <View style={styles.prioritySection}>
-          <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
-            Triage priority
+          <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
+            Triage Priority
           </ThemedText>
           <SegmentedControl<QueuePriority>
             value={triage.priority}
@@ -1571,12 +1586,84 @@ export default function DashboardScreen() {
           />
         </View>
 
+        {/* Clinical Observation Quick Chips */}
+        <View style={styles.chipsSection}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
+            Pre-assessment Observations (tap to add to remarks)
+          </ThemedText>
+          <View style={styles.chipsRow}>
+            {[
+              'Alert & Oriented',
+              'Mild Distress',
+              'Acute Dyspnea',
+              'Severe Pain',
+              'Wheelchair Bound',
+              'Fall Risk',
+              'Ambulatory with Assist',
+            ].map((chip) => {
+              const isActive = triage.preAssessmentRemarks.includes(chip);
+              return (
+                <Pressable
+                  key={chip}
+                  onPress={() => {
+                    if (isActive) {
+                      const updated = triage.preAssessmentRemarks
+                        .split(' • ')
+                        .filter((c) => c.trim() !== chip)
+                        .join(' • ');
+                      setTriageField('preAssessmentRemarks', updated);
+                    } else {
+                      const updated = triage.preAssessmentRemarks.trim()
+                        ? `${triage.preAssessmentRemarks.trim()} • ${chip}`
+                        : chip;
+                      setTriageField('preAssessmentRemarks', updated);
+                    }
+                  }}
+                  style={[styles.observationChip, isActive && styles.observationChipActive]}
+                >
+                  <View style={styles.chipContent}>
+                    {isActive ? (
+                      <Icon name="check" size={12} color={theme.colors.primaryDark} />
+                    ) : (
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        +
+                      </ThemedText>
+                    )}
+                    <ThemedText
+                      variant="caption"
+                      color={isActive ? theme.colors.primaryDark : theme.colors.textSecondary}
+                    >
+                      {chip}
+                    </ThemedText>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <Input
+          label="Pre-assessment remarks (optional)"
+          placeholder="Nurse initial observations, mobility, patient status..."
+          value={triage.preAssessmentRemarks}
+          onChangeText={(text) => setTriageField('preAssessmentRemarks', text)}
+        />
+
+        <Input
+          label="Pre-assessment notes (optional)"
+          placeholder="Detailed clinical triage notes for physician handoff..."
+          value={triage.preAssessmentNotes}
+          onChangeText={(text) => setTriageField('preAssessmentNotes', text)}
+          multiline
+          numberOfLines={2}
+        />
+
         <Input
           label="Chief complaint / notes"
           value={triage.notes}
           onChangeText={(text) => setTriageField('notes', text)}
           multiline
-          numberOfLines={3}
+          numberOfLines={2}
         />
       </Modal>
 
@@ -1823,7 +1910,33 @@ const styles = StyleSheet.create({
   },
   prioritySection: {
     gap: theme.spacing.sm,
-    marginVertical: theme.spacing.lg,
+    marginVertical: theme.spacing.md,
+  },
+  chipsSection: {
+    marginVertical: theme.spacing.xs,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  observationChip: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+    borderRadius: theme.radii.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  observationChipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  chipContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   preview: {
     gap: theme.spacing.sm,

@@ -48,6 +48,9 @@ interface VitalsFormState {
   visualAcuityRight: string;
   notes: string;
   posture: MeasurementPosture;
+  preAssessmentNotes: string;
+  preAssessmentRemarks: string;
+  triagePriority: 'Routine' | 'Urgent' | 'Emergency';
 }
 
 const EMPTY_VITALS_FORM: VitalsFormState = {
@@ -66,6 +69,9 @@ const EMPTY_VITALS_FORM: VitalsFormState = {
   visualAcuityRight: '',
   notes: '',
   posture: 'STANDING',
+  preAssessmentNotes: '',
+  preAssessmentRemarks: '',
+  triagePriority: 'Routine',
 };
 
 const parseOptionalInt = (val: string): number | undefined => {
@@ -116,6 +122,9 @@ export default function RecordVitalsModal({
           visualAcuityRight: existingVitals.visualAcuityRight || '',
           notes: existingVitals.notes || '',
           posture: existingVitals.isMeasuredRecumbent ? 'RECUMBENT' : 'STANDING',
+          preAssessmentNotes: existingVitals.preAssessmentNotes || '',
+          preAssessmentRemarks: existingVitals.preAssessmentRemarks || '',
+          triagePriority: (existingVitals.triageAcuityReason as any) || 'Routine',
         });
       } else {
         setForm(EMPTY_VITALS_FORM);
@@ -239,6 +248,9 @@ export default function RecordVitalsModal({
       zScoreWeightForLength: zScorePreview?.weightForHeightZScore,
       philHealthZScoreCategory: zScorePreview?.philHealthZScoreCategory,
       philHealthZScoreCode: zScorePreview?.philHealthZScoreCode,
+      preAssessmentNotes: form.preAssessmentNotes.trim() || undefined,
+      preAssessmentRemarks: form.preAssessmentRemarks.trim() || undefined,
+      triageAcuityReason: form.triagePriority,
     };
 
     setSaving(true);
@@ -466,6 +478,99 @@ export default function RecordVitalsModal({
             numberOfLines={2}
           />
         </View>
+
+        {/* Section 4: Nursing Pre-Assessment & Acuity */}
+        <View style={styles.sectionHeader}>
+          <Icon name="consultations" size={16} color={theme.colors.primary} />
+          <ThemedText variant="smallBold" color={theme.colors.text}>
+            Nursing Pre-Assessment &amp; Acuity
+          </ThemedText>
+        </View>
+
+        <View style={styles.prioritySection}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
+            Triage Acuity Priority
+          </ThemedText>
+          <SegmentedControl<'Routine' | 'Urgent' | 'Emergency'>
+            value={form.triagePriority}
+            onChange={(val) => updateField('triagePriority', val)}
+            options={[
+              { value: 'Routine', label: 'Routine' },
+              { value: 'Urgent', label: 'Urgent' },
+              { value: 'Emergency', label: 'STAT / Emergency' },
+            ]}
+          />
+        </View>
+
+        {/* Clinical Observation Quick Chips */}
+        <View style={styles.chipsSection}>
+          <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginBottom: 4 }}>
+            Pre-assessment Observations (tap to add to remarks)
+          </ThemedText>
+          <View style={styles.chipsRow}>
+            {[
+              'Alert & Oriented',
+              'Mild Distress',
+              'Acute Dyspnea',
+              'Severe Pain',
+              'Wheelchair Bound',
+              'Fall Risk',
+              'Ambulatory with Assist',
+            ].map((chip) => {
+              const isActive = form.preAssessmentRemarks.includes(chip);
+              return (
+                <Pressable
+                  key={chip}
+                  onPress={() => {
+                    if (isActive) {
+                      const updated = form.preAssessmentRemarks
+                        .split(' • ')
+                        .filter((c) => c.trim() !== chip)
+                        .join(' • ');
+                      updateField('preAssessmentRemarks', updated);
+                    } else {
+                      const updated = form.preAssessmentRemarks.trim()
+                        ? `${form.preAssessmentRemarks.trim()} • ${chip}`
+                        : chip;
+                      updateField('preAssessmentRemarks', updated);
+                    }
+                  }}
+                  style={[
+                    styles.observationChip,
+                    isActive && styles.observationChipActive,
+                  ]}
+                >
+                  <View style={styles.chipContent}>
+                    {isActive ? (
+                      <Icon name="check" size={12} color={theme.colors.primaryDark} />
+                    ) : (
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        +
+                      </ThemedText>
+                    )}
+                    <ThemedText
+                      variant="caption"
+                      color={isActive ? theme.colors.primaryDark : theme.colors.textSecondary}
+                    >
+                      {chip}
+                    </ThemedText>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={{ marginTop: theme.spacing.xs }}>
+          <Input
+            label="Pre-assessment notes &amp; remarks (optional)"
+            placeholder="e.g. Patient presents in mild respiratory distress, alert and oriented. Ambulatory with assist. Denies chest pain..."
+            value={form.preAssessmentNotes}
+            onChangeText={(txt) => updateField('preAssessmentNotes', txt)}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
       </ScrollView>
     </Modal>
   );
@@ -496,5 +601,35 @@ const styles = StyleSheet.create({
   postureContainer: {
     marginTop: theme.spacing.xs,
     marginBottom: theme.spacing.xs,
+  },
+  prioritySection: {
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+  },
+  chipsSection: {
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  observationChip: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 5,
+    borderRadius: theme.radii.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  observationChipActive: {
+    borderColor: theme.colors.primaryBorder,
+    backgroundColor: theme.colors.primaryLighter,
+  },
+  chipContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
 });

@@ -20,8 +20,9 @@ public sealed record UpdateConsultationCommand(
     string? Objective,
     string? Assessment,
     string? Plan,
-    List<DiagnosisInput>? Diagnoses,
-    List<PrescriptionInput>? Prescriptions,
+    List<DiagnosisInput>? Diagnoses = null,
+    List<PrescriptionInput>? Prescriptions = null,
+    string? HomeInstructions = null,
     bool? IsYakapEligible = null,
     string? PhilHealthSignSympCode = null,
     string? PhilHealthOtherComplaint = null,
@@ -95,6 +96,7 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
         if (request.Objective != null) encounter.Objective = request.Objective;
         if (request.Assessment != null) encounter.Assessment = request.Assessment;
         if (request.Plan != null) encounter.Plan = request.Plan;
+        if (request.HomeInstructions != null) encounter.HomeInstructions = request.HomeInstructions;
         if (request.IsYakapEligible.HasValue) encounter.IsYakapEligible = request.IsYakapEligible.Value;
         if (request.PhilHealthSignSympCode != null) encounter.PhilHealthSignSympCode = request.PhilHealthSignSympCode;
         if (request.PhilHealthOtherComplaint != null) encounter.PhilHealthOtherComplaint = request.PhilHealthOtherComplaint;
@@ -233,6 +235,7 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
             encounter.Objective,
             encounter.Assessment,
             encounter.Plan,
+            encounter.HomeInstructions,
             encounter.DoctorPrcLicense,
             encounter.DoctorPtr,
             encounter.DoctorS2License,
