@@ -73,6 +73,7 @@ public sealed class SystemSettingsService(
         ("Licensing:RenewBeforeDays", "7", "Licensing", "Threshold window in days to automatically renew licenses on heartbeat."),
         ("Billing:TrialDays", "14", "Billing", "Default workspace trial period in days upon registration."),
         ("Billing:DefaultPlanSlug", "starter", "Billing", "Default subscription plan tier assigned to new workspaces."),
+        ("Billing:DefaultBillingCadence", "monthly", "Billing", "Default billing cadence selected on pricing and subscription pages (monthly or annually)."),
         ("Billing:BankAccountsJson", DefaultBankAccountsJson, "Billing", "JSON array of settlement bank and e-wallet accounts displayed to tenants for offline transfers."),
         ("Billing:BirTaxExempt", "false", "Billing", "When true, platform subscription billing and official receipts are treated as BIR VAT-Exempt (0% VAT)."),
         ("Billing:BirTaxPercentage", "12", "Billing", "BIR Value Added Tax (VAT) percentage applied to vatable subscription invoices and receipts (e.g., 12 for 12%)."),
@@ -177,6 +178,7 @@ public sealed class SystemSettingsService(
             "Unit 1402, BGC Corporate Center, 11th Avenue, Bonifacio Global City, Taguig City, Metro Manila, Philippines 1634",
             ct);
         var supportEmail = await GetSettingValueAsync("Billing:SupportEmail", "billing@clinicez.ph", ct);
+        var defaultBillingCadence = await GetSettingValueAsync("Billing:DefaultBillingCadence", "monthly", ct);
 
         return new BillingPaymentConfigDto(
             BankAccounts: accounts,
@@ -185,7 +187,8 @@ public sealed class SystemSettingsService(
             CorporateName: corporateName,
             CorporateTin: corporateTin,
             CorporateAddress: corporateAddress,
-            BillingSupportEmail: supportEmail
+            BillingSupportEmail: supportEmail,
+            DefaultBillingCadence: defaultBillingCadence
         );
     }
 
@@ -274,6 +277,14 @@ public sealed class SystemSettingsService(
                 if (!decimal.TryParse(val, NumberStyles.Number, CultureInfo.InvariantCulture, out var pct) || pct < 0m || pct > 100m)
                 {
                     throw new ArgumentException("Billing:BirTaxPercentage must be a valid percentage between 0 and 100.");
+                }
+            }
+            else if (string.Equals(key, "Billing:DefaultBillingCadence", StringComparison.OrdinalIgnoreCase))
+            {
+                var cadence = val.Trim().ToLowerInvariant();
+                if (cadence != "monthly" && cadence != "annually")
+                {
+                    throw new ArgumentException("Billing:DefaultBillingCadence must be either 'monthly' or 'annually'.");
                 }
             }
         }

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   IconAdjustments,
   IconCheck,
@@ -594,12 +595,105 @@ export default function PlatformSettingsPage() {
               <CardHeader>
                 <CardTitle className="text-base font-bold">Subscription Trial & Plan Defaults</CardTitle>
                 <CardDescription>
-                  Configures default trial lengths and initial subscription plan assignments for new workspaces.
+                  Configures default trial lengths, initial subscription plan assignments, and default pricing display terms.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 {renderField("Billing:TrialDays", "Default Trial Duration (Days)", "Number of trial days granted to newly created workspace accounts.", "number")}
                 {renderField("Billing:DefaultPlanSlug", "Default Subscription Plan Slug", "Initial plan tier assigned upon tenant registration (e.g. starter, professional).")}
+
+                {/* Default Billing Cadence Selector */}
+                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      Default Billing Cadence (Pricing & Subscriptions)
+                    </Label>
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      Public /pricing & In-app Billing
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Determines the default payment term displayed to prospective clinics on the public pricing page and in-app workspace subscription plans. Visitors and administrators can still toggle terms freely at any time.
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                    {/* Monthly Option */}
+                    <button
+                      type="button"
+                      onClick={() => handleChange("Billing:DefaultBillingCadence", "monthly")}
+                      className={cn(
+                        "relative flex flex-col text-left p-4 rounded-xl border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                        (formData["Billing:DefaultBillingCadence"] || "monthly").toLowerCase() !== "annually"
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+                              (formData["Billing:DefaultBillingCadence"] || "monthly").toLowerCase() !== "annually"
+                                ? "border-primary bg-primary text-white"
+                                : "border-slate-300 dark:border-slate-700 bg-transparent"
+                            )}
+                          >
+                            {(formData["Billing:DefaultBillingCadence"] || "monthly").toLowerCase() !== "annually" && (
+                              <IconCheck className="h-2.5 w-2.5 stroke-[3]" />
+                            )}
+                          </div>
+                          <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                            Monthly Cadence
+                          </span>
+                        </div>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          Recommended
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-normal pl-6">
+                        Presents accessible monthly rates upfront (e.g. ₱2,940/mo). Minimizes initial cost friction to maximize clinic registration and free trial starts.
+                      </p>
+                    </button>
+
+                    {/* Annual Option */}
+                    <button
+                      type="button"
+                      onClick={() => handleChange("Billing:DefaultBillingCadence", "annually")}
+                      className={cn(
+                        "relative flex flex-col text-left p-4 rounded-xl border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                        (formData["Billing:DefaultBillingCadence"] || "monthly").toLowerCase() === "annually"
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+                              (formData["Billing:DefaultBillingCadence"] || "monthly").toLowerCase() === "annually"
+                                ? "border-primary bg-primary text-white"
+                                : "border-slate-300 dark:border-slate-700 bg-transparent"
+                            )}
+                          >
+                            {(formData["Billing:DefaultBillingCadence"] || "monthly").toLowerCase() === "annually" && (
+                              <IconCheck className="h-2.5 w-2.5 stroke-[3]" />
+                            )}
+                          </div>
+                          <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                            Annual Cadence
+                          </span>
+                        </div>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">
+                          Upfront Commitment
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-normal pl-6">
+                        Presents discounted annual rates upfront with maximum savings badges (e.g. Save 20%). Optimizes for upfront cash flow and long-term commitments.
+                      </p>
+                    </button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>

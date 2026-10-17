@@ -11,6 +11,9 @@ public sealed class BillingOptions
     /// <summary>Slug of the plan a new workspace's trial starts on. When empty or unknown the lowest-ranked plan is used.</summary>
     public string? DefaultPlanSlug { get; set; }
 
+    /// <summary>Default billing cadence selected on public pricing and subscription pages ("monthly" or "annually").</summary>
+    public string DefaultBillingCadence { get; set; } = "monthly";
+
     public int TrialDays { get; set; } = 14;
 
     public List<PlanSeedOptions> Plans { get; set; } = [];

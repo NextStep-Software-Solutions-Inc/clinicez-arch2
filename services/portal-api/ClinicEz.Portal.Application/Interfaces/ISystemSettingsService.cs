@@ -33,7 +33,8 @@ public record BillingPaymentConfigDto(
     string CorporateName,
     string CorporateTin,
     string CorporateAddress,
-    string BillingSupportEmail
+    string BillingSupportEmail,
+    string DefaultBillingCadence = "monthly"
 );
 
 public interface ISystemSettingsService

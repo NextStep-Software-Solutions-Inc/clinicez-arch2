@@ -1,5 +1,5 @@
 import useSWR from "swr"
-import { billingService, BillingPlan, BillingInfo } from "@/services/billing.service"
+import { billingService, BillingPlan, BillingInfo, BillingPaymentConfig } from "@/services/billing.service"
 
 export function usePlans() {
   const { data, error, isLoading, mutate } = useSWR<BillingPlan[]>(
@@ -9,6 +9,20 @@ export function usePlans() {
   )
   return {
     plans: data || [],
+    isLoading,
+    isError: error,
+    mutate
+  }
+}
+
+export function usePaymentConfig() {
+  const { data, error, isLoading, mutate } = useSWR<BillingPaymentConfig>(
+    "/billing/payment-config",
+    () => billingService.getPaymentConfig(),
+    { revalidateOnFocus: false, dedupingInterval: 10000 }
+  )
+  return {
+    paymentConfig: data,
     isLoading,
     isError: error,
     mutate

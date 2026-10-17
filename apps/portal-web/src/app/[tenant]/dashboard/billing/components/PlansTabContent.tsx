@@ -11,7 +11,7 @@ import {
   AlertTriangle
 } from "lucide-react"
 import { toast } from "sonner"
-import { useBillingInfo, usePlans } from "@/hooks/useBilling"
+import { useBillingInfo, usePlans, usePaymentConfig } from "@/hooks/useBilling"
 import { billingService } from "@/services/billing.service"
 import PricingPlansSection from "./PricingPlansSection"
 import CancelPlanDialog from "./CancelPlanDialog"
@@ -26,11 +26,20 @@ interface PlansTabContentProps {
 export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
   const { billingInfo, mutate, isLoading: isBillingLoading } = useBillingInfo(tenantId)
   const { plans: tiers, isLoading: isPlansLoading } = usePlans()
+  const { paymentConfig } = usePaymentConfig()
 
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const [isPortalLoading, setIsPortalLoading] = useState(false)
   const [isCancelLoading, setIsCancelLoading] = useState(false)
   const [isAnnual, setIsAnnual] = useState(false)
+  const [userToggled, setUserToggled] = useState(false)
+
+  // Hydrate initial billing cadence from platform settings if not manually toggled
+  useEffect(() => {
+    if (!userToggled && paymentConfig?.defaultBillingCadence) {
+      setIsAnnual(paymentConfig.defaultBillingCadence.toLowerCase() === "annually")
+    }
+  }, [paymentConfig?.defaultBillingCadence, userToggled])
 
   // Dialog states
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
@@ -242,7 +251,10 @@ export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
       <PricingPlansSection
         tiers={tiers}
         isAnnual={isAnnual}
-        setIsAnnual={setIsAnnual}
+        setIsAnnual={(val) => {
+          setUserToggled(true)
+          setIsAnnual(val)
+        }}
         isSubscribed={isSubscribed}
         isSubscribedAnnual={isSubscribedAnnual}
         billingInfo={billingInfo || null}

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
-import { usePlans } from "@/hooks/useBilling";
+import { usePlans, usePaymentConfig } from "@/hooks/useBilling";
 import { salesContactHref } from "@/config/site";
 import { BillingPlan } from "@/services/billing.service";
 
@@ -84,10 +84,18 @@ export function PricingClient({
   onAction?: (tierName: string) => void;
   loadingTier?: string | null;
 } = {}) {
-  // Default to monthly so subscribers perceive lower barrier to entry
+  const { paymentConfig } = usePaymentConfig();
   const [isAnnual, setIsAnnual] = useState(false);
+  const [userToggled, setUserToggled] = useState(false);
   const { isSignedIn } = useUser();
   const { plans: tiers, isLoading: isLoadingPlans } = usePlans();
+
+  // Hydrate initial billing cadence from platform settings if not manually toggled by user
+  useEffect(() => {
+    if (!userToggled && paymentConfig?.defaultBillingCadence) {
+      setIsAnnual(paymentConfig.defaultBillingCadence.toLowerCase() === "annually");
+    }
+  }, [paymentConfig?.defaultBillingCadence, userToggled]);
 
   // Compute highest discount dynamically across all available tiers
   const maxDiscount = useMemo(() => {
@@ -173,7 +181,10 @@ export function PricingClient({
             </span>
             <button
               type="button"
-              onClick={() => setIsAnnual(!isAnnual)}
+              onClick={() => {
+                setUserToggled(true);
+                setIsAnnual(!isAnnual);
+              }}
               className="relative inline-flex h-8 w-16 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary/20 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
               aria-label="Toggle annual or monthly billing"
             >

@@ -92,6 +92,7 @@ export interface BillingPaymentConfig {
   corporateTin: string
   corporateAddress: string
   billingSupportEmail: string
+  defaultBillingCadence?: "monthly" | "annually" | string
 }
 
 export interface BillingInfo {
