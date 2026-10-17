@@ -48,6 +48,35 @@ public class SystemSettingsTests
         Assert.Contains(settings, s => s.Key == "JoinClaim:TtlHours" && s.Value == "48");
         Assert.Contains(settings, s => s.Key == "PatientApp:AppleAppStoreUrl" && s.Value.Contains("apple.com"));
         Assert.Contains(settings, s => s.Key == "PatientApp:GooglePlayStoreUrl" && s.Value.Contains("play.google.com"));
+        Assert.Contains(settings, s => s.Key == "Contact:HeadquartersAddress" && s.Value.Contains("Cagayan de Oro"));
+        Assert.Contains(settings, s => s.Key == "Contact:SupportEmail" && s.Value == "support@clinicez.com");
+        Assert.Contains(settings, s => s.Key == "Contact:SalesEmail" && s.Value == "sales@clinicez.com");
+        Assert.Contains(settings, s => s.Key == "Contact:PhoneNumber" && s.Value == "+63 (965) 429-7640");
+        Assert.Contains(settings, s => s.Key == "Contact:OperatingHours" && s.Value.Contains("Mon - Fri"));
+    }
+
+    [Fact]
+    public async Task GetContactPlatformConfigAsync_ReturnsDefaultsAndReflectsUpdates()
+    {
+        using var db = CreateDbContext();
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new SystemSettingsService(db, cache, NullLogger<SystemSettingsService>.Instance);
+
+        var defaultConfig = await service.GetContactPlatformConfigAsync();
+        Assert.Equal("support@clinicez.com", defaultConfig.SupportEmail);
+        Assert.Equal("sales@clinicez.com", defaultConfig.SalesEmail);
+        Assert.Equal("+63 (965) 429-7640", defaultConfig.PhoneNumber);
+        Assert.Contains("Lapasan, Cagayan de Oro City", defaultConfig.HeadquartersAddress);
+
+        await service.UpdateSettingsAsync(new Dictionary<string, string>
+        {
+            ["Contact:SupportEmail"] = "help@clinicez.ph",
+            ["Contact:PhoneNumber"] = "+63 2 8123 4567"
+        }, "AdminUser");
+
+        var updatedConfig = await service.GetContactPlatformConfigAsync();
+        Assert.Equal("help@clinicez.ph", updatedConfig.SupportEmail);
+        Assert.Equal("+63 2 8123 4567", updatedConfig.PhoneNumber);
     }
 
     [Fact]

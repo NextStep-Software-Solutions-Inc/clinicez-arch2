@@ -37,6 +37,14 @@ public record BillingPaymentConfigDto(
     string DefaultBillingCadence = "monthly"
 );
 
+public record ContactPlatformConfigDto(
+    string HeadquartersAddress,
+    string SupportEmail,
+    string SalesEmail,
+    string PhoneNumber,
+    string OperatingHours
+);
+
 public interface ISystemSettingsService
 {
     Task<IReadOnlyList<SystemSettingDto>> GetAllSettingsAsync(CancellationToken ct = default);
@@ -46,5 +54,7 @@ public interface ISystemSettingsService
     Task<bool> GetSettingBoolAsync(string key, bool defaultValue, CancellationToken ct = default);
     Task<decimal> GetSettingDecimalAsync(string key, decimal defaultValue, CancellationToken ct = default);
     Task<BillingPaymentConfigDto> GetBillingPaymentConfigAsync(CancellationToken ct = default);
+    Task<ContactPlatformConfigDto> GetContactPlatformConfigAsync(CancellationToken ct = default);
     Task UpdateSettingsAsync(IDictionary<string, string> settings, string updatedBy, CancellationToken ct = default);
 }
+

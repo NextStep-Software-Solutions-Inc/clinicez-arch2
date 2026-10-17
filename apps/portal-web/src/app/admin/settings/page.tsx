@@ -23,6 +23,7 @@ import {
   IconTrash,
   IconReceiptTax,
   IconLock,
+  IconPhone,
 } from "@tabler/icons-react";
 
 const DEFAULT_BANK_ACCOUNTS: PlatformBankAccount[] = [
@@ -95,7 +96,7 @@ export default function PlatformSettingsPage() {
   const [bankAccounts, setBankAccounts] = useState<PlatformBankAccount[]>(DEFAULT_BANK_ACCOUNTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"Licensing" | "Billing" | "Storage" | "Mailer">("Licensing");
+  const [activeTab, setActiveTab] = useState<"Licensing" | "Billing" | "Storage" | "Mailer" | "Contact">("Licensing");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const fetchSettings = async () => {
@@ -103,7 +104,14 @@ export default function PlatformSettingsPage() {
       setLoading(true);
       const data = await adminService.getSettings();
       setSettings(data);
-      const formMap: Record<string, string> = {};
+      const formMap: Record<string, string> = {
+        "Contact:HeadquartersAddress": "San Juan 2, Sto Nino\nLapasan, Cagayan de Oro City\nMisamis Oriental\nPhilippines 9000",
+        "Contact:SupportEmail": "support@clinicez.com",
+        "Contact:SalesEmail": "sales@clinicez.com",
+        "Contact:PhoneNumber": "+63 (965) 429-7640",
+        "Contact:OperatingHours": "Mon - Fri, 8am - 5pm (PHT)",
+        "Mailer:ContactInbox": "contact@clinicez.com",
+      };
       data.forEach(s => {
         formMap[s.key] = s.value;
       });
@@ -318,6 +326,7 @@ export default function PlatformSettingsPage() {
           { id: "Billing", label: "Billing, Banks & BIR Tax", icon: IconBriefcase },
           { id: "Storage", label: "Storage & Uploads", icon: IconUpload },
           { id: "Mailer", label: "Mailer & Notifications", icon: IconMail },
+          { id: "Contact", label: "Contact & Support", icon: IconPhone },
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -731,6 +740,49 @@ export default function PlatformSettingsPage() {
               {renderField("Mailer:SmtpFromName", "Default Sender Name", "Display name shown in recipients' inboxes.")}
               {renderField("Mailer:SmtpReplyTo", "Default Reply-To Email", "Reply-To address for outgoing automated emails.")}
               {renderField("Mailer:ContactInbox", "Support Contact Inbox", "Destination inbox email address for customer inquiry submissions.")}
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "Contact" && (
+          <Card className="border-slate-200 dark:border-slate-800 shadow-xs">
+            <CardHeader>
+              <CardTitle className="text-base font-bold">Public Contact & Support Information</CardTitle>
+              <CardDescription>
+                Configures public headquarters address, support/sales email addresses, customer phone lines, and operating hours displayed on the Contact Us page and public portal.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {renderField(
+                "Contact:HeadquartersAddress",
+                "Headquarters Address",
+                "Official registered business address displayed on public contact pages and communications."
+              )}
+              {renderField(
+                "Contact:SupportEmail",
+                "Public Support Email",
+                "Main customer support email displayed to visitors (e.g. support@clinicez.com)."
+              )}
+              {renderField(
+                "Contact:SalesEmail",
+                "Public Sales Email",
+                "Direct sales inquiry email address displayed to visitors (e.g. sales@clinicez.com)."
+              )}
+              {renderField(
+                "Contact:PhoneNumber",
+                "Support Phone Number",
+                "Primary phone or mobile helpline displayed to visitors (e.g. +63 (965) 429-7640)."
+              )}
+              {renderField(
+                "Contact:OperatingHours",
+                "Support Operating Hours",
+                "Business and hotline hours displayed on the contact page (e.g. Mon - Fri, 8am - 5pm (PHT))."
+              )}
+              {renderField(
+                "Mailer:ContactInbox",
+                "Inquiry Destination Mailbox",
+                "Destination inbox where web form submissions from the Contact Us page are routed."
+              )}
             </CardContent>
           </Card>
         )}

@@ -94,8 +94,14 @@ public sealed class SystemSettingsService(
         ("Mailer:ContactInbox", "contact@clinicez.com", "Mailer", "Inbox email address where contact/support inquiries are delivered."),
         ("JoinClaim:TtlHours", "48", "JoinClaim", "Validity window in hours for progressive patient account claim tokens."),
         ("PatientApp:AppleAppStoreUrl", "https://apps.apple.com/app/clinicez-patient/id000000000", "PatientApp", "Download URL for ClinicEZ Patient App on Apple App Store."),
-        ("PatientApp:GooglePlayStoreUrl", "https://play.google.com/store/apps/details?id=com.clinicez.patient", "PatientApp", "Download URL for ClinicEZ Patient App on Google Play Store.")
+        ("PatientApp:GooglePlayStoreUrl", "https://play.google.com/store/apps/details?id=com.clinicez.patient", "PatientApp", "Download URL for ClinicEZ Patient App on Google Play Store."),
+        ("Contact:HeadquartersAddress", "San Juan 2, Sto Nino\nLapasan, Cagayan de Oro City\nMisamis Oriental\nPhilippines 9000", "Contact", "Official headquarters address displayed on public contact pages and communications."),
+        ("Contact:SupportEmail", "support@clinicez.com", "Contact", "Public support email address shown to visitors and subscribers."),
+        ("Contact:SalesEmail", "sales@clinicez.com", "Contact", "Public sales email address shown to visitors and subscribers."),
+        ("Contact:PhoneNumber", "+63 (965) 429-7640", "Contact", "Public phone contact number displayed to visitors."),
+        ("Contact:OperatingHours", "Mon - Fri, 8am - 5pm (PHT)", "Contact", "Customer support operating and phone hours.")
     ];
+
 
     public async Task<IReadOnlyList<SystemSettingDto>> GetAllSettingsAsync(CancellationToken ct = default)
     {
@@ -189,6 +195,26 @@ public sealed class SystemSettingsService(
             CorporateAddress: corporateAddress,
             BillingSupportEmail: supportEmail,
             DefaultBillingCadence: defaultBillingCadence
+        );
+    }
+
+    public async Task<ContactPlatformConfigDto> GetContactPlatformConfigAsync(CancellationToken ct = default)
+    {
+        var hq = await GetSettingValueAsync(
+            "Contact:HeadquartersAddress",
+            "San Juan 2, Sto Nino\nLapasan, Cagayan de Oro City\nMisamis Oriental\nPhilippines 9000",
+            ct);
+        var supportEmail = await GetSettingValueAsync("Contact:SupportEmail", "support@clinicez.com", ct);
+        var salesEmail = await GetSettingValueAsync("Contact:SalesEmail", "sales@clinicez.com", ct);
+        var phone = await GetSettingValueAsync("Contact:PhoneNumber", "+63 (965) 429-7640", ct);
+        var hours = await GetSettingValueAsync("Contact:OperatingHours", "Mon - Fri, 8am - 5pm (PHT)", ct);
+
+        return new ContactPlatformConfigDto(
+            HeadquartersAddress: hq,
+            SupportEmail: supportEmail,
+            SalesEmail: salesEmail,
+            PhoneNumber: phone,
+            OperatingHours: hours
         );
     }
 

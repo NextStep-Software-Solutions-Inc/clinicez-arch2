@@ -1,10 +1,31 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, Mail, MapPin, Phone } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, CheckCircle2, Copy, Loader2, Mail, MapPin, Phone } from "lucide-react";
 import { siteEmails } from "@/config/site";
 
+interface PublicContactInfo {
+  headquartersAddress: string;
+  supportEmail: string;
+  salesEmail: string;
+  phoneNumber: string;
+  operatingHours: string;
+}
+
+const DEFAULT_CONTACT_INFO: PublicContactInfo = {
+  headquartersAddress:
+    "San Juan 2, Sto Nino\nLapasan, Cagayan de Oro City\nMisamis Oriental\nPhilippines 9000",
+  supportEmail: siteEmails.support || "support@clinicez.com",
+  salesEmail: siteEmails.sales || "sales@clinicez.com",
+  phoneNumber: "+63 (965) 429-7640",
+  operatingHours: "Mon - Fri, 8am - 5pm (PHT)",
+};
+
 export function ContactUsClient() {
+  const [contactInfo, setContactInfo] = useState<PublicContactInfo>(DEFAULT_CONTACT_INFO);
+  const [loadingInfo, setLoadingInfo] = useState(true);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -12,6 +33,43 @@ export function ContactUsClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadContactInfo() {
+      try {
+        const res = await fetch("/api/v1/public/contact", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data) {
+            setContactInfo({
+              headquartersAddress: data.headquartersAddress || DEFAULT_CONTACT_INFO.headquartersAddress,
+              supportEmail: data.supportEmail || DEFAULT_CONTACT_INFO.supportEmail,
+              salesEmail: data.salesEmail || DEFAULT_CONTACT_INFO.salesEmail,
+              phoneNumber: data.phoneNumber || DEFAULT_CONTACT_INFO.phoneNumber,
+              operatingHours: data.operatingHours || DEFAULT_CONTACT_INFO.operatingHours,
+            });
+          }
+        }
+      } catch {
+        // Fall back gracefully to DEFAULT_CONTACT_INFO
+      } finally {
+        if (isMounted) setLoadingInfo(false);
+      }
+    }
+    loadContactInfo();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleCopy = (text: string, key: string) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +111,10 @@ export function ContactUsClient() {
     }
   };
 
+  const displayEmails = Array.from(
+    new Set([contactInfo.supportEmail, contactInfo.salesEmail].filter(Boolean))
+  );
+
   return (
     <main className="flex flex-col min-h-screen bg-background relative overflow-hidden">
       <div className="absolute top-0 right-[-10%] w-[50%] h-[50%] rounded-full bg-primary/10 blur-[120px] pointer-events-none -z-10" />
@@ -67,57 +129,132 @@ export function ContactUsClient() {
       </section>
 
       <section className="py-12 px-6 lg:px-8 max-w-6xl mx-auto w-full grid md:grid-cols-2 gap-12 lg:gap-24 mb-24">
-        {/* Contact Info */}
+        {/* Contact Info (Direct Channels) */}
         <div className="flex flex-col justify-center space-y-12">
+          {/* Headquarters */}
           <div className="flex items-start">
             <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mr-6 shrink-0">
               <MapPin className="h-5 w-5" />
             </div>
-            <div>
+            <div className="space-y-1">
               <h3 className="text-xl font-bold mb-2">Our Headquarters</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                San Juan 2, Sto Nino<br />
-                Lapasan, Cagayan de Oro City<br />
-                Misamis Oriental<br />
-                Philippines 9000
-              </p>
+              {loadingInfo ? (
+                <div className="space-y-2 animate-pulse">
+                  <div className="h-4 w-48 bg-muted rounded" />
+                  <div className="h-4 w-56 bg-muted rounded" />
+                  <div className="h-4 w-40 bg-muted rounded" />
+                </div>
+              ) : (
+                <p className="text-muted-foreground leading-relaxed">
+                  {contactInfo.headquartersAddress.split("\n").map((line, idx) => (
+                    <span key={idx}>
+                      {idx > 0 && <br />}
+                      {line}
+                    </span>
+                  ))}
+                </p>
+              )}
             </div>
           </div>
 
+          {/* Email Us */}
           <div className="flex items-start">
             <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mr-6 shrink-0">
               <Mail className="h-5 w-5" />
             </div>
-            <div>
+            <div className="space-y-1">
               <h3 className="text-xl font-bold mb-2">Email Us</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                {[siteEmails.contact, siteEmails.sales]
-                  .filter((addr): addr is string => Boolean(addr))
-                  .map((addr, index) => (
-                    <span key={addr}>
-                      {index > 0 && <br />}
-                      {addr}
-                    </span>
-                  ))}
-              </p>
+              {loadingInfo ? (
+                <div className="space-y-2 animate-pulse">
+                  <div className="h-4 w-44 bg-muted rounded" />
+                  <div className="h-4 w-40 bg-muted rounded" />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {displayEmails.map((addr) => {
+                    const isCopied = copiedKey === addr;
+                    return (
+                      <div key={addr} className="flex items-center gap-2">
+                        <a
+                          href={`mailto:${addr}?subject=Clinic%20EZ%20Inquiry`}
+                          className="text-muted-foreground hover:text-primary transition-colors underline-offset-4 hover:underline"
+                        >
+                          {addr}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(addr, addr)}
+                          title="Copy email address"
+                          className="inline-flex items-center justify-center p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                        >
+                          {isCopied ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        {isCopied && (
+                          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                            Copied
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
+          {/* Call Us */}
           <div className="flex items-start">
             <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mr-6 shrink-0">
               <Phone className="h-5 w-5" />
             </div>
-            <div>
+            <div className="space-y-1">
               <h3 className="text-xl font-bold mb-2">Call Us</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                +63 (965) 429-7640<br />
-                Mon - Fri, 8am - 5pm (PHT)
-              </p>
+              {loadingInfo ? (
+                <div className="space-y-2 animate-pulse">
+                  <div className="h-4 w-40 bg-muted rounded" />
+                  <div className="h-4 w-48 bg-muted rounded" />
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`tel:${contactInfo.phoneNumber.replace(/[^\d+]/g, "")}`}
+                      className="text-muted-foreground hover:text-primary transition-colors font-medium underline-offset-4 hover:underline"
+                    >
+                      {contactInfo.phoneNumber}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(contactInfo.phoneNumber, "phone")}
+                      title="Copy phone number"
+                      className="inline-flex items-center justify-center p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                    >
+                      {copiedKey === "phone" ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    {copiedKey === "phone" && (
+                      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                        Copied
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {contactInfo.operatingHours}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Contact Form */}
+        {/* Contact Form (In-Browser Submission) */}
         <div className="rounded-3xl border border-border bg-card/50 backdrop-blur-xl p-8 shadow-2xl shadow-primary/5 relative">
           <form className="space-y-6" onSubmit={handleSubmit}>
             {submitError && (
@@ -187,9 +324,16 @@ export function ContactUsClient() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8 py-2 disabled:opacity-60"
+              className="w-full inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8 py-2 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
             >
-              {isSubmitting ? "Sending..." : "Send Message"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                "Send Message"
+              )}
             </button>
           </form>
         </div>
@@ -197,4 +341,3 @@ export function ContactUsClient() {
     </main>
   );
 }
-

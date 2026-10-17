@@ -19,12 +19,12 @@ export const siteUrl: string = configuredSiteUrl
     ? `https://${configuredBaseDomain}`
     : "";
 
-/** Contact mailboxes shown in the UI. Empty string means "not configured" and the UI hides the entry. */
+/** Contact mailboxes shown in the UI. Falls back to platform defaults when env variables are not present. */
 export const siteEmails = {
-  contact: process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() ?? "",
-  sales: process.env.NEXT_PUBLIC_SALES_EMAIL?.trim() ?? "",
-  billing: process.env.NEXT_PUBLIC_BILLING_EMAIL?.trim() ?? "",
-  support: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() ?? "",
+  contact: process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || "support@clinicez.com",
+  sales: process.env.NEXT_PUBLIC_SALES_EMAIL?.trim() || "sales@clinicez.com",
+  billing: process.env.NEXT_PUBLIC_BILLING_EMAIL?.trim() || "billing@clinicez.ph",
+  support: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "support@clinicez.com",
 } as const;
 
 /**
