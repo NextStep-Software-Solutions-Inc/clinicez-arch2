@@ -51,7 +51,8 @@ export default function AdminPlansPage() {
   // Search filter
   const [searchQuery, setSearchQuery] = useState("");
 
-  const canManage = hasPermission("manage:plans") || hasPermission("manage:tenants") || hasPermission("view:tenants");
+  const canManage = hasPermission("manage:plans");
+  const canView = hasPermission("manage:plans") || hasPermission("manage:tenants") || hasPermission("view:tenants");
 
   const loadPlans = async () => {
     try {
@@ -69,13 +70,13 @@ export default function AdminPlansPage() {
   };
 
   useEffect(() => {
-    if (canManage) {
+    if (canView) {
       loadPlans();
     } else {
       setLoading(false);
-      setError("You do not have administrative permission to manage subscription plans.");
+      setError("You do not have administrative permission to view or manage subscription plans.");
     }
-  }, [canManage]);
+  }, [canView]);
 
   const handleCreate = () => {
     setSelectedPlan(null);
@@ -181,13 +182,15 @@ export default function AdminPlansPage() {
             <IconRefresh className="h-4 w-4 mr-1.5" />
             Refresh
           </Button>
-          <Button
-            onClick={handleCreate}
-            className="rounded-xl text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md cursor-pointer"
-          >
-            <IconPlus className="h-4 w-4 mr-1.5" />
-            Create Plan
-          </Button>
+          {canManage && (
+            <Button
+              onClick={handleCreate}
+              className="rounded-xl text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md cursor-pointer"
+            >
+              <IconPlus className="h-4 w-4 mr-1.5" />
+              Create Plan
+            </Button>
+          )}
         </div>
       </div>
 
@@ -403,25 +406,29 @@ export default function AdminPlansPage() {
 
                         {/* Actions */}
                         <td className="py-4 px-5 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              onClick={() => handleEdit(plan)}
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2.5 text-xs font-bold rounded-lg cursor-pointer hover:bg-muted text-foreground"
-                            >
-                              <IconEdit className="h-3.5 w-3.5 mr-1" />
-                              Edit
-                            </Button>
-                            <Button
-                              onClick={() => handleDeletePrompt(plan)}
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2.5 text-xs font-bold rounded-lg cursor-pointer hover:bg-destructive/10 text-destructive"
-                            >
-                              <IconTrash className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
+                          {canManage ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                onClick={() => handleEdit(plan)}
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2.5 text-xs font-bold rounded-lg cursor-pointer hover:bg-muted text-foreground"
+                              >
+                                <IconEdit className="h-3.5 w-3.5 mr-1" />
+                                Edit
+                              </Button>
+                              <Button
+                                onClick={() => handleDeletePrompt(plan)}
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2.5 text-xs font-bold rounded-lg cursor-pointer hover:bg-destructive/10 text-destructive"
+                              >
+                                <IconTrash className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">Read-only</span>
+                          )}
                         </td>
                       </tr>
                     );

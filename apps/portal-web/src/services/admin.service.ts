@@ -67,6 +67,13 @@ export interface AdminBlogDto {
   views?: number;
 }
 
+export interface PermissionDefinitionDto {
+  token: string;
+  label: string;
+  description: string;
+  category?: string;
+}
+
 export interface AdminRoleDto {
   id: string;
   name: string;
@@ -285,6 +292,11 @@ export const adminService = {
     return res.data;
   },
 
+  getPermissions: async (): Promise<PermissionDefinitionDto[]> => {
+    const res = await apiClient.get<PermissionDefinitionDto[]>("/admin/permissions");
+    return res.data;
+  },
+
   getRoles: async (): Promise<AdminRoleDto[]> => {
     const res = await apiClient.get<AdminRoleDto[]>("/admin/roles");
     return res.data;
@@ -292,6 +304,16 @@ export const adminService = {
 
   createRole: async (role: Omit<AdminRoleDto, "id" | "createdAt">): Promise<AdminRoleDto> => {
     const res = await apiClient.post<AdminRoleDto>("/admin/roles", role);
+    return res.data;
+  },
+
+  updateRole: async (id: string, role: Partial<AdminRoleDto>): Promise<AdminRoleDto> => {
+    const res = await apiClient.put<AdminRoleDto>(`/admin/roles/${id}`, role);
+    return res.data;
+  },
+
+  deleteRole: async (id: string): Promise<boolean> => {
+    const res = await apiClient.delete<boolean>(`/admin/roles/${id}`);
     return res.data;
   },
 

@@ -66,9 +66,19 @@ public class AdminRBACSeeder : IBaseSeeder
 
         foreach (var role in roles)
         {
-            if (!await _context.AdminRoles.AnyAsync(r => r.Id == role.Id, cancellationToken))
+            var existingRole = await _context.AdminRoles.FirstOrDefaultAsync(r => r.Id == role.Id, cancellationToken);
+            if (existingRole == null)
             {
                 _context.AdminRoles.Add(role);
+            }
+            else if (role.Id == superAdminRoleId)
+            {
+                // Ensure Super Admin role always inherits all current system permissions
+                var missingPerms = Permissions.All.Except(existingRole.Permissions).ToList();
+                if (missingPerms.Count > 0)
+                {
+                    existingRole.Permissions = new List<string>(Permissions.All);
+                }
             }
         }
 

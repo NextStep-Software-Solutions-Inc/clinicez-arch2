@@ -1,9 +1,12 @@
-using MediatR;
-using ClinicEz.Portal.Application.Interfaces;
-using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Constants;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Portal.Application.Features.Admin.Queries;
 
@@ -41,6 +44,17 @@ public class GetAdminMeQueryHandler(IApplicationDbContext context) : IRequestHan
         }
 
         if (admin == null || !admin.IsActive || admin.Role == null) return null;
+
+        // Ensure Super Admin role always inherits Permissions.All
+        if (admin.Role.Id == Guid.Parse("44444444-4444-4444-4444-444444444444") || admin.Role.Name == "Super Admin")
+        {
+            var missingPerms = Permissions.All.Except(admin.Role.Permissions).ToList();
+            if (missingPerms.Count > 0)
+            {
+                admin.Role.Permissions = new List<string>(Permissions.All);
+                await context.SaveChangesAsync(cancellationToken);
+            }
+        }
 
         return new AdminMeResponse(
             true,

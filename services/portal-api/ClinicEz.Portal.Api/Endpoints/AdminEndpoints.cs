@@ -255,7 +255,18 @@ public class AdminEndpoints : IEndpoint
         .WithName("DeleteAdminBlog")
         .WithTags("Admin");
 
-        // 7. ROLES CRUD
+        // 7. ROLES CRUD & PERMISSIONS
+        group.MapGet("/permissions", async (HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageRoles, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            return Results.Ok(Permissions.Definitions);
+        })
+        .WithName("GetAdminPermissions")
+        .WithDescription("Retrieves all available system permission descriptors.")
+        .WithTags("Admin");
+
         group.MapGet("/roles", async (HttpContext httpContext, ISender sender) =>
         {
             var admin = await CheckPermissionAsync(Permissions.ManageRoles, httpContext, sender);
@@ -288,6 +299,48 @@ public class AdminEndpoints : IEndpoint
             }
         })
         .WithName("CreateAdminRole")
+        .WithTags("Admin");
+
+        group.MapPut("/roles/{id:guid}", async (Guid id, AdminRole input, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageRoles, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            try
+            {
+                var result = await sender.Send(new UpdateAdminRoleCommand(
+                    id,
+                    input.Name,
+                    input.Description,
+                    input.Permissions,
+                    admin.FullName
+                ));
+                return result != null ? Results.Ok(result) : Results.NotFound("Role not found");
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(ex.Message);
+            }
+        })
+        .WithName("UpdateAdminRole")
+        .WithTags("Admin");
+
+        group.MapDelete("/roles/{id:guid}", async (Guid id, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageRoles, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            try
+            {
+                var success = await sender.Send(new DeleteAdminRoleCommand(id, admin.FullName));
+                return success ? Results.Ok(true) : Results.NotFound("Role not found");
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(ex.Message);
+            }
+        })
+        .WithName("DeleteAdminRole")
         .WithTags("Admin");
 
         // 8. ADMIN USERS CRUD
@@ -407,7 +460,8 @@ public class AdminEndpoints : IEndpoint
         // 20. Plan Management Endpoints (SuperAdmin scope)
         group.MapGet("/plans", async (HttpContext httpContext, ISender sender) =>
         {
-            var admin = await CheckPermissionAsync(Permissions.ManagePlans, httpContext, sender);
+            var admin = await CheckPermissionAsync(Permissions.ManagePlans, httpContext, sender)
+                        ?? await CheckPermissionAsync(Permissions.ViewTenants, httpContext, sender);
             if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
 
             var result = await sender.Send(new GetBillingPlansQuery());
