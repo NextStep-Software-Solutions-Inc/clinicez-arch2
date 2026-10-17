@@ -93,7 +93,7 @@ public static class GovernanceSafetyChecker
         {
             var newRole = await roleRepository.Query(r => r.Id == newClinicRoleId.Value && r.ClinicId == clinicId)
                 .FirstOrDefaultAsync(ct);
-            newPerms = newRole?.Permissions ?? Array.Empty<string>();
+            newPerms = newRole?.Permissions != null ? newRole.Permissions : Array.Empty<string>();
         }
         else if (newClinicRoleId == null && currentStaff.ClinicRoleId != null)
         {
