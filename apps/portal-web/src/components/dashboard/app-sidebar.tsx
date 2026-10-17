@@ -74,7 +74,7 @@ export function AppSidebar({
         icon: IconFileCertificate,
       },
       {
-        title: "Team & Staff",
+        title: "Workspace Team",
         url: `/dashboard/team`,
         icon: IconUsers,
       },

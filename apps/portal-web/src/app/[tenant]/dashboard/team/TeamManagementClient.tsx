@@ -190,6 +190,11 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             return;
         }
 
+        if (role === "Facility Administrator" && !facilityId) {
+            setInviteError("Please select a branch / facility for the Facility Administrator.");
+            return;
+        }
+
         setSubmittingInvite(true);
         try {
             const created = await staffService.inviteStaffMember({
@@ -274,11 +279,11 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             <IconUsers className="h-5 w-5" />
                         </div>
                         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight">
-                            Tenant Team
+                            Workspace Team
                         </h1>
                     </div>
                     <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        Manage workspace administrators, finance billers, and analysts.
+                        Manage tenant administrators, finance billers, and portal analysts.
                     </p>
                 </div>
 
@@ -289,7 +294,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                         className="rounded-xl shadow-sm gap-2 font-semibold"
                     >
                         <IconUserPlus className="h-4 w-4" />
-                        <span>Invite Team Member</span>
+                        <span>Invite Workspace Member</span>
                     </Button>
                 </div>
             </div>
@@ -370,7 +375,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                     <div>
                         <CardTitle className="text-base sm:text-lg font-bold">Workspace Team Directory</CardTitle>
                         <CardDescription className="text-xs text-slate-500 mt-0.5">
-                            Active tenant administrators, financial billers, and analytical members.
+                            Active workspace administrators, financial billers, and analytical members.
                         </CardDescription>
                     </div>
 
@@ -408,7 +413,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 <thead>
                                     <tr className="border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/20 text-slate-500 font-semibold">
                                         <th className="py-3 px-4 sm:px-6">Team Member</th>
-                                        <th className="py-3 px-4">Role</th>
+                                        <th className="py-3 px-4">Workspace Role</th>
                                         <th className="py-3 px-4">Access Scope</th>
                                         <th className="py-3 px-4">Status</th>
                                         <th className="py-3 px-4 hidden md:table-cell">Added On</th>
@@ -563,10 +568,10 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                     <DialogHeader>
                         <DialogTitle className="text-lg font-bold flex items-center gap-2">
                             <IconUserPlus className="h-5 w-5 text-primary" />
-                            Invite Team Member
+                            Invite Workspace Member
                         </DialogTitle>
                         <DialogDescription className="text-xs text-slate-500">
-                            Add a practitioner or staff member to your workspace with internal role-based access.
+                            Add an administrator, finance biller, or analyst with portal access.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -609,53 +614,60 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
 
                         <div className="space-y-1.5">
                             <Label htmlFor="role" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                Role Assignment <span className="text-rose-500">*</span>
+                                Workspace Role <span className="text-rose-500">*</span>
                             </Label>
                             <select
                                 id="role"
                                 value={role}
-                                onChange={(e) => setRole(e.target.value)}
+                                onChange={(e) => {
+                                    const newRole = e.target.value;
+                                    setRole(newRole);
+                                    if (newRole !== "Facility Administrator") {
+                                        setFacilityId("");
+                                    }
+                                }}
                                 className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
                             >
-                                <optgroup label="Tenant & Administrative Roles">
-                                    <option value="Admin">Tenant Administrator (Manage branches, invites, & tenancy settings)</option>
-                                    <option value="Facility Administrator">Facility Administrator (Branch clinical operations & local settings)</option>
-                                    <option value="Biller">Biller / Finance (Manage subscriptions, checkout sessions, & invoices)</option>
-                                    <option value="Viewer">Viewer / Analyst (Read-only access to tenancy health & branch stats)</option>
-                                </optgroup>
-                                <optgroup label="Clinical & Medical Roles">
-                                    <option value="Attending Physician">Attending Physician (Consultations, e-prescriptions & lab requisitions)</option>
-                                    <option value="Medical Technologist">Medical Technologist (Diagnostic assays, quantitative findings, certs)</option>
-                                    <option value="Registered Pharmacist">Registered Pharmacist (e-Prescription validation & dispensary fulfillment)</option>
-                                    <option value="Phlebotomist">Phlebotomist (Specimen collection, barcode accessioning, patient dropzone)</option>
-                                    <option value="Cashier/Billing Staff">Cashier / Billing Staff (Patient POS, PhilHealth Konsulta claims, ORs)</option>
-                                </optgroup>
+                                <option value="Admin">Tenant Administrator (Manage branches, invites, &amp; tenancy settings)</option>
+                                <option value="Facility Administrator">Facility Administrator (Branch clinical operations &amp; local settings)</option>
+                                <option value="Biller">Biller / Finance (Manage subscriptions, checkout sessions, &amp; invoices)</option>
+                                <option value="Viewer">Viewer / Analyst (Read-only access to tenancy health &amp; branch stats)</option>
                             </select>
                             <p className="text-[11px] text-slate-400">
                                 {ROLE_DETAILS[role]?.description}
                             </p>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <Label htmlFor="facilityId" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                Branch / Facility Scope (Optional)
-                            </Label>
-                            <select
-                                id="facilityId"
-                                value={facilityId}
-                                onChange={(e) => setFacilityId(e.target.value)}
-                                className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            >
-                                <option value="">Entire Workspace (All Branches &amp; Facilities)</option>
-                                {facilities.map((fac) => (
-                                    <option key={fac.id} value={fac.id}>
-                                        {fac.name} ({fac.facilityType})
-                                    </option>
-                                ))}
-                            </select>
-                            <p className="text-[11px] text-slate-400">
-                                Scope staff credentials to a specific clinic, diagnostic lab, or dispensary branch.
-                            </p>
+                        {role === "Facility Administrator" && (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="facilityId" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                    Assigned Branch / Facility <span className="text-rose-500">*</span>
+                                </Label>
+                                <select
+                                    id="facilityId"
+                                    value={facilityId}
+                                    onChange={(e) => setFacilityId(e.target.value)}
+                                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    required
+                                >
+                                    <option value="">Select a branch / facility...</option>
+                                    {facilities.map((fac) => (
+                                        <option key={fac.id} value={fac.id}>
+                                            {fac.name} ({fac.facilityType})
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-[11px] text-slate-400">
+                                    Designate which branch facility this administrator manages in the portal.
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2.5">
+                            <IconAlertCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                            <span className="leading-relaxed">
+                                <strong className="text-slate-700 dark:text-slate-300">Looking to add Doctors, Nurses, or Pharmacists?</strong> Clinical staff are authenticated locally using each facility&apos;s own JWT signing key. Add clinical practitioners directly within their workstation app (Clinic, Laboratory, or Pharmacy).
+                            </span>
                         </div>
 
                         <DialogFooter className="gap-2 pt-2 sm:justify-end">

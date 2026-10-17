@@ -29,12 +29,7 @@ public class InviteStaffMemberCommandValidator : AbstractValidator<InviteStaffMe
         "Billing",
         "Biller", 
         "Viewer",
-        "Facility Administrator", 
-        "Attending Physician", 
-        "Medical Technologist", 
-        "Registered Pharmacist", 
-        "Phlebotomist", 
-        "Cashier/Billing Staff"
+        "Facility Administrator"
     ];
 
     public InviteStaffMemberCommandValidator()

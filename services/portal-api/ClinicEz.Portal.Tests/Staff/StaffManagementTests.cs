@@ -120,7 +120,7 @@ public class StaffManagementTests : IDisposable
     }
 
     [Fact]
-    public async Task InviteStaffMember_FacilityClinicalRole_CreatesPendingInvitationWithJobProfile()
+    public async Task InviteStaffMember_FacilityAdministrator_CreatesPendingInvitationWithFacilityProfile()
     {
         var facility = new Facility
         {
@@ -133,21 +133,21 @@ public class StaffManagementTests : IDisposable
         _context.Facilities.Add(facility);
         await _context.SaveChangesAsync();
 
-        var command = new InviteStaffMemberCommand(TenantSlug, "medtech@metro.ph", "Mark Bautista, RMT", "Medical Technologist", facility.Id);
+        var command = new InviteStaffMemberCommand(TenantSlug, "facadmin@metro.ph", "Mark Bautista", "Facility Administrator", facility.Id);
 
         var result = await InviteHandler().Handle(command, CancellationToken.None);
 
-        Assert.Equal("medtech@metro.ph", result.Email);
-        Assert.Equal("Medical Technologist", result.Role);
+        Assert.Equal("facadmin@metro.ph", result.Email);
+        Assert.Equal("Facility Administrator", result.Role);
         Assert.Equal(facility.Id, result.FacilityId);
         Assert.Equal("BGC Laboratory Branch", result.FacilityName);
         Assert.Equal("PendingInvitation", result.Status);
 
-        var member = await _context.WorkspaceMembers.SingleAsync(m => m.Email == "medtech@metro.ph");
+        var member = await _context.WorkspaceMembers.SingleAsync(m => m.Email == "facadmin@metro.ph");
         Assert.Equal(WorkspaceMemberRole.Member, member.Role);
         var profile = await _context.StaffMembers.SingleAsync(p => p.WorkspaceMemberId == member.Id);
         Assert.Equal(facility.Id, profile.FacilityId);
-        Assert.Equal("Medical Technologist", profile.Role);
+        Assert.Equal("Facility Administrator", profile.Role);
     }
 
     [Fact]

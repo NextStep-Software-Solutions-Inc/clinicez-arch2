@@ -2,9 +2,9 @@ import { Metadata } from "next";
 import TeamManagementClient from "./TeamManagementClient";
 
 export const metadata: Metadata = {
-  title: "Team & Staff | Clinic EZ Dashboard",
-  description: "Manage clinical staff, role assignments, and workspace seat allocations in Clinic EZ.",
-  keywords: ["team", "staff", "clinic staff", "Clinic EZ staff"],
+  title: "Workspace Team | Clinic EZ Dashboard",
+  description: "Manage workspace administrators, finance billers, and analysts in Clinic EZ.",
+  keywords: ["team", "workspace team", "administrators", "Clinic EZ portal"],
 };
 
 export default async function TeamPage({

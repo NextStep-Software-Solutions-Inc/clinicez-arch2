@@ -411,7 +411,7 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
                             >
                                 <div className="flex items-center gap-2">
                                     <IconUsers className="h-4 w-4 text-purple-600" />
-                                    <span>Manage Team & Staff</span>
+                                    <span>Manage Workspace Team</span>
                                 </div>
                                 <IconArrowRight className="h-3.5 w-3.5 text-slate-400" />
                             </Button>
