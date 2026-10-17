@@ -153,6 +153,45 @@ public class AdminEndpoints : IEndpoint
         .WithDescription("Updates tenant workspace usage metrics and limits (SuperAdmin scope).")
         .WithTags("Admin");
 
+        // 5d. GET /admin/tenants/{id}/cleanup-preview
+        group.MapGet("/tenants/{id:guid}/cleanup-preview", async (Guid id, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await sender.Send(new GetTenantCleanupPreviewQuery(id));
+            return result != null ? Results.Ok(result) : Results.NotFound("Tenant not found");
+        })
+        .WithName("GetTenantCleanupPreview")
+        .WithDescription("Inspects a workspace's dependencies, patient records, invoices, and evaluates purge eligibility and orphan status.")
+        .WithTags("Admin");
+
+        // 5e. POST /admin/tenants/{id}/archive
+        group.MapPost("/tenants/{id:guid}/archive", async (Guid id, AdminArchiveTenantRequest? request, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await sender.Send(new AdminArchiveTenantCommand(id, admin.FullName, request?.Reason));
+            return Results.Ok(result);
+        })
+        .WithName("AdminArchiveTenant")
+        .WithDescription("Archives a workspace, suspending all facilities, revoking hub clients, and preserving audit records (SuperAdmin scope).")
+        .WithTags("Admin");
+
+        // 5f. DELETE /admin/tenants/{id}/purge
+        group.MapDelete("/tenants/{id:guid}/purge", async (Guid id, string confirmSlug, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await sender.Send(new AdminPurgeTenantCommand(id, confirmSlug, admin.FullName));
+            return Results.Ok(result);
+        })
+        .WithName("AdminPurgeTenant")
+        .WithDescription("Permanently purges a ghost workspace that has 0 patient records and 0 billing transactions, releasing the tenant slug (SuperAdmin scope).")
+        .WithTags("Admin");
+
         // 5c. POST /admin/hub/resync
         group.MapPost("/hub/resync", async (HttpContext httpContext, ISender sender, IHubDirectoryResyncService resync, CancellationToken ct) =>
         {
@@ -620,4 +659,6 @@ public record RecordManualPaymentRequest(
     string? Notes,
     DateTime? PaymentDate = null
 );
+
+public record AdminArchiveTenantRequest(string? Reason = null);
 

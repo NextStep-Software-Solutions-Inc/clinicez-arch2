@@ -94,6 +94,7 @@ public static class DependencyInjection
         services.AddScoped<ILicenseIssuer, LicenseIssuer>();
         services.AddScoped<IEntitlementsPublisher, EntitlementsPublisher>();
         services.AddScoped<IEntitlementRenewalJob, EntitlementRenewalJob>();
+        services.AddScoped<IOrphanTenancyCleanupJob, OrphanTenancyCleanupJob>();
         services.AddScoped<ClinicEz.Portal.Application.Features.Ownership.IOwnershipPolicy, ClinicEz.Portal.Application.Features.Ownership.OwnershipPolicy>();
         services.AddScoped<IClerkMetadataSync, ClerkMetadataSync>();
         // The key ring protects the PhilHealth credentials stored per branch, so it is persisted to the database via EF Core.

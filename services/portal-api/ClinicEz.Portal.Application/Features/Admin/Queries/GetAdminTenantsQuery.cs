@@ -19,6 +19,7 @@ public record AdminTenantResponseDto(
     string OwnerName,
     string Email,
     DateTime CreatedAt,
+    DateTime? ArchivedAt,
     string SubscriptionStatus,
     string SubscriptionPlanId,
     bool IsAnnual,
@@ -26,27 +27,74 @@ public record AdminTenantResponseDto(
     int StaffAccountsCount,
     int ActivePatientRecordsCount,
     int MonthlyApiQuotaUsed,
-    int MonthlyApiQuotaLimit
+    int MonthlyApiQuotaLimit,
+    bool IsOrphaned = false,
+    string? OrphanReason = null,
+    bool CanPurge = false
 );
 
 public record GetAdminTenantsQuery : IRequest<List<AdminTenantResponseDto>>;
 
-public class GetAdminTenantsQueryHandler(IApplicationDbContext context) : IRequestHandler<GetAdminTenantsQuery, List<AdminTenantResponseDto>>
+public class GetAdminTenantsQueryHandler(
+    IApplicationDbContext context,
+    ISystemSettingsService? settingsService = null) 
+    : IRequestHandler<GetAdminTenantsQuery, List<AdminTenantResponseDto>>
 {
+    public const string DefaultThresholdKey = "Workspace:OrphanInactivityDaysThreshold";
+    public const int DefaultThresholdDays = 14;
+
     public async Task<List<AdminTenantResponseDto>> Handle(GetAdminTenantsQuery request, CancellationToken cancellationToken)
     {
+        var thresholdDays = settingsService is not null
+            ? await settingsService.GetSettingIntAsync(DefaultThresholdKey, DefaultThresholdDays, cancellationToken)
+            : DefaultThresholdDays;
+
         var tenants = await context.Tenants
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
+
         var subscriptions = await context.Subscriptions
             .AsNoTracking()
             .Include(s => s.Plan)
             .ToDictionaryAsync(s => s.TenantId, cancellationToken);
 
+        // Fetch tenants with invoices or receipts in one fast query to avoid N+1
+        var tenantIdsWithInvoices = await context.BillingInvoices
+            .AsNoTracking()
+            .Select(i => i.TenantId)
+            .Distinct()
+            .ToHashSetAsync(cancellationToken);
+
+        var tenantIdsWithReceipts = await context.PaymentReceipts
+            .AsNoTracking()
+            .Select(r => r.TenantId)
+            .Distinct()
+            .ToHashSetAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
         var result = new List<AdminTenantResponseDto>();
+
         foreach (var t in tenants)
         {
             var subscription = subscriptions.GetValueOrDefault(t.Id);
+            var subStatus = subscription?.Status ?? SubscriptionStatus.Trialing;
+            var hasInvoices = tenantIdsWithInvoices.Contains(t.Id);
+            var hasReceipts = tenantIdsWithReceipts.Contains(t.Id);
+            var hasActiveSub = subStatus == SubscriptionStatus.Active;
+
+            var ageInDays = (now - t.CreatedAt).TotalDays;
+
+            var canPurge = t.ActivePatientRecordsCount == 0 &&
+                           t.FacilitiesCount == 0 &&
+                           !hasInvoices &&
+                           !hasReceipts &&
+                           !hasActiveSub;
+
+            var isOrphaned = canPurge && ageInDays >= thresholdDays;
+            var orphanReason = isOrphaned
+                ? $"Incomplete signup with no facilities or patients created for over {Math.Floor(ageInDays)} days (Threshold: {thresholdDays}d)."
+                : null;
+
             result.Add(new AdminTenantResponseDto(
                 t.Id,
                 t.Name,
@@ -55,14 +103,18 @@ public class GetAdminTenantsQueryHandler(IApplicationDbContext context) : IReque
                 $"{t.FirstName} {t.LastName}".Trim(),
                 t.Email,
                 t.CreatedAt,
-                SubscriptionWire.Status(subscription?.Status ?? SubscriptionStatus.Trialing),
-                subscription?.Plan.Slug ?? SubscriptionWire.NoPlan,
+                t.ArchivedAt,
+                SubscriptionWire.Status(subStatus),
+                subscription?.Plan?.Slug ?? SubscriptionWire.NoPlan,
                 subscription?.IsAnnual ?? false,
                 t.FacilitiesCount,
                 t.StaffAccountsCount,
                 t.ActivePatientRecordsCount,
                 t.MonthlyApiQuotaUsed,
-                t.MonthlyApiQuotaLimit
+                t.MonthlyApiQuotaLimit,
+                isOrphaned,
+                orphanReason,
+                canPurge
             ));
         }
 

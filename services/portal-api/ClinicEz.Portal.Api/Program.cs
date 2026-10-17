@@ -239,6 +239,13 @@ RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IEntitlementRen
     "30 3 * * *"
 );
 
+// Scans for orphaned workspaces based on platform settings and safely purges ghost workspaces
+RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IOrphanTenancyCleanupJob>(
+    "orphan-tenancy-cleanup",
+    job => job.ProcessOrphanTenanciesAsync(CancellationToken.None),
+    "0 2 * * *"
+);
+
 // IMPORTANT: Authentication MUST run before Authorization
 app.UseAuthentication();
 app.UseAuthorization();

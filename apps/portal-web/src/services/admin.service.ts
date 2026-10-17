@@ -27,6 +27,7 @@ export interface AdminTenantDto {
   ownerName: string;
   email: string;
   createdAt: string;
+  archivedAt?: string | null;
   subscriptionStatus: string;
   subscriptionPlanId: string;
   isAnnual: boolean;
@@ -36,6 +37,30 @@ export interface AdminTenantDto {
   activePatientRecordsCount: number;
   monthlyApiQuotaUsed: number;
   monthlyApiQuotaLimit: number;
+  isOrphaned?: boolean;
+  orphanReason?: string | null;
+  canPurge?: boolean;
+}
+
+export interface TenantCleanupPreviewDto {
+  tenantId: string;
+  tenantSlug: string;
+  clinicName: string;
+  ownerName: string;
+  email: string;
+  createdAt: string;
+  archivedAt?: string | null;
+  subscriptionStatus: string;
+  subscriptionPlanId: string;
+  facilitiesCount: number;
+  staffAccountsCount: number;
+  activePatientRecordsCount: number;
+  invoicesCount: number;
+  receiptsCount: number;
+  isEligibleForPurge: boolean;
+  ineligibilityReasons: string[];
+  isOrphaned: boolean;
+  orphanReason?: string | null;
 }
 
 export interface AdminLeadDto {
@@ -222,6 +247,10 @@ export const adminService = {
       facilityType: t.tenantType || (t as any).facilityType || "Workplace",
       facilitiesCount: t.facilitiesCount ?? (t as any).clinicalBranchesCount ?? 0,
       clinicalBranchesCount: t.facilitiesCount ?? (t as any).clinicalBranchesCount ?? 0,
+      archivedAt: t.archivedAt ?? null,
+      isOrphaned: Boolean(t.isOrphaned),
+      orphanReason: t.orphanReason ?? null,
+      canPurge: Boolean(t.canPurge),
     }));
   },
 
@@ -233,6 +262,21 @@ export const adminService = {
   getTenantBySlug: async (slug: string): Promise<AdminTenantDto | undefined> => {
     const tenants = await adminService.getTenants();
     return tenants.find(t => t.tenantSlug === slug);
+  },
+
+  getTenantCleanupPreview: async (id: string): Promise<TenantCleanupPreviewDto> => {
+    const res = await apiClient.get<TenantCleanupPreviewDto>(`/admin/tenants/${id}/cleanup-preview`);
+    return res.data;
+  },
+
+  archiveTenant: async (id: string, reason?: string): Promise<{ tenantId: string; tenantSlug: string; archivedAt: string; facilitiesSuspended: number }> => {
+    const res = await apiClient.post<{ tenantId: string; tenantSlug: string; archivedAt: string; facilitiesSuspended: number }>(`/admin/tenants/${id}/archive`, { reason });
+    return res.data;
+  },
+
+  purgeTenant: async (id: string, confirmSlug: string): Promise<{ tenantId: string; freedSlug: string; purgedAt: string }> => {
+    const res = await apiClient.delete<{ tenantId: string; freedSlug: string; purgedAt: string }>(`/admin/tenants/${id}/purge?confirmSlug=${encodeURIComponent(confirmSlug)}`);
+    return res.data;
   },
 
   getLeads: async (): Promise<AdminLeadDto[]> => {

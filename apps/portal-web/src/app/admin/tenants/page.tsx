@@ -23,17 +23,13 @@ import {
   IconArrowUpRight,
   IconSettings,
   IconActivity,
-  IconFolder
+  IconFolder,
+  IconArchive,
+  IconTrash,
+  IconAlertTriangle
 } from "@tabler/icons-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter
-} from "@/components/ui/dialog";
+import { TenantCleanupDialog } from "@/components/admin/TenantCleanupDialog";
 
 export default function AdminTenantsPage() {
   const { hasPermission } = useAdmin();
@@ -44,8 +40,10 @@ export default function AdminTenantsPage() {
   const [toggleLoading, setToggleLoading] = useState<string | null>(null);
   const [filterPlan, setFilterPlan] = useState<string>("ALL");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  const [cleanupTenant, setCleanupTenant] = useState<AdminTenantDto | null>(null);
 
   const canToggle = hasPermission(ADMIN_PERMISSIONS.TOGGLE_SUBSCRIPTION);
+  const canManage = hasPermission(ADMIN_PERMISSIONS.MANAGE_TENANTS);
 
   const loadTenants = async () => {
     try {
@@ -100,7 +98,15 @@ export default function AdminTenantsPage() {
       t.tenantSlug.toLowerCase().includes(search.toLowerCase());
       
     const matchesPlan = filterPlan === "ALL" || t.subscriptionPlanId === filterPlan;
-    const matchesStatus = filterStatus === "ALL" || t.subscriptionStatus === filterStatus;
+
+    let matchesStatus = true;
+    if (filterStatus === "ORPHANED") {
+      matchesStatus = Boolean(t.isOrphaned);
+    } else if (filterStatus === "ARCHIVED") {
+      matchesStatus = Boolean(t.archivedAt);
+    } else if (filterStatus !== "ALL") {
+      matchesStatus = t.subscriptionStatus === filterStatus && !t.archivedAt;
+    }
     
     return matchesSearch && matchesPlan && matchesStatus;
   });
@@ -176,6 +182,8 @@ export default function AdminTenantsPage() {
                 <option value="ALL">All Statuses</option>
                 <option value="ACTIVE">Active</option>
                 <option value="TRIALING">Trialing</option>
+                <option value="ORPHANED">Orphaned / Inactive</option>
+                <option value="ARCHIVED">Archived</option>
                 <option value="CANCELLED">Cancelled</option>
               </select>
             </div>
@@ -245,7 +253,17 @@ export default function AdminTenantsPage() {
                       </div>
                     </td>
                     <td className="py-4">
-                      {t.subscriptionStatus === "ACTIVE" ? (
+                      {t.archivedAt ? (
+                        <Badge variant="outline" className="text-slate-600 border-slate-300 bg-slate-100 dark:bg-slate-800 dark:border-slate-700 rounded-full flex items-center gap-1 w-fit font-bold text-[10px]">
+                          <IconArchive className="h-3.5 w-3.5 text-slate-500" />
+                          Archived
+                        </Badge>
+                      ) : t.isOrphaned ? (
+                        <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 rounded-full flex items-center gap-1 w-fit font-bold text-[10px]" title={t.orphanReason || "Orphaned ghost registration"}>
+                          <IconAlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                          Orphaned
+                        </Badge>
+                      ) : t.subscriptionStatus === "ACTIVE" ? (
                         <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50/50 dark:bg-green-950/20 dark:border-green-900 rounded-full flex items-center gap-1 w-fit font-bold text-[10px]">
                           <IconCircleCheck className="h-3.5 w-3.5" />
                           Active
@@ -317,6 +335,17 @@ export default function AdminTenantsPage() {
                             Toggle Active
                           </Button>
                         )}
+                        {canManage && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setCleanupTenant(t)}
+                            className="h-8 w-8 rounded-xl text-amber-600 hover:text-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                            title="Workspace Offboarding & Cleanup"
+                          >
+                            <IconTrash className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </TableRow>
@@ -332,6 +361,18 @@ export default function AdminTenantsPage() {
           </Table>
         </div>
       </Card>
+
+      {cleanupTenant && (
+        <TenantCleanupDialog
+          isOpen={Boolean(cleanupTenant)}
+          onClose={() => setCleanupTenant(null)}
+          onSuccess={loadTenants}
+          tenantId={cleanupTenant.id}
+          tenantSlug={cleanupTenant.tenantSlug}
+          clinicName={cleanupTenant.clinicName}
+          archivedAt={cleanupTenant.archivedAt}
+        />
+      )}
     </div>
   );
 }
