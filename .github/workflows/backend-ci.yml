@@ -8,6 +8,7 @@ on:
     paths:
       - 'services/**'
       - 'packages/shared-dotnet/**'
+      - 'packages/shared-dotnet.Tests/**'
       - 'tests/**'
       - 'CLINICEZ.sln'
       - 'Directory.Build.props'
@@ -20,6 +21,7 @@ on:
     paths:
       - 'services/**'
       - 'packages/shared-dotnet/**'
+      - 'packages/shared-dotnet.Tests/**'
       - 'tests/**'
       - 'CLINICEZ.sln'
       - 'Directory.Build.props'
