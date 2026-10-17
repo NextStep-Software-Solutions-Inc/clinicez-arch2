@@ -93,6 +93,14 @@ public sealed class UpdateClinicRoleCommandHandler : IRequestHandler<UpdateClini
             throw new ConflictException($"A role named '{request.Name}' already exists in this clinic.");
         }
 
+        // Guard: Cannot remove governance permissions (roles:manage, staff:manage, settings:manage) if it leaves 0 active users with the permission
+        await ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.EnsureGovernancePermissionsRemainOnRoleUpdateAsync(
+            _staffRepository,
+            _clinicContext.ClinicId,
+            role,
+            request.Permissions,
+            cancellationToken);
+
         role.Name = request.Name.Trim();
         role.Description = request.Description?.Trim();
         role.Permissions = request.Permissions.Distinct(StringComparer.OrdinalIgnoreCase).ToList();

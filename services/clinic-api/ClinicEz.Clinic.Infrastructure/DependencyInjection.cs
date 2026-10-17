@@ -82,6 +82,7 @@ public static class DependencyInjection
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyCleanupHostedService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.EodReconciliationBackgroundService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.NotificationRetentionCleanupBackgroundService>();
+        services.AddHostedService<ClinicEz.Clinic.Infrastructure.Persistence.ClinicRoleSeederHostedService>();
 
         // Audit Logging & Forensic Activity Trail Pipeline (M1)
         services.AddSingleton<IPhiRedactionService, PhiRedactionService>();

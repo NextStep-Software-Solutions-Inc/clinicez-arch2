@@ -127,6 +127,33 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             }
         }
 
+        // Guard 1: Cannot downgrade, reassign, or deactivate the only active built-in System Administrator
+        bool isCurrentSystemAdmin = ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.IsSystemAdministrator(staff);
+        if (isCurrentSystemAdmin && staff.IsActive)
+        {
+            bool willLoseSystemAdmin = !request.IsActive ||
+                request.Role != StaffRole.Admin ||
+                (request.ClinicRoleId.HasValue && (staff.ClinicRole == null || request.ClinicRoleId.Value != staff.ClinicRoleId));
+
+            await ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.EnsureActiveSystemAdminRemainsAsync(
+                _staffRepository,
+                _clinicContext.ClinicId,
+                staff.Id,
+                willLoseSystemAdmin,
+                cancellationToken);
+        }
+
+        // Guard 2: Cannot reassign or deactivate the last active user holding critical governance permissions (roles:manage, staff:manage, settings:manage)
+        await ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.EnsureGovernancePermissionsRemainOnStaffChangeAsync(
+            _staffRepository,
+            _roleRepository,
+            _clinicContext.ClinicId,
+            staff,
+            request.IsActive,
+            request.Role,
+            request.ClinicRoleId,
+            cancellationToken);
+
         string? roleName = staff.ClinicRole?.Name;
 
         if (request.ClinicRoleId.HasValue && request.ClinicRoleId != staff.ClinicRoleId)

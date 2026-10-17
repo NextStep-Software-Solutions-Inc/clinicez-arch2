@@ -47,6 +47,7 @@ public sealed class DeactivateStaffMemberCommandHandler : IRequestHandler<Deacti
     public async Task<bool> Handle(DeactivateStaffMemberCommand request, CancellationToken cancellationToken)
     {
         var staff = await _staffRepository.Query(s => s.Id == request.Id && s.ClinicId == _clinicContext.ClinicId)
+            .Include(s => s.ClinicRole)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (staff == null)
@@ -73,6 +74,46 @@ public sealed class DeactivateStaffMemberCommandHandler : IRequestHandler<Deacti
             if (!otherActiveAdmins)
             {
                 throw new ValidationException("Cannot deactivate the only active Administrator in this clinic.");
+            }
+        }
+
+        // Guard 1: Cannot deactivate the only active built-in System Administrator
+        bool isCurrentSystemAdmin = ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.IsSystemAdministrator(staff);
+        if (isCurrentSystemAdmin && staff.IsActive)
+        {
+            await ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.EnsureActiveSystemAdminRemainsAsync(
+                _staffRepository,
+                _clinicContext.ClinicId,
+                staff.Id,
+                targetWillLoseSystemAdmin: true,
+                cancellationToken);
+        }
+
+        // Guard 2: Cannot deactivate the last active user holding critical governance permissions
+        var currentPerms = ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.ResolveEffectivePermissions(staff);
+        var lostCriticalPerms = ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.CriticalGovernancePermissions
+            .Where(p => currentPerms.Contains(p, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        if (lostCriticalPerms.Count > 0)
+        {
+            var otherActiveStaff = await _staffRepository.Query(s =>
+                s.ClinicId == _clinicContext.ClinicId &&
+                s.IsActive &&
+                s.Id != staff.Id)
+                .Include(s => s.ClinicRole)
+                .ToListAsync(cancellationToken);
+
+            foreach (var lostPerm in lostCriticalPerms)
+            {
+                var anotherUserHasPerm = otherActiveStaff.Any(s =>
+                    ClinicEz.Clinic.Application.Common.Helpers.GovernanceSafetyChecker.ResolveEffectivePermissions(s).Contains(lostPerm, StringComparer.OrdinalIgnoreCase));
+
+                if (!anotherUserHasPerm)
+                {
+                    throw new ValidationException(
+                        $"Cannot deactivate the last active user with '{lostPerm}' permission in this clinic.");
+                }
             }
         }
 

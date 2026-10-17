@@ -24,7 +24,16 @@ export function inferStaffRole(role: { name: string; isSystem?: boolean; permiss
   if (name.includes('cashier') || name.includes('billing') || (perms.includes('billing:write') && !perms.includes('consultations:read'))) {
     return 'Cashier';
   }
-  if (name.includes('admin') || name.includes('director') || perms.includes('roles:manage') || perms.includes('settings:manage')) {
+  if (
+    name.includes('admin') ||
+    name.includes('director') ||
+    name.includes('protection') ||
+    name.includes('compliance') ||
+    name.includes('dpo') ||
+    perms.includes('roles:manage') ||
+    perms.includes('settings:manage') ||
+    perms.includes('audit:read')
+  ) {
     return 'Admin';
   }
   return 'Receptionist';
@@ -62,6 +71,14 @@ export const FALLBACK_SYSTEM_ROLES: RoleOption[] = [
     isSystem: true,
     staffRole: 'Cashier',
     description: 'Invoice settlement, payments, receipts, and cashier collections',
+  },
+  {
+    id: 'sys-dpo',
+    name: 'Data Protection Officer / Compliance Officer',
+    displayName: 'Data Protection Officer / Compliance Officer',
+    isSystem: true,
+    staffRole: 'Admin',
+    description: 'Patient privacy protection, audit log forensics, and compliance review',
   },
   {
     id: 'sys-admin',

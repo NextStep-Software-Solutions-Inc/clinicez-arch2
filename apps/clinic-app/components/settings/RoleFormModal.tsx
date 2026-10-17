@@ -38,6 +38,7 @@ const PERMISSION_CATEGORIES: {
   { id: 'procedures', name: 'Procedures', description: 'Nursing procedure charting and execution', prefix: 'procedures:' },
   { id: 'laborders', name: 'Lab Orders', description: 'Diagnostic orders and laboratory results ingestion', prefix: 'laborders:' },
   { id: 'reports', name: 'Reports & Remittance', description: 'Daily collections and end-of-day summary reports', prefix: 'reports:' },
+  { id: 'audit', name: 'Audit & Forensic Trail', description: 'Security audit trail, forensic activity logs, and export', prefix: 'audit:' },
   { id: 'yakap', name: 'PhilHealth Yakap', description: 'Transmittal drafting, validation, and SOAP submission', prefix: 'yakap:' },
   { id: 'philhealth', name: 'PhilHealth Catalog', description: 'Import official PhilHealth libraries and kits', prefix: 'philhealth.' },
   { id: 'staff', name: 'Staff Roster', description: 'Staff accounts and credentials administration', prefix: 'staff:' },

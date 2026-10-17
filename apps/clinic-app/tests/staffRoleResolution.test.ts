@@ -8,6 +8,7 @@ describe('inferStaffRole', () => {
     expect(inferStaffRole({ name: 'Front Desk Receptionist', isSystem: true })).toBe('Receptionist');
     expect(inferStaffRole({ name: 'Clinic Cashier / Billing Officer', isSystem: true })).toBe('Cashier');
     expect(inferStaffRole({ name: 'Clinic Administrator', isSystem: true })).toBe('Admin');
+    expect(inferStaffRole({ name: 'Data Protection Officer / Compliance Officer', isSystem: true })).toBe('Admin');
   });
 
   test('correctly infers doctor custom roles by name or signing permission', () => {
@@ -30,6 +31,7 @@ describe('inferStaffRole', () => {
   test('correctly infers administrator custom roles by name or manage permissions', () => {
     expect(inferStaffRole({ name: 'Clinic Operations Director', isSystem: false })).toBe('Admin');
     expect(inferStaffRole({ name: 'Facility Admin', isSystem: false, permissions: ['roles:manage'] })).toBe('Admin');
+    expect(inferStaffRole({ name: 'Compliance Supervisor', isSystem: false, permissions: ['audit:read'] })).toBe('Admin');
   });
 
   test('defaults unmatched roles to Receptionist', () => {

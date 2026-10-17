@@ -135,6 +135,15 @@ export default function StaffManagementTab({
   const [editError, setEditError] = useState<string | null>(null);
 
   const isEditingSelf = isSelf(editingStaff);
+  const activeSystemAdmins = (staff || []).filter(
+    (s) => s.isActive && (s.role === 'Admin' || s.clinicRole?.name === 'Clinic Administrator')
+  );
+  const isSoleActiveAdmin = Boolean(
+    editingStaff &&
+      editingStaff.isActive &&
+      (editingStaff.role === 'Admin' || editingStaff.clinicRole?.name === 'Clinic Administrator') &&
+      activeSystemAdmins.length <= 1
+  );
 
   // Doctor Roster Calendar Modal State
   const [rosterModalVisible, setRosterModalVisible] = useState(false);
@@ -174,6 +183,10 @@ export default function StaffManagementTab({
 
   const handleSelectRole = (r: RoleOption) => {
     if (editingStaff && (!canModifyStaffRole(editingStaff, user) || !canModifyStaffRole(editingStaff, currentStaff))) {
+      return;
+    }
+    if (isSoleActiveAdmin && r.name !== 'Clinic Administrator') {
+      notify.error('Cannot change the role of the only active Clinic Administrator.');
       return;
     }
     setSelectedRoleId(r.id);
@@ -272,6 +285,17 @@ export default function StaffManagementTab({
     if (isEditingSelf && role !== editingStaff.role) {
       setEditError('You cannot change or downgrade your own clinic role.');
       return;
+    }
+
+    if (isSoleActiveAdmin) {
+      if (selectedRoleOption.name !== 'Clinic Administrator') {
+        setEditError('Cannot change the role of the only active Clinic Administrator.');
+        return;
+      }
+      if (!isActiveStaff) {
+        setEditError('Cannot deactivate the only active Clinic Administrator.');
+        return;
+      }
     }
 
     if (effectiveStaffRole === 'Doctor' && !prc.trim()) {
@@ -1076,6 +1100,15 @@ export default function StaffManagementTab({
                 </ThemedText>
               )}
 
+              {isSoleActiveAdmin ? (
+                <View style={styles.systemNotice}>
+                  <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                  <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
+                    Primary System Administrator: A facility must always maintain at least one active staff member assigned to the built-in Clinic Administrator role.
+                  </ThemedText>
+                </View>
+              ) : null}
+
               {/* System Standard Roles */}
               <View style={styles.roleSubgroup}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -1092,7 +1125,7 @@ export default function StaffManagementTab({
                       key={r.id}
                       label={r.displayName}
                       active={selectedRoleOption.id === r.id}
-                      disabled={isEditingSelf}
+                      disabled={isEditingSelf || (isSoleActiveAdmin && r.name !== 'Clinic Administrator')}
                       onPress={() => handleSelectRole(r)}
                     />
                   ))}
@@ -1119,7 +1152,7 @@ export default function StaffManagementTab({
                         key={r.id}
                         label={r.displayName}
                         active={selectedRoleOption.id === r.id}
-                        disabled={isEditingSelf}
+                        disabled={isEditingSelf || isSoleActiveAdmin}
                         onPress={() => handleSelectRole(r)}
                       />
                     ))}
@@ -1243,6 +1276,8 @@ export default function StaffManagementTab({
               <ThemedText variant="caption" color={theme.colors.textMuted}>
                 {isEditingSelf
                   ? 'Active: you cannot deactivate your own workstation account.'
+                  : isSoleActiveAdmin
+                  ? 'Active: primary administrator. Cannot deactivate the only active Clinic Administrator.'
                   : isActiveStaff
                   ? 'Active: staff member can be assigned consultations and access workstation.'
                   : 'Deactivated: staff member cannot log in or be assigned.'}
@@ -1252,9 +1287,9 @@ export default function StaffManagementTab({
               title={isActiveStaff ? 'Active' : 'Deactivated'}
               variant={isActiveStaff ? 'success' : 'danger'}
               size="sm"
-              disabled={isEditingSelf}
+              disabled={isEditingSelf || isSoleActiveAdmin}
               onPress={() => {
-                if (isEditingSelf) return;
+                if (isEditingSelf || isSoleActiveAdmin) return;
                 setIsActiveStaff((prev) => !prev);
               }}
             />

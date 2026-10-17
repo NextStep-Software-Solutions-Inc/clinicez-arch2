@@ -1293,5 +1293,238 @@ public class StaffCommandsTests
         var createdInDb = await context.StaffMembers.FirstAsync(s => s.Id == result.Id);
         createdInDb.GetAssignedRoomIds().Should().Equal(new[] { room2.Id, room1.Id });
     }
+
+    [Fact]
+    public async Task UpdateStaffMember_WhenOnlyActiveSystemAdminReassignedToCustomRole_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var adminStaffId = Guid.NewGuid();
+        var callerStaffId = Guid.NewGuid();
+        var customRoleId = Guid.NewGuid();
+        var systemAdminRoleId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(callerStaffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+
+        var systemAdminRole = new ClinicRole
+        {
+            Id = systemAdminRoleId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = "Clinic Administrator",
+            IsSystem = true,
+            Permissions = new List<string>(ClinicPermissions.All)
+        };
+        var customRole = new ClinicRole
+        {
+            Id = customRoleId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = "Front Desk Lead",
+            IsSystem = false,
+            Permissions = new List<string> { ClinicPermissions.AppointmentsRead }
+        };
+        await context.ClinicRoles.AddRangeAsync(systemAdminRole, customRole);
+
+        // The only active system admin
+        var adminStaff = new StaffMember
+        {
+            Id = adminStaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Sole",
+            LastName = "Admin",
+            Role = StaffRole.Admin,
+            ClinicRoleId = systemAdminRoleId,
+            IsActive = true
+        };
+        var callerStaff = new StaffMember
+        {
+            Id = callerStaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Other",
+            LastName = "User",
+            Role = StaffRole.Doctor,
+            IsActive = true
+        };
+        await context.StaffMembers.AddRangeAsync(adminStaff, callerStaff);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateStaffMemberCommandHandler(staffRepo, roleRepo, uow, clinicContext);
+        var command = new UpdateStaffMemberCommand(
+            adminStaffId,
+            "Sole",
+            "Admin",
+            null,
+            null,
+            StaffRole.Admin,
+            customRoleId, // Attempt to reassign to custom role
+            "admin@clinic.com",
+            null,
+            null,
+            null,
+            null,
+            null,
+            true);
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*Cannot reassign or deactivate the only active staff member assigned to the built-in Clinic Administrator role*");
+    }
+
+    [Fact]
+    public async Task DeactivateStaffMember_WhenOnlyActiveSystemAdmin_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var adminStaffId = Guid.NewGuid();
+        var callerStaffId = Guid.NewGuid();
+        var systemAdminRoleId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(callerStaffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        var systemAdminRole = new ClinicRole
+        {
+            Id = systemAdminRoleId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = "Clinic Administrator",
+            IsSystem = true,
+            Permissions = new List<string>(ClinicPermissions.All)
+        };
+        await context.ClinicRoles.AddAsync(systemAdminRole);
+
+        var adminStaff = new StaffMember
+        {
+            Id = adminStaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Sole",
+            LastName = "Admin",
+            Role = StaffRole.Admin,
+            ClinicRoleId = systemAdminRoleId,
+            IsActive = true
+        };
+        var callerStaff = new StaffMember
+        {
+            Id = callerStaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Caller",
+            LastName = "User",
+            Role = StaffRole.Doctor,
+            IsActive = true
+        };
+        await context.StaffMembers.AddRangeAsync(adminStaff, callerStaff);
+        await context.SaveChangesAsync();
+
+        var handler = new DeactivateStaffMemberCommandHandler(staffRepo, uow, clinicContext);
+        var command = new DeactivateStaffMemberCommand(adminStaffId);
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*Cannot*the only active Administrator in this clinic*");
+    }
+
+    [Fact]
+    public async Task UpdateStaffMember_WhenAnotherActiveSystemAdminExists_AllowsReassignment()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var admin1StaffId = Guid.NewGuid();
+        var admin2StaffId = Guid.NewGuid();
+        var customRoleId = Guid.NewGuid();
+        var systemAdminRoleId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(admin2StaffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+
+        var systemAdminRole = new ClinicRole
+        {
+            Id = systemAdminRoleId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = "Clinic Administrator",
+            IsSystem = true,
+            Permissions = new List<string>(ClinicPermissions.All)
+        };
+        var customRole = new ClinicRole
+        {
+            Id = customRoleId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = "Secondary Lead",
+            IsSystem = false,
+            Permissions = new List<string> { ClinicPermissions.AppointmentsRead }
+        };
+        await context.ClinicRoles.AddRangeAsync(systemAdminRole, customRole);
+
+        // Two active system admins
+        var admin1 = new StaffMember
+        {
+            Id = admin1StaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Admin",
+            LastName = "One",
+            Role = StaffRole.Admin,
+            ClinicRoleId = systemAdminRoleId,
+            IsActive = true
+        };
+        var admin2 = new StaffMember
+        {
+            Id = admin2StaffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Admin",
+            LastName = "Two",
+            Role = StaffRole.Admin,
+            ClinicRoleId = systemAdminRoleId,
+            IsActive = true
+        };
+        await context.StaffMembers.AddRangeAsync(admin1, admin2);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateStaffMemberCommandHandler(staffRepo, roleRepo, uow, clinicContext);
+        var command = new UpdateStaffMemberCommand(
+            admin1StaffId,
+            "Admin",
+            "One",
+            null,
+            null,
+            StaffRole.Admin,
+            customRoleId,
+            "admin1@clinic.com",
+            null,
+            null,
+            null,
+            null,
+            null,
+            true);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+        result.Should().NotBeNull();
+        result.ClinicRoleId.Should().Be(customRoleId);
+    }
 }
 
