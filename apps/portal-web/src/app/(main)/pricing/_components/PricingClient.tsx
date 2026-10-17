@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
 import { usePlans, usePaymentConfig } from "@/hooks/useBilling";
@@ -84,6 +85,7 @@ export function PricingClient({
   onAction?: (tierName: string) => void;
   loadingTier?: string | null;
 } = {}) {
+  const router = useRouter();
   const { paymentConfig } = usePaymentConfig();
   const [isAnnual, setIsAnnual] = useState(false);
   const [userToggled, setUserToggled] = useState(false);
@@ -133,7 +135,12 @@ export function PricingClient({
       return;
     }
     if (tier.id === "enterprise" || tier.slug === "enterprise") {
-      window.location.href = salesContactHref();
+      const href = salesContactHref();
+      if (href.startsWith("mailto:")) {
+        window.location.assign(href);
+      } else {
+        router.push(href);
+      }
       return;
     }
     if (onAction) {
@@ -147,14 +154,16 @@ export function PricingClient({
 
     if (isSignedIn) {
       // If already logged in, navigate straight to workplace setup with pre-selected plan
-      window.location.href = postAuthRedirect;
+      router.push(postAuthRedirect);
       return;
     }
 
     // Direct new user to Clerk sign-up with plan pre-seeded and destination back to workplace registration
-    window.location.href = `/sign-up?plan=${planKey}&billing=${billingCycle}&redirect_url=${encodeURIComponent(
-      postAuthRedirect
-    )}`;
+    router.push(
+      `/sign-up?plan=${planKey}&billing=${billingCycle}&redirect_url=${encodeURIComponent(
+        postAuthRedirect
+      )}`
+    );
   };
 
   return (

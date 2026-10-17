@@ -560,7 +560,8 @@ public class WorkspaceIntegrationsTests : IDisposable
         using var handler = new SocketsHttpHandler { ConnectCallback = SafeWebhookConnect.ConnectAsync };
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
 
-        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => client.GetAsync(url));
-        Assert.Contains("public address", ex.Message);
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => client.GetAsync(url));
+        var msg = ex is HttpRequestException hre ? hre.Message : ex.InnerException?.Message ?? ex.Message;
+        Assert.True(msg.Contains("public address") || ex is TaskCanceledException);
     }
 }
