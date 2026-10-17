@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Roles.Commands;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Context;
 using FluentAssertions;

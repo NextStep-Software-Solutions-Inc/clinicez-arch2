@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Staff.Commands;
+using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
