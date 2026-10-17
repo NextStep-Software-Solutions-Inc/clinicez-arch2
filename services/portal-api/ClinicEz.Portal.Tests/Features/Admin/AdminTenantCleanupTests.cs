@@ -5,6 +5,7 @@ using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Tests.Support;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -111,7 +112,7 @@ public class AdminTenantCleanupTests : IDisposable
             InvoiceNumber = "INV-2026-0001",
             XenditInvoiceId = "xendit_inv_1",
             Amount = 1500m,
-            Status = InvoiceStatus.Paid
+            Status = "Paid"
         });
         _context.SaveChanges();
 
@@ -225,7 +226,7 @@ public class AdminTenantCleanupTests : IDisposable
             InvoiceNumber = "INV-2026-9999",
             XenditInvoiceId = "xendit_inv_99",
             Amount = 5000m,
-            Status = InvoiceStatus.Paid
+            Status = "Paid"
         });
         _context.SaveChanges();
 
