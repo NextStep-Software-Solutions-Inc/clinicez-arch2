@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { adminService, AdminSystemSettingDto } from "@/services/admin.service";
 import { PlatformBankAccount } from "@/services/billing.service";
+import { ADMIN_PERMISSIONS } from "@/constants/permissions";
 import { useAdmin } from "../AdminLayoutClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,7 +85,9 @@ function parseBankAccountsJson(raw?: string): PlatformBankAccount[] {
 
 export default function PlatformSettingsPage() {
   const { hasPermission } = useAdmin();
-  const canManageSettings = hasPermission("manage:settings") || hasPermission("manage:tenants");
+  const canManageSettings =
+    hasPermission(ADMIN_PERMISSIONS.MANAGE_SETTINGS) ||
+    hasPermission(ADMIN_PERMISSIONS.MANAGE_TENANTS);
 
   const [settings, setSettings] = useState<AdminSystemSettingDto[]>([]);
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -216,7 +219,7 @@ export default function PlatformSettingsPage() {
           <IconLock className="h-10 w-10 text-destructive mx-auto" />
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Access Restricted</h2>
           <p className="text-sm text-muted-foreground">
-            You need the <code>manage:settings</code> permission to view or modify global platform settings.
+            You need the <code>{ADMIN_PERMISSIONS.MANAGE_SETTINGS}</code> permission to view or modify global platform settings.
           </p>
         </CardContent>
       </Card>

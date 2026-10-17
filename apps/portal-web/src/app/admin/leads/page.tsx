@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAdmin } from "../AdminLayoutClient";
 import { adminService, AdminLeadDto } from "@/services/admin.service";
+import { ADMIN_PERMISSIONS } from "@/constants/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,7 @@ export default function AdminLeadsPage() {
   };
 
   useEffect(() => {
-    if (!hasPermission("view:tenants")) {
+    if (!hasPermission(ADMIN_PERMISSIONS.VIEW_TENANTS)) {
       setError("Unauthorized access");
       setLoading(false);
       return;

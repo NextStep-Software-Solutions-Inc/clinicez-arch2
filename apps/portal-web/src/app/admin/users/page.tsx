@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAdmin } from "../AdminLayoutClient";
 import { adminService, AdminUserDto, AdminRoleDto } from "@/services/admin.service";
+import { ADMIN_PERMISSIONS } from "@/constants/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,7 @@ export default function AdminUsersPage() {
     isActive: true
   });
 
-  const canManage = hasPermission("manage:admins");
+  const canManage = hasPermission(ADMIN_PERMISSIONS.MANAGE_ADMINS);
 
   const loadData = async () => {
     try {
@@ -66,7 +67,7 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
-    if (!hasPermission("manage:admins")) {
+    if (!hasPermission(ADMIN_PERMISSIONS.MANAGE_ADMINS)) {
       setError("Unauthorized access");
       setLoading(false);
       return;

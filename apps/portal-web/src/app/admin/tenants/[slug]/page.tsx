@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAdmin } from "../../AdminLayoutClient";
 import { adminService, AdminTenantDto } from "@/services/admin.service";
+import { ADMIN_PERMISSIONS } from "@/constants/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +51,7 @@ export default function TenantDetailPage() {
   const [apiLimit, setApiLimit] = useState(10000);
   const [saveLoading, setSaveLoading] = useState(false);
 
-  const canToggle = hasPermission("toggle:subscription");
+  const canToggle = hasPermission(ADMIN_PERMISSIONS.TOGGLE_SUBSCRIPTION);
 
   const loadTenantDetails = async () => {
     if (!slug) return;
@@ -75,7 +76,7 @@ export default function TenantDetailPage() {
   };
 
   useEffect(() => {
-    if (!hasPermission("view:tenants")) {
+    if (!hasPermission(ADMIN_PERMISSIONS.VIEW_TENANTS)) {
       setError("Unauthorized access");
       setLoading(false);
       return;

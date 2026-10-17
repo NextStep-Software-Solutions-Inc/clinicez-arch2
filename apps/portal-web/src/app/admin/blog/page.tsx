@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useAdmin } from "../AdminLayoutClient";
 import { adminService, AdminBlogDto } from "@/services/admin.service";
+import { ADMIN_PERMISSIONS } from "@/constants/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -118,7 +119,7 @@ export default function AdminBlogPage() {
   };
 
   useEffect(() => {
-    if (!hasPermission("manage:blogs")) {
+    if (!hasPermission(ADMIN_PERMISSIONS.MANAGE_BLOGS)) {
       setError("Unauthorized access");
       setLoading(false);
       return;

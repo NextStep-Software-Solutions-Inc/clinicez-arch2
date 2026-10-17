@@ -22,10 +22,11 @@ import {
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { ClinicEzMark } from "@/components/ClinicEzLogo";
+import { ADMIN_PERMISSIONS, AdminPermission } from "@/constants/permissions";
 
 interface AdminContextType {
   admin: AdminMeDto | null;
-  hasPermission: (permission: string) => boolean;
+  hasPermission: (permission: AdminPermission | string) => boolean;
   refreshAdmin: () => Promise<void>;
 }
 
@@ -161,54 +162,54 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       title: "Overview",
       href: "/admin",
       icon: IconDashboard,
-      permission: "view:analytics"
+      permission: ADMIN_PERMISSIONS.VIEW_ANALYTICS
     },
     {
       title: "Tenants",
       href: "/admin/tenants",
       icon: IconHospital,
-      permission: "view:tenants"
+      permission: ADMIN_PERMISSIONS.VIEW_TENANTS
     },
     {
       title: "Plans",
       href: "/admin/plans",
       icon: IconCreditCard,
-      permission: "manage:plans"
+      permission: ADMIN_PERMISSIONS.MANAGE_PLANS
     },
     {
       title: "Leads",
       href: "/admin/leads",
       icon: IconAddressBook,
-      permission: "view:tenants"
+      permission: ADMIN_PERMISSIONS.VIEW_TENANTS
     },
     {
       title: "Blog CRM",
       href: "/admin/blog",
       icon: IconNotebook,
-      permission: "manage:blogs"
+      permission: ADMIN_PERMISSIONS.MANAGE_BLOGS
     },
     {
       title: "Roles & Access",
       href: "/admin/roles",
       icon: IconKey,
-      permission: "manage:roles"
+      permission: ADMIN_PERMISSIONS.MANAGE_ROLES
     },
     {
       title: "Admin Users",
       href: "/admin/users",
       icon: IconUsers,
-      permission: "manage:admins"
+      permission: ADMIN_PERMISSIONS.MANAGE_ADMINS
     },
     {
       title: "Platform Settings",
       href: "/admin/settings",
       icon: IconAdjustments,
-      permission: "manage:settings"
+      permission: ADMIN_PERMISSIONS.MANAGE_SETTINGS
     }
   ].filter(item =>
     hasPermission(item.permission) ||
-    (item.permission === "manage:plans" && (hasPermission("manage:tenants") || hasPermission("view:tenants"))) ||
-    (item.permission === "manage:settings" && hasPermission("manage:tenants"))
+    (item.permission === ADMIN_PERMISSIONS.MANAGE_PLANS && (hasPermission(ADMIN_PERMISSIONS.MANAGE_TENANTS) || hasPermission(ADMIN_PERMISSIONS.VIEW_TENANTS))) ||
+    (item.permission === ADMIN_PERMISSIONS.MANAGE_SETTINGS && hasPermission(ADMIN_PERMISSIONS.MANAGE_TENANTS))
   );
 
   const SidebarContent = () => (

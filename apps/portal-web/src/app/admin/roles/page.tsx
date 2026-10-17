@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAdmin } from "../AdminLayoutClient";
 import { adminService, AdminRoleDto, PermissionDefinitionDto } from "@/services/admin.service";
+import { ADMIN_PERMISSIONS, DEFAULT_PERMISSION_DEFINITIONS } from "@/constants/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,17 +31,7 @@ import {
   IconAlertCircle
 } from "@tabler/icons-react";
 
-const FALLBACK_PERMISSIONS: PermissionDefinitionDto[] = [
-  { token: "view:analytics", label: "View Analytics", description: "Allows viewing high-level dashboard charts, stats, and estimated MRR.", category: "Analytics" },
-  { token: "view:tenants", label: "View Tenants & Leads", description: "Allows viewing lists of registered tenants and conversion leads.", category: "Tenants" },
-  { token: "manage:tenants", label: "Manage Tenant Details", description: "Allows modifying organization files and onboarding status.", category: "Tenants" },
-  { token: "toggle:subscription", label: "Adjust Subscription Plan", description: "Allows manually upgrading/downgrading tenant billing active states and recording offline payments.", category: "Billing" },
-  { token: "manage:blogs", label: "Manage Blogs (CRM)", description: "Allows creating, updating, and deleting marketing blog posts.", category: "Content" },
-  { token: "manage:roles", label: "Manage Roles & Access", description: "Allows viewing, creating, and editing roles and permissions configurations.", category: "Administration" },
-  { token: "manage:admins", label: "Manage Admin Users", description: "Allows full control to invite, edit, or delete other administrative profiles.", category: "Administration" },
-  { token: "manage:settings", label: "Manage Platform Settings", description: "Allows configuring platform-wide system settings and environment parameters.", category: "System" },
-  { token: "manage:plans", label: "Manage Commercial Plans", description: "Allows creating, updating, and managing commercial subscription tiers and limits.", category: "Billing" }
-];
+const FALLBACK_PERMISSIONS: PermissionDefinitionDto[] = DEFAULT_PERMISSION_DEFINITIONS as unknown as PermissionDefinitionDto[];
 
 export default function AdminRolesPage() {
   const { hasPermission, refreshAdmin } = useAdmin();
@@ -64,7 +55,7 @@ export default function AdminRolesPage() {
   const [roleToDelete, setRoleToDelete] = useState<AdminRoleDto | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const canManage = hasPermission("manage:roles");
+  const canManage = hasPermission(ADMIN_PERMISSIONS.MANAGE_ROLES);
 
   const loadData = async () => {
     try {
@@ -86,7 +77,7 @@ export default function AdminRolesPage() {
   };
 
   useEffect(() => {
-    if (!hasPermission("manage:roles")) {
+    if (!hasPermission(ADMIN_PERMISSIONS.MANAGE_ROLES)) {
       setError("Unauthorized access. You do not have permissions to manage administrative roles.");
       setLoading(false);
       return;

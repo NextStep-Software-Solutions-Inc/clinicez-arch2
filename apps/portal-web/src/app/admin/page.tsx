@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAdmin } from "./AdminLayoutClient";
 import { adminService, AdminAnalyticsDto } from "@/services/admin.service";
+import { ADMIN_PERMISSIONS } from "@/constants/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   IconHospital,
@@ -23,7 +24,7 @@ export default function AdminDashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!hasPermission("view:analytics")) {
+    if (!hasPermission(ADMIN_PERMISSIONS.VIEW_ANALYTICS)) {
       setError("Unauthorized access");
       setLoading(false);
       return;

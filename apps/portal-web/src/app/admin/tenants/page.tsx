@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAdmin } from "../AdminLayoutClient";
 import { adminService, AdminTenantDto } from "@/services/admin.service";
+import { ADMIN_PERMISSIONS } from "@/constants/permissions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,7 @@ export default function AdminTenantsPage() {
   const [filterPlan, setFilterPlan] = useState<string>("ALL");
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
 
-  const canToggle = hasPermission("toggle:subscription");
+  const canToggle = hasPermission(ADMIN_PERMISSIONS.TOGGLE_SUBSCRIPTION);
 
   const loadTenants = async () => {
     try {
@@ -59,7 +60,7 @@ export default function AdminTenantsPage() {
   };
 
   useEffect(() => {
-    if (!hasPermission("view:tenants")) {
+    if (!hasPermission(ADMIN_PERMISSIONS.VIEW_TENANTS)) {
       setError("Unauthorized access");
       setLoading(false);
       return;

@@ -4,3 +4,4 @@ export * from './interoperability';
 export * from './tenant';
 export * from './apiUrl';
 export * from './bloodType';
+export * from './permissions';

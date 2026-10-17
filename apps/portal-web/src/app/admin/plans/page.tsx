@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useAdmin } from "../AdminLayoutClient";
 import { adminService, BillingPlan } from "@/services/admin.service";
+import { ADMIN_PERMISSIONS } from "@/constants/permissions";
 import { PlanEditorDialog } from "@/components/admin/PlanEditorDialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,8 +52,11 @@ export default function AdminPlansPage() {
   // Search filter
   const [searchQuery, setSearchQuery] = useState("");
 
-  const canManage = hasPermission("manage:plans");
-  const canView = hasPermission("manage:plans") || hasPermission("manage:tenants") || hasPermission("view:tenants");
+  const canManage = hasPermission(ADMIN_PERMISSIONS.MANAGE_PLANS);
+  const canView =
+    hasPermission(ADMIN_PERMISSIONS.MANAGE_PLANS) ||
+    hasPermission(ADMIN_PERMISSIONS.MANAGE_TENANTS) ||
+    hasPermission(ADMIN_PERMISSIONS.VIEW_TENANTS);
 
   const loadPlans = async () => {
     try {
