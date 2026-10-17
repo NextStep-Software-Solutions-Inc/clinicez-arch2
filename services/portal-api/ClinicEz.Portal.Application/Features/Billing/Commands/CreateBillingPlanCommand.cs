@@ -5,7 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Shared.Exceptions;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Portal.Application.Features.Billing.Commands;
 
@@ -32,11 +34,25 @@ public class CreateBillingPlanCommandHandler(IApplicationDbContext context) : IR
 {
     public async Task<Guid> Handle(CreateBillingPlanCommand request, CancellationToken cancellationToken)
     {
+        var normalizedSlug = request.Slug.Trim().ToLowerInvariant();
+        var slugExists = await context.Plans
+            .AnyAsync(p => !p.IsDeleted && p.Slug.ToLower() == normalizedSlug, cancellationToken);
+        if (slugExists)
+        {
+            throw new ValidationException($"Plan slug '{normalizedSlug}' is already taken. Please choose a different unique slug.");
+        }
+
+        var otherPlans = await context.Plans
+            .Where(p => !p.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        PlanCatalog.BumpRanksOnInsertOrUpdate(otherPlans, request.Rank);
+
         var plan = new Plan
         {
-            Name = request.Name,
-            Slug = request.Slug,
-            Description = request.Description,
+            Name = request.Name.Trim(),
+            Slug = normalizedSlug,
+            Description = request.Description.Trim(),
             Rank = request.Rank,
             PriceMonthly = request.PriceMonthly,
             PriceAnnually = request.PriceAnnually,

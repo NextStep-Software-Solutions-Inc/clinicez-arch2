@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { adminService, BillingPlan } from "@/services/admin.service";
+import { cn } from "@/lib/utils";
 import {
   IconLoader,
   IconCheck,
@@ -46,7 +47,8 @@ import {
   IconCash,
   IconCreditCard,
   IconArrowLeft,
-  IconArrowRight
+  IconArrowRight,
+  IconAlertCircle
 } from "@tabler/icons-react";
 
 export interface PlanEditorDialogProps {
@@ -54,6 +56,7 @@ export interface PlanEditorDialogProps {
   onClose: () => void;
   onSaved: () => void;
   plan?: BillingPlan | null;
+  existingPlans?: BillingPlan[];
 }
 
 export interface LimitMetadata {
@@ -275,12 +278,20 @@ export const CAPABILITY_FLAGS: FeatureMetadata[] = [
   }
 ];
 
-export function PlanEditorDialog({ isOpen, onClose, onSaved, plan }: PlanEditorDialogProps) {
+export function PlanEditorDialog({
+  isOpen,
+  onClose,
+  onSaved,
+  plan,
+  existingPlans = []
+}: PlanEditorDialogProps) {
   const isEditing = Boolean(plan);
 
   const [activeTab, setActiveTab] = useState<"details" | "limits" | "features">("details");
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [slugStatus, setSlugStatus] = useState<"idle" | "checking" | "available" | "unavailable">("idle");
+  const [slugMessage, setSlugMessage] = useState<string>("");
   const [description, setDescription] = useState("");
   const [rank, setRank] = useState(1);
   const [monthlyPrice, setMonthlyPrice] = useState(0);
@@ -297,6 +308,13 @@ export function PlanEditorDialog({ isOpen, onClose, onSaved, plan }: PlanEditorD
 
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Rank collision detection against loaded existing plans
+  const collidingPlan = existingPlans.find(
+    (p) =>
+      Number(p.rank) === Number(rank) &&
+      (p.planId || p.id) !== (plan?.planId || plan?.id)
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -368,8 +386,76 @@ export function PlanEditorDialog({ isOpen, onClose, onSaved, plan }: PlanEditorD
       ]);
     }
     setActiveTab("details");
+    setSlugStatus("idle");
+    setSlugMessage("");
     setErrors({});
   }, [isOpen, plan]);
+
+  // Real-time slug validation (instant local check + debounced server check)
+  useEffect(() => {
+    if (!isOpen || !slug.trim()) {
+      setSlugStatus("idle");
+      setSlugMessage("");
+      return;
+    }
+
+    const currentPlanId = plan ? plan.planId || plan.id : undefined;
+
+    // 1. Instant regex validation
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      setSlugStatus("unavailable");
+      setSlugMessage("Slug must contain only lowercase letters, numbers, and hyphens");
+      return;
+    }
+
+    // 2. Instant client-side check against in-memory plans
+    const clientDuplicate = existingPlans.find(
+      (p) =>
+        (p.slug || p.id || "").toLowerCase() === slug.toLowerCase() &&
+        (p.planId || p.id) !== currentPlanId
+    );
+    if (clientDuplicate) {
+      setSlugStatus("unavailable");
+      setSlugMessage(`Slug is already used by "${clientDuplicate.name}"`);
+      return;
+    }
+
+    // If unchanged from current plan, mark as available
+    if (isEditing && (plan?.slug === slug || plan?.id === slug)) {
+      setSlugStatus("available");
+      setSlugMessage("Current plan slug");
+      return;
+    }
+
+    // 3. Debounced server check
+    setSlugStatus("checking");
+    setSlugMessage("Verifying slug uniqueness...");
+
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await adminService.checkPlanSlug(slug, currentPlanId);
+        if (isMounted) {
+          if (res.available) {
+            setSlugStatus("available");
+            setSlugMessage(res.message || "Unique & available");
+          } else {
+            setSlugStatus("unavailable");
+            setSlugMessage(res.message || "Slug is already registered in database");
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          console.error("Slug check error:", err);
+        }
+      }
+    }, 350);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [slug, isOpen, isEditing, plan, existingPlans]);
 
   const handleNameChange = (val: string) => {
     setName(val);
@@ -458,6 +544,8 @@ export function PlanEditorDialog({ isOpen, onClose, onSaved, plan }: PlanEditorD
     if (!slug.trim()) newErrors.slug = "Plan slug is required";
     else if (!/^[a-z0-9-]+$/.test(slug)) {
       newErrors.slug = "Slug must contain only lowercase letters, numbers, and hyphens";
+    } else if (slugStatus === "unavailable") {
+      newErrors.slug = slugMessage || "Plan slug is already in use by another plan";
     }
 
     if (rank < 1) newErrors.rank = "Ladder rank must be at least 1";
@@ -476,7 +564,7 @@ export function PlanEditorDialog({ isOpen, onClose, onSaved, plan }: PlanEditorD
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!validate()) {
+    if (!validate() || slugStatus === "unavailable") {
       toast.error("Please resolve highlighted form validation errors before saving.");
       return;
     }
@@ -764,9 +852,33 @@ export function PlanEditorDialog({ isOpen, onClose, onSaved, plan }: PlanEditorD
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-                      System Slug / Unique Key <span className="text-destructive">*</span>
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                        System Slug / Unique Key <span className="text-destructive">*</span>
+                      </label>
+                      {slug && slugStatus !== "idle" && (
+                        <div className="flex items-center gap-1.5 text-xs">
+                          {slugStatus === "checking" && (
+                            <span className="inline-flex items-center gap-1 text-muted-foreground text-[11px] font-medium animate-pulse">
+                              <IconLoader className="h-3 w-3 animate-spin text-primary" />
+                              Checking...
+                            </span>
+                          )}
+                          {slugStatus === "available" && (
+                            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                              <IconCheck className="h-3 w-3" />
+                              Unique & Available
+                            </span>
+                          )}
+                          {slugStatus === "unavailable" && (
+                            <span className="inline-flex items-center gap-1 text-destructive text-[11px] font-semibold bg-destructive/10 px-2 py-0.5 rounded-full border border-destructive/20">
+                              <IconX className="h-3 w-3" />
+                              Already Taken
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <div className="relative">
                       <input
                         type="text"
@@ -776,10 +888,23 @@ export function PlanEditorDialog({ isOpen, onClose, onSaved, plan }: PlanEditorD
                           setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))
                         }
                         placeholder="e.g. community-practice, pro-tier, enterprise-network"
-                        className="w-full h-12 px-4 text-sm font-mono font-semibold rounded-2xl border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all placeholder:text-muted-foreground/60 shadow-2xs"
+                        className={cn(
+                          "w-full h-12 px-4 text-sm font-mono font-semibold rounded-2xl border bg-background text-foreground focus:outline-none focus:ring-2 transition-all placeholder:text-muted-foreground/60 shadow-2xs",
+                          slugStatus === "unavailable"
+                            ? "border-destructive focus:ring-destructive focus:border-destructive text-destructive"
+                            : slugStatus === "available"
+                            ? "border-emerald-500/50 focus:ring-emerald-500 focus:border-emerald-500"
+                            : "border-input focus:ring-primary focus:border-primary"
+                        )}
                       />
                     </div>
                     {errors.slug && <p className="text-xs text-destructive font-medium">{errors.slug}</p>}
+                    {slugMessage && slugStatus === "unavailable" && !errors.slug && (
+                      <p className="text-xs text-destructive font-medium flex items-center gap-1">
+                        <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {slugMessage}
+                      </p>
+                    )}
                     <p className="text-[11px] text-muted-foreground">
                       Immutable identifier referenced in database migrations and tenant license tables.
                     </p>
@@ -843,6 +968,17 @@ export function PlanEditorDialog({ isOpen, onClose, onSaved, plan }: PlanEditorD
                       onChange={(e) => setRank(parseInt(e.target.value) || 1)}
                       className="w-full h-12 px-4 text-base font-bold font-mono rounded-xl border border-input bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                     />
+                    {collidingPlan && (
+                      <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-[11px] leading-tight space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <IconArrowsExchange className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span>Auto-Bump Side Effect</span>
+                        </div>
+                        <p>
+                          Tier {rank} is currently held by <strong>{collidingPlan.name}</strong>. Saving will automatically bump <strong>{collidingPlan.name}</strong> (and higher tiers) up by +1 to guarantee unique ranks.
+                        </p>
+                      </div>
+                    )}
                     {errors.rank && <p className="text-xs text-destructive font-medium">{errors.rank}</p>}
                     <p className="text-[11px] text-muted-foreground leading-snug">
                       Hierarchy rank order (1, 2, 3...). Workspaces can only upgrade to plans with a strictly higher ladder rank.

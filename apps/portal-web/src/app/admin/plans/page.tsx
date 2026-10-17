@@ -459,6 +459,7 @@ export default function AdminPlansPage() {
         onClose={() => setIsEditorOpen(false)}
         onSaved={loadPlans}
         plan={selectedPlan}
+        existingPlans={plans}
       />
 
       {/* Delete Confirmation Modal */}

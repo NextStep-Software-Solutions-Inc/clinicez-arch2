@@ -761,4 +761,148 @@ public class PlanAndEntitlementManagementTests : IDisposable
         Assert.DoesNotContain(Permissions.ManagePlans, contentWriterPermissions);
         Assert.DoesNotContain(Permissions.ManageTenants, contentWriterPermissions);
     }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // 7. Rank Bumping Side Effects & Realtime Slug Validation Tests
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void BumpRanksOnInsertOrUpdate_CollidingRank_BumpsExistingPlanAndCascades()
+    {
+        var planA = new Plan { Id = Guid.NewGuid(), Name = "Plan A", Slug = "plan-a", Rank = 1 };
+        var planB = new Plan { Id = Guid.NewGuid(), Name = "Plan B", Slug = "plan-b", Rank = 2 };
+        var planC = new Plan { Id = Guid.NewGuid(), Name = "Plan C", Slug = "plan-c", Rank = 3 };
+
+        var otherPlans = new List<Plan> { planA, planB, planC };
+
+        // Setting a new plan or updated plan to desiredRank = 2
+        var bumped = PlanCatalog.BumpRanksOnInsertOrUpdate(otherPlans, desiredRank: 2);
+
+        Assert.Equal(1, planA.Rank); // lower plan stays 1
+        Assert.Equal(3, planB.Rank); // was 2, bumped to 3
+        Assert.Equal(4, planC.Rank); // was 3, bumped to 4
+        Assert.Contains(planB, bumped);
+        Assert.Contains(planC, bumped);
+    }
+
+    [Fact]
+    public void BumpRanksOnInsertOrUpdate_LegacyDuplicates_ResolvesAllCollisions()
+    {
+        // Replicates the scenario from the user screenshot: Professional = 3, Starter = 3, Enterprise = 4
+        var pro = new Plan { Id = Guid.NewGuid(), Name = "Professional", Slug = "pro", Rank = 3, CreatedAt = DateTime.UtcNow.AddMinutes(-10) };
+        var starter = new Plan { Id = Guid.NewGuid(), Name = "Starter", Slug = "starter", Rank = 3, CreatedAt = DateTime.UtcNow.AddMinutes(-5) };
+        var enterprise = new Plan { Id = Guid.NewGuid(), Name = "Enterprise", Slug = "enterprise", Rank = 4, CreatedAt = DateTime.UtcNow };
+
+        // We edit pro and assign rank 3
+        var otherPlans = new List<Plan> { starter, enterprise };
+        var bumped = PlanCatalog.BumpRanksOnInsertOrUpdate(otherPlans, desiredRank: 3);
+
+        Assert.Equal(4, starter.Rank);
+        Assert.Equal(5, enterprise.Rank);
+        Assert.Contains(starter, bumped);
+        Assert.Contains(enterprise, bumped);
+
+        var allRanks = new HashSet<int> { 3, starter.Rank, enterprise.Rank };
+        Assert.Equal(3, allRanks.Count); // all strictly unique!
+    }
+
+    [Fact]
+    public async Task CreateBillingPlanCommandHandler_DuplicateSlug_ThrowsValidationException()
+    {
+        var existing = new Plan { Name = "Existing", Slug = "unique-tier", Rank = 1 };
+        _context.Plans.Add(existing);
+        await _context.SaveChangesAsync();
+
+        var handler = new CreateBillingPlanCommandHandler(_context);
+        var command = new CreateBillingPlanCommand
+        {
+            Name = "Duplicate Tier",
+            Slug = "UNIQUE-TIER", // case-insensitive duplicate
+            Rank = 2
+        };
+
+        var ex = await Assert.ThrowsAsync<ClinicEz.Shared.Exceptions.ValidationException>(() =>
+            handler.Handle(command, CancellationToken.None));
+
+        Assert.Contains("already taken", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CreateBillingPlanCommandHandler_CollidingRank_BumpsExistingPlans()
+    {
+        var existing = new Plan { Name = "Starter", Slug = "starter-tier-bump", Rank = 2 };
+        _context.Plans.Add(existing);
+        await _context.SaveChangesAsync();
+
+        var handler = new CreateBillingPlanCommandHandler(_context);
+        var command = new CreateBillingPlanCommand
+        {
+            Name = "Pro",
+            Slug = "pro-tier-bump",
+            Rank = 2 // colliding rank
+        };
+
+        var newPlanId = await handler.Handle(command, CancellationToken.None);
+
+        var created = await _context.Plans.FindAsync(newPlanId);
+        var reloadedExisting = await _context.Plans.FindAsync(existing.Id);
+
+        Assert.NotNull(created);
+        Assert.NotNull(reloadedExisting);
+        Assert.Equal(2, created.Rank);
+        Assert.Equal(3, reloadedExisting.Rank); // bumped!
+    }
+
+    [Fact]
+    public async Task UpdateBillingPlanCommandHandler_DuplicateSlug_ThrowsValidationException()
+    {
+        var plan1 = new Plan { Name = "Plan One", Slug = "plan-one", Rank = 1 };
+        var plan2 = new Plan { Name = "Plan Two", Slug = "plan-two", Rank = 2 };
+        _context.Plans.AddRange(plan1, plan2);
+        await _context.SaveChangesAsync();
+
+        var handler = new UpdateBillingPlanCommandHandler(_context, _publisher);
+        var command = new UpdateBillingPlanCommand
+        {
+            Id = plan2.Id,
+            Name = "Plan Two Edited",
+            Slug = "PLAN-ONE", // collides with plan1
+            Rank = 2
+        };
+
+        var ex = await Assert.ThrowsAsync<ClinicEz.Shared.Exceptions.ValidationException>(() =>
+            handler.Handle(command, CancellationToken.None));
+
+        Assert.Contains("already taken", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task UpdateBillingPlanCommandHandler_CollidingRank_BumpsExistingPlans()
+    {
+        var plan1 = new Plan { Name = "Plan Alpha", Slug = "plan-alpha", Rank = 1 };
+        var plan2 = new Plan { Name = "Plan Beta", Slug = "plan-beta", Rank = 2 };
+        _context.Plans.AddRange(plan1, plan2);
+        await _context.SaveChangesAsync();
+
+        var handler = new UpdateBillingPlanCommandHandler(_context, _publisher);
+        // Change plan2 rank from 2 to 1 (collides with plan1)
+        var command = new UpdateBillingPlanCommand
+        {
+            Id = plan2.Id,
+            Name = plan2.Name,
+            Slug = plan2.Slug,
+            Rank = 1
+        };
+
+        var success = await handler.Handle(command, CancellationToken.None);
+        Assert.True(success);
+
+        var reloaded1 = await _context.Plans.FindAsync(plan1.Id);
+        var reloaded2 = await _context.Plans.FindAsync(plan2.Id);
+
+        Assert.NotNull(reloaded1);
+        Assert.NotNull(reloaded2);
+        Assert.Equal(1, reloaded2.Rank);
+        Assert.Equal(2, reloaded1.Rank); // plan1 bumped from 1 to 2!
+    }
 }

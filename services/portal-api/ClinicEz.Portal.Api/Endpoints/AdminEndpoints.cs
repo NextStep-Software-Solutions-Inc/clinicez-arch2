@@ -12,9 +12,11 @@ using ClinicEz.Portal.Application.Features.Admin.Queries.GetTenantOverrides;
 using ClinicEz.Portal.Application.Features.Billing.Commands;
 using ClinicEz.Portal.Application.Features.Billing.Queries;
 using ClinicEz.Portal.Application.Features.Hub;
+using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Constants;
 using ClinicEz.Portal.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -506,6 +508,39 @@ public class AdminEndpoints : IEndpoint
         })
         .WithName("AdminDeleteBillingPlan")
         .WithDescription("Deletes an unused billing plan by ID (SuperAdmin scope).")
+        .WithTags("Admin");
+
+        group.MapGet("/plans/check-slug", async (
+            string slug,
+            Guid? excludePlanId,
+            HttpContext httpContext,
+            ISender sender,
+            IApplicationDbContext context) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManagePlans, httpContext, sender)
+                        ?? await CheckPermissionAsync(Permissions.ViewTenants, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            if (string.IsNullOrWhiteSpace(slug))
+            {
+                return Results.Ok(new { Available = false, Slug = string.Empty, Message = "Slug cannot be empty." });
+            }
+
+            var normalizedSlug = slug.Trim().ToLowerInvariant();
+            var exists = await context.Plans
+                .AnyAsync(p => !p.IsDeleted &&
+                               p.Slug.ToLower() == normalizedSlug &&
+                               (!excludePlanId.HasValue || p.Id != excludePlanId.Value));
+
+            return Results.Ok(new
+            {
+                Available = !exists,
+                Slug = normalizedSlug,
+                Message = exists ? $"The plan slug '{normalizedSlug}' is already taken." : "Slug is available."
+            });
+        })
+        .WithName("AdminCheckPlanSlug")
+        .WithDescription("Checks in real time whether a billing plan slug is unique and available.")
         .WithTags("Admin");
 
         // 21. Tenant Entitlement Overrides Endpoints (SuperAdmin scope)

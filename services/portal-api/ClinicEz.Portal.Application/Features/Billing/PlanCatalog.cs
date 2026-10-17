@@ -99,6 +99,68 @@ public static class PlanCatalog
         return changed;
     }
 
+    /// <summary>
+    /// Ensures that no plan has the same ladder rank. When inserting or moving a plan to <paramref name="desiredRank"/>,
+    /// any other active plan with an identical or colliding rank is bumped sequentially (+1).
+    /// Also resolves any legacy duplicate ranks among existing plans.
+    /// Returns the list of plans whose ranks were modified.
+    /// </summary>
+    public static List<Plan> BumpRanksOnInsertOrUpdate(List<Plan> otherPlans, int desiredRank)
+    {
+        var changedPlans = new List<Plan>();
+        if (desiredRank < 1) desiredRank = 1;
+
+        var occupied = new HashSet<int> { desiredRank };
+
+        // Process lower plans first (rank < desiredRank)
+        var lowerPlans = otherPlans
+            .Where(p => p.Rank < desiredRank)
+            .OrderBy(p => p.Rank)
+            .ThenBy(p => p.CreatedAt)
+            .ToList();
+
+        foreach (var p in lowerPlans)
+        {
+            var r = p.Rank < 1 ? 1 : p.Rank;
+            while (occupied.Contains(r))
+            {
+                r++;
+            }
+            if (p.Rank != r)
+            {
+                p.Rank = r;
+                changedPlans.Add(p);
+            }
+            occupied.Add(r);
+        }
+
+        // Process higher or equal plans (rank >= desiredRank)
+        var higherOrEqualPlans = otherPlans
+            .Where(p => p.Rank >= desiredRank)
+            .OrderBy(p => p.Rank)
+            .ThenBy(p => p.CreatedAt)
+            .ToList();
+
+        var nextRank = desiredRank + 1;
+        foreach (var p in higherOrEqualPlans)
+        {
+            var r = Math.Max(p.Rank, nextRank);
+            while (occupied.Contains(r))
+            {
+                r++;
+            }
+            if (p.Rank != r)
+            {
+                p.Rank = r;
+                changedPlans.Add(p);
+            }
+            occupied.Add(r);
+            nextRank = r + 1;
+        }
+
+        return changedPlans;
+    }
+
     private static void ValidateSeed(PlanSeedOptions seed)
     {
         if (string.IsNullOrWhiteSpace(seed.Slug) || string.IsNullOrWhiteSpace(seed.Name))

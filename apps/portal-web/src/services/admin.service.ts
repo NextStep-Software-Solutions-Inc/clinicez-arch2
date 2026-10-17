@@ -419,6 +419,13 @@ export const adminService = {
     return res.data?.success ?? true;
   },
 
+  checkPlanSlug: async (slug: string, excludePlanId?: string): Promise<{ available: boolean; slug: string; message: string }> => {
+    const params = new URLSearchParams({ slug });
+    if (excludePlanId) params.append("excludePlanId", excludePlanId);
+    const res = await apiClient.get<{ available: boolean; slug: string; message: string }>(`/admin/plans/check-slug?${params.toString()}`);
+    return res.data;
+  },
+
   getTenantOverrides: async (tenantId: string): Promise<TenantOverridesDto> => {
     const res = await apiClient.get<TenantOverridesDto>(`/admin/tenants/${tenantId}/overrides`);
     const data = res.data;

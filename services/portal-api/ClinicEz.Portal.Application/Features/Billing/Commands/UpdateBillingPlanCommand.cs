@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Features.Licensing;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -47,11 +48,25 @@ public class UpdateBillingPlanCommandHandler(IApplicationDbContext context, IEnt
 
         if (plan == null) return false;
 
+        var normalizedSlug = request.Slug.Trim().ToLowerInvariant();
+        var slugExists = await context.Plans
+            .AnyAsync(p => !p.IsDeleted && p.Id != plan.Id && p.Slug.ToLower() == normalizedSlug, cancellationToken);
+        if (slugExists)
+        {
+            throw new ValidationException($"Plan slug '{normalizedSlug}' is already taken. Please choose a different unique slug.");
+        }
+
+        var otherPlans = await context.Plans
+            .Where(p => !p.IsDeleted && p.Id != plan.Id)
+            .ToListAsync(cancellationToken);
+
+        var bumpedPlans = PlanCatalog.BumpRanksOnInsertOrUpdate(otherPlans, request.Rank);
+
         var rankChanged = plan.Rank != request.Rank;
 
-        plan.Name = request.Name;
-        plan.Slug = request.Slug;
-        plan.Description = request.Description;
+        plan.Name = request.Name.Trim();
+        plan.Slug = normalizedSlug;
+        plan.Description = request.Description.Trim();
         plan.Rank = request.Rank;
         plan.PriceMonthly = request.PriceMonthly;
         plan.PriceAnnually = request.PriceAnnually;
@@ -84,12 +99,26 @@ public class UpdateBillingPlanCommandHandler(IApplicationDbContext context, IEnt
                 subscription.EntitlementVersion++;
             }
 
-            subscribedTenants = subscriptions.Select(s => s.TenantId).Distinct().ToList();
+            subscribedTenants.AddRange(subscriptions.Select(s => s.TenantId));
+        }
+
+        // For any other plans bumped as a side-effect, bump their Version and cascade to active subscribers
+        foreach (var bumped in bumpedPlans)
+        {
+            bumped.Version++;
+            var bumpedSubs = await context.Subscriptions
+                .Where(s => s.PlanId == bumped.Id && !s.IsDeleted)
+                .ToListAsync(cancellationToken);
+            foreach (var sub in bumpedSubs)
+            {
+                sub.EntitlementVersion++;
+            }
+            subscribedTenants.AddRange(bumpedSubs.Select(s => s.TenantId));
         }
 
         await context.SaveChangesAsync(cancellationToken);
 
-        foreach (var tenantId in subscribedTenants)
+        foreach (var tenantId in subscribedTenants.Distinct())
         {
             await publisher.StageForWorkspaceAsync(tenantId, cancellationToken);
         }
