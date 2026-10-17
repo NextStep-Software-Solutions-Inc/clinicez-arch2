@@ -13,6 +13,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 namespace ClinicEz.Portal.Tests.Features.Admin;
 

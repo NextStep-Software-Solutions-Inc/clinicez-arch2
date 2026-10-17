@@ -96,7 +96,7 @@ export default function PlatformSettingsPage() {
   const [bankAccounts, setBankAccounts] = useState<PlatformBankAccount[]>(DEFAULT_BANK_ACCOUNTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"Licensing" | "Billing" | "Storage" | "Mailer" | "Contact">("Licensing");
+  const [activeTab, setActiveTab] = useState<"Licensing" | "Billing" | "Storage" | "Mailer" | "Contact" | "Lifecycle">("Licensing");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const fetchSettings = async () => {
@@ -111,6 +111,9 @@ export default function PlatformSettingsPage() {
         "Contact:PhoneNumber": "+63 (965) 429-7640",
         "Contact:OperatingHours": "Mon - Fri, 8am - 5pm (PHT)",
         "Mailer:ContactInbox": "contact@clinicez.com",
+        "Workspace:OrphanInactivityDaysThreshold": "14",
+        "Workspace:OrphanAutoPurgeEnabled": "false",
+        "Workspace:OrphanAutoPurgeGraceDays": "30",
       };
       data.forEach(s => {
         formMap[s.key] = s.value;
@@ -323,6 +326,7 @@ export default function PlatformSettingsPage() {
       <div className="flex border-b border-slate-200 dark:border-slate-800 space-x-1 sm:space-x-4 overflow-x-auto">
         {[
           { id: "Licensing", label: "Licensing & Limits", icon: IconShieldCheck },
+          { id: "Lifecycle", label: "Workspace Lifecycle & Cleanup", icon: IconTrash },
           { id: "Billing", label: "Billing, Banks & BIR Tax", icon: IconBriefcase },
           { id: "Storage", label: "Storage & Uploads", icon: IconUpload },
           { id: "Mailer", label: "Mailer & Notifications", icon: IconMail },
@@ -366,6 +370,52 @@ export default function PlatformSettingsPage() {
               {renderField("JoinClaim:TtlHours", "Progressive Patient Claim Token TTL (Hours)", "Validity window in hours for progressive patient intake claim tokens.", "number")}
               {renderField("PatientApp:AppleAppStoreUrl", "Apple App Store Download URL", "Official iOS download URL included in patient claim emails.")}
               {renderField("PatientApp:GooglePlayStoreUrl", "Google Play Store Download URL", "Official Android download URL included in patient claim emails.")}
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "Lifecycle" && (
+          <Card className="border-slate-200 dark:border-slate-800 shadow-xs">
+            <CardHeader>
+              <CardTitle className="text-base font-bold">Workspace Lifecycle & Tenancy Cleanup</CardTitle>
+              <CardDescription>
+                Configure inactivity thresholds for identifying orphaned trial workspaces and rules for scheduled background garbage collection.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {renderField(
+                "Workspace:OrphanInactivityDaysThreshold",
+                "Orphan Inactivity Threshold (Days)",
+                "Number of days of inactivity (with 0 facilities and 0 patient records) before a workspace is flagged as Orphaned in the Admin Console (Default: 14).",
+                "number"
+              )}
+              {renderField(
+                "Workspace:OrphanAutoPurgeGraceDays",
+                "Auto-Purge Minimum Age Grace Period (Days)",
+                "Minimum age in days an orphaned ghost workspace must reach before being eligible for automated background purging (Default: 30).",
+                "number"
+              )}
+              <div className="space-y-2 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="orphanAutoPurge" className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Enable Automated Background Purge (Nightly Hangfire Job)
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, the nightly background cleanup job automatically purges ghost workspaces meeting the Zero-Data Invariant (0 patients, 0 invoices) older than the grace period. Recommended for Staging/Dev environments.
+                </p>
+                <div className="flex items-center gap-3 pt-1">
+                  <select
+                    id="orphanAutoPurge"
+                    value={formData["Workspace:OrphanAutoPurgeEnabled"] ?? "false"}
+                    onChange={(e) => handleChange("Workspace:OrphanAutoPurgeEnabled", e.target.value)}
+                    className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-semibold max-w-xs"
+                  >
+                    <option value="false">Disabled (Flag & Log Only - Production Safe)</option>
+                    <option value="true">Enabled (Auto-Purge Qualifying Ghosts)</option>
+                  </select>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}

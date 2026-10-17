@@ -122,10 +122,6 @@ public sealed class OrphanTenancyCleanupJob(
                 foreach (var s in subs) s.AllowHardDelete = true;
                 context.Subscriptions.RemoveRange(subs);
 
-                var entitlements = await context.PlanEntitlements.Where(e => e.TenantId == tenant.Id).ToListAsync(cancellationToken);
-                foreach (var e in entitlements) e.AllowHardDelete = true;
-                context.PlanEntitlements.RemoveRange(entitlements);
-
                 var overrides = await context.EntitlementOverrides.Where(o => o.TenantId == tenant.Id).ToListAsync(cancellationToken);
                 foreach (var o in overrides) o.AllowHardDelete = true;
                 context.EntitlementOverrides.RemoveRange(overrides);

@@ -9,6 +9,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 namespace ClinicEz.Portal.Application.Features.Admin.Commands;
 
@@ -44,7 +45,7 @@ public class AdminPurgeTenantCommandHandler(
         }
 
         // Zero-Data Invariant Checks (Mandatory for clinical, compliance, and tax reasons)
-        if (tenant.ActivePatientRecordsCount > 0 || await context.Facilities.AnyAsync(f => f.TenantId == tenant.Id && f.PatientsCount > 0, cancellationToken))
+        if (tenant.ActivePatientRecordsCount > 0)
         {
             throw new ConflictException("Cannot purge workspace: clinical patient records exist. Statutory medical record retention laws strictly prohibit hard deletion. You must Archive the workspace instead.");
         }
@@ -95,10 +96,6 @@ public class AdminPurgeTenantCommandHandler(
         var subscriptions = await context.Subscriptions.Where(s => s.TenantId == tenant.Id).ToListAsync(cancellationToken);
         foreach (var s in subscriptions) s.AllowHardDelete = true;
         context.Subscriptions.RemoveRange(subscriptions);
-
-        var entitlements = await context.PlanEntitlements.Where(e => e.TenantId == tenant.Id).ToListAsync(cancellationToken);
-        foreach (var e in entitlements) e.AllowHardDelete = true;
-        context.PlanEntitlements.RemoveRange(entitlements);
 
         var overrides = await context.EntitlementOverrides.Where(o => o.TenantId == tenant.Id).ToListAsync(cancellationToken);
         foreach (var o in overrides) o.AllowHardDelete = true;

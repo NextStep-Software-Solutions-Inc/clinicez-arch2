@@ -135,13 +135,14 @@ export default function StaffManagementTab({
   const [editError, setEditError] = useState<string | null>(null);
 
   const isEditingSelf = isSelf(editingStaff);
-  const activeSystemAdmins = (staff || []).filter(
-    (s) => s.isActive && (s.role === 'Admin' || s.clinicRole?.name === 'Clinic Administrator')
-  );
+  const isSystemAdminStaff = (s?: StaffMember | null) => {
+    if (!s || !s.isActive) return false;
+    return s.role === 'Admin' || s.roleName === 'Clinic Administrator';
+  };
+  const activeSystemAdmins = (staff || []).filter(isSystemAdminStaff);
   const isSoleActiveAdmin = Boolean(
     editingStaff &&
-      editingStaff.isActive &&
-      (editingStaff.role === 'Admin' || editingStaff.clinicRole?.name === 'Clinic Administrator') &&
+      isSystemAdminStaff(editingStaff) &&
       activeSystemAdmins.length <= 1
   );
 
@@ -1700,6 +1701,17 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primaryLight,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.primary,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    marginTop: theme.spacing.xs,
+  },
+  systemNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
     padding: theme.spacing.sm,
     borderRadius: theme.radii.md,
     marginTop: theme.spacing.xs,
