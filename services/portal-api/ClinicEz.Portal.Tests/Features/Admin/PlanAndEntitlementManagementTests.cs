@@ -830,6 +830,9 @@ public class PlanAndEntitlementManagementTests : IDisposable
     [Fact]
     public async Task CreateBillingPlanCommandHandler_CollidingRank_BumpsExistingPlans()
     {
+        _context.Plans.RemoveRange(_context.Plans);
+        await _context.SaveChangesAsync();
+
         var existing = new Plan { Name = "Starter", Slug = "starter-tier-bump", Rank = 2 };
         _context.Plans.Add(existing);
         await _context.SaveChangesAsync();
@@ -879,6 +882,9 @@ public class PlanAndEntitlementManagementTests : IDisposable
     [Fact]
     public async Task UpdateBillingPlanCommandHandler_CollidingRank_BumpsExistingPlans()
     {
+        _context.Plans.RemoveRange(_context.Plans);
+        await _context.SaveChangesAsync();
+
         var plan1 = new Plan { Name = "Plan Alpha", Slug = "plan-alpha", Rank = 1 };
         var plan2 = new Plan { Name = "Plan Beta", Slug = "plan-beta", Rank = 2 };
         _context.Plans.AddRange(plan1, plan2);
