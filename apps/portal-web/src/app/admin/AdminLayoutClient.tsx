@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { UserButton, useAuth } from "@clerk/nextjs";
@@ -26,11 +26,13 @@ import { ClinicEzMark } from "@/components/ClinicEzLogo";
 interface AdminContextType {
   admin: AdminMeDto | null;
   hasPermission: (permission: string) => boolean;
+  refreshAdmin: () => Promise<void>;
 }
 
 const AdminContext = createContext<AdminContextType>({
   admin: null,
   hasPermission: () => false,
+  refreshAdmin: async () => {},
 });
 
 export const useAdmin = () => useContext(AdminContext);
@@ -69,6 +71,19 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
     }
   };
 
+  const fetchAdminProfile = useCallback(async () => {
+    try {
+      setupAxiosInterceptors(getToken);
+      const profile = await adminService.getMe();
+      setAdmin(profile);
+    } catch (err: any) {
+      console.error("Failed to load admin profile", err);
+      setError(err.message || "You are not authorized to access the admin portal.");
+    } finally {
+      setLoading(false);
+    }
+  }, [getToken]);
+
   // Auth and Admin profile resolution
   useEffect(() => {
     if (!isLoaded) return;
@@ -78,25 +93,12 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       return;
     }
 
-    const fetchAdminProfile = async () => {
-      try {
-        setupAxiosInterceptors(getToken);
-        const profile = await adminService.getMe();
-        setAdmin(profile);
-      } catch (err: any) {
-        console.error("Failed to load admin profile", err);
-        setError(err.message || "You are not authorized to access the admin portal.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchAdminProfile();
-  }, [isLoaded, userId, getToken, router]);
+  }, [isLoaded, userId, router, fetchAdminProfile]);
 
   const hasPermission = (permission: string) => {
     if (!admin) return false;
-    return admin.permissions.includes(permission);
+    return admin.permissions?.includes(permission) ?? false;
   };
 
   if (loading) {
@@ -269,7 +271,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
   );
 
   return (
-    <AdminContext.Provider value={{ admin, hasPermission }}>
+    <AdminContext.Provider value={{ admin, hasPermission, refreshAdmin: fetchAdminProfile }}>
       <div className="flex h-screen w-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-foreground transition-colors duration-300">
 
         {/* Mobile Sidebar Overlay Backdrop */}

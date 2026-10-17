@@ -43,7 +43,7 @@ const FALLBACK_PERMISSIONS: PermissionDefinitionDto[] = [
 ];
 
 export default function AdminRolesPage() {
-  const { hasPermission } = useAdmin();
+  const { hasPermission, refreshAdmin } = useAdmin();
   const [roles, setRoles] = useState<AdminRoleDto[]>([]);
   const [availablePermissions, setAvailablePermissions] = useState<PermissionDefinitionDto[]>(FALLBACK_PERMISSIONS);
   const [loading, setLoading] = useState(true);
@@ -154,6 +154,7 @@ export default function AdminRolesPage() {
       }
       setDialogOpen(false);
       loadData();
+      await refreshAdmin?.();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err.message || "Failed to save role");
     } finally {

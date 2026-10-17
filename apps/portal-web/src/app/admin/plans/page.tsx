@@ -35,7 +35,7 @@ import {
 } from "@tabler/icons-react";
 
 export default function AdminPlansPage() {
-  const { hasPermission } = useAdmin();
+  const { admin, hasPermission, refreshAdmin } = useAdmin();
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +67,15 @@ export default function AdminPlansPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    try {
+      await refreshAdmin();
+    } catch {
+      // ignore
+    }
+    await loadPlans();
   };
 
   useEffect(() => {
@@ -175,7 +184,7 @@ export default function AdminPlansPage() {
 
         <div className="flex items-center gap-3">
           <Button
-            onClick={loadPlans}
+            onClick={handleRefresh}
             variant="outline"
             className="rounded-xl text-xs font-bold border-border cursor-pointer hover:bg-muted/50"
           >

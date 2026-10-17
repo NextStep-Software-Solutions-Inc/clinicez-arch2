@@ -46,7 +46,10 @@ public class GetAdminMeQueryHandler(IApplicationDbContext context) : IRequestHan
         if (admin == null || !admin.IsActive || admin.Role == null) return null;
 
         // Ensure Super Admin role always inherits Permissions.All
-        if (admin.Role.Id == Guid.Parse("44444444-4444-4444-4444-444444444444") || admin.Role.Name == "Super Admin")
+        var isSuperAdmin = admin.Role.Id == Guid.Parse("44444444-4444-4444-4444-444444444444") ||
+                           string.Equals(admin.Role.Name, "Super Admin", StringComparison.OrdinalIgnoreCase);
+
+        if (isSuperAdmin)
         {
             var missingPerms = Permissions.All.Except(admin.Role.Permissions).ToList();
             if (missingPerms.Count > 0)

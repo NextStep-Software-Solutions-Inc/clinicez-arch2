@@ -563,6 +563,7 @@ public class AdminEndpoints : IEndpoint
         {
             return null;
         }
+
         return admin;
     }
 }
