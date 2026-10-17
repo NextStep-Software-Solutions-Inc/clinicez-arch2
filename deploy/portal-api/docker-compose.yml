@@ -86,7 +86,7 @@ services:
       - DataProtection__CertificateBase64=${DATA_PROTECTION_CERT_BASE64:-}
       - DataProtection__CertificatePassword=${DATA_PROTECTION_CERT_PASSWORD:-}
       # Shared HMAC-SHA256 signing key (at least 32 characters) for progressive patient intake claim tokens (must match patient-api).
-      - ClaimToken__SigningKey=${CLAIM_TOKEN_SIGNING_KEY:?CLAIM_TOKEN_SIGNING_KEY must be set (at least 32 characters)}
+      - ClaimToken__SigningKey=${CLAIM_TOKEN_SIGNING_KEY:-${PORTAL_HUB_CLIENT_SECRET:?CLAIM_TOKEN_SIGNING_KEY must be set (at least 32 characters)}}
     restart: unless-stopped
 
 networks:
