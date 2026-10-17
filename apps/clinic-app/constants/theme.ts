@@ -74,6 +74,10 @@ const colors = {
   surfaceHighlight: palette.slate[200],
   surfaceInverse: palette.slate[900],
 
+  // Skeletons
+  skeletonBase: palette.slate[200],
+  skeletonHighlight: palette.slate[100],
+
   // Borders
   border: palette.slate[200],
   borderLight: palette.slate[100],

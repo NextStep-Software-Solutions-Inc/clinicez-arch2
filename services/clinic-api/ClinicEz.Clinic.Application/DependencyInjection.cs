@@ -18,6 +18,7 @@ public static class DependencyInjection
 
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
 
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(AuditLoggingBehavior<,>));
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
         services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IYakapClinicalMapper, ClinicEz.Clinic.Application.Features.Yakap.Services.YakapClinicalMapper>();

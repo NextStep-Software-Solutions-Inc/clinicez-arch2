@@ -942,3 +942,75 @@ Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
 - [ ] OrderCatalogSearchModal filters catalog items and supports adding tests/procedures with custom clinical notes.
 - [ ] Previously signed encounters rehydrate ordered tests and procedures accurately upon opening.
 - [ ] Automated tests in consultationsDynamicOrders.test.ts pass cleanly.
+
+## 2026-10-17T03:10:29Z
+
+Requested team: Full multi-agent team (UI/UX, domain persistence, PhilHealth compliance, privacy engineering, automated verification)
+
+Build an exhaustive, clinic-wide Audit Log and Forensic Activity Trail system for Clinic Administrators in ClinicEZ (`apps/clinic-app` and `services/clinic-api`), capturing 100% of clinic actions (security, administration, patient access, clinical workflows, billing, and PhilHealth Yakap statutory transmittals) with built-in Privacy-by-Design PHI redaction compliant with the Philippine Data Privacy Act (RA 10173) and styled using `@clinicez/design-tokens`.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Exhaustive Clinic-Wide Event Interception (100% Action Coverage)
+Implement an automated audit capture pipeline in `services/clinic-api` that intercepts every modifying and access action across all clinic operations without exception:
+- **Security & Authentication**: Logins, logouts, failed login attempts, password resets, role permissions granted/revoked, staff activation/deactivation.
+- **Clinic Administration**: Schedule overrides, doctor leaves, room reassignments, fee schedules, custom fields, and clinic profile updates.
+- **Patient Access & Directory**: Patient registration, demographic edits, chart views/access trails, and search queries.
+- **Appointments & Queue**: Booking, rescheduling, cancellations, check-in, triage assessments, call to room, and queue completion.
+- **Clinical Care & EMR**: Consultation creation, vital signs recording, problem/allergy additions or resolutions, physical exam recordings (`lib_pe*`), SOAP notes authored, consultation signing, lab orders, lab result reviews, and prescription issuances.
+- **Billing & Cashier**: Invoice generation, item additions, discount applications (SC/PWD), payment collections, receipt number issuance, shift open/close/reconciliation, invoice voids (with audited mandatory reasons), and refunds.
+- **PhilHealth Yakap (Konsulta)**: PIN verification queries, masterlist synchronizations, eKAS availment generation, ATC code generation, GAMOT medicine dispensations, UPSC voucher checks, XML transmittal payload generation (`KonsultaData_v1.14.dtd`), AES-256 payload encryption, SOAP transmittal submissions, claims acceptance/rejection responses, and claim voids.
+- **Auditing the Auditor**: Querying, filtering, or exporting the audit log itself writes an immutable audit entry (`audit.log.viewed` / `audit.log.exported`).
+
+### R2. Privacy-by-Design & PHI Redaction Engine (DPA RA 10173 & HIPAA)
+Implement strict privacy controls ensuring the audit log provides complete forensic accountability without acting as a backdoor to Protected Health Information (PHI):
+- **Metadata vs. Payload Segregation**: Audit entries record *who, what, when, action type, target entity ID, IP address, and outcome*.
+- **Automatic PHI Sanitization**: Sensitive medical prose (SOAP subjective/objective narratives, psychiatric details, infectious disease notes) and authentication secrets (passwords, tokens, AES keys) are automatically stripped or masked (`[Clinical Text Redacted - DPA RA 10173]`) before saving to the audit store. Structural metadata (e.g. modified field names, `lib_icd` codes, `lib_pe*` statutory codes, hashes) is preserved for forensic integrity.
+- **Patient Identity Protection**: Support privacy-masked patient identifiers in administrative views (e.g., `J*** D***` / PhilHealth PIN `12-****5678-9`) with role-based access checks.
+- **Zero Mutation (WORM Immutability)**: The `ClinicAuditEntry` table is append-only. Hard deletes, soft deletes, and update mutations are blocked at the database and EF Core levels (`InvalidOperationException`).
+
+### R3. High-Density Clinic Admin Audit Workstation UI (`apps/clinic-app`)
+Deliver a clinical workstation screen and tab in `apps/clinic-app` for Clinic Administrators and compliance personnel adhering strictly to `@clinicez-ui-ux-expert`:
+- **Categorized Multi-Filter Controls**: Filter across `All`, `Security`, `Operations`, `Billing`, `Clinical Access`, and `PhilHealth Yakap`, plus date range, actor, and entity ID search.
+- **Urgency & Severity Visual Coding**: Consumes `@clinicez/design-tokens` semantic tokens:
+  - `Emergency / High Risk` (`emergencyBg`, red token): Security anomalies, failed logins, voided invoices, and deleted clinic templates.
+  - `Urgent / Warning` (`urgentBg`, orange token): PhilHealth transmittal rejections, payment refunds, and doctor leave overrides.
+  - `Routine / Info` (`routineBg`, teal `#0D6963` token): Standard clinical consultations, check-ins, and successful transmittals.
+- **Defensive State Handling**: Skeleton loaders reflecting table rows (`skeletonBase`/`skeletonHighlight`), contextual empty states with clear reset CTAs, inline filter validation, and backward cursor pagination (`before` timestamp).
+- **Inspection Drawer / Modal**: High-density side drawer allowing administrators to inspect complete forensic metadata (timestamp, actor credentials, client IP, action verb, and sanitized change summary).
+- **Zero Hex Literals**: 100% of UI styling consumes `@clinicez/design-tokens` semantic variables.
+
+### R4. Role-Based Access Control & Audit Query Gating
+- Introduce `ClinicPermissions.AuditRead` (`audit:read`) and `ClinicPermissions.AuditExport` (`audit:export`) in `ClinicPermissions.cs`.
+- Restrict audit endpoints and UI tabs strictly to the `Admin` role and designated Data Protection Officers / Supervisors.
+- Enforce EF Core multi-tenant global query filter: `ClinicId == CurrentClinicId`, guaranteeing zero cross-tenant or cross-facility data leakage.
+
+## Acceptance Criteria
+
+### Comprehensive Event Interception & Immutability
+- [ ] Every domain action across billing, triage, consultation, settings, staff, and PhilHealth writes a `ClinicAuditEntry` asynchronously.
+- [ ] Hard deletion and updates on `ClinicAuditEntries` throw an `InvalidOperationException` and are blocked in `ApplicationDbContext.SaveChangesAsync`.
+- [ ] Central EF Core query filter enforces `ClinicId == CurrentClinicId` across all audit log queries.
+
+### Data Privacy & PHI Masking
+- [ ] Raw consultation notes, psychiatric narratives, passwords, and encryption keys are strictly omitted or masked in audit diffs (`[Clinical Text Redacted - DPA RA 10173]`).
+- [ ] Structural audit metadata (Actor StaffId, Role, Action, Target Entity, Timestamp, IP Address, ICD-10 code, statutory PE category) is preserved accurately for forensic auditing.
+- [ ] Querying or exporting the audit log automatically records an audit event (`audit.log.viewed` / `audit.log.exported`).
+
+### PhilHealth Yakap Statutory Event Auditing
+- [ ] PhilHealth PIN verifications, eKAS creation, GAMOT dispensing, XML DTD v1.14 generations, SOAP transmittals, and rejection logs are accurately recorded in the audit trail.
+- [ ] Transmittal rejection reasons and claim void reasons are captured in the audit log for regulatory reconciliation.
+
+### UI/UX & Design Token Compliance
+- [ ] Audit log workstation renders with `@clinicez/design-tokens` (teal `#0D6963` primary theme, semantic urgency badges, and typography scales).
+- [ ] Zero raw hex color literals (`#0D6963`, `#F8FAFC`, etc.) exist in newly created or updated UI components.
+- [ ] Loading states display animated skeleton table rows; empty states provide clear contextual feedback.
+- [ ] Desktop workstation mode ($\ge 1024\text{px}$) supports persistent high-density inspection with a slide-out metadata drawer.
+
+### Test Automation & Regression Verification
+- [ ] Backend tests in `ClinicEz.Clinic.Application.Tests` verify comprehensive event creation, PHI sanitization, query filtering, and immutability guardrails.
+- [ ] Frontend tests in `apps/clinic-app` verify audit log rendering, category filter switching, and skeleton states.
+- [ ] All existing test suites pass with zero regressions.

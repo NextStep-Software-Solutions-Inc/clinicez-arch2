@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Domain.Constants;
@@ -20,7 +21,27 @@ public static class ClinicRoleSeeder
             .IgnoreQueryFilters()
             .AnyAsync(r => r.ClinicId == clinicId, ct);
 
-        if (existing) return;
+        if (existing)
+        {
+            // Idempotently ensure the system "Clinic Administrator" role receives newly added permissions (AuditRead, AuditExport)
+            var adminRole = await dbContext.ClinicRoles
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(r => r.ClinicId == clinicId && r.IsSystem && r.Name == "Clinic Administrator", ct);
+
+            if (adminRole != null)
+            {
+                var missingPermissions = ClinicPermissions.All
+                    .Where(p => !adminRole.Permissions.Contains(p))
+                    .ToList();
+
+                if (missingPermissions.Count > 0)
+                {
+                    adminRole.Permissions.AddRange(missingPermissions);
+                    await dbContext.SaveChangesAsync(ct);
+                }
+            }
+            return;
+        }
 
         var roles = new List<ClinicRole>
         {

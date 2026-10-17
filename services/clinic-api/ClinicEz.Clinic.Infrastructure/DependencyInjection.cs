@@ -14,6 +14,9 @@ using ClinicEz.Clinic.Infrastructure.Persistence.Repositories;
 using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Documents;
 using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Clinic.Application.Common.Privacy;
+using ClinicEz.Clinic.Infrastructure.Audit;
+using ClinicEz.Clinic.Infrastructure.Privacy;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
@@ -80,13 +83,45 @@ public static class DependencyInjection
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.EodReconciliationBackgroundService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.NotificationRetentionCleanupBackgroundService>();
 
+        // Audit Logging & Forensic Activity Trail Pipeline (M1)
+        services.AddSingleton<IPhiRedactionService, PhiRedactionService>();
+        services.AddSingleton<IAuditLogQueue, AuditLogQueue>();
+        services.AddHostedService<AuditLogBackgroundWorker>();
+
         // Workspace brand/regional defaults: fed by workspace.profile.updated messages and held in this service's own database
         services.AddWorkspaceProfile<ApplicationDbContext>();
 
-        // PhilHealth Yakap and GAMOT lookups are hub request/reply calls, not HTTP clients
-        services.AddScoped<IPhilHealthProxyClient, PhilHealthProxyClient>();
-        services.AddScoped<IPharmacyGamotGateway, PharmacyGamotGateway>();
-        services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator, PhilHealthSequenceGenerator>();
+        // PhilHealth Yakap & GAMOT Services with Comprehensive Audit Decorators
+        services.AddScoped<PhilHealthProxyClient>();
+        services.AddScoped<PharmacyGamotGateway>();
+        services.AddScoped<PhilHealthSequenceGenerator>();
+
+        services.AddScoped<IPhilHealthProxyClient, ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthProxyClient>(sp =>
+            new ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthProxyClient(
+                sp.GetRequiredService<PhilHealthProxyClient>(),
+                sp.GetRequiredService<IAuditLogQueue>(),
+                sp.GetRequiredService<IClinicContext>(),
+                sp.GetRequiredService<IPhiRedactionService>(),
+                sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthProxyClient>>()));
+
+        services.AddScoped<IPharmacyGamotGateway, ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePharmacyGamotGateway>(sp =>
+            new ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePharmacyGamotGateway(
+                sp.GetRequiredService<PharmacyGamotGateway>(),
+                sp.GetRequiredService<IAuditLogQueue>(),
+                sp.GetRequiredService<IClinicContext>(),
+                sp.GetRequiredService<IPhiRedactionService>(),
+                sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePharmacyGamotGateway>>()));
+
+        services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator, ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthSequenceGenerator>(sp =>
+            new ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthSequenceGenerator(
+                sp.GetRequiredService<PhilHealthSequenceGenerator>(),
+                sp.GetRequiredService<IAuditLogQueue>(),
+                sp.GetRequiredService<IClinicContext>(),
+                sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthSequenceGenerator>>()));
+
         services.AddScoped<ClinicEz.Clinic.Application.Common.Interfaces.IPatientCodeGenerator, PatientCodeGenerator>();
 
         // Interoperability: outbound messages are queued in the transactional interop outbox; inbound ones are

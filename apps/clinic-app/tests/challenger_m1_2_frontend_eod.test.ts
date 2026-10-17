@@ -202,6 +202,8 @@ mock.module('../components/ui/Button', () => ({
       'data-component': 'Button',
       'data-title': props.title,
       disabled: props.disabled,
+      ...(props.testID ? { 'data-testid': props.testID } : {}),
+      ...(props['data-testid'] ? { 'data-testid': props['data-testid'] } : {}),
     }, props.title);
   },
 }));

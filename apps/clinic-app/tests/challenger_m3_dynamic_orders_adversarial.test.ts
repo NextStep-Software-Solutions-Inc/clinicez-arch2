@@ -206,6 +206,18 @@ function rehydrateEncounterOrders(params: {
   const { chartData, encounterId, queueItemId, diagnosticCatalog } = params;
   const rehydratedLabs: LocalLabOrder[] = [];
 
+  const diagById = new Map<string, ClinicServiceItem>();
+  const diagByCode = new Map<string, ClinicServiceItem>();
+  const diagByName = new Map<string, ClinicServiceItem>();
+  if (Array.isArray(diagnosticCatalog)) {
+    for (const d of diagnosticCatalog) {
+      if (!d) continue;
+      if (d.id) diagById.set(d.id, d);
+      if (d.code) diagByCode.set(d.code, d);
+      if (d.name) diagByName.set(d.name.toLowerCase(), d);
+    }
+  }
+
   const existingInvoice = chartData?.invoicesHistory?.find(
     (inv: any) =>
       inv &&
@@ -221,13 +233,17 @@ function rehydrateEncounterOrders(params: {
       const cleanName = item.description
         ? item.description.replace(/\s*\(PhilHealth Yakap.*?\)$/i, '').trim()
         : item.description;
-      const matchedDiag = diagnosticCatalog.find(
-        (d) =>
-          d &&
-          ((item.serviceItemId && d.id === item.serviceItemId) ||
-            (item.itemCode && d.code === item.itemCode) ||
-            (d.name || '').toLowerCase() === (cleanName || '').toLowerCase())
-      );
+      const matchedDiag =
+        (item.serviceItemId ? diagById.get(item.serviceItemId) : undefined) ||
+        (item.itemCode ? diagByCode.get(item.itemCode) : undefined) ||
+        (cleanName ? diagByName.get(cleanName.toLowerCase()) : undefined) ||
+        diagnosticCatalog?.find(
+          (d) =>
+            d &&
+            ((item.serviceItemId && d.id === item.serviceItemId) ||
+              (item.itemCode && d.code === item.itemCode) ||
+              (d.name || '').toLowerCase() === (cleanName || '').toLowerCase())
+        );
       rehydratedLabs.push({
         serviceItemId: item.serviceItemId || matchedDiag?.id,
         code: item.itemCode || matchedDiag?.code,
@@ -252,9 +268,11 @@ function rehydrateEncounterOrders(params: {
       if (lo.items?.length) {
         for (const item of lo.items) {
           if (!item) continue;
-          const matchedDiag = diagnosticCatalog.find(
-            (d) => d && (d.name || '').toLowerCase() === (item.testName || '').toLowerCase()
-          );
+          const matchedDiag =
+            (item.testName ? diagByName.get(item.testName.toLowerCase()) : undefined) ||
+            diagnosticCatalog?.find(
+              (d) => d && (d.name || '').toLowerCase() === (item.testName || '').toLowerCase()
+            );
           rehydratedLabs.push({
             serviceItemId: matchedDiag?.id,
             code: matchedDiag?.code,
@@ -267,9 +285,11 @@ function rehydrateEncounterOrders(params: {
           });
         }
       } else if (lo.testName) {
-        const matchedDiag = diagnosticCatalog.find(
-          (d) => d && (d.name || '').toLowerCase() === (lo.testName || '').toLowerCase()
-        );
+        const matchedDiag =
+          (lo.testName ? diagByName.get(lo.testName.toLowerCase()) : undefined) ||
+          diagnosticCatalog?.find(
+            (d) => d && (d.name || '').toLowerCase() === (lo.testName || '').toLowerCase()
+          );
         rehydratedLabs.push({
           serviceItemId: matchedDiag?.id,
           code: matchedDiag?.code,

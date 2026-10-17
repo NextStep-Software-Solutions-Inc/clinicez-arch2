@@ -17,6 +17,7 @@ import SettingsScreen from './screens/Settings.screen';
 import ProfileScreen from './screens/Profile.screen';
 import ResultReviewScreen from './screens/ResultReview.screen';
 import ShareImportScreen from './screens/ShareImport.screen';
+import AuditScreen from './screens/Audit.screen';
 
 /**
  * Bottom tab bar for phones only. Workstation widths use the sidebar instead.
@@ -129,6 +130,14 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Settings',
         tabBarIcon: tabIcon('settings'),
+      },
+    },
+    Audit: {
+      screen: AuditScreen,
+      linking: 'audit',
+      options: {
+        title: 'Audit Log',
+        tabBarIcon: tabIcon('scroll'),
       },
     },
     Profile: {

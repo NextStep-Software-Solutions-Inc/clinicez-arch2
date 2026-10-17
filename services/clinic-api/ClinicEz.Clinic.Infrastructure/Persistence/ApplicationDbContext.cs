@@ -80,6 +80,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<PatientPhysicalExamProfile> PatientPhysicalExamProfiles { get; set; } = null!;
     public DbSet<ClinicStaffNotification> StaffNotifications { get; set; } = null!;
     public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
+    public DbSet<ClinicAuditEntry> ClinicAuditEntries { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -151,6 +152,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<PatientFamilyHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PatientPhysicalExamProfile>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ClinicStaffNotification>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicAuditEntry>().HasQueryFilter(e => e.ClinicId == CurrentClinicId);
 
         modelBuilder.Entity<ClinicStaffNotification>(b =>
         {
@@ -970,6 +972,36 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasIndex(e => e.CreatedAt);
         });
 
+        modelBuilder.Entity<ClinicAuditEntry>(entity =>
+        {
+            entity.ToTable("ClinicAuditEntries");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Severity).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Action).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ActorName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.ActorRole).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ClientIpAddress).HasMaxLength(50);
+            entity.Property(e => e.UserAgent).HasMaxLength(500);
+            entity.Property(e => e.TargetEntityType).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TargetEntityId).HasMaxLength(100);
+            entity.Property(e => e.PatientNameMasked).HasMaxLength(150);
+            entity.Property(e => e.PatientPinMasked).HasMaxLength(50);
+            entity.Property(e => e.Outcome).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Description).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.MetadataJson).HasColumnType("text");
+
+            // Composite indexes for audit queries, category tabs, severity alerts, and backward cursor pagination (Timestamp DESC)
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.Timestamp });
+            entity.HasIndex(e => new { e.ClinicId, e.Category, e.Timestamp });
+            entity.HasIndex(e => new { e.ClinicId, e.Severity, e.Timestamp });
+            entity.HasIndex(e => new { e.ClinicId, e.ActorStaffId, e.Timestamp });
+            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.Timestamp });
+            entity.HasIndex(e => new { e.ClinicId, e.TargetEntityType, e.TargetEntityId });
+        });
+
         // Interop transactional outbox and inbox
         modelBuilder.ApplyInteropModel();
 
@@ -980,17 +1012,64 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
     private static readonly object _inMemoryUniqueLock = new();
 
-    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public override int SaveChanges()
     {
+        return SaveChanges(true);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        EnforceWormImmutability();
+
         if (!Database.IsRelational())
         {
             lock (_inMemoryUniqueLock)
             {
                 EnforceInMemoryUniqueConstraints();
-                return base.SaveChangesAsync(cancellationToken).GetAwaiter().GetResult();
+                return base.SaveChanges(acceptAllChangesOnSuccess);
             }
         }
-        return await base.SaveChangesAsync(cancellationToken);
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        return SaveChangesAsync(true, cancellationToken);
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        EnforceWormImmutability();
+
+        if (!Database.IsRelational())
+        {
+            lock (_inMemoryUniqueLock)
+            {
+                EnforceInMemoryUniqueConstraints();
+                return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken).GetAwaiter().GetResult();
+            }
+        }
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>
+    /// Enforces Write-Once-Read-Many (WORM) immutability on ClinicAuditEntry records in accordance
+    /// with the Philippine Data Privacy Act (RA 10173). Any update, hard deletion, or soft deletion
+    /// mutation triggers an immediate InvalidOperationException.
+    /// </summary>
+    private void EnforceWormImmutability()
+    {
+        var auditMutations = ChangeTracker.Entries<ClinicAuditEntry>()
+            .Where(e => e.State is EntityState.Modified or EntityState.Deleted ||
+                       (e.State is EntityState.Added && e.Entity.IsDeleted))
+            .ToList();
+
+        if (auditMutations.Count > 0)
+        {
+            var sample = auditMutations.First();
+            throw new InvalidOperationException(
+                $"ClinicAuditEntry is append-only (WORM). {sample.State} operation on audit entry '{sample.Entity.Id}' is strictly prohibited by Philippine Data Privacy Act (RA 10173) and compliance policy.");
+        }
     }
 
     private void EnforceInMemoryUniqueConstraints()

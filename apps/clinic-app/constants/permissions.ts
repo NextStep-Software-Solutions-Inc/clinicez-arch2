@@ -41,6 +41,8 @@ export const PERMISSIONS = {
   yakapWrite: 'yakap:write',
   yakapSubmit: 'yakap:submit',
   philHealthCatalogImport: 'philhealth.catalog.import',
+  auditRead: 'audit:read',
+  auditExport: 'audit:export',
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

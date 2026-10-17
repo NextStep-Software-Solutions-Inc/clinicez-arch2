@@ -13,6 +13,19 @@ public static class DependencyInjection
         services.AddStrictStringEnums();
         services.AddOpenApi();
 
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy(ClinicEz.Clinic.Domain.Constants.ClinicPermissions.AuditRead, policy =>
+                policy.RequireAssertion(ctx =>
+                    ctx.User.HasClaim(ClinicEz.Clinic.Infrastructure.Context.ClinicClaimTypes.Permission, ClinicEz.Clinic.Domain.Constants.ClinicPermissions.AuditRead) ||
+                    ctx.User.HasClaim(ClinicEz.Clinic.Infrastructure.Context.ClinicClaimTypes.Permission, "*")));
+
+            options.AddPolicy(ClinicEz.Clinic.Domain.Constants.ClinicPermissions.AuditExport, policy =>
+                policy.RequireAssertion(ctx =>
+                    ctx.User.HasClaim(ClinicEz.Clinic.Infrastructure.Context.ClinicClaimTypes.Permission, ClinicEz.Clinic.Domain.Constants.ClinicPermissions.AuditExport) ||
+                    ctx.User.HasClaim(ClinicEz.Clinic.Infrastructure.Context.ClinicClaimTypes.Permission, "*")));
+        });
+
         // 3. Add our custom exception handlers: the clinic's coded failures first, the shared handler maps everything else.
         services.AddExceptionHandler<ClinicExceptionHandler>();
         services.AddExceptionHandler<GlobalExceptionHandler>();

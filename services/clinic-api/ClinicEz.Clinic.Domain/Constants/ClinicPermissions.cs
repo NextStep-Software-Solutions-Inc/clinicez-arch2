@@ -82,6 +82,10 @@ public static class ClinicPermissions
     public const string YakapWrite = "yakap:write";
     public const string YakapSubmit = "yakap:submit";
 
+    // Audit Log & Forensic Activity Trail
+    public const string AuditRead = "audit:read";
+    public const string AuditExport = "audit:export";
+
     /// <summary>
     /// Minimal permission set granted to trusted internal services (authenticated by the shared internal key),
     /// e.g. portal-api forwarding Yakap transmittal operations. Never includes staff/role/settings management.
@@ -137,6 +141,8 @@ public static class ClinicPermissions
         YakapSubmit,
         PhilHealthCatalogImport,
         SchedulesRead,
-        SchedulesManage
+        SchedulesManage,
+        AuditRead,
+        AuditExport
     }.AsReadOnly();
 }

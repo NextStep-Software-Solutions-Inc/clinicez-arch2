@@ -3080,7 +3080,143 @@ export const clinicService = {
   async markAllStaffNotificationsRead() {
     return clinicApiClient.post<number>('/notifications/read-all');
   },
+
+  // ── Audit Trail & Forensic Logging (Milestone 3) ─────────────────────────
+
+  async getAuditLogs(params?: AuditFilterParams) {
+    const qp = new URLSearchParams();
+    if (params?.category && params.category !== 'All') qp.append('category', params.category);
+    if (params?.severity && params.severity !== 'All') qp.append('severity', params.severity);
+    if (params?.action) qp.append('action', params.action);
+    if (params?.actorId) qp.append('actorId', params.actorId);
+    if (params?.entityId) qp.append('entityId', params.entityId);
+    if (params?.search) qp.append('search', params.search);
+    if (params?.startDate) qp.append('startDate', params.startDate);
+    if (params?.endDate) qp.append('endDate', params.endDate);
+    if (params?.before) qp.append('before', params.before);
+    if (params?.pageSize) qp.append('pageSize', String(params.pageSize));
+    const qs = qp.toString();
+    return clinicApiClient.get<AuditLogListDto>(`/audit${qs ? `?${qs}` : ''}`);
+  },
+
+  async getAuditEntryDetail(id: string) {
+    return clinicApiClient.get<ClinicAuditEntryDetailDto>(`/audit/${id}`);
+  },
+
+  async exportAuditLogs(params?: AuditExportParams) {
+    const qp = new URLSearchParams();
+    if (params?.format) qp.append('format', params.format);
+    if (params?.category && params.category !== 'All') qp.append('category', params.category);
+    if (params?.severity && params.severity !== 'All') qp.append('severity', params.severity);
+    if (params?.action) qp.append('action', params.action);
+    if (params?.actorId) qp.append('actorId', params.actorId);
+    if (params?.entityId) qp.append('entityId', params.entityId);
+    if (params?.search) qp.append('search', params.search);
+    if (params?.startDate) qp.append('startDate', params.startDate);
+    if (params?.endDate) qp.append('endDate', params.endDate);
+    if (params?.limit) qp.append('limit', String(params.limit));
+    const qs = qp.toString();
+    return clinicApiClient.getBlob(`/audit/export${qs ? `?${qs}` : ''}`);
+  },
+
+  getAuditExportUrl(params?: AuditExportParams): string {
+    const qp = new URLSearchParams();
+    if (params?.format) qp.append('format', params.format);
+    if (params?.category && params.category !== 'All') qp.append('category', params.category);
+    if (params?.severity && params.severity !== 'All') qp.append('severity', params.severity);
+    if (params?.action) qp.append('action', params.action);
+    if (params?.actorId) qp.append('actorId', params.actorId);
+    if (params?.entityId) qp.append('entityId', params.entityId);
+    if (params?.search) qp.append('search', params.search);
+    if (params?.startDate) qp.append('startDate', params.startDate);
+    if (params?.endDate) qp.append('endDate', params.endDate);
+    if (params?.limit) qp.append('limit', String(params.limit));
+    const qs = qp.toString();
+    return clinicApiUrl(`/audit/export${qs ? `?${qs}` : ''}`);
+  },
 };
+
+// ============================================================================
+// Clinic Audit Log & Forensic Activity Trail Types (Milestone 3)
+// ============================================================================
+
+export type ClinicAuditCategory =
+  | 'Security'
+  | 'Operations'
+  | 'Patient'
+  | 'Appointments'
+  | 'Queue'
+  | 'Clinical'
+  | 'Billing'
+  | 'PhilHealth'
+  | 'Audit';
+
+export type ClinicAuditSeverity = 'Routine' | 'Urgent' | 'Emergency';
+
+export type ClinicAuditOutcome = 'Success' | 'Failure' | 'Warning';
+
+export type AuditDatePreset = 'today' | '24h' | '7d' | '30d' | 'all' | 'custom';
+
+export interface ClinicAuditEntryDto {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  timestamp: string;
+  category: ClinicAuditCategory | string;
+  severity: ClinicAuditSeverity | string;
+  action: string;
+  actorStaffId?: string | null;
+  actorName: string;
+  actorRole: string;
+  clientIpAddress?: string | null;
+  userAgent?: string | null;
+  targetEntityType: string;
+  targetEntityId?: string | null;
+  patientId?: string | null;
+  patientNameMasked?: string | null;
+  patientPinMasked?: string | null;
+  outcome: ClinicAuditOutcome | string;
+  description: string;
+  metadataJson: string;
+  createdAt: string;
+}
+
+export interface ClinicAuditEntryDetailDto extends ClinicAuditEntryDto {
+  proseChecksums: Record<string, string>;
+}
+
+export interface AuditLogListDto {
+  items: ClinicAuditEntryDto[];
+  hasMore: boolean;
+  nextCursor?: string | null;
+  totalCount: number;
+}
+
+export interface AuditFilterParams {
+  category?: string;
+  severity?: string;
+  action?: string;
+  actorId?: string;
+  entityId?: string;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  before?: string;
+  pageSize?: number;
+}
+
+export interface AuditExportParams {
+  format?: 'csv' | 'json';
+  category?: string;
+  severity?: string;
+  action?: string;
+  actorId?: string;
+  entityId?: string;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+}
 
 export interface LabOrderSlipData {
   orderId: string;
