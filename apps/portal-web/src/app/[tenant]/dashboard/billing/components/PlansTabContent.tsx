@@ -30,14 +30,14 @@ export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const [isPortalLoading, setIsPortalLoading] = useState(false)
   const [isCancelLoading, setIsCancelLoading] = useState(false)
-  const [isAnnual, setIsAnnual] = useState(true)
+  const [isAnnual, setIsAnnual] = useState(false)
 
   // Dialog states
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [pendingPlanId, setPendingPlanId] = useState<string | null>(null)
-  const [pendingIsAnnual, setPendingIsAnnual] = useState(true)
+  const [pendingIsAnnual, setPendingIsAnnual] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
 
   const isSubscribed = 

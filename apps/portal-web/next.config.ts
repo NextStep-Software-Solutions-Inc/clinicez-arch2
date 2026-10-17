@@ -12,6 +12,15 @@ const nextConfig: NextConfig = {
       },
     ]
   },
+  async redirects() {
+    return [
+      {
+        source: "/signup",
+        destination: "/sign-up",
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     const rawClinicApiUrl = (process.env.NEXT_PUBLIC_CLINIC_API_URL || process.env.CLINIC_API_URL || "http://localhost:5245").replace(/\/+$/, "");
     const clinicOrigin = rawClinicApiUrl.replace(/\/api\/v1\/?$/i, "");

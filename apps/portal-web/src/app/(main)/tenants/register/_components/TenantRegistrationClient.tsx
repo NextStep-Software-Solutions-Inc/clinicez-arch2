@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Building2, User, Globe, ChevronRight, CheckCircle2, Lock, Sparkles, ShieldCheck, ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser, useAuth } from "@clerk/nextjs";
 import { tenantService } from "@/services/tenant.service";
 import { apiErrorCode, apiErrorMessage } from "@/lib/apiError";
@@ -11,6 +11,9 @@ import { getConsoleBaseDomain } from "@/utils/domain";
 
 export function TenantRegistrationClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const planParam = searchParams.get("plan");
+  const billingParam = searchParams.get("billing");
   const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
 
@@ -85,8 +88,14 @@ export function TenantRegistrationClient() {
         token
       );
 
-      // Route authenticated user directly to their new workplace dashboard
-      router.push(`/${formData.tenantSlug.trim().toLowerCase()}/dashboard`);
+      // Route authenticated user directly to their new workplace dashboard (or billing if a plan was chosen)
+      const targetSlug = formData.tenantSlug.trim().toLowerCase();
+      const destination = planParam
+        ? `/${targetSlug}/dashboard/billing?plan=${encodeURIComponent(planParam)}${
+            billingParam ? `&billing=${encodeURIComponent(billingParam)}` : ""
+          }`
+        : `/${targetSlug}/dashboard`;
+      router.push(destination);
     } catch (err: unknown) {
       if (apiErrorCode(err) === "owner_already_has_workspace" && user) {
         const owned = await tenantService

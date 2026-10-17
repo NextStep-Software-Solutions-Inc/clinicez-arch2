@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Metadata } from "next";
 import { TenantRegistrationClient } from "./_components/TenantRegistrationClient";
 import { auth } from "@clerk/nextjs/server";
@@ -24,5 +25,9 @@ export default async function TenantRegistrationPage() {
     }
   }
 
-  return <TenantRegistrationClient />;
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <TenantRegistrationClient />
+    </Suspense>
+  );
 }
