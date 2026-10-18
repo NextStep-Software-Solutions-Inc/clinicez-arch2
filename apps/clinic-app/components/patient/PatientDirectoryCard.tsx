@@ -213,7 +213,7 @@ function PatientDirectoryCard({
             </View>
             <View style={styles.identityTextCol}>
               <Pressable
-                onPress={() => onOpenChart(patient)}
+                onPress={() => onOpenChart?.(patient)}
                 accessibilityRole="button"
                 accessibilityLabel={`Open medical chart for ${patient.fullName}`}
               >
@@ -276,7 +276,7 @@ function PatientDirectoryCard({
           <View style={styles.inlineBadgesWrap}>
             {patient.philHealthNumber ? (
               <Pressable
-                onPress={() => onOpenPhilHealth(patient)}
+                onPress={() => onOpenPhilHealth?.(patient)}
                 accessibilityRole="button"
                 accessibilityLabel={`Open PhilHealth profile for ${patient.fullName}`}
               >
@@ -380,7 +380,7 @@ function PatientDirectoryCard({
           <View style={styles.cardHeaderMain}>
             <View style={styles.cardTitleRow}>
               <Pressable
-                onPress={() => onOpenChart(patient)}
+                onPress={() => onOpenChart?.(patient)}
                 accessibilityRole="button"
                 accessibilityLabel={`Open medical chart for ${patient.fullName}`}
                 style={styles.patientNamePressable}
@@ -460,7 +460,7 @@ function PatientDirectoryCard({
           <View style={styles.badgeRow}>
             {patient.philHealthNumber ? (
               <Pressable
-                onPress={() => onOpenPhilHealth(patient)}
+                onPress={() => onOpenPhilHealth?.(patient)}
                 accessibilityRole="button"
                 accessibilityLabel={`Open PhilHealth profile for ${patient.fullName}`}
               >

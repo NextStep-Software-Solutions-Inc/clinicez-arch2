@@ -339,10 +339,10 @@ const styles = StyleSheet.create({
   cardAction: {
     color: theme.colors.text,
     ...theme.typography.bodyBold,
-    marginVertical: theme.spacing.xxs,
+    marginVertical: theme.spacing.xs,
   },
   cardMetaGrid: {
-    gap: theme.spacing.xxs,
+    gap: theme.spacing.xs,
   },
   cardMetaRow: {
     flexDirection: 'row',
