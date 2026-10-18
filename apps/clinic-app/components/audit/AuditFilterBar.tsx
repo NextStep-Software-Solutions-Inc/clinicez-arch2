@@ -63,6 +63,8 @@ export interface AuditFilterBarProps {
   onResetFilters: () => void;
   onOpenExport?: () => void;
   isExporting?: boolean;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export function AuditFilterBar({
@@ -82,6 +84,8 @@ export function AuditFilterBar({
   onResetFilters,
   onOpenExport,
   isExporting = false,
+  onRefresh,
+  isRefreshing = false,
 }: AuditFilterBarProps) {
   const isDateInvalid = Boolean(dateRangeError || (startDate && endDate && startDate > endDate));
 
@@ -251,6 +255,16 @@ export function AuditFilterBar({
               icon="download"
               loading={isExporting}
               onPress={onOpenExport}
+            />
+          )}
+          {onRefresh && (
+            <Button
+              title="Refresh"
+              variant="outline"
+              size="sm"
+              icon="refresh"
+              loading={isRefreshing}
+              onPress={onRefresh}
             />
           )}
         </View>

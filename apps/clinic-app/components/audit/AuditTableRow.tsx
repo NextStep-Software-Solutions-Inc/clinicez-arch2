@@ -10,9 +10,15 @@ export interface AuditTableRowProps {
   entry: ClinicAuditEntryDto;
   onInspect: (entry: ClinicAuditEntryDto) => void;
   isEven?: boolean;
+  mode?: 'table' | 'card';
 }
 
-export const AuditTableRow = React.memo(function AuditTableRow({ entry, onInspect, isEven = false }: AuditTableRowProps) {
+export const AuditTableRow = React.memo(function AuditTableRow({
+  entry,
+  onInspect,
+  isEven = false,
+  mode = 'table',
+}: AuditTableRowProps) {
   const formattedTimestamp = formatTimestamp(entry.timestamp);
 
   const severityVariant: BadgeVariant =
@@ -30,6 +36,76 @@ export const AuditTableRow = React.memo(function AuditTableRow({ entry, onInspec
       : entry.outcome === 'Failure'
         ? 'emergency'
         : 'warning';
+
+  if (mode === 'card') {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Inspect audit entry ${entry.action} by ${entry.actorName}`}
+        onPress={() => onInspect(entry)}
+        style={[
+          styles.card,
+          isEven ? styles.cardEven : styles.cardOdd,
+        ]}
+      >
+        {/* Card Header: Severity + Category + Outcome */}
+        <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderLeft}>
+            <Badge variant={severityVariant} label={severityLabel} size="sm" />
+            <ThemedText style={styles.cardCategory} numberOfLines={1}>
+              {entry.category}
+            </ThemedText>
+          </View>
+          <Badge variant={outcomeVariant} label={entry.outcome} size="sm" />
+        </View>
+
+        {/* Card Action */}
+        <ThemedText style={styles.cardAction} numberOfLines={2}>
+          {entry.action}
+        </ThemedText>
+
+        {/* Card Metadata Details */}
+        <View style={styles.cardMetaGrid}>
+          <View style={styles.cardMetaRow}>
+            <ThemedText style={styles.cardMetaKey}>Actor:</ThemedText>
+            <ThemedText style={styles.cardMetaVal} numberOfLines={1}>
+              {entry.actorName} ({entry.actorRole})
+            </ThemedText>
+          </View>
+
+          <View style={styles.cardMetaRow}>
+            <ThemedText style={styles.cardMetaKey}>Target:</ThemedText>
+            <ThemedText style={styles.cardMetaVal} numberOfLines={1}>
+              {entry.targetEntityType}{entry.targetEntityId ? ` (${entry.targetEntityId})` : ''}
+            </ThemedText>
+          </View>
+
+          {entry.patientNameMasked ? (
+            <View style={styles.cardMetaRow}>
+              <ThemedText style={styles.cardMetaKey}>Patient:</ThemedText>
+              <ThemedText style={styles.cardMetaVal} numberOfLines={1}>
+                {entry.patientNameMasked}{entry.patientPinMasked ? ` [${entry.patientPinMasked}]` : ''}
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Card Footer: Timestamp + Inspect CTA */}
+        <View style={styles.cardFooter}>
+          <ThemedText style={styles.cardTimestamp}>
+            {formattedTimestamp}
+          </ThemedText>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon="eye"
+            title="Inspect"
+            onPress={() => onInspect(entry)}
+          />
+        </View>
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable
@@ -122,6 +198,10 @@ export const AuditTableRow = React.memo(function AuditTableRow({ entry, onInspec
       </View>
     </Pressable>
   );
+});
+
+export const AuditCard = React.memo(function AuditCard(props: Omit<AuditTableRowProps, 'mode'>) {
+  return <AuditTableRow {...props} mode="card" />;
 });
 
 function formatTimestamp(isoString: string): string {
@@ -223,6 +303,74 @@ const styles = StyleSheet.create({
   patientFallbackText: {
     color: theme.colors.textLight,
     ...theme.typography.body,
+  },
+  card: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    marginHorizontal: theme.spacing.sm,
+    marginVertical: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  cardEven: {
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  cardOdd: {
+    backgroundColor: theme.colors.surface,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.xs,
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  cardCategory: {
+    color: theme.colors.textSecondary,
+    ...theme.typography.captionBold,
+    textTransform: 'uppercase',
+  },
+  cardAction: {
+    color: theme.colors.text,
+    ...theme.typography.bodyBold,
+    marginVertical: theme.spacing.xxs,
+  },
+  cardMetaGrid: {
+    gap: theme.spacing.xxs,
+  },
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  cardMetaKey: {
+    color: theme.colors.textMuted,
+    ...theme.typography.caption,
+    width: 52,
+  },
+  cardMetaVal: {
+    flex: 1,
+    color: theme.colors.textSecondary,
+    ...theme.typography.small,
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.xs,
+    paddingTop: theme.spacing.xs,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  cardTimestamp: {
+    color: theme.colors.textMuted,
+    ...theme.typography.caption,
   },
 });
 export default AuditTableRow;
