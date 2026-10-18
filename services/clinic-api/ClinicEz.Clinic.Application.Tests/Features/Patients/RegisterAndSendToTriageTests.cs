@@ -193,9 +193,9 @@ public class RegisterAndSendToTriageTests
             FirstName = "Maria",
             LastName = "Santos",
             Title = "Dr.",
-            Role = "Doctor",
+            Role = StaffRole.Doctor,
             Email = "santos@clinic.local",
-            ContactNumber = "09171234567"
+            PhoneNumber = "09171234567"
         };
         doctor.SetAssignedRoomIds(new List<Guid> { roomId });
         await staffRepo.AddAsync(doctor);
@@ -203,9 +203,10 @@ public class RegisterAndSendToTriageTests
         var room = new ClinicRoom
         {
             Id = roomId,
+            TenantId = _tenantId,
             ClinicId = _clinicId,
             Name = "Exam Room 1",
-            Category = "Consultation",
+            Type = ClinicRoomType.Consultation,
             DisplayOrder = 1,
             IsActive = true
         };
