@@ -32,6 +32,7 @@ import PatientSearchResultRow, {
   parseConfiguredSearchFields,
 } from '../../components/patient/PatientSearchResultRow';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
+import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import {
   clinicService,
   AppointmentItem,
@@ -219,8 +220,10 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     patientName?: string;
   } | null>(null);
   const { staff } = useStaff();
-  const { settings } = useClinic();
+  const { settings, rooms } = useClinic();
   const doctors = staff.filter((s) => s.role === 'Doctor');
+  const activeDoctors = useMemo(() => staff.filter((s) => s.role === 'Doctor' && s.isActive), [staff]);
+  const activeRooms = useMemo(() => (rooms || []).filter((r) => r.isActive), [rooms]);
   const [customFieldDefs, setCustomFieldDefs] = useState<ClinicCustomFieldDefinition[]>([]);
 
   useEffect(() => {
@@ -239,6 +242,9 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
+  const [checkInAppointment, setCheckInAppointment] = useState<AppointmentItem | null>(null);
+  const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
+  const [checkInRoomId, setCheckInRoomId] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // Booking Modal State
@@ -437,10 +443,27 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     notify.success(`Appointment for ${item.patientName} was cancelled.`);
   };
 
-  const handleCheckIn = async (item: AppointmentItem) => {
-    if (isCheckingInRef.current || checkingInId) return;
+  const handleOpenCheckInModal = (item: AppointmentItem) => {
+    setCheckInAppointment(item);
+    const docId = item.doctorId ?? '';
+    setCheckInDoctorId(docId);
+    if (docId) {
+      const doc = activeDoctors.find((d) => d.id === docId);
+      const docRooms = doc?.assignedRoomIds ?? (doc?.assignedRoomId ? [doc.assignedRoomId] : []);
+      setCheckInRoomId(docRooms[0] ?? '');
+    } else {
+      setCheckInRoomId('');
+    }
+  };
+
+  const handleConfirmAppointmentCheckIn = async () => {
+    if (!checkInAppointment || isCheckingInRef.current || checkingInId) return;
+    const item = checkInAppointment;
     isCheckingInRef.current = true;
     setCheckingInId(item.id);
+
+    const chosenDoctor = checkInDoctorId ? activeDoctors.find((d) => d.id === checkInDoctorId) : undefined;
+    const chosenRoom = checkInRoomId ? activeRooms.find((r) => r.id === checkInRoomId) : undefined;
 
     try {
       const isUrgent = item.reason?.toLowerCase().includes('chest') || item.reason?.toLowerCase().includes('pain');
@@ -448,8 +471,10 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         patientId: item.patientId,
         patientName: item.patientName,
         appointmentId: item.id,
-        doctorId: item.doctorId,
-        doctorName: item.doctorName,
+        doctorId: chosenDoctor?.id,
+        doctorName: chosenDoctor ? formatStaffName(chosenDoctor) : undefined,
+        roomId: chosenRoom?.id,
+        roomOrStation: chosenRoom?.name,
         priority: isUrgent ? 'Urgent' : 'Routine',
         chiefComplaint: item.reason ?? 'General Consultation',
       });
@@ -460,6 +485,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           err.errorCode === 'CONFLICT' ||
           err.errorCode === 'active_queue_ticket_exists'
         ) {
+          setCheckInAppointment(null);
           setConflictModal({
             visible: true,
             error: err,
@@ -471,6 +497,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         return;
       }
 
+      setCheckInAppointment(null);
       setAppointments((prev) =>
         prev.map((a) => (a.id === item.id ? { ...a, status: 'CheckedIn' as AppointmentStatus } : a))
       );
@@ -559,7 +586,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
                       title="Check in"
                       loading={isCheckingIn}
                       disabled={!!checkingInId}
-                      onPress={() => handleCheckIn(item)}
+                      onPress={() => handleOpenCheckInModal(item)}
                     />
                     <Pressable
                       style={styles.cancelBtn}
@@ -813,6 +840,47 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         error={conflictModal?.error}
         patientName={conflictModal?.patientName}
       />
+
+      {/* Appointment Arrival & Check-In Routing Modal */}
+      <Modal
+        visible={!!checkInAppointment}
+        onClose={() => !checkingInId && setCheckInAppointment(null)}
+        title="Check In Appointment"
+        subtitle={
+          checkInAppointment
+            ? `Arrival check-in for ${checkInAppointment.patientName} - confirm attending doctor and room assignment`
+            : ''
+        }
+        maxWidth={540}
+        footer={
+          <>
+            <Button
+              title="Cancel"
+              variant="ghost"
+              onPress={() => setCheckInAppointment(null)}
+              disabled={!!checkingInId}
+            />
+            <Button
+              title="Confirm Check-In"
+              icon="check"
+              onPress={handleConfirmAppointmentCheckIn}
+              loading={!!checkingInId}
+            />
+          </>
+        }
+      >
+        <View style={{ gap: theme.spacing.md }}>
+          <QueueRoutingSelector
+            selectedDoctorId={checkInDoctorId}
+            onSelectDoctor={setCheckInDoctorId}
+            selectedRoomId={checkInRoomId}
+            onSelectRoom={setCheckInRoomId}
+            activeDoctors={activeDoctors}
+            activeRooms={activeRooms}
+            formatStaffName={formatStaffName}
+          />
+        </View>
+      </Modal>
     </ResponsiveLayout>
   );
 }

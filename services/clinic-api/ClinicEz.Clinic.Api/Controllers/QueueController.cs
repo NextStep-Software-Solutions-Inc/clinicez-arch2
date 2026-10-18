@@ -186,6 +186,17 @@ public sealed class QueueController : ControllerBase
         return Ok(ApiResponse<QueueItemDto>.Success(result, "Queue ticket cancelled."));
     }
 
+    [HttpPost("{id:guid}/reassign")]
+    [HasPermission(ClinicPermissions.QueueCall)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> ReassignQueueItem(
+        Guid id,
+        [FromBody] ReassignQueueRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new ReassignQueueItemCommand(id, request?.DoctorId, request?.DoctorName, request?.RoomId, request?.RoomOrStation), ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Queue ticket reassigned successfully."));
+    }
+
     [HttpPost("reconcile-eod")]
     [HasPermission(ClinicPermissions.QueueComplete)]
     public async Task<ActionResult<ApiResponse<ReconcileEodResultDto>>> ReconcileEod(
@@ -237,3 +248,5 @@ public sealed record RecordTriageRequest(
     string? TriageAcuityReason = null);
 
 public sealed record CallQueueRequest(Guid? DoctorId, string? DoctorName, string? RoomOrStation = null, Guid? RoomId = null);
+
+public sealed record ReassignQueueRequest(Guid? DoctorId, string? DoctorName, string? RoomOrStation = null, Guid? RoomId = null);

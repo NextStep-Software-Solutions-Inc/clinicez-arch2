@@ -24,7 +24,8 @@ import SegmentedControl from '@ui/SegmentedControl';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '@context/ClinicContext';
-import { useStaff } from '@context/StaffContext';
+import { useStaff, formatStaffName } from '@context/StaffContext';
+import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import { Alert, notify } from '@utils/feedback';
 import { printReceiptDialog } from '@utils/printHelper';
 import { getPortalBaseUrl } from '../../services/runtimeConfig';
@@ -183,8 +184,20 @@ function LoadingBlock({ rows = 4 }: { rows?: number }) {
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
-  const { facilityName, letterhead, settings } = useClinic();
-  const { current: currentStaff, currentName } = useStaff();
+  const { facilityName, letterhead, settings, rooms } = useClinic();
+  const { current: currentStaff, currentName, staff: staffList } = useStaff();
+  const activeDoctors = useMemo(
+    () => (staffList || []).filter((s) => s.role === 'Doctor' && s.isActive),
+    [staffList]
+  );
+  const activeRooms = useMemo(
+    () => (rooms || []).filter((r) => r.isActive),
+    [rooms]
+  );
+  const [reassignModalItem, setReassignModalItem] = useState<PatientQueueItem | null>(null);
+  const [reassignDoctorId, setReassignDoctorId] = useState<string>('');
+  const [reassignRoomId, setReassignRoomId] = useState<string>('');
+  const [savingReassignment, setSavingReassignment] = useState<boolean>(false);
 
   const handleOpenTvDisplay = useCallback(() => {
     const portalBase = getPortalBaseUrl();
@@ -455,6 +468,56 @@ export default function DashboardScreen() {
       (prev ?? []).map((q) => (q.id === item.id ? { ...q, status: 'Waiting' as QueueStatus } : q))
     );
     loadMetrics();
+  };
+
+  const handleOpenReassign = (item: PatientQueueItem) => {
+    setReassignModalItem(item);
+    const docId = item.doctorId ?? '';
+    setReassignDoctorId(docId);
+    if (docId) {
+      const doc = activeDoctors.find((d) => d.id === docId);
+      const docRooms = doc?.assignedRoomIds ?? (doc?.assignedRoomId ? [doc.assignedRoomId] : []);
+      setReassignRoomId(item.roomId ?? (docRooms[0] ?? ''));
+    } else {
+      setReassignRoomId(item.roomId ?? '');
+    }
+  };
+
+  const handleSaveReassignment = async () => {
+    if (!reassignModalItem || savingReassignment) return;
+    setSavingReassignment(true);
+    const chosenDoctor = reassignDoctorId ? activeDoctors.find((d) => d.id === reassignDoctorId) : undefined;
+    const chosenRoom = reassignRoomId ? activeRooms.find((r) => r.id === reassignRoomId) : undefined;
+
+    const [, err] = await clinicService.reassignQueueItem(reassignModalItem.id, {
+      doctorId: chosenDoctor?.id,
+      doctorName: chosenDoctor ? formatStaffName(chosenDoctor) : undefined,
+      roomId: chosenRoom?.id,
+      roomOrStation: chosenRoom?.name,
+    });
+    setSavingReassignment(false);
+
+    if (err) {
+      notify.error(err.message || 'Could not assign doctor/room to this ticket.');
+      return;
+    }
+
+    const assignedDocLabel = chosenDoctor ? formatStaffName(chosenDoctor) : 'Unassigned';
+    notify.success(`${reassignModalItem.patientName} assigned to ${assignedDocLabel}.`);
+    setQueue((prev) =>
+      (prev ?? []).map((q) =>
+        q.id === reassignModalItem.id
+          ? {
+              ...q,
+              doctorId: chosenDoctor?.id,
+              doctorName: chosenDoctor ? formatStaffName(chosenDoctor) : undefined,
+              roomId: chosenRoom?.id,
+              roomOrStation: chosenRoom?.name,
+            }
+          : q
+      )
+    );
+    setReassignModalItem(null);
   };
 
   const isPediatric = useMemo(() => {
@@ -879,6 +942,25 @@ export default function DashboardScreen() {
                         icon="activity"
                         onPress={() => handleOpenTriage(item)}
                       />
+                    ) : null}
+                    {item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'NoShow' ? (
+                      item.doctorName ? (
+                        <Button
+                          title="Reassign"
+                          variant="ghost"
+                          size="sm"
+                          icon="refresh"
+                          onPress={() => handleOpenReassign(item)}
+                        />
+                      ) : (
+                        <Button
+                          title="Assign doctor"
+                          variant="outline"
+                          size="sm"
+                          icon="userCheck"
+                          onPress={() => handleOpenReassign(item)}
+                        />
+                      )
                     ) : null}
                     {canCall ? (
                       <Button
@@ -1722,6 +1804,47 @@ export default function DashboardScreen() {
         }
         onSuccess={retry}
       />
+
+      {/* Reassign / Assign Doctor & Room Modal */}
+      <Modal
+        visible={!!reassignModalItem}
+        onClose={() => !savingReassignment && setReassignModalItem(null)}
+        title={reassignModalItem?.doctorName ? 'Reassign Doctor & Room' : 'Assign Doctor & Room'}
+        subtitle={
+          reassignModalItem
+            ? `Ticket ${reassignModalItem.queueNumber} · ${reassignModalItem.patientName}`
+            : ''
+        }
+        maxWidth={540}
+        footer={
+          <>
+            <Button
+              title="Cancel"
+              variant="ghost"
+              onPress={() => setReassignModalItem(null)}
+              disabled={savingReassignment}
+            />
+            <Button
+              title="Save Assignment"
+              icon="check"
+              onPress={handleSaveReassignment}
+              loading={savingReassignment}
+            />
+          </>
+        }
+      >
+        <View style={{ gap: theme.spacing.md }}>
+          <QueueRoutingSelector
+            selectedDoctorId={reassignDoctorId}
+            onSelectDoctor={setReassignDoctorId}
+            selectedRoomId={reassignRoomId}
+            onSelectRoom={setReassignRoomId}
+            activeDoctors={activeDoctors}
+            activeRooms={activeRooms}
+            formatStaffName={formatStaffName}
+          />
+        </View>
+      </Modal>
     </ResponsiveLayout>
   );
 }

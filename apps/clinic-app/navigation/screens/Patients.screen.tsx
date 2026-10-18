@@ -65,6 +65,7 @@ import PatientDirectoryCard, {
   hasKnownAllergies,
 } from '../../components/patient/PatientDirectoryCard';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
+import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../../components/custom-fields';
 import { formatLongAge } from '../../utils/age';
 import { useBreakpoint } from '../../utils/useBreakpoint';
@@ -196,6 +197,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [allergyModalVisible, setAllergyModalVisible] = useState(false);
   const [formChiefComplaint, setFormChiefComplaint] = useState('');
   const [formTriagePriority, setFormTriagePriority] = useState<'Routine' | 'Urgent' | 'Emergency'>('Routine');
+  const [formTriageDoctorId, setFormTriageDoctorId] = useState<string>('');
+  const [formTriageRoomId, setFormTriageRoomId] = useState<string>('');
   const [formPatientCode, setFormPatientCode] = useState('');
   const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>({});
 
@@ -624,6 +627,19 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       sendToTriage,
       priority: sendToTriage ? formTriagePriority : 'Routine',
       chiefComplaint: sendToTriage && formChiefComplaint.trim() ? formChiefComplaint.trim() : undefined,
+      doctorId: sendToTriage && formTriageDoctorId ? formTriageDoctorId : undefined,
+      doctorName:
+        sendToTriage && formTriageDoctorId
+          ? (() => {
+              const d = activeDoctors.find((doc) => doc.id === formTriageDoctorId);
+              return d ? formatStaffName(d) : undefined;
+            })()
+          : undefined,
+      roomId: sendToTriage && formTriageRoomId ? formTriageRoomId : undefined,
+      roomOrStation:
+        sendToTriage && formTriageRoomId
+          ? activeRooms.find((r) => r.id === formTriageRoomId)?.name
+          : undefined,
       ...(formPatientCode.trim() ? ({ patientCode: formPatientCode.trim() } as any) : {}),
     };
 
@@ -764,6 +780,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setIsPinValid(null);
     setFormChiefComplaint('');
     setFormTriagePriority('Routine');
+    setFormTriageDoctorId('');
+    setFormTriageRoomId('');
     setFormMemberType('MM');
     setFormPrincipalPin('');
     setFormPrincipalFullName('');
@@ -2057,6 +2075,15 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
               {/* Walk-in Triage Routing Box */}
               <View style={styles.triageRoutingBox}>
                 <ThemedText style={styles.triageRoutingTitle}>Walk-in Triage Routing (Optional)</ThemedText>
+                <QueueRoutingSelector
+                  selectedDoctorId={formTriageDoctorId}
+                  onSelectDoctor={setFormTriageDoctorId}
+                  selectedRoomId={formTriageRoomId}
+                  onSelectRoom={setFormTriageRoomId}
+                  activeDoctors={activeDoctors}
+                  activeRooms={activeRooms}
+                  formatStaffName={formatStaffName}
+                />
                 <ThemedText style={styles.inputLabel}>Chief Complaint / Triage Note</ThemedText>
                 <TextInput
                   style={styles.textInput}
@@ -2582,106 +2609,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         }
       >
         <View style={{ gap: theme.spacing.md }}>
-          {/* Attending Doctor Picker */}
-          <View style={{ gap: theme.spacing.xs }}>
-            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-              Attending Doctor (Optional)
-            </ThemedText>
-            <View style={styles.relationshipGrid}>
-              <Pressable
-                onPress={() => handleSelectCheckInDoctor('')}
-                style={[
-                  styles.relationshipChip,
-                  !checkInDoctorId && styles.relationshipChip_selected,
-                ]}
-              >
-                <ThemedText
-                  variant="smallBold"
-                  color={!checkInDoctorId ? theme.colors.textInverted : theme.colors.text}
-                >
-                  Any Available Doctor
-                </ThemedText>
-              </Pressable>
-              {activeDoctors.map((doc) => {
-                const isSelected = checkInDoctorId === doc.id;
-                const docRooms = doc.assignedRoomNames && doc.assignedRoomNames.length > 0
-                  ? doc.assignedRoomNames.join(', ')
-                  : (doc.assignedRoomName || '');
-                const docLabel = `${formatStaffName(doc)}${
-                  docRooms ? ` · ${docRooms}` : ''
-                }`;
-                return (
-                  <Pressable
-                    key={doc.id}
-                    onPress={() => handleSelectCheckInDoctor(doc.id)}
-                    style={[
-                      styles.relationshipChip,
-                      isSelected && styles.relationshipChip_selected,
-                    ]}
-                  >
-                    <ThemedText
-                      variant="smallBold"
-                      color={isSelected ? theme.colors.textInverted : theme.colors.text}
-                    >
-                      {docLabel}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Room / Station Picker */}
-          {activeRooms.length > 0 ? (
-            <View style={{ gap: theme.spacing.xs }}>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                Room / Station (Optional)
-              </ThemedText>
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Selecting a doctor with an assigned room automatically pre-selects their room.
-              </ThemedText>
-              <View style={styles.relationshipGrid}>
-                <Pressable
-                  onPress={() => setCheckInRoomId('')}
-                  style={[
-                    styles.relationshipChip,
-                    !checkInRoomId && styles.relationshipChip_selected,
-                  ]}
-                >
-                  <ThemedText
-                    variant="smallBold"
-                    color={!checkInRoomId ? theme.colors.textInverted : theme.colors.text}
-                  >
-                    Auto / Unassigned
-                  </ThemedText>
-                </Pressable>
-                {activeRooms.map((room) => {
-                  const isSelected = checkInRoomId === room.id;
-                  const selectedDoctor = activeDoctors.find((d) => d.id === checkInDoctorId);
-                  const selectedDocRooms = selectedDoctor?.assignedRoomIds ?? (selectedDoctor?.assignedRoomId ? [selectedDoctor.assignedRoomId] : []);
-                  const isDocRoom = selectedDocRooms.includes(room.id);
-                  const roomLabel = isDocRoom ? `${room.name} (Doctor's Room)` : room.name;
-                  return (
-                    <Pressable
-                      key={room.id}
-                      onPress={() => setCheckInRoomId(room.id)}
-                      style={[
-                        styles.relationshipChip,
-                        isSelected && styles.relationshipChip_selected,
-                      ]}
-                    >
-                      <ThemedText
-                        variant="smallBold"
-                        color={isSelected ? theme.colors.textInverted : theme.colors.text}
-                      >
-                        {roomLabel}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
+          {/* Harmonized Attending Doctor & Room Selector */}
+          <QueueRoutingSelector
+            selectedDoctorId={checkInDoctorId}
+            onSelectDoctor={setCheckInDoctorId}
+            selectedRoomId={checkInRoomId}
+            onSelectRoom={setCheckInRoomId}
+            activeDoctors={activeDoctors}
+            activeRooms={activeRooms}
+            formatStaffName={formatStaffName}
+          />
 
           {/* Priority Picker */}
           <View style={{ gap: theme.spacing.xs }}>

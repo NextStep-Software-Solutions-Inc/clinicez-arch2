@@ -46,7 +46,11 @@ public sealed record RegisterClinicPatientCommand(
     bool SendToTriage = false,
     string? Priority = "Normal",
     string? ChiefComplaint = null,
-    List<MedicalHistoryEntryDto>? MedicalHistories = null) : IRequest<ClinicPatientDto>;
+    List<MedicalHistoryEntryDto>? MedicalHistories = null,
+    Guid? DoctorId = null,
+    string? DoctorName = null,
+    Guid? RoomId = null,
+    string? RoomOrStation = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
@@ -57,6 +61,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     private readonly IRepository<QueueItem>? _queueRepo;
     private readonly IRepository<PatientPastMedicalHistory>? _medicalRepo;
     private readonly IPatientCodeGenerator _codeGenerator;
+    private readonly IRepository<StaffMember>? _staffRepo;
+    private readonly IRepository<ClinicRoom>? _roomRepo;
 
     public RegisterClinicPatientCommandHandler(
         IRepository<ClinicPatient> patientRepo,
@@ -65,7 +71,9 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         IRepository<PatientAllergy>? allergyRepo = null,
         IRepository<QueueItem>? queueRepo = null,
         IRepository<PatientPastMedicalHistory>? medicalRepo = null,
-        IPatientCodeGenerator? codeGenerator = null)
+        IPatientCodeGenerator? codeGenerator = null,
+        IRepository<StaffMember>? staffRepo = null,
+        IRepository<ClinicRoom>? roomRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
@@ -74,6 +82,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         _queueRepo = queueRepo;
         _medicalRepo = medicalRepo;
         _codeGenerator = codeGenerator ?? ResolveFallbackCodeGenerator(patientRepo, unitOfWork);
+        _staffRepo = staffRepo;
+        _roomRepo = roomRepo;
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
@@ -268,6 +278,59 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             var suffix = !string.IsNullOrWhiteSpace(patient.Suffix) ? $" {patient.Suffix}" : "";
             var fullName = $"{patient.LastName}, {patient.FirstName}{middleInitial}{suffix}";
 
+            Guid? resolvedDoctorId = request.DoctorId;
+            string? resolvedDoctorName = request.DoctorName;
+            Guid? resolvedRoomId = request.RoomId;
+            string? resolvedRoomOrStation = request.RoomOrStation?.Trim();
+
+            if (resolvedDoctorId.HasValue && _staffRepo != null)
+            {
+                var doctor = await _staffRepo
+                    .Query(s => s.Id == resolvedDoctorId.Value && s.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(ct);
+
+                if (doctor != null)
+                {
+                    if (string.IsNullOrWhiteSpace(resolvedDoctorName))
+                    {
+                        var prefix = !string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} " : "Dr. ";
+                        resolvedDoctorName = $"{prefix}{doctor.FirstName} {doctor.LastName}".Trim();
+                    }
+
+                    // Default the room to the primary room of the doctor selected if not explicitly passed
+                    if (!resolvedRoomId.HasValue && _roomRepo != null)
+                    {
+                        var doctorRoomIds = doctor.GetAssignedRoomIds();
+                        if (doctorRoomIds.Count > 0)
+                        {
+                            var activeRooms = await _roomRepo
+                                .Query(r => r.ClinicId == _clinicContext.ClinicId && doctorRoomIds.Contains(r.Id) && r.IsActive)
+                                .OrderBy(r => r.DisplayOrder)
+                                .ToListAsync(ct);
+
+                            var firstActive = activeRooms.FirstOrDefault();
+                            if (firstActive != null)
+                            {
+                                resolvedRoomId = firstActive.Id;
+                                resolvedRoomOrStation = firstActive.Name;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (resolvedRoomId.HasValue && _roomRepo != null)
+            {
+                var room = await _roomRepo
+                    .Query(r => r.Id == resolvedRoomId.Value && r.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(ct);
+                if (room != null)
+                {
+                    resolvedRoomId = room.Id;
+                    resolvedRoomOrStation = room.Name;
+                }
+            }
+
             queueItem = new QueueItem
             {
                 Id = Guid.NewGuid(),
@@ -282,6 +345,10 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
                 Status = QueueStatus.Waiting, // Routes to nursing triage queue
                 CheckInTime = DateTime.UtcNow,
                 ChiefComplaint = request.ChiefComplaint?.Trim(),
+                DoctorId = resolvedDoctorId,
+                DoctorName = resolvedDoctorName,
+                RoomId = resolvedRoomId,
+                RoomOrStation = resolvedRoomOrStation,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = _clinicContext.StaffId?.ToString() ?? "FrontDesk"
             };

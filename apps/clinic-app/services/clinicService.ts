@@ -1539,6 +1539,10 @@ export interface RegisterPatientPayload {
   sendToTriage?: boolean;
   priority?: 'Routine' | 'Urgent' | 'Emergency' | 'Normal';
   chiefComplaint?: string;
+  doctorId?: string;
+  doctorName?: string;
+  roomId?: string;
+  roomOrStation?: string;
 }
 
 export interface VisibilityRule {
@@ -1967,6 +1971,13 @@ export const clinicService = {
 
   async reactivateQueueItem(id: string) {
     return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/reactivate`);
+  },
+
+  async reassignQueueItem(
+    id: string,
+    payload: { doctorId?: string; doctorName?: string; roomId?: string; roomOrStation?: string }
+  ) {
+    return clinicApiClient.post<PatientQueueItem>(`/queue/${id}/reassign`, payload);
   },
 
   async reconcileEod(date?: string, reason?: string) {
