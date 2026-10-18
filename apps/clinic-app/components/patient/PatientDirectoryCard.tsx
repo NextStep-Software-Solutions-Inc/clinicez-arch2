@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 import { ThemedText, Badge, Button, Card, Icon, ActionMenu, type ActionMenuItem } from '@ui';
 import { theme } from '@constants/theme';
 import { formatLongAge } from '../../utils/age';
@@ -12,6 +12,7 @@ export interface PatientDirectoryCardProps {
   mode?: 'card' | 'table';
   /** When true in card mode, constrains width to a strict 2-column layout so odd last-row cards do not stretch 100%. */
   isDesktopGrid?: boolean;
+  style?: StyleProp<ViewStyle>;
   checkingIn?: boolean;
   disableCheckIn?: boolean;
   onOpenChart: (patient: ClinicPatient) => void;
@@ -168,6 +169,7 @@ function PatientDirectoryCard({
   patient,
   mode = 'card',
   isDesktopGrid = false,
+  style,
   checkingIn = false,
   disableCheckIn = false,
   onOpenChart,
@@ -351,6 +353,7 @@ function PatientDirectoryCard({
       style={[
         styles.patientCard,
         isDesktopGrid && styles.patientCardDesktopGrid,
+        style,
       ]}
     >
       <View style={styles.cardBody}>
@@ -514,11 +517,9 @@ function PatientDirectoryCard({
 
 const styles = StyleSheet.create({
   patientCard: {
-    flexGrow: 1,
-    flexBasis: 420,
+    width: '100%',
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
-    justifyContent: 'space-between',
   },
   patientCardDesktopGrid: {
     flexGrow: 0,
@@ -526,6 +527,7 @@ const styles = StyleSheet.create({
     flexBasis: '48.8%',
     width: '48.8%',
     maxWidth: '49%',
+    justifyContent: 'space-between',
   },
   cardBody: {
     gap: theme.spacing.sm,

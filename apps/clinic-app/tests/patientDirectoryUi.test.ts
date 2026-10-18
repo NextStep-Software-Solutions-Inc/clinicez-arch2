@@ -262,6 +262,26 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).toContain('&quot;flexBasis&quot;:&quot;48.8%&quot;');
   });
 
+  test('5.1 Mobile / single-row patient card has no fixed or minimum height (no flexBasis: 420 or minHeight)', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: basePatient,
+        mode: 'card',
+        isDesktopGrid: false,
+        onOpenChart: () => {},
+        onEditDemographics: () => {},
+        onOpenPhilHealth: () => {},
+        onBookAppointment: () => {},
+        onAddToQueue: () => {},
+      })
+    );
+
+    // Verifies full width layout without rigid min-height or flexBasis 420
+    expect(markup).toContain('&quot;width&quot;:&quot;100%&quot;');
+    expect(markup).not.toContain('420');
+    expect(markup).not.toContain('minHeight');
+  });
+
   test('6. Active queue ticket renders In Queue badge and updates primary CTA to Queued (Q-XXX)', () => {
     const queuedPatient: ClinicPatient = {
       ...basePatient,
