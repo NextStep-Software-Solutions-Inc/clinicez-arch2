@@ -173,13 +173,13 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.colors.borderLight,
     paddingBottom: theme.spacing.md,
     flexWrap: 'wrap',
-    rowGap: theme.spacing.sm,
+    gap: theme.spacing.sm,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    minWidth: 0,
+    minWidth: 200,
     gap: theme.spacing.md,
   },
   headerIcon: {
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   rightAction: {
-    marginLeft: theme.spacing.sm,
+    flexShrink: 0,
   },
   content: {
     gap: theme.spacing.md,

@@ -27,6 +27,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useStaff } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
+import { useBreakpoint } from '../../utils/useBreakpoint';
 import { DoctorRosterCalendarModal } from '../roster/DoctorRosterCalendarModal';
 
 interface StaffManagementTabProps {
@@ -56,6 +57,7 @@ export default function StaffManagementTab({
   setShowAddModal,
   onStaffAdded,
 }: StaffManagementTabProps) {
+  const { isCompact } = useBreakpoint();
   const { user } = useAuth();
   const { current: currentStaff, reload: refreshGlobalStaff } = useStaff();
   const { rooms = [], refreshRooms } = useClinic();
@@ -512,12 +514,13 @@ export default function StaffManagementTab({
               : `Active staff members: ${activeStaffCount}`
           }
           rightAction={
-            <View style={styles.headerActionsRow}>
+            <View style={[styles.headerActionsRow, isCompact && styles.headerActionsRowMobile]}>
               <Button
                 title="Doctor Rosters & Schedules"
                 icon="calendar"
                 variant="outline"
                 size="sm"
+                style={isCompact ? styles.flexBtn : undefined}
                 onPress={() => {
                   setRosterDoctorId(doctors[0]?.id);
                   setRosterModalVisible(true);
@@ -527,6 +530,7 @@ export default function StaffManagementTab({
                 title="Add staff member"
                 icon="plus"
                 size="sm"
+                style={isCompact ? styles.flexBtn : undefined}
                 onPress={handleOpenAddModal}
                 disabled={maxStaffSeats != null && activeStaffCount >= maxStaffSeats}
               />
@@ -605,12 +609,13 @@ export default function StaffManagementTab({
                       </ThemedText>
                     </View>
 
-                    <View style={styles.staffActionsCol}>
+                    <View style={[styles.staffActionsCol, isCompact && styles.staffActionsColMobile]}>
                       <Button
                         title="Edit"
                         icon="edit"
                         variant="ghost"
                         size="sm"
+                        style={isCompact ? styles.flexBtn : undefined}
                         onPress={() => handleOpenEditModal(s)}
                       />
                       <ActionMenu
@@ -1632,6 +1637,11 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
   },
+  headerActionsRowMobile: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
   staffList: {
     gap: theme.spacing.sm,
   },
@@ -1661,6 +1671,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  staffActionsColMobile: {
+    width: '100%',
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+    paddingTop: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+    justifyContent: 'space-between',
+  },
+  flexBtn: {
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   modalFooter: {
     flexDirection: 'row',

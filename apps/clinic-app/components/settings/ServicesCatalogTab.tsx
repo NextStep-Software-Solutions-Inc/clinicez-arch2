@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { useBreakpoint } from '../../utils/useBreakpoint';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
@@ -45,6 +46,7 @@ export default function ServicesCatalogTab({
   showAddModal,
   setShowAddModal,
 }: ServicesCatalogTabProps) {
+  const { isCompact } = useBreakpoint();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   // Add Item Modal State
@@ -195,7 +197,12 @@ export default function ServicesCatalogTab({
           }
         />
         <CardContent>
-          <View style={styles.chipRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
+            contentContainerStyle={styles.chipRow}
+          >
             {(['All', 'Consultation', 'Procedure', 'Diagnostic', 'Medicine', 'NursingService'] as const).map(
               (cat) => {
                 const count =
@@ -212,7 +219,7 @@ export default function ServicesCatalogTab({
                 );
               }
             )}
-          </View>
+          </ScrollView>
 
           {showSkeletons ? (
             <SkeletonList rows={4} />
@@ -248,24 +255,34 @@ export default function ServicesCatalogTab({
                         {item.description}
                       </ThemedText>
                     ) : null}
+
+                    {isCompact && (
+                      <ThemedText variant="bodyBold" color={theme.colors.primary} style={styles.mobilePrice}>
+                        {formatPeso(item.standardPrice)}
+                      </ThemedText>
+                    )}
                   </View>
 
-                  <View style={styles.serviceRightCol}>
-                    <ThemedText variant="bodyBold" color={theme.colors.primary}>
-                      {formatPeso(item.standardPrice)}
-                    </ThemedText>
-                    <View style={styles.itemActions}>
+                  <View style={[styles.serviceRightCol, isCompact && styles.serviceRightColMobile]}>
+                    {!isCompact && (
+                      <ThemedText variant="bodyBold" color={theme.colors.primary}>
+                        {formatPeso(item.standardPrice)}
+                      </ThemedText>
+                    )}
+                    <View style={[styles.itemActions, isCompact && styles.itemActionsMobile]}>
                       <Button
                         title="Edit"
                         variant="secondary"
                         size="sm"
                         icon="edit"
+                        style={isCompact ? styles.flexBtn : undefined}
                         onPress={() => handleOpenEdit(item)}
                       />
                       <Button
                         title={item.isActive ? 'Deactivate' : 'Activate'}
                         variant={item.isActive ? 'outline' : 'primary'}
                         size="sm"
+                        style={isCompact ? styles.flexBtn : undefined}
                         onPress={() => handleToggleActive(item)}
                       />
                     </View>
@@ -461,11 +478,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
+  chipScroll: {
+    flexGrow: 0,
+    marginBottom: theme.spacing.md,
+  },
   chipRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: theme.spacing.xs,
-    marginBottom: theme.spacing.md,
+    paddingVertical: 2,
   },
   serviceList: {
     gap: theme.spacing.sm,
@@ -520,5 +541,25 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.emergencySubtle,
     borderRadius: theme.radii.md,
     marginBottom: theme.spacing.md,
+  },
+  serviceRightColMobile: {
+    width: '100%',
+    alignItems: 'stretch',
+  },
+  itemActionsMobile: {
+    width: '100%',
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+    paddingTop: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+  },
+  mobilePrice: {
+    marginTop: theme.spacing.xs,
+  },
+  flexBtn: {
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
 });

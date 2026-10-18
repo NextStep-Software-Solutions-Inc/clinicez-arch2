@@ -13,6 +13,7 @@ import { notify } from '../../utils/feedback';
 import { clinicService, ClinicRole } from '../../services/clinicService';
 import { useAuth } from '../../context/AuthContext';
 import { useStaff } from '../../context/StaffContext';
+import { useBreakpoint } from '../../utils/useBreakpoint';
 import RoleFormModal from './RoleFormModal';
 
 interface AccessControlTabProps {
@@ -22,6 +23,7 @@ interface AccessControlTabProps {
 }
 
 export default function AccessControlTab({ roles, onRefreshRoles, loading }: AccessControlTabProps) {
+  const { isCompact } = useBreakpoint();
   const { user } = useAuth();
   const { current: currentStaff } = useStaff();
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
@@ -111,17 +113,25 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
           title="Role-Based Access Control (RBAC)"
           subtitle="Configure workstation permissions, create custom roles, and assign operational authority"
           rightAction={
-            <View style={styles.headerActions}>
+            <View style={[styles.headerActions, isCompact && styles.headerActionsMobile]}>
               <Button
                 title="Create Custom Role"
                 icon="plus"
                 size="sm"
+                style={isCompact ? styles.flexBtn : undefined}
                 onPress={() => {
                   setTemplateRole(null);
                   setShowCreateModal(true);
                 }}
               />
-              <Button title="Refresh" icon="refresh" variant="ghost" size="sm" onPress={onRefreshRoles} />
+              <Button
+                title="Refresh"
+                icon="refresh"
+                variant="ghost"
+                size="sm"
+                style={isCompact ? styles.flexBtn : undefined}
+                onPress={onRefreshRoles}
+              />
             </View>
           }
         />
@@ -391,6 +401,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  headerActionsMobile: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+  },
+  flexBtn: {
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   layout: {
     flexDirection: 'row',

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { useBreakpoint } from '../../utils/useBreakpoint';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge, { BadgeVariant } from '../ui/Badge';
@@ -83,6 +84,7 @@ export default function CustomFieldsTab({
   showSkeletons,
   onRefreshFields,
 }: CustomFieldsTabProps) {
+  const { isCompact } = useBreakpoint();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [showModal, setShowModal] = useState(false);
   const [editingField, setEditingField] = useState<ClinicCustomFieldDefinition | null>(null);
@@ -361,7 +363,12 @@ export default function CustomFieldsTab({
         />
         <CardContent>
           {/* Category Filter Chips */}
-          <View style={styles.chipRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipScroll}
+            contentContainerStyle={styles.chipRow}
+          >
             {(
               [
                 'All',
@@ -386,7 +393,7 @@ export default function CustomFieldsTab({
                 />
               );
             })}
-          </View>
+          </ScrollView>
 
           {/* Reorder Mode Selector Toolbar */}
           <View style={styles.reorderControlsToolbar}>
@@ -572,12 +579,13 @@ export default function CustomFieldsTab({
                     </View>
 
                     {/* Actions: Edit & Delete */}
-                    <View style={styles.actionButtonGroup}>
+                    <View style={[styles.actionButtonGroup, isCompact && styles.actionButtonGroupMobile]}>
                       <Button
                         title="Edit"
                         variant="outline"
                         size="sm"
                         icon="edit"
+                        style={isCompact ? styles.flexBtn : undefined}
                         onPress={() => handleOpenEdit(field)}
                       />
                       <Button
@@ -585,6 +593,7 @@ export default function CustomFieldsTab({
                         variant="ghost"
                         size="sm"
                         icon="trash"
+                        style={isCompact ? styles.flexBtn : undefined}
                         onPress={() => handleDeleteField(field.id)}
                       />
                     </View>
@@ -612,11 +621,15 @@ const styles = StyleSheet.create({
   container: {
     gap: theme.spacing.lg,
   },
+  chipScroll: {
+    flexGrow: 0,
+    marginBottom: theme.spacing.sm,
+  },
   chipRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: theme.spacing.xs,
-    marginBottom: theme.spacing.md,
+    paddingVertical: 2,
   },
   templatesGrid: {
     gap: theme.spacing.md,
@@ -706,5 +719,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  actionButtonGroupMobile: {
+    width: '100%',
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+    paddingTop: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+  },
+  flexBtn: {
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
 });
