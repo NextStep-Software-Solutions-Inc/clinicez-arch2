@@ -61,6 +61,16 @@ public class ChallengerM1EmpiricalTests
             new Repository<StaffMember>(db, _sieveProcessor));
     }
 
+    private static DateOnly GetFutureMonday()
+    {
+        var monday = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(14);
+        while (monday.DayOfWeek != DayOfWeek.Monday)
+        {
+            monday = monday.AddDays(1);
+        }
+        return monday;
+    }
+
     // =========================================================================
     // 1. Multi-Tenant Query Filter & Isolation Challenges
     // =========================================================================
@@ -410,7 +420,7 @@ public class ChallengerM1EmpiricalTests
     {
         var clinicId = Guid.NewGuid();
         var doctorId = Guid.NewGuid();
-        var date = new DateOnly(2026, 10, 19); // Monday
+        var date = GetFutureMonday(); // Monday
 
         var clinicContext = Substitute.For<IClinicContext>();
         clinicContext.ClinicId.Returns(clinicId);
