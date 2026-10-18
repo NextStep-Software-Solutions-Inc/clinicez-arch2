@@ -136,7 +136,7 @@ public class Tier1_PublicTvDisplayTests
     public void F2_3_T1_TvLayout_AdoptsHighContrastDarkTokens()
     {
         string darkBg = "#0F172A"; // Slate 900
-        string tealPrimary = "#0D6963"; // ClinicEZ Teal
+        string tealPrimary = "#0D6963"; // Clinic EZ Teal
         string textWhite = "#FFFFFF";
 
         darkBg.Should().NotBeEmpty();

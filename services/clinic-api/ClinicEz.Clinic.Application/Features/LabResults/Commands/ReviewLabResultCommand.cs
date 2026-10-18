@@ -63,7 +63,7 @@ public class ReviewLabResultCommandHandler : IRequestHandler<ReviewLabResultComm
 
         if (result.Source == ResultSource.ClinicEzLab)
         {
-            throw new ConflictException("A ClinicEZ laboratory result is verified by the laboratory and cannot be reviewed here.");
+            throw new ConflictException("A Clinic EZ laboratory result is verified by the laboratory and cannot be reviewed here.");
         }
 
         if (result.Verification != VerificationState.Unverified)

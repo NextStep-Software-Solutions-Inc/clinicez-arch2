@@ -24,7 +24,7 @@ export function ArchivedWorkspaceNotice({ workspaceName }: ArchivedWorkspaceNoti
                 <div className="space-y-2">
                     <h1 className="text-xl font-extrabold tracking-tight">{workspaceName} is archived</h1>
                     <p className="text-sm text-muted-foreground">
-                        This workspace was closed by its owner. Nothing was deleted. To bring it back, contact ClinicEz support.
+                        This workspace was closed by its owner. Nothing was deleted. To bring it back, contact Clinic EZ support.
                     </p>
                 </div>
                 <Button variant="outline" onClick={() => signOut({ redirectUrl: "/sign-in" })} className="rounded-xl font-semibold">

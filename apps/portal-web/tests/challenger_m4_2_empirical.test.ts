@@ -175,7 +175,7 @@ describe("Challenger M4-2: Empirical Verification & Adversarial Stress Suite", (
       })
 
       // Corporate Identity & Statutory TIN
-      expect(html).toContain("ClinicEZ Digital Health Inc.")
+      expect(html).toContain("Nextstep Software Corporation")
       expect(html).toContain("009-876-543-000 VAT Registered")
       expect(html).toContain("Unit 1402, BGC Corporate Center, 11th Avenue, Bonifacio Global City")
       expect(html).toContain("Taguig City, Metro Manila, Philippines 1634")
@@ -227,7 +227,7 @@ describe("Challenger M4-2: Empirical Verification & Adversarial Stress Suite", (
       expect(html).toContain("Invoice Ref: INV-202610-0077")
 
       // Statutory Header & TIN
-      expect(html).toContain("ClinicEZ Digital Health Inc.")
+      expect(html).toContain("Nextstep Software Corporation")
       expect(html).toContain("009-876-543-000")
 
       // Payor Data

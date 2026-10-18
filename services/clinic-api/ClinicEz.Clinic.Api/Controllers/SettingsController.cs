@@ -63,7 +63,7 @@ public sealed class SettingsController : ControllerBase
         settings ??= new ClinicSettings
         {
             TenantId = "default",
-            ClinicName = "ClinicEZ Partner Medical Clinic"
+            ClinicName = "Clinic EZ Partner Medical Clinic"
         };
 
         var pdfBytes = _pdfService.GenerateReceptionPlacardPdf(settings, qrUrl ?? string.Empty, joinCode, expiresAt);

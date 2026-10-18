@@ -1,4 +1,4 @@
-# ClinicEZ Edge Cell (on-premise bundle)
+# Clinic EZ Edge Cell (on-premise bundle)
 
 One Docker Compose stack that runs a **single tenant's site** on the customer's own server: the facility APIs, the web apps, a
 PostgreSQL database with backups and the cell's own **interop hub** (Local mode). Architecture and rationale:
@@ -13,7 +13,7 @@ LAN  ->  clinic-web :8080  (nginx, proxies /api)  ->  clinic-api  --+
 ```
 
 No inbound port is ever opened to the internet: the only external traffic is **outbound HTTPS** from the hub (and the portal
-profile fetch) to the ClinicEZ cloud.
+profile fetch) to the Clinic EZ cloud.
 
 ## Contents of this folder
 

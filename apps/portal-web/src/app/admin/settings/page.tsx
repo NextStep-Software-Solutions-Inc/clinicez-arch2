@@ -30,7 +30,7 @@ const DEFAULT_BANK_ACCOUNTS: PlatformBankAccount[] = [
   {
     id: "bdo",
     institution: "BDO Unibank",
-    accountName: "ClinicEZ Digital Health Inc.",
+    accountName: "Nextstep Software Corporation",
     accountNumber: "0012-3456-7890",
     copyValue: "0012-3456-7890",
     branch: "BGC Corporate Center",
@@ -41,7 +41,7 @@ const DEFAULT_BANK_ACCOUNTS: PlatformBankAccount[] = [
   {
     id: "bpi",
     institution: "Bank of the Philippine Islands (BPI)",
-    accountName: "ClinicEZ Digital Health Inc.",
+    accountName: "Nextstep Software Corporation",
     accountNumber: "4321-8765-09",
     copyValue: "4321-8765-09",
     branch: "Ayala Triangle",
@@ -52,7 +52,7 @@ const DEFAULT_BANK_ACCOUNTS: PlatformBankAccount[] = [
   {
     id: "gcash-maya",
     institution: "GCash / Maya",
-    accountName: "ClinicEZ Digital Health",
+    accountName: "Nextstep Software Corporation",
     accountNumber: "0917-123-EZPH (0917-123-3974)",
     copyValue: "0917-123-3974",
     branch: "Merchant QR / Mobile Wallet",
@@ -154,7 +154,7 @@ export default function PlatformSettingsPage() {
       {
         id: newId,
         institution: "",
-        accountName: formData["Billing:CorporateName"] || "ClinicEZ Digital Health Inc.",
+        accountName: formData["Billing:CorporateName"] || "Nextstep Software Corporation",
         accountNumber: "",
         copyValue: "",
         branch: "",
@@ -512,7 +512,7 @@ export default function PlatformSettingsPage() {
                             <Input
                               value={acct.accountName}
                               onChange={e => handleUpdateBankAccount(index, { accountName: e.target.value })}
-                              placeholder="e.g. ClinicEZ Digital Health Inc."
+                              placeholder="e.g. Nextstep Software Corporation"
                               className="bg-white dark:bg-slate-900 text-sm"
                             />
                           </div>

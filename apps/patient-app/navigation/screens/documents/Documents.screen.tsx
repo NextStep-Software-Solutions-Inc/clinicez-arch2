@@ -65,7 +65,7 @@ const TABS: { key: DocumentTab; label: string; icon: IconName; emptyTitle: strin
     label: 'Results',
     icon: 'clipboard',
     emptyTitle: 'No results yet',
-    emptyMessage: 'Lab results from ClinicEZ labs, external labs, and your uploads appear here.',
+    emptyMessage: 'Lab results from Clinic EZ labs, external labs, and your uploads appear here.',
   },
   {
     key: 'certificates',

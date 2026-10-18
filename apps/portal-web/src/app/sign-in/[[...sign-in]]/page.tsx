@@ -88,7 +88,7 @@ export default function SignInPage() {
 
       {/* Footer copyright */}
       <footer className="w-full py-4 text-center text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()} NextStep Software Solutions Inc. All rights reserved.
+        &copy; {new Date().getFullYear()} Nextstep Software Corporation. Clinic EZ is a product of Nextstep Software Corporation. All rights reserved.
       </footer>
     </div>
   );

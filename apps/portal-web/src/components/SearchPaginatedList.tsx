@@ -66,7 +66,7 @@ export default function SearchPaginatedList<T extends { title?: string }>({
             {search ? `No directory entries matching "${search}".` : "No public entries are currently listed in this directory."}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Registered facilities and healthcare providers appear here automatically once provisioned on ClinicEZ.
+            Registered facilities and healthcare providers appear here automatically once provisioned on Clinic EZ.
           </p>
         </div>
       ) : (

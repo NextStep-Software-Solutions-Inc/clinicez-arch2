@@ -18,7 +18,7 @@ export interface Chip {
 }
 
 const PROVENANCE_BADGES: Record<LabResultSource, Chip> = {
-  ClinicEzLab: { label: 'ClinicEZ lab', tone: 'success', icon: 'lab' },
+  ClinicEzLab: { label: 'Clinic EZ lab', tone: 'success', icon: 'lab' },
   ExternalLab: { label: 'External lab', tone: 'info', icon: 'building' },
   PatientUploaded: { label: 'Uploaded by me', tone: 'neutral', icon: 'upload' },
 };

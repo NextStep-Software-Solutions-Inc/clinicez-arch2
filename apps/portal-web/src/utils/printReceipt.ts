@@ -31,7 +31,7 @@ export const printReceipt = (
   }
 
   const cfg = { ...billingInfo?.paymentConfig, ...paymentConfigOverride }
-  const corporateName = cfg.corporateName || "ClinicEZ Digital Health Inc."
+  const corporateName = cfg.corporateName || "Nextstep Software Corporation"
   const corporateTin = cfg.corporateTin || "009-876-543-000"
   const corporateAddress =
     cfg.corporateAddress ||
@@ -426,7 +426,7 @@ export const printReceipt = (
 
           <div class="footer">
             <p>This Official Receipt is generated in compliance with Philippine Bureau of Internal Revenue (BIR) regulations.</p>
-            <p style="margin-top: 4px;">&copy; ${new Date().getFullYear()} ${escapeHtml(corporateName)} &bull; TIN: ${escapeHtml(corporateTin)} ${tinRegistrationLabel} &bull; ${escapeHtml(supportEmail)}</p>
+            <p style="margin-top: 4px;">&copy; ${new Date().getFullYear()} ${escapeHtml(corporateName)} &bull; Clinic EZ is a product of ${escapeHtml(corporateName)} &bull; TIN: ${escapeHtml(corporateTin)} ${tinRegistrationLabel} &bull; ${escapeHtml(supportEmail)}</p>
           </div>
         </div>
         <script>

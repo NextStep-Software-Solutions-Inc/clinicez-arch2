@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  ClinicEZ Edge Cell installer for Windows (PowerShell 5.1+ / 7). Same behaviour as install.sh.
+  Clinic EZ Edge Cell installer for Windows (PowerShell 5.1+ / 7). Same behaviour as install.sh.
 
 .DESCRIPTION
   .\install.ps1 [install]             first install, or re-run (keeps .env and every generated secret)

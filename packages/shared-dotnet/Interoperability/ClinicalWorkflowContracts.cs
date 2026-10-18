@@ -32,7 +32,7 @@ public enum LabOrderStage
 [JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum ResultSource { ClinicEzLab, ExternalLab, PatientUploaded }
 
-/// <summary>ClinicEZ-lab results arrive Verified; external and patient uploads stay Unverified until the ordering doctor reviews.</summary>
+/// <summary>Clinic EZ lab results arrive Verified; external and patient uploads stay Unverified until the ordering doctor reviews.</summary>
 [JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum VerificationState { Verified, Unverified, Rejected }
 
@@ -112,7 +112,7 @@ public record BillingInvoicePaidPayload
 // ---------------------------------------------------------------------------------------------
 // Lab / pharmacy status mirrors. CorrelationId = RequisitionId / PrescriptionId (GUID).
 // Lab sends `lab.order.status.changed` to the ordering clinic AND to Party.ForPatient(patientId) when the
-// order's PatientId is a ClinicEZ patient (patient-api id).
+// order's PatientId is a Clinic EZ patient (patient-api id).
 // ---------------------------------------------------------------------------------------------
 
 public record LabOrderStatusChangedPayload

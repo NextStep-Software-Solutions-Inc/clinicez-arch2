@@ -1,7 +1,7 @@
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { RESULT_SOURCES, RESULT_VERIFICATIONS } from '../../services/api/wireEnums';
 
-// Document inbox — lab results from ClinicEZ labs, external labs or patient uploads
+// Document inbox — lab results from Clinic EZ labs, external labs or patient uploads
 // (read-only, upserted from sync/changes). Distinct from the legacy `lab_results` profile table.
 export const inboxLabResults = sqliteTable(
   'inbox_lab_results',

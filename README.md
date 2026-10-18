@@ -1,5 +1,7 @@
 # Clinic EZ Architecture & Ecosystem
 
+> **Important**: Clinic EZ is not a company, but an enterprise healthcare software product developed and operated by **Nextstep Software Corporation**. All legal, financial, and corporate governance for Clinic EZ are conducted by Nextstep Software Corporation.
+
 Welcome to the **Clinic EZ** monorepo! This repository houses the unified next-generation multi-tenant platform architecture for Clinic EZ, supporting SaaS and on-premise deployments across Web, Mobile, and Desktop.
 
 ---
@@ -421,7 +423,7 @@ System feature rules and defaults are stored in PostgreSQL (`portal_dashboard.sy
 | **Mailer** | `Mailer:SmtpPort` | SMTP server port | `587` |
 | **Mailer** | `Mailer:SmtpSecurity` | SMTP security protocol (None, StartTls, Tls) | `StartTls` |
 | **Mailer** | `Mailer:SmtpFromEmail` | System notification email sender address | `no-reply@clinicez.com` |
-| **Mailer** | `Mailer:SmtpFromName` | System notification display name | `ClinicEZ Support` |
+| **Mailer** | `Mailer:SmtpFromName` | System notification display name | `Clinic EZ Support` |
 | **Mailer** | `Mailer:SmtpReplyTo` | System email reply-to address | `support@clinicez.com` |
 | **Mailer** | `Mailer:ContactInbox` | Support contact form inbox | `contact@clinicez.com` |
 
@@ -429,7 +431,7 @@ System feature rules and defaults are stored in PostgreSQL (`portal_dashboard.sy
 
 ### PART 4: Multi-Facility Topology & Configuration (Multiple Clinics, Labs & Pharmacies)
 
-In ClinicEZ, **Signing Key Pairs belong to Microservice Types** (`clinic-api`, `laboratory-api`, `pharmacy-api`, `billing-api`), **NOT** to individual clinic rooms or laboratory branches. A single service engine or Edge cell can host **N clinics** and **M laboratories** seamlessly using **1 shared service key pair**.
+In Clinic EZ, **Signing Key Pairs belong to Microservice Types** (`clinic-api`, `laboratory-api`, `pharmacy-api`, `billing-api`), **NOT** to individual clinic rooms or laboratory branches. A single service engine or Edge cell can host **N clinics** and **M laboratories** seamlessly using **1 shared service key pair**.
 
 ---
 

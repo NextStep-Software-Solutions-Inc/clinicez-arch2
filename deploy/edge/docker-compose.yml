@@ -1,4 +1,4 @@
-# docker-compose.yml: ClinicEZ on-premise "Edge Cell" bundle (one tenant, one site).
+# docker-compose.yml: Clinic EZ on-premise "Edge Cell" bundle (one tenant, one site).
 #
 # Run it through ./install.sh (Linux/macOS) or ./install.ps1 (Windows). The installer writes .env and
 # hub-bootstrap.env next to this file and picks the compose profiles (COMPOSE_PROFILES in .env).

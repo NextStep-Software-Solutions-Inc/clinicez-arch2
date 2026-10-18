@@ -42,7 +42,7 @@ export default function ShareRecordsScreen() {
   const copyClinicEzId = async () => {
     if (!clinicEzId) return;
     await Clipboard.setStringAsync(clinicEzId);
-    dialog.alert('Copied', 'Your ClinicEZ ID was copied to the clipboard.');
+    dialog.alert('Copied', 'Your Clinic EZ ID was copied to the clipboard.');
   };
 
   return (
@@ -54,7 +54,7 @@ export default function ShareRecordsScreen() {
       <Card padding="sm" style={styles.idCard}>
         <View style={styles.idText}>
           <ThemedText variant="captionBold" color="textMuted">
-            YOUR CLINICEZ ID
+            YOUR CLINIC EZ ID
           </ThemedText>
           <ThemedText variant="h3" selectable>
             {clinicEzId ?? '—'}

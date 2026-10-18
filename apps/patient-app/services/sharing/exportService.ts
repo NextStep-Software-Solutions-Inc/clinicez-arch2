@@ -22,7 +22,7 @@ export async function exportPatientData(
   }
   await Sharing.shareAsync(file.uri, {
     mimeType: 'application/json',
-    dialogTitle: 'Export my ClinicEZ data',
+    dialogTitle: 'Export my Clinic EZ data',
     UTI: 'public.json',
   });
 }

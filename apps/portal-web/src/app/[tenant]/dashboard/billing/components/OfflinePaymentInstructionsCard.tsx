@@ -27,7 +27,7 @@ export const OFFLINE_BANK_ACCOUNTS: BankAccountInfo[] = [
   {
     id: "bdo",
     institution: "BDO Unibank",
-    accountName: "ClinicEZ Digital Health Inc.",
+    accountName: "Nextstep Software Corporation",
     accountNumber: "0012-3456-7890",
     copyValue: "0012-3456-7890",
     branch: "BGC Corporate Center",
@@ -38,7 +38,7 @@ export const OFFLINE_BANK_ACCOUNTS: BankAccountInfo[] = [
   {
     id: "bpi",
     institution: "Bank of the Philippine Islands (BPI)",
-    accountName: "ClinicEZ Digital Health Inc.",
+    accountName: "Nextstep Software Corporation",
     accountNumber: "4321-8765-09",
     copyValue: "4321-8765-09",
     branch: "Ayala Triangle",
@@ -49,7 +49,7 @@ export const OFFLINE_BANK_ACCOUNTS: BankAccountInfo[] = [
   {
     id: "gcash-maya",
     institution: "GCash / Maya",
-    accountName: "ClinicEZ Digital Health",
+    accountName: "Nextstep Software Corporation",
     accountNumber: "0917-123-EZPH (0917-123-3974)",
     copyValue: "0917-123-3974",
     branch: "Merchant QR / Mobile Wallet",
@@ -97,7 +97,7 @@ export default function OfflinePaymentInstructionsCard({
   const corporateName =
     liveConfig?.corporateName ||
     resolvedAccounts[0]?.accountName ||
-    "ClinicEZ Digital Health Inc."
+    "Nextstep Software Corporation"
 
   const handleCopy = async (key: string, value: string, label: string) => {
     try {
@@ -135,7 +135,7 @@ export default function OfflinePaymentInstructionsCard({
         <div className="flex items-center gap-2 self-start sm:self-center">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
             <ShieldCheck className="h-3.5 w-3.5" />
-            Verified ClinicEZ Accounts
+            Verified Settlement Accounts
           </span>
         </div>
       </div>
@@ -334,7 +334,7 @@ export default function OfflinePaymentInstructionsCard({
         <FileCheck2 className="h-4.5 w-4.5 text-primary shrink-0 mt-0.5" />
         <div className="space-y-1 leading-relaxed">
           <p>
-            <strong className="text-foreground">Official Receipt (BIR OR) Notice:</strong> Upon receipt verification by ClinicEZ Finance, an official BIR compliant receipt (<code className="font-mono text-primary font-bold">REC-YYYYMM-XXXX</code>) is generated and staged in your workspace billing history. Your cryptographic facility license tokens will activate automatically without service interruption.
+            <strong className="text-foreground">Official Receipt (BIR OR) Notice:</strong> Upon receipt verification by Clinic EZ Finance, an official BIR compliant receipt (<code className="font-mono text-primary font-bold">REC-YYYYMM-XXXX</code>) is generated and staged in your workspace billing history. Your cryptographic facility license tokens will activate automatically without service interruption.
           </p>
         </div>
       </div>

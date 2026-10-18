@@ -1,5 +1,5 @@
 /**
- * Color and Branding Utilities for ClinicEZ Workstation
+ * Color and Branding Utilities for Clinic EZ Workstation
  *
  * Implements WCAG 2.1 contrast calculations and workspace brand color inheritance:
  * - Automatically inherits brand color from Portal Tenant Workspace (`WorkspaceProfile.accentColorHex`).
@@ -14,7 +14,7 @@ export const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 /** Minimum contrast between the accent and its text for the accent to be accepted (WCAG large-text/UI). */
 export const MIN_ACCENT_CONTRAST = 3;
 
-/** Default ClinicEZ Brand Color (Teal 600) */
+/** Default Clinic EZ Brand Color (Teal 600) */
 export const DEFAULT_CLINIC_BRAND_COLOR = theme.colors.primary;
 
 /** Legacy Sentinel Unset Value (used in older DB schemas to indicate unset) */
@@ -27,10 +27,10 @@ export interface BrandColorPreset {
 }
 
 /**
- * Standard ClinicEZ brand palette presets (aligned with Portal Tenant Workspace)
+ * Standard Clinic EZ brand palette presets (aligned with Portal Tenant Workspace)
  */
 export const BRAND_COLOR_PRESETS: BrandColorPreset[] = [
-  { color: '#0D6963', label: 'Teal (Default)', description: 'Official ClinicEZ medical teal' },
+  { color: '#0D6963', label: 'Teal (Default)', description: 'Official Clinic EZ medical teal' },
   { color: '#0284C7', label: 'Sky Blue', description: 'Clean clinical sky tone' },
   { color: '#059669', label: 'Emerald', description: 'Vitality and pharmacy green' },
   { color: '#4F46E5', label: 'Indigo', description: 'Modern professional deep indigo' },

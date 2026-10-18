@@ -122,7 +122,7 @@ public sealed class GetYakapTransmittalRawXmlQueryHandler : IRequestHandler<GetY
         {
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
-            ClinicName = "ClinicEz Healthcare Center",
+            ClinicName = "Clinic EZ Healthcare Center",
             AccreditationNumber = "000000000"
         };
 

@@ -249,7 +249,7 @@ export default function QueueDisplayClient({
           )}
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              {data?.clinicName || "ClinicEZ Healthcare"}
+              {data?.clinicName || "Clinic EZ Healthcare"}
             </h1>
             <div className="flex items-center gap-2 mt-0.5">
               <span

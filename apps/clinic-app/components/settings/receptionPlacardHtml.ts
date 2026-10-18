@@ -22,7 +22,7 @@ function escapeHtml(value: string): string {
 export function buildReceptionPlacardHtml(data: ReceptionPlacardData): string {
   const qrMatrix = generateQrMatrix(data.qrUrl);
   const qrSvg = buildQrSvgString(qrMatrix, theme.colors.text, theme.colors.surface);
-  const facilityName = data.letterhead?.header || data.facilityName || 'ClinicEZ Healthcare';
+  const facilityName = data.letterhead?.header || data.facilityName || 'Clinic EZ Healthcare';
   const subHeader = data.letterhead?.subHeader || 'Patient Self-Registration & Enlistment Station';
   const address = data.letterhead?.address;
   const contact = data.letterhead?.contact;

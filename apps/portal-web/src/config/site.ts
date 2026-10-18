@@ -25,6 +25,14 @@ export const siteEmails = {
   sales: process.env.NEXT_PUBLIC_SALES_EMAIL?.trim() || "sales@clinicez.com",
   billing: process.env.NEXT_PUBLIC_BILLING_EMAIL?.trim() || "billing@clinicez.ph",
   support: process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "support@clinicez.com",
+  careers: process.env.NEXT_PUBLIC_CAREERS_EMAIL?.trim() || "connect@nextstep-software.com",
+} as const;
+
+export const socialLinks = {
+  facebook: process.env.NEXT_PUBLIC_SOCIAL_FACEBOOK?.trim() || "https://facebook.com/clinicezph",
+  twitter: process.env.NEXT_PUBLIC_SOCIAL_TWITTER?.trim() || "https://twitter.com/clinicezph",
+  instagram: process.env.NEXT_PUBLIC_SOCIAL_INSTAGRAM?.trim() || "https://instagram.com/clinicezph",
+  linkedin: process.env.NEXT_PUBLIC_SOCIAL_LINKEDIN?.trim() || "https://linkedin.com/company/nextstep-software",
 } as const;
 
 /**
@@ -51,4 +59,11 @@ export function absoluteUrl(path: string = "/"): string {
 /** `mailto:` target for sales enquiries, falling back to the contact page when no mailbox is configured. */
 export function salesContactHref(): string {
   return siteEmails.sales ? `mailto:${siteEmails.sales}` : "/contact-us";
+}
+
+/** `mailto:` target for careers and talent connections (Nextstep Software Corporation). */
+export function careersContactHref(): string {
+  return siteEmails.careers
+    ? `mailto:${siteEmails.careers}?subject=Clinic%20EZ%20Talent%20Connection`
+    : "/contact-us";
 }

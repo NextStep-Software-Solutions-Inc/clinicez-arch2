@@ -142,7 +142,7 @@ export default function QueuePushNotificationSettingsCard({
                   </ThemedText>
                 </View>
                 <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.toggleSubtitle}>
-                  Deliver real-time mobile push notifications to registered patients in the ClinicEZ Patient App when their ticket is summoned to the doctor&apos;s room or approaching their turn in line.
+                  Deliver real-time mobile push notifications to registered patients in the Clinic EZ Patient App when their ticket is summoned to the doctor&apos;s room or approaching their turn in line.
                 </ThemedText>
               </View>
               <ToggleSwitch

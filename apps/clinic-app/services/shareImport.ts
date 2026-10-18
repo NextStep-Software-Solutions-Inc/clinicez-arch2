@@ -19,7 +19,7 @@ function isPlausibleToken(value: string): boolean {
   if (value.length < MIN_TOKEN_LENGTH || value.length > MAX_TOKEN_LENGTH || !/^[\x21-\x7e]+$/.test(value)) {
     return false;
   }
-  // Tokens without dots should not match short one-time codes or ClinicEZ IDs
+  // Tokens without dots should not match short one-time codes or Clinic EZ IDs
   if (!value.includes('.')) {
     const clean = value.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
     if (clean.length === 8 && /^[0-9A-Z]{8}$/.test(clean)) {
@@ -83,7 +83,7 @@ export function normalizeShareToken(input: string | null | undefined): string | 
 }
 
 /**
- * Normalizes a patient's ClinicEZ ID (e.g. "CE-ABCD-1234", "ce-abcd-1234", "abcd-1234", "ceabcd1234")
+ * Normalizes a patient's Clinic EZ ID (e.g. "CE-ABCD-1234", "ce-abcd-1234", "abcd-1234", "ceabcd1234")
  * to the canonical format "CE-XXXX-XXXX".
  */
 export function normalizeClinicEzId(input: string | null | undefined): string | null {
@@ -124,9 +124,9 @@ export interface SmartShareInputResult {
 
 /**
  * Smartly parses clipboard or pasted share input:
- * - Labeled pairs: "ClinicEZ ID: CE-ABCD-1234 | Code: WXYZ-5678"
+ * - Labeled pairs: "Clinic EZ ID: CE-ABCD-1234 | Code: WXYZ-5678"
  * - Delimited pairs: "CE-ABCD-1234, WXYZ-5678", "CE-ABCD-1234 / WXYZ-5678", "CE-ABCD-1234:WXYZ-5678"
- * - Bare ClinicEZ ID: "CE-ABCD-1234"
+ * - Bare Clinic EZ ID: "CE-ABCD-1234"
  * - Bare Share Code: "WXYZ-5678" or "CE42-7890"
  * - Full QR token, URL, or JSON: "https://... or tok_..."
  */
@@ -135,9 +135,9 @@ export function parseSmartShareInput(input: string | null | undefined): SmartSha
   const trimmed = input.trim();
   if (!trimmed) return null;
 
-  // 1. Check for labeled format e.g. "ClinicEZ ID: CE-ABCD-1234 | Code: WXYZ-5678"
+  // 1. Check for labeled format e.g. "Clinic EZ ID: CE-ABCD-1234 | Code: WXYZ-5678"
   // Using \b word boundaries prevents false positives on words like "Valid:" or "Fluid:"
-  const idMatch = trimmed.match(/\b(?:clinicez\s*id|clinicez|patient\s*id|id)\b\s*[:=]\s*([a-zA-Z0-9-]+)/i);
+  const idMatch = trimmed.match(/\b(?:clinicez\s*id|clinic\s*ez\s*id|clinicez|clinic\s*ez|patient\s*id|id)\b\s*[:=]\s*([a-zA-Z0-9-]+)/i);
   const codeMatch = trimmed.match(/\b(?:one-time\s*code|share\s*code|code)\b\s*[:=]\s*([a-zA-Z0-9-]+)/i);
 
   if (idMatch || codeMatch) {
@@ -188,7 +188,7 @@ export function parseSmartShareInput(input: string | null | undefined): SmartSha
     }
   }
 
-  // 3. Check if the entire string is a ClinicEZ ID (has CE prefix and 10 alphanumeric characters)
+  // 3. Check if the entire string is a Clinic EZ ID (has CE prefix and 10 alphanumeric characters)
   const directId = normalizeClinicEzId(trimmed);
   const cleanTrimmed = trimmed.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
   if (directId && !trimmed.includes('.') && cleanTrimmed.startsWith('CE') && cleanTrimmed.length === 10) {
@@ -311,10 +311,10 @@ export function buildRedeemRequest(input: RedeemInput): RedeemRequestResult {
     const code = normalizeShareCode(input.code);
 
     if (!clinicEzId && !code) {
-      return { ok: false, error: "Enter the patient's ClinicEZ ID and one-time code." };
+      return { ok: false, error: "Enter the patient's Clinic EZ ID and one-time code." };
     }
     if (!clinicEzId) {
-      return { ok: false, error: 'Enter a valid ClinicEZ ID (e.g. CE-ABCD-1234).' };
+      return { ok: false, error: 'Enter a valid Clinic EZ ID (e.g. CE-ABCD-1234).' };
     }
     if (!code) {
       return { ok: false, error: 'Enter a valid 8-character one-time code (e.g. ABCD-EFGH).' };
@@ -335,7 +335,7 @@ export function buildRedeemRequest(input: RedeemInput): RedeemRequestResult {
   const shareToken = normalizeShareToken(input.token);
   if (!shareToken) {
     if (normalizeShareCode(input.token) || normalizeClinicEzId(input.token)) {
-      return { ok: false, error: 'This looks like a one-time code or ClinicEZ ID. Switch to One-Time Code mode to enter it.' };
+      return { ok: false, error: 'This looks like a one-time code or Clinic EZ ID. Switch to One-Time Code mode to enter it.' };
     }
     return { ok: false, error: 'Scan the patient QR code or paste a valid share token.' };
   }

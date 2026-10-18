@@ -34,9 +34,9 @@ describe("Challenger M3.2 Adversarial Probes: Existing User Fast-Track & Profile
 
       // Verify unauthenticated banner presence and testid
       expect(html).toContain('data-testid="autofill-banner-unauthenticated"');
-      expect(html).toContain("Already have a ClinicEZ account? Sign in to Autofill");
+      expect(html).toContain("Already have a Clinic EZ account? Sign in to Autofill");
       expect(html).toContain(
-        "Sign in with your ClinicEZ account to pre-populate demographics, 12-digit PhilHealth PIN, contact info, and structured allergies in 1 click."
+        "Sign in with your Clinic EZ account to pre-populate demographics, 12-digit PhilHealth PIN, contact info, and structured allergies in 1 click."
       );
       expect(html).toContain("Sign In to Autofill");
       // Authenticated banner must NOT be present
@@ -113,7 +113,7 @@ describe("Challenger M3.2 Adversarial Probes: Existing User Fast-Track & Profile
 
       expect(html).toContain('data-testid="deep-link-smart-banner"');
       expect(html).toContain(`href="clinicez://join/${testCode}"`);
-      expect(html).toContain("Have the ClinicEZ Patient App?");
+      expect(html).toContain("Have the Clinic EZ Patient App?");
       expect(html).toContain("1-Tap Mobile Check-In");
     });
 
@@ -268,8 +268,8 @@ describe("Challenger M3.2 Adversarial Probes: Existing User Fast-Track & Profile
 
       expect(html).toContain(DEFAULT_APPLE_STORE_URL);
       expect(html).toContain(DEFAULT_GOOGLE_PLAY_URL);
-      expect(html).toContain("Download ClinicEZ Patient App on Apple App Store");
-      expect(html).toContain("Download ClinicEZ Patient App on Google Play Store");
+      expect(html).toContain("Download Clinic EZ Patient App on Apple App Store");
+      expect(html).toContain("Download Clinic EZ Patient App on Google Play Store");
       expect(html).toContain("print:hidden");
     });
 

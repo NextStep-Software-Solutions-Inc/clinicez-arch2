@@ -84,7 +84,7 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
       const bdo = OFFLINE_BANK_ACCOUNTS.find((a) => a.id === "bdo")
       expect(bdo).toBeDefined()
       expect(bdo?.institution).toBe("BDO Unibank")
-      expect(bdo?.accountName).toBe("ClinicEZ Digital Health Inc.")
+      expect(bdo?.accountName).toBe("Nextstep Software Corporation")
       expect(bdo?.accountNumber).toBe("0012-3456-7890")
       expect(bdo?.branch).toBe("BGC Corporate Center")
       expect(bdo?.copyValue).toBe("0012-3456-7890")
@@ -94,7 +94,7 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
       const bpi = OFFLINE_BANK_ACCOUNTS.find((a) => a.id === "bpi")
       expect(bpi).toBeDefined()
       expect(bpi?.institution).toBe("Bank of the Philippine Islands (BPI)")
-      expect(bpi?.accountName).toBe("ClinicEZ Digital Health Inc.")
+      expect(bpi?.accountName).toBe("Nextstep Software Corporation")
       expect(bpi?.accountNumber).toBe("4321-8765-09")
       expect(bpi?.branch).toBe("Ayala Triangle")
       expect(bpi?.copyValue).toBe("4321-8765-09")
@@ -105,7 +105,7 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
       expect(ewallet).toBeDefined()
       expect(ewallet?.institution).toContain("GCash")
       expect(ewallet?.institution).toContain("Maya")
-      expect(ewallet?.accountName).toBe("ClinicEZ Digital Health")
+      expect(ewallet?.accountName).toBe("Nextstep Software Corporation")
       expect(ewallet?.accountNumber).toContain("0917-123-EZPH")
       expect(ewallet?.accountNumber).toContain("0917-123-3974")
       expect(ewallet?.copyValue).toBe("0917-123-3974")
@@ -264,7 +264,7 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
       )
     })
 
-    test("M4.3.2: printInvoice generates BIR-compliant view with ClinicEZ header, TIN, and invoice details", () => {
+    test("M4.3.2: printInvoice generates BIR-compliant view with Clinic EZ header, TIN, and invoice details", () => {
       let writtenHtml = ""
       const mockWindow = {
         document: {
@@ -282,7 +282,7 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
 
       printInvoice(sampleManualInvoice, sampleBillingInfo)
 
-      expect(writtenHtml).toContain("ClinicEZ Digital Health Inc.")
+      expect(writtenHtml).toContain("Nextstep Software Corporation")
       expect(writtenHtml).toContain("009-876-543-000 VAT Registered")
       expect(writtenHtml).toContain("Unit 1402, BGC Corporate Center")
       expect(writtenHtml).toContain("INV-202610-0001")
@@ -324,7 +324,7 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
       expect(writtenHtml).toContain("OFFICIAL RECEIPT")
       expect(writtenHtml).toContain("REC-202610-0001")
       expect(writtenHtml).toContain("Invoice Ref: INV-202610-0001")
-      expect(writtenHtml).toContain("ClinicEZ Digital Health Inc.")
+      expect(writtenHtml).toContain("Nextstep Software Corporation")
       expect(writtenHtml).toContain("009-876-543-000")
       expect(writtenHtml).toContain("St. Jude Family Care Clinic")
       expect(writtenHtml).toContain("Twenty-Nine Thousand Nine Hundred Ninety Pesos Only")
@@ -436,7 +436,7 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
         {
           id: "metrobank",
           institution: "Metropolitan Bank & Trust Co. (Metrobank)",
-          accountName: "ClinicEZ Digital Health Inc.",
+          accountName: "Nextstep Software Corporation",
           accountNumber: "7788-9900-1122",
           copyValue: "778899001122",
           branch: "Makati Head Office",
@@ -447,7 +447,7 @@ describe("Milestone 4: Tenant Billing Guidance, Offline Banking Instructions & O
         {
           id: "unionbank-inactive",
           institution: "UnionBank of the Philippines",
-          accountName: "ClinicEZ Digital Health Inc.",
+          accountName: "Nextstep Software Corporation",
           accountNumber: "1099-2233-4455",
           copyValue: "109922334455",
           branch: "Ortigas Center",

@@ -21,7 +21,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapScalarApiReference(opts => opts.WithTitle("ClinicEz PhilHealth Proxy API"));
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ PhilHealth Proxy API"));
 }
 
 app.UseHttpsRedirection();

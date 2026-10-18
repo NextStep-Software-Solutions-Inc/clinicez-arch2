@@ -1,7 +1,7 @@
 /**
  * Canonical Administrative Permissions Constants
  * 
- * Replaces hardcoded string literals across ClinicEZ frontends.
+ * Replaces hardcoded string literals across Clinic EZ frontends.
  * Mirrors ClinicEz.Portal.Domain.Constants.Permissions in the backend.
  */
 

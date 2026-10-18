@@ -69,7 +69,7 @@ export function DangerZoneTab({ tenantSlug, viewerRole }: DangerZoneTabProps) {
                     <CardDescription className="text-xs font-medium text-slate-500">
                         Closes this workspace in the portal: the dashboard and settings become read-only for everyone,
                         every facility is marked Suspended and its console links are hidden. No data is deleted.
-                        Facility services keep running on their own servers, and only ClinicEz support can restore an
+                        Facility services keep running on their own servers, and only Clinic EZ support can restore an
                         archived workspace. An active subscription must be cancelled first.
                     </CardDescription>
                 </CardHeader>

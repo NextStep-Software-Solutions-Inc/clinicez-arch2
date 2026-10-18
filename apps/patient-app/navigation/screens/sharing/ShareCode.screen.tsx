@@ -42,8 +42,8 @@ export default function ShareCodeScreen() {
 
   const copyBoth = async () => {
     if (!code) return;
-    await Clipboard.setStringAsync(`ClinicEZ ID: ${code.clinicEzId} | Code: ${code.code}`);
-    dialog.alert('Copied', 'Both your ClinicEZ ID and One-Time Code were copied to the clipboard.');
+    await Clipboard.setStringAsync(`Clinic EZ ID: ${code.clinicEzId} | Code: ${code.code}`);
+    dialog.alert('Copied', 'Both your Clinic EZ ID and One-Time Code were copied to the clipboard.');
   };
 
   return (
@@ -67,7 +67,7 @@ export default function ShareCodeScreen() {
             Expires in {formatCountdown(secondsLeft)}
           </ThemedText>
           <ThemedText variant="small" color="textMuted">
-            Single use. Read BOTH your One-Time Code and your ClinicEZ ID to clinic staff.
+            Single use. Read BOTH your One-Time Code and your Clinic EZ ID to clinic staff.
           </ThemedText>
           <ThemedText variant="small" color="textMuted">
             Staff must enter this ID together with your one-time code to fetch your record.
@@ -81,7 +81,7 @@ export default function ShareCodeScreen() {
           <View style={[styles.row, styles.idRow, { gap: spacing.md }]}>
             <View style={styles.flex}>
               <ThemedText variant="captionBold" color="textMuted">
-                YOUR CLINICEZ ID
+                YOUR CLINIC EZ ID
               </ThemedText>
               <ThemedText variant="h3" selectable>
                 {code.clinicEzId}
@@ -92,7 +92,7 @@ export default function ShareCodeScreen() {
               icon="copy"
               variant="outline"
               size="sm"
-              onPress={() => copy(code.clinicEzId, 'Your ClinicEZ ID')}
+              onPress={() => copy(code.clinicEzId, 'Your Clinic EZ ID')}
             />
           </View>
           <Button label="Copy code only" icon="copy" variant="outline" onPress={() => copy(code.code, 'The code')} />

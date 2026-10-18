@@ -128,7 +128,7 @@ public sealed class ExportPatientDataEndpoint : IEndpoint
             })
             .WithTags("Sharing")
             .WithName("ExportPatientData")
-            .WithSummary("Download everything ClinicEZ holds about the patient")
+            .WithSummary("Download everything Clinic EZ holds about the patient")
             .WithDescription("A single JSON document (not wrapped in the API envelope) with the profile, appointments, documents, grants and access log.")
             .Produces<PatientDataExportDto>(StatusCodes.Status200OK)
             .RequireAuthorization();

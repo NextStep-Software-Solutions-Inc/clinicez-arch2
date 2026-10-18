@@ -1,6 +1,6 @@
 # Interop hub
 
-The hub is the only way anything crosses a service or cell boundary in ClinicEZ. Services exchange [`InteropEnvelope`](../../packages/shared-dotnet/Interop/InteropEnvelope.cs) messages through HTTPS mailboxes held in PostgreSQL. Everybody who calls the hub calls it **outbound**, so an on-premise site needs no inbound port.
+The hub is the only way anything crosses a service or cell boundary in Clinic EZ. Services exchange [`InteropEnvelope`](../../packages/shared-dotnet/Interop/InteropEnvelope.cs) messages through HTTPS mailboxes held in PostgreSQL. Everybody who calls the hub calls it **outbound**, so an on-premise site needs no inbound port.
 
 This document explains the model (mailboxes, cells, routing, delivery, federation, security). Endpoint tables, configuration keys and operations are in the [hub README](../../services/interop-hub/README.md); the SDK side is in [platform-contract.md](platform-contract.md).
 
@@ -10,7 +10,7 @@ This document explains the model (mailboxes, cells, routing, delivery, federatio
 
 ```mermaid
 flowchart LR
-  subgraph CLOUD["ClinicEZ cloud (cell: cloud)"]
+  subgraph CLOUD["Clinic EZ cloud (cell: cloud)"]
     CH["Cloud hub<br/>Hub:Mode=Cloud"]
     PG[("PostgreSQL<br/>schema interop_hub")]
     PORTAL["portal-api<br/>ControlPlane"]

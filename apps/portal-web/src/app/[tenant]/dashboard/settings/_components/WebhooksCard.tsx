@@ -154,7 +154,7 @@ export function WebhooksCard({ tenantSlug, integrations, onChanged }: WebhooksCa
                     <IconWebhook className="h-5 w-5" /> Webhooks
                 </CardTitle>
                 <CardDescription className="text-xs font-medium text-slate-500">
-                    ClinicEz sends a signed HTTPS POST to your URL when something changes in the workspace. Events carry
+                    Clinic EZ sends a signed HTTPS POST to your URL when something changes in the workspace. Events carry
                     workspace and facility details only, never patient or clinical data. Failed deliveries are retried up to
                     {" "}6 times over about 15 hours. Delivery runs once a minute, so expect up to a minute of delay. The URL
                     must be public https; private and internal addresses are blocked.

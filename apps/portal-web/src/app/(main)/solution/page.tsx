@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import Link from "next/link";
 import { Building2, Stethoscope, FlaskConical, Pill, CheckCircle2 } from "lucide-react";
 import { absoluteUrl } from "@/config/site";
 
@@ -108,6 +109,49 @@ export default function SolutionsPage() {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      {/* Specialized Module Solutions Section */}
+      <section className="py-16 px-6 lg:px-8 max-w-7xl mx-auto w-full relative z-10 mb-20">
+        <div className="text-center max-w-3xl mx-auto mb-12">
+          <h2 className="text-3xl font-extrabold tracking-tight mb-4">
+            Specialized Clinical Workstation Modules
+          </h2>
+          <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
+            Dive into deep operational workflows designed specifically for Philippine healthcare facilities and multi-branch networks.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[
+            { key: "opd", title: "Clinic OPD", desc: "Outpatient queueing, doctor scheduling, and encounter triage." },
+            { key: "pharmacy", title: "Pharmacy & Dispensing", desc: "Inventory tracking, expiry alerts, and e-prescriptions." },
+            { key: "laboratory", title: "Diagnostic Laboratory", desc: "Test ordering, analyzer interfacing, and results dispatch." },
+            { key: "philhealth", title: "PhilHealth eKonsulta", desc: "Automated YAKAP claims submission and eligibility checks." },
+            { key: "prescription", title: "Prescription Builder", desc: "Standardized templates with QR verification." },
+            { key: "medcert", title: "Medcert Builder", desc: "Digitally signed certificates with validity tracking." },
+            { key: "accounting", title: "Billing & Invoicing", desc: "Cashiering, BIR compliance, and insurance claims." },
+            { key: "bed", title: "Bed & Ward Management", desc: "Inpatient occupancy, admission, and discharge planning." }
+          ].map((mod) => (
+            <Link
+              key={mod.key}
+              href={`/solution/${mod.key}`}
+              className="group p-6 rounded-2xl border border-border bg-card hover:border-primary/50 hover:shadow-lg transition-all flex flex-col justify-between"
+            >
+              <div>
+                <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors mb-2">
+                  {mod.title}
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+                  {mod.desc}
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-primary inline-flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                View Module Deep Dive &rarr;
+              </span>
+            </Link>
+          ))}
         </div>
       </section>
     </main>

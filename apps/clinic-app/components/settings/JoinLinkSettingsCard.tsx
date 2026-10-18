@@ -134,7 +134,7 @@ export default function JoinLinkSettingsCard({
     try {
       const expiresAtFormatted = formatJoinCodeExpiration(computedExpiresAt);
       const placardData = {
-        facilityName: facilityName || settings?.clinicName || 'ClinicEZ Facility',
+        facilityName: facilityName || settings?.clinicName || 'Clinic EZ Facility',
         qrUrl: destinationUrl,
         joinCode: joinCode || undefined,
         expiresAtFormatted,

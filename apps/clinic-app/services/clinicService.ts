@@ -624,7 +624,7 @@ export interface ClinicLabOrderRecord {
 }
 
 /**
- * Redeem a patient's share: a scanned QR / pasted token, or (leave `shareToken` out) the patient's ClinicEZ ID plus the
+ * Redeem a patient's share: a scanned QR / pasted token, or (leave `shareToken` out) the patient's Clinic EZ ID plus the
  * one-time code they read out.
  */
 export interface RedeemShareTokenRequest {

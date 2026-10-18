@@ -118,7 +118,7 @@ export function AuditInspectionDrawer({
           <View style={styles.metaRow}>
             <ThemedText style={styles.metaKey}>User Agent</ThemedText>
             <ThemedText style={styles.metaValueSubtle}>
-              {entry.userAgent || 'ClinicEZ Workstation'}
+              {entry.userAgent || 'Clinic EZ Workstation'}
             </ThemedText>
           </View>
         </View>

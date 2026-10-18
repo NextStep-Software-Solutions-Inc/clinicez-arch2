@@ -32,7 +32,7 @@ public sealed class SystemSettingsService(
         new(
             Id: "bdo",
             Institution: "BDO Unibank",
-            AccountName: "ClinicEZ Digital Health Inc.",
+            AccountName: "Nextstep Software Corporation",
             AccountNumber: "0012-3456-7890",
             CopyValue: "0012-3456-7890",
             Branch: "BGC Corporate Center",
@@ -43,7 +43,7 @@ public sealed class SystemSettingsService(
         new(
             Id: "bpi",
             Institution: "Bank of the Philippine Islands (BPI)",
-            AccountName: "ClinicEZ Digital Health Inc.",
+            AccountName: "Nextstep Software Corporation",
             AccountNumber: "4321-8765-09",
             CopyValue: "4321-8765-09",
             Branch: "Ayala Triangle",
@@ -54,7 +54,7 @@ public sealed class SystemSettingsService(
         new(
             Id: "gcash-maya",
             Institution: "GCash / Maya",
-            AccountName: "ClinicEZ Digital Health",
+            AccountName: "Nextstep Software Corporation",
             AccountNumber: "0917-123-EZPH (0917-123-3974)",
             CopyValue: "0917-123-3974",
             Branch: "Merchant QR / Mobile Wallet",
@@ -77,7 +77,7 @@ public sealed class SystemSettingsService(
         ("Billing:BankAccountsJson", DefaultBankAccountsJson, "Billing", "JSON array of settlement bank and e-wallet accounts displayed to tenants for offline transfers."),
         ("Billing:BirTaxExempt", "false", "Billing", "When true, platform subscription billing and official receipts are treated as BIR VAT-Exempt (0% VAT)."),
         ("Billing:BirTaxPercentage", "12", "Billing", "BIR Value Added Tax (VAT) percentage applied to vatable subscription invoices and receipts (e.g., 12 for 12%)."),
-        ("Billing:CorporateName", "ClinicEZ Digital Health Inc.", "Billing", "Registered corporate entity name printed on BIR billing statements and official receipts."),
+        ("Billing:CorporateName", "Nextstep Software Corporation", "Billing", "Registered corporate entity name printed on BIR billing statements and official receipts."),
         ("Billing:CorporateTin", "009-876-543-000", "Billing", "Registered BIR Tax Identification Number (TIN) printed on billing statements and official receipts."),
         ("Billing:CorporateAddress", "Unit 1402, BGC Corporate Center, 11th Avenue, Bonifacio Global City, Taguig City, Metro Manila, Philippines 1634", "Billing", "Registered corporate business address printed on billing statements and official receipts."),
         ("Billing:SupportEmail", "billing@clinicez.ph", "Billing", "Billing support email address where tenants send payment proof and remittance inquiries."),
@@ -89,12 +89,12 @@ public sealed class SystemSettingsService(
         ("Mailer:SmtpPort", "1025", "Mailer", "SMTP mail server port."),
         ("Mailer:SmtpSecurity", "None", "Mailer", "SMTP security protocol (None, StartTls, Tls)."),
         ("Mailer:SmtpFromEmail", "no-reply@clinicez.com", "Mailer", "Default sender email address for outgoing system emails."),
-        ("Mailer:SmtpFromName", "ClinicEZ Support", "Mailer", "Default sender display name for outgoing system emails."),
+        ("Mailer:SmtpFromName", "Clinic EZ Support", "Mailer", "Default sender display name for outgoing system emails."),
         ("Mailer:SmtpReplyTo", "support@clinicez.com", "Mailer", "Default reply-to email address for system notifications."),
         ("Mailer:ContactInbox", "contact@clinicez.com", "Mailer", "Inbox email address where contact/support inquiries are delivered."),
         ("JoinClaim:TtlHours", "48", "JoinClaim", "Validity window in hours for progressive patient account claim tokens."),
-        ("PatientApp:AppleAppStoreUrl", "https://apps.apple.com/app/clinicez-patient/id000000000", "PatientApp", "Download URL for ClinicEZ Patient App on Apple App Store."),
-        ("PatientApp:GooglePlayStoreUrl", "https://play.google.com/store/apps/details?id=com.clinicez.patient", "PatientApp", "Download URL for ClinicEZ Patient App on Google Play Store."),
+        ("PatientApp:AppleAppStoreUrl", "https://apps.apple.com/app/clinicez-patient/id000000000", "PatientApp", "Download URL for Clinic EZ Patient App on Apple App Store."),
+        ("PatientApp:GooglePlayStoreUrl", "https://play.google.com/store/apps/details?id=com.clinicez.patient", "PatientApp", "Download URL for Clinic EZ Patient App on Google Play Store."),
         ("Contact:HeadquartersAddress", "San Juan 2, Sto Nino\nLapasan, Cagayan de Oro City\nMisamis Oriental\nPhilippines 9000", "Contact", "Official headquarters address displayed on public contact pages and communications."),
         ("Contact:SupportEmail", "support@clinicez.com", "Contact", "Public support email address shown to visitors and subscribers."),
         ("Contact:SalesEmail", "sales@clinicez.com", "Contact", "Public sales email address shown to visitors and subscribers."),
@@ -177,7 +177,7 @@ public sealed class SystemSettingsService(
 
         var birTaxExempt = await GetSettingBoolAsync("Billing:BirTaxExempt", false, ct);
         var birTaxPercentage = await GetSettingDecimalAsync("Billing:BirTaxPercentage", 12m, ct);
-        var corporateName = await GetSettingValueAsync("Billing:CorporateName", "ClinicEZ Digital Health Inc.", ct);
+        var corporateName = await GetSettingValueAsync("Billing:CorporateName", "Nextstep Software Corporation", ct);
         var corporateTin = await GetSettingValueAsync("Billing:CorporateTin", "009-876-543-000", ct);
         var corporateAddress = await GetSettingValueAsync(
             "Billing:CorporateAddress",

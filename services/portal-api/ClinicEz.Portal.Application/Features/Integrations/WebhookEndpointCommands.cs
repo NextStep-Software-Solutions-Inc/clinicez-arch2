@@ -174,7 +174,7 @@ public class SendTestWebhookCommandHandler(IApplicationDbContext context, IWebho
             tenant.Id,
             tenant.TenantSlug,
             IntegrationCatalog.EventPing,
-            new { message = "This is a test event from ClinicEz." },
+            new { message = "This is a test event from Clinic EZ." },
             endpoint.Id,
             cancellationToken);
     }

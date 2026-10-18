@@ -21,7 +21,7 @@ export interface ResultProvenance {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  ClinicEzLab: 'ClinicEZ Lab',
+  ClinicEzLab: 'Clinic EZ Lab',
   ExternalLab: 'External lab',
   PatientUploaded: 'Patient uploaded',
 };
@@ -68,7 +68,7 @@ export function resultOriginName(item: Pick<LabResultReviewItem, 'source' | 'ext
   return name || 'Unnamed laboratory';
 }
 
-/** Only unverified results from outside the ClinicEZ lab can be accepted or rejected. */
+/** Only unverified results from outside the Clinic EZ lab can be accepted or rejected. */
 export function canReviewResult(item: Pick<LabResultReviewItem, 'source' | 'verificationState'>): boolean {
   return item.verificationState === 'Unverified' && item.source !== 'ClinicEzLab';
 }

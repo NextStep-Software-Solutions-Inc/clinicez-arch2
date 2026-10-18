@@ -101,7 +101,7 @@ describe("R1: Progressive Account Claim Card & Digital Pass UI Component Tests",
     const html = renderToString(<ProgressiveClaimCard pass={mockPass} state="empty" />);
 
     expect(html).toContain('data-testid="claim-card-available"');
-    expect(html).toContain("Claim Your ClinicEZ Patient Account");
+    expect(html).toContain("Claim Your Clinic EZ Patient Account");
     expect(html).toContain("Real-Time Queue Alerts");
     expect(html).toContain("Digital Prescriptions");
     expect(html).toContain("1-Click Fast Check-In");
@@ -164,7 +164,7 @@ describe("R1: Progressive Account Claim Card & Digital Pass UI Component Tests",
 
     // Embedded ProgressiveClaimCard
     expect(html).toContain('data-section="account-claim-card"');
-    expect(html).toContain("Claim Your ClinicEZ Patient Account");
+    expect(html).toContain("Claim Your Clinic EZ Patient Account");
     expect(html).toContain("Claim My Patient Account in 1-Click");
 
     // Print isolation
@@ -178,7 +178,7 @@ describe("R1.9: Mobile App Store Badges Tests", () => {
     const html = renderToString(<MobileAppStoreBadges />);
 
     expect(html).toContain("https://apps.apple.com/app/clinicez-patient/id647000000");
-    expect(html).toContain("Download ClinicEZ Patient App on Apple App Store");
+    expect(html).toContain("Download Clinic EZ Patient App on Apple App Store");
     expect(html).toContain("App Store");
   });
 
@@ -186,7 +186,7 @@ describe("R1.9: Mobile App Store Badges Tests", () => {
     const html = renderToString(<MobileAppStoreBadges />);
 
     expect(html).toContain("https://play.google.com/store/apps/details?id=ph.clinicez.patient");
-    expect(html).toContain("Download ClinicEZ Patient App on Google Play Store");
+    expect(html).toContain("Download Clinic EZ Patient App on Google Play Store");
     expect(html).toContain("Google Play");
   });
 
@@ -219,10 +219,10 @@ describe("R1.9: Mobile App Store Badges Tests", () => {
 });
 
 describe("R2: Existing User Fast-Track & Web Autofill Integration", () => {
-  test("R2.1: Banner surfaces 'Already have a ClinicEZ account? Sign in to Autofill'", () => {
-    const bannerTitle = "Already have a ClinicEZ account? Sign in to Autofill";
+  test("R2.1: Banner surfaces 'Already have a Clinic EZ account? Sign in to Autofill'", () => {
+    const bannerTitle = "Already have a Clinic EZ account? Sign in to Autofill";
     const bannerDescription =
-      "Sign in with your ClinicEZ account to pre-populate demographics, 12-digit PhilHealth PIN, contact info, and structured allergies in 1 click.";
+      "Sign in with your Clinic EZ account to pre-populate demographics, 12-digit PhilHealth PIN, contact info, and structured allergies in 1 click.";
 
     expect(bannerTitle).toContain("Sign in to Autofill");
     expect(bannerDescription).toContain("PhilHealth PIN");

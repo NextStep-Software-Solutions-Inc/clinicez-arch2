@@ -128,7 +128,7 @@ export default function NotificationSettingsCard({
                   Patient Mobile Queue Notifications
                 </ThemedText>
                 <ThemedText variant="small" color={theme.colors.textSecondary}>
-                  Configure automated queue updates dispatched to the ClinicEZ Patient App.
+                  Configure automated queue updates dispatched to the Clinic EZ Patient App.
                 </ThemedText>
               </View>
 

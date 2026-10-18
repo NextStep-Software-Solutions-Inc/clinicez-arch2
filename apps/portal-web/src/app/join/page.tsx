@@ -98,7 +98,7 @@ export default function JoinLandingPage() {
 
       {/* Footer */}
       <footer className="text-center py-4 text-xs text-muted-foreground">
-        <p>© {new Date().getFullYear()} ClinicEZ Healthcare Technologies. Secured by Interop Hub.</p>
+        <p>© {new Date().getFullYear()} Nextstep Software Corporation. Clinic EZ is a product of Nextstep Software Corporation. Secured by Interop Hub.</p>
       </footer>
     </div>
   );

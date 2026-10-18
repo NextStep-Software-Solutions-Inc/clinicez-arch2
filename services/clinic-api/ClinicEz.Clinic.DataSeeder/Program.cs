@@ -16,7 +16,7 @@ internal class Program
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine(@"
 ======================================================================
-  ClinicEZ Development Patient & Clinical Record Seeder
+  Clinic EZ Development Patient & Clinical Record Seeder
   Scalability & Browser Capacity Load Generator (1000+ Records)
 ======================================================================");
         Console.ResetColor();

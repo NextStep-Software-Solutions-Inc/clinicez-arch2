@@ -43,6 +43,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<WebhookDelivery> WebhookDeliveries { get; set; }
     public DbSet<SystemSetting> SystemSettings { get; set; }
     public DbSet<PortalNotification> PortalNotifications { get; set; }
+    public DbSet<NewsletterSubscriber> NewsletterSubscribers { get; set; }
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
@@ -519,6 +520,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.Category).HasMaxLength(64);
             entity.Property(e => e.Description).HasMaxLength(512);
             entity.Property(e => e.UpdatedBy).HasMaxLength(256);
+        modelBuilder.Entity<NewsletterSubscriber>(entity =>
+        {
+            entity.ToTable("NewsletterSubscribers");
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(254);
+            entity.Property(e => e.Source).HasMaxLength(64);
+            entity.Property(e => e.Status).HasMaxLength(32);
+            entity.HasIndex(e => e.Email)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
         });
 
         base.OnModelCreating(modelBuilder);

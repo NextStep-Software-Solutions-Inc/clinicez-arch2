@@ -40,7 +40,7 @@ public sealed class RedeemPatientShareCommandValidator : AbstractValidator<Redee
         RuleFor(x => x)
             .Must(x => HasToken(x) != HasCode(x) && (HasToken(x) || (HasText(x.ClinicEzId) && NormalizedCodeLength(x.Code) is >= MinCodeLength and <= MaxCodeLength)))
             .WithName("ShareToken")
-            .WithMessage("Provide either a scanned share token, or the patient's ClinicEZ ID with their one-time code.");
+            .WithMessage("Provide either a scanned share token, or the patient's Clinic EZ ID with their one-time code.");
         RuleFor(x => x.Purpose).MaximumLength(100);
         RuleFor(x => x.ChiefComplaint).MaximumLength(500);
     }

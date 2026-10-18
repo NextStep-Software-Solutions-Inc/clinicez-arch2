@@ -162,7 +162,7 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         {
             TenantId = tenantId,
             ClinicId = clinicId,
-            ClinicName = "ClinicEz Healthcare Center",
+            ClinicName = "Clinic EZ Healthcare Center",
             AccreditationNumber = "000000000"
         };
 

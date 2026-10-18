@@ -66,7 +66,7 @@ public sealed class DocumentsController : ControllerBase
         {
             TenantId = cert.TenantId,
             ClinicId = cert.ClinicId,
-            ClinicName = "ClinicEz Partner Medical Clinic"
+            ClinicName = "Clinic EZ Partner Medical Clinic"
         };
 
         var patient = await _patientRepo.GetByIdAsync(cert.PatientId, ct);
@@ -87,7 +87,7 @@ public sealed class DocumentsController : ControllerBase
         {
             TenantId = referral.TenantId,
             ClinicId = referral.ClinicId,
-            ClinicName = "ClinicEz Partner Medical Clinic"
+            ClinicName = "Clinic EZ Partner Medical Clinic"
         };
 
         var patient = await _patientRepo.GetByIdAsync(referral.PatientId, ct);
@@ -104,7 +104,7 @@ public sealed class DocumentsController : ControllerBase
     {
         var trimmed = securityDigestOrNumber.Trim();
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct);
-        var facilityName = settings?.LetterheadHeader ?? settings?.ClinicName ?? "ClinicEz Accredited Healthcare Facility";
+        var facilityName = settings?.LetterheadHeader ?? settings?.ClinicName ?? "Clinic EZ Accredited Healthcare Facility";
         var facilityAddress = settings?.LetterheadAddress ?? "Philippines";
 
         // 1. Check Medical Certificates
@@ -124,7 +124,7 @@ public sealed class DocumentsController : ControllerBase
                 IssueDate: medCert.IssueDate.ToString("MMMM dd, yyyy"),
                 Status: "Officially Valid",
                 SecurityDigest: trimmed,
-                VerificationMessage: "This Medical Certificate is cryptographically verified and authentic on the ClinicEz national healthcare registry.",
+                VerificationMessage: "This Medical Certificate is cryptographically verified and authentic on the Clinic EZ national healthcare registry.",
                 Notes: $"Fitness Status: {medCert.FitnessStatus} • Rest Recommended: {medCert.RecommendedRestDays ?? 0} day(s)"
             )));
         }
@@ -190,7 +190,7 @@ public sealed class DocumentsController : ControllerBase
                 IssueDate: labOrder.OrderDate.ToString("MMMM dd, yyyy"),
                 Status: labOrder.Status.ToString(),
                 SecurityDigest: trimmed,
-                VerificationMessage: "Official Universal Diagnostic Requisition Slip registered on ClinicEz interop network.",
+                VerificationMessage: "Official Universal Diagnostic Requisition Slip registered on Clinic EZ interop network.",
                 Notes: $"Order Status: {labOrder.Status} • Interoperable with all accredited diagnostic laboratories"
             )));
         }

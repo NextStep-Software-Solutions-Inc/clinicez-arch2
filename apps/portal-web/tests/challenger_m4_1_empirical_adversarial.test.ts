@@ -62,7 +62,7 @@ describe("Milestone 4 Empirical Challenger: Adversarial Stress Suite", () => {
       const bdo = OFFLINE_BANK_ACCOUNTS.find((a) => a.id === "bdo")!
       expect(bdo).toBeDefined()
       expect(bdo.institution).toBe("BDO Unibank")
-      expect(bdo.accountName).toBe("ClinicEZ Digital Health Inc.")
+      expect(bdo.accountName).toBe("Nextstep Software Corporation")
       expect(bdo.accountNumber).toBe("0012-3456-7890")
       expect(bdo.copyValue).toBe("0012-3456-7890")
       expect(bdo.branch).toBe("BGC Corporate Center")
@@ -74,7 +74,7 @@ describe("Milestone 4 Empirical Challenger: Adversarial Stress Suite", () => {
       const bpi = OFFLINE_BANK_ACCOUNTS.find((a) => a.id === "bpi")!
       expect(bpi).toBeDefined()
       expect(bpi.institution).toBe("Bank of the Philippine Islands (BPI)")
-      expect(bpi.accountName).toBe("ClinicEZ Digital Health Inc.")
+      expect(bpi.accountName).toBe("Nextstep Software Corporation")
       expect(bpi.accountNumber).toBe("4321-8765-09")
       expect(bpi.copyValue).toBe("4321-8765-09")
       expect(bpi.branch).toBe("Ayala Triangle")
@@ -86,7 +86,7 @@ describe("Milestone 4 Empirical Challenger: Adversarial Stress Suite", () => {
       const ewallet = OFFLINE_BANK_ACCOUNTS.find((a) => a.id === "gcash-maya")!
       expect(ewallet).toBeDefined()
       expect(ewallet.institution).toBe("GCash / Maya")
-      expect(ewallet.accountName).toBe("ClinicEZ Digital Health")
+      expect(ewallet.accountName).toBe("Nextstep Software Corporation")
       expect(ewallet.accountNumber).toBe("0917-123-EZPH (0917-123-3974)")
       // Copy value must be clean numeric digits with standard dash format, no letters!
       expect(ewallet.copyValue).toBe("0917-123-3974")

@@ -7,7 +7,7 @@ There are three unrelated things called "billing" in this repository. Do not mix
 | Name | Where | What it is | Related to cashiering? |
 |------|-------|------------|------------------------|
 | **Per-cell cashiering** | [`services/billing-api`](../../services/billing-api) | Invoices, payments, receipts, cashier shifts for patient care. Subject of this document. | Yes |
-| **SaaS billing** | [`services/portal-api` `Features/Billing`](../../services/portal-api/ClinicEz.Portal.Application/Features/Billing) | What a tenant pays ClinicEZ (plans, subscriptions, Xendit checkout and webhooks). Stays in the portal. | No |
+| **SaaS billing** | [`services/portal-api` `Features/Billing`](../../services/portal-api/ClinicEz.Portal.Application/Features/Billing) | What a tenant pays Clinic EZ (plans, subscriptions, Xendit checkout and webhooks). Stays in the portal. | No |
 | **Clinic-local cashiering** | [`services/clinic-api` `Features/Billing`](../../services/clinic-api/ClinicEz.Clinic.Application/Features/Billing) | The clinic's original invoice and payment feature (`api/v1/billing/invoices`). Independent of billing-api. | Legacy, overlaps |
 
 ## Principles

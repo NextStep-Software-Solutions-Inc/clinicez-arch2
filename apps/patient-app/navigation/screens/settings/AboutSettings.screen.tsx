@@ -44,20 +44,25 @@ export default function AboutSettingsScreen() {
         />
       </SettingsSection>
 
+      <SettingsSection title="Publisher">
+        <SettingsRow title="Product" right={{ type: 'value', label: 'Clinic EZ' }} />
+        <SettingsRow title="Company" right={{ type: 'value', label: 'Nextstep Software Corporation' }} />
+      </SettingsSection>
+
       <SettingsSection title="Legal">
         <SettingsRow
           title="Privacy Policy"
           icon={{ android: 'privacy_tip', ios: 'hand.raised.fill' }}
           iconColor={colors.primary}
           right={{ type: 'chevron' }}
-          onPress={() => openUrl('https://Clinic EZ.app/privacy')}
+          onPress={() => openUrl('https://portal.clinicez.com/privacy')}
         />
         <SettingsRow
           title="Terms of Service"
           icon={{ android: 'description', ios: 'doc.text.fill' }}
           iconColor={colors.textMuted}
           right={{ type: 'chevron' }}
-          onPress={() => openUrl('https://Clinic EZ.app/terms')}
+          onPress={() => openUrl('https://portal.clinicez.com/terms')}
         />
       </SettingsSection>
 
@@ -67,7 +72,7 @@ export default function AboutSettingsScreen() {
           icon={{ android: 'support_agent', ios: 'person.fill.questionmark' }}
           iconColor={colors.success}
           right={{ type: 'chevron' }}
-          onPress={() => SUPPORT_EMAIL && openUrl(`mailto:${SUPPORT_EMAIL}?subject=Clinic EZ%20Support`)}
+          onPress={() => SUPPORT_EMAIL && openUrl(`mailto:${SUPPORT_EMAIL}?subject=Clinic%20EZ%20Support`)}
         />
         <SettingsRow
           title="Report a Bug"

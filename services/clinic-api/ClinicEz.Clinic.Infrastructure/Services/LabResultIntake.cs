@@ -38,7 +38,7 @@ public sealed class LabResultIntake : ILabResultIntake
     {
         if (submission.Source == ResultSource.ClinicEzLab)
         {
-            throw new ArgumentException("A ClinicEZ laboratory report is ingested from its finalized-report message, not through the upload intake.", nameof(submission));
+            throw new ArgumentException("A Clinic EZ laboratory report is ingested from its finalized-report message, not through the upload intake.", nameof(submission));
         }
 
         var contentType = NormalizeContentType(submission.ContentType);

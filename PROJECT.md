@@ -1,7 +1,7 @@
 # Project: Clinic-Wide Audit Log and Forensic Activity Trail
 
 ## Architecture
-Comprehensive, clinic-wide Audit Log and Forensic Activity Trail system for Clinic Administrators in ClinicEZ:
+Comprehensive, clinic-wide Audit Log and Forensic Activity Trail system for Clinic Administrators in Clinic EZ (a product of Nextstep Software Corporation):
 - `services/clinic-api`:
   - `ClinicEz.Clinic.Domain`: `ClinicAuditEntry` entity inheriting `BaseEntity`, `ClinicPermissions.AuditRead` (`audit:read`) and `ClinicPermissions.AuditExport` (`audit:export`).
   - `ClinicEz.Clinic.Infrastructure`: `ApplicationDbContext` persistence with `ClinicId == CurrentClinicId` global query filter, dual-layer WORM immutability guard in `SaveChangesAsync` and `SaveChanges` throwing `InvalidOperationException`, `PhiRedactionService`, `AuditLogQueue` (`Channel<AuditLogMessage>`), and `AuditLogBackgroundWorker : BackgroundService`.

@@ -6,7 +6,7 @@ One binary, two modes (`Hub:Mode`):
 
 | Mode | Where | Job |
 |---|---|---|
-| `Cloud` | ClinicEZ cloud | The authority: client auth, directory, routing policy, cross-tenant links, claims, mailboxes for the cloud cell and one `cell-inbox` per edge cell. |
+| `Cloud` | Clinic EZ cloud | The authority: client auth, directory, routing policy, cross-tenant links, claims, mailboxes for the cloud cell and one `cell-inbox` per edge cell. |
 | `Local` | One per on-prem site (edge cell) | Same wire API on the LAN. Same-cell traffic stays on the LAN; everything else is queued and forwarded to the cloud hub. Pulls the site's cell inbox from the cloud and fans it out to local mailboxes. Keeps a read-only copy of the directory so it works offline. |
 
 ```
@@ -119,7 +119,7 @@ Standard ASP.NET Core configuration: `appsettings*.json`, environment variables 
 
   ```
   Hub__Bootstrap__Cells__0__CellId=cloud
-  Hub__Bootstrap__Cells__0__Name=ClinicEZ Cloud
+  Hub__Bootstrap__Cells__0__Name=Clinic EZ Cloud
   Hub__Bootstrap__Cells__0__Kind=Cloud
   Hub__Bootstrap__Clients__0__ClientId=portal-api
   Hub__Bootstrap__Clients__0__Secret=<at least 24 random characters>

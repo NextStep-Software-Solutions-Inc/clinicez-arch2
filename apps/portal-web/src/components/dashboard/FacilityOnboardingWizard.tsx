@@ -738,7 +738,7 @@ export default function FacilityOnboardingWizard({
                     <span>Physical Branch Required</span>
                   </div>
                   <p className="text-xs text-rose-800 dark:text-rose-300">
-                    No physical branches exist in this workspace. Under ClinicEZ&apos;s branch-first workflow, facilities must be anchored to a physical branch.
+                    No physical branches exist in this workspace. Under Clinic EZ&apos;s branch-first workflow, facilities must be anchored to a physical branch.
                   </p>
                   <Button
                     type="button"
@@ -889,7 +889,7 @@ export default function FacilityOnboardingWizard({
                 <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Deployment</Label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {[
-                    { value: "SharedCloud" as const, label: "Shared cloud", description: "Hosted by ClinicEZ. Nothing to install." },
+                    { value: "SharedCloud" as const, label: "Shared cloud", description: "Hosted by Clinic EZ. Nothing to install." },
                     { value: "OnPremise" as const, label: "On-premise", description: "Runs on your own server and syncs through the hub." },
                   ].map((option) => {
                     const isSelected = deploymentMode === option.value;

@@ -152,7 +152,7 @@ export default function ExternalDispenseScreen({ route }: Props) {
       <Card style={{ gap: spacing.xs }}>
         <ThemedText variant="h3">{`Prescription ${prescription.prescriptionNumber}`}</ThemedText>
         <ThemedText variant="body" color="textSecondary">
-          Filled this prescription at a pharmacy outside ClinicEZ? Tell us where so your records stay accurate.
+          Filled this prescription at a pharmacy outside Clinic EZ? Tell us where so your records stay accurate.
         </ThemedText>
       </Card>
 

@@ -8,7 +8,7 @@ namespace ClinicEz.Shared.Interop.Transport;
 
 /// <summary>
 /// Patient-carried claim capability. The issuer (clinic) wraps an envelope addressed only by facility TYPE into a
-/// single-use token printed/QR'd on the slip; any ClinicEZ facility of that type redeems it and the hub then delivers
+/// single-use token printed/QR'd on the slip; any Clinic EZ facility of that type redeems it and the hub then delivers
 /// the claimed envelope into that facility's mailbox (no prior link required: the patient is the consent broker).
 /// HTTP mapping: <c>POST /v1/claims</c>, <c>POST /v1/claims/{token}/redeem</c>.
 /// </summary>

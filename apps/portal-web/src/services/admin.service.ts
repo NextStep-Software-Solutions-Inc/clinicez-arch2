@@ -505,5 +505,29 @@ export const adminService = {
   recordManualPayment: async (tenantId: string, payload: RecordManualPaymentPayload): Promise<RecordManualPaymentResult> => {
     const res = await apiClient.post<RecordManualPaymentResult>(`/admin/tenants/${tenantId}/record-payment`, payload);
     return res.data;
-  }
+  },
+
+  getNewsletterSubscribers: async (): Promise<AdminNewsletterSubscriberDto[]> => {
+    try {
+      const res = await apiClient.get<{ subscribers: AdminNewsletterSubscriberDto[] }>("/admin/newsletter-subscribers");
+      return res.data?.subscribers || [];
+    } catch {
+      try {
+        const res = await fetch("/api/v1/admin/newsletter-subscribers");
+        const json = await res.json().catch(() => ({}));
+        return json?.subscribers || [];
+      } catch {
+        return [];
+      }
+    }
+  },
 };
+
+export interface AdminNewsletterSubscriberDto {
+  id: string;
+  email: string;
+  source: string;
+  status: "Active" | "Unsubscribed";
+  subscribedAt: string;
+}
+

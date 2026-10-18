@@ -40,7 +40,7 @@ flowchart LR
     CA & LA & PA & OA & BA & HUB --> PG
     BK --> PG
   end
-  subgraph CLOUD["ClinicEZ cloud"]
+  subgraph CLOUD["Clinic EZ cloud"]
     CH["cloud hub"]
     PORTAL["portal-api"]
     PAT["patient-api"]

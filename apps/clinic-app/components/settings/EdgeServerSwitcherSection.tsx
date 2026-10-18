@@ -16,7 +16,7 @@ import { normalizeServerUrl, probeServer } from '../../services/serverUrl';
 import { useConnection } from '../connection/ConnectionGate';
 
 /**
- * Settings section for inspecting and switching the ClinicEZ Edge or Cloud server URL.
+ * Settings section for inspecting and switching the Clinic EZ Edge or Cloud server URL.
  * Allows on-prem clinic operators and mobile tablet users to test connectivity and switch LAN/Cloud targets.
  */
 export default function EdgeServerSwitcherSection() {
@@ -99,7 +99,7 @@ export default function EdgeServerSwitcherSection() {
     <Card>
       <CardHeader
         title="Edge server & API connectivity"
-        subtitle="Manage whether this device talks to a local on-premise ClinicEZ Edge server or the cloud API."
+        subtitle="Manage whether this device talks to a local on-premise Clinic EZ Edge server or the cloud API."
         rightAction={
           <Badge
             label={isCustomEdge ? 'Local Edge Server' : 'Default Host'}

@@ -130,12 +130,12 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
 
             Thank you for registering at {facilityName}.
 
-            You can claim your permanent ClinicEZ Patient Account in 1-click by visiting:
+            You can claim your permanent Clinic EZ Patient Account in 1-click by visiting:
             {claimUrl}
 
             This link is cryptographically signed and expires {expiresAt} (in {ttlHours} hours).
 
-            Claiming your account allows you to track your queue status in real-time, access digital e-prescriptions and lab results, and check-in instantly at all ClinicEZ facilities.
+            Claiming your account allows you to track your queue status in real-time, access digital e-prescriptions and lab results, and check-in instantly at all Clinic EZ facilities.
             """;
 
         return new RenderedEmail(html, text);
@@ -284,7 +284,7 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
               <td style="padding: 32px;">
                 <h2 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0;">Hello {{patientName}},</h2>
                 <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
-                  Your intake registration at <strong>{{facilityName}}</strong> was received. You can now claim your permanent ClinicEZ Patient Account to access test results, e-prescriptions, and fast-track future check-ins.
+                  Your intake registration at <strong>{{facilityName}}</strong> was received. You can now claim your permanent Clinic EZ Patient Account to access test results, e-prescriptions, and fast-track future check-ins.
                 </p>
 
                 <!-- CTA -->

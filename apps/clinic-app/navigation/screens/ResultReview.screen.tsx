@@ -125,7 +125,7 @@ export default function ResultReviewScreen() {
     setSubmitting(null);
 
     if (err || !updated) {
-      // 400/409: already reviewed or verified by the ClinicEZ lab. Refresh so the list reflects the server.
+      // 400/409: already reviewed or verified by the Clinic EZ lab. Refresh so the list reflects the server.
       notify.error(err?.message || 'The review could not be saved.');
       if (err && (err.status === 400 || err.status === 409)) {
         setSelected(null);
@@ -328,7 +328,7 @@ export default function ResultReviewScreen() {
             {!actionable ? (
               <ThemedText variant="small" color={theme.colors.textSecondary}>
                 {selected.source === 'ClinicEzLab'
-                  ? 'Results from the ClinicEZ lab are verified automatically.'
+                  ? 'Results from the Clinic EZ lab are verified automatically.'
                   : 'This result has already been reviewed.'}
               </ThemedText>
             ) : null}

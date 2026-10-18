@@ -63,7 +63,7 @@ export default function PhilHealthSettingsTab({
             />
             <InfoRow
               label="Electronic Claims Engine"
-              value="ClinicEz Yakap eClaims v2.4 (Compliant)"
+              value="Clinic EZ Yakap eClaims v2.4 (Compliant)"
             />
           </View>
         </CardContent>

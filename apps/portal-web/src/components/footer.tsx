@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Facebook, Twitter, Instagram, Linkedin, Heart } from "lucide-react";
 import { ClinicEzLogo } from "@/components/ClinicEzLogo";
+import { NewsletterForm } from "@/components/NewsletterForm";
+import { socialLinks } from "@/config/site";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
@@ -20,19 +22,13 @@ export function Footer() {
             </p>
             
             <h4 className="text-sm font-semibold mb-3">Subscribe to our newsletter</h4>
-            <div className="flex gap-2 w-full max-w-sm">
-              <input 
-                type="email" 
-                placeholder="Enter your email" 
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              />
-              <button className="h-10 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
-                Subscribe
-              </button>
-            </div>
+            <p className="text-xs text-muted-foreground mb-3 max-w-sm">
+              Get the latest clinical insights, regulatory updates, and software releases delivered to your inbox.
+            </p>
+            <NewsletterForm />
           </div>
 
-          {/* Links Column 1 */}
+          {/* Links Column 1: Product */}
           <div className="flex flex-col">
             <h4 className="text-sm font-bold mb-6 text-foreground uppercase tracking-wider">Product</h4>
             <ul className="space-y-4 text-sm">
@@ -43,7 +39,7 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Links Column 2 */}
+          {/* Links Column 2: Company */}
           <div className="flex flex-col">
             <h4 className="text-sm font-bold mb-6 text-foreground uppercase tracking-wider">Company</h4>
             <ul className="space-y-4 text-sm">
@@ -54,7 +50,7 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Links Column 3 */}
+          {/* Links Column 3: Legal */}
           <div className="flex flex-col">
             <h4 className="text-sm font-bold mb-6 text-foreground uppercase tracking-wider">Legal</h4>
             <ul className="space-y-4 text-sm">
@@ -67,21 +63,47 @@ export function Footer() {
         </div>
 
         <div className="border-t border-border/50 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground flex items-center">
-            © {currentYear} Clinic EZ. Built with <Heart className="h-4 w-4 text-red-500 mx-1 fill-current" /> for healthcare.
+          <p className="text-xs sm:text-sm text-muted-foreground flex flex-wrap items-center gap-1">
+            <span>© {currentYear} Nextstep Software Corporation. Clinic EZ is a product of Nextstep Software Corporation.</span>
+            <span className="hidden sm:inline">•</span>
+            <span className="inline-flex items-center">Built with <Heart className="h-3.5 w-3.5 text-red-500 mx-1 fill-current" /> for healthcare.</span>
           </p>
           
           <div className="flex items-center gap-4 text-muted-foreground">
-            <Link href="https://facebook.com" className="hover:text-primary transition-colors" aria-label="Facebook">
+            <Link
+              href={socialLinks.facebook}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors"
+              aria-label="Facebook"
+            >
               <Facebook className="h-5 w-5" />
             </Link>
-            <Link href="https://twitter.com" className="hover:text-primary transition-colors" aria-label="Twitter">
+            <Link
+              href={socialLinks.twitter}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors"
+              aria-label="Twitter"
+            >
               <Twitter className="h-5 w-5" />
             </Link>
-            <Link href="https://instagram.com" className="hover:text-primary transition-colors" aria-label="Instagram">
+            <Link
+              href={socialLinks.instagram}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors"
+              aria-label="Instagram"
+            >
               <Instagram className="h-5 w-5" />
             </Link>
-            <Link href="https://linkedin.com" className="hover:text-primary transition-colors" aria-label="LinkedIn">
+            <Link
+              href={socialLinks.linkedin}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors"
+              aria-label="LinkedIn"
+            >
               <Linkedin className="h-5 w-5" />
             </Link>
           </div>

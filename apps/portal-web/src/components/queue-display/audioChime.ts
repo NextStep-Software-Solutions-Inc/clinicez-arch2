@@ -1,5 +1,5 @@
 /**
- * Web Audio API chime synthesizer for ClinicEZ Public Waiting Area TV Display.
+ * Web Audio API chime synthesizer for Clinic EZ Public Waiting Area TV Display.
  * Generates an audible medical chime without external audio assets.
  * Conforms to F2.5 audio specs:
  *   Tone 1: 587.33 Hz (D5)

@@ -10,7 +10,7 @@ export default function ClerkUserButton() {
                 <UserButton.Link
                     label="Tenant Dashboard"
                     labelIcon={<Star size={14} />}
-                    href="/tenants/dashboard"
+                    href="/sync-auth"
                 />
             </UserButton.MenuItems>
         </UserButton>

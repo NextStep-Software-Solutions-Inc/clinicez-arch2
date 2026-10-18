@@ -24,7 +24,7 @@ public class LabReportLetterheadTests
         "PRC-0045678", "PRC-0089123", "DOH-LTO-2026-004412-CL", "PHIC-LAB-992140",
         "Carlos Mendoza", "Roberto Gomez", "(02) 8523-9000", "Manila, Philippines",
         "124 Medical Plaza", "lab@example.com", "Routine Medical Checkup", "N/A",
-        "ClinicEz Diagnostic Laboratory", "Clinical Chemistry • Hematology • Immunology"
+        "ClinicEZ Diagnostic Laboratory", "Clinic EZ Diagnostic Laboratory", "ClinicEz Diagnostic Laboratory", "Clinical Chemistry • Hematology • Immunology"
     };
 
     private static LabRequisition Requisition(DiagnosticReport? report = null) => new()

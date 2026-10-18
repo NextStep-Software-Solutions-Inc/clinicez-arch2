@@ -14,7 +14,7 @@ export async function generateMetadata({
   const { facilitySlug } = await params;
   return {
     title: `Public TV Display | ${facilitySlug}`,
-    description: "Public Waiting Area TV Queue Display Board for ClinicEZ.",
+    description: "Public Waiting Area TV Queue Display Board for Clinic EZ.",
   };
 }
 

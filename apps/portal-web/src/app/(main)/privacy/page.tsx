@@ -3,9 +3,9 @@ import Link from "next/link";
 import { ShieldCheck, Lock, FileText, Building2 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy (RA 10173 DPA 2012) | ClinicEZ",
+  title: "Privacy Policy (RA 10173 DPA 2012) | Clinic EZ",
   description:
-    "ClinicEZ Data Privacy Act of 2012 (Republic Act No. 10173) Notice, Patient Health Information Protection Policy, and NPC Compliance.",
+    "Clinic EZ Data Privacy Act of 2012 (Republic Act No. 10173) Notice, Patient Health Information Protection Policy, and NPC Compliance.",
 };
 
 export default function PrivacyPolicyPage() {
@@ -21,7 +21,7 @@ export default function PrivacyPolicyPage() {
             Privacy Policy &amp; Patient Data Protection Notice
           </h1>
           <p className="text-sm text-muted-foreground">
-            Effective Date: October 2026 • Applicable across all ClinicEZ Healthcare Workspaces, Patient Portals, and Interop Hub Services
+            Effective Date: October 2026 • Applicable across all Clinic EZ Healthcare Workspaces, Patient Portals, and Interop Hub Services
           </p>
         </header>
 
@@ -53,7 +53,7 @@ export default function PrivacyPolicyPage() {
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-foreground">1. Scope and Role Under RA 10173</h2>
             <p>
-              ClinicEZ Healthcare Technologies (&ldquo;ClinicEZ&rdquo;) provides cloud and on-premise health information software. Under Republic Act No. 10173 (the Data Privacy Act of 2012), accredited healthcare facilities (clinics, laboratories, pharmacies, and health networks) act as the <strong>Personal Information Controller (PIC)</strong> for clinical encounter records created within their workstations, while ClinicEZ acts as the <strong>Personal Information Processor (PIP)</strong> for workspace infrastructure and as the PIC for patient-managed health vault accounts in the ClinicEZ Patient App.
+              Clinic EZ is a health information software product developed and operated by Nextstep Software Corporation (&ldquo;Nextstep Software Corporation&rdquo;). Under Republic Act No. 10173 (the Data Privacy Act of 2012), accredited healthcare facilities (clinics, laboratories, pharmacies, and health networks) act as the <strong>Personal Information Controller (PIC)</strong> for clinical encounter records created within their workstations, while Nextstep Software Corporation / Clinic EZ acts as the <strong>Personal Information Processor (PIP)</strong> for workspace infrastructure and as the PIC for patient-managed health vault accounts in the Clinic EZ Patient App.
             </p>
           </section>
 
@@ -85,14 +85,14 @@ export default function PrivacyPolicyPage() {
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-foreground">4. Cryptographic Security, Retention, and Disposal</h2>
             <p>
-              All inter-service messages transmitted through the ClinicEZ Interop Hub are signed using ECDSA P-256 keys and verified prior to ingestion. Local patient mobile records are encrypted at rest and wiped upon sign-out. Clinical records are retained in accordance with Department of Health (DOH) and National Privacy Commission retention schedules unless earlier erasure is lawfully requested and permitted by medical retention statutes.
+              All inter-service messages transmitted through the Clinic EZ Interop Hub are signed using ECDSA P-256 keys and verified prior to ingestion. Local patient mobile records are encrypted at rest and wiped upon sign-out. Clinical records are retained in accordance with Department of Health (DOH) and National Privacy Commission retention schedules unless earlier erasure is lawfully requested and permitted by medical retention statutes.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-foreground">5. Rights of the Data Subject</h2>
             <p>
-              Pursuant to Section 16 of RA 10173, patients and workspace users have the right to be informed, to object, to access, to rectify inaccuracies, to revoke facility sharing grants at any time via the ClinicEZ Patient App, to data portability, and to lodge a complaint before the National Privacy Commission.
+              Pursuant to Section 16 of RA 10173, patients and workspace users have the right to be informed, to object, to access, to rectify inaccuracies, to revoke facility sharing grants at any time via the Clinic EZ Patient App, to data portability, and to lodge a complaint before the National Privacy Commission.
             </p>
           </section>
         </article>

@@ -18,7 +18,8 @@ import {
   IconMoon,
   IconMenu2,
   IconAdjustments,
-  IconCreditCard
+  IconCreditCard,
+  IconMail
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { ClinicEzMark } from "@/components/ClinicEzLogo";
@@ -186,6 +187,12 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
       title: "Blog CRM",
       href: "/admin/blog",
       icon: IconNotebook,
+      permission: ADMIN_PERMISSIONS.MANAGE_BLOGS
+    },
+    {
+      title: "Subscribers",
+      href: "/admin/subscribers",
+      icon: IconMail,
       permission: ADMIN_PERMISSIONS.MANAGE_BLOGS
     },
     {

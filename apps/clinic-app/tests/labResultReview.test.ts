@@ -14,9 +14,9 @@ import {
 import type { LabOrderStage } from '../services/clinicService';
 
 describe('getResultProvenance', () => {
-  test('ClinicEZ lab results are verified with a success tone', () => {
+  test('Clinic EZ lab results are verified with a success tone', () => {
     expect(getResultProvenance('ClinicEzLab', 'Verified')).toEqual({
-      sourceLabel: 'ClinicEZ Lab',
+      sourceLabel: 'Clinic EZ Lab',
       verificationLabel: 'Verified',
       tone: 'success',
     });
@@ -102,7 +102,7 @@ describe('resultOriginName', () => {
     expect(resultOriginName({ source: 'ExternalLab', externalLabName: ' Hi-Precision ' })).toBe('Hi-Precision');
     expect(resultOriginName({ source: 'ExternalLab', externalLabName: null })).toBe('Unnamed laboratory');
     expect(resultOriginName({ source: 'PatientUploaded', externalLabName: undefined })).toBe('Uploaded by patient');
-    expect(resultOriginName({ source: 'ClinicEzLab', externalLabName: null })).toBe('ClinicEZ Lab');
+    expect(resultOriginName({ source: 'ClinicEzLab', externalLabName: null })).toBe('Clinic EZ Lab');
   });
 });
 

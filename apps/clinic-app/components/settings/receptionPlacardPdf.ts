@@ -73,7 +73,7 @@ function drawLeftText(
  */
 export function buildReceptionPlacardPdfBytes(data: ReceptionPlacardData): Uint8Array {
   const pageWidth = 612;
-  const facilityName = (data.letterhead?.header || data.facilityName || 'ClinicEZ Healthcare').toUpperCase();
+  const facilityName = (data.letterhead?.header || data.facilityName || 'Clinic EZ Healthcare').toUpperCase();
   const subHeader = data.letterhead?.subHeader || 'Patient Self-Registration & Enlistment Station';
   const address = data.letterhead?.address;
   const contact = data.letterhead?.contact;

@@ -38,7 +38,7 @@ public static class DirectoryPayloads
     public static DirectoryCellUpsertedPayload CloudCell(string cloudCellId) => new()
     {
         CellId = cloudCellId,
-        Name = "ClinicEZ Cloud",
+        Name = "Clinic EZ Cloud",
         Kind = CellKind.Cloud,
         Active = true
     };

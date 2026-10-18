@@ -92,7 +92,7 @@ public sealed class MarkPrescriptionExternallyDispensedEndpoint : IEndpoint
             .DisableAntiforgery()
             .WithTags("Documents")
             .WithName("MarkPrescriptionExternallyDispensed")
-            .WithSummary("Report that a prescription was filled at a pharmacy outside ClinicEZ")
+            .WithSummary("Report that a prescription was filled at a pharmacy outside Clinic EZ")
             .WithDescription("Multipart form: pharmacyName (required), branchLocation, pharmacistName, receiptNumber, notes and an optional receipt file (up to 10 MB). The issuing clinic is informed.")
             .Accepts<IFormFile>("multipart/form-data")
             .Produces<ApiResponse<ExternalDispenseAcceptedDto>>(StatusCodes.Status202Accepted)

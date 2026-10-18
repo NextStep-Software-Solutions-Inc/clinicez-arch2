@@ -36,7 +36,7 @@ public enum LinkScopes
 [JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum CellKind
 {
-    /// <summary>The ClinicEZ cloud shared cell: facilities of every SharedCloud tenant. Its hub is the cloud hub.</summary>
+    /// <summary>The Clinic EZ cloud shared cell: facilities of every SharedCloud tenant. Its hub is the cloud hub.</summary>
     Cloud,
     /// <summary>One per on-prem tenant site; has a local hub federated to the cloud hub.</summary>
     Edge

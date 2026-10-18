@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ClinicEZ Edge Cell installer (Linux / macOS). Windows: install.ps1 (same options, PowerShell spelling).
+# Clinic EZ Edge Cell installer (Linux / macOS). Windows: install.ps1 (same options, PowerShell spelling).
 #
 #   ./install.sh [install]            first install, or re-run (keeps .env and every generated secret)
 #   ./install.sh apply                re-render hub-bootstrap.env, pull and `up -d` after editing .env (e.g. COMPOSE_PROFILES)

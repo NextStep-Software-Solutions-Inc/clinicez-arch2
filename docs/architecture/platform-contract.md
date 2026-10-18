@@ -1,6 +1,6 @@
 # Platform contract for facility-type services
 
-This is what a new facility-type service (imaging, dental, ...) has to implement to join the ClinicEZ platform. It is written from the code as it stands today. Where the code and the target architecture ([hub README](../../services/interop-hub/README.md), architecture plan) differ, the difference is called out as **Gap**.
+This is what a new facility-type service (imaging, dental, ...) has to implement to join the Clinic EZ platform. It is written from the code as it stands today. Where the code and the target architecture ([hub README](../../services/interop-hub/README.md), architecture plan) differ, the difference is called out as **Gap**.
 
 Related docs: [interop-hub.md](interop-hub.md) · [data-ownership.md](data-ownership.md) · [billing.md](billing.md)
 

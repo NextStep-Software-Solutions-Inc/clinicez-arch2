@@ -36,6 +36,7 @@ public interface IApplicationDbContext
     DbSet<WebhookDelivery> WebhookDeliveries { get; }
     DbSet<SystemSetting> SystemSettings { get; }
     DbSet<PortalNotification> PortalNotifications { get; }
+    DbSet<NewsletterSubscriber> NewsletterSubscribers { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

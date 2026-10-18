@@ -31,7 +31,7 @@ services:
       - Hub__PayloadEncryptionKey=${HUB_PAYLOAD_ENCRYPTION_KEY:-}
       # Declarative bootstrap: the cloud cell and clients for each cloud service.
       - Hub__Bootstrap__Cells__0__CellId=${HUB_CLOUD_CELL_ID:-cloud}
-      - Hub__Bootstrap__Cells__0__Name=ClinicEZ Cloud
+      - Hub__Bootstrap__Cells__0__Name=Clinic EZ Cloud
       - Hub__Bootstrap__Cells__0__Kind=Cloud
 
       # 0: Portal API (ControlPlane)

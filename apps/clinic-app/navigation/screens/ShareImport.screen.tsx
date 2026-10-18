@@ -221,19 +221,19 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
   const busy = phase === 'submitting' || phase === 'polling';
 
   const idError = formError
-    ? formError.includes('ClinicEZ ID')
+    ? formError.includes('Clinic EZ ID')
       ? formError.includes('one-time code')
-        ? 'ClinicEZ ID is required'
+        ? 'Clinic EZ ID is required'
         : formError
       : undefined
     : undefined;
 
   const codeError = formError
     ? formError.includes('one-time code')
-      ? formError.includes('ClinicEZ ID')
+      ? formError.includes('Clinic EZ ID')
         ? 'One-time code is required'
         : formError
-      : formError.includes('code') && !formError.includes('ClinicEZ ID')
+      : formError.includes('code') && !formError.includes('Clinic EZ ID')
       ? formError
       : undefined
     : undefined;
@@ -327,7 +327,7 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
         />
         <View style={styles.infoGrid}>
           <InfoRow label="Patient" value={status.patientName || 'Unnamed patient'} />
-          <InfoRow label="ClinicEZ ID" value={status.clinicEzId || '--'} />
+          <InfoRow label="Clinic EZ ID" value={status.clinicEzId || '--'} />
           <InfoRow label="Items imported" value={String(status.itemsImported)} />
           <InfoRow label="Access expires" value={formatDateTime(status.expiresAtUtc)} />
         </View>
@@ -391,7 +391,7 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
                 subtitle={
                   mode === 'token'
                     ? "Scan the patient's QR code or paste the token."
-                    : "Ask the patient for their ClinicEZ ID and 8-character code."
+                    : "Ask the patient for their Clinic EZ ID and 8-character code."
                 }
                 icon={mode === 'token' ? 'scan' : 'key'}
                 rightAction={
@@ -439,13 +439,13 @@ export default function ShareImportScreen({ route }: ShareImportScreenProps = {}
               ) : (
                 <>
                   <Input
-                    label="ClinicEZ ID"
+                    label="Clinic EZ ID"
                     required
                     autoFocus
                     autoCapitalize="characters"
                     autoCorrect={false}
                     placeholder="e.g. CE-ABCD-1234"
-                    helperText="The patient's ClinicEZ ID (e.g. CE-ABCD-1234)."
+                    helperText="The patient's Clinic EZ ID (e.g. CE-ABCD-1234)."
                     value={clinicEzId}
                     onChangeText={handleClinicEzIdChange}
                     onSubmitEditing={() => {

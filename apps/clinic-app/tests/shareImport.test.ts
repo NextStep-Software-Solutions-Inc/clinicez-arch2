@@ -97,8 +97,13 @@ describe('normalizeShareCode', () => {
 
 describe('parseSmartShareInput', () => {
   test('parses labeled patient-app copy string', () => {
-    const parsed = parseSmartShareInput('ClinicEZ ID: CE-ABCD-1234 | Code: WXYZ-5678');
+    const parsed = parseSmartShareInput('Clinic EZ ID: CE-ABCD-1234 | Code: WXYZ-5678');
     expect(parsed).toEqual({
+      clinicEzId: 'CE-ABCD-1234',
+      code: 'WXYZ-5678',
+    });
+    const parsedLegacy = parseSmartShareInput('ClinicEZ ID: CE-ABCD-1234 | Code: WXYZ-5678');
+    expect(parsedLegacy).toEqual({
       clinicEzId: 'CE-ABCD-1234',
       code: 'WXYZ-5678',
     });
@@ -223,11 +228,11 @@ describe('buildRedeemRequest', () => {
   test('validates errors in code mode', () => {
     expect(buildRedeemRequest({ mode: 'code', clinicEzId: '', code: '', purpose: '', addToQueue: false, chiefComplaint: '' })).toEqual({
       ok: false,
-      error: "Enter the patient's ClinicEZ ID and one-time code.",
+      error: "Enter the patient's Clinic EZ ID and one-time code.",
     });
     expect(buildRedeemRequest({ mode: 'code', clinicEzId: 'bad', code: 'WXYZ-5678', purpose: '', addToQueue: false, chiefComplaint: '' })).toEqual({
       ok: false,
-      error: 'Enter a valid ClinicEZ ID (e.g. CE-ABCD-1234).',
+      error: 'Enter a valid Clinic EZ ID (e.g. CE-ABCD-1234).',
     });
     expect(buildRedeemRequest({ mode: 'code', clinicEzId: 'CE-ABCD-1234', code: 'bad', purpose: '', addToQueue: false, chiefComplaint: '' })).toEqual({
       ok: false,

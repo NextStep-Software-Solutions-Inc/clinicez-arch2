@@ -24,7 +24,7 @@ export const printInvoice = (
   }
 
   const cfg = { ...billingInfo?.paymentConfig, ...paymentConfigOverride }
-  const corporateName = cfg.corporateName || "ClinicEZ Digital Health Inc."
+  const corporateName = cfg.corporateName || "Nextstep Software Corporation"
   const corporateTin = cfg.corporateTin || "009-876-543-000"
   const corporateAddress =
     cfg.corporateAddress ||
@@ -346,7 +346,7 @@ export const printInvoice = (
             <tbody>
               <tr>
                 <td>
-                  <strong>ClinicEZ Workspace License &ndash; ${escapeHtml(planName)}</strong><br/>
+                  <strong>Clinic EZ Workspace License &ndash; ${escapeHtml(planName)}</strong><br/>
                   <span style="font-size: 11px; color: ${lightColors.textMuted};">
                     Full access to clinical EMR, doctor rostering, queuing, PhilHealth Konsulta integration, and licensed facilities.
                   </span>
@@ -409,8 +409,8 @@ export const printInvoice = (
           }
 
           <div class="footer">
-            <p>Thank you for choosing ClinicEZ to power your healthcare facility operations. For billing assistance, contact ${escapeHtml(supportEmail)}.</p>
-            <p style="margin-top: 4px;">&copy; ${new Date().getFullYear()} ${escapeHtml(corporateName)} All rights reserved.</p>
+            <p>Thank you for choosing Clinic EZ to power your healthcare facility operations. Clinic EZ is a product of ${escapeHtml(corporateName)}. For billing assistance, contact ${escapeHtml(supportEmail)}.</p>
+            <p style="margin-top: 4px;">&copy; ${new Date().getFullYear()} ${escapeHtml(corporateName)}. All rights reserved.</p>
           </div>
         </div>
         <script>

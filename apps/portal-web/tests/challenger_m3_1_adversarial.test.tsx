@@ -93,7 +93,7 @@ describe("Adversarial Challenger Probe 1: 4 Core UX States Verification", () => 
 
     // Header and permanent record badge
     expect(html).toContain("Permanent Health Record");
-    expect(html).toContain("Claim Your ClinicEZ Patient Account");
+    expect(html).toContain("Claim Your Clinic EZ Patient Account");
     expect(html).toContain("Never fill out clinic intake forms again");
   });
 
@@ -112,7 +112,7 @@ describe("Adversarial Challenger Probe 1: 4 Core UX States Verification", () => 
       <ProgressiveClaimCard pass={mockFullPass} state="empty" />
     );
 
-    expect(html).toContain("Or manage via ClinicEZ Mobile PHR:");
+    expect(html).toContain("Or manage via Clinic EZ Mobile PHR:");
     expect(html).toContain('data-testid="mobile-app-store-badges"');
     expect(html).toContain("App Store");
     expect(html).toContain("Google Play");
@@ -177,7 +177,7 @@ describe("Adversarial Challenger Probe 1: 4 Core UX States Verification", () => 
 
     expect(html).toContain('data-testid="claim-card-success"');
     expect(html).toContain("Patient Account Claimed Successfully!");
-    expect(html).toContain("Your clinic registration is now linked to your permanent ClinicEZ PHR.");
+    expect(html).toContain("Your clinic registration is now linked to your permanent Clinic EZ PHR.");
     expect(html).toContain(mockFullPass.clinicEzId!);
     expect(html).toContain(mockFullPass.fullName);
     expect(html).toContain(mockFullPass.facilityName);

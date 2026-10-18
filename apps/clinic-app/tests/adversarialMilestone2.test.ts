@@ -481,7 +481,7 @@ describe('Adversarial Empirical Verification: Milestone 2', () => {
       expect(theme.sizes.touchTarget).toBe(44);
     });
 
-    test('ADV-TOKEN-2: Brand colors align with ClinicEZ primary palette #0D6963', () => {
+    test('ADV-TOKEN-2: Brand colors align with Clinic EZ primary palette #0D6963', () => {
       expect(theme.colors.primary).toBe('#0D6963');
       expect(theme.colors.emergencyText).toBe('#991B1B');
     });

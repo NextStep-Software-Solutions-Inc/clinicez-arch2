@@ -785,7 +785,7 @@ describe('Milestone M4: Clinic Admin Audit Workstation E2E Verification Suite', 
       expect(theme.colors.primaryLight).toBeDefined();
     });
 
-    test('8.3 Clinical urgency colors strictly follow ClinicEZ design system tokens', () => {
+    test('8.3 Clinical urgency colors strictly follow Clinic EZ design system tokens', () => {
       expect(theme.colors.emergency).toBeDefined();
       expect(theme.colors.emergencyBg).toBeDefined();
       expect(theme.colors.emergencyText).toBeDefined();

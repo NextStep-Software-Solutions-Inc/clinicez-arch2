@@ -126,7 +126,7 @@ public sealed class SubmitYakapTransmittalCommandHandler : IRequestHandler<Submi
         {
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
-            ClinicName = "ClinicEz Healthcare Center",
+            ClinicName = "Clinic EZ Healthcare Center",
             AccreditationNumber = "000000000"
         };
 

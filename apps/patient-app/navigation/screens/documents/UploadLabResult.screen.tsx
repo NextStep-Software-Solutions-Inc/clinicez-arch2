@@ -127,7 +127,7 @@ export default function UploadLabResultScreen({ route }: Props) {
       <Card style={{ gap: spacing.sm }}>
         <ThemedText variant="h3">{request.title}</ThemedText>
         <ThemedText variant="body" color="textSecondary">
-          Got your result from a lab outside ClinicEZ? Upload it here and your ordering doctor will review it.
+          Got your result from a lab outside Clinic EZ? Upload it here and your ordering doctor will review it.
         </ThemedText>
         <ThemedText variant="small" color="textMuted">{UPLOAD_LIMITS_HINT}</ThemedText>
       </Card>

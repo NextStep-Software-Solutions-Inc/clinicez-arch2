@@ -72,7 +72,7 @@ export const CLAIM_CARD_BENEFITS: ProgressiveClaimBenefit[] = [
   {
     id: "fast-checkin",
     title: "1-Click Fast Check-In",
-    description: "Skip the intake queue at any ClinicEZ partner clinic nationwide without retyping your info.",
+    description: "Skip the intake queue at any Clinic EZ partner clinic nationwide without retyping your info.",
     iconName: "Zap",
   },
 ];
@@ -238,8 +238,8 @@ describe("Feature 9: Mobile App Store Badges", () => {
   });
 
   test("T1_F9_3: Badges provide descriptive aria-label for accessibility", () => {
-    const ariaApple = "Download ClinicEZ Patient App on Apple App Store";
-    const ariaGoogle = "Download ClinicEZ Patient App on Google Play Store";
+    const ariaApple = "Download Clinic EZ Patient App on Apple App Store";
+    const ariaGoogle = "Download Clinic EZ Patient App on Google Play Store";
 
     expect(ariaApple).toContain("Apple App Store");
     expect(ariaGoogle).toContain("Google Play Store");
@@ -284,9 +284,9 @@ describe("Feature 10: Existing User Fast-Track & Web Autofill", () => {
     ],
   };
 
-  test("T1_F10_1: 'Already have a ClinicEZ account? Sign in to Autofill' action renders on form", () => {
-    const actionLabel = "Already have a ClinicEZ account? Sign in to Autofill";
-    expect(actionLabel).toContain("Already have a ClinicEZ account");
+  test("T1_F10_1: 'Already have a Clinic EZ account? Sign in to Autofill' action renders on form", () => {
+    const actionLabel = "Already have a Clinic EZ account? Sign in to Autofill";
+    expect(actionLabel).toContain("Already have a Clinic EZ account");
     expect(actionLabel).toContain("Autofill");
   });
 

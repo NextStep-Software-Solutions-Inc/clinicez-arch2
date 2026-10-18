@@ -622,7 +622,7 @@ export default function JoinClient({
               </span>
               <div>
                 <span className="font-bold text-foreground block">
-                  Have the ClinicEZ Patient App?
+                  Have the Clinic EZ Patient App?
                 </span>
                 <span className="text-muted-foreground text-[11px]">
                   Open on mobile for 1-Tap Fast Check-In without retyping your information.
@@ -650,10 +650,10 @@ export default function JoinClient({
               </span>
               <div className="space-y-0.5">
                 <h3 className="text-sm font-bold text-foreground">
-                  Already have a ClinicEZ account? Sign in to Autofill
+                  Already have a Clinic EZ account? Sign in to Autofill
                 </h3>
                 <p className="text-muted-foreground text-xs leading-relaxed max-w-lg">
-                  Sign in with your ClinicEZ account to pre-populate demographics, 12-digit PhilHealth PIN, contact info, and structured allergies in 1 click.
+                  Sign in with your Clinic EZ account to pre-populate demographics, 12-digit PhilHealth PIN, contact info, and structured allergies in 1 click.
                 </p>
               </div>
             </div>
@@ -688,12 +688,12 @@ export default function JoinClient({
               </span>
               <div className="space-y-0.5">
                 <h3 className="text-sm font-bold text-foreground">
-                  Signed in as {clerkUser?.fullName || clerkUser?.firstName || "ClinicEZ User"} ({clerkUser?.primaryEmailAddress?.emailAddress})
+                  Signed in as {clerkUser?.fullName || clerkUser?.firstName || "Clinic EZ User"} ({clerkUser?.primaryEmailAddress?.emailAddress})
                 </h3>
                 <p className="text-muted-foreground text-xs leading-relaxed">
                   {isAutofilled
-                    ? "Form autofilled from your ClinicEZ patient profile. You can review or edit any field below."
-                    : "ClinicEZ account active. Click below to hydrate your profile data."}
+                    ? "Form autofilled from your Clinic EZ patient profile. You can review or edit any field below."
+                    : "Clinic EZ account active. Click below to hydrate your profile data."}
                 </p>
               </div>
             </div>

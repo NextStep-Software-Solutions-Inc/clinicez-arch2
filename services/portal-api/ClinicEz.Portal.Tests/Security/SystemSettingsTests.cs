@@ -42,7 +42,7 @@ public class SystemSettingsTests
         Assert.Contains(settings, s => s.Key == "Billing:BankAccountsJson" && s.Value.Contains("BDO Unibank"));
         Assert.Contains(settings, s => s.Key == "Billing:BirTaxExempt" && s.Value == "false");
         Assert.Contains(settings, s => s.Key == "Billing:BirTaxPercentage" && s.Value == "12");
-        Assert.Contains(settings, s => s.Key == "Billing:CorporateName" && s.Value == "ClinicEZ Digital Health Inc.");
+        Assert.Contains(settings, s => s.Key == "Billing:CorporateName" && s.Value == "Nextstep Software Corporation");
         Assert.Contains(settings, s => s.Key == "Billing:SupportEmail" && s.Value == "billing@clinicez.ph");
         Assert.Contains(settings, s => s.Key == "Workspace:MaxOwnedPerUser" && s.Value == "1");
         Assert.Contains(settings, s => s.Key == "JoinClaim:TtlHours" && s.Value == "48");

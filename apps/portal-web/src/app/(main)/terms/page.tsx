@@ -3,9 +3,9 @@ import Link from "next/link";
 import { Scale, ShieldCheck, Building2, CheckCircle2 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | ClinicEZ",
+  title: "Terms of Service | Clinic EZ",
   description:
-    "Terms of Service and Platform Governance Agreement for ClinicEZ Healthcare Workspaces, Clinics, Laboratories, Pharmacies, and Patients.",
+    "Terms of Service and Platform Governance Agreement for Clinic EZ Healthcare Workspaces, Clinics, Laboratories, Pharmacies, and Patients.",
 };
 
 export default function TermsOfServicePage() {
@@ -21,7 +21,7 @@ export default function TermsOfServicePage() {
             Terms of Service
           </h1>
           <p className="text-sm text-muted-foreground">
-            Effective Date: October 2026 • Governing ClinicEZ Portal, Clinical Workstations, and Patient Self-Service Applications
+            Effective Date: October 2026 • Governing Clinic EZ Portal, Clinical Workstations, and Patient Self-Service Applications
           </p>
         </header>
 
@@ -53,7 +53,7 @@ export default function TermsOfServicePage() {
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-foreground">1. Acceptance of Terms</h2>
             <p>
-              By registering a healthcare workspace, operating a ClinicEZ facility console, or submitting patient intake and appointment requests through ClinicEZ, you agree to be bound by these Terms of Service and our{" "}
+              By registering a healthcare workspace, operating a Clinic EZ facility console, or submitting patient intake and appointment requests through Clinic EZ (a product of Nextstep Software Corporation), you agree to be bound by these Terms of Service and our{" "}
               <Link href="/privacy" className="text-primary underline hover:opacity-90">
                 Privacy Policy (RA 10173)
               </Link>
@@ -64,14 +64,14 @@ export default function TermsOfServicePage() {
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-foreground">2. Healthcare Workspace &amp; Provider Obligations</h2>
             <p>
-              Tenant owners and administrators warrant that all clinics, diagnostic laboratories, pharmacies, and healthcare organizations provisioned on ClinicEZ hold the requisite regulatory permits in the Republic of the Philippines (including DOH LTO, PhilHealth PMCC/Accreditation where applicable, and valid PRC licenses for practicing physicians and allied health professionals).
+              Tenant owners and administrators warrant that all clinics, diagnostic laboratories, pharmacies, and healthcare organizations provisioned on Clinic EZ hold the requisite regulatory permits in the Republic of the Philippines (including DOH LTO, PhilHealth PMCC/Accreditation where applicable, and valid PRC licenses for practicing physicians and allied health professionals).
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-foreground">3. Patient Self-Intake &amp; Medical Disclaimer</h2>
             <p>
-              ClinicEZ facilitates digital patient intake, appointment scheduling, document verification, and health record portability. ClinicEZ does not practice medicine or provide emergency medical dispatch. In the event of a medical emergency, patients must immediately contact local emergency services or proceed to the nearest hospital emergency department.
+              Clinic EZ facilitates digital patient intake, appointment scheduling, document verification, and health record portability. Clinic EZ does not practice medicine or provide emergency medical dispatch. In the event of a medical emergency, patients must immediately contact local emergency services or proceed to the nearest hospital emergency department.
             </p>
           </section>
 

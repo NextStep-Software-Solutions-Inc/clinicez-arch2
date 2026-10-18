@@ -87,7 +87,7 @@ public sealed class ExternalPrescriptionDispensedHandler : IInteropHandler<Exter
         encounter.RxDispensedPharmacistPrc = message.PharmacistPrcLicense;
         encounter.RxDispensedReceiptNumber = message.OfficialReceiptNumber;
         encounter.RxDispensedAt = message.DispensedAt;
-        encounter.RxNotes = $"Filled outside ClinicEZ, reported by the patient. {message.Notes}".Trim();
+        encounter.RxNotes = $"Filled outside Clinic EZ, reported by the patient. {message.Notes}".Trim();
         encounter.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);

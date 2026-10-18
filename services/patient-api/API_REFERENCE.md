@@ -1399,11 +1399,11 @@ cursor are returned. **400** when `since` is not a cursor previously returned.
 
 - `LabRequestDto { id, requisitionId, orderingTenantId, orderingFacilityId, orderingFacilityName, accessionNumber, title, urgency, items[{code,name,category}], stage, quotedAmount, currency, paymentRequired, paymentStatus: None|Pending|Paid, laboratoryName, claimToken, reason, issuedAt, updatedAt }` —
   `stage`: `Issued Routed Claimed AwaitingPayment Paid SpecimenCollected InProcess ResultFinalized ExternalSubmitted Reviewed Rejected Cancelled`.
-  `claimToken` is the QR content shown at any ClinicEZ laboratory.
+  `claimToken` is the QR content shown at any Clinic EZ laboratory.
 - `PrescriptionDto { id, prescriptionNumber, orderingTenantId, orderingFacilityId, orderingFacilityName, prescriberName, prescriberPrcLicense, diagnosis, instructions, items[{genericName,brandName,dosage,form,sig,quantity,durationDays,remarks}], stage, quotedAmount, pharmacyName, claimToken, verificationUrl, receiptNumber, dispensedAt, externalPharmacyName, issuedAt, updatedAt }` —
   `stage`: `Issued Accepted PartiallyAccepted Rejected Dispensed ExternalDispensed`.
 - `LabResultDto { id, requisitionId, laboratoryName, title, source: ClinicEzLab|ExternalLab|PatientUploaded, verification: Verified|Unverified|Rejected, reviewedByName, reviewedAt, remarks, impression, isCritical, resultedAt, fileUrl, observations[{panel,name,value,unit,referenceRange,flag}], updatedAt }` —
-  `fileUrl` is a short-lived download URL. ClinicEZ-lab results arrive `verified`; external and patient-uploaded results stay `unverified` until the ordering doctor reviews them.
+  `fileUrl` is a short-lived download URL. Clinic EZ lab results arrive `verified`; external and patient-uploaded results stay `unverified` until the ordering doctor reviews them.
 - `MedicalCertificateDto { id, certificateNumber, issuerName, doctorName, doctorPrcLicense, purpose, diagnosis, remarks, restDays, validFrom, validTo, verificationUrl, issuedAt, updatedAt }`
 - `notifications` use the existing notification shape; document notifications carry `payload` JSON `{ "kind": "labRequest|labResult|prescription|medicalCertificate", "documentId": "…" }`.
 
@@ -1449,7 +1449,7 @@ payload is about. A message that fails those checks is acknowledged and ignored,
 | out | `patient.appointment.booked` | A submitted booking draft |
 | out | `patient.record.shared` | A booking attachment, by reference: file metadata plus a 24 h presigned download URL |
 | out | `lab.result.external.submitted` | A patient-uploaded lab result, by reference |
-| out | `rx.external.dispensed` | A prescription the patient had filled outside ClinicEZ |
+| out | `rx.external.dispensed` | A prescription the patient had filled outside Clinic EZ |
 
 Redemption rules: the token must verify against `Sharing:SigningKey`, be unexpired, be for an existing patient and have
 redemptions left. A token carries the number of redemptions the patient allowed (`maxRedemptions`, default 1); each

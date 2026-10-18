@@ -126,7 +126,7 @@ public sealed class ValidateYakapTransmittalCommandHandler : IRequestHandler<Val
         {
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
-            ClinicName = "ClinicEz Healthcare Center",
+            ClinicName = "Clinic EZ Healthcare Center",
             AccreditationNumber = "000000000"
         };
 

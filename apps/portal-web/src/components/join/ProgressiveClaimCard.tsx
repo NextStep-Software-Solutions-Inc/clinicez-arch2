@@ -44,7 +44,7 @@ export const CLAIM_CARD_BENEFITS: ProgressiveClaimBenefit[] = [
     id: "fast-checkin",
     title: "1-Click Fast Check-In",
     description:
-      "Skip the intake queue at any ClinicEZ partner clinic nationwide without retyping your info.",
+      "Skip the intake queue at any Clinic EZ partner clinic nationwide without retyping your info.",
     iconName: "Zap",
   },
 ];
@@ -96,7 +96,7 @@ export function ProgressiveClaimCard({
   const claimToken = propClaimToken || pass?.claimToken || "claim-token-ephemeral";
   const expiresAt = propExpiresAt || pass?.expiresAt || "48h";
   const patientName = propPatientName || pass?.fullName || "Patient";
-  const facilityName = propFacilityName || pass?.facilityName || "ClinicEZ Facility";
+  const facilityName = propFacilityName || pass?.facilityName || "Clinic EZ Facility";
 
   // Safe Clerk hook access (survives unit tests without ClerkProvider)
   let clerkUser: ReturnType<typeof useUser>["user"] = null;
@@ -289,14 +289,14 @@ export function ProgressiveClaimCard({
               Patient Account Claimed Successfully!
             </h4>
             <p className="text-xs text-muted-foreground">
-              Your clinic registration is now linked to your permanent ClinicEZ PHR.
+              Your clinic registration is now linked to your permanent Clinic EZ PHR.
             </p>
           </div>
         </div>
 
         <div className="bg-muted/50 rounded-xl p-4 space-y-2.5 border border-border text-xs">
           <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">Linked ClinicEZ ID:</span>
+            <span className="text-muted-foreground">Linked Clinic EZ ID:</span>
             <span className="font-mono font-bold text-foreground text-sm">
               {linkedClinicEzId}
             </span>
@@ -320,7 +320,7 @@ export function ProgressiveClaimCard({
 
         <div className="text-center space-y-3 pt-2">
           <p className="text-xs text-muted-foreground">
-            Download the ClinicEZ mobile app to track live queue updates and view your medical charts:
+            Download the Clinic EZ mobile app to track live queue updates and view your medical charts:
           </p>
           <MobileAppStoreBadges
             appleStoreUrl={appleStoreUrl}
@@ -400,7 +400,7 @@ export function ProgressiveClaimCard({
           Permanent Health Record
         </div>
         <h3 className="text-lg sm:text-xl font-black text-foreground tracking-tight">
-          Claim Your ClinicEZ Patient Account
+          Claim Your Clinic EZ Patient Account
         </h3>
         <p className="text-xs sm:text-sm text-muted-foreground">
           Never fill out clinic intake forms again. Keep this visit's records and manage your queue in real time.
@@ -482,7 +482,7 @@ export function ProgressiveClaimCard({
       {/* Download Mobile Badges */}
       <div className="pt-2 border-t border-border/60">
         <p className="text-[11px] font-semibold text-center text-muted-foreground mb-3 uppercase tracking-wider">
-          Or manage via ClinicEZ Mobile PHR:
+          Or manage via Clinic EZ Mobile PHR:
         </p>
         <MobileAppStoreBadges
           appleStoreUrl={appleStoreUrl}

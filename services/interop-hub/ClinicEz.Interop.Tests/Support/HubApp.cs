@@ -110,7 +110,7 @@ public sealed class HubApp : IAsyncDisposable
         var config = BaseConfig();
         if (bootstrap)
             AddBootstrap(config, [
-                ("cloud", "ClinicEZ Cloud", CellKind.Cloud, null),
+                ("cloud", "Clinic EZ Cloud", CellKind.Cloud, null),
                 (W.EdgeCell, "Edge 1", CellKind.Edge, W.TenantE)], CloudClients, []);
         return await StartAsync(config, overrides, environment, seed, clock, configure);
     }

@@ -75,7 +75,7 @@ public sealed class HubFixture : IAsyncDisposable
             ["Hub:NackDelaySeconds"] = "0",
             ["Hub:LongPollIntervalMs"] = "50",
             ["Hub:Bootstrap:Cells:0:CellId"] = CloudCell,
-            ["Hub:Bootstrap:Cells:0:Name"] = "ClinicEZ Cloud (e2e)",
+            ["Hub:Bootstrap:Cells:0:Name"] = "Clinic EZ Cloud (e2e)",
             ["Hub:Bootstrap:Cells:0:Kind"] = nameof(CellKind.Cloud)
         };
 

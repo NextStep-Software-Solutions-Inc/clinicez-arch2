@@ -13,7 +13,7 @@ export async function generateMetadata({
 }: JoinCodePageProps): Promise<Metadata> {
   const { code } = await params;
   return {
-    title: `Clinic Intake (${code.toUpperCase()}) | ClinicEZ`,
+    title: `Clinic Intake (${code.toUpperCase()}) | Clinic EZ`,
     description: `Secured patient self-registration and intake workstation.`,
   };
 }

@@ -74,7 +74,7 @@ export function MobileAppStoreBadges({
           href={appleUrl}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="Download ClinicEZ Patient App on Apple App Store"
+          aria-label="Download Clinic EZ Patient App on Apple App Store"
           className="inline-flex items-center gap-2.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white border border-slate-700/80 rounded-xl transition-all shadow-sm hover:shadow text-left"
         >
           {/* Apple Logo SVG */}
@@ -101,7 +101,7 @@ export function MobileAppStoreBadges({
           href={googleUrl}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="Download ClinicEZ Patient App on Google Play Store"
+          aria-label="Download Clinic EZ Patient App on Google Play Store"
           className="inline-flex items-center gap-2.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white border border-slate-700/80 rounded-xl transition-all shadow-sm hover:shadow text-left"
         >
           {/* Google Play Logo SVG */}

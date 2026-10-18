@@ -85,7 +85,7 @@ public sealed class ClaimIntakeEndpoint : IEndpoint
             .WithTags("Patients")
             .WithName("ClaimIntake")
             .WithSummary("Claim an unauthenticated patient intake pass into a persistent patient profile")
-            .WithDescription("Converts an anonymous guest intake registration into a persistent ClinicEZ Patient account, resolving identity divergence per RA 10173.")
+            .WithDescription("Converts an anonymous guest intake registration into a persistent Clinic EZ Patient account, resolving identity divergence per RA 10173.")
             .Produces<ApiResponse<ClaimIntakeResultDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest)
             .Produces<ApiResponse<object>>(StatusCodes.Status401Unauthorized)

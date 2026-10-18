@@ -67,6 +67,7 @@ export default function BlogsPage() {
 
   const featuredBlog = blogs[0];
   const otherBlogs = blogs.slice(1);
+  const siteOrigin = typeof window !== "undefined" ? window.location.origin : "";
 
   return (
     <main className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950 text-foreground transition-colors duration-300">
@@ -153,7 +154,7 @@ export default function BlogsPage() {
                 {/* Social Share Controls */}
                 <div className="flex items-center gap-2">
                   <a 
-                    href={`https://facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}/blogs/${featuredBlog.slug}`)}`}
+                    href={`https://facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${siteOrigin}/blogs/${featuredBlog.slug}`)}`}
                     target="_blank"
                     rel="noreferrer"
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 hover:text-blue-600 transition-colors"
@@ -161,7 +162,7 @@ export default function BlogsPage() {
                     <IconBrandFacebook className="h-4 w-4" />
                   </a>
                   <a 
-                    href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(`${window.location.origin}/blogs/${featuredBlog.slug}`)}&text=${encodeURIComponent(featuredBlog.title)}`}
+                    href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(`${siteOrigin}/blogs/${featuredBlog.slug}`)}&text=${encodeURIComponent(featuredBlog.title)}`}
                     target="_blank"
                     rel="noreferrer"
                     className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 hover:text-sky-500 transition-colors"

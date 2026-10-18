@@ -68,7 +68,7 @@ describe('Public TV Display Board E2E Test Suite (portal-web)', () => {
       const tvTokens = {
         background: '#0F172A', // Slate 900
         cardBg: '#1E293B',     // Slate 800
-        primaryTeal: '#0D6963',// ClinicEZ brand primary
+        primaryTeal: '#0D6963',// Clinic EZ brand primary
         textPrimary: '#FFFFFF',// High contrast white
         textMuted: '#94A3B8',  // Slate 400
       };
@@ -239,7 +239,7 @@ describe('Public TV Display Board E2E Test Suite (portal-web)', () => {
   });
 
   describe('F2.8: TV Display Header UI Refinements & Brand Identity', () => {
-    it('F2.8-T1: Resolves clinic logo URL with fallback to ClinicEZ brand mark', () => {
+    it('F2.8-T1: Resolves clinic logo URL with fallback to Clinic EZ brand mark', () => {
       const resolveDisplayLogo = (clinicLogo?: string | null, isBroken = false) => {
         if (clinicLogo && !isBroken) {
           return { type: 'custom_logo', src: clinicLogo };

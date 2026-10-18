@@ -53,7 +53,7 @@ All payloads are JSON records serialised by `InteropJson`, wrapped in an envelop
 | `philhealth.request` / `.response` | facility to the PhilHealth proxy and back (request/reply) | The PhilHealth operation's own body (YAKAP report, masterlist query, PIN check, sandbox call, credential configuration, which contains the facility's PhilHealth secrets when `tenant.configure` is used). The proxy takes tenant and facility from the signed envelope. The hub lets a facility send only this type to the proxy. |
 | `philhealth.config.*` | proxy and portal (request/reply) | Facility PhilHealth credentials (see above). Only the proxy and the portal can send or receive these. |
 | `patient.document.issued` | producer in pharmacy-api (dispense receipt); no consumer yet | Document title, issuer, status and the dispensed-prescription body (patient name, medicines, quantities). |
-| `billing.invoice.requested`, `billing.payment.confirmed` | lab and pharmacy produce requests, billing-api produces confirmations; within a cell | Patient name (and id when a ClinicEZ patient) and invoice lines; payment amounts and receipt numbers. |
+| `billing.invoice.requested`, `billing.payment.confirmed` | lab and pharmacy produce requests, billing-api produces confirmations; within a cell | Patient name (and id when a Clinic EZ patient) and invoice lines; payment amounts and receipt numbers. |
 | `billing.invoice.paid`, `billing.invoice.voided` (portal copy) | billing-api produces; no portal handler yet | **No patient data**: tenant, facility, branch, invoice id, source type, total, currency, time (void adds kind and amount reversed). |
 | `notification.email.requested` | portal to itself today | Recipient email, subject, template values (HTML-encoded by the portal). |
 

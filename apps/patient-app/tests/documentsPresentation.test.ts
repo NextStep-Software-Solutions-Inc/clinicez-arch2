@@ -30,7 +30,7 @@ import {
 
 describe('provenanceBadge', () => {
   test('maps each source to its label', () => {
-    expect(provenanceBadge('ClinicEzLab').label).toBe('ClinicEZ lab');
+    expect(provenanceBadge('ClinicEzLab').label).toBe('Clinic EZ lab');
     expect(provenanceBadge('ExternalLab').label).toBe('External lab');
     expect(provenanceBadge('PatientUploaded').label).toBe('Uploaded by me');
   });

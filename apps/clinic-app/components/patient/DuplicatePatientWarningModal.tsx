@@ -54,7 +54,7 @@ export default function DuplicatePatientWarningModal({
                 Possible Duplicate Patient Detected
               </ThemedText>
               <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.subtitle}>
-                One or more existing patient records closely match the details you entered. Please verify whether this patient already has an existing chart in ClinicEZ.
+                One or more existing patient records closely match the details you entered. Please verify whether this patient already has an existing chart in Clinic EZ.
               </ThemedText>
             </View>
             <Pressable

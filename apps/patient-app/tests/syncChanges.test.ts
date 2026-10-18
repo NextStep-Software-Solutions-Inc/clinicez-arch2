@@ -85,7 +85,7 @@ function labResult(overrides: Partial<LabResultDto> = {}): LabResultDto {
   return {
     id: 'res-1',
     requisitionId: 'req-1',
-    laboratoryName: 'ClinicEZ Lab',
+    laboratoryName: 'Clinic EZ Lab',
     title: 'CBC',
     source: 'ClinicEzLab',
     verification: 'Verified',
