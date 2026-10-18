@@ -15,11 +15,11 @@ export interface PatientDirectoryCardProps {
   style?: StyleProp<ViewStyle>;
   checkingIn?: boolean;
   disableCheckIn?: boolean;
-  onOpenChart: (patient: ClinicPatient) => void;
-  onEditDemographics: (patient: ClinicPatient) => void;
-  onOpenPhilHealth: (patient: ClinicPatient) => void;
-  onBookAppointment: (patient: ClinicPatient) => void;
-  onAddToQueue: (patient: ClinicPatient) => void;
+  onOpenChart?: (patient: ClinicPatient) => void;
+  onEditDemographics?: (patient: ClinicPatient) => void;
+  onOpenPhilHealth?: (patient: ClinicPatient) => void;
+  onBookAppointment?: (patient: ClinicPatient) => void;
+  onAddToQueue?: (patient: ClinicPatient) => void;
 }
 
 /**
@@ -94,43 +94,51 @@ export function formatPatientDemographicsLine(
 export function buildPatientOverflowMenuItems(
   patient: ClinicPatient,
   handlers: {
-    onEditDemographics: (p: ClinicPatient) => void;
-    onOpenPhilHealth: (p: ClinicPatient) => void;
-    onOpenChart: (p: ClinicPatient) => void;
-    onBookAppointment: (p: ClinicPatient) => void;
+    onEditDemographics?: (p: ClinicPatient) => void;
+    onOpenPhilHealth?: (p: ClinicPatient) => void;
+    onOpenChart?: (p: ClinicPatient) => void;
+    onBookAppointment?: (p: ClinicPatient) => void;
   }
 ): ActionMenuItem[] {
-  return [
-    {
+  const items: ActionMenuItem[] = [];
+  if (handlers.onEditDemographics) {
+    items.push({
       id: 'edit-demographics',
       label: 'Edit Demographics',
       icon: 'edit',
       hint: 'Update personal, contact, and statutory details',
-      onPress: () => handlers.onEditDemographics(patient),
-    },
-    {
+      onPress: () => handlers.onEditDemographics!(patient),
+    });
+  }
+  if (handlers.onOpenPhilHealth) {
+    items.push({
       id: 'philhealth-profile',
       label: 'PhilHealth Profile',
       icon: 'shield',
       hint: patient.philHealthNumber
         ? `PIN: ${patient.philHealthNumber}`
         : 'Configure Konsulta PIN & membership',
-      onPress: () => handlers.onOpenPhilHealth(patient),
-    },
-    {
+      onPress: () => handlers.onOpenPhilHealth!(patient),
+    });
+  }
+  if (handlers.onOpenChart) {
+    items.push({
       id: 'view-chart',
       label: 'View chart',
       icon: 'clipboard',
       dividerBefore: true,
-      onPress: () => handlers.onOpenChart(patient),
-    },
-    {
+      onPress: () => handlers.onOpenChart!(patient),
+    });
+  }
+  if (handlers.onBookAppointment) {
+    items.push({
       id: 'book-appointment',
       label: 'Book appointment',
       icon: 'calendar',
-      onPress: () => handlers.onBookAppointment(patient),
-    },
-  ];
+      onPress: () => handlers.onBookAppointment!(patient),
+    });
+  }
+  return items;
 }
 
 export function PatientDirectoryTableHeader() {
@@ -323,22 +331,26 @@ function PatientDirectoryCard({
 
         {/* Column 5: Actions */}
         <View style={styles.tableColActions}>
-          <Button
-            title="View chart"
-            variant="outline"
-            size="sm"
-            icon="clipboard"
-            onPress={() => onOpenChart(patient)}
-          />
-          <Button
-            title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Add to queue'}
-            variant="primary"
-            size="sm"
-            icon={isQueued ? 'checkCircle' : 'plus'}
-            loading={checkingIn}
-            disabled={disableCheckIn}
-            onPress={() => onAddToQueue(patient)}
-          />
+          {onOpenChart ? (
+            <Button
+              title="View chart"
+              variant="outline"
+              size="sm"
+              icon="clipboard"
+              onPress={() => onOpenChart(patient)}
+            />
+          ) : null}
+          {onAddToQueue ? (
+            <Button
+              title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Add to queue'}
+              variant="primary"
+              size="sm"
+              icon={isQueued ? 'checkCircle' : 'plus'}
+              loading={checkingIn}
+              disabled={disableCheckIn}
+              onPress={() => onAddToQueue(patient)}
+            />
+          ) : null}
           <ActionMenu
             triggerAriaLabel={`More actions for ${patient.fullName}`}
             items={menuItems}
@@ -483,34 +495,49 @@ function PatientDirectoryCard({
         ) : null}
       </View>
 
-      {/* Streamlined 3-Action Footer */}
-      <View style={styles.actionRow}>
-        <Button
-          title="View chart"
-          variant="outline"
-          size="sm"
-          icon="clipboard"
-          onPress={() => onOpenChart(patient)}
-        />
-        <View style={styles.primaryActionsGroup}>
-          <Button
-            title="Book appointment"
-            variant="secondary"
-            size="sm"
-            icon="calendar"
-            onPress={() => onBookAppointment(patient)}
-          />
-          <Button
-            title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Add to queue'}
-            variant="primary"
-            size="sm"
-            icon={isQueued ? 'checkCircle' : 'plus'}
-            loading={checkingIn}
-            disabled={disableCheckIn}
-            onPress={() => onAddToQueue(patient)}
-          />
+      {/* Streamlined Action Footer: single line for action buttons, flex grow if 1 or 2 */}
+      {onOpenChart || onBookAppointment || onAddToQueue ? (
+        <View style={styles.actionRow}>
+          {onOpenChart ? (
+            <Button
+              title="View chart"
+              variant="outline"
+              size="sm"
+              icon="clipboard"
+              numberOfLines={1}
+              style={styles.actionBtn}
+              textStyle={styles.actionBtnText}
+              onPress={() => onOpenChart(patient)}
+            />
+          ) : null}
+          {onBookAppointment ? (
+            <Button
+              title="Book appointment"
+              variant="secondary"
+              size="sm"
+              icon="calendar"
+              numberOfLines={1}
+              style={styles.actionBtn}
+              textStyle={styles.actionBtnText}
+              onPress={() => onBookAppointment(patient)}
+            />
+          ) : null}
+          {onAddToQueue ? (
+            <Button
+              title={isQueued ? `Queued (${patient.activeQueueTicket})` : 'Add to queue'}
+              variant="primary"
+              size="sm"
+              icon={isQueued ? 'checkCircle' : 'plus'}
+              numberOfLines={1}
+              loading={checkingIn}
+              disabled={disableCheckIn}
+              style={styles.actionBtn}
+              textStyle={styles.actionBtnText}
+              onPress={() => onAddToQueue(patient)}
+            />
+          ) : null}
         </View>
-      </View>
+      ) : null}
     </Card>
   );
 }
@@ -617,18 +644,23 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
+    width: '100%',
+    gap: theme.spacing.xs,
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
     paddingTop: theme.spacing.md,
   },
-  primaryActionsGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
+  actionBtn: {
+    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    paddingHorizontal: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  actionBtnText: {
+    fontSize: theme.fontSizes.xs,
   },
   // Compact Workstation Table Styles
   tableHeaderRow: {

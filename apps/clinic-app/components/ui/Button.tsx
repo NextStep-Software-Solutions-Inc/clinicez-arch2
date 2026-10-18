@@ -34,6 +34,7 @@ export interface ButtonProps extends Omit<PressableProps, 'style'> {
   disabled?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
+  numberOfLines?: number;
 }
 
 type InteractionState = PressableStateCallbackType & { hovered?: boolean };
@@ -48,6 +49,7 @@ export default function Button({
   disabled = false,
   style,
   textStyle,
+  numberOfLines,
   onPress,
   ...rest
 }: ButtonProps) {
@@ -88,7 +90,10 @@ export default function Button({
         <IconSlot value={icon} size={sizeStyles.iconSize} color={variantStyles.text.color} />
       ) : null}
 
-      <ThemedText style={[styles.textBase, sizeStyles.text, variantStyles.text, textStyle]}>
+      <ThemedText
+        numberOfLines={numberOfLines}
+        style={[styles.textBase, sizeStyles.text, variantStyles.text, textStyle]}
+      >
         {title}
       </ThemedText>
 

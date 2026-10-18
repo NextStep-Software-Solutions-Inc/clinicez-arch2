@@ -282,6 +282,64 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(markup).not.toContain('minHeight');
   });
 
+  test('5.2 Action footer renders all 3 action buttons in a single row with flexGrow, without wrapping group', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: basePatient,
+        mode: 'card',
+        onOpenChart: () => {},
+        onEditDemographics: () => {},
+        onOpenPhilHealth: () => {},
+        onBookAppointment: () => {},
+        onAddToQueue: () => {},
+      })
+    );
+
+    // All 3 buttons present
+    expect(markup).toContain('View chart');
+    expect(markup).toContain('Book appointment');
+    expect(markup).toContain('Add to queue');
+
+    // No intermediate primaryActionsGroup wrapping buttons onto a second line
+    expect(markup).not.toContain('primaryActionsGroup');
+
+    // Buttons styled with flexGrow: 1 to divide single line equally
+    expect(markup).toContain('&quot;flexGrow&quot;:1');
+  });
+
+  test('5.3 Action footer flex grows to cover entire span when only 2 or 1 action buttons are provided', () => {
+    // Case A: 2 buttons provided (View chart + Add to queue)
+    const markupTwo = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: basePatient,
+        mode: 'card',
+        onOpenChart: () => {},
+        onEditDemographics: () => {},
+        onOpenPhilHealth: () => {},
+        onAddToQueue: () => {},
+      })
+    );
+    expect(markupTwo).toContain('View chart');
+    expect(markupTwo).not.toContain('Book appointment');
+    expect(markupTwo).toContain('Add to queue');
+    expect(markupTwo).toContain('&quot;flexGrow&quot;:1');
+
+    // Case B: 1 button provided (only Add to queue)
+    const markupOne = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: basePatient,
+        mode: 'card',
+        onEditDemographics: () => {},
+        onOpenPhilHealth: () => {},
+        onAddToQueue: () => {},
+      })
+    );
+    expect(markupOne).not.toContain('View chart');
+    expect(markupOne).not.toContain('Book appointment');
+    expect(markupOne).toContain('Add to queue');
+    expect(markupOne).toContain('&quot;flexGrow&quot;:1');
+  });
+
   test('6. Active queue ticket renders In Queue badge and updates primary CTA to Queued (Q-XXX)', () => {
     const queuedPatient: ClinicPatient = {
       ...basePatient,
