@@ -116,7 +116,7 @@ export default function AuditFilterMoreSheet({
                   ? theme.colors.urgentText
                   : isRoutine
                   ? theme.colors.routineText
-                  : theme.colors.primaryText
+                  : theme.colors.primary
                 : theme.colors.textSecondary;
 
               return (
