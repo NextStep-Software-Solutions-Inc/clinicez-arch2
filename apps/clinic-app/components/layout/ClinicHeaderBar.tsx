@@ -75,7 +75,6 @@ export default function ClinicHeaderBar({
     Math.round((isCompact ? theme.spacing.md : theme.spacing['2xl']) * multiplier)
   );
   const minH = isCompact ? 56 : headerHeight;
-  const hasActions = Boolean((actions && actions.length > 0) || rightAction);
 
   return (
     <View
@@ -97,7 +96,7 @@ export default function ClinicHeaderBar({
       <View
         style={[
           styles.leftSection,
-          isCompact && (hasActions ? styles.leftSectionCompactWithActions : styles.leftSectionCompactNoActions),
+          isCompact && styles.leftSectionCompact,
         ]}
       >
         <View style={styles.titleBlock}>
@@ -123,7 +122,7 @@ export default function ClinicHeaderBar({
       <View
         style={[
           styles.rightSection,
-          isCompact && (hasActions ? styles.rightSectionCompactWithActions : styles.rightSectionCompactNoActions),
+          isCompact && styles.rightSectionCompact,
         ]}
       >
         {!isCompact && (
@@ -257,16 +256,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  leftSectionCompactWithActions: {
-    flex: 0,
-    flexShrink: 0,
-    minWidth: 70,
-    maxWidth: '48%',
-    gap: theme.spacing.xs,
-  },
-  leftSectionCompactNoActions: {
-    flex: 1,
-    minWidth: 0,
+  leftSectionCompact: {
     gap: theme.spacing.xs,
   },
   titleBlock: {
@@ -282,14 +272,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  rightSectionCompactWithActions: {
-    flex: 1,
-    flexShrink: 1,
-    justifyContent: 'flex-end',
-    gap: theme.spacing.xs,
-  },
-  rightSectionCompactNoActions: {
-    flex: 0,
+  rightSectionCompact: {
     flexShrink: 0,
     justifyContent: 'flex-end',
     gap: theme.spacing.xs,
@@ -300,7 +283,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   actionsContainerCompact: {
-    flexShrink: 1,
+    flexShrink: 0,
     gap: theme.spacing.xs,
   },
   customRightAction: {
@@ -308,7 +291,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   customRightActionCompact: {
-    flexShrink: 1,
+    flexShrink: 0,
   },
   utilityCluster: {
     flexDirection: 'row',
