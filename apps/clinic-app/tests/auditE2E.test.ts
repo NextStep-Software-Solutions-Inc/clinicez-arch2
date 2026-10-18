@@ -392,10 +392,10 @@ describe('Milestone M4: Clinic Admin Audit Workstation E2E Verification Suite', 
       expect(fsNavContent).toContain('screen: AuditScreen');
     });
 
-    test('1.3 Workstation displays primary action buttons (Refresh and Export Trail)', () => {
+    test('1.3 Workstation displays primary action buttons (Refresh and Export Log)', () => {
       const html = renderToStaticMarkup(React.createElement(AuditWorkstationView));
       expect(html).toContain('Refresh');
-      expect(html).toContain('Export Trail');
+      expect(html).toContain('Export Log');
     });
   });
 

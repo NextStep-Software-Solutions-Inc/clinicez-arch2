@@ -22,14 +22,11 @@ import type { ClinicAuditEntryDto } from '../../services/clinicService';
 
 export interface AuditWorkstationViewProps {
   embeddedInSettings?: boolean;
-  showHeader?: boolean;
 }
 
 export function AuditWorkstationView({
   embeddedInSettings = false,
-  showHeader,
 }: AuditWorkstationViewProps) {
-  const shouldShowHeader = showHeader !== undefined ? showHeader : !embeddedInSettings;
   const { user } = useAuth();
   const canRead = usePermission(PERMISSIONS.auditRead) || user?.role === 'Admin';
   const canExport = usePermission(PERMISSIONS.auditExport) || user?.role === 'Admin';
@@ -238,38 +235,6 @@ export function AuditWorkstationView({
           />
         }
       >
-        {/* Workstation Header (when standalone test or requested) */}
-        {shouldShowHeader && (
-          <View style={styles.header}>
-            <View style={styles.headerTextGroup}>
-              <ThemedText style={styles.headerTitle}>Audit Log & Forensic Trail</ThemedText>
-              <ThemedText style={styles.headerSubtitle}>
-                Exhaustive clinic-wide activity trail with privacy-preserving PHI redaction (DPA RA 10173 compliant)
-              </ThemedText>
-            </View>
-            <View style={styles.headerActions}>
-              <Button
-                title="Refresh"
-                variant="outline"
-                size="sm"
-                icon="refresh"
-                loading={refreshing}
-                onPress={refresh}
-              />
-              {canExport && (
-                <Button
-                  title="Export Trail"
-                  variant="primary"
-                  size="sm"
-                  icon="download"
-                  loading={isExporting}
-                  onPress={() => setIsExportModalOpen(true)}
-                />
-              )}
-            </View>
-          </View>
-        )}
-
         {/* Filter Controls Bar */}
         <AuditFilterBar
           selectedCategory={category}
@@ -381,30 +346,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: theme.spacing.xl,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.xs,
-  },
-  headerTextGroup: {
-    gap: theme.spacing.xs,
-  },
-  headerTitle: {
-    color: theme.colors.text,
-    ...theme.typography.h1,
-  },
-  headerSubtitle: {
-    color: theme.colors.textSecondary,
-    ...theme.typography.body,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
   },
 });
 export default AuditWorkstationView;

@@ -13,7 +13,7 @@ export default function AuditScreen() {
       style={styles.container}
     >
       <View style={styles.content}>
-        <AuditWorkstationView showHeader={false} />
+        <AuditWorkstationView />
       </View>
     </ResponsiveLayout>
   );

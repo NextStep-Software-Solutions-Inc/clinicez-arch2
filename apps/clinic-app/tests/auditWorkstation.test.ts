@@ -994,11 +994,11 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
         React.createElement(AuditWorkstationView, {})
       );
 
-      expect(markup).toContain('Audit Log &amp; Forensic Trail');
-      expect(markup).toContain('Exhaustive clinic-wide activity trail with privacy-preserving PHI redaction');
-      expect(markup).toContain('Refresh');
-      expect(markup).toContain('Export Trail');
+      // Shell layout provides the page header; workstation body provides controls, search, and table
       expect(markup).toContain('Search action, actor name, patient, entity ID or description...');
+      expect(markup).toContain('Refresh');
+      expect(markup).toContain('Export Log');
+      expect(markup).toContain('Reset Filters');
     });
 
     test('7.2 Staff member lacking audit:read and non-admin displays Access Denied', () => {
@@ -1013,7 +1013,7 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
       expect(markup).toContain('You do not have administrative permission (audit:read) to view the clinic audit log.');
     });
 
-    test('7.3 Embedded mode (embeddedInSettings: true) suppresses standalone page header', () => {
+    test('7.3 Workstation does not render internal duplicate header (shell layout provides header)', () => {
       mockAuthUser = { role: 'Admin', name: 'Dr. Maria Santos' };
       mockPermissionsList = ['audit:read', 'audit:export'];
 
@@ -1021,9 +1021,9 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
         React.createElement(AuditWorkstationView, { embeddedInSettings: true })
       );
 
-      // Embedded in settings tab should not display the standalone H1 header
+      // Shell layout handles the page heading; workstation does not render duplicate header
       expect(markup).not.toContain('Audit Log &amp; Forensic Trail');
-      // But still renders filter bar and table
+      // Still renders filter bar and table
       expect(markup).toContain('Search action, actor name, patient, entity ID or description...');
     });
   });
