@@ -353,7 +353,7 @@ export function OrderCatalogSearchModal({
                         <Badge label="PhilHealth" variant="success" size="sm" />
                       )}
                       {isItemOrdered && (
-                        <Badge label="In Order (Edit)" variant="warning" size="sm" />
+                        <Badge label="Already Ordered - In Order (Edit)" variant="warning" size="sm" />
                       )}
                     </View>
                     {item.description ? (

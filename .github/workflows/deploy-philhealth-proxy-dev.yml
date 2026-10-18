@@ -158,7 +158,7 @@ jobs:
           docker compose up -d --force-recreate
 
           echo "==> Cleaning up old images..."
-          docker image prune -f
+          docker image prune -f || true
 
           echo "==> Verifying container is running..."
           docker ps --filter "name=${{ env.CONTAINER_NAME }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"

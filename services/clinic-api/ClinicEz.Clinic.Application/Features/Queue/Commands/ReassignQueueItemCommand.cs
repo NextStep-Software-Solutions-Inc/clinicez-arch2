@@ -140,9 +140,7 @@ public sealed class ReassignQueueItemCommandHandler : IRequestHandler<ReassignQu
             item.TriageVitals != null,
             vitalsSummary,
             item.RoomOrStation,
-            item.RoomId,
-            item.ApproachingNotificationSent,
-            item.CalledNotificationSent
+            item.RoomId
         );
     }
 }

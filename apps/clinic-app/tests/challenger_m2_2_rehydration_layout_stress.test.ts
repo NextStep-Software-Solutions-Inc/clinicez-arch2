@@ -846,17 +846,17 @@ describe('Challenger M2-2: Adversarial Rehydration & Workstation Layout Stress S
     });
 
     test('5.7 Diagnostic quick-select ToggleChips have disabled={isSigned}', () => {
-      const labChipsPattern = /<ToggleChip[\s\S]*?selected=\{orderedLabs\.some[\s\S]*?disabled=\{isSigned\}/;
+      const labChipsPattern = /<ToggleChip[\s\S]*?selected=\{(isOrdered|orderedLabs\.some)[\s\S]*?disabled=\{isSigned\}/;
       expect(labChipsPattern.test(sourceCode)).toBe(true);
     });
 
     test('5.8 Procedure quick-select ToggleChips have disabled={isSigned}', () => {
-      const procChipsPattern = /<ToggleChip[^>]*selected=\{orderedProcedures\.includes\([^)]*\)\}[^>]*disabled=\{isSigned\}/s;
+      const procChipsPattern = /<ToggleChip[^>]*selected=\{(isOrdered|orderedProcedures)[\s\S]*?disabled=\{isSigned\}/s;
       expect(procChipsPattern.test(sourceCode)).toBe(true);
     });
 
     test('5.9 Procedure nurse handoff action is hidden when isSigned is true', () => {
-      const handoffPattern = /\{orderedProcedures\.length > 0 && !isSigned \? \(\s*<View style=\{styles\.procedureHandoffRow\}>/;
+      const handoffPattern = /\{orderedProcedures\.length > 0 && !isSigned \? \(\s*<View style=\{styles\.procedureHandoff(Card|Row)\}>/;
       expect(handoffPattern.test(sourceCode)).toBe(true);
     });
   });

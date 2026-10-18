@@ -248,7 +248,7 @@ jobs:
 
           echo "==> Cleaning up tarball and old images..."
           rm -f portal-api.tar.gz
-          docker image prune -f
+          docker image prune -f || true
 
           echo "==> Verifying container is running..."
           docker ps --filter "name=${{ env.CONTAINER_NAME }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"

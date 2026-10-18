@@ -520,6 +520,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.Category).HasMaxLength(64);
             entity.Property(e => e.Description).HasMaxLength(512);
             entity.Property(e => e.UpdatedBy).HasMaxLength(256);
+        });
+
         modelBuilder.Entity<NewsletterSubscriber>(entity =>
         {
             entity.ToTable("NewsletterSubscribers");
