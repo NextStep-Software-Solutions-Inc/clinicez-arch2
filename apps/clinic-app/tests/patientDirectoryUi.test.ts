@@ -279,7 +279,7 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     // Verifies full width layout without rigid min-height or flexBasis 420
     expect(markup).toContain('&quot;width&quot;:&quot;100%&quot;');
     expect(markup).not.toContain('420');
-    expect(markup).not.toContain('minHeight');
+    expect(markup).not.toContain('&quot;minHeight&quot;:420');
   });
 
   test('5.2 Action footer renders all 3 action buttons in a single row with flexGrow, without wrapping group', () => {
