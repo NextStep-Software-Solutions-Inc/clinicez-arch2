@@ -25,6 +25,13 @@ export interface OrderCatalogItemPayload {
   instructions?: string;
 }
 
+export interface ExistingOrderItemContext {
+  name: string;
+  code?: string;
+  fulfillmentMode?: 'in_house' | 'outside';
+  instructions?: string;
+}
+
 export interface OrderCatalogSearchModalProps {
   visible: boolean;
   onClose: () => void;
@@ -34,6 +41,7 @@ export interface OrderCatalogSearchModalProps {
   onSelectOrder: (order: OrderCatalogItemPayload) => void;
   alreadyOrderedNames?: string[];
   alreadyOrderedCodes?: string[];
+  existingOrders?: ExistingOrderItemContext[];
   testID?: string;
 }
 
@@ -89,6 +97,7 @@ export function OrderCatalogSearchModal({
   onSelectOrder,
   alreadyOrderedNames = [],
   alreadyOrderedCodes = [],
+  existingOrders = [],
   testID = 'order-catalog-search-modal',
 }: OrderCatalogSearchModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -140,11 +149,20 @@ export function OrderCatalogSearchModal({
       alreadyOrderedNames.some((n) => n.toLowerCase() === item.name.toLowerCase()) ||
       alreadyOrderedCodes.some((c) => c.toLowerCase() === item.code.toLowerCase());
 
-    if (isOrdered) return;
+    const existing = existingOrders?.find(
+      (o) =>
+        o.name.toLowerCase() === item.name.toLowerCase() ||
+        (o.code && item.code && o.code.toLowerCase() === item.code.toLowerCase())
+    );
 
     setSelectedItem(item);
-    setFulfillmentMode(getHeuristicFulfillmentMode(item));
-    setInstructions('');
+    if (isOrdered && existing) {
+      setFulfillmentMode(existing.fulfillmentMode || getHeuristicFulfillmentMode(item));
+      setInstructions(existing.instructions || '');
+    } else {
+      setFulfillmentMode(getHeuristicFulfillmentMode(item));
+      setInstructions('');
+    }
   };
 
   const handleToggleChip = (chip: string) => {
@@ -175,7 +193,7 @@ export function OrderCatalogSearchModal({
   );
 
   const handleSubmit = () => {
-    if (!selectedItem || isSelectedAlreadyOrdered) return;
+    if (!selectedItem) return;
 
     const payload: OrderCatalogItemPayload = {
       serviceItemId: selectedItem.id,
@@ -203,10 +221,10 @@ export function OrderCatalogSearchModal({
         testID={`${testID}-cancel-btn`}
       />
       <Button
-        title="Add to Order"
+        title={isSelectedAlreadyOrdered ? 'Update Order' : 'Add to Order'}
         variant="primary"
-        icon="plus"
-        disabled={!selectedItem || isSelectedAlreadyOrdered}
+        icon={isSelectedAlreadyOrdered ? 'check' : 'plus'}
+        disabled={!selectedItem}
         onPress={handleSubmit}
         testID={`${testID}-submit-btn`}
       />
@@ -292,9 +310,8 @@ export function OrderCatalogSearchModal({
                     isItemOrdered && styles.itemRowOrdered,
                   ]}
                   onPress={() => handleSelectItem(item)}
-                  disabled={isItemOrdered}
                   accessibilityRole="button"
-                  accessibilityLabel={`${item.name}, ${item.code}, standard price ${item.standardPrice} pesos`}
+                  accessibilityLabel={`${item.name}, ${item.code}, standard price ${item.standardPrice} pesos${isItemOrdered ? ', already in order, click to edit' : ''}`}
                 >
                   <View style={styles.itemRadioSlot}>
                     <Icon
@@ -302,7 +319,7 @@ export function OrderCatalogSearchModal({
                         isSelected
                           ? 'checkCircle'
                           : isItemOrdered
-                          ? 'check'
+                          ? 'edit'
                           : isItemDiag
                           ? 'lab'
                           : 'medical'
@@ -322,7 +339,7 @@ export function OrderCatalogSearchModal({
                     <View style={styles.itemTitleRow}>
                       <ThemedText
                         variant="bodyBold"
-                        color={isItemOrdered ? theme.colors.textMuted : theme.colors.text}
+                        color={theme.colors.text}
                       >
                         {item.name}
                       </ThemedText>
@@ -336,7 +353,7 @@ export function OrderCatalogSearchModal({
                         <Badge label="PhilHealth" variant="success" size="sm" />
                       )}
                       {isItemOrdered && (
-                        <Badge label="Already Ordered" variant="warning" size="sm" />
+                        <Badge label="In Order (Edit)" variant="warning" size="sm" />
                       )}
                     </View>
                     {item.description ? (
@@ -366,12 +383,21 @@ export function OrderCatalogSearchModal({
           <View style={styles.configArea}>
             <View style={styles.configHeader}>
               <View style={styles.configHeaderLeft}>
-                <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                <Icon
+                  name={isSelectedAlreadyOrdered ? 'edit' : 'plus'}
+                  size={theme.sizes.iconSm}
+                  color={isSelectedAlreadyOrdered ? theme.colors.warningText : theme.colors.primary}
+                />
                 <ThemedText variant="smallBold" color={theme.colors.text}>
-                  Configure Order: {selectedItem.name}
+                  {isSelectedAlreadyOrdered ? 'Edit Order:' : 'Configure Order:'} {selectedItem.name}
                 </ThemedText>
               </View>
-              <Badge label={selectedItem.code} variant="neutral" size="sm" />
+              <View style={styles.rowCenterSm}>
+                {isSelectedAlreadyOrdered && (
+                  <Badge label="Edit Mode" variant="warning" size="sm" />
+                )}
+                <Badge label={selectedItem.code} variant="neutral" size="sm" />
+              </View>
             </View>
 
             {/* Diagnostic Fulfillment Mode */}
@@ -545,8 +571,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primaryLight,
   },
   itemRowOrdered: {
-    opacity: 0.6,
     backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.warningBorder,
+  },
+  rowCenterSm: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   itemRadioSlot: {
     alignItems: 'center',

@@ -114,6 +114,27 @@ export interface LocalLabOrder {
   instructions?: string;
 }
 
+export interface LocalProcedureOrder {
+  serviceItemId?: string;
+  code?: string;
+  name: string;
+  category: string;
+  standardPrice: number;
+  instructions?: string;
+  targetRoomId?: string;
+  targetRoomName?: string;
+  isHandedOff?: boolean;
+  handedOffAt?: string;
+}
+
+export interface EditingOrderItemState {
+  type: 'lab' | 'procedure';
+  name: string;
+  category: string;
+  standardPrice: number;
+  instructions: string;
+}
+
 const IN_HOUSE_RAPID_TEST_REGEX = /fingerstick|ecg|dipstick|rapid|rbs|urinalysis/i;
 
 export interface StatutorySymptom {
@@ -489,7 +510,10 @@ export default function ConsultationsScreen() {
 
   // Diagnostic Lab Orders & In-Clinic Procedures
   const [orderedLabs, setOrderedLabs] = useState<LocalLabOrder[]>([]);
-  const [orderedProcedures, setOrderedProcedures] = useState<string[]>([]);
+  const [orderedProcedures, setOrderedProcedures] = useState<LocalProcedureOrder[]>([]);
+  const [editingOrderItem, setEditingOrderItem] = useState<EditingOrderItemState | null>(null);
+  const [editingInstructionText, setEditingInstructionText] = useState<string>('');
+  const [isHandoffSending, setIsHandoffSending] = useState<boolean>(false);
   const [orderSearchModalVisible, setOrderSearchModalVisible] = useState(false);
   const [orderSearchInitialCategory, setOrderSearchInitialCategory] = useState<'Diagnostic' | 'Procedure' | 'All'>('All');
   const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
@@ -1067,16 +1091,57 @@ export default function ConsultationsScreen() {
             (existingEncounter.id && proc.consultationId === existingEncounter.id) ||
             (p.id && proc.queueItemId === p.id)
         );
-        const procNamesFromHistory = (existingProcedures || []).map((pr) => pr.procedureName).filter(Boolean);
-        const procNamesFromInvoice = (existingInvoice?.lineItems || [])
-          .filter((li) => {
-            const cat = (li.category || '').toLowerCase();
-            return cat === 'procedure' || cat === 'nursingservice';
-          })
-          .map((li) => li.description)
-          .filter(Boolean);
-        const uniqueProcs = Array.from(new Set([...procNamesFromHistory, ...procNamesFromInvoice]));
-        setOrderedProcedures(uniqueProcs);
+        const rehydratedProcs: LocalProcedureOrder[] = [];
+        const seenProcNames = new Set<string>();
+
+        if (existingProcedures && existingProcedures.length > 0) {
+          for (const pr of existingProcedures) {
+            if (!pr.procedureName) continue;
+            const lower = pr.procedureName.toLowerCase();
+            if (!seenProcNames.has(lower)) {
+              seenProcNames.add(lower);
+              const matchedCatalog = procedureCatalog.find((pc) => pc.name.toLowerCase() === lower);
+              rehydratedProcs.push({
+                serviceItemId: matchedCatalog?.id,
+                code: pr.procedureCode || matchedCatalog?.code,
+                name: pr.procedureName,
+                category: pr.category || matchedCatalog?.category || 'Procedure',
+                standardPrice: matchedCatalog?.standardPrice ?? 0,
+                instructions: pr.clinicalNotes || undefined,
+                targetRoomId: pr.targetRoomId || undefined,
+                targetRoomName: pr.targetRoomName || undefined,
+                isHandedOff: true,
+                handedOffAt: pr.scheduledAt
+                  ? new Date(pr.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : undefined,
+              });
+            }
+          }
+        }
+
+        const invoiceProcLineItems = (existingInvoice?.lineItems || []).filter((li) => {
+          const cat = (li.category || '').toLowerCase();
+          return cat === 'procedure' || cat === 'nursingservice';
+        });
+
+        for (const li of invoiceProcLineItems) {
+          if (!li.description) continue;
+          const lower = li.description.toLowerCase();
+          if (!seenProcNames.has(lower)) {
+            seenProcNames.add(lower);
+            const matchedCatalog = procedureCatalog.find((pc) => pc.name.toLowerCase() === lower);
+            rehydratedProcs.push({
+              serviceItemId: li.serviceItemId || matchedCatalog?.id,
+              code: li.itemCode || matchedCatalog?.code,
+              name: li.description,
+              category: li.category || matchedCatalog?.category || 'Procedure',
+              standardPrice: li.unitPrice || matchedCatalog?.standardPrice || 0,
+              isHandedOff: false,
+            });
+          }
+        }
+
+        setOrderedProcedures(rehydratedProcs);
       }
     } else {
       setPatientChart(null);
@@ -1538,13 +1603,47 @@ export default function ConsultationsScreen() {
     setOrderedLabs((prev) => prev.filter((lab) => lab.name.toLowerCase() !== testName.toLowerCase()));
   };
 
+  const handleOpenEditInstructions = (item: LocalLabOrder | LocalProcedureOrder, type: 'lab' | 'procedure') => {
+    if (isSigned) return;
+    setEditingOrderItem({
+      type,
+      name: item.name,
+      category: item.category,
+      standardPrice: item.standardPrice,
+      instructions: item.instructions || '',
+    });
+    setEditingInstructionText(item.instructions || '');
+  };
+
+  const handleSaveOrderInstructions = (newInstructions: string) => {
+    if (!editingOrderItem) return;
+    const trimmed = newInstructions.trim();
+    if (editingOrderItem.type === 'lab') {
+      setOrderedLabs((prev) =>
+        prev.map((lab) =>
+          lab.name.toLowerCase() === editingOrderItem.name.toLowerCase()
+            ? { ...lab, instructions: trimmed || undefined }
+            : lab
+        )
+      );
+    } else {
+      setOrderedProcedures((prev) =>
+        prev.map((proc) =>
+          proc.name.toLowerCase() === editingOrderItem.name.toLowerCase()
+            ? { ...proc, instructions: trimmed || undefined }
+            : proc
+        )
+      );
+    }
+    notify.success(`Instructions updated for ${editingOrderItem.name}.`);
+    setEditingOrderItem(null);
+  };
+
   const handleSelectCatalogOrder = (order: OrderCatalogItemPayload) => {
     const isDiagnostic = (order.category || '').toLowerCase().includes('diagnostic');
     if (isDiagnostic) {
       setOrderedLabs((prev) => {
-        if (prev.some((l) => l.name.toLowerCase() === order.name.toLowerCase())) {
-          return prev;
-        }
+        const index = prev.findIndex((l) => l.name.toLowerCase() === order.name.toLowerCase());
         const newLab: LocalLabOrder = {
           serviceItemId: order.serviceItemId,
           code: order.code,
@@ -1555,20 +1654,73 @@ export default function ConsultationsScreen() {
           fulfillmentMode: order.fulfillmentMode || 'outside',
           instructions: order.instructions,
         };
+        if (index >= 0) {
+          const next = [...prev];
+          next[index] = newLab;
+          return next;
+        }
         return [...prev, newLab];
       });
     } else {
+      const targetTreatmentRoom =
+        treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
       setOrderedProcedures((prev) => {
-        if (prev.some((p) => p.toLowerCase() === order.name.toLowerCase())) {
-          return prev;
+        const index = prev.findIndex((p) => p.name.toLowerCase() === order.name.toLowerCase());
+        const existing = index >= 0 ? prev[index] : null;
+        const newProc: LocalProcedureOrder = {
+          serviceItemId: order.serviceItemId,
+          code: order.code,
+          name: order.name,
+          category: order.category || 'Procedure',
+          standardPrice: order.standardPrice,
+          instructions: order.instructions,
+          targetRoomId: existing?.targetRoomId || targetTreatmentRoom?.id,
+          targetRoomName: existing?.targetRoomName || targetTreatmentRoom?.name,
+          isHandedOff: existing?.isHandedOff ?? false,
+          handedOffAt: existing?.handedOffAt,
+        };
+        if (index >= 0) {
+          const next = [...prev];
+          next[index] = newProc;
+          return next;
         }
-        return [...prev, order.name];
+        return [...prev, newProc];
       });
     }
   };
 
-  const handleToggleProcedure = (procName: string) => {
-    setOrderedProcedures((prev) => (prev.includes(procName) ? prev.filter((p) => p !== procName) : [...prev, procName]));
+  const handleToggleProcedure = (procOrName: string | ClinicServiceItem) => {
+    if (isSigned) return;
+    const item =
+      typeof procOrName === 'string'
+        ? procedureCatalog.find((p) => p.name.toLowerCase() === procOrName.toLowerCase())
+        : procOrName;
+    const procName = typeof procOrName === 'string' ? procOrName : procOrName.name;
+
+    setOrderedProcedures((prev) => {
+      const exists = prev.some((p) => p.name.toLowerCase() === procName.toLowerCase());
+      if (exists) {
+        return prev.filter((p) => p.name.toLowerCase() !== procName.toLowerCase());
+      }
+      const targetTreatmentRoom =
+        treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
+      const newProc: LocalProcedureOrder = {
+        serviceItemId: item?.id,
+        code: item?.code,
+        name: procName,
+        category: item?.category || 'Procedure',
+        standardPrice: item?.standardPrice ?? 0,
+        targetRoomId: targetTreatmentRoom?.id,
+        targetRoomName: targetTreatmentRoom?.name,
+        isHandedOff: false,
+      };
+      return [...prev, newProc];
+    });
+  };
+
+  const handleRemoveProcedure = (procName: string) => {
+    if (isSigned) return;
+    setOrderedProcedures((prev) => prev.filter((p) => p.name.toLowerCase() !== procName.toLowerCase()));
   };
 
   const handleAddPrescription = () => {
@@ -1817,26 +1969,32 @@ export default function ConsultationsScreen() {
       if (labErr) followUpIssues.push('laboratory requisition');
     }
 
-    // Auto-order in-clinic procedures for the nursing station
+    // Auto-order in-clinic procedures for the nursing station (only those not yet handed off)
     const targetTreatmentRoom =
       treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
-    for (const procName of orderedProcedures) {
-      const procInfo = procedureCatalog.find((p) => p.name === procName);
-      const [, procErr] = await clinicService.orderProcedure({
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
-        queueItemId: selectedPatient.id,
-        consultationId,
-        procedureCode: procInfo?.code,
-        procedureName: procName,
-        category: procInfo?.category ?? 'Procedure',
-        orderedByDoctorId: doctor.id,
-        orderedByDoctorName: doctor.name,
-        targetRoomId: targetTreatmentRoom?.id,
-        targetRoomName: targetTreatmentRoom?.name,
-        clinicalNotes: `Ordered during encounter for ${assessment}`,
-      });
-      if (procErr) followUpIssues.push(`procedure order (${procName})`);
+    for (const proc of orderedProcedures) {
+      if (!proc.isHandedOff) {
+        const procInfo = procedureCatalog.find(
+          (p) => p.name.toLowerCase() === proc.name.toLowerCase() || (p.code && p.code === proc.code)
+        );
+        const [, procErr] = await clinicService.orderProcedure({
+          patientId: selectedPatient.patientId,
+          patientName: selectedPatient.patientName,
+          queueItemId: selectedPatient.id,
+          consultationId,
+          procedureCode: proc.code || procInfo?.code,
+          procedureName: proc.name,
+          category: proc.category || procInfo?.category || 'Procedure',
+          orderedByDoctorId: doctor.id,
+          orderedByDoctorName: doctor.name,
+          targetRoomId: proc.targetRoomId || targetTreatmentRoom?.id,
+          targetRoomName: proc.targetRoomName || targetTreatmentRoom?.name,
+          clinicalNotes: proc.instructions
+            ? `${proc.instructions} (Assessment: ${assessment || 'Evaluation'})`
+            : `Ordered during encounter for ${assessment || 'Evaluation'}`,
+        });
+        if (procErr) followUpIssues.push(`procedure order (${proc.name})`);
+      }
     }
 
     // Auto-create draft billing invoice for the Cashier, priced from the clinic's fee schedule
@@ -1851,18 +2009,18 @@ export default function ConsultationsScreen() {
         quantity: 1,
       });
     }
-    for (const procName of orderedProcedures) {
-      const procInfo = procedureCatalog.find((p) => p.name === procName);
-      if (procInfo) {
-        billItems.push({
-          serviceItemId: procInfo.id,
-          itemCode: procInfo.code,
-          description: procInfo.name,
-          category: procInfo.category,
-          unitPrice: procInfo.standardPrice,
-          quantity: 1,
-        });
-      }
+    for (const proc of orderedProcedures) {
+      const procInfo = procedureCatalog.find(
+        (p) => p.name.toLowerCase() === proc.name.toLowerCase() || (p.code && p.code === proc.code)
+      );
+      billItems.push({
+        serviceItemId: proc.serviceItemId || procInfo?.id,
+        itemCode: proc.code || procInfo?.code,
+        description: proc.name,
+        category: proc.category || procInfo?.category || 'Procedure',
+        unitPrice: proc.standardPrice || procInfo?.standardPrice || 0,
+        quantity: 1,
+      });
     }
     for (const inHouseLab of inHouseLabs) {
       const matchedDiag = diagnosticCatalog.find((d) => d.name.toLowerCase() === inHouseLab.name.toLowerCase());
@@ -2139,11 +2297,88 @@ export default function ConsultationsScreen() {
     notify.success('Imported post-procedure findings into Objective notes.');
   };
 
+  const handleHandoffAllProcedures = async () => {
+    if (!selectedPatient) return;
+    const doctor = requireSigner();
+    if (!doctor) return;
+
+    const targetTreatmentRoom =
+      treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
+    const resolvedTargetName = targetTreatmentRoom?.name || 'Treatment Room';
+
+    const unhandedOff = orderedProcedures.filter((p) => !p.isHandedOff);
+    if (unhandedOff.length === 0) {
+      notify.info('All selected procedures have already been handed off to the nurse station.');
+      return;
+    }
+
+    setIsHandoffSending(true);
+    const errors: string[] = [];
+    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    for (const proc of unhandedOff) {
+      const procInfo = procedureCatalog.find(
+        (p) => p.name.toLowerCase() === proc.name.toLowerCase() || (p.code && p.code === proc.code)
+      );
+      const [orderedProc, procErr] = await clinicService.orderProcedure({
+        patientId: selectedPatient.patientId,
+        patientName: selectedPatient.patientName,
+        queueItemId: selectedPatient.id,
+        consultationId: signedConsultationId || undefined,
+        procedureCode: proc.code || procInfo?.code,
+        procedureName: proc.name,
+        category: proc.category || procInfo?.category || 'Procedure',
+        orderedByDoctorId: doctor.id,
+        orderedByDoctorName: doctor.name,
+        targetRoomId: proc.targetRoomId || targetTreatmentRoom?.id,
+        targetRoomName: proc.targetRoomName || resolvedTargetName,
+        clinicalNotes: proc.instructions
+          ? `${proc.instructions} (Assessment: ${assessment || 'Evaluation'})`
+          : `Ordered for in-clinic execution: ${assessment || 'Evaluation'}`,
+      });
+
+      if (procErr) {
+        errors.push(`${proc.name}: ${procErr.message || 'failed'}`);
+      } else {
+        const finalRoom = orderedProc?.targetRoomName || proc.targetRoomName || resolvedTargetName;
+        setOrderedProcedures((prev) =>
+          prev.map((item) =>
+            item.name.toLowerCase() === proc.name.toLowerCase()
+              ? { ...item, isHandedOff: true, handedOffAt: nowStr, targetRoomName: finalRoom }
+              : item
+          )
+        );
+      }
+    }
+
+    setIsHandoffSending(false);
+
+    if (errors.length > 0) {
+      notify.error(`Handoff incomplete: ${errors.join(', ')}`);
+    } else {
+      setSelectedPatient((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'PendingProcedure',
+              roomId: targetTreatmentRoom?.id,
+              roomOrStation: resolvedTargetName,
+            }
+          : null
+      );
+      notify.success(
+        `${unhandedOff.length} in-clinic procedure${unhandedOff.length > 1 ? 's' : ''} handed off to ${resolvedTargetName}.`
+      );
+      loadQueue();
+    }
+  };
+
   const handleHandoffToTreatmentRoom = async (procedureName: string) => {
     if (!selectedPatient) return;
     const doctor = requireSigner();
     if (!doctor) return;
-    const procInfo = procedureCatalog.find((p) => p.name === procedureName);
+    const target = orderedProcedures.find((p) => p.name.toLowerCase() === procedureName.toLowerCase());
+    const procInfo = procedureCatalog.find((p) => p.name.toLowerCase() === procedureName.toLowerCase());
     const targetTreatmentRoom =
       treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
     const resolvedTargetName = targetTreatmentRoom?.name || 'Treatment Room';
@@ -2153,14 +2388,16 @@ export default function ConsultationsScreen() {
       patientName: selectedPatient.patientName,
       queueItemId: selectedPatient.id,
       consultationId: signedConsultationId || undefined,
-      procedureCode: procInfo?.code,
+      procedureCode: target?.code || procInfo?.code,
       procedureName: procedureName,
-      category: procInfo?.category ?? 'Procedure',
+      category: target?.category || procInfo?.category || 'Procedure',
       orderedByDoctorId: doctor.id,
       orderedByDoctorName: doctor.name,
-      targetRoomId: targetTreatmentRoom?.id,
-      targetRoomName: resolvedTargetName,
-      clinicalNotes: `Ordered for in-clinic execution: ${assessment || 'Evaluation'}`,
+      targetRoomId: target?.targetRoomId || targetTreatmentRoom?.id,
+      targetRoomName: target?.targetRoomName || resolvedTargetName,
+      clinicalNotes: target?.instructions
+        ? `${target.instructions} (Assessment: ${assessment || 'Evaluation'})`
+        : `Ordered for in-clinic execution: ${assessment || 'Evaluation'}`,
     });
 
     if (procErr) {
@@ -2168,7 +2405,15 @@ export default function ConsultationsScreen() {
       return;
     }
 
+    const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const finalRoomName = proc?.targetRoomName || resolvedTargetName;
+    setOrderedProcedures((prev) =>
+      prev.map((item) =>
+        item.name.toLowerCase() === procedureName.toLowerCase()
+          ? { ...item, isHandedOff: true, handedOffAt: nowStr, targetRoomName: finalRoomName }
+          : item
+      )
+    );
     setSelectedPatient((prev) =>
       prev
         ? {
@@ -3026,59 +3271,91 @@ export default function ConsultationsScreen() {
                   No diagnostic tests are set up in the clinic fee schedule yet.
                 </ThemedText>
               ) : (
-                <View style={styles.chipsRow}>
-                  {diagnosticCatalog.map((diag) => (
-                    <ToggleChip
-                      key={diag.id}
-                      tone="success"
-                      label={`${diag.name} (₱${diag.standardPrice.toFixed(0)})`}
-                      meta={isYakapEligible && diag.philHealthCode ? 'PhilHealth Covered' : undefined}
-                      selected={orderedLabs.some((l) => l.name.toLowerCase() === diag.name.toLowerCase())}
-                      disabled={isSigned}
-                      onPress={() => handleToggleLab(diag.name)}
-                    />
-                  ))}
+                <View style={styles.quickAddSection}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Quick Add:
+                  </ThemedText>
+                  <View style={styles.chipsRow}>
+                    {diagnosticCatalog.map((diag) => {
+                      const isOrdered = orderedLabs.some((l) => l.name.toLowerCase() === diag.name.toLowerCase());
+                      return (
+                        <ToggleChip
+                          key={diag.id}
+                          tone="success"
+                          label={`${diag.name} (₱${diag.standardPrice.toFixed(0)})`}
+                          meta={isYakapEligible && diag.philHealthCode ? 'PhilHealth Covered' : undefined}
+                          selected={isOrdered}
+                          disabled={isSigned}
+                          onPress={() => handleToggleLab(diag.name)}
+                        />
+                      );
+                    })}
+                  </View>
                 </View>
               )}
               {/* Selected Lab Orders List */}
               {orderedLabs.length > 0 ? (
-                <View style={styles.orderedLabsList}>
+                <View style={styles.orderedListStack}>
                   <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.orderedSectionTitle}>
-                    Selected Tests ({orderedLabs.length}):
+                    ACTIVE DIAGNOSTIC TESTS ({orderedLabs.length})
                   </ThemedText>
                   {orderedLabs.map((lab) => {
                     const isInHouse = lab.fulfillmentMode === 'in_house';
                     const isYakapCopayFree = Boolean(isYakapEligible && lab.philHealthCode && isInHouse);
                     return (
-                      <View key={lab.name} style={styles.orderedLabItem}>
-                        <View style={styles.orderedLabMainCol}>
-                          <View style={styles.orderedLabHeaderRow}>
-                            <ThemedText variant="bodyBold" color={theme.colors.text}>
-                              {lab.name}
-                            </ThemedText>
-                            <Pressable
-                              accessibilityRole="button"
-                              accessibilityLabel={`Fulfillment mode: ${isInHouse ? 'In-House' : 'Outside Lab'}. Click to toggle.`}
-                              disabled={isSigned}
-                              onPress={() => handleToggleLabFulfillmentMode(lab.name)}
-                            >
-                              <Badge
-                                label={isInHouse ? 'In-House' : 'Outside Lab'}
-                                variant={isInHouse ? 'success' : 'info'}
-                                size="sm"
-                              />
-                            </Pressable>
-                            {isYakapCopayFree ? (
-                              <Badge label="PhilHealth ₱0 Co-pay" variant="success" size="sm" />
-                            ) : isInHouse && lab.standardPrice > 0 ? (
-                              <Badge label={`₱${lab.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                      <View key={lab.name} style={styles.activeOrderCard}>
+                        <View style={styles.activeOrderMainCol}>
+                          <View style={styles.activeOrderHeaderRow}>
+                            <View style={styles.activeOrderTitleGroup}>
+                              <Icon name="lab" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                              <ThemedText variant="bodyBold" color={theme.colors.text}>
+                                {lab.name}
+                              </ThemedText>
+                              {lab.code ? <Badge label={lab.code} variant="neutral" size="sm" /> : null}
+                            </View>
+                            <View style={styles.activeOrderBadgesRow}>
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Fulfillment mode: ${isInHouse ? 'In-House' : 'Outside Lab'}. Click to toggle.`}
+                                disabled={isSigned}
+                                onPress={() => handleToggleLabFulfillmentMode(lab.name)}
+                              >
+                                <Badge
+                                  label={isInHouse ? 'In-House' : 'Outside Lab'}
+                                  variant={isInHouse ? 'success' : 'info'}
+                                  size="sm"
+                                />
+                              </Pressable>
+                              {isYakapCopayFree ? (
+                                <Badge label="PhilHealth ₱0 Co-pay" variant="success" size="sm" />
+                              ) : isInHouse && lab.standardPrice > 0 ? (
+                                <Badge label={`₱${lab.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                              ) : null}
+                            </View>
+                          </View>
+                          {/* Instructions callout */}
+                          <View style={styles.instructionCalloutRow}>
+                            <View style={styles.instructionCalloutLeft}>
+                              <Icon name="file" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                              <ThemedText variant="caption" color={lab.instructions ? theme.colors.textSecondary : theme.colors.textMuted} style={styles.flexOne}>
+                                {lab.instructions ? `Instructions: ${lab.instructions}` : 'No specific fasting or test preparation instructions specified.'}
+                              </ThemedText>
+                            </View>
+                            {!isSigned ? (
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Edit instructions for ${lab.name}`}
+                                onPress={() => handleOpenEditInstructions(lab, 'lab')}
+                                hitSlop={theme.spacing.xs}
+                                style={styles.editNotesInlineBtn}
+                              >
+                                <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                                <ThemedText variant="captionBold" color={theme.colors.primary}>
+                                  {lab.instructions ? 'Edit Notes' : '+ Add Notes'}
+                                </ThemedText>
+                              </Pressable>
                             ) : null}
                           </View>
-                          {lab.instructions ? (
-                            <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.orderedLabNotes}>
-                              Notes: {lab.instructions}
-                            </ThemedText>
-                          ) : null}
                         </View>
                         {!isSigned ? (
                           <Pressable
@@ -3086,7 +3363,7 @@ export default function ConsultationsScreen() {
                             accessibilityLabel={`Remove ${lab.name}`}
                             onPress={() => handleRemoveLab(lab.name)}
                             hitSlop={theme.spacing.sm}
-                            style={styles.orderedLabDeleteBtn}
+                            style={styles.orderedDeleteBtn}
                           >
                             <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
                           </Pressable>
@@ -3137,56 +3414,166 @@ export default function ConsultationsScreen() {
                   No procedures are set up in the clinic fee schedule yet.
                 </ThemedText>
               ) : (
-                <View style={styles.chipsRow}>
-                  {procedureCatalog.map((proc) => (
-                    <ToggleChip
-                      key={proc.id}
-                      label={`${proc.name} (₱${proc.standardPrice.toFixed(0)})`}
-                      selected={orderedProcedures.includes(proc.name)}
-                      disabled={isSigned}
-                      onPress={() => handleToggleProcedure(proc.name)}
-                    />
-                  ))}
-                  {orderedProcedures
-                    .filter((p) => !procedureCatalog.some((pc) => pc.name.toLowerCase() === p.toLowerCase()))
-                    .map((procName) => (
-                      <ToggleChip
-                        key={procName}
-                        label={procName}
-                        selected={true}
-                        disabled={isSigned}
-                        onPress={() => handleToggleProcedure(procName)}
-                      />
-                    ))}
-                </View>
-              )}
-              {orderedProcedures.length > 0 && !isSigned ? (
-                <View style={styles.procedureHandoffRow}>
-                  {treatmentRooms.length > 1 ? (
-                    <View style={styles.chipsRow}>
-                      {treatmentRooms.map((tr) => (
+                <View style={styles.quickAddSection}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Quick Add:
+                  </ThemedText>
+                  <View style={styles.chipsRow}>
+                    {procedureCatalog.map((proc) => {
+                      const isOrdered = orderedProcedures.some((p) => p.name.toLowerCase() === proc.name.toLowerCase());
+                      return (
                         <ToggleChip
-                          key={tr.id}
-                          label={tr.name}
-                          selected={selectedTreatmentRoomId === tr.id}
-                          onPress={() => setSelectedTreatmentRoomId(tr.id)}
+                          key={proc.id}
+                          label={`${proc.name} (₱${proc.standardPrice.toFixed(0)})`}
+                          selected={isOrdered}
+                          disabled={isSigned}
+                          onPress={() => handleToggleProcedure(proc.name)}
+                        />
+                      );
+                    })}
+                    {orderedProcedures
+                      .filter((p) => !procedureCatalog.some((pc) => pc.name.toLowerCase() === p.name.toLowerCase()))
+                      .map((proc) => (
+                        <ToggleChip
+                          key={proc.name}
+                          label={proc.name}
+                          selected={true}
+                          disabled={isSigned}
+                          onPress={() => handleToggleProcedure(proc.name)}
                         />
                       ))}
-                    </View>
-                  ) : null}
-                  <Button
-                    title={`Send to ${
+                  </View>
+                </View>
+              )}
+
+              {/* Active Procedures Stack */}
+              {orderedProcedures.length > 0 ? (
+                <View style={styles.orderedListStack}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.orderedSectionTitle}>
+                    ACTIVE PROCEDURES ({orderedProcedures.length})
+                  </ThemedText>
+                  {orderedProcedures.map((proc) => {
+                    const resolvedRoom =
+                      proc.targetRoomName ||
+                      (treatmentRooms.find((r) => r.id === proc.targetRoomId) ??
+                        treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ??
+                        treatmentRooms[0])?.name ||
+                      'Treatment Room';
+
+                    return (
+                      <View key={proc.name} style={styles.activeOrderCard}>
+                        <View style={styles.activeOrderMainCol}>
+                          <View style={styles.activeOrderHeaderRow}>
+                            <View style={styles.activeOrderTitleGroup}>
+                              <Icon name="medical" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                              <ThemedText variant="bodyBold" color={theme.colors.text}>
+                                {proc.name}
+                              </ThemedText>
+                              {proc.code ? <Badge label={proc.code} variant="neutral" size="sm" /> : null}
+                            </View>
+                            <View style={styles.activeOrderBadgesRow}>
+                              <Badge label={resolvedRoom} variant="purple" size="sm" />
+                              {proc.isHandedOff ? (
+                                <Badge
+                                  label={`Handed Off${proc.handedOffAt ? ` (${proc.handedOffAt})` : ''}`}
+                                  variant="success"
+                                  size="sm"
+                                />
+                              ) : (
+                                <Badge label="Draft" variant="warning" size="sm" />
+                              )}
+                              {proc.standardPrice > 0 ? (
+                                <Badge label={`₱${proc.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                              ) : null}
+                            </View>
+                          </View>
+                          {/* Instructions callout */}
+                          <View style={styles.instructionCalloutRow}>
+                            <View style={styles.instructionCalloutLeft}>
+                              <Icon name="file" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                              <ThemedText variant="caption" color={proc.instructions ? theme.colors.textSecondary : theme.colors.textMuted} style={styles.flexOne}>
+                                {proc.instructions ? `Instructions: ${proc.instructions}` : 'No procedure instructions or site details entered.'}
+                              </ThemedText>
+                            </View>
+                            {!isSigned ? (
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Edit instructions for ${proc.name}`}
+                                onPress={() => handleOpenEditInstructions(proc, 'procedure')}
+                                hitSlop={theme.spacing.xs}
+                                style={styles.editNotesInlineBtn}
+                              >
+                                <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                                <ThemedText variant="captionBold" color={theme.colors.primary}>
+                                  {proc.instructions ? 'Edit Notes' : '+ Add Notes'}
+                                </ThemedText>
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        </View>
+                        {!isSigned ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${proc.name}`}
+                            onPress={() => handleRemoveProcedure(proc.name)}
+                            hitSlop={theme.spacing.sm}
+                            style={styles.orderedDeleteBtn}
+                          >
+                            <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              {/* Nurse Handoff Routing */}
+              {orderedProcedures.length > 0 && !isSigned ? (
+                <View style={styles.procedureHandoffCard}>
+                  <View style={styles.procedureHandoffHeader}>
+                    <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                      NURSE HANDOFF ROUTING
+                    </ThemedText>
+                    {treatmentRooms.length > 1 ? (
+                      <View style={styles.chipsRow}>
+                        {treatmentRooms.map((tr) => (
+                          <ToggleChip
+                            key={tr.id}
+                            label={tr.name}
+                            selected={selectedTreatmentRoomId === tr.id}
+                            onPress={() => setSelectedTreatmentRoomId(tr.id)}
+                          />
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+                  {(() => {
+                    const unhandedOff = orderedProcedures.filter((p) => !p.isHandedOff);
+                    const targetRoomName =
                       (treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0])?.name ||
-                      'Treatment Room'
-                    } (Nurse Handoff)`}
-                    variant="primary"
-                    icon="syringe"
-                    size="sm"
-                    onPress={() => {
-                      const first = orderedProcedures[0];
-                      if (first) handleHandoffToTreatmentRoom(first);
-                    }}
-                  />
+                      'Treatment Room';
+                    const allHandedOff = unhandedOff.length === 0;
+
+                    return (
+                      <View style={styles.procedureHandoffActionRow}>
+                        <Button
+                          title={
+                            allHandedOff
+                              ? 'All Procedures Handed Off'
+                              : `Send ${unhandedOff.length} Procedure${unhandedOff.length > 1 ? 's' : ''} to ${targetRoomName} (Nurse Handoff)`
+                          }
+                          variant={allHandedOff ? 'secondary' : 'primary'}
+                          icon={allHandedOff ? 'check' : 'syringe'}
+                          size="md"
+                          disabled={allHandedOff || isHandoffSending}
+                          loading={isHandoffSending}
+                          onPress={handleHandoffAllProcedures}
+                          testID="consultation-batch-handoff-btn"
+                        />
+                      </View>
+                    );
+                  })()}
                 </View>
               ) : null}
             </Card>
@@ -4639,15 +5026,233 @@ export default function ConsultationsScreen() {
           initialCategory={orderSearchInitialCategory}
           isYakapEligible={isYakapEligible}
           onSelectOrder={handleSelectCatalogOrder}
-          alreadyOrderedNames={[...orderedLabs.map((l) => l.name), ...orderedProcedures]}
-          alreadyOrderedCodes={orderedLabs.map((l) => l.code).filter(Boolean) as string[]}
+          alreadyOrderedNames={[...orderedLabs.map((l) => l.name), ...orderedProcedures.map((p) => p.name)]}
+          alreadyOrderedCodes={[
+            ...(orderedLabs.map((l) => l.code).filter(Boolean) as string[]),
+            ...(orderedProcedures.map((p) => p.code).filter(Boolean) as string[]),
+          ]}
+          existingOrders={[
+            ...orderedLabs.map((l) => ({
+              name: l.name,
+              code: l.code,
+              fulfillmentMode: l.fulfillmentMode,
+              instructions: l.instructions,
+            })),
+            ...orderedProcedures.map((p) => ({
+              name: p.name,
+              code: p.code,
+              fulfillmentMode: 'in_house' as const,
+              instructions: p.instructions,
+            })),
+          ]}
         />
+
+        {/* In-Place Order Instructions Modal */}
+        {editingOrderItem ? (
+          <Modal
+            visible={Boolean(editingOrderItem)}
+            onClose={() => setEditingOrderItem(null)}
+            title={`Edit Instructions: ${editingOrderItem.name}`}
+            subtitle={`Set clinical instructions and notes for ${editingOrderItem.type === 'lab' ? 'diagnostic test' : 'in-clinic procedure'}`}
+            maxWidth={560}
+            footer={
+              <View style={styles.modalFooter}>
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={() => setEditingOrderItem(null)}
+                />
+                <Button
+                  title="Save Instructions"
+                  variant="primary"
+                  icon="check"
+                  onPress={() => handleSaveOrderInstructions(editingInstructionText)}
+                  testID="save-order-instructions-btn"
+                />
+              </View>
+            }
+            testID="edit-order-instructions-modal"
+          >
+            <View style={styles.editInstructionsModalContent}>
+              <View style={styles.editInstructionsHeader}>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  {editingOrderItem.name}
+                </ThemedText>
+                <Badge label={editingOrderItem.category} variant="neutral" size="sm" />
+                {editingOrderItem.standardPrice > 0 ? (
+                  <Badge label={`₱${editingOrderItem.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                ) : null}
+              </View>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                Quick Preset Chips:
+              </ThemedText>
+              <View style={styles.chipsWrap}>
+                {(editingOrderItem.type === 'lab'
+                  ? ['10-12 hr fasting', '8 hr fasting', 'Random / Non-fasting', 'Morning mid-stream urine', 'STAT']
+                  : ['STAT', 'Routine', 'Pre/post vitals required', 'Wound care / sterile technique', 'Informed consent verified']
+                ).map((chip) => {
+                  const isChipSelected = editingInstructionText.includes(chip);
+                  return (
+                    <Pressable
+                      key={chip}
+                      style={[styles.instructionChip, isChipSelected && styles.instructionChipActive]}
+                      onPress={() => {
+                        setEditingInstructionText((prev) => {
+                          const trimmed = prev.trim();
+                          if (!trimmed) return chip;
+                          const parts = trimmed.split(';').map((p) => p.trim());
+                          if (parts.includes(chip)) {
+                            return parts.filter((p) => p !== chip).join('; ');
+                          }
+                          return `${trimmed}; ${chip}`;
+                        });
+                      }}
+                      accessibilityRole="button"
+                    >
+                      <ThemedText
+                        variant="captionBold"
+                        color={isChipSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                      >
+                        {chip}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Input
+                placeholder="Clinical instructions, site route, fasting requirements, or doctor notes..."
+                multiline
+                numberOfLines={3}
+                value={editingInstructionText}
+                onChangeText={setEditingInstructionText}
+                accessibilityLabel="Clinical instructions"
+                testID="edit-order-instructions-input"
+              />
+            </View>
+          </Modal>
+        ) : null}
       </ScrollView>
     </ResponsiveLayout>
   );
 }
 
 const styles = StyleSheet.create({
+  quickAddSection: {
+    gap: theme.spacing.xs,
+  },
+  orderedListStack: {
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+    gap: theme.spacing.xs,
+  },
+  activeOrderCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.sm,
+  },
+  activeOrderMainCol: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  activeOrderHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  activeOrderTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  activeOrderBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  instructionCalloutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.xs,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.xs,
+  },
+  instructionCalloutLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  flexOne: {
+    flex: 1,
+  },
+  editNotesInlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: 2,
+    paddingHorizontal: theme.spacing.xs,
+  },
+  orderedDeleteBtn: {
+    padding: theme.spacing.xs,
+  },
+  procedureHandoffCard: {
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    gap: theme.spacing.sm,
+  },
+  procedureHandoffHeader: {
+    gap: theme.spacing.xs,
+  },
+  procedureHandoffActionRow: {
+    marginTop: theme.spacing.xs,
+  },
+  editInstructionsModalContent: {
+    gap: theme.spacing.md,
+  },
+  editInstructionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  chipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  instructionChip: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.full,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.surface,
+  },
+  instructionChipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
   orderedLabsList: {
     marginTop: theme.spacing.sm,
     paddingTop: theme.spacing.sm,

@@ -111,7 +111,7 @@ mock.module('../utils/useBreakpoint', () => ({
 }));
 
 // Import types and component
-import type { LocalLabOrder } from '../navigation/screens/Consultations.screen';
+import type { LocalLabOrder, LocalProcedureOrder } from '../navigation/screens/Consultations.screen';
 import type { OrderCatalogItemPayload } from '../components/consultation/OrderCatalogSearchModal';
 import type { ClinicServiceItem, CreateInvoiceRequest } from '../services/clinicService';
 
@@ -280,7 +280,7 @@ function partitionLabs(orderedLabs: LocalLabOrder[]) {
 
 function generateCashierBillItems(params: {
   orderedLabs: LocalLabOrder[];
-  orderedProcedures: string[];
+  orderedProcedures: (string | LocalProcedureOrder)[];
   diagnosticCatalog: ClinicServiceItem[];
   procedureCatalog: ClinicServiceItem[];
   consultationFee: ClinicServiceItem | null;
@@ -301,18 +301,22 @@ function generateCashierBillItems(params: {
     });
   }
 
-  for (const procName of orderedProcedures) {
-    const procInfo = procedureCatalog.find((p) => p.name === procName);
-    if (procInfo) {
-      billItems.push({
-        serviceItemId: procInfo.id,
-        itemCode: procInfo.code,
-        description: procInfo.name,
-        category: procInfo.category,
-        unitPrice: procInfo.standardPrice,
-        quantity: 1,
-      });
-    }
+  for (const proc of orderedProcedures) {
+    const procName = typeof proc === 'string' ? proc : proc.name;
+    const procInfo = procedureCatalog.find((p) => p.name.toLowerCase() === procName.toLowerCase());
+    const serviceItemId = typeof proc !== 'string' ? (proc.serviceItemId || procInfo?.id) : procInfo?.id;
+    const itemCode = typeof proc !== 'string' ? (proc.code || procInfo?.code) : procInfo?.code;
+    const category = typeof proc !== 'string' ? (proc.category || procInfo?.category || 'Procedure') : (procInfo?.category || 'Procedure');
+    const unitPrice = typeof proc !== 'string' ? (proc.standardPrice ?? procInfo?.standardPrice ?? 0) : (procInfo?.standardPrice ?? 0);
+
+    billItems.push({
+      serviceItemId,
+      itemCode,
+      description: procName,
+      category,
+      unitPrice,
+      quantity: 1,
+    });
   }
 
   for (const inHouseLab of inHouseLabs) {
@@ -1484,7 +1488,8 @@ describe('Consultation Workstation Dynamic Orders Automated Test Suite', () => {
       const code = fs.readFileSync(consultationsScreenPath, 'utf8');
       expect(code).toContain('<OrderCatalogSearchModal');
       expect(code).toContain('onSelectOrder={handleSelectCatalogOrder}');
-      expect(code).toContain('alreadyOrderedNames={[...orderedLabs.map((l) => l.name), ...orderedProcedures]}');
+      expect(code).toContain('alreadyOrderedNames={[...orderedLabs.map((l) => l.name), ...orderedProcedures.map((p) => p.name)]}');
+      expect(code).toContain('existingOrders={[');
     });
 
     test('8.7 Consultations.screen.tsx implements rehydration logic for in-house and outside orders in loadPatientContext', () => {
@@ -1502,6 +1507,168 @@ describe('Consultation Workstation Dynamic Orders Automated Test Suite', () => {
       expect(code).toContain('Click to toggle.');
       expect(code).toContain('handleToggleLabFulfillmentMode');
       expect(code).toContain('handleRemoveLab');
+    });
+  });
+
+  // =======================================================================
+  // Suite 9: Batch Procedure Handoff, In-Place Editing & Modal Edit Mode
+  // =======================================================================
+  describe('Suite 9: Batch Procedure Handoff, In-Place Editing & Modal Edit Mode', () => {
+    test('9.1 Batch multi-procedure nurse handoff dispatches all un-handed-off procedures with custom instructions', async () => {
+      const orderedProcedures: LocalProcedureOrder[] = [
+        {
+          serviceItemId: 'srv-suture',
+          code: 'PROC-SUTURE',
+          name: 'Minor Suture Repair',
+          category: 'Procedure',
+          standardPrice: 850,
+          instructions: 'Cleanse with Betadine, 3-0 Nylon interrupted suture',
+          isHandedOff: false,
+        },
+        {
+          serviceItemId: 'srv-neb',
+          code: 'NEB-01',
+          name: 'Nebulization Treatment',
+          category: 'Procedure',
+          standardPrice: 200,
+          instructions: 'Salbutamol 1 neb with 4L O2 mask',
+          isHandedOff: false,
+        },
+        {
+          serviceItemId: 'srv-wound',
+          code: 'WOUND-01',
+          name: 'Wound Dressing & Debridement',
+          category: 'Procedure',
+          standardPrice: 300,
+          isHandedOff: true, // Already handed off!
+          handedOffAt: '09:15 AM',
+        },
+      ];
+
+      // Simulate handleHandoffAllProcedures logic
+      const dispatchedPayloads: any[] = [];
+      const unhandedOff = orderedProcedures.filter((p) => !p.isHandedOff);
+      expect(unhandedOff.length).toBe(2);
+
+      const targetRoom = 'Pediatric Allergy Suite';
+      let state = [...orderedProcedures];
+
+      for (const proc of unhandedOff) {
+        dispatchedPayloads.push({
+          procedureCode: proc.code,
+          procedureName: proc.name,
+          category: proc.category,
+          targetRoomName: targetRoom,
+          clinicalNotes: proc.instructions
+            ? `${proc.instructions} (Assessment: Bronchial Asthma)`
+            : 'Ordered for in-clinic execution: Bronchial Asthma',
+        });
+
+        state = state.map((item) =>
+          item.name === proc.name
+            ? { ...item, isHandedOff: true, handedOffAt: '09:30 AM', targetRoomName: targetRoom }
+            : item
+        );
+      }
+
+      // Assert both un-handed-off procedures were dispatched
+      expect(dispatchedPayloads.length).toBe(2);
+      expect(dispatchedPayloads[0].procedureName).toBe('Minor Suture Repair');
+      expect(dispatchedPayloads[0].clinicalNotes).toContain('Cleanse with Betadine, 3-0 Nylon interrupted suture');
+      expect(dispatchedPayloads[1].procedureName).toBe('Nebulization Treatment');
+      expect(dispatchedPayloads[1].clinicalNotes).toContain('Salbutamol 1 neb with 4L O2 mask');
+
+      // Assert already-handed-off item was NOT redispatched
+      expect(dispatchedPayloads.some((d) => d.procedureName === 'Wound Dressing & Debridement')).toBe(false);
+
+      // Assert state updated to all handed off
+      expect(state.every((p) => p.isHandedOff)).toBe(true);
+
+      // Verify consolidated notification toast format
+      const toastMessage = `${unhandedOff.length} in-clinic procedure${unhandedOff.length > 1 ? 's' : ''} handed off to ${targetRoom}.`;
+      expect(toastMessage).toBe('2 in-clinic procedures handed off to Pediatric Allergy Suite.');
+    });
+
+    test('9.2 In-place instruction editing updates test or procedure notes without removing the item', () => {
+      let labs: LocalLabOrder[] = [
+        {
+          name: '12-Lead Electrocardiogram',
+          category: 'Diagnostic',
+          standardPrice: 450,
+          fulfillmentMode: 'outside',
+        },
+      ];
+      let procs: LocalProcedureOrder[] = [
+        {
+          serviceItemId: 'srv-neb',
+          code: 'NEB-01',
+          name: 'Nebulization Treatment',
+          category: 'Procedure',
+          standardPrice: 200,
+          isHandedOff: false,
+        },
+      ];
+
+      // Edit lab notes in-place
+      const saveLabInstructions = (testName: string, notes: string) => {
+        labs = labs.map((l) => (l.name === testName ? { ...l, instructions: notes } : l));
+      };
+      saveLabInstructions('12-Lead Electrocardiogram', 'Routine 12-lead tracing with physician readback');
+      expect(labs.length).toBe(1);
+      expect(labs[0].instructions).toBe('Routine 12-lead tracing with physician readback');
+
+      // Edit procedure notes in-place
+      const saveProcInstructions = (procName: string, notes: string) => {
+        procs = procs.map((p) => (p.name === procName ? { ...p, instructions: notes } : p));
+      };
+      saveProcInstructions('Nebulization Treatment', 'Pre/post peak expiratory flow rate check');
+      expect(procs.length).toBe(1);
+      expect(procs[0].instructions).toBe('Pre/post peak expiratory flow rate check');
+      expect(procs[0].isHandedOff).toBe(false);
+    });
+
+    test('9.3 OrderCatalogSearchModal activates Edit Mode and pre-fills existing order context when already ordered', () => {
+      const existingOrders = [
+        {
+          name: 'Random Blood Sugar (RBS)',
+          code: 'RBS-01',
+          fulfillmentMode: 'in_house' as const,
+          instructions: 'Capillary fingerstick; check pre-meal glucose',
+        },
+      ];
+
+      const html = renderToStaticMarkup(
+        React.createElement(OrderCatalogSearchModal, {
+          visible: true,
+          onClose: () => {},
+          catalog: COMBINED_CATALOG,
+          initialCategory: 'All',
+          isYakapEligible: true,
+          onSelectOrder: () => {},
+          alreadyOrderedNames: ['Random Blood Sugar (RBS)'],
+          alreadyOrderedCodes: ['RBS-01'],
+          existingOrders,
+          testID: 'order-search-modal-test',
+        })
+      );
+
+      // Verify already-ordered item is styled with In Order (Edit) badge
+      expect(html).toContain('In Order (Edit)');
+      expect(html).toContain('already in order, click to edit');
+    });
+
+    test('9.4 Consultations.screen.tsx defines batch nurse handoff and instruction editing AST elements', () => {
+      const consultationsScreenPath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
+      const code = fs.readFileSync(consultationsScreenPath, 'utf8');
+      expect(code).toContain('export interface LocalProcedureOrder');
+      expect(code).toContain('handleHandoffAllProcedures');
+      expect(code).toContain('handleOpenEditInstructions');
+      expect(code).toContain('handleSaveOrderInstructions');
+      expect(code).toContain('testID="consultation-batch-handoff-btn"');
+      expect(code).toContain('testID="save-order-instructions-btn"');
+      expect(code).toContain('ACTIVE PROCEDURES (');
+      expect(code).toContain('ACTIVE DIAGNOSTIC TESTS (');
+      expect(code).toContain('Edit Notes');
     });
   });
 });
