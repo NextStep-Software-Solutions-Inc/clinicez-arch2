@@ -1382,9 +1382,17 @@ export default function DashboardScreen() {
   return (
     <ResponsiveLayout
       headerTitle="Dashboard"
-      rightAction={
-        <Button title="New patient" variant="primary" size="sm" icon="plus" onPress={() => navigation.navigate('Patients', { openRegister: true })} />
-      }
+      actions={[
+        {
+          id: 'new-patient',
+          label: 'New patient',
+          shortLabel: 'New',
+          icon: 'plus' as const,
+          variant: 'primary' as const,
+          primary: true,
+          onPress: () => navigation.navigate('Patients', { openRegister: true }),
+        },
+      ]}
     >
       <ScrollView
         style={styles.container}

@@ -1379,20 +1379,29 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   return (
     <ResponsiveLayout
       headerTitle="Patients"
-      rightAction={
-        <View style={styles.headerActions}>
-          {canImportPatient ? (
-            <Button
-              title="Scan patient QR"
-              variant="outline"
-              size="sm"
-              icon="scan"
-              onPress={() => navigation.navigate('ShareImport')}
-            />
-          ) : null}
-          <Button title="Register patient" variant="primary" size="sm" icon="plus" onPress={() => setRegisterVisible(true)} />
-        </View>
-      }
+      actions={[
+        ...(canImportPatient
+          ? [
+              {
+                id: 'scan',
+                label: 'Scan patient QR',
+                shortLabel: 'Scan QR',
+                icon: 'scan' as const,
+                variant: 'outline' as const,
+                onPress: () => navigation.navigate('ShareImport'),
+              },
+            ]
+          : []),
+        {
+          id: 'register',
+          label: 'Register patient',
+          shortLabel: 'Register',
+          icon: 'plus' as const,
+          variant: 'primary' as const,
+          primary: true,
+          onPress: () => setRegisterVisible(true),
+        },
+      ]}
     >
       <ScrollView
         ref={scrollViewRef}

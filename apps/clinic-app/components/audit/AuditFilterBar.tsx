@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { theme } from '../../constants/theme';
 import ThemedText from '../ui/ThemedText';
@@ -6,6 +6,7 @@ import { TextInput } from '../ui/Text';
 import { IconSlot, type IconName } from '../ui/Icon';
 import Button from '../ui/Button';
 import ValidatedDateInput from '../ui/ValidatedDateInput';
+import { useBreakpoint } from '../../utils/useBreakpoint';
 import type { AuditDatePreset } from '../../services/clinicService';
 
 export type AuditCategoryFilter =
@@ -65,6 +66,8 @@ export interface AuditFilterBarProps {
   isExporting?: boolean;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  onOpenDateRangePicker?: () => void;
+  onOpenMoreFilters?: () => void;
 }
 
 export function AuditFilterBar({
@@ -86,46 +89,39 @@ export function AuditFilterBar({
   isExporting = false,
   onRefresh,
   isRefreshing = false,
+  onOpenDateRangePicker,
+  onOpenMoreFilters,
 }: AuditFilterBarProps) {
+  const { isCompact } = useBreakpoint();
   const isDateInvalid = Boolean(dateRangeError || (startDate && endDate && startDate > endDate));
+
+  const isCategoryFiltered = selectedCategory.toLowerCase() !== 'all';
+  const isSeverityFiltered = severityFilter.toLowerCase() !== 'all';
+  const isSearchFiltered = search.trim().length > 0;
+  const isDateFiltered = Boolean(startDate || endDate || (datePreset && datePreset !== 'all' && datePreset !== '7d'));
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (isCategoryFiltered) count++;
+    if (isSeverityFiltered) count++;
+    if (isDateFiltered) count++;
+    if (isSearchFiltered) count++;
+    return count;
+  }, [isCategoryFiltered, isSeverityFiltered, isDateFiltered, isSearchFiltered]);
+
+  const dateLabel = useMemo(() => {
+    if (startDate && endDate) {
+      return startDate === endDate ? startDate : `${startDate} → ${endDate}`;
+    }
+    if (startDate) return `From ${startDate}`;
+    if (endDate) return `Until ${endDate}`;
+    const preset = DATE_PRESETS.find((p) => p.key === datePreset);
+    return preset ? preset.label : 'Date Range';
+  }, [startDate, endDate, datePreset]);
 
   return (
     <View style={styles.container}>
-      {/* Category Pills Row */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.pillsScrollContainer}
-      >
-        {CATEGORY_PILLS.map((pill) => {
-          const isSelected = selectedCategory.toLowerCase() === pill.key.toLowerCase();
-          return (
-            <Pressable
-              key={pill.key}
-              accessibilityRole="button"
-              accessibilityLabel={`Filter by ${pill.label}`}
-              onPress={() => onSelectCategory(pill.key)}
-              style={[styles.pill, isSelected ? styles.pillSelected : styles.pillUnselected]}
-            >
-              <IconSlot
-                value={pill.icon}
-                size={theme.sizes.iconSm}
-                color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
-              />
-              <ThemedText
-                style={[
-                  styles.pillText,
-                  isSelected ? styles.pillTextSelected : styles.pillTextUnselected,
-                ]}
-              >
-                {pill.label}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* Search Input Row */}
+      {/* Search & Mobile Filter Trigger Row */}
       <View style={styles.searchRow}>
         <View style={styles.searchInputContainer}>
           <View style={styles.searchIcon}>
@@ -155,120 +151,264 @@ export function AuditFilterBar({
           )}
         </View>
 
-        {/* Severities Picker */}
-        <View style={styles.severityContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.severityScroll}>
-            {SEVERITY_OPTIONS.map((opt) => {
-              const isSelected = severityFilter.toLowerCase() === opt.key.toLowerCase();
+        {/* Mobile "More Filters" Trigger Button */}
+        {isCompact && onOpenMoreFilters && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Filter options, ${activeFiltersCount} active`}
+            onPress={onOpenMoreFilters}
+            style={[
+              styles.moreFiltersBtn,
+              activeFiltersCount > 0 ? styles.moreFiltersBtnActive : styles.moreFiltersBtnInactive,
+            ]}
+          >
+            <IconSlot
+              value="settings"
+              size={theme.sizes.iconSm}
+              color={activeFiltersCount > 0 ? theme.colors.primary : theme.colors.textSecondary}
+            />
+            <ThemedText
+              style={[
+                styles.moreFiltersBtnText,
+                activeFiltersCount > 0 ? styles.moreFiltersBtnTextActive : styles.moreFiltersBtnTextInactive,
+              ]}
+            >
+              Filters{activeFiltersCount > 0 ? ` (${activeFiltersCount})` : ''}
+            </ThemedText>
+          </Pressable>
+        )}
+
+        {/* Desktop Severities Picker */}
+        {!isCompact && (
+          <View style={styles.severityContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.severityScroll}>
+              {SEVERITY_OPTIONS.map((opt) => {
+                const isSelected = severityFilter.toLowerCase() === opt.key.toLowerCase();
+                return (
+                  <Pressable
+                    key={opt.key}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter by severity ${opt.label}`}
+                    onPress={() => onSeverityFilterChange(opt.key)}
+                    style={[
+                      styles.severityPill,
+                      isSelected ? styles.severityPillSelected : styles.severityPillUnselected,
+                    ]}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.severityText,
+                        isSelected ? styles.severityTextSelected : styles.severityTextUnselected,
+                      ]}
+                    >
+                      {opt.label}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+      </View>
+
+      {/* Category Pills & Quick Chips Row */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pillsScrollContainer}
+      >
+        {/* On Mobile: Date Range Trigger Quick Chip */}
+        {isCompact && onOpenDateRangePicker && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Date range: ${dateLabel}`}
+            onPress={onOpenDateRangePicker}
+            style={[
+              styles.quickDateChip,
+              Boolean(startDate || endDate) ? styles.quickDateChipActive : styles.quickDateChipInactive,
+            ]}
+          >
+            <IconSlot
+              value="calendar"
+              size={theme.sizes.iconSm}
+              color={Boolean(startDate || endDate) ? theme.colors.primary : theme.colors.textMuted}
+            />
+            <ThemedText
+              style={[
+                styles.quickDateChipText,
+                Boolean(startDate || endDate) ? styles.quickDateChipTextActive : styles.quickDateChipTextInactive,
+              ]}
+            >
+              {dateLabel}
+            </ThemedText>
+            <IconSlot
+              value="chevronDown"
+              size={theme.fontSizes.xs}
+              color={Boolean(startDate || endDate) ? theme.colors.primary : theme.colors.textMuted}
+            />
+          </Pressable>
+        )}
+
+        {/* Category Filter Pills */}
+        {CATEGORY_PILLS.map((pill) => {
+          const isSelected = selectedCategory.toLowerCase() === pill.key.toLowerCase();
+          return (
+            <Pressable
+              key={pill.key}
+              accessibilityRole="button"
+              accessibilityLabel={`Filter by ${pill.label}`}
+              onPress={() => onSelectCategory(pill.key)}
+              style={[styles.pill, isSelected ? styles.pillSelected : styles.pillUnselected]}
+            >
+              <IconSlot
+                value={pill.icon}
+                size={theme.sizes.iconSm}
+                color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
+              />
+              <ThemedText
+                style={[
+                  styles.pillText,
+                  isSelected ? styles.pillTextSelected : styles.pillTextUnselected,
+                ]}
+              >
+                {pill.label}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
+
+        {/* On Mobile: Active Severity Quick Chip if filtered */}
+        {isCompact && isSeverityFiltered && onOpenMoreFilters && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Urgency filter: ${severityFilter}`}
+            onPress={onOpenMoreFilters}
+            style={[styles.pill, styles.pillSelected]}
+          >
+            <ThemedText style={[styles.pillText, styles.pillTextSelected]}>
+              {severityFilter}
+            </ThemedText>
+          </Pressable>
+        )}
+
+        {/* On Mobile: Reset Quick Chip if filters active */}
+        {isCompact && activeFiltersCount > 0 && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reset all filters"
+            onPress={onResetFilters}
+            style={styles.mobileResetChip}
+          >
+            <IconSlot value="close" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+            <ThemedText style={styles.mobileResetChipText}>Clear</ThemedText>
+          </Pressable>
+        )}
+      </ScrollView>
+
+      {/* Desktop Controls Row: Date Presets, Range Picker Trigger, Inputs & Action Buttons */}
+      {!isCompact && (
+        <View style={styles.controlsRow}>
+          <View style={styles.datePresetsGroup}>
+            {DATE_PRESETS.map((preset) => {
+              const isSelected = datePreset === preset.key;
               return (
                 <Pressable
-                  key={opt.key}
+                  key={preset.key}
                   accessibilityRole="button"
-                  accessibilityLabel={`Filter by severity ${opt.label}`}
-                  onPress={() => onSeverityFilterChange(opt.key)}
+                  accessibilityLabel={`Date preset ${preset.label}`}
+                  onPress={() => onDatePresetChange && onDatePresetChange(preset.key)}
                   style={[
-                    styles.severityPill,
-                    isSelected ? styles.severityPillSelected : styles.severityPillUnselected,
+                    styles.presetButton,
+                    isSelected ? styles.presetButtonSelected : styles.presetButtonUnselected,
                   ]}
                 >
                   <ThemedText
                     style={[
-                      styles.severityText,
-                      isSelected ? styles.severityTextSelected : styles.severityTextUnselected,
+                      styles.presetText,
+                      isSelected ? styles.presetTextSelected : styles.presetTextUnselected,
                     ]}
                   >
-                    {opt.label}
+                    {preset.label}
                   </ThemedText>
                 </Pressable>
               );
             })}
-          </ScrollView>
-        </View>
-      </View>
+          </View>
 
-      {/* Date Presets and Date Inputs Row */}
-      <View style={styles.controlsRow}>
-        <View style={styles.datePresetsGroup}>
-          {DATE_PRESETS.map((preset) => {
-            const isSelected = datePreset === preset.key;
-            return (
+          <View style={styles.dateInputsContainer}>
+            {onOpenDateRangePicker && (
               <Pressable
-                key={preset.key}
                 accessibilityRole="button"
-                accessibilityLabel={`Date preset ${preset.label}`}
-                onPress={() => onDatePresetChange && onDatePresetChange(preset.key)}
-                style={[
-                  styles.presetButton,
-                  isSelected ? styles.presetButtonSelected : styles.presetButtonUnselected,
-                ]}
+                accessibilityLabel={`Open date range calendar: ${dateLabel}`}
+                onPress={onOpenDateRangePicker}
+                style={styles.calendarTriggerBtn}
               >
-                <ThemedText
-                  style={[
-                    styles.presetText,
-                    isSelected ? styles.presetTextSelected : styles.presetTextUnselected,
-                  ]}
-                >
-                  {preset.label}
+                <IconSlot value="calendar" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                <ThemedText style={styles.calendarTriggerText}>
+                  {dateLabel}
                 </ThemedText>
+                <IconSlot value="chevronDown" size={theme.fontSizes.xs} color={theme.colors.textMuted} />
               </Pressable>
-            );
-          })}
-        </View>
+            )}
 
-        <View style={styles.dateInputsContainer}>
-          <View style={styles.dateField}>
-            <ValidatedDateInput
-              value={startDate}
-              onChangeText={onStartDateChange}
-              boundaryMode="pastOrToday"
-              placeholder="Start Date (YYYY-MM-DD)"
-              testID="audit-start-date"
-              containerStyle={styles.dateInputStyle}
-            />
+            <View style={styles.dateField}>
+              <ValidatedDateInput
+                value={startDate}
+                onChangeText={onStartDateChange}
+                boundaryMode="pastOrToday"
+                placeholder="Start (YYYY-MM-DD)"
+                testID="audit-start-date"
+                containerStyle={styles.dateInputStyle}
+                hideValidFeedback={true}
+                onCalendarPress={onOpenDateRangePicker}
+              />
+            </View>
+            <ThemedText style={styles.dateRangeSeparator}>to</ThemedText>
+            <View style={styles.dateField}>
+              <ValidatedDateInput
+                value={endDate}
+                onChangeText={onEndDateChange}
+                boundaryMode="pastOrToday"
+                placeholder="End (YYYY-MM-DD)"
+                testID="audit-end-date"
+                containerStyle={styles.dateInputStyle}
+                hideValidFeedback={true}
+                onCalendarPress={onOpenDateRangePicker}
+              />
+            </View>
           </View>
-          <ThemedText style={styles.dateRangeSeparator}>to</ThemedText>
-          <View style={styles.dateField}>
-            <ValidatedDateInput
-              value={endDate}
-              onChangeText={onEndDateChange}
-              boundaryMode="pastOrToday"
-              placeholder="End Date (YYYY-MM-DD)"
-              testID="audit-end-date"
-              containerStyle={styles.dateInputStyle}
-            />
-          </View>
-        </View>
 
-        <View style={styles.actionsGroup}>
-          <Button
-            title="Reset Filters"
-            variant="secondary"
-            size="sm"
-            icon="refresh"
-            onPress={onResetFilters}
-          />
-          {onOpenExport && (
+          <View style={styles.actionsGroup}>
             <Button
-              title="Export Log"
-              variant="outline"
-              size="sm"
-              icon="download"
-              loading={isExporting}
-              onPress={onOpenExport}
-            />
-          )}
-          {onRefresh && (
-            <Button
-              title="Refresh"
-              variant="outline"
+              title="Reset Filters"
+              variant="secondary"
               size="sm"
               icon="refresh"
-              loading={isRefreshing}
-              onPress={onRefresh}
+              onPress={onResetFilters}
             />
-          )}
+            {onOpenExport && (
+              <Button
+                title="Export Log"
+                variant="outline"
+                size="sm"
+                icon="download"
+                loading={isExporting}
+                onPress={onOpenExport}
+              />
+            )}
+            {onRefresh && (
+              <Button
+                title="Refresh"
+                variant="outline"
+                size="sm"
+                icon="refresh"
+                loading={isRefreshing}
+                onPress={onRefresh}
+              />
+            )}
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Inline Date Validation Alert */}
       {isDateInvalid && (
@@ -290,21 +430,23 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   pillsScrollContainer: {
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    alignItems: 'center',
+    gap: theme.spacing.xs,
     paddingVertical: theme.spacing.xs,
   },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
     borderRadius: theme.radii.full,
     borderWidth: theme.sizes.borderWidth,
+    minHeight: theme.sizes.controlSm,
   },
   pillSelected: {
     backgroundColor: theme.colors.primaryLight,
@@ -323,15 +465,57 @@ const styles = StyleSheet.create({
   pillTextUnselected: {
     color: theme.colors.textSecondary,
   },
+  quickDateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.full,
+    borderWidth: theme.sizes.borderWidth,
+    minHeight: theme.sizes.controlSm,
+  },
+  quickDateChipActive: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+  },
+  quickDateChipInactive: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.borderLight,
+  },
+  quickDateChipText: {
+    ...theme.typography.captionBold,
+  },
+  quickDateChipTextActive: {
+    color: theme.colors.primary,
+  },
+  quickDateChipTextInactive: {
+    color: theme.colors.textSecondary,
+  },
+  mobileResetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.full,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
+    backgroundColor: theme.colors.emergencyBg,
+    minHeight: theme.sizes.controlSm,
+  },
+  mobileResetChipText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.emergencyText,
+  },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   searchInputContainer: {
     flex: 1,
-    minWidth: 260,
+    minWidth: 200,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceMuted,
@@ -352,6 +536,32 @@ const styles = StyleSheet.create({
   },
   clearSearchButton: {
     padding: theme.spacing.xs,
+  },
+  moreFiltersBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    height: theme.sizes.controlMd,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  moreFiltersBtnActive: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+  },
+  moreFiltersBtnInactive: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.borderDark,
+  },
+  moreFiltersBtnText: {
+    ...theme.typography.captionBold,
+  },
+  moreFiltersBtnTextActive: {
+    color: theme.colors.primary,
+  },
+  moreFiltersBtnTextInactive: {
+    color: theme.colors.textSecondary,
   },
   severityContainer: {
     flexDirection: 'row',
@@ -389,7 +599,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   datePresetsGroup: {
     flexDirection: 'row',
@@ -421,7 +631,23 @@ const styles = StyleSheet.create({
   dateInputsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  calendarTriggerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    paddingHorizontal: theme.spacing.sm,
+    height: theme.sizes.controlMd,
+  },
+  calendarTriggerText: {
+    ...theme.typography.captionBold,
+    color: theme.colors.text,
   },
   dateField: {
     width: 140,
@@ -436,7 +662,7 @@ const styles = StyleSheet.create({
   actionsGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
   dateErrorAlert: {
     flexDirection: 'row',
@@ -453,4 +679,5 @@ const styles = StyleSheet.create({
     ...theme.typography.captionBold,
   },
 });
+
 export default AuditFilterBar;

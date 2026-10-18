@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import WorkstationSidebar from './WorkstationSidebar';
-import ClinicHeaderBar from './ClinicHeaderBar';
+import ClinicHeaderBar, { HeaderAction } from './ClinicHeaderBar';
 import { theme } from '../../constants/theme';
 import { useWorkstationShortcuts } from '../../utils/workstationShortcuts';
 import { useBreakpoint } from '../../utils/useBreakpoint';
@@ -14,6 +14,7 @@ export interface ResponsiveLayoutProps {
   children: React.ReactNode;
   headerTitle?: string;
   headerSubtitle?: string;
+  actions?: HeaderAction[];
   rightAction?: React.ReactNode;
   hideHeader?: boolean;
   style?: ViewStyle;
@@ -23,6 +24,7 @@ export default function ResponsiveLayout({
   children,
   headerTitle,
   headerSubtitle,
+  actions,
   rightAction,
   hideHeader = false,
   style,
@@ -56,10 +58,11 @@ export default function ResponsiveLayout({
           style,
         ]}
       >
-        {!hideHeader && (headerTitle || rightAction) ? (
+        {!hideHeader && (headerTitle || rightAction || (actions && actions.length > 0)) ? (
           <ClinicHeaderBar
             title={headerTitle}
             subtitle={headerSubtitle}
+            actions={actions}
             rightAction={rightAction}
           />
         ) : null}
@@ -94,6 +97,7 @@ export default function ResponsiveLayout({
           <ClinicHeaderBar
             title={headerTitle}
             subtitle={headerSubtitle}
+            actions={actions}
             rightAction={rightAction}
           />
         )}

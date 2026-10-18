@@ -24,7 +24,7 @@ export type ButtonVariant =
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps extends Omit<PressableProps, 'style'> {
-  title: string;
+  title?: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
   /** IconName (e.g. "plus"). Legacy emoji glyphs are still resolved for old call sites. */
@@ -35,6 +35,8 @@ export interface ButtonProps extends Omit<PressableProps, 'style'> {
   style?: ViewStyle;
   textStyle?: TextStyle;
   numberOfLines?: number;
+  iconOnly?: boolean;
+  accessibilityLabel?: string;
 }
 
 type InteractionState = PressableStateCallbackType & { hovered?: boolean };
@@ -50,6 +52,8 @@ export default function Button({
   style,
   textStyle,
   numberOfLines,
+  iconOnly = false,
+  accessibilityLabel,
   onPress,
   ...rest
 }: ButtonProps) {
@@ -65,16 +69,27 @@ export default function Button({
         }
       : null;
 
+  const iconOnlyStyle: ViewStyle | null = iconOnly
+    ? {
+        width: sizeStyles.container.minHeight,
+        paddingHorizontal: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }
+    : null;
+
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || title}
       accessibilityState={{ disabled: disabled || loading, busy: loading }}
-      hitSlop={size === 'lg' ? undefined : theme.spacing.xs}
+      hitSlop={iconOnly || size !== 'lg' ? theme.spacing.xs : undefined}
       style={(state: InteractionState) => [
         styles.buttonBase,
         densityBaseStyle,
         variantStyles.container,
         sizeStyles.container,
+        iconOnlyStyle,
         state.hovered && !disabled && variantStyles.hover,
         disabled && styles.disabled,
         state.pressed && !disabled && styles.pressed,
@@ -90,14 +105,16 @@ export default function Button({
         <IconSlot value={icon} size={sizeStyles.iconSize} color={variantStyles.text.color} />
       ) : null}
 
-      <ThemedText
-        numberOfLines={numberOfLines}
-        style={[styles.textBase, sizeStyles.text, variantStyles.text, textStyle]}
-      >
-        {title}
-      </ThemedText>
+      {!iconOnly && title ? (
+        <ThemedText
+          numberOfLines={numberOfLines}
+          style={[styles.textBase, sizeStyles.text, variantStyles.text, textStyle]}
+        >
+          {title}
+        </ThemedText>
+      ) : null}
 
-      {showRightIcon ? (
+      {!iconOnly && showRightIcon ? (
         <IconSlot value={rightIcon} size={sizeStyles.iconSize} color={variantStyles.text.color} />
       ) : null}
     </Pressable>

@@ -582,18 +582,25 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   return (
     <ResponsiveLayout
       headerTitle="Appointments"
-      rightAction={
-        <View style={styles.headerActionRow}>
-          <Button
-            title="Doctor Rosters"
-            icon="calendar"
-            variant="outline"
-            size="sm"
-            onPress={() => setRosterModalVisible(true)}
-          />
-          <Button title="Book appointment" icon="plus" size="sm" onPress={() => openBookModal(null)} />
-        </View>
-      }
+      actions={[
+        {
+          id: 'rosters',
+          label: 'Doctor Rosters',
+          shortLabel: 'Rosters',
+          icon: 'calendar' as const,
+          variant: 'outline' as const,
+          onPress: () => setRosterModalVisible(true),
+        },
+        {
+          id: 'book',
+          label: 'Book appointment',
+          shortLabel: 'Book',
+          icon: 'plus' as const,
+          variant: 'primary' as const,
+          primary: true,
+          onPress: () => openBookModal(null),
+        },
+      ]}
     >
       <ScrollView
         style={styles.container}

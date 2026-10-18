@@ -18,6 +18,8 @@ import AuditFilterBar from './AuditFilterBar';
 import AuditTable from './AuditTable';
 import AuditInspectionDrawer from './AuditInspectionDrawer';
 import AuditExportModal from './AuditExportModal';
+import AuditFilterMoreSheet from './AuditFilterMoreSheet';
+import DateRangePickerModal from '../ui/DateRangePickerModal';
 import type { ClinicAuditEntryDto } from '../../services/clinicService';
 
 export interface AuditWorkstationViewProps {
@@ -33,6 +35,8 @@ export function AuditWorkstationView({
 
   const [selectedEntry, setSelectedEntry] = useState<ClinicAuditEntryDto | null>(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [isDateRangeModalOpen, setIsDateRangeModalOpen] = useState<boolean>(false);
+  const [isMoreFiltersSheetOpen, setIsMoreFiltersSheetOpen] = useState<boolean>(false);
 
   // Virtualization & scroll tracking state
   const [scrollY, setScrollY] = useState(0);
@@ -150,6 +154,8 @@ export function AuditWorkstationView({
           isExporting={isExporting}
           onRefresh={refresh}
           isRefreshing={refreshing}
+          onOpenDateRangePicker={() => setIsDateRangeModalOpen(true)}
+          onOpenMoreFilters={() => setIsMoreFiltersSheetOpen(true)}
         />
 
         {/* API Error Alert */}
@@ -214,6 +220,33 @@ export function AuditWorkstationView({
             endDate={endDate}
           />
         )}
+
+        {/* Date Range Calendar Picker Modal */}
+        <DateRangePickerModal
+          visible={isDateRangeModalOpen}
+          onClose={() => setIsDateRangeModalOpen(false)}
+          startDate={startDate}
+          endDate={endDate}
+          onApply={(start, end) => {
+            setStartDate(start);
+            setEndDate(end);
+          }}
+          boundaryMode="pastOrToday"
+        />
+
+        {/* Mobile More Filters Sheet */}
+        <AuditFilterMoreSheet
+          visible={isMoreFiltersSheetOpen}
+          onClose={() => setIsMoreFiltersSheetOpen(false)}
+          selectedCategory={category}
+          onSelectCategory={setCategory}
+          severityFilter={severity}
+          onSeverityFilterChange={setSeverity}
+          startDate={startDate}
+          endDate={endDate}
+          onOpenDateRangePicker={() => setIsDateRangeModalOpen(true)}
+          onResetFilters={resetFilters}
+        />
       </View>
     );
   }
@@ -255,6 +288,8 @@ export function AuditWorkstationView({
           isExporting={isExporting}
           onRefresh={refresh}
           isRefreshing={refreshing}
+          onOpenDateRangePicker={() => setIsDateRangeModalOpen(true)}
+          onOpenMoreFilters={() => setIsMoreFiltersSheetOpen(true)}
         />
 
         {/* API Error Alert */}
@@ -320,6 +355,33 @@ export function AuditWorkstationView({
           endDate={endDate}
         />
       )}
+
+      {/* Date Range Calendar Picker Modal */}
+      <DateRangePickerModal
+        visible={isDateRangeModalOpen}
+        onClose={() => setIsDateRangeModalOpen(false)}
+        startDate={startDate}
+        endDate={endDate}
+        onApply={(start, end) => {
+          setStartDate(start);
+          setEndDate(end);
+        }}
+        boundaryMode="pastOrToday"
+      />
+
+      {/* Mobile More Filters Sheet */}
+      <AuditFilterMoreSheet
+        visible={isMoreFiltersSheetOpen}
+        onClose={() => setIsMoreFiltersSheetOpen(false)}
+        selectedCategory={category}
+        onSelectCategory={setCategory}
+        severityFilter={severity}
+        onSeverityFilterChange={setSeverity}
+        startDate={startDate}
+        endDate={endDate}
+        onOpenDateRangePicker={() => setIsDateRangeModalOpen(true)}
+        onResetFilters={resetFilters}
+      />
     </View>
   );
 }

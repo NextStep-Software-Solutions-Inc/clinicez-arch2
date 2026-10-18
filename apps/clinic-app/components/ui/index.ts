@@ -76,4 +76,12 @@ export {
   type ModalStackContextValue,
 } from './modalStack';
 export { default as ClinicEzLogo, ClinicEzMark, CoBrandedLogo, getClinicInitials, type ClinicEzMarkProps, type CoBrandedLogoProps } from './ClinicEzLogo';
+export {
+  default as DateRangePickerModal,
+  type DateRangePickerModalProps,
+} from './DateRangePickerModal';
+export {
+  default as DatePickerModal,
+  type DatePickerModalProps,
+} from './DatePickerModal';
 

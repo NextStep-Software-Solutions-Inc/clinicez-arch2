@@ -62,6 +62,7 @@ export default function UserMenu({
       accessibilityRole="button"
       accessibilityLabel={`Signed in as ${displayName}. Open my profile and credentials`}
       accessibilityState={{ selected: isSelected }}
+      hitSlop={compact ? theme.spacing.xs : undefined}
       style={(state: InteractionState) => [
         variant === 'card' ? styles.card : styles.pill,
         compact && styles.compactContainer,
@@ -132,8 +133,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.primary,
   },
   compactContainer: {
-    width: theme.sizes.controlMd + 8,
-    minHeight: theme.sizes.controlMd,
+    width: theme.sizes.controlSm + 2,
+    minHeight: theme.sizes.controlSm + 2,
     padding: 0,
     paddingVertical: 0,
     paddingHorizontal: 0,
@@ -144,7 +145,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: theme.radii.md,
+    borderRadius: theme.radii.full,
     gap: 0,
     maxWidth: undefined,
   },

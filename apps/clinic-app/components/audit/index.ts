@@ -5,4 +5,5 @@ export * from './AuditTableSkeleton';
 export * from './AuditEmptyState';
 export * from './AuditInspectionDrawer';
 export * from './AuditExportModal';
+export * from './AuditFilterMoreSheet';
 export * from './AuditWorkstationView';

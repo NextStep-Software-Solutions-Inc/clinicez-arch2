@@ -10,6 +10,7 @@ import {
 import ThemedText from './ThemedText';
 import { TextInput } from './Text';
 import { IconSlot } from './Icon';
+import DatePickerModal from './DatePickerModal';
 import { theme } from '../../constants/theme';
 
 /**
@@ -219,6 +220,9 @@ export interface ValidatedDateInputProps {
   leftIcon?: string;
   rightIcon?: string;
   onRightIconPress?: () => void;
+  onCalendarPress?: () => void;
+  disableCalendarPicker?: boolean;
+  hideValidFeedback?: boolean;
 }
 
 export default function ValidatedDateInput({
@@ -243,9 +247,13 @@ export default function ValidatedDateInput({
   leftIcon = 'calendar',
   rightIcon,
   onRightIconPress,
+  onCalendarPress,
+  disableCalendarPicker = false,
+  hideValidFeedback = true,
 }: ValidatedDateInputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
   const prevValueRef = useRef(value);
 
   const isInteractive = !disabled && editable;
@@ -253,6 +261,18 @@ export default function ValidatedDateInput({
     () => validateDateString(value, { boundaryMode, minDate, maxDate, now }),
     [value, boundaryMode, minDate, maxDate, now]
   );
+
+  const isCalendarPressable = Boolean(
+    onCalendarPress || (!disableCalendarPicker && isInteractive && leftIcon === 'calendar')
+  );
+
+  const handleCalendarPress = () => {
+    if (onCalendarPress) {
+      onCalendarPress();
+    } else if (!disableCalendarPicker && isInteractive) {
+      setIsPickerOpen(true);
+    }
+  };
 
   useEffect(() => {
     onValidationChange?.(validation);
@@ -327,13 +347,29 @@ export default function ValidatedDateInput({
           !isInteractive && styles.disabledWrapper,
         ]}
       >
-        <View style={styles.leftIcon}>
-          <IconSlot
-            value={leftIcon}
-            size={theme.sizes.iconSm}
-            color={isValidComplete ? theme.colors.success : theme.colors.textMuted}
-          />
-        </View>
+        {isCalendarPressable ? (
+          <Pressable
+            onPress={handleCalendarPress}
+            style={styles.leftIcon}
+            accessibilityRole="button"
+            accessibilityLabel="Open calendar picker"
+            hitSlop={theme.spacing.xs}
+          >
+            <IconSlot
+              value={leftIcon}
+              size={theme.sizes.iconSm}
+              color={isValidComplete ? theme.colors.success : theme.colors.textMuted}
+            />
+          </Pressable>
+        ) : (
+          <View style={styles.leftIcon}>
+            <IconSlot
+              value={leftIcon}
+              size={theme.sizes.iconSm}
+              color={isValidComplete ? theme.colors.success : theme.colors.textMuted}
+            />
+          </View>
+        )}
 
         <TextInput
           style={[styles.input, inputStyle]}
@@ -375,11 +411,11 @@ export default function ValidatedDateInput({
             {errorMessage}
           </ThemedText>
         </View>
-      ) : isValidComplete ? (
+      ) : hideValidFeedback ? null : isValidComplete ? (
         <View style={styles.feedbackRow}>
           <IconSlot value="checkCircle" size={theme.fontSizes.xs} color={theme.colors.success} />
           <ThemedText variant="captionBold" color={theme.colors.successText}>
-            Valid Date ({validation.formattedDate})
+            Valid Date
           </ThemedText>
         </View>
       ) : helperText ? (
@@ -390,6 +426,22 @@ export default function ValidatedDateInput({
         <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.feedback}>
           Format: YYYY-MM-DD
         </ThemedText>
+      )}
+
+      {/* Built-in Single Date Calendar Picker Modal */}
+      {!disableCalendarPicker && isInteractive && (
+        <DatePickerModal
+          visible={isPickerOpen}
+          onClose={() => setIsPickerOpen(false)}
+          value={validation.isValid ? validation.formattedDate : value}
+          onSelect={(selected) => {
+            handleChangeText(selected);
+          }}
+          boundaryMode={boundaryMode}
+          minDate={minDate}
+          maxDate={maxDate}
+          label={label || 'Select Date'}
+        />
       )}
     </View>
   );
