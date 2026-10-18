@@ -2,6 +2,9 @@
   "name": "@clinicez/cashier-app",
   "version": "1.0.0",
   "main": "index.ts",
+  "engines": {
+    "node": "24.x"
+  },
   "overrides": {
     "react-dom": "19.2.3"
   },

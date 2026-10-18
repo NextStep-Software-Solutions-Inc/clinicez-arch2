@@ -1,6 +1,9 @@
 {
   "name": "clinicez-monorepo",
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
