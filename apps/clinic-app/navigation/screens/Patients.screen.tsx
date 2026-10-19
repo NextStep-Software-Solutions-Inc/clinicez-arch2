@@ -102,14 +102,32 @@ const humanizeKey = (key: string) => {
 
 type PatientFilter = 'ALL' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES';
 
-export type PatientsScreenProps = StaticScreenProps<{ openPatientId?: string; openRegister?: boolean } | undefined>;
+export type PatientsScreenProps = StaticScreenProps<
+  | {
+      openPatientId?: string;
+      patientId?: string;
+      openRegister?: boolean;
+      tab?: ChartTab | string;
+      toothNumber?: number | string;
+      tooth?: number | string;
+    }
+  | undefined
+>;
 
 export default function PatientsScreen({ route }: PatientsScreenProps) {
   const navigation = useNavigation<any>();
   const { isWorkstation, isDesktop } = useBreakpoint();
   const canImportPatient = usePermission(PERMISSIONS.patientsWrite);
-  const openPatientId = route.params?.openPatientId;
-  const openRegister = route.params?.openRegister;
+  const routeParams = route?.params;
+  const openPatientId = routeParams?.openPatientId || routeParams?.patientId;
+  const openRegister = routeParams?.openRegister;
+  const routeTab = routeParams?.tab as ChartTab | undefined;
+  const rawRouteTooth = routeParams?.toothNumber ?? routeParams?.tooth;
+  const routeToothNumber = useMemo(() => {
+    if (rawRouteTooth === undefined || rawRouteTooth === null) return undefined;
+    const parsed = typeof rawRouteTooth === 'number' ? rawRouteTooth : parseInt(String(rawRouteTooth), 10);
+    return !isNaN(parsed) && parsed > 0 ? parsed : undefined;
+  }, [rawRouteTooth]);
   const { letterhead, rooms = [] } = useClinic();
   const { currentName, staff: staffList, current: currentStaff } = useStaff();
   const [patients, setPatients] = useState<ClinicPatient[] | null>(null);
@@ -256,23 +274,47 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [chartError, setChartError] = useState<string | null>(null);
 
   const getInitialChartTab = (): ChartTab => {
+    if (routeTab && (CHART_TABS.some((t) => t.value === routeTab) || routeTab === 'dental')) {
+      return routeTab;
+    }
+    if (routeToothNumber) {
+      return 'dental';
+    }
     if (typeof window !== 'undefined' && window.location?.search) {
       try {
         const sp = new URLSearchParams(window.location.search);
         const tabParam = sp.get('tab') as ChartTab;
-        if (tabParam && CHART_TABS.some((t) => t.value === tabParam)) {
+        if (tabParam && (CHART_TABS.some((t) => t.value === tabParam) || tabParam === 'dental')) {
           return tabParam;
         }
       } catch {}
     }
     const saved = getSessionItem('clinicez_active_chart_tab') as ChartTab | null;
-    if (saved && CHART_TABS.some((t) => t.value === saved)) {
+    if (saved && (CHART_TABS.some((t) => t.value === saved) || saved === 'dental')) {
       return saved;
     }
     return 'summary';
   };
 
+  const getInitialFocusTooth = (): number | undefined => {
+    if (routeToothNumber !== undefined) {
+      return routeToothNumber;
+    }
+    if (typeof window !== 'undefined' && window.location?.search) {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const toothStr = sp.get('tooth') || sp.get('toothNumber');
+        if (toothStr) {
+          const num = parseInt(toothStr, 10);
+          if (!isNaN(num) && num > 0) return num;
+        }
+      } catch {}
+    }
+    return undefined;
+  };
+
   const [activeChartTab, setActiveChartTab] = useState<ChartTab>(getInitialChartTab);
+  const [focusToothNumber, setFocusToothNumber] = useState<number | undefined>(getInitialFocusTooth);
 
   const handleChartTabChange = (tab: ChartTab) => {
     setActiveChartTab(tab);
@@ -823,10 +865,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     }
   };
 
-  const handleOpenChart = async (patient: ClinicPatient, tabToOpen?: ChartTab) => {
+  const handleOpenChart = async (patient: ClinicPatient, tabToOpen?: ChartTab, toothToFocus?: number) => {
     setSelectedPatient(patient);
     const targetTab = tabToOpen ?? activeChartTab ?? getInitialChartTab();
     setActiveChartTab(targetTab);
+    if (toothToFocus !== undefined) {
+      setFocusToothNumber(toothToFocus);
+    }
     setSessionItem('clinicez_active_patient_id', patient.id);
     setSessionItem('clinicez_active_chart_tab', targetTab);
     if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
@@ -834,6 +879,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         const url = new URL(window.location.href);
         url.searchParams.set('patientId', patient.id);
         url.searchParams.set('tab', targetTab);
+        if (toothToFocus !== undefined) {
+          url.searchParams.set('toothNumber', String(toothToFocus));
+        }
         window.history.replaceState(null, '', url.toString());
       } catch {}
     }
@@ -869,6 +917,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const handleCloseChart = () => {
     setChartVisible(false);
     setSelectedPatient(null);
+    setFocusToothNumber(undefined);
     setSessionItem('clinicez_active_patient_id', null);
     if (typeof window !== 'undefined' && window.history?.replaceState && window.location) {
       try {
@@ -876,6 +925,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         url.searchParams.delete('patientId');
         url.searchParams.delete('tab');
         url.searchParams.delete('subTab');
+        url.searchParams.delete('tooth');
+        url.searchParams.delete('toothNumber');
         window.history.replaceState(null, '', url.toString());
       } catch {}
     }
@@ -901,7 +952,8 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       const [patient] = await clinicService.getPatientById(targetPatientId!);
       if (cancelled || !patient) return;
       const initialTab = getInitialChartTab();
-      handleOpenChart(patient, initialTab);
+      const initialTooth = getInitialFocusTooth();
+      handleOpenChart(patient, initialTab, initialTooth);
     })();
     return () => {
       cancelled = true;
@@ -909,16 +961,23 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Arriving from "Scan patient QR": open the freshly imported patient's chart once.
+  // Arriving from "Scan patient QR", Global Search, or in-app deep link: open the patient's chart once.
   useEffect(() => {
     if (!openPatientId) return;
     let cancelled = false;
     (async () => {
       const [patient, err] = await clinicService.getPatientById(openPatientId);
       if (cancelled) return;
-      navigation.setParams({ openPatientId: undefined });
+      navigation.setParams({
+        openPatientId: undefined,
+        patientId: undefined,
+        tab: undefined,
+        toothNumber: undefined,
+        tooth: undefined,
+      });
       if (patient) {
-        handleOpenChart(patient);
+        const targetTab = routeTab || (routeToothNumber ? 'dental' : undefined);
+        handleOpenChart(patient, targetTab, routeToothNumber);
       } else {
         notify.error(err?.message || 'Could not open the imported patient.');
       }
@@ -927,7 +986,29 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openPatientId]);
+  }, [openPatientId, routeTab, routeToothNumber]);
+
+  // Reactive tab/tooth switching when chart is already open for the active patient
+  useEffect(() => {
+    if (chartVisible && selectedPatient && !openPatientId) {
+      if (routeTab) {
+        setActiveChartTab(routeTab);
+      }
+      if (routeToothNumber !== undefined) {
+        setFocusToothNumber(routeToothNumber);
+        if (!routeTab) {
+          setActiveChartTab('dental');
+        }
+      }
+      if (routeTab || routeToothNumber !== undefined) {
+        navigation.setParams({
+          tab: undefined,
+          toothNumber: undefined,
+          tooth: undefined,
+        });
+      }
+    }
+  }, [chartVisible, selectedPatient, openPatientId, routeTab, routeToothNumber]);
 
   // Arriving from Dashboard "New patient": open the registration dialog automatically.
   useEffect(() => {
@@ -2160,7 +2241,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         loadingChart={loadingChart}
         chartError={chartError}
         patientAttachments={patientAttachments}
+        initialTab={activeChartTab}
         activeTab={activeChartTab}
+        focusToothNumber={focusToothNumber}
         onTabChange={handleChartTabChange}
         onClose={handleCloseChart}
         onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient, activeChartTab)}

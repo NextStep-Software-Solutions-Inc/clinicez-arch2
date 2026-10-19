@@ -56,10 +56,9 @@ public static class DependencyInjection
         {
             options.UseNpgsql(connectionString, npgsqlOptions =>
             {
-                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "main");
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "public");
             });
 
-            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
             options.AddInterceptors(sp.GetRequiredService<SoftDeleteInterceptor>(), sp.GetRequiredService<FacilityDirectoryInterceptor>());
         });
 

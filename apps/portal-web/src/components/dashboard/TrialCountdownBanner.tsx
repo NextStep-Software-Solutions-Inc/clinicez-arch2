@@ -80,6 +80,8 @@ export default function TrialCountdownBanner({ tenantSlug }: TrialCountdownBanne
     const now = new Date();
     const diffTime = expiresAt ? expiresAt.getTime() - now.getTime() : 0;
     const diffDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    const trialDays = billingInfo?.trialDays || billingInfo?.paymentConfig?.trialDays || 14;
+    const planName = billingInfo?.planLimits?.planTitle || "Starter";
 
     // State 1: Trial has expired
     if (isExpired || (isTrialing && diffDays <= 0)) {
@@ -95,7 +97,7 @@ export default function TrialCountdownBanner({ tenantSlug }: TrialCountdownBanne
                                 Trial Expired
                             </span>
                             <span className="font-semibold">
-                                Your 14-day free trial has expired. Resource allocations are locked until a subscription plan is selected.
+                                Your {trialDays}-day free trial has expired. Resource allocations are locked until a subscription plan is selected.
                             </span>
                         </div>
                     </div>
@@ -139,7 +141,7 @@ export default function TrialCountdownBanner({ tenantSlug }: TrialCountdownBanne
                                 Trial Ending Soon
                             </span>
                             <span className="font-semibold">
-                                Your 14-day Starter trial expires in <span className="font-extrabold underline">{diffDays} day{diffDays === 1 ? "" : "s"}</span>. Upgrade now to ensure uninterrupted clinical operations.
+                                Your {trialDays}-day {planName} trial expires in <span className="font-extrabold underline">{diffDays} day{diffDays === 1 ? "" : "s"}</span>. Upgrade now to ensure uninterrupted clinical operations.
                             </span>
                         </div>
                     </div>
@@ -187,10 +189,10 @@ export default function TrialCountdownBanner({ tenantSlug }: TrialCountdownBanne
                     </div>
                     <div className="leading-relaxed">
                         <span className="inline-flex items-center font-bold uppercase tracking-wider text-[10px] bg-blue-500/20 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full mr-2 shrink-0">
-                            14-Day Free Trial
+                            {trialDays}-Day Free Trial
                         </span>
                         <span className="font-medium text-slate-800 dark:text-slate-200">
-                            You are evaluating the Starter Plan (<span className="font-bold">{diffDays} days remaining</span>). Full access to clinic branches, staff seats, and patient files is unlocked.
+                            You are evaluating the {planName} Plan (<span className="font-bold">{diffDays} days remaining</span>). Full access to clinic branches, staff seats, and patient files is unlocked.
                         </span>
                     </div>
                 </div>

@@ -133,7 +133,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=CLINICEZ_INTEROP_HUB_LOCAL_DB;Username=${POSTGRES_USER:-clinicez};Password=${POSTGRES_PASSWORD}
-      DbSchema: interop_hub
+      DbSchema: public
       Hub__Mode: Local
       Hub__Database__AutoMigrate: "true"
       Hub__LocalCellId: ${EDGE_CELL_ID:?EDGE_CELL_ID must be set}

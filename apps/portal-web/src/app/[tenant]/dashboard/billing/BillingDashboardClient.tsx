@@ -66,7 +66,7 @@ export default function BillingDashboardClient({ tenantId }: { tenantId: string 
         {/* 1. PLANS TAB CONTENT */}
         <TabsContent value="plans" className="space-y-8 outline-none">
           <Suspense fallback={<PlansTabSkeleton />}>
-            <PlansTabContent tenantId={tenantId} />
+            <PlansTabContent tenantId={tenantId} onSwitchTab={handleTabChange} />
           </Suspense>
         </TabsContent>
 

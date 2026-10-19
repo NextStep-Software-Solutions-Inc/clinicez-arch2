@@ -97,4 +97,30 @@ public class CreateTenantCommandHandlerTests : IDisposable
         Assert.Contains("Workplace URL slug is already taken", ex.Message);
         Assert.Single(_context.Tenants);
     }
+
+    [Fact]
+    public async Task Handle_WithSystemSettingsTrialDays_SetsTrialEndsAtToPlatformSettingDays()
+    {
+        var settingsMock = new Mock<ISystemSettingsService>();
+        settingsMock.Setup(s => s.GetSettingIntAsync("Billing:TrialDays", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(30);
+
+        var subscriptions = new SubscriptionService(
+            _context,
+            Options.Create(TestSupport.Plans()),
+            TimeProvider.System,
+            new Mock<IEntitlementsPublisher>().Object,
+            settingsMock.Object);
+
+        var handler = new CreateTenantCommandHandler(_context, TestSupport.OwnershipPolicy(_context), subscriptions, _clerk.Object, TimeProvider.System);
+
+        await handler.Handle(Command(ownerId: "user_custom_trial", slug: "custom-trial-clinic"), CancellationToken.None);
+
+        var tenant = await _context.Tenants.SingleAsync(t => t.TenantSlug == "custom-trial-clinic");
+        var subscription = await _context.Subscriptions.SingleAsync(s => s.TenantId == tenant.Id);
+        Assert.Equal(SubscriptionStatus.Trialing, subscription.Status);
+        Assert.NotNull(subscription.TrialEndsAt);
+        var expectedEnd = DateTime.UtcNow.AddDays(30);
+        Assert.True(Math.Abs((subscription.TrialEndsAt.Value - expectedEnd).TotalHours) < 1);
+    }
 }

@@ -26,7 +26,7 @@ public class OrganizationStringEnumTests
     public void Every_enum_property_of_the_model_is_stored_as_a_string()
     {
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["DbSchema"] = "organization_dashboard" })
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["DbSchema"] = "public" })
             .Build();
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase($"Organization_StringEnums_{Guid.NewGuid()}")

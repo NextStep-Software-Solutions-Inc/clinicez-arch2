@@ -9,6 +9,7 @@ import NursingProceduresTab from './NursingProceduresTab';
 import StatutoryImmunizationsTab from './StatutoryImmunizationsTab';
 import HealthProfilesTab from './HealthProfilesTab';
 import ExternalDocumentVaultTab from './ExternalDocumentVaultTab';
+import DentalChartTab from './DentalChartTab';
 import type { ChartLayoutProps } from './types';
 
 /**
@@ -126,6 +127,16 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           onUploadDocument={onUploadDocument}
           onVerifyAttachment={onVerifyAttachment}
           onDownloadAttachment={onDownloadAttachment}
+          onRefreshChart={onRefreshChart}
+        />
+      )}
+      {activeTab === 'dental' && (
+        <DentalChartTab
+          patient={patient}
+          patientId={patient?.id}
+          chart={patientChart}
+          focusToothNumber={props.focusToothNumber}
+          onOrderProcedure={props.onOrderDentalProcedure}
           onRefreshChart={onRefreshChart}
         />
       )}

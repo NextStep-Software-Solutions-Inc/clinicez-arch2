@@ -17,8 +17,8 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("laboratory_dashboard")
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasDefaultSchema("public")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -99,7 +99,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasIndex("LabRequisitionId");
 
-                    b.ToTable("AnalyteResults", "laboratory_dashboard");
+                    b.ToTable("AnalyteResults", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.CriticalPanicDispatchLog", b =>
@@ -196,7 +196,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("CriticalPanicDispatchLogs", "laboratory_dashboard");
+                    b.ToTable("CriticalPanicDispatchLogs", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.DiagnosticReport", b =>
@@ -270,7 +270,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.HasIndex("LabRequisitionId")
                         .IsUnique();
 
-                    b.ToTable("DiagnosticReports", "laboratory_dashboard");
+                    b.ToTable("DiagnosticReports", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.LabRefreshToken", b =>
@@ -342,7 +342,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.HasIndex("TokenHash")
                         .IsUnique();
 
-                    b.ToTable("LabRefreshTokens", "laboratory_dashboard");
+                    b.ToTable("LabRefreshTokens", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.LabRequisition", b =>
@@ -538,7 +538,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.HasIndex("LaboratoryId", "OrderingTenantId", "OrderingFacilityId", "ExternalRequisitionId")
                         .IsUnique();
 
-                    b.ToTable("LabRequisitions", "laboratory_dashboard");
+                    b.ToTable("LabRequisitions", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.LabSettings", b =>
@@ -624,7 +624,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("LabSettings", "laboratory_dashboard");
+                    b.ToTable("LabSettings", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.LabStaffMember", b =>
@@ -722,7 +722,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasIndex("LaboratoryId", "Email");
 
-                    b.ToTable("LabStaffMembers", "laboratory_dashboard");
+                    b.ToTable("LabStaffMembers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.Product", b =>
@@ -777,7 +777,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Products", "laboratory_dashboard");
+                    b.ToTable("Products", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.QcLot", b =>
@@ -861,7 +861,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("QcLots", "laboratory_dashboard");
+                    b.ToTable("QcLots", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.QcRun", b =>
@@ -942,7 +942,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasIndex("QcLotId");
 
-                    b.ToTable("QcRuns", "laboratory_dashboard");
+                    b.ToTable("QcRuns", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.Specimen", b =>
@@ -1053,7 +1053,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.HasIndex("LabRequisitionId", "Barcode")
                         .IsUnique();
 
-                    b.ToTable("Specimens", "laboratory_dashboard");
+                    b.ToTable("Specimens", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropInboxMessage", b =>
@@ -1074,7 +1074,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasIndex("ProcessedAtUtc");
 
-                    b.ToTable("interop_inbox", "laboratory_dashboard");
+                    b.ToTable("interop_inbox", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropOutboxMessage", b =>
@@ -1120,7 +1120,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasIndex("DispatchedAtUtc", "DeadLetteredAtUtc", "NextAttemptAtUtc");
 
-                    b.ToTable("interop_outbox", "laboratory_dashboard");
+                    b.ToTable("interop_outbox", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Workspace.WorkspaceProfileRecord", b =>
@@ -1148,7 +1148,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasIndex("TenantSlug");
 
-                    b.ToTable("workspace_profiles", "laboratory_dashboard");
+                    b.ToTable("workspace_profiles", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.AnalyteResult", b =>

@@ -1,0 +1,213 @@
+name: Deploy Interop Hub (Prod)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual production deployment'
+        required: false
+        default: 'Manual production deployment'
+        type: string
+
+env:
+  IMAGE_NAME: interop-hub
+  IMAGE_TAG: ${{ github.event.release.tag_name || 'prod' }}
+  CONTAINER_NAME: interop-hub
+  DEPLOY_DIR: /opt/clinicez/apps/interop-hub
+  ASPNETCORE_ENVIRONMENT: Production
+
+jobs:
+  test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    environment: Production
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' && (
+        startsWith(github.event.release.tag_name, 'interop-hub-') ||
+        startsWith(github.event.release.tag_name, 'interop-hub/') ||
+        startsWith(github.event.release.tag_name, 'interop-hub@')
+      ))
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Run interop hub tests
+      run: dotnet test services/interop-hub/ClinicEz.Interop.Tests/ClinicEz.Interop.Tests.csproj --configuration Release
+
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    environment: Production
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: services/interop-hub/Dockerfile
+        push: false
+        load: true
+        tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Save Docker image to tar.gz
+      run: |
+        docker save ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} | gzip > interop-hub.tar.gz
+        echo "Image size: $(du -sh interop-hub.tar.gz | cut -f1)"
+
+    - name: Upload image artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: interop-hub-docker-image-prod
+        path: interop-hub.tar.gz
+        retention-days: 1
+
+  deploy:
+    name: Deploy to Production Server
+    runs-on: ubuntu-latest
+    environment: Production
+    needs: build
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' && (
+        startsWith(github.event.release.tag_name, 'interop-hub-') ||
+        startsWith(github.event.release.tag_name, 'interop-hub/') ||
+        startsWith(github.event.release.tag_name, 'interop-hub@')
+      ))
+
+    steps:
+    - name: Checkout code (for compose file)
+      uses: actions/checkout@v7
+
+    - name: Create .env file
+      env:
+        ASPNETCORE_ENVIRONMENT: ${{ env.ASPNETCORE_ENVIRONMENT }}
+        CONNECTION_STRING: ${{ secrets.INTEROP_HUB_DB_CONNECTION_STRING }}
+        HUB_PAYLOAD_ENCRYPTION_KEY: ${{ secrets.INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY }}
+        HUB_SIGNING_REQUIRED: ${{ vars.HUB_SIGNING_REQUIRED || 'true' }}
+        IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        CONTAINER_NAME: ${{ env.CONTAINER_NAME }}
+        HUB_CLOUD_CELL_ID: ${{ vars.HUB_CLOUD_CELL_ID || 'cloud' }}
+        PORTAL_HUB_CLIENT_ID: ${{ vars.PORTAL_HUB_CLIENT_ID || secrets.PORTAL_HUB_CLIENT_ID || 'portal' }}
+        PORTAL_HUB_CLIENT_SECRET: ${{ secrets.PORTAL_HUB_CLIENT_SECRET || secrets.INTEROP_HUB_PORTAL_CLIENT_SECRET }}
+        PORTAL_HUB_SIGNING_PUBLIC_KEY: ${{ secrets.PORTAL_HUB_SIGNING_PUBLIC_KEY || vars.PORTAL_HUB_SIGNING_PUBLIC_KEY }}
+        CLINIC_HUB_CLIENT_ID: ${{ vars.CLINIC_HUB_CLIENT_ID || secrets.CLINIC_HUB_CLIENT_ID || 'clinic' }}
+        CLINIC_HUB_CLIENT_SECRET: ${{ secrets.CLINIC_HUB_CLIENT_SECRET }}
+        CLINIC_HUB_SIGNING_PUBLIC_KEY: ${{ secrets.CLINIC_HUB_SIGNING_PUBLIC_KEY || vars.CLINIC_HUB_SIGNING_PUBLIC_KEY }}
+        LABORATORY_HUB_CLIENT_ID: ${{ vars.LABORATORY_HUB_CLIENT_ID || secrets.LABORATORY_HUB_CLIENT_ID || 'laboratory' }}
+        LABORATORY_HUB_CLIENT_SECRET: ${{ secrets.LABORATORY_HUB_CLIENT_SECRET }}
+        LABORATORY_HUB_SIGNING_PUBLIC_KEY: ${{ secrets.LABORATORY_HUB_SIGNING_PUBLIC_KEY || vars.LABORATORY_HUB_SIGNING_PUBLIC_KEY }}
+        PHARMACY_HUB_CLIENT_ID: ${{ vars.PHARMACY_HUB_CLIENT_ID || secrets.PHARMACY_HUB_CLIENT_ID || 'pharmacy' }}
+        PHARMACY_HUB_CLIENT_SECRET: ${{ secrets.PHARMACY_HUB_CLIENT_SECRET }}
+        PHARMACY_HUB_SIGNING_PUBLIC_KEY: ${{ secrets.PHARMACY_HUB_SIGNING_PUBLIC_KEY || vars.PHARMACY_HUB_SIGNING_PUBLIC_KEY }}
+        BILLING_HUB_CLIENT_ID: ${{ vars.BILLING_HUB_CLIENT_ID || secrets.BILLING_HUB_CLIENT_ID || 'billing' }}
+        BILLING_HUB_CLIENT_SECRET: ${{ secrets.BILLING_HUB_CLIENT_SECRET }}
+        BILLING_HUB_SIGNING_PUBLIC_KEY: ${{ secrets.BILLING_HUB_SIGNING_PUBLIC_KEY || vars.BILLING_HUB_SIGNING_PUBLIC_KEY }}
+        ORGANIZATION_HUB_CLIENT_ID: ${{ vars.ORGANIZATION_HUB_CLIENT_ID || secrets.ORGANIZATION_HUB_CLIENT_ID || 'organization' }}
+        ORGANIZATION_HUB_CLIENT_SECRET: ${{ secrets.ORGANIZATION_HUB_CLIENT_SECRET }}
+        ORGANIZATION_HUB_SIGNING_PUBLIC_KEY: ${{ secrets.ORGANIZATION_HUB_SIGNING_PUBLIC_KEY || vars.ORGANIZATION_HUB_SIGNING_PUBLIC_KEY }}
+        PATIENT_HUB_CLIENT_ID: ${{ vars.PATIENT_HUB_CLIENT_ID || secrets.PATIENT_HUB_CLIENT_ID || 'patient' }}
+        PATIENT_HUB_CLIENT_SECRET: ${{ secrets.PATIENT_HUB_CLIENT_SECRET }}
+        PATIENT_HUB_SIGNING_PUBLIC_KEY: ${{ secrets.PATIENT_HUB_SIGNING_PUBLIC_KEY || vars.PATIENT_HUB_SIGNING_PUBLIC_KEY }}
+      run: |
+        . scripts/ci/prepare-key-env.sh
+        prepare_key_env public PORTAL_HUB_SIGNING_PUBLIC_KEY CLINIC_HUB_SIGNING_PUBLIC_KEY LABORATORY_HUB_SIGNING_PUBLIC_KEY PHARMACY_HUB_SIGNING_PUBLIC_KEY BILLING_HUB_SIGNING_PUBLIC_KEY ORGANIZATION_HUB_SIGNING_PUBLIC_KEY PATIENT_HUB_SIGNING_PUBLIC_KEY
+        for var in CONNECTION_STRING PORTAL_HUB_CLIENT_SECRET CLINIC_HUB_CLIENT_SECRET LABORATORY_HUB_CLIENT_SECRET PHARMACY_HUB_CLIENT_SECRET BILLING_HUB_CLIENT_SECRET ORGANIZATION_HUB_CLIENT_SECRET PATIENT_HUB_CLIENT_SECRET; do
+          if [ -z "$(printenv $var)" ]; then
+            echo "::error::$var is not configured. Set the matching GitHub secret (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+        done
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING HUB_PAYLOAD_ENCRYPTION_KEY HUB_SIGNING_REQUIRED IMAGE_NAME IMAGE_TAG CONTAINER_NAME HUB_CLOUD_CELL_ID \
+                   PORTAL_HUB_CLIENT_ID PORTAL_HUB_CLIENT_SECRET PORTAL_HUB_SIGNING_PUBLIC_KEY \
+                   CLINIC_HUB_CLIENT_ID CLINIC_HUB_CLIENT_SECRET CLINIC_HUB_SIGNING_PUBLIC_KEY \
+                   LABORATORY_HUB_CLIENT_ID LABORATORY_HUB_CLIENT_SECRET LABORATORY_HUB_SIGNING_PUBLIC_KEY \
+                   PHARMACY_HUB_CLIENT_ID PHARMACY_HUB_CLIENT_SECRET PHARMACY_HUB_SIGNING_PUBLIC_KEY \
+                   BILLING_HUB_CLIENT_ID BILLING_HUB_CLIENT_SECRET BILLING_HUB_SIGNING_PUBLIC_KEY \
+                   ORGANIZATION_HUB_CLIENT_ID ORGANIZATION_HUB_CLIENT_SECRET ORGANIZATION_HUB_SIGNING_PUBLIC_KEY \
+                   PATIENT_HUB_CLIENT_ID PATIENT_HUB_CLIENT_SECRET PATIENT_HUB_SIGNING_PUBLIC_KEY; do
+          echo "$var=$(printenv $var)" >> deploy/interop-hub/.env
+        done
+
+    - name: Download Docker image artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: interop-hub-docker-image-prod
+
+    - name: Ensure deploy directory exists on server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        script: mkdir -p "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
+
+    - name: Transfer Docker image via SCP
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        source: interop-hub.tar.gz
+        target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
+
+    - name: Transfer docker-compose and .env files via SCP
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        source: "deploy/interop-hub/docker-compose.yml,deploy/interop-hub/.env"
+        target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
+        strip_components: 2
+
+    - name: Load image and deploy on server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        script: |
+          set -e
+          cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
+
+          echo "==> Ensuring networks exist..."
+          docker network inspect "npm-default" >/dev/null 2>&1 || docker network create "npm-default"
+          docker network inspect "data-network" >/dev/null 2>&1 || docker network create "data-network"
+
+          echo "==> Loading Docker image..."
+          docker load < interop-hub.tar.gz
+
+          echo "==> Deploying with docker compose..."
+          docker compose up -d --force-recreate
+
+          echo "==> Cleaning up tarball and old images..."
+          rm -f interop-hub.tar.gz
+          docker image prune -f || true
+
+          echo "==> Verifying container is running..."
+          docker ps --filter "name=${{ env.CONTAINER_NAME }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+          echo "==> Interop Hub Production deployment complete!"

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import WorkstationSidebar from './WorkstationSidebar';
@@ -9,6 +9,7 @@ import { useBreakpoint } from '../../utils/useBreakpoint';
 import { useSidebar } from '../../context/SidebarContext';
 import { useSafeInsets } from '../../utils/useSafeInsets';
 import { useUiDensity } from '../../context/UiDensityContext';
+import { useGlobalSearch } from '../search/GlobalSearchProvider';
 
 export interface ResponsiveLayoutProps {
   children: React.ReactNode;
@@ -35,6 +36,26 @@ export default function ResponsiveLayout({
   const route = useRoute();
   const { mode, cycleMode } = useSidebar();
 
+  let openSearch: (() => void) | undefined;
+  let registerNavigator: (((fn: (targetRoute: string, params?: any) => void) => () => void)) | undefined;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const searchCtx = useGlobalSearch();
+    openSearch = searchCtx.openSearch;
+    registerNavigator = searchCtx.registerNavigator;
+  } catch {
+    openSearch = undefined;
+    registerNavigator = undefined;
+  }
+
+  useEffect(() => {
+    if (registerNavigator) {
+      return registerNavigator((targetRoute, params) => {
+        navigation.navigate(targetRoute, params);
+      });
+    }
+  }, [navigation, registerNavigator]);
+
   const currentRouteName = route?.name ?? 'Dashboard';
 
   const handleNavigate = (targetRoute: string) => {
@@ -46,6 +67,7 @@ export default function ResponsiveLayout({
   useWorkstationShortcuts({
     onNavigate: handleNavigate,
     onToggleSidebar: cycleMode,
+    onOpenSearch: openSearch,
   });
 
   if (!isWorkstation) {
@@ -58,12 +80,13 @@ export default function ResponsiveLayout({
           style,
         ]}
       >
-        {!hideHeader && (headerTitle || rightAction || (actions && actions.length > 0)) ? (
+        {!hideHeader && (headerTitle || rightAction || (actions && actions.length > 0) || openSearch) ? (
           <ClinicHeaderBar
             title={headerTitle}
             subtitle={headerSubtitle}
             actions={actions}
             rightAction={rightAction}
+            onOpenSearch={openSearch}
           />
         ) : null}
         <View style={[styles.content, insets.bottom > 0 && { paddingBottom: insets.bottom }]}>{children}</View>
@@ -99,6 +122,7 @@ export default function ResponsiveLayout({
             subtitle={headerSubtitle}
             actions={actions}
             rightAction={rightAction}
+            onOpenSearch={openSearch}
           />
         )}
         <View style={[styles.content, insets.bottom > 0 && { paddingBottom: insets.bottom }]}>{children}</View>

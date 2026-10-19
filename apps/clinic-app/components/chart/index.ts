@@ -15,6 +15,8 @@ export type { PatientChartModalProps, ChartTab, ChartLayoutMode } from './types'
 export {
   CHART_LAYOUT_OPTIONS,
   DEFAULT_CHART_LAYOUT,
+  DENTAL_CHART_TAB,
+  getAvailableChartTabs,
   type ChartLayoutProps,
   type ChartLayoutOptionMeta,
 } from './types';
@@ -47,6 +49,14 @@ export type { HealthProfilesTabProps, ProfileSubTab } from './HealthProfilesTab'
 
 export { default as ExternalDocumentVaultTab, PHILHEALTH_CHEST_XRAY_FINDINGS, PHILHEALTH_CHEST_XRAY_OBSERVATIONS } from './ExternalDocumentVaultTab';
 export type { ExternalDocumentVaultTabProps } from './ExternalDocumentVaultTab';
+
+export {
+  default as DentalChartTab,
+  getPlainEnglishToothName,
+  getStatusBadgeVariant,
+  getToothStatusColor,
+} from './DentalChartTab';
+export type { DentalChartTabProps } from './DentalChartTab';
 
 // Preserved for backward-compatibility
 export { default as ClinicalHistoryTab } from './ClinicalHistoryTab';

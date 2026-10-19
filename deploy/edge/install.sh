@@ -887,7 +887,7 @@ cmd_status() {
   if [ -n "$body" ]; then echo "Clinic license: $body"; else echo "Clinic license: API not reachable"; fi
   if has_profile local-hub && [ "$UPSTREAM_ENABLED" = true ]; then
     echo -n "Hub outbound queue (messages waiting for the cloud): "
-    dc exec -T postgres psql -U "$POSTGRES_USER" -d CLINICEZ_INTEROP_HUB_LOCAL_DB -tAc 'SELECT count(*) FROM interop_hub."Outbound"' 2>/dev/null || echo "n/a (see README)"
+    dc exec -T postgres psql -U "$POSTGRES_USER" -d CLINICEZ_INTEROP_HUB_LOCAL_DB -tAc 'SELECT count(*) FROM public."Outbound"' 2>/dev/null || echo "n/a (see README)"
   elif has_profile local-hub; then
     echo "Hub upstream: disabled (UPSTREAM_ENABLED=false, air-gapped): same-cell traffic only."
   fi

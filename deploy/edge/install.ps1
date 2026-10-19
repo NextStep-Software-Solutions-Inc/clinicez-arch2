@@ -895,7 +895,7 @@ function Invoke-Status {
   if ((Test-HasProfile 'local-hub') -and $Cfg['UPSTREAM_ENABLED'] -eq 'false') {
     Write-Host 'Hub upstream: disabled (UPSTREAM_ENABLED=false, air-gapped): same-cell traffic only.'
   } elseif (Test-HasProfile 'local-hub') {
-    $n = Get-DcOutput @('exec', '-T', 'postgres', 'psql', '-U', $Cfg['POSTGRES_USER'], '-d', 'CLINICEZ_INTEROP_HUB_LOCAL_DB', '-tAc', 'SELECT count(*) FROM interop_hub."Outbound"')
+    $n = Get-DcOutput @('exec', '-T', 'postgres', 'psql', '-U', $Cfg['POSTGRES_USER'], '-d', 'CLINICEZ_INTEROP_HUB_LOCAL_DB', '-tAc', 'SELECT count(*) FROM public."Outbound"')
     if (-not $n) { $n = 'n/a (see README)' }
     Write-Host "Hub outbound queue (messages waiting for the cloud): $n"
   }

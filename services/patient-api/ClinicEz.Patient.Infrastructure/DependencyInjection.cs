@@ -64,8 +64,7 @@ public static class DependencyInjection
             options
                 .UseNpgsql(connectionString, npgsql =>
                     npgsql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName))
-                .UseSnakeCaseNamingConvention()
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
+                .UseSnakeCaseNamingConvention());
 
 
         services.AddHangfire(config => config

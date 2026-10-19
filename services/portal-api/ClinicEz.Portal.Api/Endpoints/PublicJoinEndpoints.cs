@@ -178,29 +178,36 @@ public sealed class PublicJoinEndpoints : IEndpoint
         // 5. If Email is Provided, Enqueue notification.email.requested to Interop Hub (Strictly 0 SMS)
         if (!string.IsNullOrWhiteSpace(payload.Email))
         {
-            var baseUrl = frontendUrlProvider.GetBaseUrl()?.TrimEnd('/') ?? "https://portal.clinicez.com";
-            var claimUrl = $"{baseUrl}/join/claim?token={Uri.EscapeDataString(claimToken)}";
+            var baseUrl = frontendUrlProvider.GetBaseUrl()?.TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                logger.LogWarning("Account claim email for join request {TrackingId} skipped: frontend address could not be resolved (set FrontendBaseUrl or Facility:BaseDomain).", trackingId);
+            }
+            else
+            {
+                var claimUrl = $"{baseUrl}/join/claim?token={Uri.EscapeDataString(claimToken)}";
 
-            publisher.Enqueue(
-                InteropTypes.NotificationEmailRequested,
-                Party.Portal,
-                Party.Portal,
-                trackingId,
-                new NotificationEmailRequestedPayload
-                {
-                    To = payload.Email.Trim(),
-                    Subject = $"Your Registration Pass & Account Claim Link - {facility.Name ?? facility.Slug}",
-                    TemplateKey = EmailTemplateKeys.PatientClaimInvitation,
-                    Model = new Dictionary<string, string>
+                publisher.Enqueue(
+                    InteropTypes.NotificationEmailRequested,
+                    Party.Portal,
+                    Party.Portal,
+                    trackingId,
+                    new NotificationEmailRequestedPayload
                     {
-                        ["patientName"] = $"{payload.FirstName} {payload.LastName}".Trim(),
-                        ["facilityName"] = facility.Name ?? facility.Slug,
-                        ["claimUrl"] = claimUrl,
-                        ["ttlHours"] = ttlHours.ToString(),
-                        ["expiresAt"] = expiresAt.ToString("yyyy-MM-dd HH:mm UTC")
-                    },
-                    FromFacilityName = facility.Name ?? tenant.Name
-                });
+                        To = payload.Email.Trim(),
+                        Subject = $"Your Registration Pass & Account Claim Link - {facility.Name ?? facility.Slug}",
+                        TemplateKey = EmailTemplateKeys.PatientClaimInvitation,
+                        Model = new Dictionary<string, string>
+                        {
+                            ["patientName"] = $"{payload.FirstName} {payload.LastName}".Trim(),
+                            ["facilityName"] = facility.Name ?? facility.Slug,
+                            ["claimUrl"] = claimUrl,
+                            ["ttlHours"] = ttlHours.ToString(),
+                            ["expiresAt"] = expiresAt.ToString("yyyy-MM-dd HH:mm UTC")
+                        },
+                        FromFacilityName = facility.Name ?? tenant.Name
+                    });
+            }
         }
 
         await context.SaveChangesAsync(ct);

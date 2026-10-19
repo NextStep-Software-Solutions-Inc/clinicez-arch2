@@ -39,6 +39,7 @@ public class SystemSettingsTests
         Assert.NotEmpty(settings);
         Assert.Contains(settings, s => s.Key == "Licensing:TtlDays" && s.Value == "30");
         Assert.Contains(settings, s => s.Key == "Billing:TrialDays" && s.Value == "14");
+        Assert.Contains(settings, s => s.Key == "Billing:IsOnlinePaymentReady" && s.Value == "false");
         Assert.Contains(settings, s => s.Key == "Billing:BankAccountsJson" && s.Value.Contains("BDO Unibank"));
         Assert.Contains(settings, s => s.Key == "Billing:BirTaxExempt" && s.Value == "false");
         Assert.Contains(settings, s => s.Key == "Billing:BirTaxPercentage" && s.Value == "12");
@@ -77,6 +78,25 @@ public class SystemSettingsTests
         var updatedConfig = await service.GetContactPlatformConfigAsync();
         Assert.Equal("help@clinicez.ph", updatedConfig.SupportEmail);
         Assert.Equal("+63 2 8123 4567", updatedConfig.PhoneNumber);
+    }
+
+    [Fact]
+    public async Task GetBillingPaymentConfigAsync_ReturnsIsOnlinePaymentReadyDefaultAndReflectsUpdates()
+    {
+        using var db = CreateDbContext();
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new SystemSettingsService(db, cache, NullLogger<SystemSettingsService>.Instance);
+
+        var defaultConfig = await service.GetBillingPaymentConfigAsync();
+        Assert.False(defaultConfig.IsOnlinePaymentReady);
+
+        await service.UpdateSettingsAsync(new Dictionary<string, string>
+        {
+            ["Billing:IsOnlinePaymentReady"] = "true"
+        }, "AdminUser");
+
+        var updatedConfig = await service.GetBillingPaymentConfigAsync();
+        Assert.True(updatedConfig.IsOnlinePaymentReady);
     }
 
     [Fact]
@@ -225,6 +245,43 @@ public class SystemSettingsTests
         Assert.Single(providersPayload.Data!);
         Assert.Contains("Maria Santos", providersPayload.Data![0].Name);
         Assert.Contains("Family Medicine Physician", providersPayload.Data![0].Specialty);
+    }
+
+    [Fact]
+    public async Task GetBillingPaymentConfigAsync_ReturnsTrialDaysDefaultAndReflectsUpdates()
+    {
+        using var db = CreateDbContext();
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new SystemSettingsService(db, cache, NullLogger<SystemSettingsService>.Instance);
+
+        var defaultConfig = await service.GetBillingPaymentConfigAsync();
+        Assert.Equal(14, defaultConfig.TrialDays);
+
+        await service.UpdateSettingsAsync(new Dictionary<string, string>
+        {
+            ["Billing:TrialDays"] = "30"
+        }, "AdminUser");
+
+        var updatedConfig = await service.GetBillingPaymentConfigAsync();
+        Assert.Equal(30, updatedConfig.TrialDays);
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("-14")]
+    [InlineData("invalid")]
+    public async Task UpdateSettingsAsync_RejectsNegativeOrNonIntegerTrialDays(string invalidVal)
+    {
+        using var db = CreateDbContext();
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new SystemSettingsService(db, cache, NullLogger<SystemSettingsService>.Instance);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateSettingsAsync(new Dictionary<string, string>
+        {
+            ["Billing:TrialDays"] = invalidVal
+        }, "AdminUser"));
+
+        Assert.Contains("Billing:TrialDays", ex.Message);
     }
 }
 

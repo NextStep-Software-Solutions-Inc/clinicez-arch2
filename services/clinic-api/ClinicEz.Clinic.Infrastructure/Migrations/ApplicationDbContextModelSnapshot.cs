@@ -17,7 +17,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("clinic_dashboard")
+                .HasDefaultSchema("public")
                 .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -132,7 +132,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ClinicId", "DoctorId", "ScheduledAt", "EndTimeUtc");
 
-                    b.ToTable("Appointments", "clinic_dashboard");
+                    b.ToTable("Appointments", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicAuditEntry", b =>
@@ -258,7 +258,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "Timestamp");
 
-                    b.ToTable("ClinicAuditEntries", "clinic_dashboard");
+                    b.ToTable("ClinicAuditEntries", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicCustomFieldDefinition", b =>
@@ -347,7 +347,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "EntityType", "FieldKey");
 
-                    b.ToTable("CustomFieldDefinitions", "clinic_dashboard");
+                    b.ToTable("CustomFieldDefinitions", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicLabOrder", b =>
@@ -519,7 +519,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId", "OrderNumber")
                         .IsUnique();
 
-                    b.ToTable("LabOrders", "clinic_dashboard");
+                    b.ToTable("LabOrders", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicLabOrderItem", b =>
@@ -556,7 +556,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("LabOrderId");
 
-                    b.ToTable("LabOrderItems", "clinic_dashboard");
+                    b.ToTable("LabOrderItems", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicLabResult", b =>
@@ -685,7 +685,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ClinicId", "Verification", "SubmittedAt");
 
-                    b.ToTable("LabResults", "clinic_dashboard");
+                    b.ToTable("LabResults", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicPatient", b =>
@@ -864,7 +864,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "LastName", "FirstName");
 
-                    b.ToTable("Patients", "clinic_dashboard");
+                    b.ToTable("Patients", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicRecordAttachment", b =>
@@ -1002,7 +1002,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("RecordAttachments", "clinic_dashboard");
+                    b.ToTable("RecordAttachments", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicRefreshToken", b =>
@@ -1074,7 +1074,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TokenHash")
                         .IsUnique();
 
-                    b.ToTable("RefreshTokens", "clinic_dashboard");
+                    b.ToTable("RefreshTokens", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicRole", b =>
@@ -1133,7 +1133,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId");
 
-                    b.ToTable("ClinicRoles", "clinic_dashboard");
+                    b.ToTable("ClinicRoles", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicRoom", b =>
@@ -1204,7 +1204,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "DisplayOrder");
 
-                    b.ToTable("ClinicRooms", "clinic_dashboard");
+                    b.ToTable("ClinicRooms", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicServiceItem", b =>
@@ -1284,7 +1284,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId", "Code")
                         .IsUnique();
 
-                    b.ToTable("ServiceItems", "clinic_dashboard");
+                    b.ToTable("ServiceItems", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicSettings", b =>
@@ -1334,6 +1334,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<bool>("EnableDentalModule")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("EnableQueuePushNotifications")
                         .ValueGeneratedOnAdd()
@@ -1466,6 +1469,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("SpecialtyMode")
+                        .HasColumnType("text");
+
                     b.Property<int>("StaffNotificationRetentionDays")
                         .HasColumnType("integer");
 
@@ -1501,7 +1507,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId")
                         .IsUnique();
 
-                    b.ToTable("ClinicSettings", "clinic_dashboard");
+                    b.ToTable("ClinicSettings", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicStaffNotification", b =>
@@ -1587,7 +1593,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ClinicId", "IsRead", "CreatedAt");
 
-                    b.ToTable("clinic_staff_notifications", "clinic_dashboard");
+                    b.ToTable("clinic_staff_notifications", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicalProcedure", b =>
@@ -1699,6 +1705,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("TenantId")
                         .HasColumnType("text");
 
+                    b.Property<int?>("ToothNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ToothSurface")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1711,7 +1724,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("Procedures", "clinic_dashboard");
+                    b.ToTable("Procedures", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ConsultationEncounter", b =>
@@ -1936,7 +1949,80 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("Consultations", "clinic_dashboard");
+                    b.ToTable("Consultations", "public");
+                });
+
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.DentalToothRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ConsultationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PatientName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Surface")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("ToothNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClinicId", "ConsultationId");
+
+                    b.HasIndex("ClinicId", "PatientId", "ToothNumber");
+
+                    b.HasIndex("TenantId", "ClinicId", "PatientId");
+
+                    b.ToTable("DentalToothRecords", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.DoctorBreakTime", b =>
@@ -1985,7 +2071,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TemplateId");
 
-                    b.ToTable("DoctorBreakTimes", "clinic_dashboard");
+                    b.ToTable("DoctorBreakTimes", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.DoctorLeave", b =>
@@ -2061,7 +2147,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ClinicId", "DoctorId", "StartDate", "EndDate");
 
-                    b.ToTable("DoctorLeaves", "clinic_dashboard");
+                    b.ToTable("DoctorLeaves", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.DoctorScheduleOverride", b =>
@@ -2134,7 +2220,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ClinicId", "DoctorId", "Date");
 
-                    b.ToTable("DoctorScheduleOverrides", "clinic_dashboard");
+                    b.ToTable("DoctorScheduleOverrides", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.DoctorScheduleTemplate", b =>
@@ -2217,7 +2303,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ClinicId", "DoctorId", "DayOfWeek", "IsActive");
 
-                    b.ToTable("DoctorScheduleTemplates", "clinic_dashboard");
+                    b.ToTable("DoctorScheduleTemplates", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.EncounterDiagnosis", b =>
@@ -2268,7 +2354,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ConsultationEncounterId");
 
-                    b.ToTable("Diagnoses", "clinic_dashboard");
+                    b.ToTable("Diagnoses", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.EodReconciliationAudit", b =>
@@ -2341,7 +2427,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "ReconciliationDate");
 
-                    b.ToTable("EodReconciliationAudits", "clinic_dashboard");
+                    b.ToTable("EodReconciliationAudits", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.IdempotencyRecord", b =>
@@ -2414,7 +2500,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("Scope", "Key")
                         .IsUnique();
 
-                    b.ToTable("IdempotencyRecords", "clinic_dashboard");
+                    b.ToTable("IdempotencyRecords", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.Invoice", b =>
@@ -2542,7 +2628,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId", "InvoiceNumber")
                         .IsUnique();
 
-                    b.ToTable("Invoices", "clinic_dashboard");
+                    b.ToTable("Invoices", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.InvoiceLineItem", b =>
@@ -2585,7 +2671,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("InvoiceId");
 
-                    b.ToTable("InvoiceLineItems", "clinic_dashboard");
+                    b.ToTable("InvoiceLineItems", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.MedicalCertificate", b =>
@@ -2701,7 +2787,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("MedicalCertificates", "clinic_dashboard");
+                    b.ToTable("MedicalCertificates", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.NcdRiskAssessment", b =>
@@ -2888,7 +2974,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("NcdRiskAssessments", "clinic_dashboard");
+                    b.ToTable("NcdRiskAssessments", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientAllergy", b =>
@@ -2974,7 +3060,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("PatientAllergies", "clinic_dashboard");
+                    b.ToTable("PatientAllergies", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientCodeSequenceTracker", b =>
@@ -3028,7 +3114,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId", "Year")
                         .IsUnique();
 
-                    b.ToTable("PatientCodeSequenceTrackers", "clinic_dashboard");
+                    b.ToTable("PatientCodeSequenceTrackers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientFamilyHistory", b =>
@@ -3103,7 +3189,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("PatientFamilyHistories", "clinic_dashboard");
+                    b.ToTable("PatientFamilyHistories", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientImmunization", b =>
@@ -3260,7 +3346,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("PatientImmunizations", "clinic_dashboard");
+                    b.ToTable("PatientImmunizations", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientPastMedicalHistory", b =>
@@ -3337,7 +3423,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("PatientPastMedicalHistories", "clinic_dashboard");
+                    b.ToTable("PatientPastMedicalHistories", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientPhysicalExamProfile", b =>
@@ -3486,7 +3572,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId", "PatientId")
                         .IsUnique();
 
-                    b.ToTable("PatientPhysicalExamProfiles", "clinic_dashboard");
+                    b.ToTable("PatientPhysicalExamProfiles", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientProblem", b =>
@@ -3584,7 +3670,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("PatientProblems", "clinic_dashboard");
+                    b.ToTable("PatientProblems", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientReproductiveHistory", b =>
@@ -3694,7 +3780,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId", "PatientId")
                         .IsUnique();
 
-                    b.ToTable("PatientReproductiveHistories", "clinic_dashboard");
+                    b.ToTable("PatientReproductiveHistories", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientSocialHistory", b =>
@@ -3806,7 +3892,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId", "PatientId")
                         .IsUnique();
 
-                    b.ToTable("PatientSocialHistories", "clinic_dashboard");
+                    b.ToTable("PatientSocialHistories", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PatientSurgicalHistory", b =>
@@ -3878,7 +3964,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
-                    b.ToTable("PatientSurgicalHistories", "clinic_dashboard");
+                    b.ToTable("PatientSurgicalHistories", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PaymentRecord", b =>
@@ -3952,7 +4038,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("InvoiceId");
 
-                    b.ToTable("Payments", "clinic_dashboard");
+                    b.ToTable("Payments", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PhilHealthCatalogImportLog", b =>
@@ -4031,7 +4117,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("Library", "CreatedAt");
 
-                    b.ToTable("PhilHealthCatalogImportLogs", "clinic_dashboard");
+                    b.ToTable("PhilHealthCatalogImportLogs", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PhilHealthCatalogItem", b =>
@@ -4100,7 +4186,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("Library", "ItemKey")
                         .IsUnique();
 
-                    b.ToTable("PhilHealthCatalogItems", "clinic_dashboard");
+                    b.ToTable("PhilHealthCatalogItems", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PhilHealthSequenceTracker", b =>
@@ -4155,7 +4241,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PhilHealthSequenceTrackers", "clinic_dashboard");
+                    b.ToTable("PhilHealthSequenceTrackers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PrescriptionItem", b =>
@@ -4235,7 +4321,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ConsultationEncounterId");
 
-                    b.ToTable("Prescriptions", "clinic_dashboard");
+                    b.ToTable("Prescriptions", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.Product", b =>
@@ -4282,7 +4368,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Products", "clinic_dashboard");
+                    b.ToTable("Products", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.QueueItem", b =>
@@ -4401,7 +4487,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "QueueDate");
 
-                    b.ToTable("QueueItems", "clinic_dashboard");
+                    b.ToTable("QueueItems", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ReferralLetter", b =>
@@ -4516,7 +4602,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId", "ReferralNumber")
                         .IsUnique();
 
-                    b.ToTable("ReferralLetters", "clinic_dashboard");
+                    b.ToTable("ReferralLetters", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ShareImport", b =>
@@ -4637,7 +4723,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ClinicId", "RequestedAt");
 
-                    b.ToTable("ShareImports", "clinic_dashboard");
+                    b.ToTable("ShareImports", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.StaffMember", b =>
@@ -4761,7 +4847,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId");
 
-                    b.ToTable("StaffMembers", "clinic_dashboard");
+                    b.ToTable("StaffMembers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.TriageVitals", b =>
@@ -4927,7 +5013,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("QueueItemId")
                         .IsUnique();
 
-                    b.ToTable("TriageVitals", "clinic_dashboard");
+                    b.ToTable("TriageVitals", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.UploadGrant", b =>
@@ -5000,7 +5086,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ClinicId", "LabOrderId");
 
-                    b.ToTable("UploadGrants", "clinic_dashboard");
+                    b.ToTable("UploadGrants", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.YakapTransmittal", b =>
@@ -5095,7 +5181,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "TransmittalNumber");
 
-                    b.ToTable("YakapTransmittals", "clinic_dashboard");
+                    b.ToTable("YakapTransmittals", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.YakapTransmittalItem", b =>
@@ -5180,7 +5266,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "YakapTransmittalId");
 
-                    b.ToTable("YakapTransmittalItems", "clinic_dashboard");
+                    b.ToTable("YakapTransmittalItems", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropInboxMessage", b =>
@@ -5201,7 +5287,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("ProcessedAtUtc");
 
-                    b.ToTable("interop_inbox", "clinic_dashboard");
+                    b.ToTable("interop_inbox", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropOutboxMessage", b =>
@@ -5247,7 +5333,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("DispatchedAtUtc", "DeadLetteredAtUtc", "NextAttemptAtUtc");
 
-                    b.ToTable("interop_outbox", "clinic_dashboard");
+                    b.ToTable("interop_outbox", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Workspace.WorkspaceProfileRecord", b =>
@@ -5275,7 +5361,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantSlug");
 
-                    b.ToTable("workspace_profiles", "clinic_dashboard");
+                    b.ToTable("workspace_profiles", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicLabOrderItem", b =>

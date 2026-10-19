@@ -29,11 +29,7 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection");
 
-        var schemaName = configuration["DbSchema"];
-        if (string.IsNullOrEmpty(schemaName))
-        {
-            throw new InvalidOperationException("DbSchema configuration value is required but was not specified.");
-        }
+        var schemaName = configuration["DbSchema"] ?? "public";
 
         services.AddDbContext<ApplicationDbContext>(options =>
         {
@@ -41,7 +37,6 @@ public static class DependencyInjection
             {
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", schemaName);
             });
-            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });
         // Register repositories and Unit of Work
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));

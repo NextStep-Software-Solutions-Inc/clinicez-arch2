@@ -43,7 +43,7 @@ public class ChallengerM1_2AdversarialVerificationTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 

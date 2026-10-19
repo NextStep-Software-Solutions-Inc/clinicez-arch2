@@ -85,7 +85,7 @@ Standard ASP.NET Core configuration: `appsettings*.json`, environment variables 
 | Key | Default | Meaning |
 |---|---|---|
 | `ConnectionStrings:DefaultConnection` | none | PostgreSQL (database `CLINICEZ_INTEROP_HUB_DB` in the shared stack). Required. |
-| `DbSchema` | `interop_hub` | Schema for all tables and the migrations history. |
+| `DbSchema` | `public` | Schema for all tables and the migrations history. |
 | `Hub:Mode` | `Cloud` | `Cloud` or `Local`. |
 | `Hub:CloudCellId` | `cloud` | Id of the cloud cell. |
 | `Hub:LocalCellId` | empty | Local mode: the edge cell this hub serves. Required in Local mode. |

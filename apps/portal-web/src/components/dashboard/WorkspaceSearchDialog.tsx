@@ -49,6 +49,8 @@ import { Badge } from "@/components/ui/badge";
 import { branchService, type BranchDto } from "@/services/branch.service";
 import { staffService, type StaffMemberDto } from "@/services/staff.service";
 import { cn } from "@/lib/utils";
+import { universalSearchRegistry } from "@shared/safe";
+import { registerPortalSearchContributors } from "@/services/portalSearchContributors";
 
 export type SearchCategory = "actions" | "navigation" | "branches" | "facilities" | "team";
 
@@ -56,7 +58,7 @@ export interface SearchItem {
   id: string;
   title: string;
   subtitle?: string;
-  category: SearchCategory;
+  category: SearchCategory | string;
   categoryLabel: string;
   icon: React.ComponentType<{ className?: string }>;
   url: string;
@@ -64,6 +66,7 @@ export interface SearchItem {
   badge?: string;
   badgeClass?: string;
   isSuggested?: boolean;
+  onSelect?: () => void;
   _corpus?: string;
 }
 
@@ -607,6 +610,30 @@ export function filterSearchItems(
   return typeof limit === "number" && limit > 0 ? matched.slice(0, limit) : matched;
 }
 
+export function groupSearchResults(
+  visibleResults: SearchItem[]
+): Map<string, { items: SearchItem[]; startIndex: number; label: string }> {
+  const map = new Map<string, { items: SearchItem[]; startIndex: number; label: string }>();
+  const visibleCategories = Array.from(new Set(visibleResults.map((i) => i.category)));
+  const sortedCategories = [
+    ...CATEGORY_ORDER.filter((cat) => visibleCategories.includes(cat)),
+    ...visibleCategories.filter((cat) => !CATEGORY_ORDER.includes(cat as SearchCategory)),
+  ];
+  let runningIndex = 0;
+  for (const cat of sortedCategories) {
+    const itemsInCat = visibleResults.filter((item) => item.category === cat);
+    if (itemsInCat.length > 0) {
+      const label =
+        CATEGORY_LABELS[cat as SearchCategory] ||
+        itemsInCat[0]?.categoryLabel ||
+        cat.charAt(0).toUpperCase() + cat.slice(1);
+      map.set(cat, { items: itemsInCat, startIndex: runningIndex, label });
+      runningIndex += itemsInCat.length;
+    }
+  }
+  return map;
+}
+
 export default function WorkspaceSearchDialog({
   open: openProp,
   onOpenChange,
@@ -668,6 +695,18 @@ export default function WorkspaceSearchDialog({
       setStaff(initialStaff);
     }
   }, [initialStaff]);
+
+  // Register portal search contributors in universalSearchRegistry on mount/update and unregister on unmount
+  useEffect(() => {
+    const unregister = registerPortalSearchContributors({
+      tenantSlug,
+      branches,
+      staff,
+    });
+    return () => {
+      unregister();
+    };
+  }, [tenantSlug, branches, staff]);
 
   const setOpen = useCallback(
     (nextOpen: boolean | ((prev: boolean) => boolean)) => {
@@ -780,10 +819,70 @@ export default function WorkspaceSearchDialog({
     return [...actionItems, ...navItems, ...branchItems, ...staffItems];
   }, [tenantSlug, branches, staff]);
 
+  const [universalResults, setUniversalResults] = useState<SearchItem[] | null>(null);
+
+  // Execute queries through universalSearchRegistry.search(query, { signal }) when available
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setUniversalResults(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    universalSearchRegistry
+      .search(trimmed, { signal: controller.signal })
+      .then((items) => {
+        if (cancelled) return;
+        const localIdSet = new Set(allIndexItems.map((i) => i.id));
+        const externalItems = (items || []).filter((item) => !localIdSet.has(item.id));
+        if (externalItems.length > 0) {
+          const mappedExternal: SearchItem[] = externalItems.map((uItem) => ({
+            id: uItem.id,
+            title: uItem.title,
+            subtitle: uItem.subtitle,
+            category: uItem.category || "navigation",
+            categoryLabel: (uItem as any).categoryLabel || uItem.category || "General",
+            icon: IconSearch,
+            url: uItem.targetRoute || `/${tenantSlug}/dashboard/overview`,
+            badge: uItem.badgeText || uItem.badge?.text,
+            badgeClass:
+              uItem.badgeVariant === "emergency"
+                ? "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
+                : uItem.badgeVariant === "urgent"
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                : uItem.badgeVariant === "routine"
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border/60 bg-muted text-muted-foreground",
+            onSelect: uItem.onSelect,
+          }));
+          setUniversalResults(mappedExternal);
+        } else {
+          setUniversalResults(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.warn("[WorkspaceSearchDialog] Universal search query error:", err);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [query, allIndexItems, tenantSlug]);
+
   // Filtered results
   const filteredResults = useMemo<SearchItem[]>(() => {
-    return filterSearchItems(allIndexItems, query);
-  }, [allIndexItems, query]);
+    const localMatches = filterSearchItems(allIndexItems, query);
+    if (universalResults && universalResults.length > 0) {
+      return [...localMatches, ...universalResults];
+    }
+    return localMatches;
+  }, [allIndexItems, query, universalResults]);
 
   // High-volume performance optimization: cap rendered DOM elements to 60 items
   const MAX_RENDERED_RESULTS = 60;
@@ -791,15 +890,25 @@ export default function WorkspaceSearchDialog({
     return filteredResults.slice(0, MAX_RENDERED_RESULTS);
   }, [filteredResults]);
 
-  // Keep active index within bounds of visibleResults
-  useEffect(() => {
-    if (activeIndex >= visibleResults.length) {
-      setActiveIndex(Math.max(0, visibleResults.length - 1));
-    }
-  }, [visibleResults.length, activeIndex]);
+  // Group visible results by category for clear visual hierarchy
+  const groupedResults = useMemo(() => {
+    return groupSearchResults(visibleResults);
+  }, [visibleResults]);
 
-  const activeOptionId = visibleResults[activeIndex]
-    ? `workspace-search-opt-${(visibleResults[activeIndex].id || "").replace(/[^\w-]/g, "_")}`
+  // Derive synchronized flattened results matching visual DOM render order
+  const flattenedResults = useMemo(() => {
+    return Array.from(groupedResults.values()).flatMap((g) => g.items);
+  }, [groupedResults]);
+
+  // Keep active index within bounds of flattenedResults
+  useEffect(() => {
+    if (activeIndex >= flattenedResults.length) {
+      setActiveIndex(Math.max(0, flattenedResults.length - 1));
+    }
+  }, [flattenedResults.length, activeIndex]);
+
+  const activeOptionId = flattenedResults[activeIndex]
+    ? `workspace-search-opt-${(flattenedResults[activeIndex].id || "").replace(/[^\w-]/g, "_")}`
     : undefined;
 
   // Scroll active item into view reliably using its unique activeOptionId
@@ -823,6 +932,7 @@ export default function WorkspaceSearchDialog({
       inputRef.current?.blur();
       setOpen(false);
       forceReleaseBodyScrollLock();
+      item.onSelect?.();
       router.push(item.url);
     },
     [router, setOpen, pathname]
@@ -830,7 +940,7 @@ export default function WorkspaceSearchDialog({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.nativeEvent.isComposing) return;
-    if (visibleResults.length === 0) {
+    if (flattenedResults.length === 0) {
       if (e.key === "Escape") {
         e.preventDefault();
         setOpen(false);
@@ -840,19 +950,19 @@ export default function WorkspaceSearchDialog({
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((prev) => (prev + 1) % visibleResults.length);
+      setActiveIndex((prev) => (prev + 1) % flattenedResults.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((prev) => (prev - 1 + visibleResults.length) % visibleResults.length);
+      setActiveIndex((prev) => (prev - 1 + flattenedResults.length) % flattenedResults.length);
     } else if (e.key === "PageDown") {
       e.preventDefault();
-      setActiveIndex((prev) => Math.min(visibleResults.length - 1, prev + 5));
+      setActiveIndex((prev) => Math.min(flattenedResults.length - 1, prev + 5));
     } else if (e.key === "PageUp") {
       e.preventDefault();
       setActiveIndex((prev) => Math.max(0, prev - 5));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const selected = visibleResults[activeIndex];
+      const selected = flattenedResults[activeIndex];
       if (selected) {
         handleSelectItem(selected);
       }
@@ -861,25 +971,6 @@ export default function WorkspaceSearchDialog({
       setOpen(false);
     }
   };
-
-  // Group visible results by category for clear visual hierarchy
-  const groupedResults = useMemo(() => {
-    const map = new Map<SearchCategory, { items: SearchItem[]; startIndex: number }>();
-
-    let runningIndex = 0;
-    for (const cat of CATEGORY_ORDER) {
-      const itemsInCat = visibleResults.filter((item) => item.category === cat);
-      if (itemsInCat.length > 0) {
-        map.set(cat, {
-          items: itemsInCat,
-          startIndex: runningIndex,
-        });
-        runningIndex += itemsInCat.length;
-      }
-    }
-
-    return map;
-  }, [visibleResults]);
 
   const isZeroState = !query.trim();
 
@@ -1034,8 +1125,11 @@ export default function WorkspaceSearchDialog({
           ) : (
             <>
               {/* Grouped Results with WAI-ARIA role="group" */}
-              {Array.from(groupedResults.entries()).map(([category, { items, startIndex }]) => {
-                const categoryTitle = CATEGORY_LABELS[category];
+              {Array.from(groupedResults.entries()).map(([category, categoryData]) => {
+                const { items, startIndex } = categoryData;
+                // aria-label={categoryData.label || CATEGORY_LABELS[category as SearchCategory] || categoryTitle}
+                const categoryTitle =
+                  categoryData.label || CATEGORY_LABELS[category as SearchCategory] || category;
 
                 return (
                   <div
@@ -1049,7 +1143,7 @@ export default function WorkspaceSearchDialog({
                       aria-hidden="true"
                       className="px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 flex items-center justify-between select-none"
                     >
-                      <span>{categoryTitle}</span>
+                      <span>{categoryData.label || CATEGORY_LABELS[category as SearchCategory] || category}</span>
                       {isZeroState && category === "actions" && (
                         <span className="text-[10px] lowercase font-normal text-muted-foreground/50">
                           Suggested

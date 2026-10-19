@@ -83,7 +83,7 @@ public class LabEntitlementsTests
     private static ApplicationDbContext CreateDb(string dbName, ILabContext? labContext = null)
     {
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["DbSchema"] = "laboratory_dashboard" })
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["DbSchema"] = "public" })
             .Build();
         var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(dbName).Options;
         return new ApplicationDbContext(options, config, labContext);
@@ -193,7 +193,7 @@ public class LabEntitlementsTests
             ["Messaging:Transport"] = "InProcess",
             ["Messaging:Service"] = InteropServices.Laboratory,
             ["Messaging:Enabled"] = "false",
-            ["DbSchema"] = "laboratory_dashboard"
+            ["DbSchema"] = "public"
         }).Build();
 
         var services = new ServiceCollection();

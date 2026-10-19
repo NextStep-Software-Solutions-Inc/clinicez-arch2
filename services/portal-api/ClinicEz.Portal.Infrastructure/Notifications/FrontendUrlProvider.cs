@@ -16,9 +16,29 @@ public sealed class FrontendUrlProvider(IConfiguration configuration, IHttpConte
         if (configured is not null) return configured;
 
         var request = httpContextAccessor.HttpContext?.Request;
-        if (request is null) return null;
+        if (request is not null)
+        {
+            var headerUrl = Normalize(request.Headers.Origin.ToString()) ?? Normalize(request.Headers.Referer.ToString());
+            if (headerUrl is not null) return headerUrl;
 
-        return Normalize(request.Headers.Origin.ToString()) ?? Normalize(request.Headers.Referer.ToString());
+            var forwardedHost = request.Headers["X-Forwarded-Host"].ToString();
+            var host = !string.IsNullOrWhiteSpace(forwardedHost) ? forwardedHost.Split(',')[0].Trim() : request.Host.Value;
+            if (!string.IsNullOrWhiteSpace(host))
+            {
+                var proto = request.Headers["X-Forwarded-Proto"].ToString();
+                var scheme = !string.IsNullOrWhiteSpace(proto) ? proto.Split(',')[0].Trim() : (request.Scheme ?? "https");
+                var candidate = Normalize($"{scheme}://{host}");
+                if (candidate is not null) return candidate;
+            }
+        }
+
+        var baseDomain = configuration["Facility:BaseDomain"]?.Trim().TrimStart('.');
+        if (!string.IsNullOrWhiteSpace(baseDomain))
+        {
+            return $"https://portal.{baseDomain}";
+        }
+
+        return null;
     }
 
     private static string? Normalize(string? value)

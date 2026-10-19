@@ -12,6 +12,7 @@ import { StaffProvider } from './context/StaffContext';
 import { SidebarProvider } from './context/SidebarContext';
 import { FeedbackHost, initModalStackObserver } from './components/ui';
 import { OfflineSyncRunner } from './components/OfflineSyncRunner';
+import { GlobalSearchProvider } from './components/search/GlobalSearchProvider';
 import ErrorBoundary from './components/ErrorBoundary';
 import { CrashRecoveryBanner } from './components/CrashRecoveryBanner';
 import { TextScaleProvider } from './context/TextScaleContext';
@@ -62,7 +63,9 @@ export default function App() {
                     <StaffProvider>
                       <SidebarProvider>
                         <OfflineSyncRunner />
-                        <Navigation linking={linkingOptions} theme={navigationTheme} />
+                        <GlobalSearchProvider>
+                          <Navigation linking={linkingOptions} theme={navigationTheme} />
+                        </GlobalSearchProvider>
                       </SidebarProvider>
                     </StaffProvider>
                   </ClinicProvider>

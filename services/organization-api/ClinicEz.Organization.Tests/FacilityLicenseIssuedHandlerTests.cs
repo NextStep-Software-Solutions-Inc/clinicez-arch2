@@ -34,7 +34,7 @@ internal sealed class OrganizationInteropHost : IDisposable
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["DbSchema"] = "organization_dashboard",
+            ["DbSchema"] = "public",
             ["Messaging:Transport"] = "InProcess",
             ["Messaging:Service"] = InteropServices.Organization,
             ["Messaging:Enabled"] = "false"

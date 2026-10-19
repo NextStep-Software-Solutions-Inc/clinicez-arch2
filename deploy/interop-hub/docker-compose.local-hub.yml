@@ -33,7 +33,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=hub-db;Database=${LOCAL_DB_NAME:-CLINICEZ_INTEROP_HUB_LOCAL_DB};Username=${LOCAL_DB_USER:-interop_hub};Password=${LOCAL_DB_PASSWORD}
-      - DbSchema=${DB_SCHEMA:-interop_hub}
+      - DbSchema=${DB_SCHEMA:-public}
       - Hub__Mode=Local
       - Hub__Database__AutoMigrate=true
       - Hub__LocalCellId=${LOCAL_CELL_ID:?LOCAL_CELL_ID must be set}

@@ -56,7 +56,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        const string schemaName = "main";
+        const string schemaName = "public";
         modelBuilder.HasDefaultSchema(schemaName);
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
@@ -509,12 +509,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         modelBuilder.Entity<DataProtectionKey>(entity =>
         {
-            entity.ToTable("DataProtectionKeys", "portal_dashboard");
+            entity.ToTable("DataProtectionKeys");
         });
 
         modelBuilder.Entity<SystemSetting>(entity =>
         {
-            entity.ToTable("SystemSettings", "portal_dashboard");
+            entity.ToTable("SystemSettings");
             entity.HasKey(e => e.Key);
             entity.Property(e => e.Key).HasMaxLength(128);
             entity.Property(e => e.Value).HasMaxLength(2048);

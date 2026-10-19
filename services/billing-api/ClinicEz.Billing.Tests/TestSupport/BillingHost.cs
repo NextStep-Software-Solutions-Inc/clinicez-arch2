@@ -84,7 +84,7 @@ internal sealed class BillingHost : IDisposable
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["DbSchema"] = "billing",
+            ["DbSchema"] = "public",
             ["Messaging:Transport"] = "InProcess",
             ["Messaging:Service"] = InteropServices.Billing,
             ["Messaging:Enabled"] = "false",

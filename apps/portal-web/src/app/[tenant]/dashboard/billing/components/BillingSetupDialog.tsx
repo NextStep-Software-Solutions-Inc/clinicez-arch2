@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils"
 import { z } from "zod"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
+import { useRouter, usePathname } from "next/navigation"
 import { BillingInfo, billingService } from "@/services/billing.service"
 
 const billingSchema = z.object({
@@ -45,6 +46,8 @@ interface BillingSetupDialogProps {
   selectedPlanId: string | null
   isAnnual: boolean
   billingInfo: BillingInfo | null
+  isOnlinePaymentReady?: boolean
+  onSwitchTab?: (tab: string) => void
 }
 
 export default function BillingSetupDialog({
@@ -54,7 +57,11 @@ export default function BillingSetupDialog({
   selectedPlanId,
   isAnnual,
   billingInfo,
+  isOnlinePaymentReady,
+  onSwitchTab,
 }: BillingSetupDialogProps) {
+  const router = useRouter()
+  const pathname = usePathname()
   const [formData, setFormData] = useState({
     phoneNumber: billingInfo?.phoneNumber || "",
     country: billingInfo?.country || "PH",
@@ -97,6 +104,18 @@ export default function BillingSetupDialog({
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedPlanId) return
+
+    if (isOnlinePaymentReady === false) {
+      toast.info("Online checkout is currently in review. Directing you to Bank Transfer & GCash instructions.")
+      onOpenChange(false)
+      if (onSwitchTab) {
+        onSwitchTab("offline")
+      } else {
+        router.push(`${pathname}?tab=offline`)
+      }
+      return
+    }
+
     const normalizedPlanId = selectedPlanId === "professional" ? "pro" : selectedPlanId
 
     try {

@@ -93,6 +93,8 @@ export interface BillingPaymentConfig {
   corporateAddress: string
   billingSupportEmail: string
   defaultBillingCadence?: "monthly" | "annually" | string
+  isOnlinePaymentReady?: boolean
+  trialDays?: number
 }
 
 export interface BillingInfo {
@@ -116,6 +118,7 @@ export interface BillingInfo {
   planLimits?: BillingPlanLimits
   usage?: TenantUsage
   paymentConfig?: BillingPaymentConfig
+  trialDays?: number
 }
 
 export interface CheckoutSessionRequest {

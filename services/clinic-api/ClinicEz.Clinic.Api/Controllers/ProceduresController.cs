@@ -55,7 +55,9 @@ public sealed class ProceduresController : ControllerBase
             request.OrderedByDoctorName,
             request.ClinicalNotes,
             request.TargetRoomId,
-            request.TargetRoomName
+            request.TargetRoomName,
+            request.ToothNumber,
+            request.ToothSurface
         );
 
         var result = await _sender.Send(command, ct);

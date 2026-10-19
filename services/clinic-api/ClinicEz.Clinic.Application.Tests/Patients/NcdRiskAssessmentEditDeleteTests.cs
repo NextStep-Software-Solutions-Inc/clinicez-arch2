@@ -39,7 +39,7 @@ public class NcdRiskAssessmentEditDeleteTests
         clinicContext.TenantId.Returns(tenantId);
 
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard") })
+            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "public") })
             .Build();
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()

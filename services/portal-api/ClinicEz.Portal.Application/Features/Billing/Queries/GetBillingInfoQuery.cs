@@ -68,7 +68,8 @@ public record BillingInfoDto(
     DateTime? SubscriptionExpiresAt,
     PlanLimitsDto? PlanLimits = null,
     TenantUsageDto? Usage = null,
-    BillingPaymentConfigDto? PaymentConfig = null
+    BillingPaymentConfigDto? PaymentConfig = null,
+    int? TrialDays = null
 );
 
 public class GetBillingInfoQuery : IRequest<BillingInfoDto?>
@@ -175,6 +176,20 @@ public class GetBillingInfoQueryHandler(
             ? await settingsService.GetBillingPaymentConfigAsync(cancellationToken)
             : null;
 
+        var platformTrialDays = settingsService != null
+            ? await settingsService.GetSettingIntAsync("Billing:TrialDays", 14, cancellationToken)
+            : 14;
+
+        int? effectiveTrialDays = platformTrialDays;
+        if (stored.TrialEndsAt.HasValue && tenant.CreatedAt != default)
+        {
+            var diff = (int)Math.Round((stored.TrialEndsAt.Value - tenant.CreatedAt).TotalDays);
+            if (diff > 0)
+            {
+                effectiveTrialDays = diff;
+            }
+        }
+
         return new BillingInfoDto(
             subscriptionStatus,
             subscription.PlanSlug,
@@ -194,7 +209,8 @@ public class GetBillingInfoQueryHandler(
             subscription.PeriodEnd,
             planLimitsDto,
             usageDto,
-            paymentConfig
+            paymentConfig,
+            effectiveTrialDays
         );
     }
 

@@ -17,8 +17,8 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("interop_hub")
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasDefaultSchema("public")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -57,7 +57,7 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
 
                     b.HasKey("CellId");
 
-                    b.ToTable("Cells", "interop_hub");
+                    b.ToTable("Cells", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Interop.Domain.Entities.HubClaim", b =>
@@ -119,7 +119,7 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
                     b.HasIndex("TokenHash")
                         .IsUnique();
 
-                    b.ToTable("Claims", "interop_hub");
+                    b.ToTable("Claims", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Interop.Domain.Entities.HubClient", b =>
@@ -168,7 +168,7 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
 
                     b.HasIndex("CellId");
 
-                    b.ToTable("Clients", "interop_hub");
+                    b.ToTable("Clients", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Interop.Domain.Entities.HubConversation", b =>
@@ -205,7 +205,7 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
                     b.HasIndex("CorrelationId", "FromKey", "ToKey")
                         .IsUnique();
 
-                    b.ToTable("Conversations", "interop_hub");
+                    b.ToTable("Conversations", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Interop.Domain.Entities.HubFacility", b =>
@@ -270,7 +270,7 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("Facilities", "interop_hub");
+                    b.ToTable("Facilities", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Interop.Domain.Entities.HubLink", b =>
@@ -321,7 +321,7 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
 
                     b.HasIndex("TargetTenantId", "TargetFacilityId");
 
-                    b.ToTable("Links", "interop_hub");
+                    b.ToTable("Links", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Interop.Domain.Entities.HubMessage", b =>
@@ -391,7 +391,7 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
 
                     b.HasIndex("Mailbox", "Seq");
 
-                    b.ToTable("Messages", "interop_hub");
+                    b.ToTable("Messages", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Interop.Domain.Entities.HubOutboundMessage", b =>
@@ -445,7 +445,7 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
 
                     b.HasIndex("CorrelationId", "Seq");
 
-                    b.ToTable("Outbound", "interop_hub");
+                    b.ToTable("Outbound", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Interop.Domain.Entities.HubState", b =>
@@ -463,7 +463,7 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
 
                     b.HasKey("Key");
 
-                    b.ToTable("State", "interop_hub");
+                    b.ToTable("State", "public");
                 });
 #pragma warning restore 612, 618
         }

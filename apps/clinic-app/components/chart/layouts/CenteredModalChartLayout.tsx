@@ -161,7 +161,7 @@ export default function CenteredModalChartLayout(props: ChartLayoutProps) {
         {/* ========================================================================= */}
         <View style={styles.tabBarContainer}>
           <SegmentedControl
-            options={CHART_TABS}
+            options={props.availableTabs || CHART_TABS}
             value={activeTab}
             onChange={onTabChange}
           />

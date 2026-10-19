@@ -8,6 +8,7 @@ using ClinicEz.Portal.Application.Features.Billing.Commands;
 using ClinicEz.Portal.Application.Features.Billing.Queries;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -50,7 +51,9 @@ public class BillingEndpoints : IEndpoint
             CreateCheckoutSessionCommand command, 
             HttpContext httpContext,
             IApplicationDbContext context,
-            ISender sender) =>
+            ISender sender,
+            ISystemSettingsService settingsService,
+            System.Threading.CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId))
@@ -64,10 +67,28 @@ public class BillingEndpoints : IEndpoint
                 return Results.Forbid();
             }
 
+            var isOnlinePaymentReady = await settingsService.GetSettingBoolAsync("Billing:IsOnlinePaymentReady", false, ct);
+            if (!isOnlinePaymentReady)
+            {
+                throw new ServiceUnavailableException("Online card and e-wallet checkout is currently undergoing partner verification. Please proceed via the Offline Payment / Bank Transfer tab or contact billing@clinicez.ph.");
+            }
+
             Console.WriteLine($"[API] Processing checkout session for tenant: {command.TenantId}, plan: {command.PlanId}, isAnnual: {command.IsAnnual}");
-            var result = await sender.Send(command);
-            Console.WriteLine($"[API] Xendit Invoice URL generated: {result}");
-            return Results.Ok(new { Url = result });
+            try
+            {
+                var result = await sender.Send(command, ct);
+                Console.WriteLine($"[API] Xendit Invoice URL generated: {result}");
+                return Results.Ok(new { Url = result });
+            }
+            catch (ServiceUnavailableException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[API] Checkout session failed with unexpected exception: {ex.Message}");
+                throw new ServiceUnavailableException("Online card and e-wallet checkout is currently undergoing partner verification. Please proceed via the Offline Payment / Bank Transfer tab or contact billing@clinicez.ph.", ex);
+            }
         })
         .WithName("CreateCheckoutSession")
         .WithDescription("Creates a new Xendit checkout session for a billing plan subscription and returns the invoice URL.")
@@ -188,6 +209,7 @@ public class BillingEndpoints : IEndpoint
             var config = await settingsService.GetBillingPaymentConfigAsync(ct);
             return Results.Ok(config);
         })
+        .AllowAnonymous()
         .WithName("GetBillingPaymentConfig")
         .WithDescription("Retrieves platform offline bank accounts, BIR tax exemption/percentage settings, and corporate invoicing details.")
         .WithTags("Billing");

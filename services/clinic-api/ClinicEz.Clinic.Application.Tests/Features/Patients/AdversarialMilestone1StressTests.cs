@@ -32,7 +32,7 @@ public class AdversarialMilestone1StressTests
     {
         var sharedDbName = $"ClinicEz_MultiTenant_TestDb_{Guid.NewGuid()}";
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard") })
+            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "public") })
             .Build();
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()

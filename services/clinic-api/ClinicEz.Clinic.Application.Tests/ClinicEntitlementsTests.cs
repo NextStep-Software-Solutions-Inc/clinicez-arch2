@@ -93,7 +93,7 @@ public class ClinicEntitlementsTests
     private static ApplicationDbContext CreateDb(string dbName)
     {
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["DbSchema"] = "clinic_dashboard" })
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["DbSchema"] = "public" })
             .Build();
         var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(dbName).Options;
         return new ApplicationDbContext(options, config);
@@ -195,7 +195,7 @@ public class ClinicEntitlementsTests
             ["Messaging:Transport"] = "InProcess",
             ["Messaging:Service"] = InteropServices.Clinic,
             ["Messaging:Enabled"] = "false",
-            ["DbSchema"] = "clinic_dashboard"
+            ["DbSchema"] = "public"
         }).Build();
 
         var services = new ServiceCollection();
@@ -352,7 +352,7 @@ public class ClinicEntitlementsTests
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development });
         builder.WebHost.UseTestServer();
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["DbSchema"] = "clinic_dashboard" });
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["DbSchema"] = "public" });
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<IClinicContext, ClinicContext>();
         builder.Services.AddScoped(_ => CreateDb(dbName));

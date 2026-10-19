@@ -122,6 +122,7 @@ let mockAuthContext = {
 
 mock.module('../context/AuthContext', () => ({
   useAuth: () => mockAuthContext,
+  usePermission: () => true,
 }));
 
 const staffContextMockFactory = () => ({
@@ -159,6 +160,7 @@ describe('WorkstationSidebar Component', () => {
     };
     mock.module('../context/AuthContext', () => ({
       useAuth: () => mockAuthContext,
+      usePermission: () => true,
     }));
     mock.module('../context/StaffContext', staffContextMockFactory);
     mock.module('@context/StaffContext', staffContextMockFactory);

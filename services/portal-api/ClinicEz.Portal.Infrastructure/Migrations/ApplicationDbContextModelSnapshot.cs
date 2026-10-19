@@ -18,7 +18,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("main")
+                .HasDefaultSchema("public")
                 .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -67,7 +67,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AdminRoles", "main");
+                    b.ToTable("AdminRoles", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.AdminUser", b =>
@@ -121,7 +121,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("AdminUsers", "main");
+                    b.ToTable("AdminUsers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.BillingInvoice", b =>
@@ -192,7 +192,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.HasIndex("XenditInvoiceId")
                         .IsUnique();
 
-                    b.ToTable("BillingInvoices", "main");
+                    b.ToTable("BillingInvoices", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.BlogArticle", b =>
@@ -266,7 +266,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.HasIndex("Slug")
                         .IsUnique();
 
-                    b.ToTable("BlogArticles", "main");
+                    b.ToTable("BlogArticles", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Branch", b =>
@@ -365,7 +365,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false AND \"Code\" IS NOT NULL");
 
-                    b.ToTable("Branches", "main");
+                    b.ToTable("Branches", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.EdgeHubClient", b =>
@@ -421,7 +421,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("EdgeHubClients", "main");
+                    b.ToTable("EdgeHubClients", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.EntitlementOverride", b =>
@@ -482,7 +482,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("EntitlementOverrides", "main");
+                    b.ToTable("EntitlementOverrides", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.ExampleEntity", b =>
@@ -526,7 +526,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("ExampleEntities", "main");
+                    b.ToTable("ExampleEntities", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Facility", b =>
@@ -694,7 +694,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("Facilities", "main");
+                    b.ToTable("Facilities", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.FacilityAllocation", b =>
@@ -749,7 +749,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("FacilityAllocations", "main");
+                    b.ToTable("FacilityAllocations", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.FacilityLink", b =>
@@ -824,7 +824,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("FacilityLinks", "main");
+                    b.ToTable("FacilityLinks", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.FinanceDailySummary", b =>
@@ -898,7 +898,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("FinanceDailySummaries", "main");
+                    b.ToTable("FinanceDailySummaries", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.FinanceInvoiceRecord", b =>
@@ -972,7 +972,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("FinanceInvoiceRecords", "main");
+                    b.ToTable("FinanceInvoiceRecords", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.NewsletterSubscriber", b =>
@@ -1034,7 +1034,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("NewsletterSubscribers", "main");
+                    b.ToTable("NewsletterSubscribers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.OwnershipTransfer", b =>
@@ -1096,7 +1096,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false AND \"Status\" = 'Pending'");
 
-                    b.ToTable("OwnershipTransfers", "main");
+                    b.ToTable("OwnershipTransfers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.PaymentReceipt", b =>
@@ -1173,7 +1173,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("PaymentReceipts", "main");
+                    b.ToTable("PaymentReceipts", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Plan", b =>
@@ -1241,7 +1241,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("Plans", "main");
+                    b.ToTable("Plans", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.PlanEntitlement", b =>
@@ -1298,7 +1298,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("PlanEntitlements", "main");
+                    b.ToTable("PlanEntitlements", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.PlanFeature", b =>
@@ -1344,7 +1344,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("PlanId");
 
-                    b.ToTable("PlanFeatures", "main");
+                    b.ToTable("PlanFeatures", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.PortalNotification", b =>
@@ -1416,7 +1416,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "IsRead", "CreatedAt");
 
-                    b.ToTable("portal_notifications", "main");
+                    b.ToTable("portal_notifications", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.StaffMember", b =>
@@ -1471,7 +1471,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("StaffMembers", "main");
+                    b.ToTable("StaffMembers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Subscription", b =>
@@ -1550,7 +1550,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("Subscriptions", "main");
+                    b.ToTable("Subscriptions", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.SystemSetting", b =>
@@ -1583,7 +1583,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasKey("Key");
 
-                    b.ToTable("SystemSettings", "portal_dashboard");
+                    b.ToTable("SystemSettings", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Tenant", b =>
@@ -1701,7 +1701,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.HasIndex("TenantSlug")
                         .IsUnique();
 
-                    b.ToTable("Tenants", "main");
+                    b.ToTable("Tenants", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.WebhookDelivery", b =>
@@ -1778,7 +1778,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("Status", "NextAttemptAt");
 
-                    b.ToTable("WebhookDeliveries", "main");
+                    b.ToTable("WebhookDeliveries", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.WebhookEndpoint", b =>
@@ -1839,7 +1839,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("WebhookEndpoints", "main");
+                    b.ToTable("WebhookEndpoints", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.WorkspaceApiKey", b =>
@@ -1913,7 +1913,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.ToTable("WorkspaceApiKeys", "main");
+                    b.ToTable("WorkspaceApiKeys", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.WorkspaceAuditEntry", b =>
@@ -1981,7 +1981,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "CreatedAt");
 
-                    b.ToTable("WorkspaceAuditEntries", "main");
+                    b.ToTable("WorkspaceAuditEntries", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.WorkspaceMember", b =>
@@ -2060,7 +2060,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false AND \"UserId\" IS NOT NULL");
 
-                    b.ToTable("WorkspaceMembers", "main");
+                    b.ToTable("WorkspaceMembers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.WorkspaceSettings", b =>
@@ -2158,7 +2158,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"IsDeleted\" = false");
 
-                    b.ToTable("WorkspaceSettings", "main");
+                    b.ToTable("WorkspaceSettings", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropInboxMessage", b =>
@@ -2179,7 +2179,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("ProcessedAtUtc");
 
-                    b.ToTable("interop_inbox", "main");
+                    b.ToTable("interop_inbox", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropOutboxMessage", b =>
@@ -2225,7 +2225,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasIndex("DispatchedAtUtc", "DeadLetteredAtUtc", "NextAttemptAtUtc");
 
-                    b.ToTable("interop_outbox", "main");
+                    b.ToTable("interop_outbox", "public");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
@@ -2244,7 +2244,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DataProtectionKeys", "portal_dashboard");
+                    b.ToTable("DataProtectionKeys", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.AdminUser", b =>
