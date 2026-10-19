@@ -138,17 +138,17 @@ public class GlobalClinicSearchQueryHandlerStressTests
         {
             CreateMockProvider("Patients", 10, async ct =>
             {
-                await Task.Delay(10, ct);
+                await Task.Yield();
                 return new List<SearchResultItemDto> { CreateItem("p1", "Patients", "Patient Item") };
             }),
             CreateMockProvider("Consultations", 20, async ct =>
             {
-                await Task.Delay(15, ct);
+                await Task.Yield();
                 return new List<SearchResultItemDto> { CreateItem("c1", "Consultations", "Consultation Item") };
             }),
             CreateMockProvider("Billing", 60, async ct =>
             {
-                await Task.Delay(12, ct);
+                await Task.Yield();
                 return new List<SearchResultItemDto> { CreateItem("b1", "Billing", "Billing Item") };
             })
         };
