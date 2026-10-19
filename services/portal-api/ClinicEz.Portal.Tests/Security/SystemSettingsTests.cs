@@ -39,6 +39,7 @@ public class SystemSettingsTests
         Assert.NotEmpty(settings);
         Assert.Contains(settings, s => s.Key == "Licensing:TtlDays" && s.Value == "30");
         Assert.Contains(settings, s => s.Key == "Billing:TrialDays" && s.Value == "14");
+        Assert.Contains(settings, s => s.Key == "Billing:IsOnlinePaymentReady" && s.Value == "false");
         Assert.Contains(settings, s => s.Key == "Billing:BankAccountsJson" && s.Value.Contains("BDO Unibank"));
         Assert.Contains(settings, s => s.Key == "Billing:BirTaxExempt" && s.Value == "false");
         Assert.Contains(settings, s => s.Key == "Billing:BirTaxPercentage" && s.Value == "12");
@@ -77,6 +78,25 @@ public class SystemSettingsTests
         var updatedConfig = await service.GetContactPlatformConfigAsync();
         Assert.Equal("help@clinicez.ph", updatedConfig.SupportEmail);
         Assert.Equal("+63 2 8123 4567", updatedConfig.PhoneNumber);
+    }
+
+    [Fact]
+    public async Task GetBillingPaymentConfigAsync_ReturnsIsOnlinePaymentReadyDefaultAndReflectsUpdates()
+    {
+        using var db = CreateDbContext();
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new SystemSettingsService(db, cache, NullLogger<SystemSettingsService>.Instance);
+
+        var defaultConfig = await service.GetBillingPaymentConfigAsync();
+        Assert.False(defaultConfig.IsOnlinePaymentReady);
+
+        await service.UpdateSettingsAsync(new Dictionary<string, string>
+        {
+            ["Billing:IsOnlinePaymentReady"] = "true"
+        }, "AdminUser");
+
+        var updatedConfig = await service.GetBillingPaymentConfigAsync();
+        Assert.True(updatedConfig.IsOnlinePaymentReady);
     }
 
     [Fact]

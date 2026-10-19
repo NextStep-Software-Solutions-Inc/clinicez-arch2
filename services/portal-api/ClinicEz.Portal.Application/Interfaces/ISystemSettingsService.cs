@@ -34,7 +34,8 @@ public record BillingPaymentConfigDto(
     string CorporateTin,
     string CorporateAddress,
     string BillingSupportEmail,
-    string DefaultBillingCadence = "monthly"
+    string DefaultBillingCadence = "monthly",
+    bool IsOnlinePaymentReady = false
 );
 
 public record ContactPlatformConfigDto(
