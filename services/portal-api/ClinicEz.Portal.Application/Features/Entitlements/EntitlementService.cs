@@ -113,9 +113,13 @@ internal static class TrialSubscription
         ISystemSettingsService? settingsService = null)
     {
         var defaultPlanSlug = options.DefaultPlanSlug;
-        if (string.IsNullOrWhiteSpace(defaultPlanSlug) && settingsService is not null)
+        if (settingsService is not null)
         {
-            defaultPlanSlug = await settingsService.GetSettingValueAsync("Billing:DefaultPlanSlug", string.Empty, cancellationToken);
+            var configuredSlug = await settingsService.GetSettingValueAsync("Billing:DefaultPlanSlug", string.Empty, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(configuredSlug))
+            {
+                defaultPlanSlug = configuredSlug;
+            }
         }
 
         var trialDays = options.TrialDays;
@@ -123,6 +127,8 @@ internal static class TrialSubscription
         {
             trialDays = await settingsService.GetSettingIntAsync("Billing:TrialDays", trialDays, cancellationToken);
         }
+
+        trialDays = Math.Max(0, trialDays);
 
         var plans = context.Plans.AsNoTracking();
         Plan? plan = null;

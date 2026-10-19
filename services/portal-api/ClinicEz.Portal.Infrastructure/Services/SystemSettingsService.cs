@@ -187,6 +187,7 @@ public sealed class SystemSettingsService(
         var supportEmail = await GetSettingValueAsync("Billing:SupportEmail", "billing@clinicez.ph", ct);
         var defaultBillingCadence = await GetSettingValueAsync("Billing:DefaultBillingCadence", "monthly", ct);
         var isOnlinePaymentReady = await GetSettingBoolAsync("Billing:IsOnlinePaymentReady", false, ct);
+        var trialDays = await GetSettingIntAsync("Billing:TrialDays", 14, ct);
 
         return new BillingPaymentConfigDto(
             BankAccounts: accounts,
@@ -197,7 +198,8 @@ public sealed class SystemSettingsService(
             CorporateAddress: corporateAddress,
             BillingSupportEmail: supportEmail,
             DefaultBillingCadence: defaultBillingCadence,
-            IsOnlinePaymentReady: isOnlinePaymentReady
+            IsOnlinePaymentReady: isOnlinePaymentReady,
+            TrialDays: trialDays
         );
     }
 
@@ -321,6 +323,13 @@ public sealed class SystemSettingsService(
                 if (!bool.TryParse(val, out _))
                 {
                     throw new ArgumentException("Billing:IsOnlinePaymentReady must be 'true' or 'false'.");
+                }
+            }
+            else if (string.Equals(key, "Billing:TrialDays", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out var days) || days < 0)
+                {
+                    throw new ArgumentException("Billing:TrialDays must be a non-negative integer.");
                 }
             }
         }

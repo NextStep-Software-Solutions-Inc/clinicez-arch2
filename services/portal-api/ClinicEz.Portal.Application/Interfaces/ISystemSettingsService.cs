@@ -35,7 +35,8 @@ public record BillingPaymentConfigDto(
     string CorporateAddress,
     string BillingSupportEmail,
     string DefaultBillingCadence = "monthly",
-    bool IsOnlinePaymentReady = false
+    bool IsOnlinePaymentReady = false,
+    int TrialDays = 14
 );
 
 public record ContactPlatformConfigDto(

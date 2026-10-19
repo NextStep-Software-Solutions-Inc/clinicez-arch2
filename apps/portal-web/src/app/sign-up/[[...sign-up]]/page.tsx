@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Stethoscope, Sparkles, CheckCircle2, ShieldCheck } from "lucide-react";
+import { Stethoscope, CheckCircle2, ShieldCheck } from "lucide-react";
 import { CustomSignUpForm } from "../_components/CustomSignUpForm";
+import { SignUpTrialBadge } from "../_components/SignUpTrialBadge";
 
 export default function SignUpPage() {
   return (
@@ -33,10 +34,7 @@ export default function SignUpPage() {
         <div className="flex w-full items-center justify-center gap-12 lg:gap-16">
           {/* Left Side: Brand Context (Desktop Only) */}
           <div className="hidden lg:flex flex-col w-1/2 pr-6">
-            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary mb-6 w-fit backdrop-blur-md">
-              <Sparkles className="h-3.5 w-3.5" />
-              14-Day Free Trial
-            </div>
+            <SignUpTrialBadge />
 
             <h1 className="text-4xl xl:text-5xl font-extrabold tracking-tight mb-6 leading-tight">
               Start Your Journey with <br />

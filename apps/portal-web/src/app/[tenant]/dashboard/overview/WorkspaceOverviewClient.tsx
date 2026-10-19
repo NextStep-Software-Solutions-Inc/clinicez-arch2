@@ -60,6 +60,7 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
     
     const isTrialing = billingInfo?.subscriptionStatus === "TRIALING";
     const hasAllocations = (isSubscribed || isTrialing) && !!billingInfo?.planLimits;
+    const trialDays = billingInfo?.trialDays || billingInfo?.paymentConfig?.trialDays || 14;
 
     const planLimits = billingInfo?.planLimits;
     const usage = billingInfo?.usage;
@@ -240,7 +241,7 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
                         </div>
                     </div>
                     <div className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-2 truncate">
-                        {planLimits?.planTitle || (isTrialing ? "14-Day Free Trial" : "Setup Mode")}
+                        {planLimits?.planTitle || (isTrialing ? `${trialDays}-Day Free Trial` : "Setup Mode")}
                     </div>
                     <div className="text-[11px] text-slate-500 font-medium mt-2 flex items-center justify-between">
                         <span>{isSubscribed ? "Active Billing Cycle" : isTrialing ? "Evaluation Period" : "Plan Unsubscribed"}</span>

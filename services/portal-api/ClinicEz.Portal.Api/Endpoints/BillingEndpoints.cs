@@ -209,6 +209,7 @@ public class BillingEndpoints : IEndpoint
             var config = await settingsService.GetBillingPaymentConfigAsync(ct);
             return Results.Ok(config);
         })
+        .AllowAnonymous()
         .WithName("GetBillingPaymentConfig")
         .WithDescription("Retrieves platform offline bank accounts, BIR tax exemption/percentage settings, and corporate invoicing details.")
         .WithTags("Billing");

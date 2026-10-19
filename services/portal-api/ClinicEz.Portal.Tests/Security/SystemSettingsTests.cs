@@ -246,5 +246,42 @@ public class SystemSettingsTests
         Assert.Contains("Maria Santos", providersPayload.Data![0].Name);
         Assert.Contains("Family Medicine Physician", providersPayload.Data![0].Specialty);
     }
+
+    [Fact]
+    public async Task GetBillingPaymentConfigAsync_ReturnsTrialDaysDefaultAndReflectsUpdates()
+    {
+        using var db = CreateDbContext();
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new SystemSettingsService(db, cache, NullLogger<SystemSettingsService>.Instance);
+
+        var defaultConfig = await service.GetBillingPaymentConfigAsync();
+        Assert.Equal(14, defaultConfig.TrialDays);
+
+        await service.UpdateSettingsAsync(new Dictionary<string, string>
+        {
+            ["Billing:TrialDays"] = "30"
+        }, "AdminUser");
+
+        var updatedConfig = await service.GetBillingPaymentConfigAsync();
+        Assert.Equal(30, updatedConfig.TrialDays);
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("-14")]
+    [InlineData("invalid")]
+    public async Task UpdateSettingsAsync_RejectsNegativeOrNonIntegerTrialDays(string invalidVal)
+    {
+        using var db = CreateDbContext();
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var service = new SystemSettingsService(db, cache, NullLogger<SystemSettingsService>.Instance);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateSettingsAsync(new Dictionary<string, string>
+        {
+            ["Billing:TrialDays"] = invalidVal
+        }, "AdminUser"));
+
+        Assert.Contains("Billing:TrialDays", ex.Message);
+    }
 }
 

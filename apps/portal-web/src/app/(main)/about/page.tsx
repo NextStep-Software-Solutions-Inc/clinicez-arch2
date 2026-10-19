@@ -165,7 +165,7 @@ export default function AboutPage() {
             Join the Next Step in Healthcare
           </h2>
           <p className="text-base sm:text-lg text-primary-foreground/90 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Experience how Clinic EZ by Nextstep Software Corporation transforms daily clinical operations. Start a free 30-day workspace trial today.
+            Experience how Clinic EZ by Nextstep Software Corporation transforms daily clinical operations. Start a free workspace trial today.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
