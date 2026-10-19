@@ -44,5 +44,7 @@ public sealed record ClinicSettingsDto(
     bool EnableChipLevelQueueCalling = false,
     int StaffNotificationRetentionDays = 30,
     bool EnableStatAudioAlert = true,
-    bool EnableStatVibrationAlert = true);
+    bool EnableStatVibrationAlert = true,
+    bool IsDirectoryPublished = false,
+    bool IsOnlineBookingPaused = false);
 

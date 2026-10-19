@@ -542,10 +542,72 @@ public class FacilityEndpoints : IEndpoint
         .WithName("UpdateFacilitySettings")
         .WithDescription("Updates facility regulatory profile and notification preferences.")
         .WithTags("Facilities");
+
+        // 8. Set master patient directory discovery eligibility (Workspace Owner or Admin only)
+        app.MapPut("/facilities/{id:guid}/discovery-eligibility", async (
+            Guid id,
+            SetFacilityDiscoveryEligibilityRequest request,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ISender sender,
+            System.Threading.CancellationToken ct) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            // Resolve tenant by slug or find via facility
+            Tenant? tenant = null;
+            if (!string.IsNullOrWhiteSpace(request.TenantSlug))
+            {
+                tenant = await context.Tenants.FirstOrDefaultAsync(
+                    t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower() || t.Id.ToString() == request.TenantSlug,
+                    ct);
+            }
+            else
+            {
+                tenant = await context.Facilities
+                    .Where(f => f.Id == id && !f.IsDeleted)
+                    .Select(f => f.Tenant)
+                    .FirstOrDefaultAsync(ct);
+            }
+
+            if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active, ct);
+
+            if (!isOwner && !isAdmin) return Results.Forbid();
+
+            try
+            {
+                var result = await sender.Send(new SetFacilityDiscoveryEligibilityCommand(id, tenant.TenantSlug, request.IsEligible), ct);
+                return Results.Ok(new
+                {
+                    facilityId = result.FacilityId,
+                    isEligible = result.IsEligible,
+                    updatedAt = result.UpdatedAt
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .RequireAuthorization()
+        .WithName("SetFacilityDiscoveryEligibility")
+        .WithDescription("Sets master patient app directory discovery eligibility for a facility (Workspace Owner or Admin only).")
+        .WithTags("Facilities");
     }
 }
 
 public record UpdateFacilityRequest(string TenantSlug, string Name, ClinicEz.Portal.Domain.Entities.FacilityStatus? Status = null, string? Slug = null);
+
+public record SetFacilityDiscoveryEligibilityRequest(bool IsEligible, string? TenantSlug = null);
 
 public record UpdateFacilitySettingsRequest(
     string TenantSlug,

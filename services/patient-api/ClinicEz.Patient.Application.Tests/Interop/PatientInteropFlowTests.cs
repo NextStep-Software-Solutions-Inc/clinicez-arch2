@@ -302,17 +302,452 @@ public sealed class PatientInteropFlowTests
     }
 
     [Fact]
-    public async Task Directory_update_from_anyone_but_the_portal_is_ignored()
+    public async Task Directory_update_from_unauthorized_parties_is_ignored()
     {
         using var h = new PatientInteropHarness();
+        var resourceId = Guid.NewGuid();
         var payload = new FacilityCreatedEvent
         {
-            ResourceId = Guid.NewGuid(), TenantId = PatientInteropHarness.TenantA, FacilityType = FacilityType.Clinic, Name = "Forged"
+            ResourceId = resourceId, TenantId = PatientInteropHarness.TenantA, FacilityType = FacilityType.Clinic, Name = "Forged"
         };
 
+        // 1. Impostor clinic where sender FacilityId does not match message ResourceId
         await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(Guid.NewGuid()), payload));
 
+        // 2. Non-clinic facility (e.g., Laboratory)
+        var labParty = Party.ForFacility(PatientInteropHarness.TenantA, resourceId.ToString(), FacilityType.Laboratory);
+        await h.DeliverAsync(DirectoryUpdate(labParty, payload));
+
+        // 3. Unauthorized control plane service
+        var otherServiceParty = new Party { Kind = PartyKind.ControlPlane, Service = "billing-api" };
+        await h.DeliverAsync(DirectoryUpdate(otherServiceParty, payload));
+
         (await h.WithDbAsync(db => db.Clinics.CountAsync())).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Directory_update_from_clinic_with_null_facility_id_is_ignored()
+    {
+        using var h = new PatientInteropHarness();
+        var resourceId = Guid.NewGuid();
+        var payload = new FacilityCreatedEvent
+        {
+            ResourceId = resourceId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Impostor Null Clinic"
+        };
+
+        var nullFacilityParty = new Party
+        {
+            Kind = PartyKind.Facility,
+            FacilityType = FacilityType.Clinic,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityId = null
+        };
+
+        await h.DeliverAsync(DirectoryUpdate(nullFacilityParty, payload));
+
+        (await h.WithDbAsync(db => db.Clinics.CountAsync())).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Directory_update_from_clinic_with_empty_facility_id_is_ignored()
+    {
+        using var h = new PatientInteropHarness();
+        var resourceId = Guid.NewGuid();
+        var payload = new FacilityCreatedEvent
+        {
+            ResourceId = resourceId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Impostor Empty Clinic"
+        };
+
+        var emptyFacilityParty = new Party
+        {
+            Kind = PartyKind.Facility,
+            FacilityType = FacilityType.Clinic,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityId = "   "
+        };
+
+        await h.DeliverAsync(DirectoryUpdate(emptyFacilityParty, payload));
+
+        (await h.WithDbAsync(db => db.Clinics.CountAsync())).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Directory_update_from_clinic_with_malformed_facility_id_is_ignored()
+    {
+        using var h = new PatientInteropHarness();
+        var resourceId = Guid.NewGuid();
+        var payload = new FacilityCreatedEvent
+        {
+            ResourceId = resourceId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Impostor Malformed Clinic"
+        };
+
+        var malformedFacilityParty = new Party
+        {
+            Kind = PartyKind.Facility,
+            FacilityType = FacilityType.Clinic,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityId = "not-a-valid-guid"
+        };
+
+        await h.DeliverAsync(DirectoryUpdate(malformedFacilityParty, payload));
+
+        (await h.WithDbAsync(db => db.Clinics.CountAsync())).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Directory_update_from_clinic_with_mismatched_resource_id_is_ignored()
+    {
+        using var h = new PatientInteropHarness();
+        var resourceId = Guid.NewGuid();
+        var senderFacilityId = Guid.NewGuid();
+        var payload = new FacilityCreatedEvent
+        {
+            ResourceId = resourceId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Impostor Mismatched Resource Clinic"
+        };
+
+        var mismatchedParty = PatientInteropHarness.Clinic(senderFacilityId, PatientInteropHarness.TenantA);
+
+        await h.DeliverAsync(DirectoryUpdate(mismatchedParty, payload));
+
+        (await h.WithDbAsync(db => db.Clinics.CountAsync())).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Directory_update_from_clinic_with_mismatched_tenant_id_is_ignored()
+    {
+        using var h = new PatientInteropHarness();
+        var resourceId = Guid.NewGuid();
+        var payload = new FacilityCreatedEvent
+        {
+            ResourceId = resourceId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Impostor Mismatched Tenant Clinic"
+        };
+
+        // Sender claims to be in TenantB, but payload claims TenantA
+        var crossTenantParty = PatientInteropHarness.Clinic(resourceId, PatientInteropHarness.TenantB);
+
+        await h.DeliverAsync(DirectoryUpdate(crossTenantParty, payload));
+
+        (await h.WithDbAsync(db => db.Clinics.CountAsync())).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task TwoTierGovernance_WhenPortalUpdatesFirst_ClinicRemainsPrivateUntilClinicPublishes()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+
+        // 1. Portal sends directory update enabling discovery eligibility
+        var portalPayload = new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "St. Jude Family Care",
+            IsPublic = true,
+            IsWorkspaceEligible = true
+        };
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, portalPayload));
+
+        // Eligible in workspace, but not published by clinic -> IsPublic MUST BE FALSE
+        var clinicAfterPortal = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        clinicAfterPortal.IsWorkspaceEligible.Should().BeTrue();
+        clinicAfterPortal.IsDirectoryPublished.Should().BeFalse();
+        clinicAfterPortal.IsPublic.Should().BeFalse();
+
+        // 2. Clinic manager verifies readiness and publishes from clinic-app
+        var clinicPayload = portalPayload with
+        {
+            IsPublic = true,
+            IsDirectoryPublished = true,
+            OperatingHours = "Mon-Fri 08:00-17:00"
+        };
+        var clinicSender = PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA);
+        await h.DeliverAsync(DirectoryUpdate(clinicSender, clinicPayload));
+
+        // Both tiers satisfied -> IsPublic MUST NOW BE TRUE
+        var clinicAfterBoth = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        clinicAfterBoth.IsWorkspaceEligible.Should().BeTrue();
+        clinicAfterBoth.IsDirectoryPublished.Should().BeTrue();
+        clinicAfterBoth.IsPublic.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TwoTierGovernance_WhenClinicPublishesFirst_ClinicRemainsPrivateUntilPortalEnablesEligibility()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+
+        // 1. Clinic publishes first
+        var clinicPayload = new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "St. Luke Specialty",
+            IsPublic = true,
+            IsDirectoryPublished = true,
+            OperatingHours = "Mon-Fri 09:00-18:00"
+        };
+        var clinicSender = PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA);
+        await h.DeliverAsync(DirectoryUpdate(clinicSender, clinicPayload));
+
+        // Clinic published, but workspace not yet eligible -> IsPublic MUST BE FALSE
+        var clinicAfterClinic = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        clinicAfterClinic.IsWorkspaceEligible.Should().BeFalse();
+        clinicAfterClinic.IsDirectoryPublished.Should().BeTrue();
+        clinicAfterClinic.IsPublic.Should().BeFalse();
+
+        // 2. Portal later grants discovery eligibility
+        var portalPayload = clinicPayload with
+        {
+            IsPublic = true,
+            IsWorkspaceEligible = true
+        };
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, portalPayload));
+
+        // Both tiers satisfied -> IsPublic MUST NOW BE TRUE
+        var clinicAfterBoth = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        clinicAfterBoth.IsWorkspaceEligible.Should().BeTrue();
+        clinicAfterBoth.IsDirectoryPublished.Should().BeTrue();
+        clinicAfterBoth.IsPublic.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TwoTierGovernance_WhenWorkspaceRevokesEligibility_ClinicBecomesPrivateWhileRetainingClinicPublishedState()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+
+        // Setup: Clinic is in State 3 (Fully Published)
+        var payload = new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Makati Medical Center",
+            IsPublic = true
+        };
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, payload));
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA), payload));
+
+        (await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId))).IsPublic.Should().BeTrue();
+
+        // Portal revokes discovery eligibility
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, payload with { IsPublic = false, IsWorkspaceEligible = false }));
+
+        var revokedClinic = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        revokedClinic.IsWorkspaceEligible.Should().BeFalse();
+        revokedClinic.IsDirectoryPublished.Should().BeTrue(); // Clinic state preserved!
+        revokedClinic.IsPublic.Should().BeFalse();             // Hidden from patients
+
+        // Portal re-enables eligibility
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, payload with { IsPublic = true, IsWorkspaceEligible = true }));
+
+        var restoredClinic = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        restoredClinic.IsWorkspaceEligible.Should().BeTrue();
+        restoredClinic.IsDirectoryPublished.Should().BeTrue();
+        restoredClinic.IsPublic.Should().BeTrue();             // Automatically restored!
+    }
+
+    [Fact]
+    public async Task TwoTierGovernance_WhenClinicUnpublishes_ClinicBecomesPrivateWhileRetainingWorkspaceEligibility()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+
+        var payload = new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Cebu Doctors Clinic",
+            IsPublic = true
+        };
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, payload));
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA), payload));
+
+        // Clinic manager unpublishes from clinic-app
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA),
+            payload with { IsPublic = false, IsDirectoryPublished = false }));
+
+        var unpublishedClinic = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        unpublishedClinic.IsWorkspaceEligible.Should().BeTrue();  // Workspace state preserved!
+        unpublishedClinic.IsDirectoryPublished.Should().BeFalse();
+        unpublishedClinic.IsPublic.Should().BeFalse();            // Hidden from patients
+
+        // Clinic manager re-publishes
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA),
+            payload with { IsPublic = true, IsDirectoryPublished = true }));
+
+        var republishedClinic = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        republishedClinic.IsWorkspaceEligible.Should().BeTrue();
+        republishedClinic.IsDirectoryPublished.Should().BeTrue();
+        republishedClinic.IsPublic.Should().BeTrue();             // Automatically restored!
+    }
+
+    [Fact]
+    public async Task TwoTierGovernance_WhenClinicPausesBooking_ClinicRemainsPublicWhileAppointmentsArePaused()
+    {
+        using var h = new PatientInteropHarness();
+        var clinicId = Guid.NewGuid();
+
+        var payload = new FacilityCreatedEvent
+        {
+            ResourceId = clinicId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Davao Wellness Clinic",
+            IsPublic = true
+        };
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Portal, payload));
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA), payload));
+
+        (await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId))).IsPublic.Should().BeTrue();
+
+        // Clinic pauses online appointments
+        await h.DeliverAsync(DirectoryUpdate(PatientInteropHarness.Clinic(clinicId, PatientInteropHarness.TenantA),
+            payload with { IsBookingPaused = true }));
+
+        var pausedClinic = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == clinicId));
+        pausedClinic.IsWorkspaceEligible.Should().BeTrue();
+        pausedClinic.IsDirectoryPublished.Should().BeTrue();
+        pausedClinic.IsPublic.Should().BeTrue();                    // Still discoverable in directory!
+        pausedClinic.SupportsAppointments.Should().BeFalse();       // Appointments are paused!
+    }
+
+    [Fact]
+    public async Task Directory_update_from_authorized_clinic_upserts_clinic_services_and_capacity_controls()
+    {
+        using var h = new PatientInteropHarness();
+        var resourceId = Guid.NewGuid();
+        var providerId = Guid.NewGuid();
+        var service1Id = Guid.NewGuid();
+        var service2Id = Guid.NewGuid();
+
+        var payload = new FacilityCreatedEvent
+        {
+            ResourceId = resourceId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "St. Jude Family Care",
+            Slug = "st-jude",
+            ConsoleUrl = "https://stjude.example.test",
+            IsPublic = true,
+            IsBookingPaused = true,
+            IsJoinGated = true,
+            JoinCode = "VIP2026",
+            OperatingHours = "Mon-Fri 08:00-17:00",
+            Providers =
+            [
+                new FacilityProviderDto(providerId, "Dr. Maria Santos", "Cardiology", "PRC-0098765", true, 1)
+            ],
+            Services =
+            [
+                new ClinicServiceDto(service1Id, "General Consultation", "Consultation", 600m, true),
+                new ClinicServiceDto(service2Id, "CBC Blood Test", "Laboratory", 350m, true)
+            ]
+        };
+
+        // Authorized clinic sender matches payload.ResourceId
+        var clinicSender = PatientInteropHarness.Clinic(resourceId, PatientInteropHarness.TenantA);
+        await h.DeliverAsync(DirectoryUpdate(clinicSender, payload));
+
+        var clinic = await h.WithDbAsync(db => db.Clinics.AsNoTracking().SingleAsync(c => c.Id == resourceId));
+        clinic.Name.Should().Be("St. Jude Family Care");
+        clinic.SupportsAppointments.Should().BeFalse();
+        clinic.IsGated.Should().BeTrue();
+        clinic.JoinCode.Should().Be("VIP2026");
+        clinic.OperatingHours.Should().Be("Mon-Fri 08:00-17:00");
+        clinic.FeaturedScore.Should().Be(1000);
+        clinic.IsDirectoryPublished.Should().BeTrue();
+        clinic.IsWorkspaceEligible.Should().BeFalse();
+        clinic.IsPublic.Should().BeFalse();
+
+        var providers = await h.WithDbAsync(db => db.ClinicHealthcareProviders.AsNoTracking().Where(p => p.ClinicId == resourceId).ToListAsync());
+        providers.Should().ContainSingle();
+        providers[0].Name.Should().Be("Dr. Maria Santos");
+        providers[0].Specialty.Should().Be("Cardiology");
+        providers[0].ProfessionalLicenseNo.Should().Be("PRC-0098765");
+
+        var services = await h.WithDbAsync(db => db.ClinicServices.AsNoTracking().Where(s => s.ClinicId == resourceId).ToListAsync());
+        services.Should().HaveCount(2);
+        services.Should().Contain(s => s.Id == service1Id && s.Name == "General Consultation" && s.Price == 600m && s.IsActive);
+        services.Should().Contain(s => s.Id == service2Id && s.Name == "CBC Blood Test" && s.Price == 350m && s.IsActive);
+    }
+
+    [Fact]
+    public async Task Directory_update_deactivates_omitted_services_and_reactivates_reincluded_services()
+    {
+        using var h = new PatientInteropHarness();
+        var resourceId = Guid.NewGuid();
+        var service1Id = Guid.NewGuid();
+        var service2Id = Guid.NewGuid();
+        var service3Id = Guid.NewGuid();
+
+        var clinicSender = PatientInteropHarness.Clinic(resourceId, PatientInteropHarness.TenantA);
+
+        // Initial sync: Service 1 & Service 2
+        var initialPayload = new FacilityCreatedEvent
+        {
+            ResourceId = resourceId,
+            TenantId = PatientInteropHarness.TenantA,
+            FacilityType = FacilityType.Clinic,
+            Name = "Clinic With Services",
+            Services =
+            [
+                new ClinicServiceDto(service1Id, "Service 1", "General", 100m, true),
+                new ClinicServiceDto(service2Id, "Service 2", "General", 200m, true)
+            ]
+        };
+        await h.DeliverAsync(DirectoryUpdate(clinicSender, initialPayload));
+
+        // Update omitting Service 2 and adding Service 3
+        var updatePayload = initialPayload with
+        {
+            Services =
+            [
+                new ClinicServiceDto(service1Id, "Service 1", "General", 100m, true),
+                new ClinicServiceDto(service3Id, "Service 3", "General", 300m, true)
+            ]
+        };
+        await h.DeliverAsync(DirectoryUpdate(clinicSender, updatePayload));
+
+        var dbServices = await h.WithDbAsync(db => db.ClinicServices.AsNoTracking().Where(s => s.ClinicId == resourceId).ToListAsync());
+        dbServices.Should().HaveCount(3);
+        dbServices.Single(s => s.Id == service1Id).IsActive.Should().BeTrue();
+        dbServices.Single(s => s.Id == service2Id).IsActive.Should().BeFalse(); // Soft-deactivated, preserving FKs!
+        dbServices.Single(s => s.Id == service3Id).IsActive.Should().BeTrue();
+
+        // Reactivation sync: Re-including Service 2
+        var reactivatePayload = initialPayload with
+        {
+            Services =
+            [
+                new ClinicServiceDto(service1Id, "Service 1", "General", 100m, true),
+                new ClinicServiceDto(service2Id, "Service 2", "General", 250m, true)
+            ]
+        };
+        await h.DeliverAsync(DirectoryUpdate(clinicSender, reactivatePayload));
+
+        var updatedDbServices = await h.WithDbAsync(db => db.ClinicServices.AsNoTracking().Where(s => s.ClinicId == resourceId).ToListAsync());
+        updatedDbServices.Single(s => s.Id == service2Id).IsActive.Should().BeTrue();
+        updatedDbServices.Single(s => s.Id == service2Id).Price.Should().Be(250m);
+        updatedDbServices.Single(s => s.Id == service3Id).IsActive.Should().BeFalse(); // Now service 3 is omitted and soft-deactivated
     }
 
     [Fact]

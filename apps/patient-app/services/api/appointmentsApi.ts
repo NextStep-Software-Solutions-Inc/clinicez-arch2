@@ -69,8 +69,12 @@ export async function fetchAvailableSlotsLive(
     clinicId: string,
     providerId: string,
     date: string,
+    forPatientId?: string,
 ): Promise<LiveAvailableSlotsResponse> {
     const params = new URLSearchParams({ date });
+    if (forPatientId) {
+        params.set('forPatientId', forPatientId);
+    }
     return api.get<LiveAvailableSlotsResponse>(
         getToken,
         `/clinics/${clinicId}/providers/${providerId}/slots?${params}`,

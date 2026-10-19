@@ -67,6 +67,13 @@ export interface ClinicEntity {
     address: string;
     isPublic: boolean;
     supportsAppointments: boolean;
+    isGated?: boolean;
+    isUnlocked?: boolean;
+    isOnlineBookingPaused?: boolean;
+    operatingHours?: string | null;
+    isPhilHealthAccredited?: boolean;
+    contactNumber?: string | null;
+    contactEmail?: string | null;
     organizationIds: string[];
     requiredShareFields: ShareableFieldKey[];
     privacyPolicyUrl: string;
@@ -104,6 +111,7 @@ export interface OrganizationView extends OrganizationEntity {
 export interface ClinicView extends ClinicEntity {
     isJoined: boolean;
     isVisible: boolean;
+    isUnlocked?: boolean;
     unlockedByOrganizationIds: string[];
     membershipStatus?: 'pending' | 'active' | null;
 }

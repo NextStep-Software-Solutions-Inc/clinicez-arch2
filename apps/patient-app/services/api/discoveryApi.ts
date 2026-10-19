@@ -29,6 +29,13 @@ const clinicSummarySchema = z.object({
     address: z.string().nullable(),
     isPublic: z.boolean(),
     supportsAppointments: z.boolean(),
+    isGated: z.boolean().optional(),
+    isUnlocked: z.boolean().optional(),
+    isOnlineBookingPaused: z.boolean().optional(),
+    operatingHours: z.string().nullable().optional(),
+    isPhilHealthAccredited: z.boolean().optional(),
+    contactNumber: z.string().nullable().optional(),
+    contactEmail: z.string().nullable().optional(),
     logoUrl: z.string().nullable(),
     coverImageUrl: z.string().nullable(),
     specialtiesJson: z.string(),
@@ -260,5 +267,42 @@ export async function cancelClinicMembership(
     clinicId: string,
 ): Promise<boolean> {
     return api.delete<boolean>(getToken, `/patients/${patientId}/clinic-memberships/${clinicId}`);
+}
+
+// ── Unlock Gated Clinic API ──────────────────────────────────────────────────
+
+export const unlockClinicResultSchema = z.object({
+    success: z.boolean().optional(),
+    isUnlocked: z.boolean(),
+    membershipId: z.string().nullable().optional(),
+    message: z.string().nullable().optional(),
+});
+export type UnlockClinicResult = z.infer<typeof unlockClinicResultSchema>;
+
+export interface UnlockClinicAccessInput {
+    joinCode?: string;
+    organizationId?: string;
+    consentPrivacyPolicy?: boolean;
+    consentTermsAndConditions?: boolean;
+    consentDataSharing?: boolean;
+}
+
+/**
+ * Submits an unlock request for a gated clinic using a 6-character Join Code
+ * or linked partner Organization ID.
+ *
+ * Backend endpoint: POST /api/v1/clinics/{clinicId}/unlock
+ */
+export async function unlockClinic(
+    getToken: () => Promise<string | null>,
+    clinicId: string,
+    input: UnlockClinicAccessInput,
+): Promise<UnlockClinicResult> {
+    const data = await api.post<unknown>(
+        getToken,
+        `/clinics/${encodeURIComponent(clinicId)}/unlock`,
+        input,
+    );
+    return unlockClinicResultSchema.parse(data);
 }
 

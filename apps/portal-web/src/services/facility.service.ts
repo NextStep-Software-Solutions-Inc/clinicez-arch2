@@ -47,6 +47,7 @@ const workspaceFacilitySchema = z.object({
   visibility: facilityVisibilitySchema,
   acceptsExternalRequests: z.boolean(),
   branchId: optionalText,
+  isPatientDiscoveryEligible: z.boolean().nullish().transform((v) => v ?? false),
 });
 export type WorkspaceFacility = z.infer<typeof workspaceFacilitySchema>;
 
@@ -103,6 +104,13 @@ const rotateHubCredentialsResultSchema = z.object({
   hubCredentials: hubRotatedCredentialsSchema,
 });
 
+const setDiscoveryEligibilityResultSchema = z.object({
+  facilityId: z.string(),
+  isEligible: z.boolean(),
+  updatedAt: z.string(),
+});
+export type SetDiscoveryEligibilityResult = z.infer<typeof setDiscoveryEligibilityResultSchema>;
+
 export const facilityService = {
   getFacilities: async (tenantSlug: string): Promise<WorkspaceFacility[]> => {
     const res = await apiClient.get<unknown>(`/facilities?tenantSlug=${encodeURIComponent(tenantSlug)}`);
@@ -124,6 +132,23 @@ export const facilityService = {
       `/facilities/${encodeURIComponent(facilityId)}/hub-credentials/rotate?tenantSlug=${encodeURIComponent(tenantSlug)}&service=${encodeURIComponent(service)}`,
     );
     return parseWire(rotateHubCredentialsResultSchema, res.data, "hub credentials").hubCredentials;
+  },
+
+  /**
+   * Sets master patient app directory discovery eligibility for a facility.
+   * Restricted to Workspace Owners and Workspace Admins.
+   * Calls: PUT /api/v1/facilities/{facilityId}/discovery-eligibility
+   */
+  setDiscoveryEligibility: async (
+    tenantSlug: string,
+    facilityId: string,
+    isEligible: boolean,
+  ): Promise<SetDiscoveryEligibilityResult> => {
+    const res = await apiClient.put<unknown>(
+      `/facilities/${encodeURIComponent(facilityId)}/discovery-eligibility`,
+      { isEligible, tenantSlug },
+    );
+    return parseWire(setDiscoveryEligibilityResultSchema, res.data, "discovery eligibility");
   },
 };
 

@@ -103,7 +103,9 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.EnableChipLevelQueueCalling,
             settings.StaffNotificationRetentionDays,
             settings.EnableStatAudioAlert,
-            settings.EnableStatVibrationAlert);
+            settings.EnableStatVibrationAlert,
+            settings.IsDirectoryPublished,
+            settings.IsOnlineBookingPaused);
     }
 }
 

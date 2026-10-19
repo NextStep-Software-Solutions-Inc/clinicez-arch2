@@ -248,10 +248,78 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       (license.limits?.maxStaff ?? 0) > 0
   );
   const hasProfile = Boolean(clinicName?.trim() && (letterheadAddress?.trim() || letterheadContact?.trim()));
+  const hasOperatingHours = Boolean(operatingHours && operatingHours.trim().length > 0);
   const hasDoctor = staff.some((s) => s.isActive && s.role === 'Doctor' && Boolean(s.prcLicenseNumber?.trim()));
   const hasFrontDesk = staff.some((s) => s.isActive && (s.role === 'Receptionist' || s.role === 'Cashier' || s.role === 'Admin'));
   const hasServices = services.some((s) => s.isActive);
-  const isFacilityReady = hasActiveLicense && hasProfile && hasDoctor && hasFrontDesk && hasServices;
+  const isFacilityReady = hasActiveLicense && hasProfile && hasOperatingHours && hasDoctor && hasFrontDesk && hasServices;
+
+  const [publishingLoading, setPublishingLoading] = useState(false);
+  const [pauseLoading, setPauseLoading] = useState(false);
+
+  const handleTogglePublishDirectory = async (nextValue: boolean) => {
+    if (!settings) return;
+    const prevPublished = settings.isDirectoryPublished ?? false;
+    // Optimistic update
+    setSettings((prev) => (prev ? { ...prev, isDirectoryPublished: nextValue } : null));
+    setPublishingLoading(true);
+
+    const [result, err] = await clinicService.publishToDirectory(nextValue);
+    setPublishingLoading(false);
+
+    if (err || !result?.success) {
+      // Rollback
+      setSettings((prev) => (prev ? { ...prev, isDirectoryPublished: prevPublished } : null));
+      notify.error(err?.message || result?.message || 'Failed to update patient directory status.');
+      return;
+    }
+
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            isDirectoryPublished: result.isPublished,
+          }
+        : null
+    );
+    notify.success(
+      result.isPublished
+        ? 'Facility is now published to the Patient App directory.'
+        : 'Facility has been unpublished from the Patient App directory.'
+    );
+  };
+
+  const handleToggleBookingPause = async (nextValue: boolean) => {
+    if (!settings) return;
+    const prevPaused = settings.isOnlineBookingPaused ?? false;
+    // Optimistic update
+    setSettings((prev) => (prev ? { ...prev, isOnlineBookingPaused: nextValue } : null));
+    setPauseLoading(true);
+
+    const [result, err] = await clinicService.toggleBookingPause(nextValue);
+    setPauseLoading(false);
+
+    if (err || !result?.success) {
+      // Rollback
+      setSettings((prev) => (prev ? { ...prev, isOnlineBookingPaused: prevPaused } : null));
+      notify.error(err?.message || result?.message || 'Failed to update booking pause status.');
+      return;
+    }
+
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            isOnlineBookingPaused: result.isPaused,
+          }
+        : null
+    );
+    notify.success(
+      result.isPaused
+        ? 'Online patient bookings are now paused.'
+        : 'Online patient bookings are now active.'
+    );
+  };
 
   // Build Tabs based on RBAC authority
   const tabs = useMemo<SettingsTabItem[]>(() => {
@@ -361,9 +429,18 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             letterheadAddress={letterheadAddress}
             letterheadContact={letterheadContact}
             accreditationNumber={accreditationNumber}
+            operatingHours={operatingHours}
             staff={staff}
             services={services}
             roles={roles}
+            isDirectoryPublished={settings?.isDirectoryPublished ?? false}
+            isOnlineBookingPaused={settings?.isOnlineBookingPaused ?? false}
+            isWorkspaceEligible={settings?.isWorkspaceEligible ?? false}
+            onTogglePublishDirectory={handleTogglePublishDirectory}
+            onToggleBookingPause={handleToggleBookingPause}
+            isPublishingMutating={publishingLoading}
+            isBookingPauseMutating={pauseLoading}
+            showSkeletons={showSkeletons}
             onNavigateTab={setActiveTab}
             onOpenAddStaff={() => {
               setActiveTab('staff');

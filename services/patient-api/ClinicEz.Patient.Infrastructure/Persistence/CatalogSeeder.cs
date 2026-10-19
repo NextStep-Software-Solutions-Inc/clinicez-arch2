@@ -55,21 +55,37 @@ public class CatalogSeeder : IDataSeeder
     {
         var now = DateTime.UtcNow;
 
-        // Only seed catalog if healthcare providers and availabilities are already seeded
-        if (context.ClinicHealthcareProviders.Any() && context.ProviderAvailabilities.Any())
+        // Only seed catalog if demo clinics are not already seeded
+        if (context.Clinics.Any(c => c.TenantId == null))
         {
             return;
         }
 
-        context.ProviderAvailabilities.RemoveRange(context.ProviderAvailabilities);
-        context.ClinicHealthcareProviders.RemoveRange(context.ClinicHealthcareProviders);
-        context.ClinicOrganizationLinks.RemoveRange(context.ClinicOrganizationLinks);
-        context.ClinicMemberships.RemoveRange(context.ClinicMemberships);
-        context.OrganizationMemberships.RemoveRange(context.OrganizationMemberships);
-        context.BookingDrafts.RemoveRange(context.BookingDrafts);
-        context.Clinics.RemoveRange(context.Clinics);
-        context.Organizations.RemoveRange(context.Organizations);
-        context.SaveChanges();
+        var demoClinics = context.Clinics.Where(c => c.TenantId == null).ToList();
+        if (demoClinics.Count != 0)
+        {
+            var demoClinicIds = demoClinics.Select(c => c.Id).ToHashSet();
+            var demoProviderIds = context.ClinicHealthcareProviders
+                .Where(p => demoClinicIds.Contains(p.ClinicId))
+                .Select(p => p.Id)
+                .ToHashSet();
+
+            context.ProviderAvailabilities.RemoveRange(
+                context.ProviderAvailabilities.Where(pa => demoProviderIds.Contains(pa.ClinicHealthcareProviderId)));
+            context.ClinicHealthcareProviders.RemoveRange(
+                context.ClinicHealthcareProviders.Where(p => demoClinicIds.Contains(p.ClinicId)));
+            context.ClinicServices.RemoveRange(
+                context.ClinicServices.Where(s => demoClinicIds.Contains(s.ClinicId)));
+            context.ClinicOrganizationLinks.RemoveRange(
+                context.ClinicOrganizationLinks.Where(l => demoClinicIds.Contains(l.ClinicId)));
+            context.ClinicMemberships.RemoveRange(
+                context.ClinicMemberships.Where(m => demoClinicIds.Contains(m.ClinicId)));
+            context.BookingDrafts.RemoveRange(
+                context.BookingDrafts.Where(b => demoClinicIds.Contains(b.ClinicId)));
+            context.Clinics.RemoveRange(demoClinics);
+            context.Organizations.RemoveRange(context.Organizations);
+            context.SaveChanges();
+        }
 
         var organizations = new List<Organization>();
         var clinics = new List<Clinic>();
@@ -255,6 +271,8 @@ public class CatalogSeeder : IDataSeeder
                 Description = $"A {(isPublic ? "public" : "private")} {specialty.ToLowerInvariant()} clinic built for online consultations and follow-up care.",
                 LogoUrl = $"https://picsum.photos/seed/clinic-logo-{i}/80/80",
                 CoverImageUrl = $"https://picsum.photos/seed/clinic-cover-{i}/400/180",
+                IsWorkspaceEligible = isPublic,
+                IsDirectoryPublished = isPublic,
                 IsPublic = isPublic,
                 SupportsAppointments = supportsAppointments,
                 PrivacyPolicyUrl = $"https://Clinic EZ.app/privacy/{slug}",

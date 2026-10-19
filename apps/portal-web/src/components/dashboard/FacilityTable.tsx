@@ -6,6 +6,7 @@ import { apiClient } from "@/transport/apiClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
     IconCircleCheck, 
@@ -312,8 +313,17 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                     </span>
                                 </div>
                             </div>
-                            <div className="shrink-0">
+                            <div className="shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
                                 {renderStatusBadge(fac.status)}
+                                {fac.isPatientDiscoveryEligible ? (
+                                    <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/20">
+                                        Directory Eligible
+                                    </Badge>
+                                ) : (
+                                    <Badge variant="outline" className="text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700">
+                                        Draft / Private
+                                    </Badge>
+                                )}
                             </div>
                         </div>
 
@@ -438,7 +448,18 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                         })}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        {renderStatusBadge(fac.status)}
+                                        <div className="flex items-center gap-2">
+                                            {renderStatusBadge(fac.status)}
+                                            {fac.isPatientDiscoveryEligible ? (
+                                                <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/20">
+                                                    Directory Eligible
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="outline" className="text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700">
+                                                    Draft / Private
+                                                </Badge>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4 text-right whitespace-nowrap">
                                         <div className="inline-flex items-center gap-1.5 justify-end">

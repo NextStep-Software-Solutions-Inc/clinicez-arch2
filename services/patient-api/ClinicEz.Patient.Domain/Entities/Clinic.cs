@@ -15,8 +15,14 @@ public sealed class Clinic
     public string? TenantId { get; set; }
     public string? Description { get; set; }
     public string? Address { get; set; }
-    public bool IsPublic { get; set; } = true;
+    public bool IsWorkspaceEligible { get; set; } = false;
+    public bool IsDirectoryPublished { get; set; } = false;
+    public bool IsPublic { get; set; } = false;
     public bool SupportsAppointments { get; set; } = true;
+    public string? OperatingHours { get; set; }
+    public bool IsGated { get; set; } = false;
+    public string? JoinCode { get; set; }
+    public DateTime? JoinCodeExpiresAt { get; set; }
     public string? LogoUrl { get; set; }
     public string? CoverImageUrl { get; set; }
     public string? PrivacyPolicyUrl { get; set; }
@@ -34,4 +40,21 @@ public sealed class Clinic
     public ICollection<BookingDraft> BookingDrafts { get; set; } = [];
     public ICollection<ClinicHealthcareProvider> HealthcareProviders { get; set; } = [];
     public ICollection<ClinicService> Services { get; set; } = [];
+
+    public void SetWorkspaceEligibility(bool isEligible)
+    {
+        IsWorkspaceEligible = isEligible;
+        SyncPublicStatus();
+    }
+
+    public void SetDirectoryPublished(bool isPublished)
+    {
+        IsDirectoryPublished = isPublished;
+        SyncPublicStatus();
+    }
+
+    public void SyncPublicStatus()
+    {
+        IsPublic = IsWorkspaceEligible && IsDirectoryPublished;
+    }
 }

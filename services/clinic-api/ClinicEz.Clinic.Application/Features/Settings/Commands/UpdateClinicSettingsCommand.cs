@@ -227,7 +227,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.EnableChipLevelQueueCalling,
             settings.StaffNotificationRetentionDays,
             settings.EnableStatAudioAlert,
-            settings.EnableStatVibrationAlert);
+            settings.EnableStatVibrationAlert,
+            settings.IsDirectoryPublished,
+            settings.IsOnlineBookingPaused);
     }
 }
 

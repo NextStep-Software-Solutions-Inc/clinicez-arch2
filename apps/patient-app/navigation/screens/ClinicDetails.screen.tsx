@@ -5,6 +5,7 @@ import { useAuth as useClerkAuth } from '@clerk/expo';
 import NetInfo from '@react-native-community/netinfo';
 import ThemedText from '@ui/ThemedText';
 import { AppIcon } from '@ui/Icon';
+import Badge from '@ui/Badge';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
 import EntityCoverHeader from '@ui/EntityCoverHeader';
@@ -19,9 +20,12 @@ import {
   getShareFieldLabel,
   joinClinic,
   cancelClinicMembershipOnline,
+  unlockClinicAccess,
 } from '../../services/discovery/discoveryService';
 import { ClinicDetail, ConsentSelection } from '../../services/discovery/types';
 import { dialog } from '@utils/dialog';
+import GatedServiceCatalogLockedCard from '../../components/clinics/GatedServiceCatalogLockedCard';
+import ClinicJoinCodeModal from '../../components/clinics/ClinicJoinCodeModal';
 
 function ConsentToggle({ label, value, onPress }: { label: string; value: boolean; onPress: () => void }) {
   const { colors, radii, sizes } = useAppTheme();
@@ -70,6 +74,7 @@ export default function ClinicDetailsScreen() {
   const [clinic, setClinic] = useState<ClinicDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showJoinCodeModal, setShowJoinCodeModal] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -226,138 +231,215 @@ export default function ClinicDetailsScreen() {
       />
       <View style={styles.titleBlock}>
         <ThemedText variant="h1">{clinic.name}</ThemedText>
+        {clinic.isPhilHealthAccredited ? (
+          <Badge
+            label="PhilHealth YAKAP Accredited"
+            tone="routine"
+            icon="shield"
+            size="sm"
+            style={{ alignSelf: 'flex-start' }}
+          />
+        ) : null}
         <ThemedText variant="body" color="textSecondary">{clinic.description}</ThemedText>
-        <ThemedText variant="caption" color="textMuted">{clinic.isPublic ? 'Public clinic' : 'Private clinic'} · {clinic.supportsAppointments ? 'Supports bookings' : 'Booking not yet available'}</ThemedText>
+        <ThemedText variant="caption" color="textMuted">
+          {clinic.isPublic ? 'Public clinic' : 'Private clinic'} ·{' '}
+          {clinic.supportsAppointments && !clinic.isOnlineBookingPaused
+            ? 'Supports bookings'
+            : 'Booking not yet available'}
+        </ThemedText>
         <ThemedText variant="caption" color="textMuted">{clinic.address}</ThemedText>
       </View>
 
+      {/* Structured Public Attributes: Operating Hours, Location, Contact */}
       <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
-        <ThemedText variant="title">Access</ThemedText>
-        <ThemedText variant="body" color="textSecondary">
-          {clinic.isJoined
-            ? 'You have joined this clinic.'
-            : clinic.membershipStatus === 'pending'
-            ? 'Your join request is pending approval.'
-            : clinic.isPublic
-            ? 'You can join directly from here.'
-            : 'Join a partnered organization to unlock this clinic.'}
-        </ThemedText>
-        {!clinic.isJoined && clinic.membershipStatus !== 'pending' ? (
-          <Pressable onPress={startJoin} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, borderRadius: radii.md, opacity: pressed ? 0.8 : 1 }]} accessibilityRole="button">
-            <ThemedText variant="smallBold" color="onPrimary">Join clinic</ThemedText>
-          </Pressable>
-        ) : clinic.membershipStatus === 'pending' ? (
-          <View style={{ gap: spacing.sm }}>
-            <View style={[styles.primaryButton, { backgroundColor: colors.warning, borderRadius: radii.md, opacity: 0.85, justifyContent: 'center', alignItems: 'center' }]}>
-              <ThemedText variant="smallBold" color="onPrimary">Request pending approval</ThemedText>
+        {clinic.operatingHours ? (
+          <>
+            <View style={styles.attributeRow}>
+              <AppIcon name="clock" size={sizes.iconMd} color="primary" />
+              <View style={styles.attributeTextCol}>
+                <ThemedText variant="smallBold" color="text">Operating Hours</ThemedText>
+                <ThemedText variant="caption" color="textSecondary">{clinic.operatingHours}</ThemedText>
+              </View>
             </View>
-            <Pressable
-              onPress={handleCancelRequest}
-              disabled={isCancelling}
-              style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.emergency, borderRadius: radii.md, opacity: pressed || isCancelling ? 0.7 : 1 }]}
-              accessibilityRole="button"
-            >
-              <ThemedText variant="smallBold" color="emergency">
-                {isCancelling ? 'Cancelling...' : 'Cancel join request'}
-              </ThemedText>
-            </Pressable>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          </>
+        ) : null}
+        <View style={styles.attributeRow}>
+          <AppIcon name="location" size={sizes.iconMd} color="primary" />
+          <View style={styles.attributeTextCol}>
+            <ThemedText variant="smallBold" color="text">Physical Location</ThemedText>
+            <ThemedText variant="caption" color="textSecondary">{clinic.address}</ThemedText>
           </View>
-        ) : null}
-        {clinic.supportsAppointments ? (
-          <Pressable onPress={() => navigation.navigate('Main', { screen: 'BookingDraftScreen', params: { clinicId: clinic.id } })} style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, borderRadius: radii.md, opacity: pressed ? 0.8 : 1 }]} accessibilityRole="button">
-            <ThemedText variant="smallBold" color="text">Create booking draft</ThemedText>
-          </Pressable>
-        ) : null}
-      </View>
-
-      <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
-        <ThemedText variant="title">Required sharing</ThemedText>
-        <View style={styles.requiredWrap}>
-          {clinic.requiredShareFields.map((field) => (
-            <View key={field} style={[styles.requiredChip, { borderColor: colors.border, borderRadius: radii.full }]}>
-              <ThemedText variant="captionBold" color="textSecondary">{getShareFieldLabel(field)}</ThemedText>
-            </View>
-          ))}
         </View>
+        {clinic.contactNumber || clinic.contactEmail ? (
+          <>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <View style={styles.contactRow}>
+              {clinic.contactNumber ? (
+                <View style={[styles.contactChip, { borderColor: colors.border, backgroundColor: colors.surfaceSubtle, borderRadius: radii.full }]}>
+                  <AppIcon name="phone" size={sizes.iconSm} color="primary" />
+                  <ThemedText variant="captionBold" color="textSecondary">{clinic.contactNumber}</ThemedText>
+                </View>
+              ) : null}
+              {clinic.contactEmail ? (
+                <View style={[styles.contactChip, { borderColor: colors.border, backgroundColor: colors.surfaceSubtle, borderRadius: radii.full }]}>
+                  <AppIcon name="mail" size={sizes.iconSm} color="primary" />
+                  <ThemedText variant="captionBold" color="textSecondary">{clinic.contactEmail}</ThemedText>
+                </View>
+              ) : null}
+            </View>
+          </>
+        ) : null}
       </View>
 
-      <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
-        <ThemedText variant="title">Healthcare Providers</ThemedText>
-        {clinic.healthcareProviders.length === 0 ? (
-          <ThemedText variant="body" color="textMuted">No providers listed for this clinic.</ThemedText>
-        ) : (
-          <View style={{ gap: spacing.md }}>
-            {clinic.healthcareProviders.map((provider, idx) => (
-              <View key={provider.id}>
-                {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+      {/* Gated Intake vs Active Catalog */}
+      {clinic.isGated && !clinic.isUnlocked ? (
+        <GatedServiceCatalogLockedCard
+          clinic={clinic}
+          onEnterJoinCode={() => setShowJoinCodeModal(true)}
+          onScanQr={() => setShowJoinCodeModal(true)}
+          onJoinOrganization={(orgId) =>
+            navigation.navigate('Main', {
+              screen: 'OrganizationDetailsScreen',
+              params: { organizationId: orgId },
+            })
+          }
+        />
+      ) : (
+        <>
+          <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
+            <ThemedText variant="title">Access</ThemedText>
+            <ThemedText variant="body" color="textSecondary">
+              {clinic.isJoined
+                ? 'You have joined this clinic.'
+                : clinic.membershipStatus === 'pending'
+                ? 'Your join request is pending approval.'
+                : clinic.isPublic
+                ? 'You can join directly from here.'
+                : 'Join a partnered organization to unlock this clinic.'}
+            </ThemedText>
+            {!clinic.isJoined && clinic.membershipStatus !== 'pending' ? (
+              <Pressable onPress={startJoin} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, borderRadius: radii.md, opacity: pressed ? 0.8 : 1 }]} accessibilityRole="button">
+                <ThemedText variant="smallBold" color="onPrimary">Join clinic</ThemedText>
+              </Pressable>
+            ) : clinic.membershipStatus === 'pending' ? (
+              <View style={{ gap: spacing.sm }}>
+                <View style={[styles.primaryButton, { backgroundColor: colors.warning, borderRadius: radii.md, opacity: 0.85, justifyContent: 'center', alignItems: 'center' }]}>
+                  <ThemedText variant="smallBold" color="onPrimary">Request pending approval</ThemedText>
+                </View>
                 <Pressable
-                  onPress={() =>
-                    navigation.navigate('Main', {
-                      screen: 'ProviderProfileScreen',
-                      params: {
-                        providerData: {
-                          ...provider,
-                          affiliatedClinics: [{ id: clinic.id, name: clinic.name, address: clinic.address, logoUrl: clinic.logoUrl ?? null, coverImageUrl: clinic.coverImageUrl ?? null }],
-                        },
-                      },
-                    })
-                  }
+                  onPress={handleCancelRequest}
+                  disabled={isCancelling}
+                  style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.emergency, borderRadius: radii.md, opacity: pressed || isCancelling ? 0.7 : 1 }]}
                   accessibilityRole="button"
-                  style={({ pressed }) => [styles.providerRow, { opacity: pressed ? 0.75 : 1 }]}
                 >
-                  <View style={[styles.providerAvatar, { backgroundColor: colors.primary, borderRadius: radii.full }]}>
-                    <ThemedText variant="smallBold" color="onPrimary">
-                      {provider.name.split(' ').filter(w => w[0]?.match(/[A-Z]/)).slice(0, 2).map(w => w[0]).join('')}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.providerInfo}>
-                    <ThemedText variant="bodyBold" color="text">{provider.name}</ThemedText>
-                    <ThemedText variant="caption" color="textMuted">
-                      {provider.specialty} · {provider.credentials.join(', ')}
-                    </ThemedText>
-                  </View>
-                  <AppIcon name="forward" size={sizes.iconMd} color="textMuted" />
+                  <ThemedText variant="smallBold" color="emergency">
+                    {isCancelling ? 'Cancelling...' : 'Cancel join request'}
+                  </ThemedText>
                 </Pressable>
               </View>
-            ))}
-          </View>
-        )}
-      </View>
-
-      <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
-        <ThemedText variant="title">Services & Pricing</ThemedText>
-        {!clinic.services || clinic.services.length === 0 ? (
-          <ThemedText variant="body" color="textMuted">No services listed for this clinic.</ThemedText>
-        ) : (
-          <View style={{ gap: spacing.md }}>
-            {clinic.services.map((service, idx) => (
-              <View key={service.id}>
-                {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
-                <View style={styles.serviceRow}>
-                  <View style={styles.serviceInfo}>
-                    <ThemedText variant="bodyBold" color="text">{service.name}</ThemedText>
-                    {service.description ? (
-                      <ThemedText variant="caption" color="textSecondary" numberOfLines={2}>
-                        {service.description}
-                      </ThemedText>
-                    ) : null}
-                    <ThemedText variant="caption" color="textMuted">
-                      {service.durationMinutes ? `${service.durationMinutes} mins` : 'N/A duration'}
-                    </ThemedText>
-                  </View>
-                  {service.price !== undefined && service.price !== null ? (
-                    <ThemedText variant="title" color="primary">
-                      PHP {service.price.toFixed(2)}
-                    </ThemedText>
-                  ) : (
-                    <ThemedText variant="title" color="textSecondary">Free</ThemedText>
-                  )}
-                </View>
+            ) : null}
+            {clinic.supportsAppointments && !clinic.isOnlineBookingPaused ? (
+              <Pressable onPress={() => navigation.navigate('Main', { screen: 'BookingDraftScreen', params: { clinicId: clinic.id } })} style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, borderRadius: radii.md, opacity: pressed ? 0.8 : 1 }]} accessibilityRole="button">
+                <ThemedText variant="smallBold" color="text">Create booking draft</ThemedText>
+              </Pressable>
+            ) : clinic.supportsAppointments && clinic.isOnlineBookingPaused ? (
+              <View style={[styles.secondaryButton, { borderColor: colors.border, borderRadius: radii.md, opacity: 0.6 }]}>
+                <ThemedText variant="smallBold" color="textMuted">Booking not yet available</ThemedText>
               </View>
-            ))}
+            ) : null}
           </View>
-        )}
-      </View>
+
+          <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
+            <ThemedText variant="title">Required sharing</ThemedText>
+            <View style={styles.requiredWrap}>
+              {clinic.requiredShareFields.map((field) => (
+                <View key={field} style={[styles.requiredChip, { borderColor: colors.border, borderRadius: radii.full }]}>
+                  <ThemedText variant="captionBold" color="textSecondary">{getShareFieldLabel(field)}</ThemedText>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
+            <ThemedText variant="title">Healthcare Providers</ThemedText>
+            {clinic.healthcareProviders.length === 0 ? (
+              <ThemedText variant="body" color="textMuted">No providers listed for this clinic.</ThemedText>
+            ) : (
+              <View style={{ gap: spacing.md }}>
+                {clinic.healthcareProviders.map((provider, idx) => (
+                  <View key={provider.id}>
+                    {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+                    <Pressable
+                      onPress={() =>
+                        navigation.navigate('Main', {
+                          screen: 'ProviderProfileScreen',
+                          params: {
+                            providerData: {
+                              ...provider,
+                              affiliatedClinics: [{ id: clinic.id, name: clinic.name, address: clinic.address, logoUrl: clinic.logoUrl ?? null, coverImageUrl: clinic.coverImageUrl ?? null }],
+                            },
+                          },
+                        })
+                      }
+                      accessibilityRole="button"
+                      style={({ pressed }) => [styles.providerRow, { opacity: pressed ? 0.75 : 1 }]}
+                    >
+                      <View style={[styles.providerAvatar, { backgroundColor: colors.primary, borderRadius: radii.full }]}>
+                        <ThemedText variant="smallBold" color="onPrimary">
+                          {provider.name.split(' ').filter(w => w[0]?.match(/[A-Z]/)).slice(0, 2).map(w => w[0]).join('')}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.providerInfo}>
+                        <ThemedText variant="bodyBold" color="text">{provider.name}</ThemedText>
+                        <ThemedText variant="caption" color="textMuted">
+                          {provider.specialty} · {provider.credentials.join(', ')}
+                        </ThemedText>
+                      </View>
+                      <AppIcon name="forward" size={sizes.iconMd} color="textMuted" />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
+            <ThemedText variant="title">Services & Pricing</ThemedText>
+            {!clinic.services || clinic.services.length === 0 ? (
+              <ThemedText variant="body" color="textMuted">No services listed for this clinic.</ThemedText>
+            ) : (
+              <View style={{ gap: spacing.md }}>
+                {clinic.services.map((service, idx) => (
+                  <View key={service.id}>
+                    {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+                    <View style={styles.serviceRow}>
+                      <View style={styles.serviceInfo}>
+                        <ThemedText variant="bodyBold" color="text">{service.name}</ThemedText>
+                        {service.description ? (
+                          <ThemedText variant="caption" color="textSecondary" numberOfLines={2}>
+                            {service.description}
+                          </ThemedText>
+                        ) : null}
+                        <ThemedText variant="caption" color="textMuted">
+                          {service.durationMinutes ? `${service.durationMinutes} mins` : 'N/A duration'}
+                        </ThemedText>
+                      </View>
+                      {service.price !== undefined && service.price !== null ? (
+                        <ThemedText variant="title" color="primary">
+                          PHP {service.price.toFixed(2)}
+                        </ThemedText>
+                      ) : (
+                        <ThemedText variant="title" color="textSecondary">Free</ThemedText>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </>
+      )}
 
       <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
         <ThemedText variant="title">Partner organizations</ThemedText>
@@ -404,6 +486,20 @@ export default function ClinicDetailsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Clinic Join Code Modal */}
+      <ClinicJoinCodeModal
+        visible={showJoinCodeModal}
+        clinicId={clinic.id}
+        clinicName={clinic.name}
+        onClose={() => setShowJoinCodeModal(false)}
+        onScanQr={() => setShowJoinCodeModal(true)}
+        onUnlock={async (joinCode) => {
+          const updated = await unlockClinicAccess(patientId, clinic.id, joinCode, getToken);
+          setClinic(updated);
+          dialog.alert('Clinic Unlocked', `You now have full access to ${clinic.name}'s service catalog and appointment booking.`);
+        }}
+      />
     </ScrollView>
   );
 }
@@ -432,4 +528,8 @@ const styles = StyleSheet.create({
   consentLabel: { flex: 1 },
   serviceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, gap: 12 },
   serviceInfo: { flex: 1, gap: 2 },
+  attributeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
+  attributeTextCol: { flex: 1, gap: 2 },
+  contactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 4 },
+  contactChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 6 },
 });

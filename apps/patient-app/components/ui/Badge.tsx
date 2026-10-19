@@ -12,7 +12,8 @@ export type BadgeTone =
   | 'danger'
   | 'info'
   | 'purple'
-  | 'urgent';
+  | 'urgent'
+  | 'routine';
 
 export interface BadgeProps {
   label: string;
@@ -39,6 +40,8 @@ export function useBadgeColors(tone: BadgeTone) {
       return { bg: colors.purpleBg, fg: colors.purpleText, border: colors.purpleBorder };
     case 'urgent':
       return { bg: colors.urgentBg, fg: colors.urgentText, border: colors.urgentBorder };
+    case 'routine':
+      return { bg: colors.routineBg, fg: colors.routineText, border: colors.routineBorder };
     case 'neutral':
     default:
       return { bg: colors.surfaceSubtle, fg: colors.textSecondary, border: colors.border };

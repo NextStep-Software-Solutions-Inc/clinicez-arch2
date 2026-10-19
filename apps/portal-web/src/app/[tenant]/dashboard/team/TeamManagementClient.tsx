@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { 
     IconUsers, 
@@ -149,9 +150,20 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
         }
     };
 
+    const searchParams = useSearchParams();
+
     useEffect(() => {
         loadData();
     }, [tenantSlug]);
+
+    useEffect(() => {
+        if (searchParams?.get("invite") === "true") {
+            setInviteOpen(true);
+            const sp = new URLSearchParams(window.location.search);
+            sp.delete("invite");
+            window.history.replaceState({}, "", `${window.location.pathname}${sp.toString() ? `?${sp.toString()}` : ""}`);
+        }
+    }, [searchParams]);
 
     const handleCopyInviteLink = (token?: string | null) => {
         if (!token) return;

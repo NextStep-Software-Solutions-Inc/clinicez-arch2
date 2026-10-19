@@ -182,6 +182,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.DeploymentMode).HasConversion<string>().HasMaxLength(16).HasDefaultValue(FacilityDeploymentMode.SharedCloud);
             entity.Property(e => e.ConsoleBaseUrl).HasMaxLength(2048);
             entity.Property(e => e.Visibility).HasConversion<string>().HasMaxLength(16).HasDefaultValue(FacilityVisibility.Private);
+            entity.Property(e => e.IsPatientDiscoveryEligible).HasDefaultValue(false);
             entity.Property(e => e.CellId).HasMaxLength(80).HasDefaultValue(string.Empty);
             entity.Property(e => e.HubClientId).HasMaxLength(128);
             entity.HasOne(e => e.Tenant)

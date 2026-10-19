@@ -12,6 +12,13 @@ public record FacilityProviderDto(
     bool IsActive = true,
     int DisplayOrder = 0);
 
+public record ClinicServiceDto(
+    Guid ServiceId,
+    string Name,
+    string Category,
+    decimal StandardPrice,
+    bool IsActive = true);
+
 public record FacilityCreatedEvent
 {
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -42,5 +49,12 @@ public record FacilityCreatedEvent
     public string? Classification { get; init; }
     public bool? IsPhilHealthAccredited { get; init; }
     public bool? IsPublic { get; init; }
+    public bool? IsWorkspaceEligible { get; init; }
+    public bool? IsDirectoryPublished { get; init; }
     public IReadOnlyList<FacilityProviderDto>? Providers { get; init; }
+    public IReadOnlyList<ClinicServiceDto>? Services { get; init; }
+    public bool? IsBookingPaused { get; init; }
+    public bool? IsJoinGated { get; init; }
+    public string? JoinCode { get; init; }
 }
+

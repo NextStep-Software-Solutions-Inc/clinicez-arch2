@@ -32,12 +32,35 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
 
     public async Task HandleAsync(FacilityCreatedEvent message, InteropMessageContext context, CancellationToken ct)
     {
-        if (context.From.Kind != PartyKind.ControlPlane || InteropServices.For(context.From) != InteropServices.Portal)
+        var isAuthorizedPortal = context.From.Kind == PartyKind.ControlPlane &&
+                                 string.Equals(InteropServices.For(context.From), InteropServices.Portal, StringComparison.OrdinalIgnoreCase);
+
+        var isClinicSender = context.From.Kind == PartyKind.Facility &&
+                             context.From.FacilityType == FacilityType.Clinic;
+
+        if (!isAuthorizedPortal && !isClinicSender)
         {
             _logger.LogWarning(
-                "Ignoring facility.directory.updated {MessageId}: sender {Sender} is not the portal.",
+                "Ignoring facility.directory.updated {MessageId}: sender {Sender} is neither the portal nor an authorized clinic.",
                 context.MessageId, context.From.Address);
             return;
+        }
+
+        if (isClinicSender)
+        {
+            var isValidClinicSender = !string.IsNullOrWhiteSpace(context.From.FacilityId) &&
+                                      Guid.TryParse(context.From.FacilityId, out var senderFacilityId) &&
+                                      senderFacilityId == message.ResourceId &&
+                                      !string.IsNullOrWhiteSpace(context.From.TenantId) &&
+                                      string.Equals(context.From.TenantId, message.TenantId, StringComparison.OrdinalIgnoreCase);
+
+            if (!isValidClinicSender)
+            {
+                _logger.LogWarning(
+                    "Security alert: Ignoring facility.directory.updated {MessageId}: clinic sender FacilityId '{SenderFacilityId}' (Tenant: '{SenderTenant}') is invalid or does not match resource '{ResourceId}' (Tenant: '{TargetTenant}').",
+                    context.MessageId, context.From.FacilityId, context.From.TenantId, message.ResourceId, message.TenantId);
+                return;
+            }
         }
 
         _logger.LogInformation(
@@ -69,15 +92,31 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
                     TenantId = message.TenantId,
                     Address = resolvedAddress,
                     Description = resolvedDescription,
-                    IsPublic = message.IsPublic ?? true,
-                    SupportsAppointments = true,
+                    SupportsAppointments = !(message.IsBookingPaused ?? false),
+                    OperatingHours = message.OperatingHours?.Trim(),
+                    IsGated = message.IsJoinGated ?? false,
+                    JoinCode = message.JoinCode?.Trim(),
                     SpecialtiesJson = specialtiesJson,
                     RequiredShareFieldsJson = "[\"demographics\",\"allergies\",\"medications\"]",
                     PrivacyPolicyUrl = privacyUrl,
                     TermsAndConditionsUrl = termsUrl,
+                    FeaturedScore = 1000,
                     CreatedAt = message.CreatedAt,
                     UpdatedAt = DateTime.UtcNow
                 };
+
+                if (isAuthorizedPortal)
+                {
+                    var eligible = message.IsWorkspaceEligible ?? message.IsPublic ?? false;
+                    newClinic.SetWorkspaceEligibility(eligible);
+                }
+                else if (isClinicSender)
+                {
+                    var published = message.IsDirectoryPublished ?? message.IsPublic ?? false;
+                    newClinic.SetDirectoryPublished(published);
+                }
+                newClinic.SyncPublicStatus();
+
                 await _dbContext.Clinics.AddAsync(newClinic, ct);
             }
             else
@@ -88,8 +127,35 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
                     existingClinic.Address = resolvedAddress;
                 if (!string.IsNullOrWhiteSpace(resolvedDescription))
                     existingClinic.Description = resolvedDescription;
-                if (message.IsPublic.HasValue)
-                    existingClinic.IsPublic = message.IsPublic.Value;
+
+                if (isAuthorizedPortal)
+                {
+                    if (message.IsWorkspaceEligible.HasValue)
+                        existingClinic.SetWorkspaceEligibility(message.IsWorkspaceEligible.Value);
+                    else if (message.IsPublic.HasValue)
+                        existingClinic.SetWorkspaceEligibility(message.IsPublic.Value);
+                }
+                else if (isClinicSender)
+                {
+                    if (message.IsDirectoryPublished.HasValue)
+                        existingClinic.SetDirectoryPublished(message.IsDirectoryPublished.Value);
+                    else if (message.IsPublic.HasValue)
+                        existingClinic.SetDirectoryPublished(message.IsPublic.Value);
+
+                    if (message.IsBookingPaused.HasValue)
+                        existingClinic.SupportsAppointments = !message.IsBookingPaused.Value;
+                    if (message.OperatingHours != null)
+                        existingClinic.OperatingHours = string.IsNullOrWhiteSpace(message.OperatingHours) ? null : message.OperatingHours.Trim();
+                    if (message.IsJoinGated.HasValue)
+                        existingClinic.IsGated = message.IsJoinGated.Value;
+                    if (message.JoinCode != null)
+                        existingClinic.JoinCode = string.IsNullOrWhiteSpace(message.JoinCode) ? null : message.JoinCode.Trim();
+                }
+
+                existingClinic.SyncPublicStatus();
+
+                if (existingClinic.FeaturedScore == 0)
+                    existingClinic.FeaturedScore = 1000;
                 if (!string.IsNullOrWhiteSpace(message.Classification) || (message.Providers is { Count: > 0 }))
                     existingClinic.SpecialtiesJson = specialtiesJson;
                 existingClinic.PrivacyPolicyUrl = privacyUrl;
@@ -141,6 +207,57 @@ public sealed class FacilityDirectoryUpdatedInteropHandler : IInteropHandler<Fac
                 }
 
                 foreach (var stale in existingProviders.Where(p => !incomingIds.Contains(p.Id)))
+                {
+                    stale.IsActive = false;
+                    stale.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            if (message.Services is not null)
+            {
+                var existingServices = await _dbContext.ClinicServices
+                    .Where(s => s.ClinicId == message.ResourceId)
+                    .ToListAsync(ct);
+
+                var incomingServiceIds = new HashSet<Guid>();
+                for (var i = 0; i < message.Services.Count; i++)
+                {
+                    var dto = message.Services[i];
+                    var serviceId = dto.ServiceId != Guid.Empty ? dto.ServiceId : Guid.NewGuid();
+                    incomingServiceIds.Add(serviceId);
+
+                    var existingService = existingServices.FirstOrDefault(s => s.Id == serviceId)
+                        ?? existingServices.FirstOrDefault(s => string.Equals(s.Name, dto.Name, StringComparison.OrdinalIgnoreCase));
+
+                    if (existingService is null)
+                    {
+                        await _dbContext.ClinicServices.AddAsync(new ClinicService
+                        {
+                            Id = serviceId,
+                            ClinicId = message.ResourceId,
+                            Name = dto.Name,
+                            Description = !string.IsNullOrWhiteSpace(dto.Category) ? dto.Category : null,
+                            Price = dto.StandardPrice,
+                            IsActive = dto.IsActive,
+                            DisplayOrder = i,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        }, ct);
+                    }
+                    else
+                    {
+                        incomingServiceIds.Add(existingService.Id);
+                        existingService.Name = dto.Name;
+                        if (!string.IsNullOrWhiteSpace(dto.Category))
+                            existingService.Description = dto.Category;
+                        existingService.Price = dto.StandardPrice;
+                        existingService.IsActive = dto.IsActive;
+                        existingService.DisplayOrder = i;
+                        existingService.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+
+                foreach (var stale in existingServices.Where(s => !incomingServiceIds.Contains(s.Id)))
                 {
                     stale.IsActive = false;
                     stale.UpdatedAt = DateTime.UtcNow;

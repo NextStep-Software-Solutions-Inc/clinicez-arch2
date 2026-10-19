@@ -460,8 +460,9 @@ export async function fetchAvailableSlots(
     providerId: string,
     date: string,
     getToken: () => Promise<string | null>,
+    forPatientId?: string,
 ): Promise<AvailableSlotsResponse> {
-    const live = await fetchAvailableSlotsLive(getToken, clinicId, providerId, date);
+    const live = await fetchAvailableSlotsLive(getToken, clinicId, providerId, date, forPatientId);
     return live as AvailableSlotsResponse;
 }
 

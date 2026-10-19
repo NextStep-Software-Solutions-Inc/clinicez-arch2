@@ -60,6 +60,18 @@ public sealed class ClinicSettings : BaseEntity
     public string? JoinCode { get; set; }
     public DateTime? JoinCodeExpiresAt { get; set; }
 
+    /// <summary>
+    /// Tier 2 publishing governance: whether this clinic has published its profile to the patient app directory.
+    /// Can only be set to true if pre-flight readiness checks pass.
+    /// </summary>
+    public bool IsDirectoryPublished { get; set; } = false;
+
+    /// <summary>
+    /// Dynamic capacity control: pauses online appointment booking on the patient app while leaving
+    /// the clinic profile discoverable.
+    /// </summary>
+    public bool IsOnlineBookingPaused { get; set; } = false;
+
     // Configurable Patient Search Result Display Fields
     public string? PatientSearchDisplayFieldsJson { get; set; }
 

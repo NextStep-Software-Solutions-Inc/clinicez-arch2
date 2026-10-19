@@ -39,7 +39,8 @@ public record FacilityDto(
     string? ConsoleBaseUrl = null,
     string Visibility = "Private",
     bool AcceptsExternalRequests = false,
-    Guid? BranchId = null
+    Guid? BranchId = null,
+    bool IsPatientDiscoveryEligible = false
 );
 
 public record GetFacilitiesQuery(string TenantSlug) : IRequest<List<FacilityDto>>;
@@ -95,7 +96,8 @@ public class GetFacilitiesQueryHandler(
                 f.ConsoleBaseUrl,
                 f.Visibility.ToString(),
                 f.AcceptsExternalRequests,
-                f.BranchId
+                f.BranchId,
+                f.IsPatientDiscoveryEligible
             );
         }).ToList();
     }

@@ -16,7 +16,10 @@ public sealed class ClinicRepository : IClinicRepository
         var q = _ctx.Clinics.Where(c => c.IsPublic).AsQueryable();
         if (!string.IsNullOrWhiteSpace(query))
             q = q.Where(c => EF.Functions.ILike(c.Name, $"%{query}%"));
-        return await q.OrderByDescending(c => c.FeaturedScore).ThenBy(c => c.Name)
+        return await q
+            .OrderByDescending(c => c.TenantId != null)
+            .ThenByDescending(c => c.FeaturedScore)
+            .ThenBy(c => c.Name)
             .Skip(skip).Take(take).ToListAsync(ct);
     }
 
@@ -41,7 +44,9 @@ public sealed class ClinicRepository : IClinicRepository
     public async Task<IReadOnlyList<Clinic>> GetByOrganizationAsync(Guid organizationId, CancellationToken ct = default)
         => await _ctx.Clinics
             .Where(c => c.OrganizationLinks.Any(l => l.OrganizationId == organizationId && l.IsActive))
-            .OrderByDescending(c => c.FeaturedScore).ThenBy(c => c.Name)
+            .OrderByDescending(c => c.TenantId != null)
+            .ThenByDescending(c => c.FeaturedScore)
+            .ThenBy(c => c.Name)
             .ToListAsync(ct);
 
     public async Task<IReadOnlyList<Clinic>> GetAllAsync(CancellationToken ct = default)

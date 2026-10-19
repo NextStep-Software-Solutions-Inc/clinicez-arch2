@@ -1,0 +1,6 @@
+ClinVar Database Terms Notification
+Timestamp: 2026-10-18T18:44:07-07:00
+
+Please review NCBI ClinVar terms of use and data disclaimer at https://www.ncbi.nlm.nih.gov/clinvar/.
+ClinVar data is maintained by the National Center for Biotechnology Information (NCBI) at the National Library of Medicine (NLM).
+Usage of ClinVar data within ClinicEZ must adhere to NLM and NCBI public domain guidelines and data disclaimers.

@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { IconBuildingHospital, IconCloud, IconServer, IconExternalLink, IconKey, IconWorld } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -117,6 +118,40 @@ function FacilityRow({ tenantSlug, facility, interopAvailable, onSaved }: Facili
         }
     };
 
+    const [isDiscoveryEligible, setIsDiscoveryEligible] = useState<boolean>(
+        Boolean(facility.isPatientDiscoveryEligible)
+    );
+    const [savingDiscovery, setSavingDiscovery] = useState(false);
+
+    useEffect(() => {
+        setIsDiscoveryEligible(Boolean(facility.isPatientDiscoveryEligible));
+    }, [facility.isPatientDiscoveryEligible]);
+
+    const handleToggleDiscovery = async () => {
+        if (savingDiscovery) return;
+        const previous = isDiscoveryEligible;
+        const next = !previous;
+
+        // Optimistic update
+        setIsDiscoveryEligible(next);
+        setSavingDiscovery(true);
+
+        try {
+            await facilityService.setDiscoveryEligibility(tenantSlug, facility.id, next);
+            toast.success(
+                next
+                    ? `${facility.name} is now eligible for Patient App discovery`
+                    : `${facility.name} discovery disabled (Draft / Private)`
+            );
+            onSaved();
+        } catch (err: unknown) {
+            setIsDiscoveryEligible(previous);
+            toastApiError(err, "Failed to update discovery eligibility", tenantSlug);
+        } finally {
+            setSavingDiscovery(false);
+        }
+    };
+
     return (
         <div className="py-4 first:pt-0 last:pb-0 space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -124,6 +159,17 @@ function FacilityRow({ tenantSlug, facility, interopAvailable, onSaved }: Facili
                 <span className="text-sm font-semibold">{facility.name}</span>
                 <Badge variant="outline" className="text-[10px]">{facility.facilityType}</Badge>
                 <Badge variant={facility.status === "Active" ? "default" : "secondary"} className="text-[10px]">{facility.status}</Badge>
+
+                {facility.isPatientDiscoveryEligible ? (
+                    <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/20">
+                        Directory Eligible
+                    </Badge>
+                ) : (
+                    <Badge variant="outline" className="text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700">
+                        Draft / Private
+                    </Badge>
+                )}
+
                 {facility.consoleUrl && (
                     <a
                         href={facility.consoleUrl}
@@ -214,6 +260,56 @@ function FacilityRow({ tenantSlug, facility, interopAvailable, onSaved }: Facili
                         </Link>
                     </p>
                 )}
+            </div>
+
+            {/* Milestone 2: Patient App Discovery Control Card */}
+            <div className="space-y-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                        <IconWorld className="h-3.5 w-3.5 text-primary" />
+                        <span className="text-xs font-bold">Patient App Discovery</span>
+                        {isDiscoveryEligible ? (
+                            <Badge variant="outline" className="text-[10px] font-bold bg-primary/10 text-primary border-primary/20">
+                                Directory Eligible
+                            </Badge>
+                        ) : (
+                            <Badge variant="outline" className="text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700">
+                                Draft / Private
+                            </Badge>
+                        )}
+                    </div>
+
+                    <div className="flex items-center gap-2 ml-auto">
+                        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                            {isDiscoveryEligible ? "Eligible" : "Disabled"}
+                        </span>
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={isDiscoveryEligible}
+                            aria-label={`Enable patient app discovery for ${facility.name}`}
+                            disabled={savingDiscovery}
+                            onClick={handleToggleDiscovery}
+                            className={cn(
+                                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed",
+                                isDiscoveryEligible ? "bg-primary" : "bg-slate-200 dark:bg-slate-800"
+                            )}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className={cn(
+                                    "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out",
+                                    isDiscoveryEligible ? "translate-x-4" : "translate-x-0"
+                                )}
+                            />
+                        </button>
+                    </div>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    {isDiscoveryEligible
+                        ? "Facility is eligible for public discovery. Clinic managers can now publish and manage online booking from the clinic workstation."
+                        : "Facility is restricted to internal workspace use. It will not appear in patient app search."}
+                </p>
             </div>
 
             {facility.deploymentMode === "OnPremise" && (

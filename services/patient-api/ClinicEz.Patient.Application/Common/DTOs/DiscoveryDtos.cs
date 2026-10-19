@@ -52,7 +52,9 @@ public sealed record ClinicSummaryDto(
     string RequiredShareFieldsJson,
     int FeaturedScore,
     int ActiveMemberCount,
-    string? MembershipStatus = null);
+    string? MembershipStatus = null,
+    bool IsGated = false,
+    bool IsUnlocked = true);
 
 public sealed record ClinicHealthcareProviderDto(
     Guid Id,
@@ -86,7 +88,9 @@ public sealed record ClinicDetailDto(
     IReadOnlyList<ClinicHealthcareProviderDto> HealthcareProviders,
     IReadOnlyList<ClinicServiceDto> Services,
     IReadOnlyList<OrganizationSummaryDto> LinkedOrganizations,
-    string? MembershipStatus);
+    string? MembershipStatus,
+    bool IsGated = false,
+    bool IsUnlocked = true);
 
 public sealed record DiscoveryPagedDto<T>(
     IReadOnlyList<T> Items,

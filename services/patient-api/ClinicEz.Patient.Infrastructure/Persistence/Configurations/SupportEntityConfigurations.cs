@@ -41,7 +41,16 @@ public sealed class ClinicConfiguration : IEntityTypeConfiguration<Clinic>
         builder.Property(e => e.TermsAndConditionsUrl).HasMaxLength(500);
         builder.Property(e => e.SpecialtiesJson).HasColumnType("text").IsRequired();
         builder.Property(e => e.RequiredShareFieldsJson).HasColumnType("text").IsRequired();
+        builder.Property(e => e.OperatingHours).HasMaxLength(200);
+        builder.Property(e => e.IsGated).HasDefaultValue(false).IsRequired();
+        builder.Property(e => e.JoinCode).HasMaxLength(50);
+        builder.Property(e => e.JoinCodeExpiresAt);
+        builder.Property(e => e.IsWorkspaceEligible).HasDefaultValue(false).IsRequired();
+        builder.Property(e => e.IsDirectoryPublished).HasDefaultValue(false).IsRequired();
+        builder.Property(e => e.IsPublic).HasDefaultValue(false).IsRequired();
         builder.HasIndex(e => e.FeaturedScore);
+        builder.HasIndex(e => e.JoinCode);
+        builder.HasIndex(e => e.IsPublic);
     }
 }
 

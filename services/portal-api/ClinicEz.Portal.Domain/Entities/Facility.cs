@@ -42,6 +42,7 @@ public class Facility : BaseEntity
     // Interop hub directory: who may address this facility and which cell (hub) serves it.
     public FacilityVisibility Visibility { get; set; } = FacilityVisibility.Private;
     public bool AcceptsExternalRequests { get; set; }
+    public bool IsPatientDiscoveryEligible { get; set; } = false;
     /// <summary>
     /// Routing cell: the shared cloud cell for SharedCloud facilities, <c>edge-{tenantId}</c> for on-premise ones.
     /// Derived from <see cref="DeploymentMode"/> whenever the facility is saved.

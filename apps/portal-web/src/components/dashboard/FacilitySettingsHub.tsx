@@ -30,9 +30,12 @@ import {
   IconAlertTriangle,
   IconTrash,
   IconAlertCircle,
-  IconPower
+  IconPower,
+  IconWorld
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
+import { facilityService } from "@/services/facility.service";
+import { toastApiError } from "@/lib/apiToast";
 
 // Prevent legacy hardcoded dummy strings from being assumed as authentic user configurations
 const sanitizeLegacyDefault = (val?: string | null): string => {
@@ -64,6 +67,7 @@ export interface FacilityData {
   contactNumber?: string | null;
   contactEmail?: string | null;
   notificationPreferencesJson?: string | null;
+  isPatientDiscoveryEligible?: boolean | null;
 }
 
 interface FacilitySettingsHubProps {
@@ -84,6 +88,12 @@ export default function FacilitySettingsHub({
 
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
+
+  // Milestone 2 Discovery Eligibility State
+  const [isPatientDiscoveryEligible, setIsPatientDiscoveryEligible] = useState<boolean>(
+    Boolean(facility?.isPatientDiscoveryEligible)
+  );
+  const [updatingDiscovery, setUpdatingDiscovery] = useState(false);
 
   // Cryptographic Facility License State
   const [licenseData, setLicenseData] = useState<{
@@ -186,6 +196,7 @@ export default function FacilitySettingsHub({
       setZipCode(facility.zipCode || "");
       setContactNumber(facility.contactNumber || "");
       setContactEmail(facility.contactEmail || "");
+      setIsPatientDiscoveryEligible(Boolean(facility.isPatientDiscoveryEligible));
 
       try {
         if (facility.notificationPreferencesJson) {
@@ -196,6 +207,32 @@ export default function FacilitySettingsHub({
       }
     }
   }, [facility]);
+
+  const handleToggleDiscoveryEligibility = async () => {
+    if (!facility || !tenantSlug || updatingDiscovery) return;
+
+    const previousValue = isPatientDiscoveryEligible;
+    const nextValue = !previousValue;
+
+    // Optimistic UI Update
+    setIsPatientDiscoveryEligible(nextValue);
+    setUpdatingDiscovery(true);
+
+    try {
+      await facilityService.setDiscoveryEligibility(tenantSlug, facility.id, nextValue);
+      toast.success(
+        nextValue
+          ? `Patient App Discovery enabled for "${facility.name}". Facility is now Directory Eligible.`
+          : `Patient App Discovery disabled for "${facility.name}". Facility returned to Draft / Private.`
+      );
+      if (onSaved) onSaved();
+    } catch (err: unknown) {
+      setIsPatientDiscoveryEligible(previousValue);
+      toastApiError(err, "Failed to update directory discovery eligibility", tenantSlug);
+    } finally {
+      setUpdatingDiscovery(false);
+    }
+  };
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -312,6 +349,23 @@ export default function FacilitySettingsHub({
             <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 bg-background border-slate-200 dark:border-slate-800">
               Status: <span className="font-bold text-emerald-600 dark:text-emerald-400 ml-1">{status}</span>
             </Badge>
+
+            {isPatientDiscoveryEligible ? (
+              <Badge 
+                variant="outline" 
+                className="text-xs font-bold px-2.5 py-1 bg-primary/10 text-primary border-primary/20 flex items-center gap-1.5"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                <span>Directory Eligible</span>
+              </Badge>
+            ) : (
+              <Badge 
+                variant="outline" 
+                className="text-xs font-semibold px-2.5 py-1 bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800"
+              >
+                <span>Draft / Private</span>
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -360,6 +414,70 @@ export default function FacilitySettingsHub({
           <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 overscroll-contain">
             {/* TAB 1: REGULATORY & STATUTORY PROFILE */}
             <TabsContent value="profile" className="m-0 space-y-5">
+              {/* ── MILESTONE 2: PATIENT DIRECTORY DISCOVERY CARD ── */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 shadow-xs space-y-3.5 transition-all">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <IconWorld className="h-4 w-4 text-primary shrink-0" />
+                      <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                        Patient App Directory Discovery
+                      </span>
+                      {isPatientDiscoveryEligible ? (
+                        <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-bold">
+                          Directory Eligible
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-semibold border-slate-200 dark:border-slate-700">
+                          Draft / Private
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Allow patients to find this facility on the ClinicEZ Patient mobile app directory.
+                      When disabled, the facility is strictly internal to your workspace and invisible to consumer search.
+                    </p>
+                  </div>
+
+                  {/* Accessible Interactive Toggle Switch */}
+                  <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isPatientDiscoveryEligible}
+                      aria-label="Toggle Patient App Directory Discovery"
+                      disabled={updatingDiscovery}
+                      onClick={handleToggleDiscoveryEligibility}
+                      className={cn(
+                        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed",
+                        isPatientDiscoveryEligible ? "bg-primary" : "bg-slate-200 dark:bg-slate-800"
+                      )}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center",
+                          isPatientDiscoveryEligible ? "translate-x-5" : "translate-x-0"
+                        )}
+                      >
+                        {updatingDiscovery && (
+                          <IconLoader className="h-3 w-3 animate-spin text-primary" />
+                        )}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Informative Two-Tier Guidance Box */}
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 flex items-start gap-2.5 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                  <IconSparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-slate-800 dark:text-slate-200">Two-Tier Publishing Governance: </strong>
+                    Enabling directory discovery marks this facility eligible. Before the clinic goes live to patients, the clinic team must verify the pre-flight readiness checklist (operating hours, licensed doctors with PRC, active service catalog) in the clinic workstation.
+                  </div>
+                </div>
+              </div>
+
               <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-2.5">
                 <IconFileCertificate className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">

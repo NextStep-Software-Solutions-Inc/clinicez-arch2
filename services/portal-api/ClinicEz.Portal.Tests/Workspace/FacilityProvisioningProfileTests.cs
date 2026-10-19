@@ -129,4 +129,51 @@ public class FacilityProvisioningProfileTests : IDisposable
         Assert.Single(_context.WorkspaceSettings);
         Assert.Equal(2, TestSupport.Outbox(_context, InteropTypes.WorkspaceProfileUpdated).Count);
     }
+
+    [Fact]
+    public async Task Provisioning_DefaultsIsPublicToFalse_WhenNewlyProvisioned()
+    {
+        var facilityId = Guid.NewGuid();
+        var facility = new Facility
+        {
+            Id = facilityId,
+            TenantId = _tenant.Id,
+            Name = "Draft Clinic",
+            Slug = "draft-clinic",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Provisioning,
+            IsPatientDiscoveryEligible = false
+        };
+        _context.Facilities.Add(facility);
+
+        await StageAsync(facilityId, FacilityType.Clinic);
+        await _context.SaveChangesAsync();
+
+        var directoryEvent = TestSupport.OutboxPayloads<FacilityCreatedEvent>(_context, InteropTypes.FacilityDirectoryUpdated).Single();
+        Assert.False(directoryEvent.IsPublic ?? true, "Newly provisioned facility MUST default to IsPublic = false (Draft/Private).");
+    }
+
+    [Fact]
+    public async Task Provisioning_SetsIsPublicToTrue_WhenFacilityIsPatientDiscoveryEligible()
+    {
+        var facilityId = Guid.NewGuid();
+        var facility = new Facility
+        {
+            Id = facilityId,
+            TenantId = _tenant.Id,
+            Name = "Eligible Clinic",
+            Slug = "eligible-clinic",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active,
+            IsPatientDiscoveryEligible = true
+        };
+        _context.Facilities.Add(facility);
+
+        await StageAsync(facilityId, FacilityType.Clinic);
+        await _context.SaveChangesAsync();
+
+        var directoryEvent = TestSupport.OutboxPayloads<FacilityCreatedEvent>(_context, InteropTypes.FacilityDirectoryUpdated).Single();
+        Assert.True(directoryEvent.IsPublic, "Facility with IsPatientDiscoveryEligible = true MUST have IsPublic = true.");
+    }
 }
+

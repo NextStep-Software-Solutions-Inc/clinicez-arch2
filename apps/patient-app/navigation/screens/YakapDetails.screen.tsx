@@ -52,7 +52,7 @@ function BenefitItem({
       <View style={[styles.bulletList, { gap: spacing.xs }]}>
         {bullets.map((bullet, idx) => (
           <View key={idx} style={styles.bulletRow}>
-            <View style={[styles.bulletDot, { backgroundColor: colors.primary }]} />
+            <View style={[styles.bulletDot, { backgroundColor: colors.primary, borderRadius: radii.full }]} />
             <ThemedText variant="small" color="text" style={styles.flex}>
               {bullet}
             </ThemedText>
@@ -375,7 +375,6 @@ const styles = StyleSheet.create({
   bulletDot: {
     width: 6,
     height: 6,
-    borderRadius: 3,
     marginTop: 6,
   },
   stepContainer: {

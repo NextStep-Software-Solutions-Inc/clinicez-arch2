@@ -19,6 +19,7 @@ import {
     joinClinic as apiJoinClinic,
     cancelOrganizationMembership as apiCancelOrgMembership,
     cancelClinicMembership as apiCancelClinicMembership,
+    unlockClinic as apiUnlockClinic,
     type OrganizationSummary as RemoteOrgSummary,
     type OrganizationDetail as RemoteOrgDetail,
     type ClinicSummary as RemoteClinicSummary,
@@ -885,14 +886,22 @@ export async function getClinicDetail(patientId: string, clinicId: string): Prom
     const membership = snapshot.clinicMembershipRows.find((item: Record<string, any>) => String(item.clinicId) === clinicId);
     const unlockedByOrganizationIds = linkedOrganizationIds.filter((organizationId) => snapshot.organizationMembershipRows.some((membershipRow: Record<string, any>) => String(membershipRow.organizationId) === organizationId && membershipRow.status === 'active'));
     const isJoined = membership?.status === 'active';
+    const isUnlocked = isJoined || unlockedByOrganizationIds.length > 0 || !clinic.isGated;
     const isVisible = clinic.isPublic || isJoined || unlockedByOrganizationIds.length > 0;
 
-    if (!isVisible && !clinic.isPublic) {
+    if (!isVisible && !clinic.isPublic && !clinic.isGated) {
         throw new Error('This clinic is private. Join a partner organization first.');
     }
 
     return {
         ...clinic,
+        isGated: clinic.isGated,
+        isUnlocked,
+        isOnlineBookingPaused: clinic.isOnlineBookingPaused,
+        operatingHours: clinic.operatingHours,
+        isPhilHealthAccredited: clinic.isPhilHealthAccredited,
+        contactNumber: clinic.contactNumber,
+        contactEmail: clinic.contactEmail,
         organizationIds: linkedOrganizationIds,
         linkedOrganizations,
         isJoined,
@@ -1287,6 +1296,13 @@ export async function getClinicDetailOnline(
         address: remote.address ?? '',
         isPublic: remote.isPublic,
         supportsAppointments: remote.supportsAppointments,
+        isGated: remote.isGated,
+        isUnlocked: remote.isUnlocked ?? (remote.membershipStatus === 'Active' || !remote.isGated),
+        isOnlineBookingPaused: remote.isOnlineBookingPaused,
+        operatingHours: remote.operatingHours ?? undefined,
+        isPhilHealthAccredited: remote.isPhilHealthAccredited,
+        contactNumber: remote.contactNumber ?? undefined,
+        contactEmail: remote.contactEmail ?? undefined,
         organizationIds: (remote.linkedOrganizations ?? []).map((o) => o.id),
         requiredShareFields: parseJsonArray<ShareableFieldKey>(remote.requiredShareFieldsJson, ['fullName', 'mobile']),
         privacyPolicyUrl: remote.privacyPolicyUrl ?? DEFAULT_PRIVACY_POLICY_URL,
@@ -1320,6 +1336,76 @@ export async function getClinicDetailOnline(
         healthcareProviders: mappedProviders,
         services: mappedServices,
     };
+}
+
+/**
+ * Unlocks a gated clinic's service catalog and appointment booking.
+ *
+ * 1. Pre-flight network and 6-character code validation.
+ * 2. POST /api/v1/clinics/{clinicId}/unlock with join code.
+ * 3. Persist active membership locally in SQLite (clinic_memberships).
+ * 4. Fetch online unredacted clinic detail (service catalog & provider roster).
+ * 5. Returns updated ClinicDetail with isUnlocked = true.
+ */
+export async function unlockClinicAccess(
+    patientId: string,
+    clinicId: string,
+    joinCode: string,
+    getToken: () => Promise<string | null>,
+): Promise<ClinicDetail> {
+    const network = await NetInfo.fetch();
+    if (!network.isConnected) {
+        throw new Error('OFFLINE_ERROR');
+    }
+
+    const cleanCode = joinCode.trim().toUpperCase();
+    if (!cleanCode || cleanCode.length !== 6 || !/^[A-Z0-9]{6}$/.test(cleanCode)) {
+        throw new Error('Join code must be exactly 6 alphanumeric characters.');
+    }
+
+    const unlockResult = await apiUnlockClinic(getToken, clinicId, {
+        joinCode: cleanCode,
+        consentPrivacyPolicy: true,
+        consentTermsAndConditions: true,
+        consentDataSharing: true,
+    });
+
+    if (!unlockResult.isUnlocked) {
+        throw new Error(unlockResult.message || 'Failed to unlock clinic.');
+    }
+
+    const timestamp = now();
+    const membershipId = unlockResult.membershipId || getMembershipId('clinic-membership', patientId, clinicId);
+    const row = {
+        id: membershipId,
+        patientId,
+        clinicId,
+        status: 'active' as const,
+        consentPrivacyPolicy: true,
+        consentTermsAndConditions: true,
+        consentDataSharing: true,
+        consentedAt: timestamp,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        syncedAt: timestamp,
+        serverId: unlockResult.membershipId ?? null,
+    };
+
+    await db.insert(clinicMemberships).values(row).onConflictDoUpdate({
+        target: clinicMemberships.id,
+        set: row,
+    });
+
+    const refreshed = await getClinicDetailOnline(patientId, clinicId, getToken);
+    if (!refreshed) {
+        throw new Error('Could not refresh clinic service catalog after unlock.');
+    }
+
+    refreshed.isUnlocked = true;
+    refreshed.isJoined = true;
+    refreshed.membershipStatus = 'active';
+
+    return refreshed;
 }
 
 export async function cancelOrganizationMembershipOnline(

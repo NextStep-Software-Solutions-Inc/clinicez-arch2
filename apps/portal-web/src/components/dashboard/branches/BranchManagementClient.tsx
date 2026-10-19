@@ -604,6 +604,7 @@ export default function BranchManagementClient() {
                 visibility: "Private",
                 acceptsExternalRequests: false,
                 branchId: branch.id,
+                isPatientDiscoveryEligible: false,
               };
             });
 
@@ -793,6 +794,15 @@ export default function BranchManagementClient() {
                                           >
                                             {activeFacility.status}
                                           </Badge>
+                                          {activeFacility.isPatientDiscoveryEligible ? (
+                                            <Badge variant="outline" className="text-[9px] font-bold bg-primary/10 text-primary border-primary/20 px-1.5 py-0 shrink-0">
+                                              Directory Eligible
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant="outline" className="text-[9px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 px-1.5 py-0 shrink-0">
+                                              Draft / Private
+                                            </Badge>
+                                          )}
                                         </div>
                                       </div>
                                     </div>

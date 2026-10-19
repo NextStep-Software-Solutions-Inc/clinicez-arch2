@@ -140,8 +140,11 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
         var classification = FirstNonEmpty(source.Classification, facility?.Classification);
         var isPhilHealthAccredited = source.IsPhilHealthAccredited
             ?? (!string.IsNullOrWhiteSpace(facility?.PhilHealthAccreditationNumber) || (branch?.IsPhilHealthAccredited ?? false));
-        var isPublic = source.IsPublic ?? (facility is null
-            || (!facility.IsDeleted && facility.Status != FacilityStatus.Suspended && facility.Status != FacilityStatus.Failed));
+        var isPublic = source.IsPublic ?? (facility is not null
+            && facility.IsPatientDiscoveryEligible
+            && !facility.IsDeleted
+            && facility.Status != FacilityStatus.Suspended
+            && facility.Status != FacilityStatus.Failed);
 
         IReadOnlyList<FacilityProviderDto>? providers = source.Providers;
         if (providers is null && source.FacilityType == FacilityType.Clinic)

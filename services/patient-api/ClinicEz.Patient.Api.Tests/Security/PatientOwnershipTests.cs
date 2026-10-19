@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using ClinicEz.Patient.Api.Tests.Infrastructure;
+using ClinicEz.Patient.Application.Features.Appointments.Queries.GetAvailableSlots;
 using FluentAssertions;
 using NSubstitute;
 
@@ -145,5 +146,59 @@ public sealed class PatientOwnershipTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         _host.Sender.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetAvailableSlots_WithOwnForPatientId_BindsParameterAndDispatchesQuery()
+    {
+        var clinicId = Guid.NewGuid();
+        var providerId = Guid.NewGuid();
+        var date = new DateOnly(2026, 10, 20);
+
+        var response = await GetAsync(
+            $"/api/v1/clinics/{clinicId}/providers/{providerId}/slots?date={date:yyyy-MM-dd}&forPatientId={_patientId}", Owner);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await _host.Sender.Received(1).Send(
+            Arg.Is<GetAvailableSlotsQuery>(q =>
+                q.ClinicId == clinicId &&
+                q.ProviderId == providerId &&
+                q.Date == date &&
+                q.ForPatientId == _patientId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAvailableSlots_WithForeignForPatientId_IsForbiddenAndNeverQueried()
+    {
+        var clinicId = Guid.NewGuid();
+        var providerId = Guid.NewGuid();
+        var date = new DateOnly(2026, 10, 20);
+
+        var response = await GetAsync(
+            $"/api/v1/clinics/{clinicId}/providers/{providerId}/slots?date={date:yyyy-MM-dd}&forPatientId={_patientId}", Intruder);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        _host.Sender.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetAvailableSlots_WithoutForPatientId_DispatchesQueryWithNullPatientId()
+    {
+        var clinicId = Guid.NewGuid();
+        var providerId = Guid.NewGuid();
+        var date = new DateOnly(2026, 10, 20);
+
+        var response = await GetAsync(
+            $"/api/v1/clinics/{clinicId}/providers/{providerId}/slots?date={date:yyyy-MM-dd}", Owner);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await _host.Sender.Received(1).Send(
+            Arg.Is<GetAvailableSlotsQuery>(q =>
+                q.ClinicId == clinicId &&
+                q.ProviderId == providerId &&
+                q.Date == date &&
+                q.ForPatientId == null),
+            Arg.Any<CancellationToken>());
     }
 }

@@ -15,21 +15,72 @@ public sealed record AvailableSlotDto(
     string Period,
     bool Available);
 
-public sealed record GetAvailableSlotsQuery(Guid ClinicId, Guid ProviderId, DateOnly Date) : IRequest<List<AvailableSlotDto>>;
+public sealed record GetAvailableSlotsQuery(Guid ClinicId, Guid ProviderId, DateOnly Date, Guid? ForPatientId = null) : IRequest<List<AvailableSlotDto>>;
 
 public sealed class GetAvailableSlotsQueryHandler : IRequestHandler<GetAvailableSlotsQuery, List<AvailableSlotDto>>
 {
     private readonly IProviderAvailabilityRepository _providerAvailabilityRepository;
     private readonly IAppointmentRepository _appointmentRepository;
+    private readonly IClinicRepository? _clinicRepository;
+    private readonly IClinicMembershipRepository? _membershipRepository;
+    private readonly IOrganizationMembershipRepository? _orgMembershipRepository;
 
-    public GetAvailableSlotsQueryHandler(IProviderAvailabilityRepository providerAvailabilityRepository, IAppointmentRepository appointmentRepository)
+    public GetAvailableSlotsQueryHandler(
+        IProviderAvailabilityRepository providerAvailabilityRepository,
+        IAppointmentRepository appointmentRepository,
+        IClinicRepository? clinicRepository = null,
+        IClinicMembershipRepository? membershipRepository = null,
+        IOrganizationMembershipRepository? orgMembershipRepository = null)
     {
         _providerAvailabilityRepository = providerAvailabilityRepository;
         _appointmentRepository = appointmentRepository;
+        _clinicRepository = clinicRepository;
+        _membershipRepository = membershipRepository;
+        _orgMembershipRepository = orgMembershipRepository;
     }
 
     public async Task<List<AvailableSlotDto>> Handle(GetAvailableSlotsQuery request, CancellationToken cancellationToken)
     {
+        if (_clinicRepository != null)
+        {
+            var clinic = await _clinicRepository.GetByIdAsync(request.ClinicId, cancellationToken);
+            if (clinic != null && clinic.IsGated)
+            {
+                var isUnlocked = false;
+                if (request.ForPatientId.HasValue && _membershipRepository != null)
+                {
+                    var membership = await _membershipRepository.GetByPatientAndClinicAsync(
+                        request.ForPatientId.Value, request.ClinicId, cancellationToken);
+                    if (membership != null && membership.Status == Domain.Enums.ClinicMembershipStatus.Active)
+                    {
+                        isUnlocked = true;
+                    }
+                    else if (_orgMembershipRepository != null)
+                    {
+                        var linkedOrgIds = clinic.OrganizationLinks
+                            .Where(l => l.IsActive)
+                            .Select(l => l.OrganizationId)
+                            .ToHashSet();
+
+                        if (linkedOrgIds.Count > 0)
+                        {
+                            var orgMemberships = await _orgMembershipRepository.GetByPatientAsync(
+                                request.ForPatientId.Value, cancellationToken);
+                            if (orgMemberships.Any(m => m.Status == Domain.Enums.ClinicMembershipStatus.Active && linkedOrgIds.Contains(m.OrganizationId)))
+                            {
+                                isUnlocked = true;
+                            }
+                        }
+                    }
+                }
+
+                if (!isUnlocked)
+                {
+                    return [];
+                }
+            }
+        }
+
         var slots = new List<AvailableSlotDto>();
 
         var dayOfWeek = request.Date.DayOfWeek;

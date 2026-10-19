@@ -1672,6 +1672,34 @@ export interface ClinicRecordAttachmentRecord {
   createdAt: string;
 }
 
+export interface ClinicPublishingChecks {
+  hasOperatingHours: boolean;
+  hasLicensedDoctors: boolean;
+  hasActiveServices: boolean;
+  hasLetterhead: boolean;
+}
+
+export interface ClinicPublishingReadiness {
+  isReady: boolean;
+  isWorkspaceEligible?: boolean;
+  checks: ClinicPublishingChecks;
+  licensedDoctorsCount: number;
+  activeServicesCount: number;
+  operatingHours?: string | null;
+}
+
+export interface ClinicPublishingResult {
+  success: boolean;
+  isPublished: boolean;
+  message: string;
+}
+
+export interface ClinicBookingPauseResult {
+  success: boolean;
+  isPaused: boolean;
+  message: string;
+}
+
 export interface ClinicSettingsRecord {
   id: string;
   tenantId: string;
@@ -1695,6 +1723,12 @@ export interface ClinicSettingsRecord {
   joinCode?: string | null;
   joinCodeExpiresAt?: string | null;
   clearJoinCode?: boolean;
+
+  // Milestone 2 Directory Publishing & Dynamic Booking Capacity
+  isDirectoryPublished?: boolean;
+  isOnlineBookingPaused?: boolean;
+  isWorkspaceEligible?: boolean;
+
   patientSearchDisplayFieldsJson?: string | null;
   eodReconciliationTime?: string | null;
   autoEodEnabled?: boolean;
@@ -2883,6 +2917,23 @@ export const clinicService = {
 
   async getWorkspaceProfile() {
     return clinicApiClient.get<WorkspaceProfile>('/settings/workspace-profile');
+  },
+
+  // Clinic Publishing & Dynamic Booking Capacity
+  async getPublishingReadiness() {
+    return clinicApiClient.get<ClinicPublishingReadiness>('/clinic-settings/readiness');
+  },
+
+  async publishToDirectory(isPublished: boolean) {
+    return clinicApiClient.put<ClinicPublishingResult>('/clinic-settings/directory-publishing', {
+      isPublished,
+    });
+  },
+
+  async toggleBookingPause(isPaused: boolean) {
+    return clinicApiClient.put<ClinicBookingPauseResult>('/clinic-settings/booking-pause', {
+      isPaused,
+    });
   },
 
   getReceptionPlacardPdfUrl(params?: { qrUrl?: string; joinCode?: string; expiresAt?: string }) {
