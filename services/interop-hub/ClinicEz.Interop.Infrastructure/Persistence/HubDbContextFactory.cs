@@ -33,7 +33,6 @@ public class HubDbContextFactory : IDesignTimeDbContextFactory<HubDbContext>
 
         var optionsBuilder = new DbContextOptionsBuilder<HubDbContext>();
         optionsBuilder.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", schemaName));
-        optionsBuilder.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
 
         return new HubDbContext(optionsBuilder.Options, configuration);
     }
