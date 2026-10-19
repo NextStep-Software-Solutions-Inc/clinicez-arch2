@@ -103,6 +103,20 @@ mock.module('../constants/fonts', () => ({
   fontAssets: {},
 }));
 
+mock.module('../components/ui/Button', () => ({
+  default: ({ title, style, onPress, testID }: any) =>
+    React.createElement(
+      'div',
+      {
+        'data-component': 'Button',
+        ...(testID ? { 'data-testid': testID } : {}),
+        'data-style': style ? JSON.stringify(style) : undefined,
+        onClick: onPress,
+      },
+      title
+    ),
+}));
+
 const {
   default: PatientDirectoryCard,
   PatientDirectoryTableHeader,

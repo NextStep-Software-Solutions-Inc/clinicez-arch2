@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-19T02:43:00Z
+# BRIEFING — 2026-10-19T03:32:00Z
 
 ## Mission
-Implement a functional, keyboard-accessible Workspace-Wide Search Tool (⌘K / Ctrl+K) in ClinicEZ's tenant portal (apps/portal-web), replacing the unrouted placeholder icon next to Quick Create.
+Implement the Universal Pluggable Search Provider Framework across ClinicEZ (shared in `packages/shared-dotnet` and `packages/shared-ts`), strictly governed by `clinicez-search-provider-expert` and `clinicez-ui-ux-expert`.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -22,6 +22,8 @@ Implement a functional, keyboard-accessible Workspace-Wide Search Tool (⌘K / C
 - Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
 - Victory Auditor: to be spawned on victory claim
 - Victory Auditor (victory_auditor_12): 198482df-5abc-4531-abfa-92c845eb7396
+- Active Project Orchestrator (orchestrator_15): 0df9ea4a-5b1c-4d93-aed9-1bb3cd1251ea
+- Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -65,34 +67,39 @@ Implement a functional, keyboard-accessible Workspace-Wide Search Tool (⌘K / C
 - WorkspaceSearchDialog with Radix Dialog, auto-focus, keyboard navigation (ArrowUp/Down, Enter, Esc)
 - Live indexing of pages, branches/facilities, workspace team, and quick actions
 - @clinicez/design-tokens compliance and strict TypeScript typing
+- Route to General (`teamwork_preview_orchestrator`) for Universal Pluggable Search Provider Framework across ClinicEZ
+- Strictly governed by clinicez-search-provider-expert and clinicez-ui-ux-expert
+- Shared platform contracts in packages/shared-dotnet & packages/shared-ts
+- Zero-touch assembly scanning DI in clinic-api and feature search providers
+- Workstation command palette UX (Cmd+K/Ctrl+K) in clinic-app with 200ms debounce and @clinicez/design-tokens styling
+- Deep navigation dispatch to target records and Settings tabs
+- Portal-web WorkspaceSearchDialog parity
 - Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
 
 ## User Context
-- **Last user request**: Implement functional, keyboard-accessible Workspace-Wide Search Tool (⌘K / Ctrl+K) in ClinicEZ tenant portal (apps/portal-web).
+- **Last user request**: Implement the Universal Pluggable Search Provider Framework across ClinicEZ (shared in `packages/shared-dotnet` and `packages/shared-ts`), strictly governed by `clinicez-search-provider-expert` and `clinicez-ui-ux-expert`.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Appended request verbatim to `ORIGINAL_REQUEST.md` (2026-10-19T01:39:27Z).
-  - Evaluated route: SWE Light (`teamwork_preview_swe`).
-  - Executed SWE Light loop with 1 implementer round and 3 reviewer rounds.
-  - Independent post-victory audit completed: **VICTORY CONFIRMED**.
-  - All background crons cancelled and subagents cleaned up.
+  - Recorded request verbatim to `ORIGINAL_REQUEST.md` (header `## 2026-10-19T03:31:55Z`).
+  - Evaluated route: General -> dispatched `orchestrator_15` (`0df9ea4a-5b1c-4d93-aed9-1bb3cd1251ea`).
+  - Active Crons: `task-30` (Cron 1: Progress Reporting) and `task-32` (Cron 2: Liveness Check).
 
 ## Project Status
-- **Phase**: complete
-- **Route**: SWE Light -> teamwork_preview_swe (swe_4)
-- **Active Subagents**: none
-- **Active Tasks**: none
+- **Phase**: in progress
+- **Route**: General -> teamwork_preview_orchestrator (orchestrator_15)
+- **Active Subagents**: orchestrator_15 (0df9ea4a-5b1c-4d93-aed9-1bb3cd1251ea)
+- **Active Tasks**: task-30, task-32
 
 ## Victory Audit Status
-- **Triggered**: yes
-- **Verdict**: VICTORY CONFIRMED
+- **Triggered**: no
+- **Verdict**: pending
 - **Retry count**: 0
 
 ## Artifact Index
 - /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
 - /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel briefing memory
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/handoff.md — Sentinel completion handoff report
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/swe_4/DISPATCH.md — SWE Light Orchestrator dispatch instructions
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/swe_4/handoff.md — SWE Light Orchestrator completion handoff report
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_12/DISPATCH.md — Victory Auditor dispatch instructions
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_12/handoff.md — Victory Auditor handoff report
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel briefing archive
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/handoff.md — Sentinel handoff report
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_15/progress.md — Orchestrator progress log
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/skills/clinicez-search-provider-expert/SKILL.md — Search provider skill
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/skills/clinicez-ui-ux-expert/SKILL.md — UI/UX design tokens skill

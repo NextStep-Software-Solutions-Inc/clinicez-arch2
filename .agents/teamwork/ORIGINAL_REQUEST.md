@@ -1114,3 +1114,68 @@ Provide full arrow key navigation (`ArrowDown` / `ArrowUp`) to cycle items, `Ent
 ### Code Quality & Compatibility
 - [ ] Preserves all existing sidebar functionalities and responsiveness.
 - [ ] Strict TypeScript typing with no compile errors.
+
+
+## 2026-10-19T03:31:55Z
+
+Implement the Universal Pluggable Search Provider Framework across ClinicEZ (shared in `packages/shared-dotnet` and `packages/shared-ts`), strictly governed by the project skills `clinicez-search-provider-expert` and `clinicez-ui-ux-expert`. The framework enables any service across the platform (`clinic-api`, `laboratory-api`, `pharmacy-api`, `billing-api`, `organization-api`, etc.) and client workstation to automatically register or unregister searchable domain entities via assembly scanning and contributor registries without touching central orchestrators. Clinic Workspace (`services/clinic-api` and `apps/clinic-app`) is the flagship first beneficiary.
+
+Working directory: `/Users/macuser/projects/github/nextstep/clinicez-arch2`
+Integrity mode: development
+Reference skills:
+- `.agents/skills/clinicez-search-provider-expert/SKILL.md`
+- `.agents/skills/clinicez-ui-ux-expert/SKILL.md`
+
+## Requirements
+
+### R1. Shared Platform Standards (`packages/shared-dotnet` & `packages/shared-ts`)
+- Implement `ISearchProvider`, `SearchResultItemDto`, `SearchResponseDto`, and the `AddPluggableSearch()` assembly-scanning DI extension in `packages/shared-dotnet/Search/`.
+- Implement `universalSearchRegistry.ts` and `SearchContributor` in `packages/shared-ts/search/`.
+- Export all search contracts so any backend service or frontend app in the monorepo can consume them.
+
+### R2. Clinic Backend Pluggable Implementation (`services/clinic-api`)
+- Call `services.AddPluggableSearch<...>()` in `ClinicEz.Clinic.Application/DependencyInjection.cs`.
+- Implement domain feature search providers following `clinicez-search-provider-expert`:
+  - `PatientSearchProvider` (Name, PhilHealth PIN, patient code, DOB)
+  - `ConsultationSearchProvider` (Chief complaint, diagnosis, visit notes)
+  - `AppointmentSearchProvider` (Patient name, doctor, date/time, status)
+  - `SettingSearchProvider` (Rooms, Services catalog fees, Staff & Roles, Operating hours, Facility details)
+  - `QueueSearchProvider` (Active tickets, priority, assigned station)
+  - `BillingSearchProvider` (Invoice numbers, patient, payment status)
+  - `LabOrderSearchProvider` (Order number, test name, panic value flags)
+- Implement `GlobalClinicSearchQueryHandler` executing active providers concurrently via `Task.WhenAll`.
+- Enforce strict `TenantId` isolation and staff permission filtering (`RequiredPermission`) on every provider.
+- Expose via `SearchController` (`GET /api/v1/search?q={query}&category={category}&limit={limit}`).
+
+### R3. Clinic Workstation Command Palette UX (`apps/clinic-app`)
+- Implement `GlobalSearchModal` with keyboard shortcut listener (`Cmd+K` / `Ctrl+K` or `/` outside inputs) and persistent search input in `ClinicHeaderBar`.
+- Dynamic category filter tabs derived from active providers.
+- Debounced (200ms) query execution and keyboard navigation (Arrow Up/Down, Enter, Esc).
+- Quick Actions when query is empty (Register Patient, View Queue, Doctor Rosters, Services Catalog).
+- Strict adherence to `@clinicez/design-tokens` per `clinicez-ui-ux-expert`:
+  - Teal `#0D6963` brand accent and semantic tokens (`surface`, `surfaceHover`, `text`, `textMuted`).
+  - Semantic urgency badges for priority & panic alerts (`routineBg`, `urgentBg`, `emergencyBg`).
+  - Never use hardcoded hex values. Handle skeleton loading and empty states cleanly.
+
+### R4. Deep Navigation Dispatch & Portal Web Integration
+- Selecting a search result deep-links directly into the target record or specific Settings tab (`general`, `services`, `staff`, `access`, `facility`, etc.).
+- Connect `apps/portal-web`'s `WorkspaceSearchDialog` to the shared registry and clinic search API for cross-app parity.
+
+## Acceptance Criteria
+
+### Universal Extensibility & Zero-Touch
+- [ ] Shared contracts in `packages/shared-dotnet` and `packages/shared-ts` can be imported and consumed by any service in the monorepo.
+- [ ] Adding a new `ISearchProvider` in any feature folder auto-registers in `/api/v1/search` without editing `SearchController` or query handlers.
+- [ ] Deleting or disabling a provider cleanly removes that category from search without broken references.
+- [ ] Users lacking permissions (e.g. `BillingRead`) receive zero items from that provider.
+
+### Workstation Navigation & Hotkeys
+- [ ] Pressing `Cmd+K` or `Ctrl+K` (or `/` outside input fields) opens `GlobalSearchModal` from any workstation screen.
+- [ ] Pressing `Esc` closes the modal immediately and restores focus.
+- [ ] Arrow Up/Down navigates result items with active highlight; `Enter` executes deep navigation.
+
+### Search Performance & Coverage
+- [ ] Parallel provider queries execute and return aggregated results under 150ms.
+- [ ] Searching settings (e.g. "Services", "Room 101", "Staff", "PhilHealth") navigates to the exact active tab in Settings.
+- [ ] Searching patients, consults, and appointments displays accurate records and urgency badges.
+- [ ] Visual styling conforms to `@clinicez/design-tokens` with zero raw color hex codes.

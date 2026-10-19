@@ -75,7 +75,7 @@ ClinicEZ multi-tenant architecture decouples three distinct operational domains:
 | M1 | Tri-Domain Backend Models, Governance & Interop Sync | `portal-api`, `clinic-api`, `patient-api`, `packages/shared-dotnet`, `interop-hub` | none | DONE |
 | M2 | Two-Tier Governance UI in Portal & Clinic App | `apps/portal-web`, `apps/clinic-app` | M1 | DONE |
 | M3 | Patient App Public Discovery & Hybrid Gated Intake | `apps/patient-app` | M1, M2 | DONE |
-| M4 | E2E Testing, Token Audits & Regression Defense | All apps, test runners, token linters | M1, M2, M3 | IN_PROGRESS |
+| M4 | E2E Testing, Token Audits & Regression Defense | All apps, test runners, token linters | M1, M2, M3 | DONE |
 
 ## Interface Contracts
 
