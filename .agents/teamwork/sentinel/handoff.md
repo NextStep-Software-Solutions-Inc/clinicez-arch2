@@ -1,119 +1,59 @@
-# Handoff Report: Sentinel Completion Summary
+# Sentinel Handoff Report — Clean, Integrated Dental Module
 
-**Task**: Universal Pluggable Search Provider Framework across ClinicEZ (`packages/shared-dotnet`, `packages/shared-ts`, `services/clinic-api`, `apps/clinic-app`, `apps/portal-web`)  
-**Timestamp**: 2026-10-19T08:08:00Z  
-**Routing Path**: General (`teamwork_preview_orchestrator`)  
-**Victory Audit Verdict**: **VICTORY CONFIRMED**
+## Observation
 
----
+1. **User Request & Ingestion**:
+   - On `2026-10-19T05:00:54Z`, recorded authoritative user request into `.agents/teamwork/ORIGINAL_REQUEST.md` to implement the Clean, Integrated Dental Module across `services/clinic-api`, `apps/clinic-app`, and `apps/portal-web`.
+   - Primary constraints: strictly follow `clinicez-ui-ux-expert` and `clinicez-search-provider-expert`, and preserve repository search framework files without overwrite or reversion.
+2. **Execution & Swarm Milestones**:
+   - Evaluated route as `General` (`teamwork_preview_orchestrator`) and dispatched `orchestrator_16`.
+   - **Milestone MA (Backend Core & Entity Foundation)**: Implemented `DentalToothRecord.cs`, `ToothStatus.cs`, extended `ClinicSettings` (`SpecialtyMode`, `EnableDentalModule`) and `ClinicalProcedure` (`ToothNumber: int?`, `ToothSurface: string?`), added `DentalController` (`api/v1/dental`), registered `"Dental Clinic"` in `apps/portal-web/src/constants/philippine-addresses.ts`, and updated `PublishClinicToDirectoryCommand.cs` dynamic classification mapping.
+   - **Milestone MB (Search Provider Pluggability)**: Implemented `DentalChartSearchProvider : ISearchProvider` with zero modifications to existing search infrastructure (`packages/shared-dotnet/Search/`, `SearchController.cs`). Registered `dentalSearchContributor` in `universalSearchRegistry`.
+   - **Milestone MC (Frontend Workstations & Design Tokens)**: Implemented `InlineDentalChartCard.tsx` (FDI Adult/Child, 4 quadrants, plain English statuses, canonical `MODBL` surface sorting, quick-order procedure linking), conditional suppression of physical exams when `specialtyMode === 'Dental'`, `DentalChartTab.tsx` across `modal`, `split`, and `drawer` chart layouts, and 3-way specialty selector in `GeneralSettingsTab.tsx`. Verified 0 token guard violations (`check-tokens.mjs --strict`).
+   - **Milestone MD (E2E Integration & Stress Gates)**: Executed backend E2E challenger suites (`MilestoneMDEndToEndBackendChallengerTests.cs`) and frontend challenger suites (`challenger_md_2_frontend_e2e_stress.test.ts`).
+3. **Independent Post-Victory Audit**:
+   - Dispatched independent auditor `victory_auditor_16` (`663db1e1-f744-4c32-92a7-3991c2f398c0`) with zero shared context from the implementation swarm.
+   - `victory_auditor_16` executed Phase A (Timeline), Phase B (Anti-Cheating & Integrity Detection), and Phase C (Independent Test Execution).
+   - Independent test execution confirmed:
+     * `dotnet build`: 0 Warnings, 0 Errors.
+     * `ClinicEz.Shared.Tests`: 298 passed, 0 failed.
+     * `ClinicEz.Clinic.Application.Tests`: 2,807 passed, 0 failed (including 411 Dental-specific passed, 54 Milestone MD challenger passed).
+     * `packages/design-tokens`: 27 passed, 0 failed.
+     * `packages/shared-ts`: 176 passed, 0 failed.
+     * `check-tokens.mjs --strict`: 0 violations in 0 files.
+     * `bun run typecheck:clinic`: 0 TypeScript errors.
+     * `apps/clinic-app` Dental suites: 132 passed, 0 failed.
+     * `apps/portal-web` search suites: 24 passed, 0 failed.
+   - Audit Verdict: **VICTORY CONFIRMED**.
+4. **Mandatory Cleanup**:
+   - Cancelled Cron 1 (`task-30`) and Cron 2 (`task-32`).
+   - Killed all subagents via `manage_subagents(Action="kill_all")`.
 
-## 1. Observation
+## Logic Chain
 
-1. **User Request & Requirements**:
-   - Recorded in `.agents/teamwork/ORIGINAL_REQUEST.md` under header `## 2026-10-19T03:31:55Z`.
-   - Architected and delivered a universal, zero-touch pluggable search framework across the ClinicEZ monorepo, strictly adhering to `clinicez-search-provider-expert` and `clinicez-ui-ux-expert`.
-   - **R1. Shared Platform Standards**:
-     - `packages/shared-dotnet/Search/`: `ISearchProvider`, `SearchResultItemDto`, `SearchQuery`, immutable envelopes, extension overloads (`SearchProviderExtensions.cs`), and reflection assembly scanning (`AddPluggableSearch<TAssemblyMarker>()`).
-     - `packages/shared-ts/search/`: `universalSearchRegistry.ts`, `SearchContributor`, `SearchItem`, and DTO exports.
-   - **R2. Clinic Backend Pluggable Service (`services/clinic-api`)**:
-     - Assembly-scanning DI registration in `DependencyInjection.cs`.
-     - 7 Domain Feature Search Providers: `PatientSearchProvider`, `ConsultationSearchProvider`, `AppointmentSearchProvider`, `SettingSearchProvider`, `QueueSearchProvider`, `BillingSearchProvider`, `LabOrderSearchProvider` (plus zero-touch `DentalChartSearchProvider`).
-     - MediatR query orchestrator `GlobalClinicSearchQueryHandler` executing active providers concurrently via `Task.WhenAll` with 500ms timeout race, linked CTS cancellation, fault isolation, strict tenant isolation (`ClinicId == tenantId`), and staff RBAC pre-filtering (`RequiredPermission`).
-     - REST API endpoint `SearchController` (`GET /api/v1/search?q={query}&category={category}&limit={limit}`).
-   - **R3. Clinic Workstation Command Palette UX (`apps/clinic-app`)**:
-     - Global hotkey listener (`Cmd+K` / `Ctrl+K` / `/` outside inputs, with `<select>` & contenteditable guards, `Esc`).
-     - `GlobalSearchModal` with persistent trigger in `ClinicHeaderBar`, 200ms debouncing, in-flight `AbortController` cancellation.
-     - 4 explicit UI states (Skeleton loading, Empty, QuickActions, Results), dynamic category tabs, wrap-around keyboard navigation, and web scroll-into-view.
-     - Deep navigation routing to specific records and all 9 Settings tabs.
-     - Strict compliance with `@clinicez/design-tokens` (0 raw hex codes, brand Teal `#0D6963`, semantic urgency badges: routine/urgent/emergency/neutral).
-   - **R4. Cross-App Integration (`apps/portal-web`)**:
-     - Connected `WorkspaceSearchDialog.tsx` to `universalSearchRegistry` and 5 portal contributors.
-     - Dynamic category grouping and action callback execution (`onSelect`).
-     - Canonical `flattenedResults` derivation from `groupedResults` (`Array.from(groupedResults.values()).flatMap((g) => g.items)`), ensuring 100% synchronization across DOM rendered order, `activeOptionId` (`aria-activedescendant`), and keyboard `Enter` selection.
+1. Requirements R1–R4 were comprehensively implemented and verified across domain, application, controllers, search provider discovery, and frontend workstations.
+2. The core coordination directive was upheld: search framework files in `packages/shared-dotnet/Search/`, `packages/shared-ts/search/`, and `SearchController.cs` remained 100% immutable and unregressed, with Dental search extending the architecture via DI assembly scanning and registry contributor pattern.
+3. Strict UI/UX design token rules were respected without exception: zero raw hex colors, zero un-tokenized radii, and full 4-state lifecycle handling.
+4. Independent 3-phase post-victory audit verified that the timeline was authentic, anti-cheating checks passed cleanly with zero facades or hardcoded values, and all independent test runs matched claimed results with 100% pass rates.
+5. All background tasks and subagents have been terminated per protocol, allowing definitive completion signoff.
 
-2. **Milestone Progression & Quality Gates**:
-   - **Milestone 1 (Shared Platform Standards)**: GATE PASSED (298/298 .NET tests, 115/115 TS stress tests).
-   - **Milestone 2 (Clinic API Pluggable Search Core)**: GATE PASSED (76 search tests, 2,258 application tests, 0 regressions).
-   - **Milestone 3 (Clinic Workstation Command Palette UX)**: GATE PASSED (Iteration 2: 46 tests pass, 0 mapNavigation, CLEAN audit).
-   - **Milestone 4 (Portal Web Cross-App Integration)**: GATE PASSED (Iteration 3: 79 tests pass across 4 suites, CLEAN audit, approved by all reviewers and challengers).
-   - **Milestone 5 (E2E Test Suite & Adversarial Hardening)**: GATE PASSED.
-     - Phase 1 (Tiers 1-4): `TEST_READY.md` published; comprehensive E2E scenarios runner `tests/e2e/universal_search_e2e_scenarios.test.ts` passing 100%.
-     - Phase 2 (Tier 5): 121 adversarial stress tests authored across .NET, TS, and frontend, unanimously approved by 2 Challengers, 2 Reviewers, and Forensic Auditor (**CLEAN**).
+## Caveats
 
-3. **Independent Post-Victory Audit (`victory_auditor_15`, `cee09185-ee0d-43be-b6ae-2468b2428486`)**:
-   - **Phase A (Timeline)**: PASS. All commits and file modifications were authored within task scope and proper directory boundaries.
-   - **Phase B (Anti-Cheating & Integrity Detection)**: PASS.
-     - Zero dummy facades, canned static returns, or fabricated outputs.
-     - All 8 search providers query real EF Core database repositories (`IRepository<T>.Query(..., ignoreQueryFilters: true)`).
-     - Multi-tenant clinic isolation strictly enforced on every query (`e.ClinicId == tenantId`).
-     - Staff RBAC permission gating (`RequiredPermission`) verified in backend handlers and client registry.
-     - Reflection assembly scanning in `AddPluggableSearch()` discovers and registers providers idempotently with zero hardcoded orchestrator references.
-     - `WorkspaceSearchDialog.tsx` derives `flattenedResults` canonically from `groupedResults`, guaranteeing 100% synchronization across active index, visual DOM highlight, and Enter selection.
-     - Zero raw hex color literals found in touched UI files (`check-tokens.mjs --strict` passed with 0 violations).
-     - Zero skipped tests (`.skip()`, `[Fact(Skip)]`) or commented-out assertions.
-   - **Phase C (Independent Test Execution)**: PASS.
-     - `dotnet test packages/shared-dotnet.Tests`: Passed: 298, Failed: 0, Skipped: 0
-     - `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests --filter FullyQualifiedName~Search`: Passed: 273, Failed: 0, Skipped: 0
-     - Full `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests`: Passed: 2,753, Failed: 0, Skipped: 0
-     - `bun test packages/shared-ts`: Passed: 176, Failed: 0
-     - `bun test apps/clinic-app/tests/globalSearchModal.test.ts`: Passed: 47, Failed: 0
-     - `bun test apps/portal-web/tests/portalSearchIntegration.test.ts`: Passed: 24, Failed: 0
-     - `bun test apps/portal-web/tests/workspaceSearchDialog.test.tsx`: Passed: 26, Failed: 0
-     - `bun test tests/e2e/universal_search_e2e_scenarios.test.ts`: Passed: 28, Failed: 0
-     - `bun test apps/portal-web/tests/challenger_m4_*.test.ts apps/portal-web/tests/challenger_m5_*.test.ts`: Passed: 71, Failed: 0
-     - `bun test apps/clinic-app/tests/challenger_m3_*.test.ts apps/clinic-app/tests/challenger_mb_*.test.ts`: Passed: 54, Failed: 0
-     - `node apps/clinic-app/scripts/check-tokens.mjs --strict`: 0 violations in 0 files
-     - `bun run typecheck:all`: 0 errors
-     - `bun run --cwd apps/portal-web typecheck`: 0 errors
-   - **Verdict**: **VICTORY CONFIRMED**.
+- As noted by the independent auditor, running blanket `bun test apps/clinic-app` executes legacy unrelated tests requiring native Expo environments (Alert, SQLite mocks). Targeted Dental and Search test suites pass 100% green without errors, and full TypeScript typechecking (`bun run typecheck:clinic`) succeeds with 0 errors.
 
----
+## Conclusion
 
-## 2. Logic Chain
+The Clean, Integrated Dental Module has been completely implemented, verified through multiple challenger iterations, independently audited, and approved with a `VICTORY CONFIRMED` verdict. All requirements (R1–R4) are satisfied in full.
 
-1. Received user request and recorded verbatim in `ORIGINAL_REQUEST.md` (header `## 2026-10-19T03:31:55Z`).
-2. Evaluated request against Routing Decision Table: monorepo-wide architectural implementation across shared libraries, backend, and 2 frontend apps -> routed to General (`teamwork_preview_orchestrator`).
-3. Dispatched `orchestrator_15` (`0df9ea4a-5b1c-4d93-aed9-1bb3cd1251ea`) and established monitoring crons (`task-30` for 8-minute user progress reporting and `task-32` for 10-minute orchestrator liveness checks).
-4. Monitored iterative execution across Milestones 1–5, ensuring Challenger findings (such as the M4 activeIndex visual DOM divergence) were addressed through proper iteration loops.
-5. Upon victory claim by `orchestrator_15`, enforced the mandatory, blocking independent Victory Audit by dispatching `teamwork_preview_victory_auditor` (`victory_auditor_15`, `cee09185-ee0d-43be-b6ae-2468b2428486`).
-6. Received formal **VICTORY CONFIRMED** report validating 100% genuine code, zero anti-patterns, and complete test suite passes.
-7. Cleaned up background monitoring crons (`task-30`, `task-32`) and terminated all subagents prior to delivering the final summary to the user.
+## Verification Method
 
----
-
-## 3. Caveats
-
-None. All 836+ automated tests pass with 0 regressions, 0 skipped tests, 0 type errors, and 0 design token violations.
-
----
-
-## 4. Conclusion
-
-The Universal Pluggable Search Provider Framework across ClinicEZ is **100% complete, fully verified, and certified with a VICTORY CONFIRMED verdict**. Any backend microservice or frontend application in the ClinicEZ monorepo can now register domain search providers via zero-touch assembly scanning and contributor registries without modifying central controllers or orchestrators.
-
----
-
-## 5. Verification Method
-
-To independently reproduce the verification:
-```bash
-# 1. Backend .NET tests
-dotnet test packages/shared-dotnet.Tests
-dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests --filter FullyQualifiedName~Search
-
-# 2. Shared TypeScript tests
-bun test packages/shared-ts
-
-# 3. Clinic Workstation Command Palette tests & token lint
-bun test apps/clinic-app/tests/globalSearchModal.test.ts
-node apps/clinic-app/scripts/check-tokens.mjs --strict
-
-# 4. Portal Web Search tests
-bun test apps/portal-web/tests/portalSearchIntegration.test.ts
-bun test apps/portal-web/tests/workspaceSearchDialog.test.tsx
-
-# 5. E2E Scenarios & Typecheck
-bun test tests/e2e/universal_search_e2e_scenarios.test.ts
-bun run typecheck:all
-bun run --cwd apps/portal-web typecheck
-```
+To reproduce verification independently:
+1. `dotnet build services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj`
+2. `dotnet test packages/shared-dotnet.Tests/ClinicEz.Shared.Tests.csproj`
+3. `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj`
+4. `bun test packages/design-tokens`
+5. `bun test packages/shared-ts`
+6. `bun apps/clinic-app/scripts/check-tokens.mjs --strict`
+7. `bun run typecheck:clinic`
+8. `bun test apps/clinic-app/tests/inlineDentalChartCard.test.ts apps/clinic-app/tests/dentalChartTab.test.ts apps/clinic-app/tests/dentalOdontogramStress.test.ts apps/clinic-app/tests/generalSettingsTab.test.ts apps/clinic-app/tests/consultationsGating.test.ts apps/clinic-app/tests/challenger_mb_2_dental_search.test.ts apps/clinic-app/tests/challenger_mc_1_empirical_stress.test.ts apps/clinic-app/tests/challenger_mc_2_empirical_stress.test.ts apps/clinic-app/tests/challenger_mc_it2_deep_stress.test.ts apps/clinic-app/tests/challenger_md_2_frontend_e2e_stress.test.ts`
+9. `bun test apps/portal-web/tests/portalSearchIntegration.test.ts`
