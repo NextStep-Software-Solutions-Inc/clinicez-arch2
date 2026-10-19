@@ -232,11 +232,15 @@ export default function HomeScreenWeb() {
           }
         />
         <StatTile
-          label="GAMOT Benefit Used"
-          value={`₱${gamotUsed.toLocaleString()}`}
+          label="Medicine Allowance Used"
+          value={
+            yakapStatus.isConfirmedRegistered
+              ? `₱${yakapStatus.gamotUsed.toLocaleString()}`
+              : 'Not Enlisted'
+          }
           icon="shield"
           tone="success"
-          onPress={() => navigation.navigate('Main', { screen: 'PrescriptionsScreen' })}
+          onPress={() => navigation.navigate('Main', { screen: 'YakapDetailsScreen' })}
         />
         <StatTile
           label="Recent Records"

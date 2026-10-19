@@ -11,7 +11,7 @@ import { ProgressBar } from '../ui/Primitives';
 
 export interface YakapActiveCardProps {
   philhealthPin: string | null;
-  assignedClinicName: string;
+  assignedClinicName?: string | null;
   gamotUsed: number;
   annualAllocation?: number;
   onViewGuide?: () => void;
@@ -26,7 +26,7 @@ export interface YakapActiveCardProps {
  */
 export default function YakapActiveCard({
   philhealthPin,
-  assignedClinicName,
+  assignedClinicName = 'Partner Health Center',
   gamotUsed,
   annualAllocation = 20000,
   onViewGuide,
