@@ -1,0 +1,32 @@
+# On-premise web image for the Pharmacy app: the Expo web export served by nginx, with same-origin `/api` proxied to the
+# pharmacy's own API container and a runtime `config.json`, so one image runs on any LAN without a rebuild and without
+# any external network access (the CSP forbids third-party origins).
+#
+# Mirrors apps/clinic-app/deploy/Dockerfile.web. Build from the repository root (the app is a bun workspace member):
+#   docker build -f apps/pharmacy-app/deploy/Dockerfile.web -t pharmacy-web .
+#
+# Runtime configuration (environment), published in /config.json:
+#   PHARMACY_API_UPSTREAM         required  where nginx forwards /api/, e.g. http://pharmacy-api:8080 (infrastructure only)
+#   EXPO_PUBLIC_PHARMACY_API_URL         optional  default "/" = same origin (nginx proxies /api)
+# Read by services/runtimeConfig.ts.
+
+FROM oven/bun:1 AS build
+WORKDIR /repo
+COPY . .
+RUN bun install --frozen-lockfile
+WORKDIR /repo/apps/pharmacy-app
+RUN bun run build:web
+
+FROM nginx:1.27-alpine AS runtime
+RUN rm -f /etc/nginx/conf.d/default.conf
+COPY apps/pharmacy-app/deploy/nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY apps/pharmacy-app/deploy/nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
+COPY apps/pharmacy-app/deploy/nginx/40-write-config-json.sh /docker-entrypoint.d/40-write-config-json.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.d/40-write-config-json.sh /etc/nginx/templates/default.conf.template /etc/nginx/snippets/security-headers.conf \
+ && chmod +x /docker-entrypoint.d/40-write-config-json.sh
+COPY --from=build /repo/apps/pharmacy-app/dist /usr/share/nginx/html
+
+ENV NGINX_RESOLVER=127.0.0.11
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1

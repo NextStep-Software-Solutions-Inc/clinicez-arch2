@@ -1,0 +1,210 @@
+name: Deploy Patient API (Dev)
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - 'services/patient-api/**'
+      - 'deploy/patient-api/**'
+      - 'scripts/ci/**'
+      - 'packages/shared-dotnet/**'
+      - '.github/workflows/deploy-patient-api-dev.yml'
+  pull_request:
+    branches:
+      - development
+    paths:
+      - 'services/patient-api/**'
+      - 'deploy/patient-api/**'
+      - 'scripts/ci/**'
+      - 'packages/shared-dotnet/**'
+      - '.github/workflows/deploy-patient-api-dev.yml'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deployment'
+        required: false
+        default: 'Manual deployment'
+        type: string
+
+env:
+  IMAGE_NAME: patient-api
+  IMAGE_TAG: dev
+  CONTAINER_NAME: patient-api
+  DEPLOY_DIR: /opt/docker-stack/patient-api
+  ENVIRONMENT: Development
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    environment: Development
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/patient-api/Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save Docker image to tar.gz
+        run: |
+          docker save ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} | gzip > patient-api.tar.gz
+          echo "Image size: $(du -sh patient-api.tar.gz | cut -f1)"
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: patient-api-docker-image
+          path: patient-api.tar.gz
+          retention-days: 1
+
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    environment: Development
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code (for compose file)
+        uses: actions/checkout@v7
+
+      - name: Create .env file
+        env:
+          ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          CONNECTION_STRING: ${{ secrets.PATIENT_DB_CONNECTION_STRING }}
+          CLERK_AUTHORITY: ${{ secrets.PATIENT_CLERK_AUTHORITY || vars.PATIENT_CLERK_AUTHORITY }}
+          CLERK_AUDIENCE: ${{ secrets.PATIENT_CLERK_AUDIENCE || '' }}
+          CLERK_WEBHOOK_SECRET: ${{ secrets.PATIENT_CLERK_WEBHOOK_SECRET }}
+          R2_ACCOUNT_ID: ${{ secrets.PATIENT_R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.PATIENT_R2_BUCKET_NAME || secrets.R2_BUCKET_NAME }}
+          R2_ACCESS_KEY_ID: ${{ secrets.PATIENT_R2_ACCESS_KEY_ID || secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.PATIENT_R2_SECRET_ACCESS_KEY || secrets.R2_SECRET_ACCESS_KEY }}
+          R2_PUBLIC_URL: ${{ secrets.PATIENT_R2_PUBLIC_URL || secrets.R2_PUBLIC_URL }}
+          HANGFIRE_DASHBOARD_PASSWORD: ${{ secrets.PATIENTAPP_HANGFIRE_PASSWORD || secrets.PATIENT_HANGFIRE_PASSWORD || secrets.HANGFIRE_PASSWORD }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.PATIENT_FIREBASE_JSON }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          HUB_URL: ${{ vars.HUB_URL || vars.MESSAGING_HUB_URL || secrets.HUB_URL || secrets.MESSAGING_HUB_URL }}
+          PATIENT_HUB_CLIENT_ID: ${{ secrets.PATIENT_HUB_CLIENT_ID || secrets.PATIENT_MESSAGING_CLIENT_ID }}
+          PATIENT_HUB_CLIENT_SECRET: ${{ secrets.PATIENT_HUB_CLIENT_SECRET || secrets.PATIENT_MESSAGING_CLIENT_SECRET }}
+          PATIENT_HUB_SIGNING_KEY: ${{ secrets.PATIENT_HUB_SIGNING_KEY || secrets.PATIENT_MESSAGING_SIGNING_KEY }}
+          DATA_NETWORK: ${{ vars.DATA_NETWORK || 'data-network' }}
+          NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
+          SHARING_SIGNING_KEY: ${{ secrets.PATIENT_SHARING_SIGNING_KEY || secrets.SHARING_SIGNING_KEY }}
+          PATIENT_ENCRYPTION_KEY: ${{ secrets.PATIENT_ENCRYPTION_KEY }}
+          CLAIM_TOKEN_SIGNING_KEY: ${{ secrets.CLAIM_TOKEN_SIGNING_KEY || secrets.PORTAL_HUB_CLIENT_SECRET || secrets.PATIENT_HUB_CLIENT_SECRET }}
+          BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+          CORS_ALLOWED_DOMAINS: ${{ vars.CORS_ALLOWED_DOMAINS }}
+        run: |
+          . scripts/ci/prepare-key-env.sh
+          prepare_key_env private PATIENT_HUB_SIGNING_KEY
+          if [ -z "$BASE_DOMAIN" ]; then
+            echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+          for var in CONNECTION_STRING CLERK_AUTHORITY HUB_URL PATIENT_HUB_CLIENT_ID PATIENT_HUB_CLIENT_SECRET SHARING_SIGNING_KEY PATIENT_ENCRYPTION_KEY CLAIM_TOKEN_SIGNING_KEY; do
+            if [ -z "$(printenv $var)" ]; then
+              echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
+              exit 1
+            fi
+          done
+          if [ ${#SHARING_SIGNING_KEY} -lt 32 ]; then
+            echo "::error::PATIENT_SHARING_SIGNING_KEY must be at least 32 characters."
+            exit 1
+          fi
+          if [ ${#CLAIM_TOKEN_SIGNING_KEY} -lt 32 ]; then
+            echo "::error::CLAIM_TOKEN_SIGNING_KEY must be at least 32 characters."
+            exit 1
+          fi
+          # Encryption__Base64Key must be base64 of exactly 32 bytes (AES-256).
+          ENC_BYTES=$(printf '%s' "$PATIENT_ENCRYPTION_KEY" | base64 -d 2>/dev/null | wc -c | tr -d ' ')
+          if [ "$ENC_BYTES" != "32" ]; then
+            echo "::error::PATIENT_ENCRYPTION_KEY must be base64 of exactly 32 random bytes (generate with: openssl rand -base64 32, or scripts/generate-secrets)."
+            exit 1
+          fi
+          for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING CLERK_AUTHORITY CLERK_AUDIENCE CLERK_WEBHOOK_SECRET R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL HANGFIRE_DASHBOARD_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON IMAGE_NAME IMAGE_TAG DATA_NETWORK NPM_NETWORK BASE_DOMAIN HUB_URL PATIENT_HUB_CLIENT_ID PATIENT_HUB_CLIENT_SECRET SHARING_SIGNING_KEY PATIENT_ENCRYPTION_KEY PATIENT_HUB_SIGNING_KEY CLAIM_TOKEN_SIGNING_KEY CORS_ALLOWED_ORIGINS CORS_ALLOWED_DOMAINS; do
+            echo "$var=$(printenv $var)" >> deploy/patient-api/.env
+          done
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: patient-api-docker-image
+
+      - name: Ensure deploy directory exists on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          script: mkdir -p "${{ env.DEPLOY_DIR }}"
+
+      - name: Transfer Docker image via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          source: patient-api.tar.gz
+          target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
+
+      - name: Transfer docker-compose and .env files via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          source: "deploy/patient-api/docker-compose.yml,deploy/patient-api/.env"
+          target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
+          strip_components: 2
+
+      - name: Load image and deploy on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          script: |
+            set -e
+            cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
+
+            echo "==> Ensuring networks exist..."
+            DATA_NET=$(grep -E '^DATA_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+            PROXY_NET=$(grep -E '^NPM_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+            docker network inspect "${PROXY_NET:-npm-default}" >/dev/null 2>&1 || docker network create "${PROXY_NET:-npm-default}"
+            docker network inspect "${DATA_NET:-data-network}" >/dev/null 2>&1 || docker network create "${DATA_NET:-data-network}"
+
+            echo "==> Loading Docker image..."
+            docker load < patient-api.tar.gz
+
+            echo "==> Deploying with docker compose..."
+            # One-time migration: remove the container left over from the previous prefixed naming scheme
+            docker rm -f clinicez-patient-api 2>/dev/null || true
+
+            docker compose up -d --force-recreate
+
+            echo "==> Cleaning up old images..."
+            docker image prune -f || true
+
+            echo "==> Verifying container is running..."
+            docker ps --filter "name=${{ env.CONTAINER_NAME }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+            echo "==> Deployment complete!"

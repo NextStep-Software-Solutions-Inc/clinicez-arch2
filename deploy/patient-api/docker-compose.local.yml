@@ -1,0 +1,61 @@
+services:
+
+  # ─── Patient App API ──────────────────────────────────────────────────────────
+  patientapp-api:
+    build:
+      context: ../..
+      dockerfile: services/patient-api/Dockerfile
+    container_name: patientapp-api
+    ports:
+      - "5100:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=patientapp_db;Username=${POSTGRES_USER:-patientapp};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - Clerk__Authority=${CLERK_AUTHORITY:-https://amazing-mosquito-75.clerk.accounts.dev}
+      - Clerk__Audience=${CLERK_AUDIENCE:-}
+      - Clerk__WebhookSecret=${CLERK_WEBHOOK_SECRET}
+      - R2__AccountId=${R2_ACCOUNT_ID}
+      - R2__BucketName=${R2_BUCKET_NAME}
+      - R2__AccessKeyId=${R2_ACCESS_KEY_ID}
+      - R2__SecretAccessKey=${R2_SECRET_ACCESS_KEY}
+      - R2__PublicUrl=${R2_PUBLIC_URL}
+      - Hangfire__DashboardUsername=${HANGFIRE_DASHBOARD_USERNAME:-admin}
+      - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
+      - Encryption__Enabled=false
+      # Signs share tokens (at least 32 characters). No default; generate one with scripts/generate-secrets.
+      - Sharing__SigningKey=${SHARING_SIGNING_KEY:?SHARING_SIGNING_KEY must be set (at least 32 characters)}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - patientapp-net
+    restart: unless-stopped
+
+  # ─── PostgreSQL 16 ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: patientapp-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: patientapp_db
+      POSTGRES_USER: ${POSTGRES_USER:-patientapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-patientapp} -d patientapp_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - patientapp-net
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  patientapp-net:
+    driver: bridge

@@ -1,0 +1,66 @@
+# docker-compose.yml
+# Deploy compose for Organization API on Server (Dev environment).
+#
+# All secrets are injected via .env written at deploy time by GitHub Actions.
+# No host ports exposed; routed via npm-default (NPM) and connected to data-network.
+
+name: organization-api
+
+services:
+  organization-api:
+    image: ${IMAGE_NAME:-organization-api}:${IMAGE_TAG:-dev}
+    container_name: ${CONTAINER_NAME:-organization-api}
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    expose:
+      - "8080"
+    networks:
+      - data-network
+      - npm-default
+    # Proportional Resource Allocation (Production VPS 1 vCPU / 2GB RAM Standard)
+    # Work-conserving: active services burst to 100% of CPU and available RAM; zero idle resources wasted.
+    cpu_shares: ${ORGANIZATION_CPU_SHARES:-512}
+    deploy:
+      resources:
+        reservations:
+          cpus: '${ORGANIZATION_CPUS_RESERVATION:-0.05}'
+          memory: ${ORGANIZATION_MEM_RESERVATION:-80M}
+        limits:
+          cpus: '${ORGANIZATION_CPUS_LIMIT:-0.95}'
+          memory: ${ORGANIZATION_MEM_LIMIT:-250M}
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      # Low-memory & 1 vCPU tuning for Production VPS (130.94.50.27)
+      - DOTNET_GCHeapHardLimitPercent=75
+      - DOTNET_gcServer=0
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
+      # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
+      - Messaging__Transport=Hub
+      - Messaging__Service=organization
+      - Messaging__HubUrl=${HUB_URL:?HUB_URL must be set}
+      - Messaging__ClientId=${ORGANIZATION_HUB_CLIENT_ID:?ORGANIZATION_HUB_CLIENT_ID must be set}
+      - Messaging__ClientSecret=${ORGANIZATION_HUB_CLIENT_SECRET:?ORGANIZATION_HUB_CLIENT_SECRET must be set}
+      # Envelope signing (ECDSA P-256 private key, PEM or base64 of PEM; scripts/generate-signing-key.sh). Its public half must be
+      # the key registered at the hub for this client. One key pair per client; never shared.
+      - Messaging__SigningKey=${ORGANIZATION_HUB_SIGNING_KEY:?ORGANIZATION_HUB_SIGNING_KEY must be set}
+
+      # Facility license PUBLIC key (ECDSA P-256, PEM or base64 of PEM; scripts/generate-license-keys.sh). Required: there is no
+      # built-in default. The previous public key is only set during a rotation, until every issued license was renewed.
+      - FacilityLicense__PublicKeyPem=${FACILITY_LICENSE_PUBLIC_KEY:?FACILITY_LICENSE_PUBLIC_KEY must be set}
+      - FacilityLicense__PreviousPublicKeyPem=${FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS:-}
+      # Hangfire dashboard Basic Auth password. Empty denies the dashboard to everyone (there is no default).
+      - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
+      - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
+      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
+      - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
+    restart: unless-stopped
+
+networks:
+  data-network:
+    external: true
+    name: ${DATA_NETWORK:-data-network}
+  npm-default:
+    external: true
+    name: ${NPM_NETWORK:-npm-default}

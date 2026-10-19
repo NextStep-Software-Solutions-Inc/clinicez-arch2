@@ -1,0 +1,19 @@
+{
+ "library": "lib_chestxray_observation",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"INFILTRATES","isActive":true},
+  {"code":"10","description":"THICKENING","isActive":true},
+  {"code":"11","description":"HYPERAERATION/ EMPHYSEMATOUS CHANGES","isActive":true},
+  {"code":"12","description":"MASS","isActive":true},
+  {"code":"2","description":"CALCIFICATION","isActive":true},
+  {"code":"3","description":"CONSOLIDATION","isActive":true},
+  {"code":"4","description":"CAVITY","isActive":true},
+  {"code":"5","description":"DENSITIES","isActive":true},
+  {"code":"6","description":"PLEURAL EFFUSION","isActive":true},
+  {"code":"7","description":"PNEUMOTHORAX","isActive":true},
+  {"code":"8","description":"BLEB","isActive":true},
+  {"code":"9","description":"CARDIOMEGALY","isActive":true},
+  {"code":"99","description":"OTHERS","isActive":true}
+ ]
+}

@@ -1,0 +1,17 @@
+{
+ "library": "lib_chest",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"Symmetrical chest expansion","isActive":false},
+  {"code":"10","description":"Lumps over breast(s)","isActive":true},
+  {"code":"2","description":"Clear breath sounds","isActive":false},
+  {"code":"3","description":"Retractions","isActive":true},
+  {"code":"4","description":"Crackles/rales","isActive":true},
+  {"code":"5","description":"Wheezes","isActive":true},
+  {"code":"6","description":"Essentially normal","isActive":true},
+  {"code":"7","description":"Asymmetrical chest expansion","isActive":true},
+  {"code":"8","description":"Decreased breath sounds","isActive":true},
+  {"code":"9","description":"Enlarge Axillary Lymph Nodes","isActive":false},
+  {"code":"99","description":"Others","isActive":true}
+ ]
+}

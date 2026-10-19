@@ -1,0 +1,6 @@
+<Project>
+  <!-- Test projects run with tests.runsettings (see the file for why) unless they bring their own. -->
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true' And '$(RunSettingsFilePath)' == ''">
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)tests.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,82 @@
+# docker-compose.yml
+# Deploy compose for Patient API on Server (Dev environment).
+#
+# - PostgreSQL: external (managed PostgreSQL or internal postgres)
+# - API:        this file manages only the patient-api container
+# (patient-api does not use Redis or any other cache service.)
+#
+# All secrets are injected via .env written at deploy time by GitHub Actions.
+# No host ports exposed; routed via npm-default (NPM) and connected to data-network.
+
+name: patient-api
+
+services:
+  patient-api:
+    image: ${IMAGE_NAME:-patient-api}:${IMAGE_TAG:-dev}
+    container_name: ${CONTAINER_NAME:-patient-api}
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    expose:
+      - "8080"
+    networks:
+      - data-network
+      - npm-default
+    # Proportional Resource Allocation (Production VPS 1 vCPU / 2GB RAM Standard)
+    # Work-conserving: active services burst to 100% of CPU and available RAM; zero idle resources wasted.
+    cpu_shares: ${PATIENT_CPU_SHARES:-1024}
+    deploy:
+      resources:
+        reservations:
+          cpus: '${PATIENT_CPUS_RESERVATION:-0.15}'
+          memory: ${PATIENT_MEM_RESERVATION:-140M}
+        limits:
+          cpus: '${PATIENT_CPUS_LIMIT:-0.95}'
+          memory: ${PATIENT_MEM_LIMIT:-400M}
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      # Low-memory & 1 vCPU tuning for Production VPS (130.94.50.27)
+      - DOTNET_GCHeapHardLimitPercent=75
+      - DOTNET_gcServer=0
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
+      - Clerk__Authority=${CLERK_AUTHORITY:?CLERK_AUTHORITY must be set}
+      - Clerk__Audience=${CLERK_AUDIENCE:-}
+      - Clerk__WebhookSecret=${CLERK_WEBHOOK_SECRET}
+      - R2__AccountId=${R2_ACCOUNT_ID}
+      - R2__BucketName=${R2_BUCKET_NAME}
+      - R2__AccessKeyId=${R2_ACCESS_KEY_ID}
+      - R2__SecretAccessKey=${R2_SECRET_ACCESS_KEY}
+      - R2__PublicUrl=${R2_PUBLIC_URL}
+      # Hangfire dashboard password: no default; empty means the dashboard is denied.
+      - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
+      - Firebase__ServiceAccountJson=${FIREBASE_SERVICE_ACCOUNT_JSON}
+      # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
+      - Messaging__Transport=Hub
+      - Messaging__Service=patient
+      - Messaging__HubUrl=${HUB_URL:?HUB_URL must be set}
+      - Messaging__ClientId=${PATIENT_HUB_CLIENT_ID:?PATIENT_HUB_CLIENT_ID must be set}
+      - Messaging__ClientSecret=${PATIENT_HUB_CLIENT_SECRET:?PATIENT_HUB_CLIENT_SECRET must be set}
+      # Envelope signing (ECDSA P-256 private key, PEM or base64 of PEM; scripts/generate-signing-key.sh). Its public half must be
+      # the key registered at the hub for this client. One key pair per client; never shared.
+      - Messaging__SigningKey=${PATIENT_HUB_SIGNING_KEY:?PATIENT_HUB_SIGNING_KEY must be set}
+
+      - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
+      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
+      - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
+      # Payload encryption (disabled by default; set PATIENT_ENCRYPTION_ENABLED=true only when client transport encryption is active).
+      - Encryption__Enabled=${PATIENT_ENCRYPTION_ENABLED:-false}
+      - Encryption__Base64Key=${PATIENT_ENCRYPTION_KEY:-}
+      # Signs the share tokens patients hand to facilities (at least 32 characters; the service refuses to start without it).
+      - Sharing__SigningKey=${SHARING_SIGNING_KEY:?SHARING_SIGNING_KEY must be set (at least 32 characters)}
+      # Shared HMAC-SHA256 signing key (at least 32 characters) for progressive patient intake claim tokens (must match portal-api).
+      - ClaimToken__SigningKey=${CLAIM_TOKEN_SIGNING_KEY:?CLAIM_TOKEN_SIGNING_KEY must be set (at least 32 characters)}
+    restart: unless-stopped
+
+networks:
+  data-network:
+    external: true
+    name: ${DATA_NETWORK:-data-network}
+  npm-default:
+    external: true
+    name: ${NPM_NETWORK:-npm-default}

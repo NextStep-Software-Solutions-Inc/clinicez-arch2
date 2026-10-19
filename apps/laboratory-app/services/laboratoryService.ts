@@ -1,0 +1,600 @@
+import { labApiClient } from './apiClient';
+import { joinApiUrl } from '@shared/safe';
+import { getLabApiBaseUrl } from './runtimeConfig';
+
+/**
+ * Enums travel as their C# names, in both directions. The API rejects numbers and unknown names, so these unions
+ * mirror the backend enums member for member.
+ */
+export type SpecimenContainerType =
+  | 'Purple_EDTA'
+  | 'Yellow_SST'
+  | 'Red_Serum'
+  | 'Grey_Fluoride'
+  | 'LightBlue_Citrate'
+  | 'Urine_Cup'
+  | 'Stool_Vial';
+
+export type SpecimenRejectionReason =
+  | 'None'
+  | 'Hemolyzed'
+  | 'Lipemic'
+  | 'Icteric'
+  | 'Clotted'
+  | 'InsufficientVolume_QNS'
+  | 'WrongContainer'
+  | 'UnlabeledMislabeled'
+  | 'Contaminated';
+
+export type StorageTemperature = 'Ambient_20_25C' | 'Refrigerated_2_8C' | 'Frozen_Minus20C' | 'DeepFreeze_Minus80C';
+
+export type SpecimenStorageStatus = 'InTransit' | 'InTesting' | 'StoredInRack' | 'Disposed';
+
+export type ControlLevel = 'Level1_Low' | 'Level2_Normal' | 'Level3_High';
+
+export type QcRunStatus = 'Passed' | 'Warning' | 'Rejected';
+
+export type NotificationMethod = 'Telephone' | 'DirectEMR' | 'SMS' | 'InPerson';
+
+export type RequisitionStatus =
+  | 'PendingAccession'
+  | 'SpecimenCollected'
+  | 'InTesting'
+  | 'AwaitingReview'
+  | 'Verified'
+  | 'Rejected';
+
+export interface SpecimenItem {
+  id: string;
+  barcode: string;
+  containerType: SpecimenContainerType;
+  specimenType: string;
+  status: 'Pending' | 'Collected' | 'ReceivedInLab' | 'Rejected';
+  collectedAt?: string;
+  collectedByPhlebotomistName?: string;
+  receivedInLabAt?: string;
+  notes?: string;
+
+  // Rejection metadata
+  rejectionReason?: SpecimenRejectionReason;
+  rejectionNotes?: string;
+  rejectedAt?: string;
+  rejectedByPhlebotomistName?: string;
+  correctiveAction?: string;
+
+  // Storage rack metadata
+  rackId?: string;
+  rackPosition?: string;
+  storageTemperature?: StorageTemperature;
+  storageStatus?: SpecimenStorageStatus;
+  storedAt?: string;
+  disposedAt?: string;
+}
+
+export interface AnalyteResultItem {
+  id: string;
+  panelName: string;
+  analyteCode: string;
+  analyteName: string;
+  value: string;
+  unit: string;
+  referenceInterval: string;
+  flag: 'Normal' | 'Low' | 'High' | 'Critical';
+  interpretation?: string;
+  enteredByMedTechName?: string;
+  enteredAt?: string;
+  deltaCheckAlert?: string;
+}
+
+export interface DiagnosticReportItem {
+  id: string;
+  reportNumber: string;
+  releasedAt: string;
+  pathologistName: string;
+  pathologistPrcLicense: string;
+  medicalTechnologistName: string;
+  medicalTechnologistPrcLicense: string;
+  pathologistImpression?: string;
+  isCriticalResult: boolean;
+  signedPdfBase64?: string;
+}
+
+export type PaymentPolicy = 'Prepaid' | 'Postpaid' | 'None';
+
+/** Set when billing voided or refunded the order's invoice after it was raised or paid. */
+export type PaymentCorrection = 'None' | 'Voided' | 'Refunded';
+
+export type RequisitionStage =
+  | 'Routed'
+  | 'Claimed'
+  | 'AwaitingPayment'
+  | 'Paid'
+  | 'SpecimenCollected'
+  | 'InProcess'
+  | 'ResultFinalized'
+  | 'Rejected'
+  | 'Cancelled';
+
+export interface LabRequisitionItem {
+  id: string;
+  externalRequisitionId?: string;
+  accessionNumber: string;
+  orderingFacilityName: string;
+  orderingDoctorName: string;
+  orderingDoctorPrc?: string;
+  patientId: string;
+  patientName: string;
+  philHealthPin?: string;
+  patientAge: number;
+  patientGender: string;
+  contactNumber?: string;
+  clinicalDiagnosis?: string;
+  fastingInstructions?: string;
+  urgency: 'Routine' | 'STAT';
+  status: RequisitionStatus;
+  stage?: RequisitionStage;
+  stageReason?: string;
+  paymentPolicy?: PaymentPolicy;
+  quotedAmount?: number;
+  currency?: string;
+  /** True while a prepaid order is unpaid; specimen collection and processing are blocked. */
+  paymentRequired?: boolean;
+  paid?: boolean;
+  paidAtUtc?: string;
+  receiptNumber?: string;
+  paymentCorrection?: PaymentCorrection;
+  paymentCorrectedAtUtc?: string;
+  invoiceId?: string;
+  createdAt: string;
+  specimens: SpecimenItem[];
+  analyteResults: AnalyteResultItem[];
+  diagnosticReport?: DiagnosticReportItem;
+}
+
+export interface AnalyteCatalogSpec {
+  panelName: string;
+  analyteCode: string;
+  analyteName: string;
+  unit: string;
+  referenceInterval: string;
+}
+
+export interface PrintableTubeStickerItem {
+  barcode: string;
+  accessionNumber: string;
+  patientName: string;
+  patientGender: string;
+  patientAge: number;
+  philHealthPin?: string;
+  containerType: SpecimenContainerType;
+  containerColor: string;
+  hexColor: string;
+  specimenType: string;
+  requiredTests: string;
+  urgency: string;
+  drawnAt?: string;
+  phlebotomistName?: string;
+  rackLocation?: string;
+}
+
+export interface RackInventoryItem {
+  specimenId: string;
+  requisitionId: string;
+  barcode: string;
+  accessionNumber: string;
+  patientName: string;
+  containerType: SpecimenContainerType;
+  specimenType: string;
+  rackId: string;
+  rackPosition: string;
+  storageTemperature: StorageTemperature;
+  storageStatus: SpecimenStorageStatus;
+  storedAt?: string;
+}
+
+export interface QcLotItem {
+  id: string;
+  tenantId: string;
+  lotNumber: string;
+  controlName: string;
+  level: ControlLevel;
+  analyteCode: string;
+  instrumentName: string;
+  targetMean: number;
+  targetStandardDeviation: number;
+  manufacturerExpirationDate: string;
+  openVialDate?: string;
+  openVialStabilityDays: number;
+  openVialExpirationDate?: string;
+  isExpired: boolean;
+  daysRemaining?: number;
+  isActive: boolean;
+}
+
+export interface QcRunItem {
+  id: string;
+  qcLotId: string;
+  analyteCode: string;
+  measuredValue: number;
+  zScore: number;
+  runAt: string;
+  runByMedTechName: string;
+  status: QcRunStatus;
+  violationRules: string;
+  correctiveAction?: string;
+  notes?: string;
+}
+
+export interface LeveyJenningsPoint {
+  runId: string;
+  runAt: string;
+  measuredValue: number;
+  zScore: number;
+  status: QcRunStatus;
+  violationRules?: string;
+}
+
+export interface LeveyJenningsChartData {
+  lotId: string;
+  lotNumber: string;
+  controlName: string;
+  level: ControlLevel;
+  analyteCode: string;
+  targetMean: number;
+  targetSD: number;
+  plus1SD: number;
+  plus2SD: number;
+  plus3SD: number;
+  minus1SD: number;
+  minus2SD: number;
+  minus3SD: number;
+  points: LeveyJenningsPoint[];
+}
+
+export interface CriticalPanicDispatchLogItem {
+  id: string;
+  requisitionId: string;
+  accessionNumber: string;
+  patientName: string;
+  orderingDoctorName: string;
+  orderingFacilityName: string;
+  criticalFindings: string;
+  dispatchedAt: string;
+  dispatchedByMedTechName: string;
+  notifiedDoctorName: string;
+  notificationMethod: NotificationMethod;
+  readbackConfirmed: boolean;
+  readbackNotes?: string;
+  acknowledgedAt?: string;
+}
+
+export interface IngestFeedResult {
+  protocol: string;
+  analyzerId: string;
+  accessionNumber: string;
+  ingestedCount: number;
+  hasDeltaCheckAlerts: boolean;
+  hasCriticalFlags: boolean;
+  requisition?: LabRequisitionItem;
+}
+
+export interface AnalyzerCapabilities {
+  simulatorEnabled: boolean;
+}
+
+export interface SimulateAnalyzerResult {
+  format: string;
+  analyzerModel: string;
+  accessionNumber: string;
+  rawPayload: string;
+}
+
+export interface ClaimRequisitionResult {
+  claimId: string;
+  correlationId: string;
+}
+
+export const laboratoryService = {
+  async getWorklist(status?: RequisitionStatus, searchTerm?: string, stage?: RequisitionStage) {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (searchTerm) params.append('searchTerm', searchTerm);
+    if (stage) params.append('stage', stage);
+    const qs = params.toString();
+    return labApiClient.get<LabRequisitionItem[]>(`/requisitions${qs ? `?${qs}` : ''}`);
+  },
+
+  async getRequisition(id: string) {
+    return labApiClient.get<LabRequisitionItem>(`/requisitions/${id}`);
+  },
+
+  async getByAccession(accessionNumber: string) {
+    return labApiClient.get<LabRequisitionItem>(`/requisitions/by-accession/${encodeURIComponent(accessionNumber)}`);
+  },
+
+  /** Redeems a patient's paper-slip QR token so the order is delivered to this laboratory. */
+  async claimRequisition(token: string) {
+    return labApiClient.post<ClaimRequisitionResult>('/requisitions/claim', { token });
+  },
+
+  async rejectRequisition(id: string, reason: string) {
+    return labApiClient.post<LabRequisitionItem>(`/requisitions/${id}/reject`, { reason });
+  },
+
+  /** Asks billing for the current payment state of a prepaid order. */
+  async refreshPaymentStatus(id: string) {
+    return labApiClient.post<LabRequisitionItem>(`/requisitions/${id}/payment/refresh`);
+  },
+
+  async accessionSpecimen(id: string, phlebotomistName: string, specimens: {
+    specimenId?: string;
+    barcode?: string;
+    containerType: SpecimenContainerType;
+    specimenType: string;
+    collectedAt?: string;
+    notes?: string;
+  }[]) {
+    return labApiClient.post<LabRequisitionItem>(`/requisitions/${id}/accession`, {
+      phlebotomistName,
+      specimens
+    });
+  },
+
+  // Scope 1: Phlebotomy, Stickers, Rejection, Storage Racks
+  async getTubeStickers(requisitionId: string) {
+    return labApiClient.get<PrintableTubeStickerItem[]>(`/requisitions/${requisitionId}/stickers`);
+  },
+
+  async rejectSpecimen(requisitionId: string, specimenId: string, payload: {
+    reasonCode: SpecimenRejectionReason;
+    notes?: string;
+    phlebotomistName?: string;
+    correctiveAction?: string;
+  }) {
+    return labApiClient.post<LabRequisitionItem>(`/requisitions/${requisitionId}/specimens/${specimenId}/reject`, payload);
+  },
+
+  async storeSpecimen(requisitionId: string, specimenId: string, payload: {
+    rackId: string;
+    rackPosition: string;
+    temperature?: StorageTemperature;
+  }) {
+    return labApiClient.post<LabRequisitionItem>(`/requisitions/${requisitionId}/specimens/${specimenId}/store`, payload);
+  },
+
+  async getRackInventory(rackId?: string) {
+    const qs = rackId ? `?rackId=${encodeURIComponent(rackId)}` : '';
+    return labApiClient.get<RackInventoryItem[]>(`/requisitions/racks${qs}`);
+  },
+
+  // Scope 2: Analyte Catalog, Results, Analyzer Feeds & Simulation
+  async getCatalog() {
+    return labApiClient.get<AnalyteCatalogSpec[]>('/results/catalog');
+  },
+
+  async recordResults(requisitionId: string, medTechName: string, results: {
+    panelName?: string;
+    analyteCode: string;
+    analyteName?: string;
+    value: string;
+    unit?: string;
+    interpretation?: string;
+  }[]) {
+    return labApiClient.post<LabRequisitionItem>(`/results/${requisitionId}`, {
+      medTechName,
+      results
+    });
+  },
+
+  async ingestAnalyzerFeed(rawPayload: string, protocolHint?: string, medTechName?: string) {
+    return labApiClient.post<IngestFeedResult>('/analyzers/feed', {
+      rawPayload,
+      protocolHint,
+      medTechName
+    });
+  },
+
+  /** What the analyzer integration offers; the simulator is only available in development setups. */
+  async getAnalyzerCapabilities() {
+    return labApiClient.get<AnalyzerCapabilities>('/analyzers/capabilities');
+  },
+
+  async simulateAnalyzer(accessionNumber: string, analyzerModel = 'Mindray BC-5150', format = 'ASTM') {
+    return labApiClient.post<SimulateAnalyzerResult>('/analyzers/simulate', {
+      accessionNumber,
+      analyzerModel,
+      format
+    });
+  },
+
+  // Scope 3: Quality Control & Westgard Multi-Rules
+  async getQcLots(analyteCode?: string, activeOnly = true) {
+    const params = new URLSearchParams();
+    if (analyteCode) params.append('analyteCode', analyteCode);
+    params.append('activeOnly', String(activeOnly));
+    return labApiClient.get<QcLotItem[]>(`/qc/lots?${params.toString()}`);
+  },
+
+  async createQcLot(payload: {
+    tenantId?: string;
+    lotNumber: string;
+    controlName: string;
+    level: ControlLevel;
+    analyteCode: string;
+    instrumentName: string;
+    targetMean: number;
+    targetStandardDeviation: number;
+    manufacturerExpirationDate: string;
+    openVialDate?: string;
+    openVialStabilityDays?: number;
+  }) {
+    return labApiClient.post<QcLotItem>('/qc/lots', payload);
+  },
+
+  async recordQcRun(payload: {
+    qcLotId: string;
+    measuredValue: number;
+    medTechName: string;
+    runAt?: string;
+    peerLevelZScore?: number;
+    notes?: string;
+  }) {
+    return labApiClient.post<QcRunItem>('/qc/runs', payload);
+  },
+
+  async getLeveyJenningsChart(lotId?: string, analyteCode?: string, level?: ControlLevel) {
+    const params = new URLSearchParams();
+    if (lotId) params.append('lotId', lotId);
+    if (analyteCode) params.append('analyteCode', analyteCode);
+    if (level) params.append('level', level);
+    return labApiClient.get<LeveyJenningsChartData>(`/qc/chart?${params.toString()}`);
+  },
+
+  // Scope 4: Statutory Reports, PDF Generation, Panic Dispatch
+  async verifyAndSignReport(requisitionId: string, payload: {
+    pathologistName: string;
+    pathologistPrcLicense: string;
+    medicalTechnologistName: string;
+    medicalTechnologistPrcLicense: string;
+    pathologistImpression?: string;
+    signedPdfBase64?: string;
+  }) {
+    return labApiClient.post<LabRequisitionItem>(`/reports/${requisitionId}/verify`, payload);
+  },
+
+  async getReport(requisitionId: string) {
+    return labApiClient.get<DiagnosticReportItem>(`/reports/${requisitionId}`);
+  },
+
+  async recordPanicDispatch(requisitionId: string, payload: {
+    dispatchedByMedTechName: string;
+    notifiedDoctorName: string;
+    notificationMethod?: NotificationMethod;
+    readbackConfirmed?: boolean;
+    readbackNotes?: string;
+  }) {
+    return labApiClient.post<CriticalPanicDispatchLogItem>(`/reports/${requisitionId}/panic-dispatch`, payload);
+  },
+
+  async getPanicAlerts(limit = 50) {
+    return labApiClient.get<CriticalPanicDispatchLogItem[]>(`/reports/panic-alerts?limit=${limit}`);
+  },
+
+  getReportPdfDownloadUrl(requisitionId: string) {
+    return joinApiUrl(getLabApiBaseUrl(), `/reports/${requisitionId}/pdf`);
+  },
+
+  getReportHtmlPreviewUrl(requisitionId: string) {
+    return joinApiUrl(getLabApiBaseUrl(), `/reports/${requisitionId}/preview-html`);
+  },
+
+  // Scope 5: Facility Licensing & On-Premise Staff Roster
+  async getLicenseStatus() {
+    return labApiClient.get<LabLicenseStatus>('/license');
+  },
+
+  async applyLicense(licenseToken: string) {
+    return labApiClient.post<LabLicenseStatus>('/license/apply', { licenseToken });
+  },
+
+  async getStaff(role?: LabStaffRole, isActive?: boolean) {
+    const params = new URLSearchParams();
+    if (role) params.append('role', role);
+    if (typeof isActive === 'boolean') params.append('isActive', String(isActive));
+    const qs = params.toString();
+    return labApiClient.get<LabStaffMember[]>(`/staff${qs ? `?${qs}` : ''}`);
+  },
+
+  async createStaff(payload: CreateLabStaffPayload) {
+    return labApiClient.post<LabStaffMember>('/staff', payload);
+  },
+
+  async updateStaff(id: string, payload: Partial<CreateLabStaffPayload>) {
+    return labApiClient.put<LabStaffMember>(`/staff/${id}`, payload);
+  },
+
+  async deactivateStaff(id: string) {
+    return labApiClient.delete(`/staff/${id}`);
+  },
+
+  async getLabProfile() {
+    return labApiClient.get<LabProfile>('/profile');
+  },
+
+  async updateLabProfile(payload: UpdateLabProfilePayload) {
+    return labApiClient.put<LabProfile>('/profile', payload);
+  }
+};
+
+/** The laboratory's own letterhead facts, printed on every released report. */
+export interface LabProfile {
+  laboratoryName: string;
+  licenseToOperateNumber?: string;
+  philHealthAccreditationNumber?: string;
+  physicalAddress?: string;
+  contactNumbers?: string;
+  emailAndWeb?: string;
+}
+
+export type UpdateLabProfilePayload = Omit<LabProfile, 'laboratoryName'>;
+
+export type LabStaffRole =
+  | 'Pathologist'
+  | 'MedicalTechnologist'
+  | 'Phlebotomist'
+  | 'LabAdmin'
+  | 'LabClerk';
+
+export interface LabStaffMember {
+  id: string;
+  tenantId: string;
+  laboratoryId: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  title?: string;
+  role: LabStaffRole;
+  email?: string;
+  phoneNumber?: string;
+  prcLicenseNumber?: string;
+  ptrNumber?: string;
+  specialty?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreateLabStaffPayload {
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  title?: string;
+  role: LabStaffRole;
+  email?: string;
+  phoneNumber?: string;
+  prcLicenseNumber?: string;
+  ptrNumber?: string;
+  specialty?: string;
+}
+
+export interface FacilityLimits {
+  maxStaff: number;
+  maxDailyEncounters: number;
+  maxActiveBeds: number;
+  maxStorageMb: number;
+  maxAnalyzers: number;
+  isOfflineCapable: boolean;
+  canDispenseRestrictedDrugs: boolean;
+}
+
+export interface LabLicenseStatus {
+  status: 'Active' | 'ActivationRequired' | 'Expired' | 'Tampered';
+  laboratoryId: string;
+  laboratoryName: string;
+  planTier: string;
+  limits: FacilityLimits;
+  activeStaffCount: number;
+  enabledFeatures: string[];
+  expiresAtUtc?: string;
+  isTampered: boolean;
+  errorMessage?: string;
+}

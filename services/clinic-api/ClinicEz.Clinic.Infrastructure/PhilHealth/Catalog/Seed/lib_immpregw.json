@@ -1,0 +1,8 @@
+{
+ "library": "lib_immpregw",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"999","description":"None","isActive":true},
+  {"code":"P01","description":"Tetanus Toxoid","isActive":true}
+ ]
+}

@@ -1,0 +1,9 @@
+{
+ "library": "lib_immelderly",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"999","description":"None","isActive":true},
+  {"code":"E01","description":"Pnuemococcal Vaccine","isActive":true},
+  {"code":"E02","description":"Flu Vaccine","isActive":true}
+ ]
+}

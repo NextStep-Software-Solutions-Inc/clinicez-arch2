@@ -1,0 +1,5 @@
+# Shell scripts run inside Linux containers / on Linux hosts: they must keep LF line endings.
+*.sh text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+.env.example text eol=lf

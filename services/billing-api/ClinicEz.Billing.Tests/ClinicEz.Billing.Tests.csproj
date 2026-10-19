@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="FluentAssertions" Version="8.10.0" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ClinicEz.Billing.Api\ClinicEz.Billing.Api.csproj" />
+    <ProjectReference Include="..\ClinicEz.Billing.Application\ClinicEz.Billing.Application.csproj" />
+    <ProjectReference Include="..\ClinicEz.Billing.Domain\ClinicEz.Billing.Domain.csproj" />
+    <ProjectReference Include="..\ClinicEz.Billing.Infrastructure\ClinicEz.Billing.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\packages\shared-dotnet\ClinicEz.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,57 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - development
+      - main
+    paths:
+      - 'services/**'
+      - 'packages/shared-dotnet/**'
+      - 'packages/shared-dotnet.Tests/**'
+      - 'tests/**'
+      - 'CLINICEZ.sln'
+      - 'Directory.Build.props'
+      - 'scripts/check-no-broker.ps1'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches:
+      - development
+      - main
+    paths:
+      - 'services/**'
+      - 'packages/shared-dotnet/**'
+      - 'packages/shared-dotnet.Tests/**'
+      - 'tests/**'
+      - 'CLINICEZ.sln'
+      - 'Directory.Build.props'
+      - 'scripts/check-no-broker.ps1'
+      - '.github/workflows/backend-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and Test .NET Solution
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+
+    - name: Set up .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Guard against message brokers (Interop Hub only)
+      shell: pwsh
+      run: ./scripts/check-no-broker.ps1
+
+    - name: Restore dependencies
+      run: dotnet restore CLINICEZ.sln
+
+    - name: Build solution
+      run: dotnet build CLINICEZ.sln --no-restore --configuration Release
+
+    - name: Run unit and integration tests
+      run: dotnet test CLINICEZ.sln --no-build --configuration Release --verbosity normal

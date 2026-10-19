@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ClinicEz.PhilHealthProxy.Api</RootNamespace>
+    <UserSecretsId>a7b3c9d1-f2e4-4801-bcde-901234567890</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.16.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ClinicEz.PhilHealthProxy.Application\ClinicEz.PhilHealthProxy.Application.csproj" />
+    <ProjectReference Include="..\ClinicEz.PhilHealthProxy.Infrastructure\ClinicEz.PhilHealthProxy.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\packages\shared-dotnet\ClinicEz.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
+

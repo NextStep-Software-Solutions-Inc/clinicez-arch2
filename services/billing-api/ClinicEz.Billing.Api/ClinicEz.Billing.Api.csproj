@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ClinicEz.Billing.Api</RootNamespace>
+    <UserSecretsId>5d1c2a54-7a63-4a9b-9c0e-b1a1c6f7e0a3</UserSecretsId>
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Scalar.AspNetCore" Version="2.16.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ClinicEz.Billing.Application\ClinicEz.Billing.Application.csproj" />
+    <ProjectReference Include="..\ClinicEz.Billing.Infrastructure\ClinicEz.Billing.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\packages\shared-dotnet\ClinicEz.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,48 @@
+# On-premise Clinic web: the app served by nginx next to the clinic's own API, reachable by every phone, tablet and
+# workstation on the LAN. Nothing here needs the internet.
+#
+#   1. Start the clinic API (deploy/clinic-api/docker-compose.yml) on a Docker network.
+#   2. Set CLINIC_NETWORK to that network's name and CLINIC_API_UPSTREAM to the API's address on it.
+#   3. cp .env.example .env, fill it in, then: docker compose -f deploy/clinic-web/docker-compose.yml up -d
+#
+# Native devices do not use this container: they connect straight to the API address entered at first launch.
+
+name: clinic-web
+
+services:
+  clinic-web:
+    image: ${CLINIC_WEB_IMAGE:?CLINIC_WEB_IMAGE must be set (published by publish-images.yml from apps/clinic-app/deploy/Dockerfile.web)}
+    container_name: ${CONTAINER_NAME:-clinic-web}
+    restart: unless-stopped
+    ports:
+      - "${CLINIC_WEB_PORT:-8080}:80"
+    # Proportional Resource Allocation (Lightweight static web / nginx reverse proxy)
+    cpu_shares: ${CLINIC_WEB_CPU_SHARES:-256}
+    deploy:
+      resources:
+        reservations:
+          cpus: '${CLINIC_WEB_CPUS_RESERVATION:-0.05}'
+          memory: ${CLINIC_WEB_MEM_RESERVATION:-32M}
+        limits:
+          cpus: '${CLINIC_WEB_CPUS_LIMIT:-0.50}'
+          memory: ${CLINIC_WEB_MEM_LIMIT:-128M}
+    environment:
+      # Where nginx forwards /api/ (infrastructure for this container; not an app setting).
+      CLINIC_API_UPSTREAM: ${CLINIC_API_UPSTREAM:?CLINIC_API_UPSTREAM must be set, e.g. http://clinic-api:8080}
+      # App settings: exactly the same EXPO_PUBLIC_* variables as the Vercel build. Only the ones you set are published.
+      # EXPO_PUBLIC_CLINIC_API_URL defaults to "/" here (same origin; nginx proxies /api).
+      EXPO_PUBLIC_CLINIC_API_URL: ${EXPO_PUBLIC_CLINIC_API_URL:-}
+      EXPO_PUBLIC_BASE_DOMAIN: ${EXPO_PUBLIC_BASE_DOMAIN:-}
+      EXPO_PUBLIC_SERVICE_SUBDOMAIN: ${EXPO_PUBLIC_SERVICE_SUBDOMAIN:-}
+      EXPO_PUBLIC_SERVICE_SUBDOMAINS: ${EXPO_PUBLIC_SERVICE_SUBDOMAINS:-}
+      EXPO_PUBLIC_API_URL_TEMPLATE: ${EXPO_PUBLIC_API_URL_TEMPLATE:-}
+      EXPO_PUBLIC_PORTAL_URL: ${EXPO_PUBLIC_PORTAL_URL:-}
+      EXPO_PUBLIC_STORAGE_PUBLIC_URL: ${EXPO_PUBLIC_STORAGE_PUBLIC_URL:-}
+      EXPO_PUBLIC_OFFLINE_GRACE_HOURS: ${EXPO_PUBLIC_OFFLINE_GRACE_HOURS:-}
+    networks:
+      - clinic
+
+networks:
+  clinic:
+    name: ${CLINIC_NETWORK:?CLINIC_NETWORK must be set to the Docker network the clinic API runs on}
+    external: true

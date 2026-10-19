@@ -1,0 +1,11 @@
+{
+ "library": "lib_genitourinary",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"Essentially normal","isActive":true},
+  {"code":"2","description":"Blood stained in exam finger","isActive":true},
+  {"code":"3","description":"Cervical dilatation","isActive":true},
+  {"code":"4","description":"Presence of abnormal discharge","isActive":true},
+  {"code":"99","description":"Others","isActive":true}
+ ]
+}

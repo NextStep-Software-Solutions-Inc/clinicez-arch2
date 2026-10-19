@@ -1,0 +1,20 @@
+{
+ "library": "lib_neuro",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"Developmental delay","isActive":true},
+  {"code":"10","description":"Abnormal reflex(es)","isActive":true},
+  {"code":"11","description":"Poor/altered memory","isActive":true},
+  {"code":"12","description":"Poor muscle tone/strength","isActive":true},
+  {"code":"13","description":"Poor coordination","isActive":true},
+  {"code":"2","description":"Seizures","isActive":true},
+  {"code":"3","description":"Normal","isActive":true},
+  {"code":"4","description":"Motor Deficit","isActive":true},
+  {"code":"5","description":"Sensory Deficit","isActive":true},
+  {"code":"6","description":"Essentially normal","isActive":true},
+  {"code":"7","description":"Abnormal gait","isActive":true},
+  {"code":"8","description":"Abnormal position sense","isActive":true},
+  {"code":"9","description":"Abnormal sensation","isActive":true},
+  {"code":"99","description":"Others","isActive":true}
+ ]
+}

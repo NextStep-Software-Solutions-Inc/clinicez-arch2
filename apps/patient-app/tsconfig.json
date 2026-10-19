@@ -1,0 +1,35 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "strict": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@ui/*": [
+        "components/ui/*"
+      ],
+      "@ui": [
+        "components/ui"
+      ],
+      "@db/*": [
+        "db/*"
+      ],
+      "@db": [
+        "db"
+      ],
+      "@utils/*": [
+        "utils/*"
+      ],
+      "@utils": [
+        "utils"
+      ]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    ".expo"
+  ]
+}

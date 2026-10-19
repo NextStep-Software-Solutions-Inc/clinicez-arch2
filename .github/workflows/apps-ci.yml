@@ -1,0 +1,75 @@
+name: Apps CI
+
+on:
+  push:
+    branches:
+      - development
+      - main
+    paths:
+      - 'apps/**'
+      - 'packages/shared-ts/**'
+      - 'packages/design-tokens/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.nvmrc'
+      - '.node-version'
+      - '.github/workflows/apps-ci.yml'
+  pull_request:
+    branches:
+      - development
+      - main
+    paths:
+      - 'apps/**'
+      - 'packages/shared-ts/**'
+      - 'packages/design-tokens/**'
+      - 'package.json'
+      - 'bun.lock'
+      - '.nvmrc'
+      - '.node-version'
+      - '.github/workflows/apps-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  lint-and-build:
+    name: Lint, Type Check & Build Apps
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Type check all apps
+        run: bun run typecheck:all
+
+      - name: Test clinic app
+        run: bun run test:clinic
+
+      - name: Clinic app token and host/catalog gates
+        run: bun run lint:clinic
+
+      - name: Lint portal web
+        run: bun run lint:portal
+
+      - name: Build portal web
+        run: bun run build:portal
+
+      - name: Build patient web
+        run: bun run build:patient-web
+
+      - name: Build clinic web
+        run: bun run build:clinic-web

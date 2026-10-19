@@ -1,0 +1,14 @@
+name: Staging OTA Update
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  update:
+    name: Publish Staging
+    type: update
+    environment: preview
+    params:
+      branch: staging

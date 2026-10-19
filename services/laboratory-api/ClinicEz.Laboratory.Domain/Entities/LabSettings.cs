@@ -1,0 +1,34 @@
+using System;
+using ClinicEz.Laboratory.Domain.Common;
+using ClinicEz.Laboratory.Domain.Enums;
+
+namespace ClinicEz.Laboratory.Domain.Entities;
+
+public sealed class LabSettings : BaseEntity, ILabScopedEntity
+{
+    public required string TenantId { get; set; }
+    public Guid LaboratoryId { get; set; }
+    public required string LaboratoryName { get; set; }
+
+    /// <summary>Whether orders must be paid before specimen collection (default), are billed afterwards, or are not billed.</summary>
+    public PaymentPolicy PaymentPolicy { get; set; } = PaymentPolicy.Prepaid;
+
+    // Cryptographic License & Hard Limit Profile
+    public string? LicenseToken { get; set; }
+
+    /// <summary>Version of the signed license in <see cref="LicenseToken"/>; an entitlement update older than this is ignored.</summary>
+    public int EntitlementVersion { get; set; }
+    public string PlanTier { get; set; } = "Community";
+    public int MaxStaffLimit { get; set; } = 5;
+    public int MaxAnalyzersLimit { get; set; } = 1;
+    public DateTime? LicenseExpiresAt { get; set; }
+
+    public string? LicenseToOperateNumber { get; set; }
+    public string? TaxIdentificationNumber { get; set; }
+
+    // Letterhead printed on diagnostic reports. Entered by the laboratory; reports omit whatever is blank.
+    public string? PhilHealthAccreditationNumber { get; set; }
+    public string? PhysicalAddress { get; set; }
+    public string? ContactNumbers { get; set; }
+    public string? EmailAndWeb { get; set; }
+}

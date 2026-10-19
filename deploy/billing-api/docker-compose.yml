@@ -1,0 +1,70 @@
+# docker-compose.yml
+# Deploy compose for the Billing (cashiering) API on a cell's server (Dev environment).
+#
+# billing-api is a PER-CELL service: run one per cell, next to that cell's local interop hub. It reaches the hub through
+# the interop SDK only (Messaging__*); there is no message broker to deploy. All secrets are injected via .env written
+# at deploy time by GitHub Actions. No host ports exposed; routed via npm-default (NPM) and connected to data-network.
+
+name: billing-api
+
+services:
+  billing-api:
+    image: ${IMAGE_NAME:-billing-api}:${IMAGE_TAG:-dev}
+    container_name: ${CONTAINER_NAME:-billing-api}
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    expose:
+      - "8080"
+    networks:
+      - data-network
+      - npm-default
+    # Proportional Resource Allocation (Production VPS 1 vCPU / 2GB RAM Standard)
+    # Work-conserving: active services burst to 100% of CPU and available RAM; zero idle resources wasted.
+    cpu_shares: ${BILLING_CPU_SHARES:-768}
+    deploy:
+      resources:
+        reservations:
+          cpus: '${BILLING_CPUS_RESERVATION:-0.10}'
+          memory: ${BILLING_MEM_RESERVATION:-100M}
+        limits:
+          cpus: '${BILLING_CPUS_LIMIT:-0.95}'
+          memory: ${BILLING_MEM_LIMIT:-300M}
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      # Low-memory & 1 vCPU tuning for Production VPS (130.94.50.27)
+      - DOTNET_GCHeapHardLimitPercent=75
+      - DOTNET_gcServer=0
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING:?CONNECTION_STRING must be set}
+      - DbSchema=${DB_SCHEMA:-billing}
+      # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
+      - Messaging__Transport=Hub
+      - Messaging__Service=billing
+      - Messaging__HubUrl=${HUB_URL:?HUB_URL must be set}
+      - Messaging__ClientId=${BILLING_HUB_CLIENT_ID:?BILLING_HUB_CLIENT_ID must be set}
+      - Messaging__ClientSecret=${BILLING_HUB_CLIENT_SECRET:?BILLING_HUB_CLIENT_SECRET must be set}
+      # Envelope signing (ECDSA P-256 private key, PEM or base64 of PEM; scripts/generate-signing-key.sh). Its public half must be
+      # the key registered at the hub for this client. One key pair per client; never shared.
+      - Messaging__SigningKey=${BILLING_HUB_SIGNING_KEY:?BILLING_HUB_SIGNING_KEY must be set}
+
+      - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
+      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
+      - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
+      # Signs this service's facility-local session tokens: a long random secret (at least 32 characters), required.
+      - Jwt__SigningKey=${BILLING_JWT_SIGNING_KEY:?BILLING_JWT_SIGNING_KEY must be set (at least 32 characters)}
+      - Jwt__KeyDirectory=/app/keys
+    volumes:
+      - billing-api-keys:/app/keys
+    restart: unless-stopped
+
+volumes:
+  billing-api-keys:
+
+networks:
+  data-network:
+    external: true
+    name: ${DATA_NETWORK:-data-network}
+  npm-default:
+    external: true
+    name: ${NPM_NETWORK:-npm-default}

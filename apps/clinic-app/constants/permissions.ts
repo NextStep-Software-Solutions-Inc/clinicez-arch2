@@ -1,0 +1,48 @@
+/**
+ * Permission keys issued by the clinic server in the session token (mirrors ClinicPermissions in clinic-api).
+ * Use with `usePermission()` to hide actions the signed-in staff member cannot perform; the server enforces them regardless.
+ */
+export const PERMISSIONS = {
+  appointmentsRead: 'appointments:read',
+  appointmentsManage: 'appointments:manage',
+  queueRead: 'queue:read',
+  queueCheckIn: 'queue:check-in',
+  queueCall: 'queue:call',
+  queueComplete: 'queue:complete',
+  triageRead: 'triage:read',
+  triageWrite: 'triage:write',
+  consultationsRead: 'consultations:read',
+  consultationsWrite: 'consultations:write',
+  consultationsSign: 'consultations:sign',
+  billingRead: 'billing:read',
+  billingWrite: 'billing:write',
+  billingVoid: 'billing:void',
+  servicesRead: 'services:read',
+  servicesManage: 'services:manage',
+  proceduresRead: 'procedures:read',
+  proceduresWrite: 'procedures:write',
+  labOrdersRead: 'laborders:read',
+  labOrdersWrite: 'laborders:write',
+  labResultsReview: 'labresults:review',
+  reportsRead: 'reports:read',
+  patientsRead: 'patients:read',
+  patientsWrite: 'patients:write',
+  documentsRead: 'documents:read',
+  documentsIssue: 'documents:issue',
+  recordsRead: 'records:read',
+  recordsUpload: 'records:upload',
+  settingsRead: 'settings:read',
+  settingsManage: 'settings:manage',
+  staffRead: 'staff:read',
+  staffManage: 'staff:manage',
+  rolesRead: 'roles:read',
+  rolesManage: 'roles:manage',
+  yakapRead: 'yakap:read',
+  yakapWrite: 'yakap:write',
+  yakapSubmit: 'yakap:submit',
+  philHealthCatalogImport: 'philhealth.catalog.import',
+  auditRead: 'audit:read',
+  auditExport: 'audit:export',
+} as const;
+
+export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

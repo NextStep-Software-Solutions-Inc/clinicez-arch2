@@ -1,0 +1,1 @@
+ALTER TABLE `booking_drafts` ADD `share_sections_json` text DEFAULT '[]' NOT NULL;

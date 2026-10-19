@@ -1,0 +1,116 @@
+# docker-compose.yml
+# Deploy compose for the Interop Hub (cloud mode) on Server (Dev environment).
+#
+# All secrets are injected via .env written at deploy time by GitHub Actions (see .env.example).
+# No host ports exposed; routed via npm-default (NPM) and connected to data-network (PostgreSQL).
+#
+# ASPNETCORE_ENVIRONMENT defaults to Production on purpose: the hub's Development environment seeds well-known
+# development clients (dev-*), which must never exist on a server.
+
+name: interop-hub
+
+services:
+  interop-hub:
+    image: ${IMAGE_NAME:-interop-hub}:${IMAGE_TAG:-dev}
+    container_name: ${CONTAINER_NAME:-interop-hub}
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    expose:
+      - "8080"
+    networks:
+      - data-network
+      - npm-default
+    # Proportional Resource Allocation (Production VPS 1 vCPU / 2GB RAM Standard)
+    # Work-conserving: active services burst to 100% of CPU and available RAM; zero idle resources wasted.
+    cpu_shares: ${HUB_CPU_SHARES:-1024}
+    deploy:
+      resources:
+        reservations:
+          cpus: '${HUB_CPUS_RESERVATION:-0.15}'
+          memory: ${HUB_MEM_RESERVATION:-120M}
+        limits:
+          cpus: '${HUB_CPUS_LIMIT:-0.95}'
+          memory: ${HUB_MEM_LIMIT:-350M}
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      # Low-memory & 1 vCPU tuning for Production VPS (130.94.50.27)
+      - DOTNET_GCHeapHardLimitPercent=75
+      - DOTNET_gcServer=0
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING:?CONNECTION_STRING must be set}
+      - DbSchema=${DB_SCHEMA:-interop_hub}
+      - Hub__Mode=Cloud
+      - Hub__Database__AutoMigrate=${HUB_AUTO_MIGRATE:-true}
+      # Optional AES-256-GCM encryption of stored envelopes: base64 of 32 random bytes. Empty stores plain JSON.
+      - Hub__PayloadEncryptionKey=${HUB_PAYLOAD_ENCRYPTION_KEY:-}
+      # Declarative bootstrap: the cloud cell and clients for each cloud service.
+      - Hub__Bootstrap__Cells__0__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Cells__0__Name=Clinic EZ Cloud
+      - Hub__Bootstrap__Cells__0__Kind=Cloud
+
+      # 0: Portal API (ControlPlane)
+      - Hub__Bootstrap__Clients__0__ClientId=${PORTAL_HUB_CLIENT_ID:-dev-portal}
+      - Hub__Bootstrap__Clients__0__Secret=${PORTAL_HUB_CLIENT_SECRET:?PORTAL_HUB_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__0__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Clients__0__Service=portal
+      - Hub__Bootstrap__Clients__0__Kind=ControlPlane
+      - Hub__Bootstrap__Clients__0__PublicKey=${PORTAL_HUB_SIGNING_PUBLIC_KEY:?PORTAL_HUB_SIGNING_PUBLIC_KEY must be set}
+
+      # 1: Clinic API (CloudService)
+      - Hub__Bootstrap__Clients__1__ClientId=${CLINIC_HUB_CLIENT_ID:-dev-clinic}
+      - Hub__Bootstrap__Clients__1__Secret=${CLINIC_HUB_CLIENT_SECRET:?CLINIC_HUB_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__1__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Clients__1__Service=clinic
+      - Hub__Bootstrap__Clients__1__Kind=CloudService
+      - Hub__Bootstrap__Clients__1__PublicKey=${CLINIC_HUB_SIGNING_PUBLIC_KEY:?CLINIC_HUB_SIGNING_PUBLIC_KEY must be set}
+
+      # 2: Laboratory API (CloudService)
+      - Hub__Bootstrap__Clients__2__ClientId=${LABORATORY_HUB_CLIENT_ID:-dev-laboratory}
+      - Hub__Bootstrap__Clients__2__Secret=${LABORATORY_HUB_CLIENT_SECRET:?LABORATORY_HUB_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__2__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Clients__2__Service=laboratory
+      - Hub__Bootstrap__Clients__2__Kind=CloudService
+      - Hub__Bootstrap__Clients__2__PublicKey=${LABORATORY_HUB_SIGNING_PUBLIC_KEY:?LABORATORY_HUB_SIGNING_PUBLIC_KEY must be set}
+
+      # 3: Pharmacy API (CloudService)
+      - Hub__Bootstrap__Clients__3__ClientId=${PHARMACY_HUB_CLIENT_ID:-dev-pharmacy}
+      - Hub__Bootstrap__Clients__3__Secret=${PHARMACY_HUB_CLIENT_SECRET:?PHARMACY_HUB_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__3__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Clients__3__Service=pharmacy
+      - Hub__Bootstrap__Clients__3__Kind=CloudService
+      - Hub__Bootstrap__Clients__3__PublicKey=${PHARMACY_HUB_SIGNING_PUBLIC_KEY:?PHARMACY_HUB_SIGNING_PUBLIC_KEY must be set}
+
+      # 4: Billing API (CloudService)
+      - Hub__Bootstrap__Clients__4__ClientId=${BILLING_HUB_CLIENT_ID:-dev-billing}
+      - Hub__Bootstrap__Clients__4__Secret=${BILLING_HUB_CLIENT_SECRET:?BILLING_HUB_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__4__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Clients__4__Service=billing
+      - Hub__Bootstrap__Clients__4__Kind=CloudService
+      - Hub__Bootstrap__Clients__4__PublicKey=${BILLING_HUB_SIGNING_PUBLIC_KEY:?BILLING_HUB_SIGNING_PUBLIC_KEY must be set}
+
+      # 5: Organization API (CloudService)
+      - Hub__Bootstrap__Clients__5__ClientId=${ORGANIZATION_HUB_CLIENT_ID:-dev-organization}
+      - Hub__Bootstrap__Clients__5__Secret=${ORGANIZATION_HUB_CLIENT_SECRET:?ORGANIZATION_HUB_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__5__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Clients__5__Service=organization
+      - Hub__Bootstrap__Clients__5__Kind=CloudService
+      - Hub__Bootstrap__Clients__5__PublicKey=${ORGANIZATION_HUB_SIGNING_PUBLIC_KEY:?ORGANIZATION_HUB_SIGNING_PUBLIC_KEY must be set}
+
+      # 6: Patient API (PatientPlane)
+      - Hub__Bootstrap__Clients__6__ClientId=${PATIENT_HUB_CLIENT_ID:-dev-patient}
+      - Hub__Bootstrap__Clients__6__Secret=${PATIENT_HUB_CLIENT_SECRET:?PATIENT_HUB_CLIENT_SECRET must be set}
+      - Hub__Bootstrap__Clients__6__CellId=${HUB_CLOUD_CELL_ID:-cloud}
+      - Hub__Bootstrap__Clients__6__Service=patient
+      - Hub__Bootstrap__Clients__6__Kind=PatientPlane
+      - Hub__Bootstrap__Clients__6__PublicKey=${PATIENT_HUB_SIGNING_PUBLIC_KEY:?PATIENT_HUB_SIGNING_PUBLIC_KEY must be set}
+
+      # Verify envelope signatures on POST /v1/messages (default true outside Development). Only set false for a temporary
+      # migration of clients that cannot sign yet.
+      - Hub__Signing__Required=${HUB_SIGNING_REQUIRED:-true}
+    restart: unless-stopped
+
+networks:
+  data-network:
+    external: true
+  npm-default:
+    external: true

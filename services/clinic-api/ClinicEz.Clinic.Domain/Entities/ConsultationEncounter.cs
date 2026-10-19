@@ -1,0 +1,151 @@
+using System;
+using System.Collections.Generic;
+using ClinicEz.Clinic.Domain.Common;
+
+namespace ClinicEz.Clinic.Domain.Entities;
+
+public sealed class ConsultationEncounter : BaseEntity
+{
+    public required string TenantId { get; set; }
+    public Guid ClinicId { get; set; }
+    public Guid? BranchId { get; set; }
+
+    public Guid? QueueItemId { get; set; }
+    public QueueItem? QueueItem { get; set; }
+
+    public Guid? AppointmentId { get; set; }
+    public Appointment? Appointment { get; set; }
+
+    public Guid PatientId { get; set; }
+    public required string PatientName { get; set; }
+
+    public Guid DoctorId { get; set; }
+    public required string DoctorName { get; set; }
+
+    public DateTime EncounterDate { get; set; } = DateTime.UtcNow;
+
+    // Structured SOAP Documentation (Confidential / Clinician Only)
+    public string Subjective { get; set; } = string.Empty;
+    public string Objective { get; set; } = string.Empty;
+    public string Assessment { get; set; } = string.Empty;
+    public string Plan { get; set; } = string.Empty;
+
+    // Patient-Facing Home & Discharge Instructions (Exposed to patient portal and discharge slips)
+    public string? HomeInstructions { get; set; }
+
+    // Physician credential snapshot at encounter signing
+    public string? DoctorPrcLicense { get; set; }
+    public string? DoctorPtr { get; set; }
+    public string? DoctorS2License { get; set; }
+
+    // Lock status
+    public bool IsSigned { get; set; } = false;
+    public DateTime? SignedAt { get; set; }
+
+    // PhilHealth Konsulta / YAKAP Encounter Tracking
+    public bool IsYakapEligible { get; set; } = false;
+    public string? PhilHealthSignSympCode { get; set; }
+    public string? PhilHealthOtherComplaint { get; set; }
+    public string? PhilHealthPainSite { get; set; }
+    public string? PhilHealthCaseNo { get; set; }
+    public string? PhilHealthSoapTransNo { get; set; }
+    public string? DoctorPhilHealthPan { get; set; }
+    public string? PhilHealthAtc { get; set; }
+    public string? HciCaseNo { get; set; }
+    public string? HciTransNo { get; set; }
+    public string? SoapTransNo { get; set; }
+    public string? GeneralSurveyId { get; set; }
+    public string? GeneralSurveyRemarks { get; set; }
+    public string? PhysicalExamFindingsJson { get; set; }
+
+    // E-Prescription Interoperability & External Verification
+    public string? PrescriptionNumber { get; set; }
+    public string? RxPublicVerificationToken { get; set; }
+
+    /// <summary>Hub claim capability printed as the prescription QR so any ClinicEZ pharmacy can dispense it.</summary>
+    public string? RxClaimToken { get; set; }
+    public DateTime? RxClaimExpiresAt { get; set; }
+    public ClinicEz.Clinic.Domain.Enums.PrescriptionDispenseStatus RxDispenseStatus { get; set; } = ClinicEz.Clinic.Domain.Enums.PrescriptionDispenseStatus.Issued;
+    public string? RxDispensedPharmacyName { get; set; }
+    public string? RxDispensedPharmacistName { get; set; }
+    public string? RxDispensedPharmacistPrc { get; set; }
+    public string? RxDispensedReceiptNumber { get; set; }
+    public string? RxDispensedReceiptUrl { get; set; }
+    public DateTime? RxDispensedAt { get; set; }
+    public string? RxNotes { get; set; }
+
+    /// <summary>Stage owned by the pharmacy; mirrored here from <c>rx.status.changed</c>.</summary>
+    public ClinicEz.Shared.Interoperability.RxStage RxStage { get; set; } = ClinicEz.Shared.Interoperability.RxStage.Issued;
+    public string? RxStageReason { get; set; }
+    public decimal? RxQuotedAmount { get; set; }
+    /// <summary>When the pharmacy said the stage changed (its clock); a status message older than this is stale and ignored.</summary>
+    public DateTime? RxStageReportedAt { get; set; }
+    public string? RxPharmacyTenantId { get; set; }
+    public string? RxPharmacyFacilityId { get; set; }
+    public string? RxPharmacyName { get; set; }
+
+    // Navigations
+    public ICollection<EncounterDiagnosis> Diagnoses { get; set; } = new List<EncounterDiagnosis>();
+    public ICollection<PrescriptionItem> Prescriptions { get; set; } = new List<PrescriptionItem>();
+
+    public NineSystemPhysicalExamFindings? GetPhysicalExamFindings()
+    {
+        if (string.IsNullOrWhiteSpace(PhysicalExamFindingsJson)) return null;
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<NineSystemPhysicalExamFindings>(PhysicalExamFindingsJson);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public void SetPhysicalExamFindings(NineSystemPhysicalExamFindings? findings)
+    {
+        PhysicalExamFindingsJson = findings != null
+            ? System.Text.Json.JsonSerializer.Serialize(findings)
+            : null;
+    }
+}
+
+public sealed class SystemExamFinding
+{
+    public SystemExamFinding()
+    {
+    }
+
+    public SystemExamFinding(bool isNormal, string? remarks = null)
+    {
+        IsNormal = isNormal;
+        Remarks = remarks;
+    }
+
+    public bool IsNormal { get; set; } = true;
+    public string? Remarks { get; set; }
+}
+
+public sealed class NineSystemPhysicalExamFindings
+{
+    public bool AllEssentiallyNormal =>
+        (Skin?.IsNormal ?? true) &&
+        (Heent?.IsNormal ?? true) &&
+        (Chest?.IsNormal ?? true) &&
+        (Heart?.IsNormal ?? true) &&
+        (Abdomen?.IsNormal ?? true) &&
+        (Neuro?.IsNormal ?? true) &&
+        (Rectal?.IsNormal ?? true) &&
+        (Gu?.IsNormal ?? true) &&
+        (Musculoskeletal?.IsNormal ?? true);
+
+    public SystemExamFinding Skin { get; set; } = new();
+    public SystemExamFinding Heent { get; set; } = new();
+    public SystemExamFinding Chest { get; set; } = new();
+    public SystemExamFinding Heart { get; set; } = new();
+    public SystemExamFinding Abdomen { get; set; } = new();
+    public SystemExamFinding Neuro { get; set; } = new();
+    public SystemExamFinding Rectal { get; set; } = new();
+    public SystemExamFinding Gu { get; set; } = new();
+    public SystemExamFinding Musculoskeletal { get; set; } = new();
+}
+
