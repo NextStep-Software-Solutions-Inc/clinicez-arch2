@@ -47,7 +47,7 @@ export default function ClinicHeaderBar({
   onOpenSearch,
 }: ClinicHeaderBarProps) {
   const insets = useSafeInsets();
-  const { isCompact } = useBreakpoint();
+  const { isCompact, width } = useBreakpoint();
   const { multiplier, headerHeight } = useUiDensity();
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -133,7 +133,7 @@ export default function ClinicHeaderBar({
       >
         {!isCompact && onOpenSearch && (
           <Pressable
-            onPress={onOpenSearch}
+            onPress={() => onOpenSearch()}
             style={({ pressed, hovered }: any) => [
               styles.searchTriggerPill,
               hovered && styles.searchTriggerPillHovered,
@@ -161,7 +161,7 @@ export default function ClinicHeaderBar({
           </Pressable>
         )}
 
-        {!isCompact && (
+        {!isCompact && width >= 1150 && (
           <View style={styles.dateBadge}>
             <Icon name="calendar" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
             <ThemedText variant="small" color={theme.colors.textSecondary}>
@@ -221,7 +221,7 @@ export default function ClinicHeaderBar({
         <View style={styles.utilityCluster}>
           {isCompact && onOpenSearch ? (
             <Pressable
-              onPress={onOpenSearch}
+              onPress={() => onOpenSearch()}
               style={({ pressed }) => [
                 styles.searchIconButton,
                 pressed && styles.searchIconButtonPressed,
@@ -404,8 +404,10 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.full,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
-    width: 260,
-    maxWidth: 320,
+    width: 240,
+    minWidth: 160,
+    maxWidth: 280,
+    flexShrink: 1,
     minHeight: 34,
     gap: theme.spacing.sm,
   },

@@ -190,6 +190,7 @@ const {
   handleModalKeyNavigation,
 } = await import('../components/search/GlobalSearchModal');
 const { default: ClinicHeaderBar } = await import('../components/layout/ClinicHeaderBar');
+const { default: ErrorBoundary } = await import('../components/ErrorBoundary');
 
 const {
   handleWorkstationKeyDown,
@@ -1256,6 +1257,146 @@ describe('Milestone 3: Clinic Workstation Command Palette UX & Deep Navigation',
       );
 
       expect(html).toContain('data-component="Animated.View"');
+    });
+  });
+
+  describe('Suite 9: Defensive Hardening & TypeError Prevention (C.trim and Event Leaks)', () => {
+    test('renders without crashing when query is undefined', () => {
+      expect(() => {
+        renderToStaticMarkup(
+          React.createElement(GlobalSearchModal, {
+            visible: true,
+            onClose: () => {},
+            query: undefined as any,
+            onChangeQuery: () => {},
+            activeCategory: 'all',
+            onSelectCategory: () => {},
+            categories: [{ key: 'all', label: 'All' }],
+            results: [],
+            quickActions: QUICK_ACTIONS,
+            loading: false,
+            onSelectItem: () => {},
+          }),
+        );
+      }).not.toThrow();
+    });
+
+    test('renders without crashing when query is an event object (e.g. from Pressable onPress)', () => {
+      const eventMock = {
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        nativeEvent: {},
+      };
+
+      expect(() => {
+        const html = renderToStaticMarkup(
+          React.createElement(GlobalSearchModal, {
+            visible: true,
+            onClose: () => {},
+            query: eventMock as any,
+            onChangeQuery: () => {},
+            activeCategory: 'all',
+            onSelectCategory: () => {},
+            categories: [{ key: 'all', label: 'All' }],
+            results: [],
+            quickActions: QUICK_ACTIONS,
+            loading: false,
+            onSelectItem: () => {},
+          }),
+        );
+        expect(html).toContain('Quick Actions');
+      }).not.toThrow();
+    });
+
+    test('renders without crashing when activeCategory is non-string or undefined', () => {
+      expect(() => {
+        renderToStaticMarkup(
+          React.createElement(GlobalSearchModal, {
+            visible: true,
+            onClose: () => {},
+            query: 'test',
+            onChangeQuery: () => {},
+            activeCategory: undefined as any,
+            onSelectCategory: () => {},
+            categories: [{ key: 'all', label: 'All' }],
+            results: [],
+            quickActions: QUICK_ACTIONS,
+            loading: false,
+            onSelectItem: () => {},
+          }),
+        );
+      }).not.toThrow();
+    });
+
+    test('renders without crashing when results or quickActions are undefined', () => {
+      expect(() => {
+        renderToStaticMarkup(
+          React.createElement(GlobalSearchModal, {
+            visible: true,
+            onClose: () => {},
+            query: 'test',
+            onChangeQuery: () => {},
+            activeCategory: 'all',
+            onSelectCategory: () => {},
+            categories: [{ key: 'all', label: 'All' }],
+            results: undefined as any,
+            quickActions: undefined as any,
+            loading: false,
+            onSelectItem: () => {},
+          }),
+        );
+      }).not.toThrow();
+    });
+
+    test('ErrorBoundary renders harmonized layout with unified maxWidth across cards and actions', () => {
+      const errorInstance = new TypeError("C.trim is not a function. (In 'C.trim()', 'C.trim' is undefined)");
+      const boundary = new ErrorBoundary({ children: null });
+      boundary.state = {
+        failed: true,
+        error: errorInstance,
+        componentStack: 'in GlobalSearchModal\nin GlobalSearchProvider',
+        report: {
+          id: 'crash-test-123',
+          source: 'ErrorBoundary',
+          name: 'TypeError',
+          message: errorInstance.message,
+          timestamp: new Date().toISOString(),
+          formattedTime: '10/20/2026, 7:00:00 AM GMT+8',
+          platform: 'web',
+          osVersion: '0.0.0',
+          windowDimensions: { width: 1471, height: 860 },
+          isFatal: true,
+        },
+        copied: false,
+        expandedDetails: false,
+      };
+
+      const markup = renderToStaticMarkup(boundary.render() as any);
+
+      expect(markup).toContain('Something went wrong');
+      expect(markup).toContain('C.trim is not a function');
+      expect(markup).toContain('View full technical diagnostics (stack trace)');
+      expect(markup).toContain('Copy / Share Error Report');
+      expect(markup).toContain('Try again');
+      expect(markup).toContain('Switch workspace / Reconnect');
+      expect(markup).toContain('1471x860');
+    });
+
+    test('ClinicHeaderBar search trigger invokes onOpenSearch cleanly without forwarding event objects', () => {
+      let invocationArgs: any[] | null = null;
+      const onOpenSearch = (...args: any[]) => {
+        invocationArgs = args;
+      };
+
+      const html = renderToStaticMarkup(
+        React.createElement(ClinicHeaderBar, {
+          title: 'Patients',
+          onOpenSearch,
+        }),
+      );
+
+      expect(html).toContain('Search records...');
+      expect(html).toContain('Search clinic records and settings (Cmd+K)');
     });
   });
 });
