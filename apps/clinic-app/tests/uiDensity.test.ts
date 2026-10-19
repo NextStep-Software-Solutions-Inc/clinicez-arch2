@@ -20,9 +20,41 @@ mock.module('react-native', () => ({
   TouchableHighlight: createMockComponent('TouchableHighlight'),
   Touchable: { Mixin: {} },
   ActivityIndicator: createMockComponent('ActivityIndicator'),
+  ScrollView: createMockComponent('ScrollView'),
+  RefreshControl: createMockComponent('RefreshControl'),
+  Modal: createMockComponent('Modal'),
+  KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
+  FlatList: createMockComponent('FlatList'),
+  SectionList: createMockComponent('SectionList'),
+  Switch: createMockComponent('Switch'),
+  Image: createMockComponent('Image'),
+  ImageBackground: createMockComponent('ImageBackground'),
+  Dimensions: {
+    get: () => ({ width: 1280, height: 800 }),
+    addEventListener: () => ({ remove: () => {} }),
+  },
+  useWindowDimensions: () => ({ width: 1280, height: 800 }),
+  Keyboard: { dismiss: () => {}, addListener: () => ({ remove: () => {} }) },
+  Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
+  TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
+  NativeModules: {},
+  Alert: { alert: () => {} },
   processColor: (c: any) => c,
   AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
+  Animated: {
+    Value: class {
+      constructor(public val: any) {}
+      setValue(val: any) { this.val = val; }
+      interpolate() { return this; }
+    },
+    timing: () => ({ start: (cb?: any) => cb && cb() }),
+    sequence: () => ({ start: (cb?: any) => cb && cb() }),
+    loop: () => ({ start: (cb?: any) => cb && cb() }),
+    spring: () => ({ start: (cb?: any) => cb && cb() }),
+    View: createMockComponent('Animated.View'),
+    Text: createMockComponent('Animated.Text'),
+  },
 }));
 
 mock.module('react-native-svg', () => ({

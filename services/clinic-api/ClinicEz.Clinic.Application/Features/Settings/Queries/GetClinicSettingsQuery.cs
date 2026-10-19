@@ -105,7 +105,9 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.EnableStatAudioAlert,
             settings.EnableStatVibrationAlert,
             settings.IsDirectoryPublished,
-            settings.IsOnlineBookingPaused);
+            settings.IsOnlineBookingPaused,
+            settings.SpecialtyMode,
+            settings.EnableDentalModule);
     }
 }
 

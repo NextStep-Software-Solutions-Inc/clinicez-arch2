@@ -9,6 +9,7 @@ public interface IClinicContext
     Guid ClinicId { get; }
     Guid? BranchId { get; }
     Guid? StaffId { get; }
+    string? StaffName { get; }
     IReadOnlyList<string> Permissions { get; }
     bool HasPermission(string permission);
 }

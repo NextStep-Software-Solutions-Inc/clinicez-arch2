@@ -42,7 +42,9 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableChipLevelQueueCalling = null,
     int? StaffNotificationRetentionDays = null,
     bool? EnableStatAudioAlert = null,
-    bool? EnableStatVibrationAlert = null) : IRequest<ClinicSettingsDto>;
+    bool? EnableStatVibrationAlert = null,
+    string? SpecialtyMode = null,
+    bool? EnableDentalModule = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -180,6 +182,19 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.EnableStatVibrationAlert.HasValue)
             settings.EnableStatVibrationAlert = request.EnableStatVibrationAlert.Value;
 
+        if (!string.IsNullOrWhiteSpace(request.SpecialtyMode))
+        {
+            var mode = request.SpecialtyMode.Trim();
+            settings.SpecialtyMode = mode;
+            if (string.Equals(mode, "Dental", StringComparison.OrdinalIgnoreCase))
+            {
+                settings.EnableDentalModule = true;
+            }
+        }
+
+        if (request.EnableDentalModule.HasValue)
+            settings.EnableDentalModule = request.EnableDentalModule.Value;
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -229,7 +244,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.EnableStatAudioAlert,
             settings.EnableStatVibrationAlert,
             settings.IsDirectoryPublished,
-            settings.IsOnlineBookingPaused);
+            settings.IsOnlineBookingPaused,
+            settings.SpecialtyMode,
+            settings.EnableDentalModule);
     }
 }
 

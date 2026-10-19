@@ -406,7 +406,7 @@ BACKUP_RETENTION_DAYS=14
 
 ### PART 3: Portal Platform Administrator Settings (Managed Live via Database / Portal UI `/admin/settings`)
 
-System feature rules and defaults are stored in PostgreSQL (`portal_dashboard.system_settings`) and managed by Super Administrators in the **Portal UI** (`/admin/settings`):
+System feature rules and defaults are stored in PostgreSQL (`public.SystemSettings`) and managed by Super Administrators in the **Portal UI** (`/admin/settings`):
 
 | Category | Key | Description | Default Value |
 | :--- | :--- | :--- | :--- |

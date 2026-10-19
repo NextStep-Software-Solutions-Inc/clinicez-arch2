@@ -642,4 +642,153 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       }
     }
   });
+
+  test('22. In-app navigation deep link with activeTab="dental" and focusToothNumber in Centered Modal auto-focuses tooth', () => {
+    const dentalChartData: PatientChart = {
+      ...mockChart,
+      dentalTeeth: [
+        {
+          id: 'dt-1',
+          tenantId: 'tenant-ustp',
+          clinicId: 'clinic-1',
+          patientId: 'pat-001',
+          toothNumber: 16,
+          status: 'Decay',
+          surface: 'MOD',
+          notes: 'Deep occlusal decay',
+          createdAt: '2026-03-01T00:00:00Z',
+          updatedAt: '2026-03-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: mockPatient,
+        patientChart: dentalChartData,
+        preferredLayout: 'modal',
+        activeTab: 'dental',
+        focusToothNumber: 16,
+        onClose: () => {},
+      })
+    );
+
+    expect(markup).toContain('Odontogram Visualizer');
+    expect(markup).toContain('Tooth #16');
+    expect(markup).toContain('Upper Right First Molar');
+    expect(markup).toContain('Decay');
+    expect(markup).toContain('MOD');
+  });
+
+  test('23. In-app navigation deep link with preferredLayout="split", activeTab="dental", and focusToothNumber={16}', () => {
+    const dentalChartData: PatientChart = {
+      ...mockChart,
+      dentalTeeth: [
+        {
+          id: 'dt-1',
+          tenantId: 'tenant-ustp',
+          clinicId: 'clinic-1',
+          patientId: 'pat-001',
+          toothNumber: 16,
+          status: 'Decay',
+          surface: 'MOD',
+          notes: 'Deep occlusal decay',
+          createdAt: '2026-03-01T00:00:00Z',
+          updatedAt: '2026-03-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: mockPatient,
+        patientChart: dentalChartData,
+        preferredLayout: 'split',
+        activeTab: 'dental',
+        focusToothNumber: 16,
+        onClose: () => {},
+      })
+    );
+
+    expect(markup).toContain('aria-label="Clinical Workstation for Maria DB"');
+    expect(markup).toContain('Dental Chart');
+    expect(markup).toContain('Tooth #16');
+    expect(markup).toContain('Upper Right First Molar');
+    expect(markup).toContain('Decay');
+  });
+
+  test('24. In-app navigation deep link with preferredLayout="drawer", activeTab="dental", and child tooth focusToothNumber={54}', () => {
+    const dentalChartData: PatientChart = {
+      ...mockChart,
+      dentalTeeth: [
+        {
+          id: 'dt-child',
+          tenantId: 'tenant-ustp',
+          clinicId: 'clinic-1',
+          patientId: 'pat-001',
+          toothNumber: 54,
+          status: 'Healthy',
+          surface: '',
+          notes: '',
+          createdAt: '2026-03-01T00:00:00Z',
+          updatedAt: '2026-03-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: mockPatient,
+        patientChart: dentalChartData,
+        preferredLayout: 'drawer',
+        activeTab: 'dental',
+        focusToothNumber: 54,
+        onClose: () => {},
+      })
+    );
+
+    expect(markup).toContain('aria-label="Medical Chart Drawer for Maria DB"');
+    expect(markup).toContain('Dental Chart');
+    expect(markup).toContain('Tooth #54');
+    expect(markup).toContain('Upper Right Primary First Molar');
+    expect(markup).toContain('Q5 • Upper Right');
+  });
+
+  test('25. PatientChartModal auto-resolves dental tab and includes DENTAL_CHART_TAB when focusToothNumber is provided without explicit activeTab', () => {
+    const dentalChartData: PatientChart = {
+      ...mockChart,
+      dentalTeeth: [
+        {
+          id: 'dt-1',
+          tenantId: 'tenant-ustp',
+          clinicId: 'clinic-1',
+          patientId: 'pat-001',
+          toothNumber: 16,
+          status: 'Decay',
+          surface: 'MOD',
+          notes: 'Deep occlusal decay',
+          createdAt: '2026-03-01T00:00:00Z',
+          updatedAt: '2026-03-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientChartModal, {
+        visible: true,
+        patient: mockPatient,
+        patientChart: dentalChartData,
+        focusToothNumber: 16,
+        onClose: () => {},
+      })
+    );
+
+    expect(markup).toContain('Odontogram Visualizer');
+    expect(markup).toContain('Dental Chart');
+    expect(markup).toContain('Tooth #16');
+    expect(markup).toContain('Upper Right First Molar');
+  });
 });

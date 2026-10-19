@@ -23,7 +23,7 @@ public static class LabTestDbHelper
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new KeyValuePair<string, string?>("DbSchema", "laboratory_dashboard")
+                new KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 

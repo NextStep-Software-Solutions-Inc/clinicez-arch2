@@ -24,11 +24,7 @@ public class HubDbContext(DbContextOptions<HubDbContext> options, IConfiguration
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        var schemaName = configuration["DbSchema"];
-        if (string.IsNullOrEmpty(schemaName))
-        {
-            throw new InvalidOperationException("DbSchema configuration value is required but was not specified.");
-        }
+        var schemaName = configuration["DbSchema"] ?? "public";
         modelBuilder.HasDefaultSchema(schemaName);
 
         modelBuilder.Entity<HubCell>(e =>

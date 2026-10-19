@@ -121,5 +121,17 @@ public sealed class ClinicSettings : BaseEntity
     /// Controls whether STAT/panic diagnostic findings trigger device vibration (mobile/tablet).
     /// </summary>
     public bool EnableStatVibrationAlert { get; set; } = true;
+
+    /// <summary>
+    /// Specialty operational mode: "Medical", "Dental", or "MultiSpecialty".
+    /// Defaults to "Medical".
+    /// </summary>
+    public string? SpecialtyMode { get; set; } = "Medical";
+
+    /// <summary>
+    /// Feature flag controlling whether dental odontogram chart tabs, tooth records, and dental search are active.
+    /// Defaults to false.
+    /// </summary>
+    public bool EnableDentalModule { get; set; } = false;
 }
 

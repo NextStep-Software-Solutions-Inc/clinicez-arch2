@@ -18,7 +18,7 @@ public class AuditWormImmutabilityTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new System.Collections.Generic.KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new System.Collections.Generic.KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 
@@ -204,7 +204,7 @@ public class AuditWormImmutabilityTests
             .UseInMemoryDatabase(databaseName: dbName)
             .Options;
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new[] { new System.Collections.Generic.KeyValuePair<string, string?>("DbSchema", "clinic_dashboard") })
+            .AddInMemoryCollection(new[] { new System.Collections.Generic.KeyValuePair<string, string?>("DbSchema", "public") })
             .Build();
 
         var clinicContext = Substitute.For<IClinicContext>();

@@ -23,6 +23,8 @@ export interface OrderCatalogItemPayload {
   isPhilHealthFormulary?: boolean;
   fulfillmentMode: 'in_house' | 'outside';
   instructions?: string;
+  toothNumber?: number;
+  toothSurface?: string;
 }
 
 export interface ExistingOrderItemContext {
@@ -30,6 +32,8 @@ export interface ExistingOrderItemContext {
   code?: string;
   fulfillmentMode?: 'in_house' | 'outside';
   instructions?: string;
+  toothNumber?: number;
+  toothSurface?: string;
 }
 
 export interface OrderCatalogSearchModalProps {
@@ -42,6 +46,8 @@ export interface OrderCatalogSearchModalProps {
   alreadyOrderedNames?: string[];
   alreadyOrderedCodes?: string[];
   existingOrders?: ExistingOrderItemContext[];
+  initialToothNumber?: number;
+  initialToothSurface?: string;
   testID?: string;
 }
 
@@ -98,6 +104,8 @@ export function OrderCatalogSearchModal({
   alreadyOrderedNames = [],
   alreadyOrderedCodes = [],
   existingOrders = [],
+  initialToothNumber,
+  initialToothSurface,
   testID = 'order-catalog-search-modal',
 }: OrderCatalogSearchModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -113,9 +121,13 @@ export function OrderCatalogSearchModal({
       setSelectedCategory(initialCategory);
       setSelectedItem(null);
       setFulfillmentMode('in_house');
-      setInstructions('');
+      if (initialToothNumber) {
+        setInstructions(`Tooth #${initialToothNumber}${initialToothSurface ? ` (${initialToothSurface})` : ''}`);
+      } else {
+        setInstructions('');
+      }
     }
-  }, [visible, initialCategory]);
+  }, [visible, initialCategory, initialToothNumber, initialToothSurface]);
 
   const filteredCatalog = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -206,6 +218,8 @@ export function OrderCatalogSearchModal({
       isPhilHealthFormulary: selectedItem.isPhilHealthFormulary,
       fulfillmentMode: isDiagnostic ? fulfillmentMode : 'in_house',
       instructions: instructions.trim() ? instructions.trim() : undefined,
+      toothNumber: initialToothNumber,
+      toothSurface: initialToothSurface,
     };
 
     onSelectOrder(payload);
@@ -236,12 +250,25 @@ export function OrderCatalogSearchModal({
       visible={visible}
       onClose={onClose}
       title="Add Test or Procedure"
-      subtitle="Search fee schedule catalog for diagnostic tests and in-clinic procedures"
+      subtitle={
+        initialToothNumber
+          ? `Order procedure for Tooth #${initialToothNumber}${initialToothSurface ? ` (${initialToothSurface})` : ''}`
+          : 'Search fee schedule catalog for diagnostic tests and in-clinic procedures'
+      }
       maxWidth={680}
       footer={renderModalFooter}
       testID={testID}
     >
       <View style={styles.container}>
+        {initialToothNumber ? (
+          <View style={styles.targetToothBanner}>
+            <Badge
+              label={`Target: Tooth #${initialToothNumber}${initialToothSurface ? ` (${initialToothSurface})` : ''}`}
+              variant="info"
+              size="md"
+            />
+          </View>
+        ) : null}
         {/* Search input */}
         <Input
           placeholder="Search by name, code, PhilHealth code, or description..."
@@ -666,5 +693,10 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     borderRadius: theme.radii.md,
     backgroundColor: theme.colors.surfaceSubtle,
+  },
+  targetToothBanner: {
+    marginBottom: theme.spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });

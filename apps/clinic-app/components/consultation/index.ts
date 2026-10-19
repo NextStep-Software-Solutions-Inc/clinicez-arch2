@@ -30,3 +30,26 @@ export type {
   OrderCatalogSearchModalProps,
 } from './OrderCatalogSearchModal';
 
+export {
+  InlineDentalChartCard,
+  ADULT_UPPER_RIGHT,
+  ADULT_UPPER_LEFT,
+  ADULT_LOWER_RIGHT,
+  ADULT_LOWER_LEFT,
+  CHILD_UPPER_RIGHT,
+  CHILD_UPPER_LEFT,
+  CHILD_LOWER_RIGHT,
+  CHILD_LOWER_LEFT,
+  CANONICAL_SURFACES,
+  TOOTH_STATUS_OPTIONS,
+  sortToothSurfaces,
+  getToothDescription,
+} from './InlineDentalChartCard';
+export type {
+  ToothStatus,
+  ToothSurfaceCode,
+  DentalToothState,
+  InlineDentalChartCardProps,
+} from './InlineDentalChartCard';
+
+

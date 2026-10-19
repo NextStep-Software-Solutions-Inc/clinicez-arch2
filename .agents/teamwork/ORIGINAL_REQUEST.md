@@ -1179,3 +1179,55 @@ Reference skills:
 - [ ] Searching settings (e.g. "Services", "Room 101", "Staff", "PhilHealth") navigates to the exact active tab in Settings.
 - [ ] Searching patients, consults, and appointments displays accurate records and urgency badges.
 - [ ] Visual styling conforms to `@clinicez/design-tokens` with zero raw color hex codes.
+
+
+## 2026-10-19T05:00:54Z
+
+Implement the **Clean, Integrated Dental Module** inside ClinicEZ (`services/clinic-api`, `apps/clinic-app`, and `apps/portal-web`), strictly governed by the project skills `clinicez-ui-ux-expert` and `clinicez-search-provider-expert`, and coordinated with the active **Clinic Workspace Global Search** implementation in the repository.
+
+Working directory: `/Users/macuser/projects/github/nextstep/clinicez-arch2`
+Integrity mode: development
+Reference skills:
+- `.agents/skills/clinicez-ui-ux-expert/SKILL.md`
+- `.agents/skills/clinicez-search-provider-expert/SKILL.md`
+
+## Coordination Directive with "Clinic Workspace Global Search Plan"
+- `packages/shared-dotnet/Search/` (`ISearchProvider`, `SearchResultItemDto`, `SearchBadgeVariant`, `AddPluggableSearch`) and `packages/shared-ts/search/` (`universalSearchRegistry`, `SearchContributor`) and `services/clinic-api/ClinicEz.Clinic.Application/Features/Search/` (`GlobalClinicSearchQuery`, `SearchController`) are already present/active in the workspace.
+- **DO NOT overwrite, delete, or revert** any existing search framework files in `packages/shared-dotnet/Search/`, `packages/shared-ts/search/`, `services/clinic-api/ClinicEz.Clinic.Api/Controllers/SearchController.cs`, `services/clinic-api/ClinicEz.Clinic.Application/Features/*/Search/`, or `apps/clinic-app/components/search/`.
+- Instead, plug the Dental Module directly into that foundation via zero-touch extensibility: implement `DentalChartSearchProvider : ISearchProvider` in `services/clinic-api/ClinicEz.Clinic.Application/Features/Dental/Search/DentalChartSearchProvider.cs` and register a dental `SearchContributor` in `universalSearchRegistry`.
+
+## Requirements
+
+### R1. Reuse Existing Rooms, Documents, Orders, Billing & Patient App Directory Exposure
+- **Document Outputs**: Reuse existing **Prescription** (`PrescriptionItem` / `PrescriptionSlipModal`), **Medical Certificate** (`MedicalCertificate`), **Lab / Diagnostic Orders** (`ClinicLabOrder` / `OrderCatalogSearchModal`), **Home Instructions**, and **Doc Vault** (`ClinicRecordAttachment`) with zero duplicate document pipelines.
+- **Room & Station Assignment**: Reuse existing `ClinicRoom` (`Consultation`, `Triage`, `Treatment`) and staff-to-room assignment as-is. Do not introduce a separate chair-based queue or room type.
+- **Procedures & Billing**: Extend `ClinicalProcedure` (and its DTOs/commands) with optional `ToothNumber` (`int?`) and `ToothSurface` (`string?`) fields so dental procedures flow through the existing procedure order catalog and Cashier `Invoice` pipeline.
+- **Patient App / Directory Exposure (`PublishClinicToDirectoryCommand.cs`)**: Update `PublishClinicToDirectoryCommand.cs` so `FacilityCreatedEvent.Classification` maps dynamically from `ClinicSettings.SpecialtyMode` (`"Dental"` -> `"Dental Clinic"`, `"MultiSpecialty"` -> `"Multi-Specialty Clinic"`, `"Medical"` -> `"Ambulatory Clinic"`), exposing dental clinics, dentist providers, and dental services to `patient-api` and `patient-app` automatically.
+
+### R2. Dental Chart Backend & Specialty Mode (`services/clinic-api`, `apps/portal-web`)
+- Add `SpecialtyMode` (`"Medical"`, `"Dental"`, `"MultiSpecialty"`, default `"Medical"`) and `EnableDentalModule` (`bool`, default `false`) to `ClinicSettings` (and settings DTOs/commands/queries).
+- Add `"Dental Clinic"` to `FACILITY_CLASSIFICATIONS.Clinic` in `apps/portal-web/src/constants/philippine-addresses.ts`.
+- Create `DentalToothRecord` entity in `ClinicEz.Clinic.Domain/Entities/DentalToothRecord.cs` (`TenantId`, `ClinicId`, `PatientId`, `ConsultationId`, `ToothNumber` 11–48 Adult / 51–85 Child, `Status`: `Healthy`, `Decay`, `Filled`, `Missing`, `Crown`, `Extraction`, optional `Surface` `M,O,D,B,L`, and `Notes`), configured in `ClinicDbContext`.
+- Implement CQRS queries and commands in `ClinicEz.Clinic.Application/Features/Dental/` (`GetPatientDentalChartQuery`, `UpsertDentalToothRecordCommand`, `BatchSaveDentalChartCommand`) and expose via `DentalController` (`api/v1/dental`).
+
+### R3. Clean, Jargon-Free UI in Consultation & Patient Chart (`apps/clinic-app`)
+- **Strict No-Clutter / No-Jargon Rule**: Use short, plain English labels (`Dental Chart`, `Adult`, `Child`, `Healthy`, `Decay`, `Filled`, `Missing`, `Crown`, `Extraction`). No verbose descriptions or complex clinical jargon.
+- **`InlineDentalChartCard.tsx` in Consultation (`Consultations.screen.tsx`)**: Modeled on `InlinePhysicalExamCard.tsx`. Provides a clean `Adult` (11–48) / `Child` (51–85) toggle, visual upper/lower teeth grid, compact tooth status & surface (`M, O, D, B, L`) selector, short notes, and quick action to order a dental procedure tagged with the selected tooth number. Render in `Consultations.screen.tsx` when `enableDentalModule` is active (and hide 9-system `InlinePhysicalExamCard` when `specialtyMode === 'Dental'`).
+- **`DentalChartTab.tsx` in `PatientChartModal`**: Add `'dental'` tab (`label: 'Dental'`) to `CHART_TABS` when dental is enabled, rendering the patient's tooth chart and dental procedure history across `modal`, `split`, and `drawer` chart layouts.
+- **Settings UI (`GeneralSettingsTab.tsx`)**: Add a clean `Clinic Specialty` selector (`Medical`, `Dental`, `Multi-Specialty`) to configure `specialtyMode` and `enableDentalModule`.
+- **Design Token & 4-State Compliance (`clinicez-ui-ux-expert`)**: Consume only semantic tokens from `@clinicez/design-tokens` (`lightColors` / `darkColors` — zero raw hex codes or `palette.ts` imports) and implement Skeleton, Empty, Error, and Active states.
+
+### R4. Pluggable Search Provider Integration (`clinicez-search-provider-expert`)
+- Implement `DentalChartSearchProvider : ISearchProvider` in `services/clinic-api/ClinicEz.Clinic.Application/Features/Dental/Search/DentalChartSearchProvider.cs` following the exact pattern of `ConsultationSearchProvider.cs` (`Category => "Dental"`, `Priority => 25`, `RequiredPermission => ClinicPermissions.ConsultationsRead`, strict `ClinicId == tenantId` filtering).
+- Register a frontend `SearchContributor` (`id: 'clinic-dental'`) in `universalSearchRegistry` (`@clinicez/shared-ts`) so `Cmd+K` searches dental tooth records and dental procedures seamlessly.
+
+## Acceptance Criteria
+
+### Backend, Directory Sync & Search Verification
+- [ ] `dotnet build` and `dotnet test` pass across `ClinicEz.Clinic.Application.Tests` and `ClinicEz.Shared.Tests` with 0 errors.
+- [ ] Unit tests verify `DentalToothRecord` CRUD, `ToothNumber` tagging on `ClinicalProcedure`, `PublishClinicToDirectoryCommand` classification mapping (`"Dental Clinic"` / `"Multi-Specialty Clinic"`), tenant isolation, and `DentalChartSearchProvider` auto-discovery via `AddPluggableSearch`.
+
+### Frontend, Design Tokens & UI Simplicity Verification
+- [ ] Zero raw hex color literals or direct `palette.ts` imports exist in any new or modified `.tsx`/`.ts` files.
+- [ ] `bun test` passes for `packages/design-tokens`, `packages/shared-ts`, and `apps/clinic-app`.
+- [ ] UI labels are concise and free of technical jargon; existing Room assignment, Prescriptions, Certificates, and Lab Orders work seamlessly for dental encounters.

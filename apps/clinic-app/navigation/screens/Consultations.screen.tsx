@@ -55,6 +55,8 @@ import {
   RecordVitalsModal,
   OrderCatalogSearchModal,
   OrderCatalogItemPayload,
+  InlineDentalChartCard,
+  DentalToothState,
 } from '../../components/consultation';
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
@@ -125,6 +127,8 @@ export interface LocalProcedureOrder {
   targetRoomName?: string;
   isHandedOff?: boolean;
   handedOffAt?: string;
+  toothNumber?: number;
+  toothSurface?: string;
 }
 
 export interface EditingOrderItemState {
@@ -511,6 +515,13 @@ export default function ConsultationsScreen() {
   // Diagnostic Lab Orders & In-Clinic Procedures
   const [orderedLabs, setOrderedLabs] = useState<LocalLabOrder[]>([]);
   const [orderedProcedures, setOrderedProcedures] = useState<LocalProcedureOrder[]>([]);
+  const [dentalChart, setDentalChart] = useState<Record<number, DentalToothState>>({});
+  const [orderInitialToothNumber, setOrderInitialToothNumber] = useState<number | undefined>(undefined);
+  const [orderInitialToothSurface, setOrderInitialToothSurface] = useState<string | undefined>(undefined);
+  const isDentalEnabled = useMemo(
+    () => Boolean(settings?.enableDentalModule || settings?.specialtyMode === 'Dental'),
+    [settings?.enableDentalModule, settings?.specialtyMode]
+  );
   const [editingOrderItem, setEditingOrderItem] = useState<EditingOrderItemState | null>(null);
   const [editingInstructionText, setEditingInstructionText] = useState<string>('');
   const [isHandoffSending, setIsHandoffSending] = useState<boolean>(false);
@@ -899,13 +910,30 @@ export default function ConsultationsScreen() {
   const loadPatientContext = useCallback(async (p: PatientQueueItem) => {
     activePatientId.current = p.id;
     setContextLoading(true);
-    const [triageRes, recordRes, labRes, chartRes] = await Promise.all([
+    const [triageRes, recordRes, labRes, chartRes, dentalRes] = await Promise.all([
       clinicService.getTriage(p.id),
       clinicService.getPatientById(p.patientId),
       clinicService.getLabOrders(p.patientId),
       clinicService.getPatientChart(p.patientId),
+      clinicService.getPatientDentalChart(p.patientId),
     ]);
     if (activePatientId.current !== p.id) return;
+
+    const [dentalData] = dentalRes;
+    if (dentalData?.teeth && dentalData.teeth.length > 0) {
+      const toothMap: Record<number, DentalToothState> = {};
+      for (const t of dentalData.teeth) {
+        toothMap[t.toothNumber] = {
+          toothNumber: t.toothNumber,
+          status: t.status,
+          surface: t.surface || '',
+          notes: t.notes || '',
+        };
+      }
+      setDentalChart(toothMap);
+    } else {
+      setDentalChart({});
+    }
 
     const [triageData, triageErr] = triageRes;
     if (triageErr) {
@@ -1092,14 +1120,15 @@ export default function ConsultationsScreen() {
             (p.id && proc.queueItemId === p.id)
         );
         const rehydratedProcs: LocalProcedureOrder[] = [];
-        const seenProcNames = new Set<string>();
+        const seenProcKeys = new Set<string>();
 
         if (existingProcedures && existingProcedures.length > 0) {
           for (const pr of existingProcedures) {
             if (!pr.procedureName) continue;
             const lower = pr.procedureName.toLowerCase();
-            if (!seenProcNames.has(lower)) {
-              seenProcNames.add(lower);
+            const procKey = `${lower}-${pr.toothNumber ?? '0'}`;
+            if (!seenProcKeys.has(procKey)) {
+              seenProcKeys.add(procKey);
               const matchedCatalog = procedureCatalog.find((pc) => pc.name.toLowerCase() === lower);
               rehydratedProcs.push({
                 serviceItemId: matchedCatalog?.id,
@@ -1114,6 +1143,8 @@ export default function ConsultationsScreen() {
                 handedOffAt: pr.scheduledAt
                   ? new Date(pr.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                   : undefined,
+                toothNumber: pr.toothNumber ?? undefined,
+                toothSurface: pr.toothSurface ?? undefined,
               });
             }
           }
@@ -1127,8 +1158,9 @@ export default function ConsultationsScreen() {
         for (const li of invoiceProcLineItems) {
           if (!li.description) continue;
           const lower = li.description.toLowerCase();
-          if (!seenProcNames.has(lower)) {
-            seenProcNames.add(lower);
+          const procKey = `${lower}-0`;
+          if (!seenProcKeys.has(procKey)) {
+            seenProcKeys.add(procKey);
             const matchedCatalog = procedureCatalog.find((pc) => pc.name.toLowerCase() === lower);
             rehydratedProcs.push({
               serviceItemId: li.serviceItemId || matchedCatalog?.id,
@@ -1172,6 +1204,9 @@ export default function ConsultationsScreen() {
     setPrescriptions([]);
     setOrderedLabs([]);
     setOrderedProcedures([]);
+    setDentalChart({});
+    setOrderInitialToothNumber(undefined);
+    setOrderInitialToothSurface(undefined);
     setSelectedSymptomCodes([]);
     setSymptomOtherDesc('');
     setSymptomPainSite('');
@@ -1665,7 +1700,11 @@ export default function ConsultationsScreen() {
       const targetTreatmentRoom =
         treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
       setOrderedProcedures((prev) => {
-        const index = prev.findIndex((p) => p.name.toLowerCase() === order.name.toLowerCase());
+        const index = prev.findIndex(
+          (p) =>
+            p.name.toLowerCase() === order.name.toLowerCase() &&
+            (order.toothNumber !== undefined ? p.toothNumber === order.toothNumber : p.toothNumber === undefined)
+        );
         const existing = index >= 0 ? prev[index] : null;
         const newProc: LocalProcedureOrder = {
           serviceItemId: order.serviceItemId,
@@ -1678,6 +1717,8 @@ export default function ConsultationsScreen() {
           targetRoomName: existing?.targetRoomName || targetTreatmentRoom?.name,
           isHandedOff: existing?.isHandedOff ?? false,
           handedOffAt: existing?.handedOffAt,
+          toothNumber: order.toothNumber,
+          toothSurface: order.toothSurface,
         };
         if (index >= 0) {
           const next = [...prev];
@@ -1686,6 +1727,8 @@ export default function ConsultationsScreen() {
         }
         return [...prev, newProc];
       });
+      setOrderInitialToothNumber(undefined);
+      setOrderInitialToothSurface(undefined);
     }
   };
 
@@ -1718,9 +1761,24 @@ export default function ConsultationsScreen() {
     });
   };
 
-  const handleRemoveProcedure = (procName: string) => {
+  const handleRemoveProcedure = (procName: string, toothNumber?: number) => {
     if (isSigned) return;
-    setOrderedProcedures((prev) => prev.filter((p) => p.name.toLowerCase() !== procName.toLowerCase()));
+    setOrderedProcedures((prev) =>
+      prev.filter((p) => {
+        if (p.name.toLowerCase() !== procName.toLowerCase()) return true;
+        if (toothNumber !== undefined && p.toothNumber !== toothNumber) return true;
+        if (toothNumber === undefined && p.toothNumber !== undefined) return true;
+        return false;
+      })
+    );
+  };
+
+  const handleQuickOrderDentalProcedure = (toothNumber: number, toothSurface?: string) => {
+    if (isSigned) return;
+    setOrderInitialToothNumber(toothNumber);
+    setOrderInitialToothSurface(toothSurface);
+    setOrderSearchInitialCategory('Procedure');
+    setOrderSearchModalVisible(true);
   };
 
   const handleAddPrescription = () => {
@@ -1989,12 +2047,29 @@ export default function ConsultationsScreen() {
           orderedByDoctorName: doctor.name,
           targetRoomId: proc.targetRoomId || targetTreatmentRoom?.id,
           targetRoomName: proc.targetRoomName || targetTreatmentRoom?.name,
+          toothNumber: proc.toothNumber,
+          toothSurface: proc.toothSurface,
           clinicalNotes: proc.instructions
             ? `${proc.instructions} (Assessment: ${assessment || 'Evaluation'})`
             : `Ordered during encounter for ${assessment || 'Evaluation'}`,
         });
         if (procErr) followUpIssues.push(`procedure order (${proc.name})`);
       }
+    }
+
+    // Atomic batch save dental chart on encounter signing when dental is enabled and teeth have been marked
+    if (isDentalEnabled && Object.keys(dentalChart).length > 0) {
+      const teethPayload = Object.entries(dentalChart).map(([toothStr, state]) => ({
+        toothNumber: parseInt(toothStr, 10),
+        status: state.status,
+        surface: state.surface || undefined,
+        notes: state.notes || undefined,
+      }));
+      const [, dentalErr] = await clinicService.batchSaveDentalChart(selectedPatient.patientId, {
+        consultationId,
+        teeth: teethPayload,
+      });
+      if (dentalErr) followUpIssues.push('dental chart records');
     }
 
     // Auto-create draft billing invoice for the Cashier, priced from the clinic's fee schedule
@@ -2332,6 +2407,8 @@ export default function ConsultationsScreen() {
         orderedByDoctorName: doctor.name,
         targetRoomId: proc.targetRoomId || targetTreatmentRoom?.id,
         targetRoomName: proc.targetRoomName || resolvedTargetName,
+        toothNumber: proc.toothNumber,
+        toothSurface: proc.toothSurface,
         clinicalNotes: proc.instructions
           ? `${proc.instructions} (Assessment: ${assessment || 'Evaluation'})`
           : `Ordered for in-clinic execution: ${assessment || 'Evaluation'}`,
@@ -2343,7 +2420,7 @@ export default function ConsultationsScreen() {
         const finalRoom = orderedProc?.targetRoomName || proc.targetRoomName || resolvedTargetName;
         setOrderedProcedures((prev) =>
           prev.map((item) =>
-            item.name.toLowerCase() === proc.name.toLowerCase()
+            item.name.toLowerCase() === proc.name.toLowerCase() && item.toothNumber === proc.toothNumber
               ? { ...item, isHandedOff: true, handedOffAt: nowStr, targetRoomName: finalRoom }
               : item
           )
@@ -2373,11 +2450,13 @@ export default function ConsultationsScreen() {
     }
   };
 
-  const handleHandoffToTreatmentRoom = async (procedureName: string) => {
+  const handleHandoffToTreatmentRoom = async (procedureName: string, toothNumber?: number) => {
     if (!selectedPatient) return;
     const doctor = requireSigner();
     if (!doctor) return;
-    const target = orderedProcedures.find((p) => p.name.toLowerCase() === procedureName.toLowerCase());
+    const target = orderedProcedures.find(
+      (p) => p.name.toLowerCase() === procedureName.toLowerCase() && (toothNumber === undefined || p.toothNumber === toothNumber)
+    );
     const procInfo = procedureCatalog.find((p) => p.name.toLowerCase() === procedureName.toLowerCase());
     const targetTreatmentRoom =
       treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
@@ -2395,6 +2474,8 @@ export default function ConsultationsScreen() {
       orderedByDoctorName: doctor.name,
       targetRoomId: target?.targetRoomId || targetTreatmentRoom?.id,
       targetRoomName: target?.targetRoomName || resolvedTargetName,
+      toothNumber: target?.toothNumber,
+      toothSurface: target?.toothSurface,
       clinicalNotes: target?.instructions
         ? `${target.instructions} (Assessment: ${assessment || 'Evaluation'})`
         : `Ordered for in-clinic execution: ${assessment || 'Evaluation'}`,
@@ -3141,12 +3222,24 @@ export default function ConsultationsScreen() {
             </View>
 
             {/* Inline Physical Examination (PhilHealth Konsulta 9-System Findings) */}
-            {isYakapEligible && (
+            {isYakapEligible && settings?.specialtyMode !== 'Dental' && (
               <View onLayout={(e) => { sectionOffsets.current['physical-exam'] = e.nativeEvent.layout.y; }}>
                 <InlinePhysicalExamCard
                   findings={physicalExamFindings}
                   onChange={setPhysicalExamFindings}
                   disabled={isSigned}
+                />
+              </View>
+            )}
+
+            {/* Inline Dental Chart Card (Adult & Child Odontogram) */}
+            {isDentalEnabled && (
+              <View onLayout={(e) => { sectionOffsets.current['dental-chart'] = e.nativeEvent.layout.y; }}>
+                <InlineDentalChartCard
+                  chart={dentalChart}
+                  onChange={setDentalChart}
+                  disabled={isSigned}
+                  onQuickOrderProcedure={handleQuickOrderDentalProcedure}
                 />
               </View>
             )}
@@ -3459,9 +3552,12 @@ export default function ConsultationsScreen() {
                         treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ??
                         treatmentRooms[0])?.name ||
                       'Treatment Room';
+                    const procKey = proc.serviceItemId
+                      ? `${proc.serviceItemId}-${proc.toothNumber ?? '0'}`
+                      : `${proc.name}-${proc.toothNumber ?? '0'}-${proc.code ?? ''}`;
 
                     return (
-                      <View key={proc.name} style={styles.activeOrderCard}>
+                      <View key={procKey} style={styles.activeOrderCard}>
                         <View style={styles.activeOrderMainCol}>
                           <View style={styles.activeOrderHeaderRow}>
                             <View style={styles.activeOrderTitleGroup}>
@@ -3472,6 +3568,13 @@ export default function ConsultationsScreen() {
                               {proc.code ? <Badge label={proc.code} variant="neutral" size="sm" /> : null}
                             </View>
                             <View style={styles.activeOrderBadgesRow}>
+                              {proc.toothNumber ? (
+                                <Badge
+                                  label={`Tooth #${proc.toothNumber}${proc.toothSurface ? ` (${proc.toothSurface})` : ''}`}
+                                  variant="info"
+                                  size="sm"
+                                />
+                              ) : null}
                               <Badge label={resolvedRoom} variant="purple" size="sm" />
                               {proc.isHandedOff ? (
                                 <Badge
@@ -3515,7 +3618,7 @@ export default function ConsultationsScreen() {
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Remove ${proc.name}`}
-                            onPress={() => handleRemoveProcedure(proc.name)}
+                            onPress={() => handleRemoveProcedure(proc.name, proc.toothNumber)}
                             hitSlop={theme.spacing.sm}
                             style={styles.orderedDeleteBtn}
                           >
@@ -5021,9 +5124,15 @@ export default function ConsultationsScreen() {
         {/* Order Catalog Search Modal */}
         <OrderCatalogSearchModal
           visible={orderSearchModalVisible}
-          onClose={() => setOrderSearchModalVisible(false)}
+          onClose={() => {
+            setOrderSearchModalVisible(false);
+            setOrderInitialToothNumber(undefined);
+            setOrderInitialToothSurface(undefined);
+          }}
           catalog={activeCatalog}
           initialCategory={orderSearchInitialCategory}
+          initialToothNumber={orderInitialToothNumber}
+          initialToothSurface={orderInitialToothSurface}
           isYakapEligible={isYakapEligible}
           onSelectOrder={handleSelectCatalogOrder}
           alreadyOrderedNames={[...orderedLabs.map((l) => l.name), ...orderedProcedures.map((p) => p.name)]}
@@ -5043,6 +5152,8 @@ export default function ConsultationsScreen() {
               code: p.code,
               fulfillmentMode: 'in_house' as const,
               instructions: p.instructions,
+              toothNumber: p.toothNumber,
+              toothSurface: p.toothSurface,
             })),
           ]}
         />

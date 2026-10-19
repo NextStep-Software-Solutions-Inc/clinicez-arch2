@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -61,6 +61,13 @@ const SPLIT_NAV_ITEMS: readonly NavItemMeta[] = [
   },
 ] as const;
 
+export const DENTAL_NAV_ITEM: NavItemMeta = {
+  tab: 'dental',
+  label: 'Dental Chart',
+  icon: 'medical',
+  getCount: (chart) => chart?.dentalTeeth?.length || chart?.dentalChart?.teeth?.length,
+};
+
 export default function SplitPaneChartLayout(props: ChartLayoutProps) {
   const {
     patient,
@@ -77,8 +84,16 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
 
   const { isCompact } = useBreakpoint();
 
+  const navItems = useMemo<readonly NavItemMeta[]>(() => {
+    const isDentalAvailable = props.availableTabs?.some((t) => t.value === 'dental');
+    if (isDentalAvailable) {
+      return [...SPLIT_NAV_ITEMS, DENTAL_NAV_ITEM];
+    }
+    return SPLIT_NAV_ITEMS;
+  }, [props.availableTabs]);
+
   const formattedPin = patient ? formatPhilHealthPin(patient.philHealthNumber) : null;
-  const activeNavItem = SPLIT_NAV_ITEMS.find((item) => item.tab === activeTab);
+  const activeNavItem = navItems.find((item: NavItemMeta) => item.tab === activeTab);
   const allergies = patientChart?.allergies || [];
   const latestVitals = patientChart?.vitalsHistory?.[0];
 
@@ -248,7 +263,7 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
             </View>
             <View style={styles.navCard}>
               <View style={styles.navList}>
-                {SPLIT_NAV_ITEMS.map((item) => {
+                {navItems.map((item) => {
                   const isSelected = activeTab === item.tab;
                   const count = item.getCount?.(patientChart, patientAttachments);
                   return (

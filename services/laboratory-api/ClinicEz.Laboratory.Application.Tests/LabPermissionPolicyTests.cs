@@ -96,7 +96,7 @@ public class LabPermissionPolicyTests
     private static ApplicationDbContext CreateDb(string name, ILabContext? context)
     {
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "laboratory_dashboard") })
+            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "public") })
             .Build();
         var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseInMemoryDatabase(name).Options;
         return new ApplicationDbContext(options, config, context);

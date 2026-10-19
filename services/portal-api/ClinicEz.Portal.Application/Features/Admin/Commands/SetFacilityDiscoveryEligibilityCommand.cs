@@ -71,6 +71,6 @@ public sealed class SetFacilityDiscoveryEligibilityCommandHandler(
         return new SetFacilityDiscoveryEligibilityResult(
             facility.Id,
             facility.IsPatientDiscoveryEligible,
-            facility.UpdatedAt);
+            facility.UpdatedAt ?? DateTime.UtcNow);
     }
 }

@@ -154,7 +154,7 @@ public sealed class HubApp : IAsyncDisposable
 
     private static Dictionary<string, string?> BaseConfig() => new()
     {
-        ["DbSchema"] = "interop_hub",
+        ["DbSchema"] = "public",
         ["Hub:Database:AutoMigrate"] = "true",
         ["Hub:Background:Enabled"] = "false",
         ["Hub:Auth:Pbkdf2Iterations"] = "1000",

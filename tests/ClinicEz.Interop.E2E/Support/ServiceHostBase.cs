@@ -66,7 +66,7 @@ public abstract class ServiceHostBase : IDisposable
         stuck.Should().BeEmpty($"{Service} must have delivered everything it queued");
     }
 
-    protected static Dictionary<string, string?> BaseConfig(string service, string schema) => new()
+    protected static Dictionary<string, string?> BaseConfig(string service, string schema = "public") => new()
     {
         ["DbSchema"] = schema,
         ["Messaging:Transport"] = "Hub",

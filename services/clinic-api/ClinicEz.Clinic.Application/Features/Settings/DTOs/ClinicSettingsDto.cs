@@ -46,5 +46,7 @@ public sealed record ClinicSettingsDto(
     bool EnableStatAudioAlert = true,
     bool EnableStatVibrationAlert = true,
     bool IsDirectoryPublished = false,
-    bool IsOnlineBookingPaused = false);
+    bool IsOnlineBookingPaused = false,
+    string? SpecialtyMode = "Medical",
+    bool EnableDentalModule = false);
 

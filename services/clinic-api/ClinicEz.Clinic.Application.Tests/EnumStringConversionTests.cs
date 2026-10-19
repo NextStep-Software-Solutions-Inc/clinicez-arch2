@@ -25,7 +25,7 @@ public class EnumStringConversionTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new System.Collections.Generic.KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new System.Collections.Generic.KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 

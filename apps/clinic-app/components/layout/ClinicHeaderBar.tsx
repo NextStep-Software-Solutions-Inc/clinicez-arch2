@@ -35,6 +35,7 @@ export interface ClinicHeaderBarProps {
   /** Page-level actions (e.g. "New patient") as custom JSX. Backward-compatible. */
   rightAction?: React.ReactNode;
   style?: ViewStyle;
+  onOpenSearch?: () => void;
 }
 
 export default function ClinicHeaderBar({
@@ -43,6 +44,7 @@ export default function ClinicHeaderBar({
   actions,
   rightAction,
   style,
+  onOpenSearch,
 }: ClinicHeaderBarProps) {
   const insets = useSafeInsets();
   const { isCompact } = useBreakpoint();
@@ -75,6 +77,10 @@ export default function ClinicHeaderBar({
     Math.round((isCompact ? theme.spacing.md : theme.spacing['2xl']) * multiplier)
   );
   const minH = isCompact ? 56 : headerHeight;
+
+  const isMac =
+    typeof navigator !== 'undefined' &&
+    /Mac|iPhone|iPod|iPad/i.test(navigator.platform || (navigator as any).userAgentData?.platform || '');
 
   return (
     <View
@@ -125,6 +131,36 @@ export default function ClinicHeaderBar({
           isCompact && styles.rightSectionCompact,
         ]}
       >
+        {!isCompact && onOpenSearch && (
+          <Pressable
+            onPress={onOpenSearch}
+            style={({ pressed, hovered }: any) => [
+              styles.searchTriggerPill,
+              hovered && styles.searchTriggerPillHovered,
+              pressed && styles.searchTriggerPillPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Search clinic records and settings (Cmd+K)"
+          >
+            <View style={styles.searchTriggerContent}>
+              <Icon name="search" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+              <ThemedText
+                variant="small"
+                color={theme.colors.textMuted}
+                numberOfLines={1}
+                style={styles.searchPlaceholderText}
+              >
+                Search records...
+              </ThemedText>
+            </View>
+            <View style={styles.shortcutBadge}>
+              <ThemedText variant="code" color={theme.colors.textSecondary} style={styles.shortcutText}>
+                {isMac ? '⌘K' : 'Ctrl+K'}
+              </ThemedText>
+            </View>
+          </Pressable>
+        )}
+
         {!isCompact && (
           <View style={styles.dateBadge}>
             <Icon name="calendar" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
@@ -181,8 +217,23 @@ export default function ClinicHeaderBar({
           </View>
         ) : null}
 
-        {/* Utility cluster: Bell + User avatar */}
+        {/* Utility cluster: Search (mobile) + Bell + User avatar */}
         <View style={styles.utilityCluster}>
+          {isCompact && onOpenSearch ? (
+            <Pressable
+              onPress={onOpenSearch}
+              style={({ pressed }) => [
+                styles.searchIconButton,
+                pressed && styles.searchIconButtonPressed,
+              ]}
+              hitSlop={theme.spacing.xs}
+              accessibilityRole="button"
+              accessibilityLabel="Search clinic records"
+            >
+              <Icon name="search" size={theme.sizes.iconMd} color={theme.colors.text} />
+            </Pressable>
+          ) : null}
+
           <Pressable
             onPress={() => setModalVisible(true)}
             style={({ pressed }) => [
@@ -342,5 +393,61 @@ const styles = StyleSheet.create({
   },
   badgePillStat: {
     backgroundColor: theme.colors.emergency,
+  },
+  searchTriggerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.full,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    width: 260,
+    maxWidth: 320,
+    minHeight: 34,
+    gap: theme.spacing.sm,
+  },
+  searchTriggerPillHovered: {
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.surfaceSubtle,
+  },
+  searchTriggerPillPressed: {
+    opacity: 0.8,
+  },
+  searchTriggerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flex: 1,
+    minWidth: 0,
+  },
+  searchPlaceholderText: {
+    flex: 1,
+  },
+  shortcutBadge: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.sm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 1,
+  },
+  shortcutText: {
+    lineHeight: 14,
+  },
+  searchIconButton: {
+    width: theme.sizes.controlSm,
+    height: theme.sizes.controlSm,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchIconButtonPressed: {
+    opacity: 0.7,
   },
 });

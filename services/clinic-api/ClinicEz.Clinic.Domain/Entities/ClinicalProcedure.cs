@@ -42,4 +42,14 @@ public sealed class ClinicalProcedure : BaseEntity
     public Guid? TargetRoomId { get; set; }
     public ClinicRoom? TargetRoom { get; set; }
     public string? TargetRoomName { get; set; }
+
+    /// <summary>
+    /// Optional FDI tooth number (11-48 for adult, 51-85 for child) for dental procedures.
+    /// </summary>
+    public int? ToothNumber { get; set; }
+
+    /// <summary>
+    /// Optional dental tooth surface (M, O, D, B, L or combination, e.g. "MOD") for dental procedures.
+    /// </summary>
+    public string? ToothSurface { get; set; }
 }

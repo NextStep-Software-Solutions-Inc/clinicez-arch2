@@ -111,6 +111,15 @@ public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<Pub
             IsActive: s.IsActive
         )).ToList();
 
+        // Dynamic mapping based on ClinicSettings.SpecialtyMode
+        var classification = settings.SpecialtyMode?.Trim().ToLowerInvariant() switch
+        {
+            "dental" => "Dental Clinic",
+            "multispecialty" or "multi-specialty" => "Multi-Specialty Clinic",
+            "medical" => "Ambulatory Clinic",
+            _ => "Ambulatory Clinic"
+        };
+
         // Enqueue facility.directory.updated to patient-api via Outbox
         var directoryEvent = new FacilityCreatedEvent
         {
@@ -123,7 +132,7 @@ public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<Pub
             OperatingHours = settings.OperatingHours,
             Address = settings.LetterheadAddress,
             ContactNumber = settings.LetterheadContact,
-            Classification = "Ambulatory Clinic",
+            Classification = classification,
             IsPhilHealthAccredited = settings.IsPhilHealthConfigured,
             IsPublic = settings.IsDirectoryPublished,
             IsBookingPaused = settings.IsOnlineBookingPaused,

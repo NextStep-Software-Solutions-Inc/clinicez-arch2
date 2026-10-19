@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Modal from '../ui/Modal';
 import { useClinic } from '../../context/ClinicContext';
 import type { ClinicPatient } from '../../services/clinicService';
@@ -15,6 +15,7 @@ import {
   type PatientChartModalProps,
   CHART_TABS,
   DEFAULT_CHART_LAYOUT,
+  getAvailableChartTabs,
 } from './types';
 
 export { CHART_TABS };
@@ -55,6 +56,9 @@ export default function PatientChartModal({
   onAdministerVaccine,
   onRecordHistoricalVaccine,
   onRecordAefi,
+  availableTabs: availableTabsProp,
+  focusToothNumber,
+  onOrderDentalProcedure,
 }: PatientChartModalProps) {
   const { settings } = useClinic();
   const configuredLayout: ChartLayoutMode =
@@ -62,7 +66,22 @@ export default function PatientChartModal({
     ((settings as any)?.preferredChartLayout as ChartLayoutMode) ||
     DEFAULT_CHART_LAYOUT;
 
-  const [internalTab, setInternalTab] = useState<ChartTab>(activeTabProp || initialTab);
+  const availableTabs = useMemo(() => {
+    if (availableTabsProp) return availableTabsProp;
+    const isDentalEnabled = Boolean(
+      settings?.enableDentalModule ||
+      settings?.specialtyMode === 'Dental' ||
+      (patientChart?.dentalTeeth && patientChart.dentalTeeth.length > 0) ||
+      (patientChart?.dentalChart?.teeth && patientChart.dentalChart.teeth.length > 0) ||
+      focusToothNumber ||
+      activeTabProp === 'dental' ||
+      initialTab === 'dental'
+    );
+    return getAvailableChartTabs(isDentalEnabled);
+  }, [availableTabsProp, settings?.enableDentalModule, settings?.specialtyMode, patientChart?.dentalTeeth, patientChart?.dentalChart, focusToothNumber, activeTabProp, initialTab]);
+
+  const defaultInitialTab: ChartTab = activeTabProp || (focusToothNumber ? 'dental' : initialTab);
+  const [internalTab, setInternalTab] = useState<ChartTab>(defaultInitialTab);
   const [activeLayout, setActiveLayout] = useState<ChartLayoutMode>(configuredLayout);
   const [editDemographicsVisible, setEditDemographicsVisible] = useState(false);
   const [currentPatient, setCurrentPatient] = useState<ClinicPatient | null>(patient);
@@ -85,12 +104,20 @@ export default function PatientChartModal({
     if (visible && !tabVisibleRef.current) {
       if (activeTabProp) {
         setInternalTab(activeTabProp);
+      } else if (focusToothNumber) {
+        setInternalTab('dental');
       } else if (initialTab) {
         setInternalTab(initialTab);
       }
     }
     tabVisibleRef.current = visible;
-  }, [visible, activeTabProp, initialTab]);
+  }, [visible, activeTabProp, initialTab, focusToothNumber]);
+
+  useEffect(() => {
+    if (focusToothNumber && !activeTabProp) {
+      setInternalTab('dental');
+    }
+  }, [focusToothNumber, activeTabProp]);
 
   useEffect(() => {
     const justOpened = visible && !layoutVisibleRef.current;
@@ -153,6 +180,9 @@ export default function PatientChartModal({
     onAdministerVaccine,
     onRecordHistoricalVaccine,
     onRecordAefi,
+    availableTabs,
+    focusToothNumber,
+    onOrderDentalProcedure,
   };
 
   return (

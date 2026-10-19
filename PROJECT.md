@@ -56,11 +56,11 @@
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Shared Platform Search Standards | `packages/shared-dotnet/Search/` and `packages/shared-ts/search/` | none | IN_PROGRESS |
-| M2 | Clinic Backend Pluggable Search Core & 7 Feature Providers | `services/clinic-api` MediatR orchestrator, 7 domain providers, `SearchController`, unit tests | M1 | PLANNED |
-| M3 | Clinic Workstation Command Palette UX & Deep Navigation | `apps/clinic-app` `GlobalSearchModal`, `ClinicHeaderBar`, shortcuts, category tabs, deep navigation | M1, M2 | PLANNED |
-| M4 | Portal Web Cross-App Integration | `apps/portal-web` `WorkspaceSearchDialog` integration with shared search | M1 | PLANNED |
-| M5 | Final Milestone: 100% E2E Test Pass & Adversarial Hardening | Pass 100% of E2E test suite (Tiers 1-4) and Tier 5 adversarial stress testing | M2, M3, M4 | PLANNED |
+| M1 | Shared Platform Search Standards | `packages/shared-dotnet/Search/` and `packages/shared-ts/search/` | none | DONE |
+| M2 | Clinic Backend Pluggable Search Core & 7 Feature Providers | `services/clinic-api` MediatR orchestrator, 7 domain providers, `SearchController`, unit tests | M1 | DONE |
+| M3 | Clinic Workstation Command Palette UX & Deep Navigation | `apps/clinic-app` `GlobalSearchModal`, `ClinicHeaderBar`, shortcuts, category tabs, deep navigation | M1, M2 | DONE |
+| M4 | Portal Web Cross-App Integration | `apps/portal-web` `WorkspaceSearchDialog` integration with shared search | M1 | DONE |
+| M5 | Final Milestone: 100% E2E Test Pass & Adversarial Hardening | Pass 100% of E2E test suite (Tiers 1-4) and Tier 5 adversarial stress testing | M2, M3, M4 | DONE |
 
 ---
 

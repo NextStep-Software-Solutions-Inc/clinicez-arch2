@@ -35,11 +35,7 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection");
 
-        var schemaName = configuration["DbSchema"];
-        if (string.IsNullOrEmpty(schemaName))
-        {
-            throw new InvalidOperationException("DbSchema configuration value is required but was not specified.");
-        }
+        var schemaName = configuration["DbSchema"] ?? "public";
 
         // Must be registered before Hangfire/interop so the schema exists when they start (fresh on-prem installs).
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.DatabaseMigrationHostedService>();

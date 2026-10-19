@@ -17,7 +17,8 @@ export type ChartTab =
   | 'procedures'
   | 'immunizations'
   | 'profiles'
-  | 'vault';
+  | 'vault'
+  | 'dental';
 
 export const CHART_TABS: SegmentedOption<ChartTab>[] = [
   { value: 'summary', label: 'Summary' },
@@ -28,6 +29,21 @@ export const CHART_TABS: SegmentedOption<ChartTab>[] = [
   { value: 'profiles', label: 'Health Profiles' },
   { value: 'vault', label: 'Doc Vault' },
 ];
+
+export const DENTAL_CHART_TAB: SegmentedOption<ChartTab> = {
+  value: 'dental',
+  label: 'Dental Chart',
+};
+
+export function getAvailableChartTabs(
+  enableDentalModule?: boolean,
+  hasDentalRecords?: boolean
+): SegmentedOption<ChartTab>[] {
+  if (enableDentalModule || hasDentalRecords) {
+    return [...CHART_TABS, DENTAL_CHART_TAB];
+  }
+  return CHART_TABS;
+}
 
 export type ChartLayoutMode = 'modal' | 'split' | 'drawer';
 
@@ -100,6 +116,9 @@ export interface ChartLayoutProps {
   onAdministerVaccine?: (payload: AdministerVaccinePayload) => Promise<void>;
   onRecordHistoricalVaccine?: (payload: RecordHistoricalImmunizationPayload) => Promise<void>;
   onRecordAefi?: (immId: string, payload: RecordAefiPayload) => Promise<void>;
+  availableTabs?: SegmentedOption<ChartTab>[];
+  focusToothNumber?: number;
+  onOrderDentalProcedure?: (toothNumber: number, toothSurface?: string) => void;
 }
 
 export interface PatientChartModalProps {
@@ -118,6 +137,9 @@ export interface PatientChartModalProps {
   onPressEdit?: () => void;
   /** Override layout mode; falls back to clinic setting or 'modal' */
   preferredLayout?: ChartLayoutMode;
+  availableTabs?: SegmentedOption<ChartTab>[];
+  focusToothNumber?: number;
+  onOrderDentalProcedure?: (toothNumber: number, toothSurface?: string) => void;
 
   // Tab Action Handlers
   onViewPrescriptionSlip?: (consultation: ConsultationRecord) => void;

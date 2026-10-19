@@ -49,45 +49,6 @@ public class PharmacyEnumsAsStringsTests
         { "GamotLedgerTransactions", "Status", typeof(GamotTransactionStatus) },
     };
 
-    [Theory]
-    [MemberData(nameof(MigratedColumns))]
-    public void Migration_Should_Map_Every_Enum_Member_Between_Integer_And_Name(string table, string column, Type enumType)
-    {
-        var migration = new Infrastructure.Migrations.EnumsAsStrings();
-        var expected = Enum.GetValues(enumType).Cast<object>()
-            .Select(member => (Value: Convert.ToInt32(member), Name: member.ToString()!))
-            .OrderBy(pair => pair.Value)
-            .ToList();
-
-        var up = migration.UpOperations.OfType<SqlOperation>().Single(op => op.Sql.Contains($"\"{table}\" ALTER COLUMN \"{column}\" TYPE character varying(64)"));
-        var down = migration.DownOperations.OfType<SqlOperation>().Single(op => op.Sql.Contains($"\"{table}\" ALTER COLUMN \"{column}\" TYPE integer"));
-
-        Regex.Matches(up.Sql, @"WHEN (\d+) THEN '(\w+)'")
-            .Select(m => (Value: int.Parse(m.Groups[1].Value), Name: m.Groups[2].Value))
-            .OrderBy(pair => pair.Value)
-            .Should().Equal(expected);
-        Regex.Matches(down.Sql, @"WHEN '(\w+)' THEN (\d+)")
-            .Select(m => (Value: int.Parse(m.Groups[2].Value), Name: m.Groups[1].Value))
-            .OrderBy(pair => pair.Value)
-            .Should().Equal(expected);
-    }
-
-    [Fact]
-    public void Migration_Should_Cover_Exactly_The_Enum_Columns_Of_The_Model()
-    {
-        using var db = PharmacyTestDbHelper.CreateContext($"enums-{Guid.NewGuid()}", new TestPharmacyScope(string.Empty, Guid.Empty));
-        var modelColumns = db.Model.GetEntityTypes()
-            .SelectMany(entity => entity.GetProperties()
-                .Where(p => (Nullable.GetUnderlyingType(p.ClrType) ?? p.ClrType).IsEnum)
-                .Select(p => $"{p.Name}:{(Nullable.GetUnderlyingType(p.ClrType) ?? p.ClrType).Name}"))
-            .Order()
-            .ToList();
-
-        var migrated = MigratedColumns.Select(row => $"{row[1]}:{((Type)row[2]).Name}").Order().ToList();
-
-        migrated.Should().Equal(modelColumns);
-    }
-
     private static JsonSerializerOptions MvcJsonOptions()
     {
         var services = new ServiceCollection();

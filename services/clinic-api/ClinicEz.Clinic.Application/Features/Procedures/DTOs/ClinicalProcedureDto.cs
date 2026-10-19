@@ -30,7 +30,9 @@ public record ClinicalProcedureDto(
     string? ClinicalNotes,
     string? Complications,
     Guid? TargetRoomId = null,
-    string? TargetRoomName = null
+    string? TargetRoomName = null,
+    int? ToothNumber = null,
+    string? ToothSurface = null
 );
 
 public record OrderProcedureRequest(
@@ -45,7 +47,9 @@ public record OrderProcedureRequest(
     string? OrderedByDoctorName,
     string? ClinicalNotes,
     Guid? TargetRoomId = null,
-    string? TargetRoomName = null
+    string? TargetRoomName = null,
+    int? ToothNumber = null,
+    string? ToothSurface = null
 );
 
 public record RecordProcedureExecutionRequest(
