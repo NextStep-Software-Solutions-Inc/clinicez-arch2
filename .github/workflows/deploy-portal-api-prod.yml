@@ -15,7 +15,7 @@ env:
   IMAGE_NAME: portal-api
   IMAGE_TAG: ${{ github.event.release.tag_name || 'prod' }}
   CONTAINER_NAME: portal-api
-  DEPLOY_DIR: /opt/docker-stack/portal-api
+  DEPLOY_DIR: /opt/clinicez/apps/portal-api
   ENVIRONMENT: Production
 
 jobs:

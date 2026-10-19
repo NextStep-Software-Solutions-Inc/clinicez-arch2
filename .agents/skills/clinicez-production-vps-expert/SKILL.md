@@ -235,7 +235,7 @@ ssh -i ~/.ssh/id_ed25519 root@130.94.50.27 "cd /opt/clinicez/data/compose && doc
 ## 8. Critical Rules & Gotchas
 
 > [!IMPORTANT]
-> **Preserve `/opt/clinicez/data` Path**: Never place persistent production data on `/root`, `/var/lib`, or the root `/dev/vda2` drive. All stateful assets must live within `/opt/clinicez/data` to preserve the 100% portable storage guarantee.
+> **Preserve `/opt/clinicez/data` Path**: Never place persistent production data on `/root`, `/var/lib`, or the root `/dev/vda2` drive. All stateful assets must live within `/opt/clinicez/data` to preserve the 100% portable storage guarantee. Stateless application service stacks (e.g. `portal-api`) are deployed under `/opt/clinicez/apps/<service-name>` on the host drive (`/dev/vda2`), never in legacy `/opt/docker-stack/`.
 
 > [!WARNING]
 > **Bash & `.env` Quoting**: Passwords containing characters like `#` (e.g., `t-G9x#mK5!pQ2vW8*zY;`) will be truncated as bash/docker comments if unquoted. Always wrap credentials in double quotes `""` in `.env` files and shell scripts.
