@@ -1,5 +1,6 @@
 using ClinicEz.Shared.Exceptions;
 using FluentValidation;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 using MediatR;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Enums;

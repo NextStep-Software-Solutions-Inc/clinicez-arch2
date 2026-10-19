@@ -9,22 +9,36 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
 {
     public ApplicationDbContext CreateDbContext(string[] args)
     {
-        var evironment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
-        var basePath = Directory.GetCurrentDirectory();
-
-        IConfigurationRoot configuration = new ConfigurationBuilder()
-            .SetBasePath(Path.GetFullPath(Path.Combine(basePath, "../ClinicEz.Portal.Api")))
-            .AddJsonFile("appsettings.json", optional: true, true) // Make appsettings optional
-            .AddJsonFile($"appsettings.{evironment}.json", optional: true, true) // Make environment-specific appsettings optional
-            .AddUserSecrets(Assembly.Load("ClinicEz.Portal.Api"))
-            .Build();
-
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
-
-        if (string.IsNullOrEmpty(connectionString))
+        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+        var currentDir = Directory.GetCurrentDirectory();
+        var candidatePaths = new[]
         {
-            throw new InvalidOperationException("Could not find a connection string named 'DefaultConnection'.");
+            Path.Combine(currentDir, "services/portal-api/ClinicEz.Portal.Api"),
+            Path.Combine(currentDir, "../ClinicEz.Portal.Api"),
+            currentDir
+        };
+        var apiPath = candidatePaths.FirstOrDefault(Directory.Exists) ?? currentDir;
+
+        var builder = new ConfigurationBuilder()
+            .SetBasePath(Path.GetFullPath(apiPath))
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+            .AddJsonFile($"appsettings.{environment}.json", optional: true, reloadOnChange: false)
+            .AddEnvironmentVariables();
+
+        try
+        {
+            builder.AddUserSecrets(Assembly.Load("ClinicEz.Portal.Api"), optional: true);
         }
+        catch
+        {
+            // Ignore if UserSecrets assembly cannot be loaded at design-time
+        }
+
+        var configuration = builder.Build();
+
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? Environment.GetEnvironmentVariable("CONNECTION_STRING")
+            ?? "Host=localhost;Database=CLINICEZ_PORTAL_DB;Username=postgres;Password=postgres";
 
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
         optionsBuilder.UseNpgsql(connectionString, npgsqlOptions =>

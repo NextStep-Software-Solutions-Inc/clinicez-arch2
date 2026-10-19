@@ -19,7 +19,7 @@ public sealed record SetFacilityDiscoveryEligibilityCommand(
 public sealed record SetFacilityDiscoveryEligibilityResult(
     Guid FacilityId,
     bool IsEligible,
-    DateTime UpdatedAt
+    DateTime? UpdatedAt
 );
 
 public sealed class SetFacilityDiscoveryEligibilityCommandValidator : AbstractValidator<SetFacilityDiscoveryEligibilityCommand>

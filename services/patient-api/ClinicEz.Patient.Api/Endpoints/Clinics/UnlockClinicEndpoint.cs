@@ -4,6 +4,7 @@ using ClinicEz.Patient.Application.Features.Clinics.Commands.UnlockClinicAccess;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;

@@ -13,6 +13,7 @@ using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using FluentAssertions;
 using FluentValidation;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 using NSubstitute;
 using Xunit;
 
