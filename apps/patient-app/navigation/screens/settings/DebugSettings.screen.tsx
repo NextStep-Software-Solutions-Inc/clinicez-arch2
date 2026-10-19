@@ -35,6 +35,7 @@ export default function DebugSettingsScreen() {
   const [isSeedingCatalog, setIsSeedingCatalog] = useState(false);
   const [isSeedingNotifications, setIsSeedingNotifications] = useState(false);
   const [isClearingData, setIsClearingData] = useState(false);
+  const [forceYakap, setForceYakap] = useState(false);
 
   const refreshStoreValues = async () => {
     const entries = await Promise.all(
@@ -44,6 +45,8 @@ export default function DebugSettingsScreen() {
       }),
     );
     setStoreValues(Object.fromEntries(entries));
+    const yakapVal = await SecureStore.getItemAsync('debug_force_yakap_registered');
+    setForceYakap(yakapVal === 'true');
   };
 
   useEffect(() => {
@@ -76,6 +79,11 @@ export default function DebugSettingsScreen() {
       await complete();
       await refreshStoreValues();
     }
+  };
+
+  const handleForceYakapToggle = async (value: boolean) => {
+    setForceYakap(value);
+    await SecureStore.setItemAsync('debug_force_yakap_registered', value ? 'true' : 'false');
   };
 
   const handleSeedDemoHealthRecords = async () => {
@@ -172,6 +180,23 @@ export default function DebugSettingsScreen() {
             type: 'switch',
             value: isComplete,
             onValueChange: handleOnboardingToggle,
+          }}
+        />
+      </SettingsSection>
+
+      <SettingsSection
+        title="PhilHealth YAKAP Benefit Preview"
+        footer="Toggle to test between the Promotional Card (unverified) and the Active Benefit Tracker (100% confirmed registered)."
+      >
+        <SettingsRow
+          title="Simulate 100% Confirmed YAKAP"
+          subtitle="Displays assigned clinic and ₱20,000 medicine allowance on Home"
+          icon={{ android: 'shield', ios: 'checkmark.shield.fill' }}
+          iconColor={colors.primary}
+          right={{
+            type: 'switch',
+            value: forceYakap,
+            onValueChange: handleForceYakapToggle,
           }}
         />
       </SettingsSection>

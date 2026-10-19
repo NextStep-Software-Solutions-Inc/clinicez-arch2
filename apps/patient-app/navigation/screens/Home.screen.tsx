@@ -17,11 +17,9 @@ import { useContentInsets } from '../../hooks/useContentInsets';
 import { usePatientId } from '../../hooks/usePatientId';
 import { getHomeDashboard } from '../../services/discovery/discoveryService';
 import { HomeDashboard, HealthMetric, AppointmentLineupItem } from '../../services/discovery/types';
-import { db } from '../../db/index';
-import { prescriptions } from '../../db/schema/prescriptions';
-import { patientGovernmentIds } from '../../db/schema/patientGovernmentIds';
-import { patientNcdQuestionnaire } from '../../db/schema/patientNcdQuestionnaire';
-import { eq } from 'drizzle-orm';
+import YakapPromoCard from '../../components/yakap/YakapPromoCard';
+import YakapActiveCard from '../../components/yakap/YakapActiveCard';
+import { useYakapRegistrationStatus } from '../../hooks/useYakapRegistrationStatus';
 
 function MetricCard({ metric }: { metric: HealthMetric }) {
   const { colors, radii, spacing, shadows } = useAppTheme();
@@ -112,10 +110,8 @@ export default function HomeScreen() {
   const patientId = usePatientId();
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [gamotUsed, setGamotUsed] = useState(0);
-  const [hasNcd, setHasNcd] = useState(false);
-  const [philhealthPin, setPhilhealthPin] = useState<string | null>(null);
   const contentInsets = useContentInsets();
+  const yakapStatus = useYakapRegistrationStatus(patientId);
 
   useEffect(() => {
     let mounted = true;
@@ -129,39 +125,7 @@ export default function HomeScreen() {
           if (mounted) setIsLoading(false);
         });
 
-      if (patientId) {
-        db.select()
-          .from(prescriptions)
-          .where(eq(prescriptions.patientId, patientId))
-          .then((rxs) => {
-            if (!mounted) return;
-            const total = rxs
-              .filter((r) => r.isPhilHealthGamot)
-              .reduce((sum, r) => sum + (r.gamotCoverageAmount ?? 0), 0);
-            setGamotUsed(total);
-          })
-          .catch(console.error);
-
-        db.select()
-          .from(patientNcdQuestionnaire)
-          .where(eq(patientNcdQuestionnaire.patientId, patientId))
-          .then((rows) => {
-            if (!mounted) return;
-            setHasNcd(rows.length > 0 && !!rows[0].qid1Yn);
-          })
-          .catch(console.error);
-
-        db.select()
-          .from(patientGovernmentIds)
-          .where(eq(patientGovernmentIds.patientId, patientId))
-          .then((rows) => {
-            if (!mounted) return;
-            if (rows.length > 0 && rows[0].philhealthId) {
-              setPhilhealthPin(rows[0].philhealthId);
-            }
-          })
-          .catch(console.error);
-      }
+      void yakapStatus.refresh();
     };
 
     load();
@@ -208,80 +172,17 @@ export default function HomeScreen() {
         )}
       </ThemedView>
 
-      {/* PhilHealth YAKAP & GAMOT ₱20,000 Benefit Tracker Card */}
-      <Card padding="md" style={styles.yakapCard}>
-        <View style={styles.yakapCardTop}>
-          <View style={styles.yakapHeaderLeft}>
-            <View
-              style={[
-                styles.yakapIconBadge,
-                { backgroundColor: colors.primaryLight, borderRadius: radii.md },
-              ]}
-            >
-              <AppIcon name="shield" size={sizes.iconMd} color="primary" />
-            </View>
-            <View style={styles.flex}>
-              <ThemedText variant="h3">PhilHealth YAKAP Benefit</ThemedText>
-              <ThemedText variant="small" color="textMuted">
-                {philhealthPin ? `PIN: ${philhealthPin} • Mod-11 Verified` : 'Link PhilHealth PIN in Government IDs'}
-              </ThemedText>
-            </View>
-          </View>
-          <View
-            style={[
-              styles.yakapBudgetBadge,
-              { backgroundColor: colors.infoBg, borderColor: colors.infoBorder, borderRadius: radii.sm },
-            ]}
-          >
-            <ThemedText variant="badge" color="infoText">
-              ₱20,000/yr
-            </ThemedText>
-          </View>
-        </View>
-
-        <View style={styles.yakapProgressSection}>
-          <View style={styles.yakapProgressLabels}>
-            <ThemedText variant="smallBold" color="text">
-              GAMOT Outpatient Drug Allocation
-            </ThemedText>
-            <ThemedText variant="smallBold" color="infoText">
-              {Math.min(100, Math.round((gamotUsed / 20000) * 100))}% used
-            </ThemedText>
-          </View>
-          <ProgressBar
-            value={gamotUsed / 20000}
-            tone="success"
-            label="GAMOT Outpatient Drug Allocation"
-          />
-          <View style={styles.yakapProgressLabels}>
-            <ThemedText variant="caption" color="textMuted">
-              Claimed: ₱{gamotUsed.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </ThemedText>
-            <ThemedText variant="captionBold" color="successText">
-              Balance: ₱{Math.max(0, 20000 - gamotUsed).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </ThemedText>
-          </View>
-        </View>
-
-        <View style={styles.yakapActionRow}>
-          <Button
-            label={hasNcd ? 'Review NCD (24 Qs)' : 'Fill NCD Assessment'}
-            variant="outline"
-            size="sm"
-            icon="checklist"
-            style={styles.flex}
-            onPress={() => navigation.navigate('Main', { screen: 'NcdQuestionnaireScreen' })}
-          />
-          <Button
-            label="Digital Rx (UPSC QR)"
-            variant="outline"
-            size="sm"
-            icon="pill"
-            style={styles.flex}
-            onPress={() => navigation.navigate('Main', { screen: 'PrescriptionsScreen' })}
-          />
-        </View>
-      </Card>
+      {/* PhilHealth YAKAP Benefit Card */}
+      {yakapStatus.isConfirmedRegistered ? (
+        <YakapActiveCard
+          philhealthPin={yakapStatus.philhealthPin}
+          assignedClinicName={yakapStatus.assignedClinicName}
+          gamotUsed={yakapStatus.gamotUsed}
+          annualAllocation={yakapStatus.annualAllocation}
+        />
+      ) : (
+        <YakapPromoCard />
+      )}
 
       <View style={styles.sectionWrap}>
         <SectionHeader title="Quick Actions" />
@@ -479,43 +380,5 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     marginTop: 6,
-  },
-  yakapCard: {
-    gap: 14,
-  },
-  yakapCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  yakapHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  yakapIconBadge: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  yakapBudgetBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-  },
-  yakapProgressSection: {
-    gap: 6,
-  },
-  yakapProgressLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  yakapActionRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 2,
   },
 });

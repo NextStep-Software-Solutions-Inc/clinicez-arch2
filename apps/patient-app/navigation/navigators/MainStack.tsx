@@ -19,6 +19,7 @@ import ExploreClinicsScreen from '../screens/ExploreClinics.screen';
 import ExploreOrgsScreen from '../screens/ExploreOrgs.screen';
 import OrganizationDetailsScreen from '../screens/OrganizationDetails.screen';
 import ClinicDetailsScreen from '../screens/ClinicDetails.screen';
+import YakapDetailsScreen from '../screens/YakapDetails.screen';
 import BookingDraftScreen from '../screens/BookingDraft.screen';
 import AppointmentDetailScreen from '../screens/appointments/AppointmentDetail.screen';
 import ProviderProfileScreen from '../screens/appointments/ProviderProfile.screen';
@@ -156,6 +157,10 @@ const MainStack = createNativeStackNavigator({
     ClinicDetailsScreen: createNativeStackScreen({
       screen: ClinicDetailsScreen,
       options: { title: 'Clinic Details', headerLargeTitleEnabled: true },
+    }),
+    YakapDetailsScreen: createNativeStackScreen({
+      screen: YakapDetailsScreen,
+      options: { title: 'PhilHealth YAKAP Guide', headerLargeTitleEnabled: true },
     }),
     BookingDraftScreen: createNativeStackScreen({
       screen: BookingDraftScreen,

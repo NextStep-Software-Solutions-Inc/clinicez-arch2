@@ -18,6 +18,7 @@ import ExploreClinicsScreen from '../screens/ExploreClinics.screen';
 import ExploreOrgsScreen from '../screens/ExploreOrgs.screen';
 import OrganizationDetailsScreen from '../screens/OrganizationDetails.screen';
 import ClinicDetailsScreen from '../screens/ClinicDetails.screen';
+import YakapDetailsScreen from '../screens/YakapDetails.screen';
 import BookingDraftScreen from '../screens/BookingDraft.screen';
 import AppointmentDetailScreen from '../screens/appointments/AppointmentDetail.screen';
 import ProviderProfileScreen from '../screens/appointments/ProviderProfile.screen';
@@ -89,6 +90,7 @@ const SCREENS: [name: string, component: ComponentType<any>, title: string][] = 
   ['ExploreOrgsScreen', ExploreOrgsScreen, 'Explore Organizations'],
   ['OrganizationDetailsScreen', OrganizationDetailsScreen, 'Organization Details'],
   ['ClinicDetailsScreen', ClinicDetailsScreen, 'Clinic Details'],
+  ['YakapDetailsScreen', YakapDetailsScreen, 'PhilHealth YAKAP Guide'],
   ['BookingDraftScreen', BookingDraftScreen, 'Book Appointment'],
   ['AppointmentDetailScreen', AppointmentDetailScreen, 'Appointment Details'],
   ['ProviderProfileScreen', ProviderProfileScreen, 'Provider Profile'],

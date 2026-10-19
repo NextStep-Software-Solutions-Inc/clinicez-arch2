@@ -1014,3 +1014,56 @@ Deliver a clinical workstation screen and tab in `apps/clinic-app` for Clinic Ad
 - [ ] Backend tests in `ClinicEz.Clinic.Application.Tests` verify comprehensive event creation, PHI sanitization, query filtering, and immutability guardrails.
 - [ ] Frontend tests in `apps/clinic-app` verify audit log rendering, category filter switching, and skeleton states.
 - [ ] All existing test suites pass with zero regressions.
+
+
+## 2026-10-18T23:46:55Z
+
+Decouple ClinicEZ's multi-tenant architecture across Facility Network (B2B Interoperability), Online Presence (Patient Directory Discovery), and Service Catalog (Clinical Intake & Booking), implementing the missing two-tier publishing governance, resilient Interop Hub event synchronization to patient-api, and hybrid gated patient-app intake access workflows conforming strictly to @clinicez/design-tokens.
+
+Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2
+Integrity mode: development
+Requested team: Full team (Cross-service architecture, backend interop, portal & clinic & patient app UI/UX)
+
+## Requirements
+
+### R1. Architectural Tri-Domain Decoupling
+Decouple Facility Network (cross-tenant B2B interop links), Online Presence (patient-facing public directory identity), and Service Catalog (clinical procedures, doctor schedules, and intake booking access) across `portal-api`, `clinic-api`, and `patient-api`. Ensure changes to one domain do not unintentionally expose or restrict another.
+
+### R2. Two-Tier Facility Publishing Governance
+Implement a two-tier governance model:
+- **Workspace Level (`portal-web` / `portal-api`)**: Workspace owner sets master directory eligibility (`Enable Patient App Discovery`). Newly provisioned facilities default to `Draft / Private`.
+- **Facility Level (`clinic-app` / `clinic-api`)**: Clinic manager/receptionist configures the public profile, verifies the readiness checklist (hours, licensed doctors, service catalog), toggles "Publish to Patient Directory", and can pause online booking dynamically for capacity control.
+
+### R3. Resilient Interop Hub Synchronization to patient-api
+Fix the outbox/relay bridge between `portal-api`, `clinic-api`, and `patient-api` so that facility creation and publishing status updates (`facility.directory.updated`) reliably upsert into `patient-api`'s PostgreSQL database (`Clinics` and `ClinicHealthcareProviders` tables), ensuring real clinics appear rather than being masked by dev seeders.
+
+### R4. Hybrid Gated Service Catalog & Tiered Patient Intake Experience
+Implement hybrid access gating for facilities with public online presence but private/network services (e.g. campus clinics like USTP CDO - UHC, corporate occupational centers):
+- Clinic profile card is publicly discoverable (location, hours, contact, accreditation).
+- Clinical services and doctor appointment booking can be unlocked by patients via either:
+  1. Entering a 6-character Clinic Join Code / scanning the reception QR code, OR
+  2. Joining a linked partner Organization (e.g. university or employer network).
+
+### R5. ClinicEZ Design System & Clinical Workstation UX Compliance
+Enforce `@clinicez/design-tokens` standards across all new and modified UI components in `portal-web`, `clinic-app`, and `patient-app`:
+- Zero raw hex values; strictly consume semantic tokens (`lightColors`/`darkColors`, radii, typography).
+- Full 4-state coverage (loading skeleton matching layout, empty state with action, actionable error toast via `apiError`, active state).
+- Clinical urgency encoding (`STAT`, `Urgent`, `Routine`).
+
+## Acceptance Criteria
+
+### Directory & Publishing Governance
+- [ ] Facilities created in a workspace default to `Private / Draft` until explicitly published.
+- [ ] Workspace admin in `portal-web` can control master directory eligibility per facility.
+- [ ] Clinic admin in `clinic-app` can view readiness status, toggle public online presence, and pause online booking in real time.
+- [ ] Publishing triggers a validated `facility.directory.updated` event delivered through the Interop Hub to `patient-api`.
+
+### Patient Discovery & Gated Access
+- [ ] Published clinics appear in `patient-api`'s `/clinics` search and the Patient App Explore/Discover screens.
+- [ ] Clinics with public presence but private services render a clean locked state with an "Enter Join Code / Scan QR" CTA instead of exposing private schedules or showing a blank screen.
+- [ ] Entering a valid join code or linking a recognized organization unlocks the service catalog and appointment booking.
+
+### UI/UX & Design Tokens
+- [ ] All new UI components strictly consume `@clinicez/design-tokens` semantic tokens.
+- [ ] Token unit tests pass without regressions (`bun test packages/design-tokens/src/tokens.test.ts`).
+- [ ] Backend test suites pass (`dotnet test services/patient-api/ClinicEz.Patient.Application.Tests` and `dotnet test services/portal-api/ClinicEz.Portal.Tests`).

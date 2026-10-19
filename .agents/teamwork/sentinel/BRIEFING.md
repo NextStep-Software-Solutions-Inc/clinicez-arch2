@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-13T14:10:30Z
+# BRIEFING — 2026-10-18T23:48:00Z
 
 ## Mission
-Orchestrate the end-to-end implementation of Progressive Patient Account Claiming (Option A) across the ClinicEZ ecosystem (portal-web, patient-api, shared-dotnet, portal-api, and Interop Hub) with cryptographic claim tokens, multi-identity conflict resolution, and design token compliance.
+Decouple ClinicEZ's multi-tenant architecture across Facility Network (B2B Interoperability), Online Presence (Patient Directory Discovery), and Service Catalog (Clinical Intake & Booking), implementing the missing two-tier publishing governance, resilient Interop Hub event synchronization to patient-api, and hybrid gated patient-app intake access workflows conforming strictly to @clinicez/design-tokens.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -15,6 +15,9 @@ Orchestrate the end-to-end implementation of Progressive Patient Account Claimin
 - Victory Auditor (victory_auditor_9): e910a86e-47eb-4204-840a-f12e62fa1b6f
 - Active Project Orchestrator (orchestrator_13): ca7b12d0-6a35-40d1-9796-313203cdeccb
 - Victory Auditor (victory_auditor_11): 5da13317-25e0-4007-a270-44480d4b6d09
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_14): 41f067d9-3fa1-46c7-a09f-b2e90505a53a
+- Active Crons: task-28 (Progress Reporting), task-30 (Liveness Check)
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -47,40 +50,33 @@ Orchestrate the end-to-end implementation of Progressive Patient Account Claimin
 - Multi-identity conflict resolution (proxy, alternate email linking, medical privacy guardrails)
 - Central profile hydration endpoint POST /api/v1/patients/claim-intake in patient-api
 - Full build and test verification (CLINICEZ.sln, portal-web test & build)
+- Route to General (`teamwork_preview_orchestrator`) for multi-tenant tri-domain architectural decoupling (Facility Network, Online Presence, Service Catalog)
+- Two-tier publishing governance (portal-web/portal-api workspace eligibility, clinic-app/clinic-api facility publishing & capacity control)
+- Resilient Interop Hub synchronization to patient-api (facility.directory.updated)
+- Hybrid gated service catalog & tiered patient intake experience (join code / org link)
+- ClinicEZ Design System & Clinical Workstation UX compliance (@clinicez/design-tokens, 4 states, clinical urgency)
+- Verification: bun test packages/design-tokens/src/tokens.test.ts, dotnet test services/patient-api/ClinicEz.Patient.Application.Tests, dotnet test services/portal-api/ClinicEz.Portal.Tests
 
 ## User Context
-- **Last user request**: Implement Progressive Patient Account Claiming (Option A) across ClinicEZ ecosystem (`portal-web`, `patient-api`, `shared-dotnet`, `portal-api`).
+- **Last user request**: Decouple ClinicEZ's multi-tenant architecture across Facility Network, Online Presence, and Service Catalog (2026-10-18T23:46:55Z).
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` (timestamp `## 2026-10-13T11:39:58Z`).
-  - Evaluated routing: General path (`teamwork_preview_orchestrator`).
-  - Created working directory `orchestrator_13` and `DISPATCH.md`.
-  - Dispatched Project Orchestrator `ca7b12d0-6a35-40d1-9796-313203cdeccb` (`orchestrator_13`).
-  - Scheduled Progress Reporting Cron (`task-28`) and Liveness Check Cron (`task-30`).
-  - Milestone 1 certified clean: HMAC-SHA256 tokens, 48h TTL, transactional email outbox (0 SMS).
-  - Milestone 2 certified clean: Patient API intake hydration, conflict resolution engine (minor proxy vs RA 10173 adult privacy guardrail).
-  - Milestone 3 certified clean: Portal Web Progressive Claim card, 4 UX states, @clinicez/design-tokens Teal, Clerk autofill, deep linking.
-  - Milestone 4 certified clean: 100% test pass across solution (82 E2E tests + 1,241 unit/integration tests).
-  - Independent Victory Audit (`victory_auditor_11`): VICTORY CONFIRMED across all 3 phases (Timeline, Integrity Forensics, Independent Test Execution).
-  - Background crons cancelled and subagents killed.
+  - Appended request verbatim to `ORIGINAL_REQUEST.md`.
+  - Evaluated route: General -> `teamwork_preview_orchestrator`.
+  - Created dispatch instructions in `.agents/teamwork/orchestrator_14/DISPATCH.md`.
 
 ## Project Status
-- **Phase**: complete
-- **Route**: General -> teamwork_preview_orchestrator (orchestrator_13: `ca7b12d0-6a35-40d1-9796-313203cdeccb`)
-- **Active Subagents**: none (all killed)
-- **Active Tasks**: none (all cancelled)
+- **Phase**: in progress
+- **Route**: General -> teamwork_preview_orchestrator (orchestrator_14)
+- **Active Subagents**: orchestrator_14 (41f067d9-3fa1-46c7-a09f-b2e90505a53a)
+- **Active Tasks**: task-28 (Cron 1), task-30 (Cron 2)
 
 ## Victory Audit Status
-- **Triggered**: yes
-- **Verdict**: VICTORY CONFIRMED
+- **Triggered**: no
+- **Verdict**: pending
 - **Retry count**: 0
 
 ## Artifact Index
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\ORIGINAL_REQUEST.md — Authoritative record of user requests
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\orchestrator_13\DISPATCH.md — Project Orchestrator dispatch instructions
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\sentinel\BRIEFING.md — Sentinel briefing memory
-- c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\o13_worker_m3\DISPATCH.md — M3 Worker dispatch instructions
-- services/patient-api/ClinicEz.Patient.Api/Endpoints/Patients/ClaimIntakeEndpoint.cs — POST /api/v1/patients/claim-intake
-- services/patient-api/ClinicEz.Patient.Application/Features/Patients/Commands/ClaimIntake/PatientClaimConflictResolver.cs — Conflict Engine
-- packages/shared-dotnet/Security/ClaimTokens/ClaimTokenService.cs — HMAC-SHA256 Token Service
-- tests/ClinicEz.Interop.E2E/PatientClaimingFlowTests.cs — Opaque-Box E2E Test Suite (52 tests)
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel briefing memory
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_14/DISPATCH.md — Project Orchestrator dispatch instructions
