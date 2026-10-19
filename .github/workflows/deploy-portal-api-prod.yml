@@ -23,6 +23,13 @@ jobs:
     name: Run Unit Tests & Verify Migrations
     runs-on: ubuntu-latest
     environment: Production
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' && (
+        startsWith(github.event.release.tag_name, 'portal-api-') ||
+        startsWith(github.event.release.tag_name, 'portal-api/') ||
+        startsWith(github.event.release.tag_name, 'portal-api@')
+      ))
 
     steps:
     - name: Checkout code
@@ -89,7 +96,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: Production
     needs: build
-    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' && (
+        startsWith(github.event.release.tag_name, 'portal-api-') ||
+        startsWith(github.event.release.tag_name, 'portal-api/') ||
+        startsWith(github.event.release.tag_name, 'portal-api@')
+      ))
 
     steps:
     - name: Checkout code (for compose file)
