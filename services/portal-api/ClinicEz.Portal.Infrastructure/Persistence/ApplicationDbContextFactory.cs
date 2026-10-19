@@ -37,12 +37,8 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
         var configuration = builder.Build();
 
         var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? Environment.GetEnvironmentVariable("CONNECTION_STRING");
-
-        if (string.IsNullOrEmpty(connectionString))
-        {
-            throw new InvalidOperationException("Could not find a connection string named 'DefaultConnection'. Set it in configuration or via the ConnectionStrings__DefaultConnection environment variable.");
-        }
+            ?? Environment.GetEnvironmentVariable("CONNECTION_STRING")
+            ?? "Host=localhost;Database=portal_db;Username=postgres;Password=postgres";
 
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
         optionsBuilder.UseNpgsql(connectionString, npgsqlOptions =>

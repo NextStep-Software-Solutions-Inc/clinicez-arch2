@@ -50,6 +50,8 @@ jobs:
       run: dotnet tool install --global dotnet-ef --version 10.0.2
 
     - name: Verify no pending EF Core model changes
+      env:
+        ConnectionStrings__DefaultConnection: "Host=localhost;Database=portal_db;Username=postgres;Password=postgres"
       run: |
         dotnet ef migrations has-pending-model-changes \
           --project services/portal-api/ClinicEz.Portal.Infrastructure \
