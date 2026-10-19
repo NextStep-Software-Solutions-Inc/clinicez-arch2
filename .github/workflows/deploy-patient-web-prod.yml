@@ -1,14 +1,6 @@
 name: Deploy Patient Web (Prod)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'apps/patient-app/**'
-      - 'packages/shared-ts/**'
-      - 'packages/design-tokens/**'
-      - '.github/workflows/deploy-patient-web-prod.yml'
   release:
     types: [published]
   workflow_dispatch:
@@ -28,6 +20,15 @@ jobs:
     name: Type Check & Verify Patient Web
     runs-on: ubuntu-latest
     environment: Production
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' && (
+        startsWith(github.event.release.tag_name, 'patient-web-') ||
+        startsWith(github.event.release.tag_name, 'patient-web/') ||
+        startsWith(github.event.release.tag_name, 'patient-web@') ||
+        startsWith(github.event.release.tag_name, 'patient-app-') ||
+        startsWith(github.event.release.tag_name, 'patient-app/')
+      ))
 
     steps:
       - name: Checkout code
@@ -49,7 +50,15 @@ jobs:
     runs-on: ubuntu-latest
     needs: test-and-typecheck
     environment: Production
-    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' && (
+        startsWith(github.event.release.tag_name, 'patient-web-') ||
+        startsWith(github.event.release.tag_name, 'patient-web/') ||
+        startsWith(github.event.release.tag_name, 'patient-web@') ||
+        startsWith(github.event.release.tag_name, 'patient-app-') ||
+        startsWith(github.event.release.tag_name, 'patient-app/')
+      ))
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_PATIENT_WEB || secrets.VERCEL_PROJECT_ID }}

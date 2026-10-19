@@ -102,6 +102,33 @@ Direct IP access (`http://130.94.50.27` or `https://130.94.50.27`) is restricted
 - Docker Daemon (`/etc/docker/daemon.json`): Global log rotation capped at `max-size: 20m` with `max-file: 5` and `live-restore: true`.
 - Systemd Journald (`/etc/systemd/journald.conf.d/size-limit.conf`): Capped at `SystemMaxUse=200M`.
 
+### 3.5. Proportional Dynamic Resource Allocation (1 vCPU / 2GB RAM Standard)
+To maximize throughput on a single vCPU (1.9 GiB RAM budget) while guaranteeing stability:
+- **Work-Conserving Dynamic Scheduling (`cpu_shares`)**: Hard CPU throttling (`cpus: 0.2`) wastes up to 80% of the single core when few services are running. By using Linux CFS **`cpu_shares`**, any active service bursts to **100% of the vCPU** when other containers are idle. When multiple services compete, CPU cycles are divided strictly according to relative share weights.
+- **Ceiling Quotas (`limits.cpus: "0.95"`)**: Prevents runaway threads or infinite loops from starving host SSH, UFW, or the Linux kernel.
+- **Soft Memory Reservation (`reservations.memory`)**: Guaranteed baseline RAM. The kernel allows containers to burst into available physical RAM when others are idle.
+- **Hard Memory Limit (`limits.memory`)**: Hard circuit-breaker ceiling protecting the host from kernel OOM panic.
+- **.NET 10 Low-Memory Tuning**:
+  - `DOTNET_gcServer=0`: Enforces Workstation GC, cutting per-container idle memory overhead by ~50%.
+  - `DOTNET_GCHeapHardLimitPercent=75`: Instructs the .NET runtime to trigger proactive garbage collection before reaching the container's hard limit, preventing OOMKills.
+
+#### Standard Production Resource Matrix:
+| Service / Container | `cpu_shares` | Reserved CPU | Max CPU | Soft RAM (`reservations`) | Hard RAM (`limits`) | Role & Priority |
+|---|---|---|---|---|---|---|
+| **`postgres`** | 1536 | `0.20` | `0.95` | `256M` | `650M` | Primary database cluster (all 8 databases) |
+| **`clinic-api`** | 1536 | `0.20` | `0.95` | `160M` | `450M` | Core clinical EHR, charting & Hangfire |
+| **`portal-api`** | 1024 | `0.15` | `0.95` | `140M` | `400M` | Multi-tenant control plane, subscriptions |
+| **`patient-api`** | 1024 | `0.15` | `0.95` | `140M` | `400M` | Patient portal, records & Clerk auth |
+| **`interop-hub`** | 1024 | `0.15` | `0.95` | `120M` | `350M` | Message exchange & ECDSA verification |
+| **`billing-api`** | 768 | `0.10` | `0.95` | `100M` | `300M` | Cashiering & invoices |
+| **`laboratory-api`** | 768 | `0.10` | `0.95` | `90M` | `280M` | Specimen tracking & lab results |
+| **`pharmacy-api`** | 768 | `0.10` | `0.95` | `90M` | `280M` | Dispensary & UPSC verification |
+| **`organization-api`**| 512 | `0.05` | `0.95` | `80M` | `250M` | Multi-facility directories |
+| **`philhealth-proxy`**| 512 | `0.05` | `0.95` | `60M` | `200M` | Outbound PhilHealth pass-through proxy |
+| **`npm`** | 512 | `0.10` | `0.95` | `80M` | `250M` | Edge reverse proxy & SSL termination |
+| **`dozzle`** | 128 | `0.02` | `0.30` | `15M` | `64M` | Real-time log viewer |
+
+
 ---
 
 ## 4. PostgreSQL 17 & `pgvector` Architecture
@@ -132,10 +159,13 @@ Located at `/opt/clinicez/data/postgres/conf/postgresql.conf`:
 - `checkpoint_completion_target = 0.9`
 
 ### 4.3. Standard Connection String Format
-For application microservices running on the VPS Docker network:
+For application microservices running on the VPS Docker network (`data-network`):
 ```text
-Host=postgres;Port=5432;Database=CLINICEZ-CLINIC_DB;Username=db_admin_node;Password=t-G9x#mK5!pQ2vW8*zY;
+Host=postgres;Port=5432;Database=CLINICEZ-CLINIC_DB;Username=db_admin_node;Password==5XQ*YuioBmjr45I3fOYrQvx;
 ```
+> [!IMPORTANT]
+> **Strict Environment Isolation**: Production credentials (e.g. database password `=5XQ*YuioBmjr45I3fOYrQvx` on `130.94.50.27`) MUST never overlap with Development credentials (`t-G9x#mK5!pQ2vW8*zY;` on `38.54.16.240`). All secrets, ECDSA P-256 keys, JWT keys, and client secrets are maintained independently in `configuration.prod.txt` and GitHub Environment `Production`.
+
 
 ---
 
@@ -205,7 +235,7 @@ ssh -i ~/.ssh/id_ed25519 root@130.94.50.27 "cd /opt/clinicez/data/compose && doc
 ## 8. Critical Rules & Gotchas
 
 > [!IMPORTANT]
-> **Preserve `/opt/clinicez/data` Path**: Never place persistent production data on `/root`, `/var/lib`, or the root `/dev/vda2` drive. All stateful assets must live within `/opt/clinicez/data` to preserve the 100% portable storage guarantee.
+> **Preserve `/opt/clinicez/data` Path**: Never place persistent production data on `/root`, `/var/lib`, or the root `/dev/vda2` drive. All stateful assets must live within `/opt/clinicez/data` to preserve the 100% portable storage guarantee. Stateless application service stacks (e.g. `portal-api`) are deployed under `/opt/clinicez/apps/<service-name>` on the host drive (`/dev/vda2`), never in legacy `/opt/docker-stack/`.
 
 > [!WARNING]
 > **Bash & `.env` Quoting**: Passwords containing characters like `#` (e.g., `t-G9x#mK5!pQ2vW8*zY;`) will be truncated as bash/docker comments if unquoted. Always wrap credentials in double quotes `""` in `.env` files and shell scripts.

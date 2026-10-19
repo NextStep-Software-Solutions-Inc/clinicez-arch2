@@ -19,8 +19,22 @@ services:
     networks:
       - data-network
       - npm-default
+    # Proportional Resource Allocation (Production VPS 1 vCPU / 2GB RAM Standard)
+    # Work-conserving: active services burst to 100% of CPU and available RAM; zero idle resources wasted.
+    cpu_shares: ${BILLING_CPU_SHARES:-768}
+    deploy:
+      resources:
+        reservations:
+          cpus: '${BILLING_CPUS_RESERVATION:-0.10}'
+          memory: ${BILLING_MEM_RESERVATION:-100M}
+        limits:
+          cpus: '${BILLING_CPUS_LIMIT:-0.95}'
+          memory: ${BILLING_MEM_LIMIT:-300M}
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      # Low-memory & 1 vCPU tuning for Production VPS (130.94.50.27)
+      - DOTNET_GCHeapHardLimitPercent=75
+      - DOTNET_gcServer=0
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING:?CONNECTION_STRING must be set}
       - DbSchema=${DB_SCHEMA:-billing}
       # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.

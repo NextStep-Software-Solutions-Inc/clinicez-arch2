@@ -18,8 +18,22 @@ services:
     networks:
       - data-network
       - npm-default
+    # Proportional Resource Allocation (Production VPS 1 vCPU / 2GB RAM Standard)
+    # Work-conserving: active services burst to 100% of CPU and available RAM; zero idle resources wasted.
+    cpu_shares: ${PHILHEALTH_PROXY_CPU_SHARES:-512}
+    deploy:
+      resources:
+        reservations:
+          cpus: '${PHILHEALTH_PROXY_CPUS_RESERVATION:-0.05}'
+          memory: ${PHILHEALTH_PROXY_MEM_RESERVATION:-60M}
+        limits:
+          cpus: '${PHILHEALTH_PROXY_CPUS_LIMIT:-0.95}'
+          memory: ${PHILHEALTH_PROXY_MEM_LIMIT:-200M}
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      # Low-memory & 1 vCPU tuning for Production VPS (130.94.50.27)
+      - DOTNET_GCHeapHardLimitPercent=75
+      - DOTNET_gcServer=0
       - PortalApi__BaseUrl=${PORTAL_API_BASE_URL:?PORTAL_API_BASE_URL must be set}
     restart: unless-stopped
 

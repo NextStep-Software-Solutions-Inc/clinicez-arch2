@@ -2,7 +2,7 @@ using ClinicEz.Patient.Domain.Entities;
 using FluentAssertions;
 using Xunit;
 
-namespace ClinicEz.Patient.Application.Tests.Features.Clinics;
+namespace ClinicEz.Patient.Application.Tests.Governance;
 
 public sealed class ClinicTwoTierGovernanceTests
 {

@@ -53,19 +53,6 @@ ssh -i ~/.ssh/id_ed25519 root@130.94.50.27 "docker exec -i postgres psql -U db_a
 ssh -i ~/.ssh/id_ed25519 root@130.94.50.27 "docker exec -i postgres psql -U db_admin_node -d CLINICEZ-CLINIC_DB -c 'SELECT extname, extversion FROM pg_extension WHERE extname = \"vector\";'"
 ```
 
-### 3.1. Connect via SSH Tunnel (DBeaver, TablePlus, pgAdmin, CLI)
-```bash
-# Open local port 5433 forwarded to VPS PostgreSQL (127.0.0.1:5432)
-ssh -i ~/.ssh/id_ed25519 -N -L 5433:127.0.0.1:5432 root@130.94.50.27
-
-# Connect using local psql:
-psql -h 127.0.0.1 -p 5433 -U db_admin_node -d CLINICEZ-CLINIC_DB
-```
-GUI Database Tool Settings:
-- **Host**: `127.0.0.1` | **Port**: `5433` (or built-in SSH tunnel tab using port `5432`)
-- **User**: `db_admin_node` | **Password**: `t-G9x#mK5!pQ2vW8*zY;`
-- **Database**: Any of the 8 production databases (e.g. `CLINICEZ-CLINIC_DB`)
-
 ---
 
 ## 4. Emergency Database Dump & Restore
