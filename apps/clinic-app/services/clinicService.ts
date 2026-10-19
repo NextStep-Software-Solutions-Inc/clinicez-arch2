@@ -1,6 +1,6 @@
 import type { AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
-import { SyncStatus } from '@shared/safe';
+import { SyncStatus, type SearchResponseDto, type ApiError } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus =
@@ -541,6 +541,8 @@ export interface ClinicalProcedureRecord {
   complications?: string;
   targetRoomId?: string | null;
   targetRoomName?: string | null;
+  toothNumber?: number | null;
+  toothSurface?: string | null;
 }
 
 export interface ClinicLabOrderItem {
@@ -1418,6 +1420,62 @@ export interface PatientChart {
   socialHistory?: PatientSocialHistory;
   reproductiveHistory?: PatientReproductiveHistory;
   latestNcdAssessment?: NcdRiskAssessment;
+  dentalChart?: DentalChart | null;
+  dentalTeeth?: DentalToothRecord[];
+  dentalProcedures?: ClinicalProcedureRecord[];
+}
+
+export type ToothStatus = 'Healthy' | 'Decay' | 'Filled' | 'Missing' | 'Crown' | 'Extraction';
+
+export interface DentalToothRecord {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  patientId: string;
+  patientName?: string | null;
+  consultationId?: string | null;
+  toothNumber: number;
+  status: ToothStatus;
+  surface?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export interface DentalSummary {
+  totalTeethRecorded: number;
+  healthyCount: number;
+  decayCount: number;
+  filledCount: number;
+  missingCount: number;
+  crownCount: number;
+  extractionCount: number;
+}
+
+export interface DentalChart {
+  patientId: string;
+  teeth: DentalToothRecord[];
+  dentalProcedures: ClinicalProcedureRecord[];
+  lastExaminedAt?: string | null;
+  summary?: DentalSummary | null;
+}
+
+export interface UpsertDentalToothRecordPayload {
+  toothNumber: number;
+  status: ToothStatus;
+  surface?: string | null;
+  notes?: string | null;
+  consultationId?: string | null;
+}
+
+export interface BatchSaveDentalChartPayload {
+  consultationId?: string | null;
+  teeth: {
+    toothNumber: number;
+    status: ToothStatus;
+    surface?: string | null;
+    notes?: string | null;
+  }[];
 }
 
 export interface ClinicPatient {
@@ -1743,6 +1801,8 @@ export interface ClinicSettingsRecord {
   facilitySlug?: string;
   primaryLogoUrl?: string | null;
   primaryColorHex?: string;
+  specialtyMode?: 'Medical' | 'Dental' | 'Multi-Specialty' | 'MultiSpecialty';
+  enableDentalModule?: boolean;
 }
 
 export type NotificationUrgency = 'Routine' | 'Urgent' | 'Stat';
@@ -2196,6 +2256,8 @@ export const clinicService = {
     clinicalNotes?: string;
     targetRoomId?: string;
     targetRoomName?: string;
+    toothNumber?: number;
+    toothSurface?: string;
   }) {
     return clinicApiClient.post<ClinicalProcedureRecord>('/procedures', payload);
   },
@@ -3195,6 +3257,53 @@ export const clinicService = {
     if (params?.limit) qp.append('limit', String(params.limit));
     const qs = qp.toString();
     return clinicApiUrl(`/audit/export${qs ? `?${qs}` : ''}`);
+  },
+
+  /**
+   * Pluggable Global Search client across all domain entities and settings.
+   */
+  async search(
+    query: string,
+    category?: string,
+    limit: number = 20,
+    signal?: AbortSignal,
+  ): Promise<[SearchResponseDto | null, ApiError | null]> {
+    const trimmed = (query ?? '').trim();
+    if (!trimmed) {
+      return [{ items: [], totalCount: 0 }, null];
+    }
+    const qp = new URLSearchParams();
+    qp.append('q', trimmed);
+    if (category && category.toLowerCase() !== 'all') {
+      qp.append('category', category);
+    }
+    if (limit) {
+      qp.append('limit', String(limit));
+    }
+    const qs = qp.toString();
+    return clinicApiClient.get<SearchResponseDto>(`/search${qs ? `?${qs}` : ''}`, { signal });
+  },
+
+  // Dental Module (Milestone MC)
+  async getPatientDentalChart(patientId: string, consultationId?: string) {
+    const qs = consultationId ? `?consultationId=${consultationId}` : '';
+    return clinicApiClient.get<DentalChart>(`/dental/patients/${patientId}/chart${qs}`);
+  },
+
+  async upsertToothRecord(patientId: string, payload: UpsertDentalToothRecordPayload) {
+    return clinicApiClient.post<DentalToothRecord>(`/dental/patients/${patientId}/teeth`, payload);
+  },
+
+  async upsertDentalTooth(patientId: string, payload: UpsertDentalToothRecordPayload) {
+    return this.upsertToothRecord(patientId, payload);
+  },
+
+  async batchSaveDentalChart(patientId: string, payload: BatchSaveDentalChartPayload) {
+    return clinicApiClient.post<DentalChart>(`/dental/patients/${patientId}/chart/batch`, payload);
+  },
+
+  async saveDentalChartBatch(patientId: string, payload: BatchSaveDentalChartPayload) {
+    return this.batchSaveDentalChart(patientId, payload);
   },
 };
 

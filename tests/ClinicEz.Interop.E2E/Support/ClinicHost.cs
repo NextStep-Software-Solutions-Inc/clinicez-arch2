@@ -26,6 +26,7 @@ public sealed class AmbientClinicContext : IClinicContext
     public Guid? BranchId => null;
 
     public Guid? StaffId { get; private set; }
+    public string? StaffName => null;
 
     public IReadOnlyList<string> Permissions => [];
 

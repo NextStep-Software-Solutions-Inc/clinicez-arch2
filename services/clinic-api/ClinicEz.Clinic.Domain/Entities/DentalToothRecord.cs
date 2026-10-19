@@ -1,0 +1,35 @@
+using System;
+using ClinicEz.Clinic.Domain.Common;
+using ClinicEz.Clinic.Domain.Enums;
+
+namespace ClinicEz.Clinic.Domain.Entities;
+
+/// <summary>
+/// Relational record for a patient's individual tooth state in the dental odontogram.
+/// Tracks tooth status, affected surfaces, and clinical notes across encounters.
+/// </summary>
+public sealed class DentalToothRecord : BaseEntity
+{
+    public required string TenantId { get; set; }
+    public Guid ClinicId { get; set; }
+    public Guid PatientId { get; set; }
+    public string? PatientName { get; set; }
+    public Guid? ConsultationId { get; set; }
+
+    /// <summary>
+    /// FDI World Dental Federation notation (ISO 3950):
+    /// Adult teeth: 11-18, 21-28, 31-38, 41-48
+    /// Primary/Child teeth: 51-55, 61-65, 71-75, 81-85
+    /// </summary>
+    public int ToothNumber { get; set; }
+
+    public ToothStatus Status { get; set; } = ToothStatus.Healthy;
+
+    /// <summary>
+    /// Comma-separated or combined tooth surfaces: M (Mesial), O (Occlusal), D (Distal), B (Buccal), L (Lingual).
+    /// Standardized to uppercase (e.g. "MOD", "DO", "B").
+    /// </summary>
+    public string? Surface { get; set; }
+
+    public string? Notes { get; set; }
+}

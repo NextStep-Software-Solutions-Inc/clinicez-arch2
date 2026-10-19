@@ -81,6 +81,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<ClinicStaffNotification> StaffNotifications { get; set; } = null!;
     public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
     public DbSet<ClinicAuditEntry> ClinicAuditEntries { get; set; } = null!;
+    public DbSet<DentalToothRecord> DentalToothRecords { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -153,6 +154,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<PatientPhysicalExamProfile>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ClinicStaffNotification>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ClinicAuditEntry>().HasQueryFilter(e => e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<DentalToothRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         modelBuilder.Entity<ClinicStaffNotification>(b =>
         {
@@ -473,6 +475,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.ProcedureName).IsRequired().HasMaxLength(150);
             entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
             entity.Property(e => e.TargetRoomName).HasMaxLength(100);
+            entity.Property(e => e.ToothSurface).HasMaxLength(20);
             entity.HasOne(e => e.TargetRoom)
                 .WithMany()
                 .HasForeignKey(e => e.TargetRoomId)
@@ -1002,6 +1005,22 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasIndex(e => new { e.ClinicId, e.ActorStaffId, e.Timestamp });
             entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.Timestamp });
             entity.HasIndex(e => new { e.ClinicId, e.TargetEntityType, e.TargetEntityId });
+        });
+
+        modelBuilder.Entity<DentalToothRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PatientName).HasMaxLength(150);
+            entity.Property(e => e.ToothNumber).IsRequired();
+            entity.Property(e => e.Status).IsRequired().HasConversion<string>().HasMaxLength(50);
+            entity.Property(e => e.Surface).HasMaxLength(20);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+
+            // Composite indexes for fast odontogram reads and tooth history
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.ToothNumber });
+            entity.HasIndex(e => new { e.ClinicId, e.ConsultationId });
         });
 
         // Interop transactional outbox and inbox

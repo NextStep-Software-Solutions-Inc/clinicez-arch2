@@ -25,7 +25,9 @@ public record OrderProcedureCommand(
     string? OrderedByDoctorName = null,
     string? ClinicalNotes = null,
     Guid? TargetRoomId = null,
-    string? TargetRoomName = null
+    string? TargetRoomName = null,
+    int? ToothNumber = null,
+    string? ToothSurface = null
 ) : IRequest<ClinicalProcedureDto>;
 
 public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureCommand, ClinicalProcedureDto>
@@ -118,7 +120,9 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
             Status = ProcedureStatus.Ordered,
             ClinicalNotes = request.ClinicalNotes?.Trim(),
             TargetRoomId = resolvedRoomId,
-            TargetRoomName = resolvedRoomName
+            TargetRoomName = resolvedRoomName,
+            ToothNumber = request.ToothNumber,
+            ToothSurface = string.IsNullOrWhiteSpace(request.ToothSurface) ? null : request.ToothSurface.Trim().ToUpperInvariant()
         };
 
         await _procRepo.AddAsync(procedure, cancellationToken);
@@ -169,6 +173,8 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
         p.ClinicalNotes,
         p.Complications,
         p.TargetRoomId,
-        p.TargetRoomName
+        p.TargetRoomName,
+        p.ToothNumber,
+        p.ToothSurface
     );
 }

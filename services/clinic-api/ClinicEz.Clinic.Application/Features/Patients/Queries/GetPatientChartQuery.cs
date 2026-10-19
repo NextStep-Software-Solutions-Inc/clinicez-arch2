@@ -449,7 +449,11 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             p.ExpirationDate,
             p.SiteRoute,
             p.ClinicalNotes,
-            p.Complications
+            p.Complications,
+            p.TargetRoomId,
+            p.TargetRoomName,
+            p.ToothNumber,
+            p.ToothSurface
         )).ToList();
 
         var labOrderDtos = labOrders.Select(o => CreateClinicLabOrderCommandHandler.MapToDto(o)).ToList();

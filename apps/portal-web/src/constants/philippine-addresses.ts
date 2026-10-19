@@ -357,6 +357,11 @@ export const FACILITY_CLASSIFICATIONS: Record<string, { value: string; label: st
       description: "Primary care, family medicine, specialist consultation, and outpatient treatment.",
     },
     {
+      value: "Dental Clinic",
+      label: "Dental Clinic / Oral Health Center",
+      description: "Comprehensive oral health, dental surgery, restorative dentistry, and orthodontics.",
+    },
+    {
       value: "Multi-Specialty Center",
       label: "Multi-Specialty Medical Center",
       description: "Integrated multispecialty clinical practice with multi-doctor consultation suites.",

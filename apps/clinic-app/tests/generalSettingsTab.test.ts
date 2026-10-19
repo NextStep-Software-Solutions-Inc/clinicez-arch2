@@ -176,4 +176,204 @@ describe('GeneralSettingsTab — Preferred Medical Chart Layout Configuration', 
       expect(markup).toContain(opt.description);
     }
   });
+
+  test('3. Renders Clinic Specialty & Clinical Modules section with Medical, Dental, and Multi-Specialty cards', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        clinicName: 'St. Jude Family Clinic',
+        setClinicName: () => {},
+        accreditationNumber: 'PHIC-001',
+        setAccreditationNumber: () => {},
+        operatingHours: 'Mon-Fri 8am-5pm',
+        setOperatingHours: () => {},
+        slotDuration: '30',
+        setSlotDuration: () => {},
+        consultationFee: '500',
+        setConsultationFee: () => {},
+        letterheadHeader: 'St. Jude Clinic',
+        setLetterheadHeader: () => {},
+        letterheadAddress: '123 Main St',
+        setLetterheadAddress: () => {},
+        letterheadContact: '0917-123-4567',
+        setLetterheadContact: () => {},
+        savingSettings: false,
+        onSavePreferences: async () => {},
+        showSkeletons: false,
+        settingsLoadError: null,
+        settings: {
+          specialtyMode: 'Medical',
+          enableDentalModule: false,
+        } as any,
+        eodReport: null,
+        eodLoadError: null,
+        onRefreshEod: async () => {},
+        formatPeso: (v) => `₱${v}`,
+      })
+    );
+
+    expect(markup).toContain('Clinic Specialty');
+    expect(markup).toContain('Clinical Modules');
+    expect(markup).toContain('Configure facility specialization and toggle specialty clinical workstations');
+    expect(markup).toContain('Medical Practice');
+    expect(markup).toContain('Dental Practice');
+    expect(markup).toContain('Multi-Specialty Clinic');
+    expect(markup).toContain('Save specialty preferences');
+  });
+
+  test('4. In Medical specialty mode: Dental Chart Module is marked Inactive and toggle is disabled', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        clinicName: 'General Med Clinic',
+        setClinicName: () => {},
+        accreditationNumber: 'PHIC-001',
+        setAccreditationNumber: () => {},
+        operatingHours: 'Mon-Fri 8am-5pm',
+        setOperatingHours: () => {},
+        slotDuration: '30',
+        setSlotDuration: () => {},
+        consultationFee: '500',
+        setConsultationFee: () => {},
+        letterheadHeader: 'St. Jude Clinic',
+        setLetterheadHeader: () => {},
+        letterheadAddress: '123 Main St',
+        setLetterheadAddress: () => {},
+        letterheadContact: '0917-123-4567',
+        setLetterheadContact: () => {},
+        savingSettings: false,
+        onSavePreferences: async () => {},
+        showSkeletons: false,
+        settingsLoadError: null,
+        specialtyMode: 'Medical',
+        enableDentalModule: false,
+        settings: {
+          specialtyMode: 'Medical',
+          enableDentalModule: false,
+        } as any,
+        eodReport: null,
+        eodLoadError: null,
+        onRefreshEod: async () => {},
+        formatPeso: (v) => `₱${v}`,
+      })
+    );
+
+    expect(markup).toContain('Inactive in Medical Mode');
+    expect(markup).toContain('Select Dental or Multi-Specialty to activate dental charting');
+  });
+
+  test('5. In Dental specialty mode: Dental Chart Module is Permanently Active and toggle is locked', () => {
+    const markup = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        clinicName: 'Bright Smiles Dental Clinic',
+        setClinicName: () => {},
+        accreditationNumber: 'DENT-001',
+        setAccreditationNumber: () => {},
+        operatingHours: 'Mon-Fri 9am-6pm',
+        setOperatingHours: () => {},
+        slotDuration: '45',
+        setSlotDuration: () => {},
+        consultationFee: '800',
+        setConsultationFee: () => {},
+        letterheadHeader: 'Bright Smiles',
+        setLetterheadHeader: () => {},
+        letterheadAddress: '456 Dental Ave',
+        setLetterheadAddress: () => {},
+        letterheadContact: '0917-888-9999',
+        setLetterheadContact: () => {},
+        savingSettings: false,
+        onSavePreferences: async () => {},
+        showSkeletons: false,
+        settingsLoadError: null,
+        specialtyMode: 'Dental',
+        enableDentalModule: true,
+        settings: {
+          specialtyMode: 'Dental',
+          enableDentalModule: true,
+        } as any,
+        eodReport: null,
+        eodLoadError: null,
+        onRefreshEod: async () => {},
+        formatPeso: (v) => `₱${v}`,
+      })
+    );
+
+    expect(markup).toContain('Permanently Active (Dental Practice)');
+    expect(markup).toContain('The FDI odontogram, tooth surface tracking, and dental procedure catalog are permanently active');
+  });
+
+  test('6. In Multi-Specialty mode: Dental Chart Module toggle is enabled and reflects active status', () => {
+    const markupActive = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        clinicName: 'Metro Polymedic Center',
+        setClinicName: () => {},
+        accreditationNumber: 'POLY-001',
+        setAccreditationNumber: () => {},
+        operatingHours: '24/7',
+        setOperatingHours: () => {},
+        slotDuration: '30',
+        setSlotDuration: () => {},
+        consultationFee: '600',
+        setConsultationFee: () => {},
+        letterheadHeader: 'Metro Polymedic',
+        setLetterheadHeader: () => {},
+        letterheadAddress: '789 Highway',
+        setLetterheadAddress: () => {},
+        letterheadContact: '0917-555-1234',
+        setLetterheadContact: () => {},
+        savingSettings: false,
+        onSavePreferences: async () => {},
+        showSkeletons: false,
+        settingsLoadError: null,
+        specialtyMode: 'Multi-Specialty',
+        enableDentalModule: true,
+        settings: {
+          specialtyMode: 'Multi-Specialty',
+          enableDentalModule: true,
+        } as any,
+        eodReport: null,
+        eodLoadError: null,
+        onRefreshEod: async () => {},
+        formatPeso: (v) => `₱${v}`,
+      })
+    );
+
+    expect(markupActive).toContain('Active');
+    expect(markupActive).toContain('Enables adult (11–48) and child (51–85) FDI odontograms');
+
+    const markupDisabled = renderToStaticMarkup(
+      React.createElement(GeneralSettingsTab, {
+        clinicName: 'Metro Polymedic Center',
+        setClinicName: () => {},
+        accreditationNumber: 'POLY-001',
+        setAccreditationNumber: () => {},
+        operatingHours: '24/7',
+        setOperatingHours: () => {},
+        slotDuration: '30',
+        setSlotDuration: () => {},
+        consultationFee: '600',
+        setConsultationFee: () => {},
+        letterheadHeader: 'Metro Polymedic',
+        setLetterheadHeader: () => {},
+        letterheadAddress: '789 Highway',
+        setLetterheadAddress: () => {},
+        letterheadContact: '0917-555-1234',
+        setLetterheadContact: () => {},
+        savingSettings: false,
+        onSavePreferences: async () => {},
+        showSkeletons: false,
+        settingsLoadError: null,
+        specialtyMode: 'Multi-Specialty',
+        enableDentalModule: false,
+        settings: {
+          specialtyMode: 'Multi-Specialty',
+          enableDentalModule: false,
+        } as any,
+        eodReport: null,
+        eodLoadError: null,
+        onRefreshEod: async () => {},
+        formatPeso: (v) => `₱${v}`,
+      })
+    );
+
+    expect(markupDisabled).toContain('Disabled');
+  });
 });

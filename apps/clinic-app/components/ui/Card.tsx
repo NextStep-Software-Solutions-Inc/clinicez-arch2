@@ -9,9 +9,10 @@ export interface CardProps {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   variant?: 'default' | 'elevated' | 'outlined' | 'subtle';
+  testID?: string;
 }
 
-export function Card({ children, style, variant = 'default' }: CardProps) {
+export function Card({ children, style, variant = 'default', testID }: CardProps) {
   const { multiplier, cardPadding } = useUiDensity();
   const variantStyles = getCardVariantStyles(variant);
   const densityStyles =
@@ -22,7 +23,7 @@ export function Card({ children, style, variant = 'default' }: CardProps) {
           borderRadius: Math.max(6, Math.round(theme.radii.lg * multiplier)),
         }
       : null;
-  return <View style={[styles.card, variantStyles, densityStyles, style]}>{children}</View>;
+  return <View testID={testID} style={[styles.card, variantStyles, densityStyles, style]}>{children}</View>;
 }
 
 export interface CardHeaderProps {

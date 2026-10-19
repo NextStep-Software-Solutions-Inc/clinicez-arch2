@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable, Image } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
@@ -14,8 +14,9 @@ import SecuritySection from './SecuritySection';
 import AppUpdatesSettingsCard from './AppUpdatesSettingsCard';
 import EdgeServerSwitcherSection from './EdgeServerSwitcherSection';
 import { theme } from '../../constants/theme';
-import { DailyEodReport, ClinicSettingsRecord } from '../../services/clinicService';
+import { clinicService, DailyEodReport, ClinicSettingsRecord } from '../../services/clinicService';
 import { CHART_LAYOUT_OPTIONS, type ChartLayoutMode } from '../chart/types';
+import { ToggleSwitch } from './FacilityReadinessTab';
 import { InfoRow } from './common';
 import JoinLinkSettingsCard from './JoinLinkSettingsCard';
 import PatientSearchConfigSection from './PatientSearchConfigSection';
@@ -30,6 +31,43 @@ import { Alert, notify } from '../../utils/feedback';
 import LogoCropModal from './LogoCropModal';
 import ColorBrandingSection from './ColorBrandingSection';
 import DevDataSeederCard from './DevDataSeederCard';
+
+export type ClinicSpecialtyMode = 'Medical' | 'Dental' | 'Multi-Specialty';
+
+export interface SpecialtyOption {
+  id: ClinicSpecialtyMode;
+  label: string;
+  badge: string;
+  icon: 'medical' | 'scan' | 'clinic';
+  description: string;
+}
+
+export const CLINIC_SPECIALTY_OPTIONS: SpecialtyOption[] = [
+  {
+    id: 'Medical',
+    label: 'Medical Practice',
+    badge: 'General & Family Medicine',
+    icon: 'medical',
+    description:
+      'Standard clinical workstation with medical physical examination templates, vital signs triage, and prescription workflows. Dental chart module is disabled.',
+  },
+  {
+    id: 'Dental',
+    label: 'Dental Practice',
+    badge: 'Exclusive Dentistry',
+    icon: 'scan',
+    description:
+      'Odontogram dental workstation with FDI adult (11–48) and child (51–85) charts, surface tracking, and quick-order dental procedures. General medical physical exam forms are disabled and dental module is permanently active.',
+  },
+  {
+    id: 'Multi-Specialty',
+    label: 'Multi-Specialty Clinic',
+    badge: 'Medical & Dental Care',
+    icon: 'clinic',
+    description:
+      'Integrated healthcare facility combining general medical consultations and dental care. The dental chart module can be enabled or disabled according to your facility’s clinical workflows.',
+  },
+];
 
 interface GeneralSettingsTabProps {
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
@@ -61,6 +99,10 @@ interface GeneralSettingsTabProps {
   onRefreshEod: () => Promise<void>;
   formatPeso: (v: number | undefined | null) => string;
   onNavigatePatients?: () => void;
+  specialtyMode?: ClinicSpecialtyMode;
+  setSpecialtyMode?: (v: ClinicSpecialtyMode) => void;
+  enableDentalModule?: boolean;
+  setEnableDentalModule?: (v: boolean) => void;
 }
 
 export default function GeneralSettingsTab({
@@ -93,11 +135,86 @@ export default function GeneralSettingsTab({
   eodLoadError,
   onRefreshEod,
   formatPeso,
+  specialtyMode,
+  setSpecialtyMode,
+  enableDentalModule,
+  setEnableDentalModule,
 }: GeneralSettingsTabProps) {
   const { clinicLogo, setClinicLogo } = useClinic();
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [cropModalVisible, setCropModalVisible] = useState(false);
   const [pendingLogoUri, setPendingLogoUri] = useState<string | null>(null);
+
+  // Clinic Specialty & Dental Module State
+  const [internalSpecialty, setInternalSpecialty] = useState<ClinicSpecialtyMode>(() => {
+    if (specialtyMode) return specialtyMode;
+    if (settings?.specialtyMode === 'MultiSpecialty' || settings?.specialtyMode === 'Multi-Specialty') {
+      return 'Multi-Specialty';
+    }
+    if (settings?.specialtyMode === 'Dental') return 'Dental';
+    return 'Medical';
+  });
+
+  const [internalDentalEnabled, setInternalDentalEnabled] = useState<boolean>(() => {
+    if (enableDentalModule !== undefined) return enableDentalModule;
+    if (settings?.specialtyMode === 'Dental') return true;
+    return Boolean(settings?.enableDentalModule);
+  });
+
+  const [savingSpecialty, setSavingSpecialty] = useState(false);
+
+  useEffect(() => {
+    if (settings?.specialtyMode) {
+      const mode = (settings.specialtyMode === 'MultiSpecialty' ? 'Multi-Specialty' : settings.specialtyMode) as ClinicSpecialtyMode;
+      setInternalSpecialty(mode);
+      if (mode === 'Dental') {
+        setInternalDentalEnabled(true);
+      } else if (settings.enableDentalModule !== undefined) {
+        setInternalDentalEnabled(Boolean(settings.enableDentalModule));
+      }
+    }
+  }, [settings?.specialtyMode, settings?.enableDentalModule]);
+
+  const effectiveSpecialty = specialtyMode ?? internalSpecialty;
+  const effectiveDentalEnabled =
+    effectiveSpecialty === 'Dental'
+      ? true
+      : effectiveSpecialty === 'Medical'
+      ? false
+      : (enableDentalModule ?? internalDentalEnabled);
+
+  const handleSelectSpecialty = (mode: ClinicSpecialtyMode) => {
+    setInternalSpecialty(mode);
+    setSpecialtyMode?.(mode);
+    if (mode === 'Dental') {
+      setInternalDentalEnabled(true);
+      setEnableDentalModule?.(true);
+    } else if (mode === 'Medical') {
+      setInternalDentalEnabled(false);
+      setEnableDentalModule?.(false);
+    }
+  };
+
+  const handleToggleDental = (nextVal: boolean) => {
+    if (effectiveSpecialty === 'Dental' || effectiveSpecialty === 'Medical') return;
+    setInternalDentalEnabled(nextVal);
+    setEnableDentalModule?.(nextVal);
+  };
+
+  const handleSaveSpecialty = async () => {
+    setSavingSpecialty(true);
+    const [updated, err] = await clinicService.updateSettings({
+      specialtyMode: effectiveSpecialty,
+      enableDentalModule: effectiveDentalEnabled,
+    });
+    setSavingSpecialty(false);
+    if (err || !updated) {
+      notify.error(err?.message || 'Failed to update clinic specialty settings.');
+      return;
+    }
+    notify.success('Clinic specialty settings saved.');
+    onSettingsUpdated?.(updated);
+  };
 
   const handlePickLogo = async () => {
     setUploadingLogo(true);
@@ -315,6 +432,127 @@ export default function GeneralSettingsTab({
         showSkeletons={showSkeletons}
         onSettingsUpdated={onSettingsUpdated}
       />
+
+      {/* Clinic Specialty Mode & Dental Module */}
+      <Card>
+        <CardHeader
+          title="Clinic Specialty & Clinical Modules"
+          subtitle="Configure facility specialization and toggle specialty clinical workstations (Medical, Dental, Multi-Specialty)"
+        />
+        <CardContent>
+          {showSkeletons ? (
+            <SkeletonList rows={3} />
+          ) : (
+            <View style={styles.specialtyContainer}>
+              <View style={styles.layoutSelectorGrid}>
+                {CLINIC_SPECIALTY_OPTIONS.map((opt) => {
+                  const isSelected = effectiveSpecialty === opt.id;
+                  return (
+                    <Pressable
+                      key={opt.id}
+                      onPress={() => handleSelectSpecialty(opt.id)}
+                      style={({ pressed }) => [
+                        styles.layoutCard,
+                        isSelected && styles.layoutCardSelected,
+                        pressed && styles.layoutCardPressed,
+                      ]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${opt.label} (${opt.badge})`}
+                    >
+                      <View style={styles.layoutCardHeader}>
+                        <View style={styles.layoutCardIconTitle}>
+                          <View style={[styles.layoutIconWrap, isSelected && styles.layoutIconWrapSelected]}>
+                            <Icon
+                              name={opt.icon}
+                              size={theme.sizes.iconLg}
+                              color={isSelected ? theme.colors.onPrimary : theme.colors.primaryDark}
+                            />
+                          </View>
+                          <View style={styles.layoutTitleGroup}>
+                            <ThemedText
+                              variant="bodyBold"
+                              color={isSelected ? theme.colors.primaryDark : theme.colors.text}
+                            >
+                              {opt.label}
+                            </ThemedText>
+                            <Badge
+                              label={opt.badge}
+                              variant={isSelected ? 'info' : 'neutral'}
+                              size="sm"
+                            />
+                          </View>
+                        </View>
+
+                        <View style={[styles.radioOuter, isSelected && styles.radioOuterSelected]}>
+                          {isSelected && <View style={styles.radioInner} />}
+                        </View>
+                      </View>
+
+                      <ThemedText
+                        variant="caption"
+                        color={theme.colors.textSecondary}
+                        style={styles.layoutDescription}
+                      >
+                        {opt.description}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* Dental Module Control Box */}
+              <View style={styles.dentalModuleBox}>
+                <View style={styles.dentalModuleHeader}>
+                  <View style={styles.dentalModuleTitleGroup}>
+                    <View style={styles.dentalModuleIconBadgeRow}>
+                      <Icon name="scan" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
+                        Dental Chart Module
+                      </ThemedText>
+                      {effectiveSpecialty === 'Dental' && (
+                        <Badge label="Permanently Active (Dental Practice)" variant="info" size="sm" />
+                      )}
+                      {effectiveSpecialty === 'Medical' && (
+                        <Badge label="Inactive in Medical Mode" variant="neutral" size="sm" />
+                      )}
+                      {effectiveSpecialty === 'Multi-Specialty' && (
+                        <Badge
+                          label={effectiveDentalEnabled ? 'Active' : 'Disabled'}
+                          variant={effectiveDentalEnabled ? 'success' : 'neutral'}
+                          size="sm"
+                        />
+                      )}
+                    </View>
+                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                      {effectiveSpecialty === 'Dental'
+                        ? 'The FDI odontogram, tooth surface tracking, and dental procedure catalog are permanently active for Dental specialty practices.'
+                        : effectiveSpecialty === 'Medical'
+                        ? 'The dental chart module is inactive in Medical Mode. Select Dental or Multi-Specialty to activate dental charting.'
+                        : 'Enables adult (11–48) and child (51–85) FDI odontograms, tooth surface tracking, and quick-order dental procedures in consultation workstations and patient medical charts.'}
+                    </ThemedText>
+                  </View>
+
+                  <ToggleSwitch
+                    value={effectiveDentalEnabled}
+                    onValueChange={handleToggleDental}
+                    disabled={effectiveSpecialty === 'Dental' || effectiveSpecialty === 'Medical'}
+                    accessibilityLabel="Toggle Dental Chart Module"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.actionsEnd}>
+                <Button
+                  title="Save specialty preferences"
+                  onPress={handleSaveSpecialty}
+                  loading={savingSpecialty || savingSettings}
+                />
+              </View>
+            </View>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Preferred Medical Chart Workstation Layout */}
       <Card>
@@ -690,5 +928,32 @@ const styles = StyleSheet.create({
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
     marginVertical: theme.spacing.lg,
+  },
+  specialtyContainer: {
+    gap: theme.spacing.md,
+  },
+  dentalModuleBox: {
+    backgroundColor: theme.colors.surfaceHighlight,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.sm,
+  },
+  dentalModuleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  dentalModuleTitleGroup: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  dentalModuleIconBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
   },
 });

@@ -105,6 +105,8 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const [letterheadAddress, setLetterheadAddress] = useState('');
   const [letterheadContact, setLetterheadContact] = useState('');
   const [preferredChartLayout, setPreferredChartLayout] = useState<'modal' | 'split' | 'drawer'>('modal');
+  const [specialtyMode, setSpecialtyMode] = useState<'Medical' | 'Dental' | 'Multi-Specialty'>('Medical');
+  const [enableDentalModule, setEnableDentalModule] = useState(false);
 
   // Modals for sub-components
   const [showAddStaffModal, setShowAddStaffModal] = useState<boolean>(() => initialIntent.shouldOpenAddStaff);
@@ -167,6 +169,13 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       if (settingsData.preferredChartLayout) {
         setPreferredChartLayout(settingsData.preferredChartLayout as 'modal' | 'split' | 'drawer');
       }
+      if (settingsData.specialtyMode) {
+        const mode = settingsData.specialtyMode === 'MultiSpecialty' ? 'Multi-Specialty' : settingsData.specialtyMode;
+        setSpecialtyMode(mode as 'Medical' | 'Dental' | 'Multi-Specialty');
+      }
+      if (settingsData.enableDentalModule !== undefined) {
+        setEnableDentalModule(settingsData.enableDentalModule);
+      }
     }
 
     setStaffLoadError(staffErr ? staffErr.message || 'Unable to load staff.' : null);
@@ -224,6 +233,8 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       letterheadAddress: letterheadAddress.trim(),
       letterheadContact: letterheadContact.trim(),
       preferredChartLayout,
+      specialtyMode,
+      enableDentalModule: specialtyMode === 'Dental' ? true : enableDentalModule,
     });
     setSavingSettings(false);
 
@@ -484,6 +495,11 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             onRefreshEod={onRefresh}
             formatPeso={formatPeso}
             onNavigatePatients={() => navigation.navigate('Patients')}
+            specialtyMode={specialtyMode}
+            setSpecialtyMode={setSpecialtyMode}
+            enableDentalModule={enableDentalModule}
+            setEnableDentalModule={setEnableDentalModule}
+            onSettingsUpdated={setSettings}
           />
         )}
 

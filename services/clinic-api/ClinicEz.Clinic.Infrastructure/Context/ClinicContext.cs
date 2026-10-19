@@ -156,6 +156,16 @@ public sealed class ClinicContext : IClinicContext, IClinicScopeSetter
         }
     }
 
+    public string? StaffName
+    {
+        get
+        {
+            var http = Http;
+            if (http is null || !IsStaff(http.User)) return null;
+            return http.User.FindFirst(ClinicClaimTypes.Name)?.Value ?? http.User.Identity?.Name;
+        }
+    }
+
     public IReadOnlyList<string> Permissions
     {
         get
