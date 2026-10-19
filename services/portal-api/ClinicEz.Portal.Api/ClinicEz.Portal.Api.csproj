@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <Version>1.1.0</Version>
     <NoWarn>$(NoWarn);NU1903</NoWarn>
     <NuGetAudit>false</NuGetAudit>
     <TargetFramework>net10.0</TargetFramework>
