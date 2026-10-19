@@ -1,138 +1,136 @@
-# Project: ClinicEZ Tri-Domain Decoupling & Publishing Governance
+# Project: Universal Pluggable Search Provider Framework across ClinicEZ
 
 ## Architecture
-ClinicEZ multi-tenant architecture decouples three distinct operational domains:
-1. **Facility Network Domain (B2B Interoperability)**:
-   - Governs cross-tenant inter-facility communication and clinical routing (e.g., clinic-to-laboratory requisitions, billing transmittals).
-   - Handled via `portal-api`, `packages/shared-dotnet/Interop`, and `services/interop-hub` using ECDSA P-256 signed envelopes and `FacilityVisibility` (`Private`, `Network`, `Public`).
-2. **Online Presence Domain (Patient Directory Discovery)**:
-   - Governs public discovery on the consumer patient mobile app directory (`apps/patient-app` and `services/patient-api`).
-   - Controlled by a two-tier publishing model:
-     - Tier 1: Workspace owner controls master directory eligibility (`IsPatientDiscoveryEligible`) in `portal-web` / `portal-api`. Newly provisioned facilities default to `Draft / Private`.
-     - Tier 2: Clinic manager in `clinic-app` / `clinic-api` verifies pre-flight readiness (Operating Hours, Licensed Doctors with PRC numbers, Service Catalog), toggles "Publish to Patient Directory", and dynamically toggles "Pause Online Booking".
-   - Synchronized downstream to `patient-api`'s PostgreSQL database (`Clinics` and `ClinicHealthcareProviders` tables) via resilient Interop Hub event `facility.directory.updated`.
-3. **Service Catalog & Clinical Intake Domain (Booking & Gated Access)**:
-   - Governs patient booking and intake access to clinical procedures, doctor schedules, and slots.
-   - Supports hybrid gated access for institutions with public online profiles but restricted intake (e.g. campus health centers like USTP CDO - UHC, corporate occupational health clinics):
-     - Public clinic profile card (address, hours, contact, accreditation) is discoverable by all patients.
-     - Clinical services and doctor appointment booking remain locked until unlocked via a 6-character Clinic Join Code / reception QR scan, or linked partner Organization membership.
+- **Layer 1: Shared Platform Standards (`packages/shared-dotnet` & `packages/shared-ts`)**:
+  - C# contracts (`ISearchProvider`, `SearchResultItemDto`, `SearchResponseDto`, `SearchBadgeDto`, `SearchQuery`) and reflection-based assembly scanning extension (`AddPluggableSearch<TAssemblyMarker>()`) in `packages/shared-dotnet/Search/`.
+  - TypeScript registry (`UniversalSearchRegistry`, singleton `universalSearchRegistry`), `SearchContributor`, `SearchItem`, and DTOs in `packages/shared-ts/search/`.
+  - Decoupled, zero-dependency foundation enabling any backend microservice and frontend app to register domain entities dynamically.
+- **Layer 2: Clinic Backend Pluggable Service (`services/clinic-api`)**:
+  - MediatR query `GlobalClinicSearchQuery` and orchestrator `GlobalClinicSearchQueryHandler` executing active providers concurrently via `Task.WhenAll` with 500ms timeout, fault-isolated try-catch, tenant isolation (`ClinicId == CurrentClinicId`), and RBAC permission checks (`HasPermission`).
+  - 7 domain feature search providers in feature folders: `PatientSearchProvider`, `ConsultationSearchProvider`, `AppointmentSearchProvider`, `SettingSearchProvider`, `QueueSearchProvider`, `BillingSearchProvider`, `LabOrderSearchProvider`.
+  - REST API endpoint `SearchController` (`GET /api/v1/search?q={query}&category={category}&limit={limit}`).
+- **Layer 3: Clinic Workstation Command Palette UX (`apps/clinic-app`)**:
+  - Header search trigger pill in `ClinicHeaderBar` and global hotkey listener (`Cmd+K`, `Ctrl+K`, `/` outside inputs, `Esc`) in `workstationShortcuts.web.ts`.
+  - Command palette `GlobalSearchModal` with 200ms debouncing, dynamic category tabs, arrow-key navigation, 4 explicit UI states (skeleton loading, empty state, zero-state quick actions, active results with semantic urgency badges: routine/urgent/emergency/neutral).
+  - Direct deep navigation dispatch to clinical records and Settings tabs (`general`, `services`, `staff`, `access`/`rbac`, `facility`/`readiness`, `philhealth`, `license`, `audit`).
+  - Strict compliance with `@clinicez/design-tokens` (brand teal `#0D6963`, semantic colors, 0 raw hex codes).
+- **Layer 4: Portal Web Cross-App Integration (`apps/portal-web`)**:
+  - Integration of `@shared/safe/search` registry into `WorkspaceSearchDialog.tsx` for cross-platform unified search parity.
 
-```
-+-----------------------------------------------------------------------------------------+
-|                                    WORKSPACE LEVEL                                      |
-|  portal-web / portal-api: Workspace Admin sets IsPatientDiscoveryEligible               |
-|  Default: Draft / Private (not visible in patient directory)                            |
-+-----------------------------------------------------------------------------------------+
-                                          │
-                                          ▼
-+-----------------------------------------------------------------------------------------+
-|                                    FACILITY LEVEL                                       |
-|  clinic-app / clinic-api: Clinic Admin verifies Readiness Checklist:                    |
-|  - Operating Hours defined                                                              |
-|  - Licensed Doctors with PRC license numbers                                            |
-|  - Active Service Catalog items                                                         |
-|  Actions: "Publish to Directory" & Dynamic "Pause Online Booking" Toggle                |
-+-----------------------------------------------------------------------------------------+
-                                          │
-                                          ▼ Interop Hub Event: facility.directory.updated
-+-----------------------------------------------------------------------------------------+
-|                                     INTEROP HUB                                         |
-|  Resilient Outbox / Relay forwards validated envelope to patient-api                    |
-|  Authorizes both Portal control plane and Clinic facility senders                       |
-+-----------------------------------------------------------------------------------------+
-                                          │
-                                          ▼
-+-----------------------------------------------------------------------------------------+
-|                                     CONSUMER LEVEL                                      |
-|  patient-api: Upserts Clinics, ClinicHealthcareProviders, ClinicServices.               |
-|  CatalogSeeder hardened: zero deletion of real tenant clinics; real clinics prioritized.|
-|  patient-app: Discover / Explore screens render published clinics.                      |
-|  - Public Clinic: Open service catalog & appointment booking.                           |
-|  - Hybrid Gated Clinic: Public profile card + Locked Catalog CTA                        |
-|    (Unlock via 6-char Join Code / QR Scan or Partner Organization membership).          |
-+-----------------------------------------------------------------------------------------+
-```
+---
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | Master Directory Eligibility (`IsPatientDiscoveryEligible`) | Workspace owner control in `portal-api` & `portal-web`. Newly created facilities default to `Draft / Private`. | M1, M2 | Survey 1.1, 2.1 |
-| 2 | Facility Readiness Evaluation & Checklist | Enforce Operating Hours, Licensed Doctors with PRC numbers, and Active Services before publishing in `clinic-api` & `clinic-app`. | M1, M2 | Survey 1.2, 2.2 |
-| 3 | Clinic Publishing & Booking Pause Controls | Clinic manager toggles "Publish to Patient Directory" and dynamically toggles "Pause Online Booking" in `clinic-api` & `clinic-app`. | M1, M2 | Survey 1.2, 2.2 |
-| 4 | Resilient Interop Hub Directory Synchronization | Event `facility.directory.updated` carries services and booking status; `patient-api` handler accepts clinic & portal senders and upserts PostgreSQL `Clinics`, `Providers`, `Services`. | M1 | Survey 1.3 |
-| 5 | Catalog Seeder Hardening & Real Clinic Prioritization | Prevent `CatalogSeeder.cs` from wiping real synced tenant clinics on dev startup; prioritize real clinics over demo seeds. | M1 | Survey 1.4 |
-| 6 | Hybrid Gated Intake Access Backend | `patient-api` endpoints support gated clinic detail, join code unlock (`JoinClinicByCodeCommand`), and organization membership resolution. | M1 | Survey 1.4 |
-| 7 | Workspace Governance UI in `portal-web` | Add "Enable Patient App Discovery" toggle and status badges in `FacilitySettingsHub.tsx` conforming to `@clinicez/design-tokens`. | M2 | Survey 2.1 |
-| 8 | Clinic Governance & Capacity Workstation in `clinic-app` | Readiness checklist card with Operating Hours, Directory Publishing switch, and Capacity Pause switch conforming to `@clinicez/design-tokens`. | M2 | Survey 2.2 |
-| 9 | Patient App Discovery of Published Clinics | Patient app displays published clinics in `/clinics` search and Explore tab, filtering out unpublished/draft clinics. | M3 | Survey 3.1 |
-| 10 | Hybrid Gated Service Catalog UI in `patient-app` | `<GatedServiceCatalogLockedCard>` displaying public clinic details with "Enter Join Code / Scan QR" CTA and "Join Partner Organization". | M3 | Survey 3.2 |
-| 11 | Join Code & QR Scan Unlock Modal in `patient-app` | Interactive 6-character code entry and QR scan to unlock clinic services and booking in real time. | M3 | Survey 3.2 |
-| 12 | Design System Compliance & Quality Audit | Zero raw hex values, 4-state UI coverage, clinical urgency tokens across all apps, and passing automated test suites. | M4 | Survey 1.5, 2.3, 3.3 |
+| 1 | `ISearchProvider` C# Interface | Universal contract for pluggable backend search providers | M1 | Survey |
+| 2 | `SearchResultItemDto` & DTOs | Unified immutable records for search items and envelopes | M1 | Survey |
+| 3 | `AddPluggableSearch<T>` DI Extension | Reflection assembly scanning for zero-touch provider registration | M1 | Survey |
+| 4 | Shared TS Registry & Contributor | `universalSearchRegistry.ts` and `SearchContributor` contracts | M1 | Survey |
+| 5 | Shared Contracts Unit Tests | Tests for shared .NET and TS search contracts and registry | M1 | Survey |
+| 6 | `GlobalClinicSearchQuery` & Handler | MediatR concurrent orchestrator using `Task.WhenAll` | M2 | Survey |
+| 7 | Backend Fault Tolerance & Timeout | 500ms linked CTS timeout and per-provider try-catch isolation | M2 | Survey |
+| 8 | Multi-Tenant & Clinic Isolation | Enforcement of `ClinicId == CurrentClinicId` across all queries | M2 | Survey |
+| 9 | RBAC Permission Pre-Filtering | Skipping unpermitted providers before query execution | M2 | Survey |
+| 10 | `PatientSearchProvider` | Queries patients by name, PIN, code, DOB, contact, Senior/PWD | M2 | Survey |
+| 11 | `ConsultationSearchProvider` | Queries encounters by SOAP notes, diagnoses, ICD-10, clinician | M2 | Survey |
+| 12 | `AppointmentSearchProvider` | Queries appointments by patient, doctor, date, status, reason | M2 | Survey |
+| 13 | `QueueSearchProvider` | Queries active OPD tickets by number, priority, station | M2 | Survey |
+| 14 | `LabOrderSearchProvider` | Queries diagnostic orders by order number, test name, panic flags | M2 | Survey |
+| 15 | `BillingSearchProvider` | Queries financial records by invoice number, patient, balance | M2 | Survey |
+| 16 | `SettingSearchProvider` | Queries rooms, services catalog & fees, staff roster, facility info | M2 | Survey |
+| 17 | `SearchController` REST Endpoint | `GET /api/v1/search` with whitespace query early return | M2 | Survey |
+| 18 | Backend Unit & Integration Tests | Automated test suite for query handler and 7 providers | M2 | Survey |
+| 19 | Clinic Header Bar Search Pill | Desktop search input pill and mobile search icon in `ClinicHeaderBar` | M3 | Survey |
+| 20 | Workstation Global Hotkeys | `Cmd+K`, `Ctrl+K`, and `/` outside inputs with `isInput` guard | M3 | Survey |
+| 21 | Debounced Query Execution (200ms) | Keystroke debounce delaying network queries by 200ms | M3 | Survey |
+| 22 | Command Palette 4 UI States | Skeletons, empty state, zero-state quick actions, active results | M3 | Survey |
+| 23 | Dynamic Category Filter Tabs | Horizontal category pills dynamically derived from active providers | M3 | Survey |
+| 24 | Keyboard Result Navigation | Arrow Up/Down navigation, active index highlight, Enter dispatch, Esc | M3 | Survey |
+| 25 | Deep Navigation Dispatch | Direct routing to target records and Settings tabs | M3 | Survey |
+| 26 | Design Token Governance | Strict `@clinicez/design-tokens` compliance (0 raw hex codes) | M3 | Survey |
+| 27 | Portal Web Search Integration | Integration of shared registry into `WorkspaceSearchDialog.tsx` | M4 | Survey |
+| 28 | Comprehensive E2E Verification | 100% pass of Tiers 1-4 E2E tests and Tier 5 adversarial hardening | M5 | Survey |
+
+---
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Tri-Domain Backend Models, Governance & Interop Sync | `portal-api`, `clinic-api`, `patient-api`, `packages/shared-dotnet`, `interop-hub` | none | DONE |
-| M2 | Two-Tier Governance UI in Portal & Clinic App | `apps/portal-web`, `apps/clinic-app` | M1 | DONE |
-| M3 | Patient App Public Discovery & Hybrid Gated Intake | `apps/patient-app` | M1, M2 | DONE |
-| M4 | E2E Testing, Token Audits & Regression Defense | All apps, test runners, token linters | M1, M2, M3 | DONE |
+| M1 | Shared Platform Search Standards | `packages/shared-dotnet/Search/` and `packages/shared-ts/search/` | none | IN_PROGRESS |
+| M2 | Clinic Backend Pluggable Search Core & 7 Feature Providers | `services/clinic-api` MediatR orchestrator, 7 domain providers, `SearchController`, unit tests | M1 | PLANNED |
+| M3 | Clinic Workstation Command Palette UX & Deep Navigation | `apps/clinic-app` `GlobalSearchModal`, `ClinicHeaderBar`, shortcuts, category tabs, deep navigation | M1, M2 | PLANNED |
+| M4 | Portal Web Cross-App Integration | `apps/portal-web` `WorkspaceSearchDialog` integration with shared search | M1 | PLANNED |
+| M5 | Final Milestone: 100% E2E Test Pass & Adversarial Hardening | Pass 100% of E2E test suite (Tiers 1-4) and Tier 5 adversarial stress testing | M2, M3, M4 | PLANNED |
+
+---
 
 ## Interface Contracts
 
-### 1. `portal-api` ↔ Workspace Admins
-- `Facility`:
-  - `IsPatientDiscoveryEligible`: bool (default `false`)
-- `PUT /api/v1/facilities/{id}/discovery-eligibility`:
-  - Request: `{ isEligible: boolean }`
-  - Response: HTTP 200 `{ facilityId, isEligible, updatedAt }`
+### Shared .NET (`packages/shared-dotnet/Search/`)
+- `ISearchProvider`:
+  - `string Category { get; }`
+  - `int Priority { get; }`
+  - `string? RequiredPermission { get; }`
+  - `Task<IReadOnlyList<SearchResultItemDto>> SearchAsync(string query, Guid tenantId, int limit, CancellationToken ct);`
+- `SearchResultItemDto(string Id, string Category, string Title, string Subtitle, string? BadgeText, string? BadgeVariant, string TargetRoute, Dictionary<string, string>? RouteParams, SearchBadgeDto? Badge)`
+- `SearchResponseDto(IReadOnlyList<SearchResultItemDto> Items, int TotalCount)`
+- `SearchServiceExtensions.AddPluggableSearch<TAssemblyMarker>(IServiceCollection services)`
 
-### 2. `clinic-api` ↔ Clinic Managers
-- `ClinicSettings`:
-  - `IsDirectoryPublished`: bool (default `false`)
-  - `IsOnlineBookingPaused`: bool (default `false`)
-- `GET /api/v1/clinic-settings/readiness`:
-  - Response: `{ isReady: boolean, checks: { hasOperatingHours: bool, hasLicensedDoctors: bool, hasActiveServices: bool, hasLetterhead: bool } }`
-- `PUT /api/v1/clinic-settings/directory-publishing`:
-  - Request: `{ isPublished: boolean }`
-  - Validates `isReady && isWorkspaceEligible`. Enqueues `facility.directory.updated`.
-- `PUT /api/v1/clinic-settings/booking-pause`:
-  - Request: `{ isPaused: boolean }`
-  - Enqueues `facility.directory.updated`.
+### Shared TypeScript (`packages/shared-ts/search/`)
+- `SearchBadgeVariant`: `'routine' | 'urgent' | 'emergency' | 'neutral'`
+- `SearchItem`: `{ id, category, title, subtitle, badgeText?, badgeVariant?, targetRoute, routeParams?, onSelect? }`
+- `SearchContributor`: `{ id, category, categoryLabel, priority?, requiredPermission?, search: (query, signal?) => Promise<SearchItem[]> | SearchItem[] }`
+- `universalSearchRegistry`: `{ register(contributor), unregister(id), getContributors(), getCategories(), clear() }`
 
-### 3. Interop Hub Event: `facility.directory.updated`
-- Topic / Type: `InteropTypes.FacilityDirectoryUpdated` (`"facility.directory.updated"`)
-- Senders Authorized:
-  - `Party.Portal`
-  - `Party.ForFacility(facilityId, FacilityType.Clinic)`
-- Payload (`FacilityCreatedEvent` / directory contract):
-  - `ResourceId`: Guid
-  - `TenantId`: Guid
-  - `Name`: string
-  - `FacilityType`: FacilityType
-  - `IsPublic`: bool (`IsPatientDiscoveryEligible && IsDirectoryPublished`)
-  - `SupportsAppointments`: bool (`!IsOnlineBookingPaused`)
-  - `IsGated`: bool (true if clinic has private service catalog)
-  - `JoinCode`: string? (6-character code)
-  - `OperatingHours`: string?
-  - `Providers`: IReadOnlyList<FacilityProviderDto>
-  - `Services`: IReadOnlyList<ClinicServiceDto>
+### REST API (`GET /api/v1/search`)
+- Query parameters: `q` (string, required), `category` (string, optional), `limit` (int, optional, default 20)
+- Response: `ApiResponse<SearchResponseDto>`
 
-### 4. `patient-api` ↔ `patient-app`
-- `GET /api/v1/clinics`:
-  - Returns published clinics (`IsPublic == true`), sorted by `FeaturedScore` descending, then name.
-- `GET /api/v1/clinics/{id}`:
-  - Response: `{ id, name, address, operatingHours, accreditation, isGated, isUnlocked, isBookingPaused, services: [...], providers: [...] }`
-  - If `isGated && !isUnlocked`, `services` and `providers` are redacted/empty with `isUnlocked: false`.
-- `POST /api/v1/clinics/{id}/unlock`:
-  - Request: `{ joinCode?: string, organizationId?: Guid }`
-  - Response: `{ success: boolean, isUnlocked: boolean, message?: string }`
+---
 
 ## Code Layout
-- `services/portal-api/`: Workspace & facility management, master directory eligibility.
-- `services/clinic-api/`: Clinic settings, readiness evaluator, publishing commands, capacity pause.
-- `services/patient-api/`: Consumer clinic catalogue, seeder hardening, hybrid gated access handler.
-- `packages/shared-dotnet/`: Interop contracts, `FacilityCreatedEvent`, common DTOs.
-- `apps/portal-web/`: Next.js workspace admin UI, `FacilitySettingsHub.tsx`.
-- `apps/clinic-app/`: React Native Expo clinic workstation, `FacilityReadinessTab.tsx`, `Settings.screen.tsx`.
-- `apps/patient-app/`: React Native Expo consumer patient app, `ExploreClinics.screen.tsx`, `ClinicDetails.screen.tsx`, `GatedServiceCatalogLockedCard.tsx`.
-- `packages/design-tokens/`: Semantic tokens, typography, radii, palettes.
+- `packages/shared-dotnet/Search/`
+  - `ISearchProvider.cs`
+  - `SearchResultItemDto.cs`
+  - `SearchResponseDto.cs`
+  - `SearchBadgeDto.cs`
+  - `SearchQuery.cs`
+  - `SearchServiceExtensions.cs`
+- `packages/shared-dotnet.Tests/Search/`
+  - `SearchPluggableFrameworkTests.cs`
+- `packages/shared-ts/search/`
+  - `dto.ts`
+  - `searchRegistry.ts`
+  - `index.ts`
+- `packages/shared-ts/`
+  - `search.test.ts`
+  - `index.ts` (re-exports `./search`)
+- `services/clinic-api/ClinicEz.Clinic.Application/`
+  - `Features/Search/Queries/GlobalClinicSearchQuery.cs`
+  - `Features/Search/Queries/GlobalClinicSearchQueryHandler.cs`
+  - `Features/Patients/Search/PatientSearchProvider.cs`
+  - `Features/Consultations/Search/ConsultationSearchProvider.cs`
+  - `Features/Appointments/Search/AppointmentSearchProvider.cs`
+  - `Features/Queue/Search/QueueSearchProvider.cs`
+  - `Features/LabOrders/Search/LabOrderSearchProvider.cs`
+  - `Features/Billing/Search/BillingSearchProvider.cs`
+  - `Features/Settings/Search/SettingSearchProvider.cs`
+  - `DependencyInjection.cs`
+- `services/clinic-api/ClinicEz.Clinic.Api/Controllers/`
+  - `SearchController.cs`
+- `services/clinic-api/ClinicEz.Clinic.Application.Tests/Features/Search/`
+  - `GlobalClinicSearchQueryHandlerTests.cs`
+  - `DomainSearchProvidersTests.cs`
+- `apps/clinic-app/`
+  - `components/search/GlobalSearchModal.tsx`
+  - `components/search/SearchResultItemRow.tsx`
+  - `components/search/SearchCategoryTabs.tsx`
+  - `components/search/GlobalSearchProvider.tsx`
+  - `components/layout/ClinicHeaderBar.tsx`
+  - `components/layout/ResponsiveLayout.tsx`
+  - `utils/workstationShortcuts.web.ts`
+  - `utils/workstationShortcuts.ts`
+  - `services/clinicService.ts`
+  - `tests/globalSearchModal.test.ts`
+- `apps/portal-web/`
+  - `src/components/dashboard/WorkspaceSearchDialog.tsx`

@@ -614,7 +614,13 @@ export default function FacilityOnboardingWizard({
           </div>
 
           {/* Stepper Progress Bar */}
-          <div className={`grid grid-cols-${stepsList.length} gap-2 pt-2`}>
+          <div
+            className={cn(
+              "grid gap-2 pt-2",
+              stepsList.length === 2 ? "grid-cols-2" : "grid-cols-4"
+            )}
+            style={{ gridTemplateColumns: `repeat(${stepsList.length}, minmax(0, 1fr))` }}
+          >
             {stepsList.map((s) => {
               const isPast = currentStep > s.step;
               const isCurrent = currentStep === s.step;
