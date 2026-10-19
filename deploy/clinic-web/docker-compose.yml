@@ -16,6 +16,16 @@ services:
     restart: unless-stopped
     ports:
       - "${CLINIC_WEB_PORT:-8080}:80"
+    # Proportional Resource Allocation (Lightweight static web / nginx reverse proxy)
+    cpu_shares: ${CLINIC_WEB_CPU_SHARES:-256}
+    deploy:
+      resources:
+        reservations:
+          cpus: '${CLINIC_WEB_CPUS_RESERVATION:-0.05}'
+          memory: ${CLINIC_WEB_MEM_RESERVATION:-32M}
+        limits:
+          cpus: '${CLINIC_WEB_CPUS_LIMIT:-0.50}'
+          memory: ${CLINIC_WEB_MEM_LIMIT:-128M}
     environment:
       # Where nginx forwards /api/ (infrastructure for this container; not an app setting).
       CLINIC_API_UPSTREAM: ${CLINIC_API_UPSTREAM:?CLINIC_API_UPSTREAM must be set, e.g. http://clinic-api:8080}

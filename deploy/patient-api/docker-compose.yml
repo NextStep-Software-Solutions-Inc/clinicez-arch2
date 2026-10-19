@@ -22,8 +22,22 @@ services:
     networks:
       - data-network
       - npm-default
+    # Proportional Resource Allocation (Production VPS 1 vCPU / 2GB RAM Standard)
+    # Work-conserving: active services burst to 100% of CPU and available RAM; zero idle resources wasted.
+    cpu_shares: ${PATIENT_CPU_SHARES:-1024}
+    deploy:
+      resources:
+        reservations:
+          cpus: '${PATIENT_CPUS_RESERVATION:-0.15}'
+          memory: ${PATIENT_MEM_RESERVATION:-140M}
+        limits:
+          cpus: '${PATIENT_CPUS_LIMIT:-0.95}'
+          memory: ${PATIENT_MEM_LIMIT:-400M}
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      # Low-memory & 1 vCPU tuning for Production VPS (130.94.50.27)
+      - DOTNET_GCHeapHardLimitPercent=75
+      - DOTNET_gcServer=0
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
       - Clerk__Authority=${CLERK_AUTHORITY:?CLERK_AUTHORITY must be set}
       - Clerk__Audience=${CLERK_AUDIENCE:-}
