@@ -38,7 +38,7 @@ services:
       - DOTNET_GCHeapHardLimitPercent=75
       - DOTNET_gcServer=0
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING:?CONNECTION_STRING must be set}
-      - DbSchema=${DB_SCHEMA:-interop_hub}
+      - DbSchema=${DB_SCHEMA:-public}
       - Hub__Mode=Cloud
       - Hub__Database__AutoMigrate=${HUB_AUTO_MIGRATE:-true}
       # Optional AES-256-GCM encryption of stored envelopes: base64 of 32 random bytes. Empty stores plain JSON.

@@ -36,7 +36,7 @@ services:
       - DOTNET_GCHeapHardLimitPercent=75
       - DOTNET_gcServer=0
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING:?CONNECTION_STRING must be set}
-      - DbSchema=${DB_SCHEMA:-billing}
+      - DbSchema=${DB_SCHEMA:-public}
       # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
       - Messaging__Transport=Hub
       - Messaging__Service=billing

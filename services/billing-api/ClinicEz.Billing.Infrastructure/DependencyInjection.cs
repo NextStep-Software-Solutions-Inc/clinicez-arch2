@@ -37,8 +37,6 @@ public static class DependencyInjection
             {
                 configureDatabase(options);
             }
-
-            options.ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning));
         });
 
         services.AddScoped<IBillingDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
