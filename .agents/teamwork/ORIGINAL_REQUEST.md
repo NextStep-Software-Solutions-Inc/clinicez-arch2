@@ -1067,3 +1067,50 @@ Enforce `@clinicez/design-tokens` standards across all new and modified UI compo
 - [ ] All new UI components strictly consume `@clinicez/design-tokens` semantic tokens.
 - [ ] Token unit tests pass without regressions (`bun test packages/design-tokens/src/tokens.test.ts`).
 - [ ] Backend test suites pass (`dotnet test services/patient-api/ClinicEz.Patient.Application.Tests` and `dotnet test services/portal-api/ClinicEz.Portal.Tests`).
+
+
+## 2026-10-19T01:39:27Z
+
+This is a single self-contained feature; keep it small and focused.
+
+Implement a functional, keyboard-accessible Workspace-Wide Search Tool (⌘K / Ctrl+K) in ClinicEZ's tenant portal (apps/portal-web), replacing the unrouted placeholder icon next to Quick Create.
+
+Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Trigger Button in Sidebar
+Replace the unrouted placeholder mail icon next to 'Quick Create' in `apps/portal-web/src/components/dashboard/nav-main.tsx` with a search icon button (`IconSearch` from `@tabler/icons-react`) that opens the workspace search modal and displays an accessible tooltip showing "Search workspace (⌘K)".
+
+### R2. Workspace Search Modal (Spotlight / Command Palette)
+Create `apps/portal-web/src/components/dashboard/WorkspaceSearchDialog.tsx` using Radix Dialog (`@radix-ui/react-dialog`) that opens on click or globally when `⌘K` (Mac) or `Ctrl+K` (Windows/Linux) is pressed. The dialog must auto-focus the search input with instant search filtering.
+
+### R3. Search Index & Coverage
+The search tool must index and filter across:
+1. **Navigation & Pages**: Overview, Branches, PhilHealth YAKAP, Workspace Team, Network, Finance, Settings, Plan & Usage, Ownership, Billing.
+2. **Branches & Facilities**: Live search physical branches and their child facilities (Clinics, Laboratories, Pharmacies) via `branchService.getBranches(tenantSlug)` with address and PhilHealth tags.
+3. **Workspace Team**: Live search staff members and roles via `staffService.getTenantStaff(tenantSlug)`.
+4. **Quick Actions**: Fast shortcuts for creating branches, provisioning facilities, and inviting staff.
+
+### R4. Keyboard Navigation & UI Polish
+Provide full arrow key navigation (`ArrowDown` / `ArrowUp`) to cycle items, `Enter` key to select and navigate, and `Escape` to dismiss. Support empty state and zero-state suggestions conforming to `@clinicez/design-tokens` styling and dark/light mode.
+
+## Acceptance Criteria
+
+### Functionality & Navigation
+- [ ] Clicking the search icon next to Quick Create opens the search dialog.
+- [ ] Pressing `⌘K` or `Ctrl+K` from any route in the tenant dashboard opens/toggles the search dialog.
+- [ ] Pressing `Escape` closes the search dialog.
+- [ ] Pressing `ArrowDown` and `ArrowUp` moves active selection through search results.
+- [ ] Pressing `Enter` navigates to the selected route and closes the dialog.
+
+### Search Filtering & Content
+- [ ] Querying "branch", "clinic", "lab", or "pharmacy" filters to the respective facilities and pages.
+- [ ] Querying team members or roles filters matching staff.
+- [ ] When query is empty, displays zero-state suggested pages and quick actions.
+- [ ] When no results match, displays a helpful empty state.
+
+### Code Quality & Compatibility
+- [ ] Preserves all existing sidebar functionalities and responsiveness.
+- [ ] Strict TypeScript typing with no compile errors.

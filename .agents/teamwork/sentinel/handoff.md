@@ -1,102 +1,93 @@
-# Handoff Report: Sentinel Final Project Closure — Progressive Patient Account Claiming (Option A)
+# Handoff Report: Sentinel Completion Summary
 
-**Author:** Sentinel (`3ac45a71-51a0-499e-8aa5-a6b287b52f13`)  
-**Recipient:** Parent Caller (`f41f49df-6ed0-441b-83a9-46d42353eb53`)  
-**Date:** 2026-10-13T15:51:00Z  
-**Verdict:** **VICTORY CONFIRMED**  
-**Status:** Project Complete  
+**Task**: Workspace-Wide Search Tool (⌘K / Ctrl+K) in ClinicEZ Tenant Portal (`apps/portal-web`)  
+**Timestamp**: 2026-10-19T02:44:00Z  
+**Routing Path**: SWE Light (`teamwork_preview_swe`)  
+**Victory Audit Verdict**: **VICTORY CONFIRMED**
 
 ---
 
 ## 1. Observation
 
-1. **User Request & Scope Ingestion**:
-   - The authoritative user request was recorded verbatim to `.agents/teamwork/ORIGINAL_REQUEST.md` (timestamp `## 2026-10-13T11:39:58Z`).
-   - The request called for implementing Progressive Patient Account Claiming (Option A) across the ClinicEZ ecosystem (`portal-web`, `patient-api`, `portal-api`, `shared-dotnet`, and Interop Hub) with zero enumeration, cryptographic claim tokens, platform settings, automated email delivery (strictly 0 SMS), fast-track onboarding with Clerk, and a multi-identity conflict resolution engine adhering to `@clinicez/design-tokens` (Teal `#0D6963`) and the Philippine Data Privacy Act (RA 10173).
+1. **User Request & Routing**:
+   - Request received on 2026-10-19T01:39:27Z: implement functional, keyboard-accessible Workspace-Wide Search Tool in `apps/portal-web`, replacing placeholder icon next to Quick Create.
+   - User explicitly requested a single, self-contained focused feature ("This is a single self-contained feature; keep it small and focused.").
+   - Routed per Routing Decision Table to SWE Light (`teamwork_preview_swe`).
 
-2. **Milestone Execution & Dual-Track Orchestration**:
-   - **Track 1 (E2E Test Suite Creation)**: Authored opaque-box test suite `tests/ClinicEz.Interop.E2E/PatientClaimingFlowTests.cs` (1,332 lines) and `apps/portal-web/tests/progressiveClaim.test.ts`. Verified in `scripts/run-e2e-claiming-tests.ps1` with 82/82 tests passing. Published in `TEST_READY.md`.
-   - **Milestone 1 (Security, Tokens, Settings, Email)**: Implemented `ClaimTokenService` in `packages/shared-dotnet` (HMAC-SHA256, constant-time `FixedTimeEquals`, 43-char signature check fixing CWE-347 malleability), `SystemSettingsService` (48h TTL, store URLs), and `PublicJoinEndpoints` with `notification.email.requested` outbox queuing (0 SMS). Certified clean after adversarial challenger remediation (243 shared tests + 564 portal tests passing).
-   - **Milestone 2 (Patient API Hydration & Conflict Resolution)**: Implemented `Patient` self-referential relations (`ManagedByPatientId`), `ClaimIntakeCommandHandler`, `PatientClaimConflictResolver` (minor proxy `<18y` and PhilHealth `DD` with `ClerkUserId = null`, alternate email linking without duplicate rows, RA 10173 medical privacy guardrail blocking unrelated adults with HTTP 422 `MedicalPrivacyGuardrailException`), and transactional `ClinicMembership` creation. Certified clean after EF Core change-tracking remediation (250 application tests + 102 API tests passing).
-   - **Milestone 3 (Portal Web Progressive Claim UI & Fast-Track)**: Implemented `<ProgressiveClaimCard />` on `DigitalPassCard.tsx` with 3 benefits, primary CTA in `@clinicez/design-tokens` Teal `#0D6963` (`bg-primary`, 0 raw hex literals), 4 core UX states, `<MobileAppStoreBadges />`, `print:hidden` isolation, and Clerk autofill banner in `JoinClient.tsx` with `hasAutoHydratedRef` loop protection and `clinicez://join/{code}` smart banner. Certified clean after Challenger/Auditor recheck (201 portal tests, clean typecheck, successful Next.js build).
-   - **Milestone 4 (Full Solution Integration & Tier 5 Adversarial Hardening)**: Both Tier 5 Challengers probed backend cryptography, boundary ages, race conditions, and frontend DOM/storage privacy, issuing unanimous `APPROVE` verdicts.
+2. **Implementation & Iterative Review**:
+   - `apps/portal-web/src/components/dashboard/nav-main.tsx`:
+     - Replaced the placeholder icon with `IconSearch` (`@tabler/icons-react`) wrapped in an accessible `Tooltip` ("Search workspace (⌘K)") and button (`aria-label="Search workspace (⌘K)"`, `id="workspace-search-trigger"`).
+     - Bound to `isSearchOpen` state and integrated with route change auto-closing and mobile sidebar drawer auto-closing.
+   - `apps/portal-web/src/components/dashboard/WorkspaceSearchDialog.tsx`:
+     - Implemented using Radix Dialog (`@radix-ui/react-dialog`) with accessible `DialogTitle` and `DialogDescription`.
+     - Capture-phase global keyboard listener for `⌘K` (Mac) and `Ctrl+K` (Windows/Linux) preventing browser default.
+     - Full keyboard navigation: `ArrowDown`, `ArrowUp`, `Enter`, `Escape`.
+     - Unified multi-domain search index: 10 navigation pages, 5 quick actions, live physical branches & facilities (`branchService.getBranches`), and workspace staff (`staffService.getTenantStaff`).
+     - Zero-state suggested pages/actions and helpful empty state.
+     - Fully compliant with `@clinicez/design-tokens` with zero raw hex color values.
+     - Mobile safeguards: 16px font size to prevent iOS Safari auto-zoom, kinetic scroll guards, and `forceReleaseBodyScrollLock` teardown.
 
-3. **Mandatory Independent Victory Audit**:
-   - When Project Orchestrator `ca7b12d0-6a35-40d1-9796-313203cdeccb` reported project completion, Sentinel did not take the claim at face value and dispatched `teamwork_preview_victory_auditor` (`victory_auditor_11`, ID: `5da13317-25e0-4007-a270-44480d4b6d09`) in a blocking audit.
-   - `victory_auditor_11` completed all 3 audit phases with zero shared context from the swarm:
-     - **Phase A (Timeline & Provenance)**: Verified genuine iterative git commit history at commit `bd234ed8` (135 files committed).
-     - **Phase B (Anti-Cheating Forensics & Code Inspection)**: Verified zero fake mocks, constant-time HMAC-SHA256, RA 10173 privacy guardrail enforcement, zero SMS, design token compliance, and zero raw hex color literals.
-     - **Phase C (Independent Test Execution)**: All 10 verification commands executed independently with 100% pass rates:
-       1. `dotnet build CLINICEZ.sln`: 0 errors.
-       2. `dotnet test packages/shared-dotnet.Tests`: 243 passed, 0 failed.
-       3. `dotnet test services/portal-api/ClinicEz.Portal.Tests`: 564 passed, 0 failed.
-       4. `dotnet test services/patient-api/ClinicEz.Patient.Application.Tests`: 250 passed, 0 failed.
-       5. `dotnet test services/patient-api/ClinicEz.Patient.Api.Tests`: 102 passed, 0 failed (8 live DB integration skipped).
-       6. `bun test apps/portal-web/tests/`: 201 passed, 0 failed.
-       7. `bun run typecheck`: 0 errors.
-       8. `bun run build`: Next.js 16.2.10 production build succeeded cleanly.
-       9. `powershell -ExecutionPolicy Bypass -File scripts/run-e2e-claiming-tests.ps1`: 82/82 passed (100% green).
-       10. `git grep -E "#[0-9a-fA-F]{3,8}" apps/portal-web/src/components/join/`: 0 matches.
-   - Definitive Audit Verdict: **VICTORY CONFIRMED**.
+3. **Multi-Round Review Loop**:
+   - Round 1 Implementer (`3e70c58a-4131-4fb5-a6d1-c7082cab8057`): Initial implementation + 17 passing tests.
+   - Reviewer Round 1 (`66c500b7-1364-4ae2-b384-e8f1000177b0`): Hardened WAI-ARIA 1.2 combobox/listbox attributes, capture-phase shortcuts, and async loading indicators (20 passing tests).
+   - Reviewer Round 2 (`93f408c6-dfaa-46dc-b71c-bba615c68079`): Hardened diacritics/accents matching, regex special characters, direct ID scrollIntoView, and 800-item corpus performance (23 passing tests).
+   - Reviewer Round 3 (`9dfba40d-31f1-4676-a21f-4444941bd6df`): Hardened mobile viewport kinetic scroll guard, iOS zoom threshold, and scroll-lock teardowns (26 passing tests).
 
-4. **Resource & Background Task Cleanup**:
-   - Both Sentinel monitoring crons (`task-28` and `task-30`) were cancelled via `manage_task(Action="kill")`.
-   - All subagents (`orchestrator_13` and `victory_auditor_11`) were terminated via `manage_subagents(Action="kill_all")`.
+4. **Independent Post-Victory Audit (`victory_auditor_12`)**:
+   - Phase A (Timeline): PASS.
+   - Phase B (Integrity & Anti-Cheating): PASS. Zero facades, zero hardcoded test returns, zero bypasses.
+   - Phase C (Independent Test Execution): PASS.
+     - `bun test apps/portal-web/tests/workspaceSearchDialog.test.tsx`: 26 passed, 0 failed, 1,069 assertions (183ms).
+     - `tsc --noEmit`: 0 errors.
+     - `bun run build`: Next.js production build succeeded in 5.7s, 15/15 static pages generated.
+   - Verdict: **VICTORY CONFIRMED**.
+
+5. **Lifecycle Cleanup**:
+   - Both monitoring crons (Progress Reporting `task-30`, Liveness Check `task-32`) cancelled via `manage_task(action="kill")`.
+   - All subagents killed via `manage_subagents(action="kill_all")`.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Strict Protocol Compliance**:
-   - Sentinel followed the 4 required sentinel jobs: recorded user requests in `ORIGINAL_REQUEST.md`, ran background monitoring crons, routed via the General pattern to `teamwork_preview_orchestrator`, and enforced a blocking independent victory audit before reporting completion.
-2. **Defensive Quality Gates**:
-   - Quality was validated at every tier. Multiple challenger findings (CWE-347 signature padding, EF Core change-tracking concurrency exception, and SSR apostrophe entity escaping) were caught by challengers, blocked by forensic auditors, and remediated by workers before advancement.
-3. **Regulatory & Architectural Adherence**:
-   - Philippine Data Privacy Act (RA 10173) was rigorously validated: foreign adult merges are rejected with HTTP 422 `MedicalPrivacyGuardrailException`, minor/dependent records are partitioned under parent accounts (`ClerkUserId = null`), and Protected Health Information is never stored in client-side storage or URL strings.
-   - ClinicEZ design system standards are strictly enforced: all UI elements in `apps/portal-web/src/components/join/` consume semantic tokens with zero hardcoded hex literals.
+1. Evaluated request against Routing Decision Table: single self-contained focused UI feature -> routed to SWE Light (`teamwork_preview_swe`).
+2. Maintained authoritative `ORIGINAL_REQUEST.md` and persistent working memory in `BRIEFING.md`.
+3. Dispatched SWE Light Orchestrator and initialized background monitoring crons for user visibility and liveness guarantees.
+4. Orchestrator drove the iterative SWE Light process through implementer delivery and 3 adversarial review rounds.
+5. On victory claim, enforced mandatory independent post-victory audit via `teamwork_preview_victory_auditor` with zero shared context from the implementation swarm.
+6. Received blocking audit confirmation (**VICTORY CONFIRMED**) matching all acceptance criteria.
+7. Executed mandatory process cleanup of all crons and subagents prior to delivering final user report.
 
 ---
 
 ## 3. Caveats
 
-- **PostgreSQL Live DB Tests**: 8 tests in `services/patient-api/ClinicEz.Patient.Api.Tests` require a live running PostgreSQL server and were skipped by xUnit runner; all 1,241 in-memory application, domain, shared, and E2E Interop tests ran in-process and passed 100%.
-- **Desktop URI Protocol**: On desktop browsers without the native `patient-app` installed, clicking `clinicez://join/{code}` triggers browser protocol handling. The desktop web intake form and Clerk autofill banner remain fully functional directly beneath it.
+- In headless CLI test runs, physical mobile touch gestures and screen reader audio synthesis were verified via DOM event emulation, WAI-ARIA 1.2 specification compliance, and Next.js static compilation.
 
 ---
 
 ## 4. Conclusion
 
-Progressive Patient Account Claiming (Option A) across the ClinicEZ ecosystem is 100% implemented, verified, adversarially hardened, and independently audited.
-**Final Verdict: VICTORY CONFIRMED.**
+All functional, keyboard-accessible, accessibility, and design system requirements for the Workspace-Wide Search Tool (⌘K / Ctrl+K) in `apps/portal-web` have been completely delivered, verified across 3 review rounds, and independently audited with a **VICTORY CONFIRMED** verdict.
 
 ---
 
 ## 5. Verification Method
 
-To reproduce the verified results independently:
+To reproduce the independent audit verification:
+```bash
+export PATH="$HOME/.bun/bin:$PATH"
 
-```powershell
-# 1. Full Solution Build
-dotnet build CLINICEZ.sln
+# 1. Run workspace search test suite
+bun test apps/portal-web/tests/workspaceSearchDialog.test.tsx
 
-# 2. Shared Token Tests
-dotnet test packages/shared-dotnet.Tests
+# 2. Verify strict TypeScript type check
+cd apps/portal-web && bun run typecheck
 
-# 3. Portal API Tests
-dotnet test services/portal-api/ClinicEz.Portal.Tests
+# 3. Verify Next.js production build
+bun run build
 
-# 4. Patient API Application & API Tests
-dotnet test services/patient-api/ClinicEz.Patient.Application.Tests
-dotnet test services/patient-api/ClinicEz.Patient.Api.Tests
-
-# 5. Portal Web Unit Tests, Typecheck, and Production Build
-bun test apps/portal-web/tests/
-bun --cwd apps/portal-web run typecheck
-bun --cwd apps/portal-web run build
-
-# 6. Progressive Claiming Opaque-Box E2E Suite (52 .NET Interop + 30 Web)
-powershell -ExecutionPolicy Bypass -File scripts/run-e2e-claiming-tests.ps1
-
-# 7. Design Token Compliance (0 Raw Hex Literals)
-git grep -E "#[0-9a-fA-F]{3,8}" apps/portal-web/src/components/join/
+# 4. Verify monorepo token & billing regressions
+cd ../..
+bun test packages/design-tokens/src/tokens.test.ts apps/portal-web/tests/tenantBillingAndReceipts.test.ts
 ```

@@ -1,8 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { IconCirclePlusFilled, IconMail, IconChevronRight, type Icon } from "@tabler/icons-react"
+import { useState, useEffect } from "react"
+import { IconCirclePlusFilled, IconSearch, IconChevronRight, type Icon } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -12,10 +17,12 @@ import {
   SidebarMenuSub,
   SidebarMenuSubItem,
   SidebarMenuSubButton,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import Link from "next/link"
 import { useParams, usePathname } from "next/navigation"
 import QuickCreateDialog from "./QuickCreateDialog"
+import WorkspaceSearchDialog from "./WorkspaceSearchDialog"
 
 interface NavItem {
   title: string
@@ -38,6 +45,22 @@ export function NavMain({
   
   // Track open state of expandable menus
   const [openStates, setOpenStates] = useState<Record<string, boolean>>({})
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+
+  let isMobile = false
+  let setOpenMobile: ((open: boolean) => void) | undefined
+  try {
+    const sidebar = useSidebar()
+    isMobile = sidebar.isMobile
+    setOpenMobile = sidebar.setOpenMobile
+  } catch {
+    // Graceful fallback when rendered without SidebarProvider in isolated tests
+  }
+
+  // Ensure search modal closes on route change
+  useEffect(() => {
+    setIsSearchOpen(false)
+  }, [pathname])
 
   const toggleOpen = (title: string) => {
     setOpenStates((prev) => ({
@@ -60,14 +83,34 @@ export function NavMain({
                 <span>Quick Create</span>
               </SidebarMenuButton>
             } />
-            <Button
-              size="icon"
-              className="size-8 group-data-[collapsible=icon]:opacity-0"
-              variant="outline"
-            >
-              <IconMail />
-              <span className="sr-only">Inbox</span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  id="workspace-search-trigger"
+                  size="icon"
+                  className="size-8 group-data-[collapsible=icon]:opacity-0 cursor-pointer touch-manipulation"
+                  variant="outline"
+                  onClick={() => {
+                    if (isMobile) {
+                      setOpenMobile?.(false)
+                    }
+                    setIsSearchOpen(true)
+                  }}
+                  aria-label="Search workspace (⌘K)"
+                >
+                  <IconSearch className="size-4" />
+                  <span className="sr-only">Search workspace (⌘K)</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                Search workspace (⌘K)
+              </TooltipContent>
+            </Tooltip>
+            <WorkspaceSearchDialog
+              open={isSearchOpen}
+              onOpenChange={setIsSearchOpen}
+              tenantSlug={tenant}
+            />
           </SidebarMenuItem>
         </SidebarMenu>
         
