@@ -86,6 +86,15 @@ mock.module('react-native', () => ({
   SectionList: createMockComponent('SectionList'),
   Switch: createMockComponent('Switch'),
   TouchableOpacity: createMockComponent('TouchableOpacity'),
+  TouchableHighlight: createMockComponent('TouchableHighlight'),
+  Touchable: { Mixin: {} },
+  Image: createMockComponent('Image'),
+  ImageBackground: createMockComponent('ImageBackground'),
+  Alert: { alert: () => {} },
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
+  TurboModuleRegistry: { get: () => null, getEnforcing: () => null },
+  NativeModules: {},
+  processColor: (c: any) => c,
   Dimensions: {
     get: () => ({ width: 1280, height: 800 }),
     addEventListener: () => ({ remove: () => {} }),
@@ -151,15 +160,6 @@ mock.module('../constants/fonts', () => ({
   setCustomFontsAvailable: () => {},
 }));
 
-mock.module('../context/TextScaleContext', () => ({
-  useTextScale: () => ({ scale: 1 }),
-  TextScaleProvider: ({ children }: any) => children,
-}));
-
-mock.module('../context/UiDensityContext', () => ({
-  useUiDensity: () => ({ multiplier: 1, headerHeight: 64, sidebarWidth: 260 }),
-  UiDensityProvider: ({ children }: any) => children,
-}));
 
 mock.module('../utils/useSafeInsets', () => ({
   useSafeInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -186,6 +186,12 @@ mock.module('../context/AuthContext', () => ({
     ],
     signOut: () => {},
   }),
+  usePermission: (perm: string) => [
+    'Clinic.PatientsRead',
+    'Clinic.ConsultationsRead',
+    'Clinic.AppointmentsRead',
+    'Clinic.BillingRead',
+  ].includes(perm),
 }));
 
 mock.module('../context/StaffContext', () => ({
