@@ -99,6 +99,7 @@ public sealed class SmtpEmailSender(
         mime.Body = new BodyBuilder { HtmlBody = message.HtmlBody, TextBody = message.TextBody }.ToMessageBody();
 
         using var client = new SmtpClient();
+        client.CheckCertificateRevocation = false;
         await client.ConnectAsync(host, port, SocketOptions(smtp), cancellationToken);
         if (!string.IsNullOrEmpty(smtp.User))
         {
