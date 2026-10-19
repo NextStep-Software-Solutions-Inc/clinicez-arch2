@@ -159,25 +159,27 @@ export default function GlobalSearchModal({
     }
   }, [visible]);
 
-  // Determine displayed items based on query & activeCategory
-  const hasQuery = query.trim().length > 0;
+  // Sanitize query and activeCategory against non-string inputs (e.g. click events or undefined)
+  const safeQuery = typeof query === 'string' ? query : '';
+  const safeCategory = typeof activeCategory === 'string' ? activeCategory : 'all';
+  const hasQuery = safeQuery.trim().length > 0;
 
   const displayedItems = useMemo(() => {
     if (!hasQuery) {
-      return quickActions;
+      return quickActions || [];
     }
-    if (activeCategory.toLowerCase() === 'all') {
-      return results;
+    if (safeCategory.toLowerCase() === 'all') {
+      return results || [];
     }
-    return results.filter(
-      (r) => r.category.toLowerCase() === activeCategory.toLowerCase(),
+    return (results || []).filter(
+      (r) => (r.category || '').toLowerCase() === safeCategory.toLowerCase(),
     );
-  }, [hasQuery, quickActions, results, activeCategory]);
+  }, [hasQuery, quickActions, results, safeCategory]);
 
   // Reset activeIndex when displayed items change
   useEffect(() => {
     setActiveIndex(0);
-  }, [displayedItems.length, activeCategory]);
+  }, [displayedItems.length, safeCategory]);
 
   // Keyboard navigation within modal
   useEffect(() => {
@@ -225,8 +227,9 @@ export default function GlobalSearchModal({
 
   // Result counts by category
   const resultCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: results.length };
-    for (const item of results) {
+    const list = results || [];
+    const counts: Record<string, number> = { all: list.length };
+    for (const item of list) {
       const cat = item.category || 'General';
       counts[cat] = (counts[cat] || 0) + 1;
       counts[cat.toLowerCase()] = (counts[cat.toLowerCase()] || 0) + 1;
@@ -266,7 +269,7 @@ export default function GlobalSearchModal({
               ref={inputRef}
               role="combobox"
               accessibilityRole="combobox"
-              aria-expanded={visible && (hasQuery || quickActions.length > 0)}
+              aria-expanded={visible && (hasQuery || (quickActions && quickActions.length > 0))}
               aria-controls="search-results-list"
               aria-activedescendant={
                 activeIndex >= 0 && displayedItems[activeIndex]
@@ -277,13 +280,13 @@ export default function GlobalSearchModal({
               accessibilityLabel="Search clinic records, patients, consultations, settings"
               placeholder="Search patients, consultations, appointments, rooms, settings... (Cmd+K)"
               placeholderTextColor={theme.colors.textMuted}
-              value={query}
+              value={safeQuery}
               onChangeText={onChangeQuery}
               autoFocus={true}
               style={styles.searchInput}
             />
 
-            {query.length > 0 ? (
+            {safeQuery.length > 0 ? (
               <Pressable
                 onPress={() => onChangeQuery('')}
                 accessibilityRole="button"
@@ -303,10 +306,10 @@ export default function GlobalSearchModal({
           </View>
 
           {/* 2. Category Filter Tabs (when query is active) */}
-          {hasQuery && categories.length > 0 ? (
+          {hasQuery && categories && categories.length > 0 ? (
             <SearchCategoryTabs
               categories={categories}
-              activeCategory={activeCategory}
+              activeCategory={safeCategory}
               onSelectCategory={onSelectCategory}
               resultCounts={resultCounts}
             />
@@ -386,12 +389,12 @@ export default function GlobalSearchModal({
                   <Icon name="search" size={theme.sizes.iconLg} color={theme.colors.textMuted} />
                 </View>
                 <ThemedText variant="bodyBold" color={theme.colors.text} style={styles.emptyTitle}>
-                  {`No results found for "${query}"`}
+                  {`No results found for "${safeQuery}"`}
                 </ThemedText>
                 <ThemedText variant="small" color={theme.colors.textMuted} style={styles.emptySubtitle}>
                   Check spelling or try searching across all categories.
                 </ThemedText>
-                {activeCategory.toLowerCase() !== 'all' ? (
+                {safeCategory.toLowerCase() !== 'all' ? (
                   <Pressable
                     onPress={() => onSelectCategory('all')}
                     style={({ pressed }) => [
@@ -470,6 +473,7 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
     overflow: 'hidden',
+    zIndex: 1,
     ...theme.shadows.lg,
   },
   inputHeader: {
@@ -501,7 +505,8 @@ const styles = StyleSheet.create({
   },
   bodyContainer: {
     maxHeight: 460,
-    minHeight: 200,
+    minHeight: 120,
+    flexShrink: 1,
   },
   resultsWrapper: {
     flex: 1,

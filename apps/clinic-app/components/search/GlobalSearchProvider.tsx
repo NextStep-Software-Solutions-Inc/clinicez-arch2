@@ -306,9 +306,21 @@ export function GlobalSearchProvider({ children }: GlobalSearchProviderProps) {
     [],
   );
 
+  const handleSetQuery = useCallback((q: string) => {
+    setQuery(typeof q === 'string' ? q : '');
+  }, []);
+
   const openSearch = useCallback((initialQuery?: string, initialCategory?: string) => {
-    if (initialQuery !== undefined) setQuery(initialQuery);
-    if (initialCategory !== undefined) setActiveCategory(initialCategory);
+    if (typeof initialQuery === 'string') {
+      setQuery(initialQuery);
+    } else {
+      setQuery('');
+    }
+    if (typeof initialCategory === 'string') {
+      setActiveCategory(initialCategory);
+    } else {
+      setActiveCategory('all');
+    }
     setIsOpen(true);
   }, []);
 
@@ -491,7 +503,7 @@ export function GlobalSearchProvider({ children }: GlobalSearchProviderProps) {
       closeSearch,
       toggleSearch,
       query,
-      setQuery,
+      setQuery: handleSetQuery,
       activeCategory,
       setActiveCategory,
       results,
@@ -507,6 +519,7 @@ export function GlobalSearchProvider({ children }: GlobalSearchProviderProps) {
       closeSearch,
       toggleSearch,
       query,
+      handleSetQuery,
       activeCategory,
       results,
       loading,
@@ -524,7 +537,7 @@ export function GlobalSearchProvider({ children }: GlobalSearchProviderProps) {
         visible={isOpen}
         onClose={closeSearch}
         query={query}
-        onChangeQuery={setQuery}
+        onChangeQuery={handleSetQuery}
         activeCategory={activeCategory}
         onSelectCategory={setActiveCategory}
         categories={categories}

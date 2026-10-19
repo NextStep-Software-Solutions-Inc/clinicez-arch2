@@ -21,6 +21,8 @@ export default function SearchCategoryTabs({
     return null;
   }
 
+  const safeActiveCategory = (typeof activeCategory === 'string' ? activeCategory : 'all').toLowerCase();
+
   return (
     <View role="tablist" accessibilityRole="tablist" style={styles.container}>
       <ScrollView
@@ -29,17 +31,19 @@ export default function SearchCategoryTabs({
         contentContainerStyle={styles.scrollContent}
       >
         {categories.map((cat) => {
-          const isActive = activeCategory.toLowerCase() === cat.key.toLowerCase();
-          const count = resultCounts?.[cat.key.toLowerCase()] ?? resultCounts?.[cat.key];
+          const catKey = typeof cat?.key === 'string' ? cat.key : '';
+          const catKeyLower = catKey.toLowerCase();
+          const isActive = safeActiveCategory === catKeyLower;
+          const count = resultCounts?.[catKeyLower] ?? (catKey ? resultCounts?.[catKey] : undefined);
 
           return (
             <Pressable
-              key={cat.key}
+              key={catKey || cat?.label}
               role="tab"
               accessibilityRole="tab"
               aria-selected={isActive}
               accessibilityLabel={`${cat.label} category${count !== undefined ? `, ${count} results` : ''}`}
-              onPress={() => onSelectCategory(cat.key)}
+              onPress={() => onSelectCategory(catKey)}
               style={({ pressed }) => [
                 styles.tab,
                 isActive ? styles.tabActive : styles.tabInactive,
