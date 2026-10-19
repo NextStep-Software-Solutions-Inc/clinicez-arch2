@@ -11,11 +11,11 @@ name: interop-hub
 
 services:
   interop-hub:
-    image: ${IMAGE_NAME:-interop-hub}:${IMAGE_TAG:-dev}
+    image: ${IMAGE_NAME:-interop-hub}:${IMAGE_TAG:-latest}
     container_name: ${CONTAINER_NAME:-interop-hub}
     labels:
       - "project=clinicez"
-      - "environment=dev"
+      - "environment=${ENVIRONMENT_LABEL:-prod}"
     expose:
       - "8080"
     networks:
@@ -49,7 +49,7 @@ services:
       - Hub__Bootstrap__Cells__0__Kind=Cloud
 
       # 0: Portal API (ControlPlane)
-      - Hub__Bootstrap__Clients__0__ClientId=${PORTAL_HUB_CLIENT_ID:-dev-portal}
+      - Hub__Bootstrap__Clients__0__ClientId=${PORTAL_HUB_CLIENT_ID:-portal}
       - Hub__Bootstrap__Clients__0__Secret=${PORTAL_HUB_CLIENT_SECRET:?PORTAL_HUB_CLIENT_SECRET must be set}
       - Hub__Bootstrap__Clients__0__CellId=${HUB_CLOUD_CELL_ID:-cloud}
       - Hub__Bootstrap__Clients__0__Service=portal
@@ -57,7 +57,7 @@ services:
       - Hub__Bootstrap__Clients__0__PublicKey=${PORTAL_HUB_SIGNING_PUBLIC_KEY:?PORTAL_HUB_SIGNING_PUBLIC_KEY must be set}
 
       # 1: Clinic API (CloudService)
-      - Hub__Bootstrap__Clients__1__ClientId=${CLINIC_HUB_CLIENT_ID:-dev-clinic}
+      - Hub__Bootstrap__Clients__1__ClientId=${CLINIC_HUB_CLIENT_ID:-clinic}
       - Hub__Bootstrap__Clients__1__Secret=${CLINIC_HUB_CLIENT_SECRET:?CLINIC_HUB_CLIENT_SECRET must be set}
       - Hub__Bootstrap__Clients__1__CellId=${HUB_CLOUD_CELL_ID:-cloud}
       - Hub__Bootstrap__Clients__1__Service=clinic
@@ -65,7 +65,7 @@ services:
       - Hub__Bootstrap__Clients__1__PublicKey=${CLINIC_HUB_SIGNING_PUBLIC_KEY:?CLINIC_HUB_SIGNING_PUBLIC_KEY must be set}
 
       # 2: Laboratory API (CloudService)
-      - Hub__Bootstrap__Clients__2__ClientId=${LABORATORY_HUB_CLIENT_ID:-dev-laboratory}
+      - Hub__Bootstrap__Clients__2__ClientId=${LABORATORY_HUB_CLIENT_ID:-laboratory}
       - Hub__Bootstrap__Clients__2__Secret=${LABORATORY_HUB_CLIENT_SECRET:?LABORATORY_HUB_CLIENT_SECRET must be set}
       - Hub__Bootstrap__Clients__2__CellId=${HUB_CLOUD_CELL_ID:-cloud}
       - Hub__Bootstrap__Clients__2__Service=laboratory
@@ -73,7 +73,7 @@ services:
       - Hub__Bootstrap__Clients__2__PublicKey=${LABORATORY_HUB_SIGNING_PUBLIC_KEY:?LABORATORY_HUB_SIGNING_PUBLIC_KEY must be set}
 
       # 3: Pharmacy API (CloudService)
-      - Hub__Bootstrap__Clients__3__ClientId=${PHARMACY_HUB_CLIENT_ID:-dev-pharmacy}
+      - Hub__Bootstrap__Clients__3__ClientId=${PHARMACY_HUB_CLIENT_ID:-pharmacy}
       - Hub__Bootstrap__Clients__3__Secret=${PHARMACY_HUB_CLIENT_SECRET:?PHARMACY_HUB_CLIENT_SECRET must be set}
       - Hub__Bootstrap__Clients__3__CellId=${HUB_CLOUD_CELL_ID:-cloud}
       - Hub__Bootstrap__Clients__3__Service=pharmacy
@@ -81,7 +81,7 @@ services:
       - Hub__Bootstrap__Clients__3__PublicKey=${PHARMACY_HUB_SIGNING_PUBLIC_KEY:?PHARMACY_HUB_SIGNING_PUBLIC_KEY must be set}
 
       # 4: Billing API (CloudService)
-      - Hub__Bootstrap__Clients__4__ClientId=${BILLING_HUB_CLIENT_ID:-dev-billing}
+      - Hub__Bootstrap__Clients__4__ClientId=${BILLING_HUB_CLIENT_ID:-billing}
       - Hub__Bootstrap__Clients__4__Secret=${BILLING_HUB_CLIENT_SECRET:?BILLING_HUB_CLIENT_SECRET must be set}
       - Hub__Bootstrap__Clients__4__CellId=${HUB_CLOUD_CELL_ID:-cloud}
       - Hub__Bootstrap__Clients__4__Service=billing
@@ -89,7 +89,7 @@ services:
       - Hub__Bootstrap__Clients__4__PublicKey=${BILLING_HUB_SIGNING_PUBLIC_KEY:?BILLING_HUB_SIGNING_PUBLIC_KEY must be set}
 
       # 5: Organization API (CloudService)
-      - Hub__Bootstrap__Clients__5__ClientId=${ORGANIZATION_HUB_CLIENT_ID:-dev-organization}
+      - Hub__Bootstrap__Clients__5__ClientId=${ORGANIZATION_HUB_CLIENT_ID:-organization}
       - Hub__Bootstrap__Clients__5__Secret=${ORGANIZATION_HUB_CLIENT_SECRET:?ORGANIZATION_HUB_CLIENT_SECRET must be set}
       - Hub__Bootstrap__Clients__5__CellId=${HUB_CLOUD_CELL_ID:-cloud}
       - Hub__Bootstrap__Clients__5__Service=organization
@@ -97,7 +97,7 @@ services:
       - Hub__Bootstrap__Clients__5__PublicKey=${ORGANIZATION_HUB_SIGNING_PUBLIC_KEY:?ORGANIZATION_HUB_SIGNING_PUBLIC_KEY must be set}
 
       # 6: Patient API (PatientPlane)
-      - Hub__Bootstrap__Clients__6__ClientId=${PATIENT_HUB_CLIENT_ID:-dev-patient}
+      - Hub__Bootstrap__Clients__6__ClientId=${PATIENT_HUB_CLIENT_ID:-patient}
       - Hub__Bootstrap__Clients__6__Secret=${PATIENT_HUB_CLIENT_SECRET:?PATIENT_HUB_CLIENT_SECRET must be set}
       - Hub__Bootstrap__Clients__6__CellId=${HUB_CLOUD_CELL_ID:-cloud}
       - Hub__Bootstrap__Clients__6__Service=patient
