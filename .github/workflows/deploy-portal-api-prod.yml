@@ -51,7 +51,7 @@ jobs:
 
     - name: Verify no pending EF Core model changes
       env:
-        ConnectionStrings__DefaultConnection: "Host=localhost;Database=portal_db;Username=postgres;Password=postgres"
+        CONNECTION_STRING: ${{ secrets.PORTAL_DB_CONNECTION_STRING }}
       run: |
         dotnet ef migrations has-pending-model-changes \
           --project services/portal-api/ClinicEz.Portal.Infrastructure \
