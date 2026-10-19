@@ -16,6 +16,12 @@ public class HubDbContext(DbContextOptions<HubDbContext> options, IConfiguration
     public DbSet<HubClaim> Claims { get; set; }
     public DbSet<HubState> State { get; set; }
 
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        base.OnConfiguring(optionsBuilder);
+        optionsBuilder.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+    }
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         // Every enum is persisted as its name (explicit per-property settings below take precedence).

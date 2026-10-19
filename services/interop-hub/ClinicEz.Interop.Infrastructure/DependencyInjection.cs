@@ -30,6 +30,7 @@ public static class DependencyInjection
 
             var schema = configuration["DbSchema"] ?? "public";
             options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", schema));
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });
 
         services.AddScoped<IClientStore, EfClientStore>();
