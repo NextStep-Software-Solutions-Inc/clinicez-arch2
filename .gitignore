@@ -102,6 +102,10 @@ migration_reports/
 # .tmp files
 *.tmp
 configuration.txt
+configuration*.txt
+configurations*.txt
 keys/*
 .agents/teamwork/
 credentials.txt
+credentials.prod.txt
+credentials*.txt
