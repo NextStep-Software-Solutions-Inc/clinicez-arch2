@@ -8,6 +8,7 @@ import Button from '../../components/ui/Button';
 import ThemedText from '../../components/ui/ThemedText';
 import { AppIcon, type IconName } from '../../components/ui/Icon';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface BenefitItemProps {
   icon: IconName;
@@ -140,6 +141,7 @@ function FaqItem({ question, answer }: FaqItemProps) {
 export default function YakapDetailsScreen() {
   const { colors, radii, spacing, sizes } = useAppTheme();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
 
   const handleNavigateClinics = () => {
     navigation.navigate('Main', { screen: 'ExploreClinicsScreen' });
@@ -153,24 +155,46 @@ export default function YakapDetailsScreen() {
     <Screen
       width="form"
       padded
+      bottomInset={120}
       footer={
-        <View style={[styles.footerBar, { gap: spacing.sm }]}>
-          <Button
-            label="Find an Accredited Clinic"
-            variant="primary"
-            size="md"
-            icon="hospital"
-            fullWidth
-            onPress={handleNavigateClinics}
-          />
-          <Button
-            label="Update PhilHealth Number"
-            variant="outline"
-            size="sm"
-            icon="badge"
-            fullWidth
-            onPress={handleNavigateGovernmentIds}
-          />
+        <View
+          style={[
+            styles.footerContainer,
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.borderLight,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.footerContent,
+              {
+                maxWidth: sizes.formMaxWidth,
+                paddingHorizontal: spacing.lg,
+                paddingTop: spacing.md,
+                paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.sm,
+                gap: spacing.sm,
+              },
+            ]}
+          >
+            <Button
+              label="Find an Accredited Clinic"
+              variant="primary"
+              size="md"
+              icon="hospital"
+              fullWidth
+              onPress={handleNavigateClinics}
+            />
+            <Button
+              label="Update PhilHealth Number"
+              variant="outline"
+              size="sm"
+              icon="badge"
+              fullWidth
+              onPress={handleNavigateGovernmentIds}
+            />
+          </View>
         </View>
       }
     >
@@ -390,8 +414,13 @@ const styles = StyleSheet.create({
   faqAnswer: {
     lineHeight: 20,
   },
-  footerBar: {
-    paddingTop: 8,
+  footerContainer: {
+    width: '100%',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+  },
+  footerContent: {
+    width: '100%',
   },
   flex: {
     flex: 1,
