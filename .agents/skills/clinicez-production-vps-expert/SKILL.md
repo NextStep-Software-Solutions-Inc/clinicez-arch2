@@ -159,10 +159,13 @@ Located at `/opt/clinicez/data/postgres/conf/postgresql.conf`:
 - `checkpoint_completion_target = 0.9`
 
 ### 4.3. Standard Connection String Format
-For application microservices running on the VPS Docker network:
+For application microservices running on the VPS Docker network (`data-network`):
 ```text
-Host=postgres;Port=5432;Database=CLINICEZ-CLINIC_DB;Username=db_admin_node;Password=t-G9x#mK5!pQ2vW8*zY;
+Host=postgres;Port=5432;Database=CLINICEZ-CLINIC_DB;Username=db_admin_node;Password==5XQ*YuioBmjr45I3fOYrQvx;
 ```
+> [!IMPORTANT]
+> **Strict Environment Isolation**: Production credentials (e.g. database password `=5XQ*YuioBmjr45I3fOYrQvx` on `130.94.50.27`) MUST never overlap with Development credentials (`t-G9x#mK5!pQ2vW8*zY;` on `38.54.16.240`). All secrets, ECDSA P-256 keys, JWT keys, and client secrets are maintained independently in `configuration.prod.txt` and GitHub Environment `Production`.
+
 
 ---
 
