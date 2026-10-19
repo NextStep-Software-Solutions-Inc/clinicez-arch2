@@ -24,6 +24,7 @@ import {
   IconReceiptTax,
   IconLock,
   IconPhone,
+  IconCreditCard,
 } from "@tabler/icons-react";
 
 const DEFAULT_BANK_ACCOUNTS: PlatformBankAccount[] = [
@@ -114,6 +115,7 @@ export default function PlatformSettingsPage() {
         "Workspace:OrphanInactivityDaysThreshold": "14",
         "Workspace:OrphanAutoPurgeEnabled": "false",
         "Workspace:OrphanAutoPurgeGraceDays": "30",
+        "Billing:IsOnlinePaymentReady": "false",
       };
       data.forEach(s => {
         formMap[s.key] = s.value;
@@ -276,6 +278,7 @@ export default function PlatformSettingsPage() {
 
   const isBirTaxExempt = (formData["Billing:BirTaxExempt"] || "false").toLowerCase() === "true";
   const birTaxPercentage = formData["Billing:BirTaxPercentage"] ?? "12";
+  const isOnlinePaymentReady = (formData["Billing:IsOnlinePaymentReady"] || "false").toLowerCase() === "true";
 
   return (
     <div className="space-y-8 max-w-5xl">
@@ -422,6 +425,55 @@ export default function PlatformSettingsPage() {
 
         {activeTab === "Billing" && (
           <div className="space-y-6">
+            {/* Payment Gateway Ready (Live Online Checkout) Toggle */}
+            <Card className="border-slate-200 dark:border-slate-800 shadow-xs">
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <IconCreditCard className="h-5 w-5 text-primary" />
+                      <CardTitle className="text-base font-bold">
+                        Payment Gateway Ready (Live Online Checkout)
+                      </CardTitle>
+                      <span className={cn(
+                        "text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider border",
+                        isOnlinePaymentReady 
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                      )}>
+                        {isOnlinePaymentReady ? "Gateway Active (Live Checkout)" : "Disabled (Offline Fallback Active)"}
+                      </span>
+                    </div>
+                    <CardDescription className="max-w-2xl text-xs sm:text-sm">
+                      Toggle whether tenants can checkout via Xendit credit card / e-wallet. When disabled, tenants are guided to manual bank transfers and GCash offline payment.
+                    </CardDescription>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0 pt-0.5">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isOnlinePaymentReady}
+                      aria-label="Payment Gateway Ready (Live Online Checkout)"
+                      onClick={() => handleChange("Billing:IsOnlinePaymentReady", isOnlinePaymentReady ? "false" : "true")}
+                      className={cn(
+                        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                        isOnlinePaymentReady ? "bg-primary" : "bg-slate-200 dark:bg-slate-800"
+                      )}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out",
+                          isOnlinePaymentReady ? "translate-x-5" : "translate-x-0"
+                        )}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
+
             {/* Section 1: N-Bank Account Management */}
             <Card className="border-slate-200 dark:border-slate-800 shadow-xs">
               <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

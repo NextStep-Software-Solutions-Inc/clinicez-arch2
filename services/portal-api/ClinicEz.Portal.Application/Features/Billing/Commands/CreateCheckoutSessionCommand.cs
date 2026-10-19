@@ -1,5 +1,6 @@
 using MediatR;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,11 +30,21 @@ public class CreateCheckoutSessionCommand : IRequest<string>
 
 public class CreateCheckoutSessionCommandHandler(
     IBillingProvider billingService,
-    IApplicationDbContext context)
+    IApplicationDbContext context,
+    ISystemSettingsService settingsService)
     : IRequestHandler<CreateCheckoutSessionCommand, string>
 {
+    public const string PaymentGatewayNotReadyMessage =
+        "Online card and e-wallet checkout is currently undergoing partner verification. Please proceed via the Offline Payment / Bank Transfer tab or contact billing@clinicez.ph.";
+
     public async Task<string> Handle(CreateCheckoutSessionCommand request, CancellationToken cancellationToken)
     {
+        var isOnlinePaymentReady = await settingsService.GetSettingBoolAsync("Billing:IsOnlinePaymentReady", false, cancellationToken);
+        if (!isOnlinePaymentReady)
+        {
+            throw new ServiceUnavailableException(PaymentGatewayNotReadyMessage);
+        }
+
         var tenant = await context.Tenants
             .FirstOrDefaultAsync(t => t.Id.ToString() == request.TenantId || t.TenantSlug == request.TenantId, cancellationToken);
 

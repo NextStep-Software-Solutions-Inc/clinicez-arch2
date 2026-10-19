@@ -93,6 +93,7 @@ export interface BillingPaymentConfig {
   corporateAddress: string
   billingSupportEmail: string
   defaultBillingCadence?: "monthly" | "annually" | string
+  isOnlinePaymentReady?: boolean
 }
 
 export interface BillingInfo {

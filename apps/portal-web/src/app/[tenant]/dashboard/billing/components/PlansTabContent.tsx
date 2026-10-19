@@ -8,8 +8,11 @@ import {
   Calendar, 
   ShieldCheck, 
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  CreditCard,
+  Building2
 } from "lucide-react"
+import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
 import { useBillingInfo, usePlans, usePaymentConfig } from "@/hooks/useBilling"
 import { billingService } from "@/services/billing.service"
@@ -21,12 +24,18 @@ import { PlansTabSkeleton } from "./BillingSkeletons"
 
 interface PlansTabContentProps {
   tenantId: string
+  onSwitchTab?: (tab: string) => void
 }
 
-export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
+export default function PlansTabContent({ tenantId, onSwitchTab }: PlansTabContentProps) {
+  const router = useRouter()
+  const pathname = usePathname()
   const { billingInfo, mutate, isLoading: isBillingLoading } = useBillingInfo(tenantId)
   const { plans: tiers, isLoading: isPlansLoading } = usePlans()
-  const { paymentConfig } = usePaymentConfig()
+  const { paymentConfig: remoteConfig } = usePaymentConfig()
+
+  const paymentConfig = remoteConfig ?? billingInfo?.paymentConfig
+  const isOnlinePaymentReady = paymentConfig?.isOnlinePaymentReady === true
 
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const [isPortalLoading, setIsPortalLoading] = useState(false)
@@ -40,6 +49,14 @@ export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
       setIsAnnual(paymentConfig.defaultBillingCadence.toLowerCase() === "annually")
     }
   }, [paymentConfig?.defaultBillingCadence, userToggled])
+
+  const handleNavigateToOffline = () => {
+    if (onSwitchTab) {
+      onSwitchTab("offline")
+    } else {
+      router.push(`${pathname}?tab=offline`)
+    }
+  }
 
   // Dialog states
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
@@ -62,6 +79,12 @@ export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
     : (isSubscribedAnnual ? "₱2,340" : "₱2,940")
 
   const handlePlanClick = (tierId: string) => {
+    if (!isOnlinePaymentReady) {
+      toast.info("Online checkout is currently in review. Directing you to Bank Transfer & GCash instructions.")
+      handleNavigateToOffline()
+      return
+    }
+
     const normalizedPlanId = tierId === "professional" ? "pro" : tierId
     const isDifferentPlan = 
       billingInfo?.subscriptionPlanId?.toLowerCase() !== normalizedPlanId || 
@@ -79,6 +102,12 @@ export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
 
   const handleConfirmSwitch = async () => {
     if (!pendingPlanId) return
+    if (!isOnlinePaymentReady) {
+      toast.info("Online checkout is currently in review. Directing you to Bank Transfer & GCash instructions.")
+      setShowConfirmDialog(false)
+      handleNavigateToOffline()
+      return
+    }
     const normalizedPlanId = pendingPlanId === "professional" ? "pro" : pendingPlanId
 
     try {
@@ -145,6 +174,40 @@ export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
 
   return (
     <div id="billing-plans-section" className="space-y-8 animate-in fade-in-50 duration-300">
+      {/* Proactive Offline Payment Fallback Banner */}
+      {!isOnlinePaymentReady && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 sm:p-6 text-slate-900 dark:text-slate-100 shadow-xs">
+          <div className="flex gap-3.5 items-start">
+            <div className="rounded-xl p-2.5 bg-primary/10 text-primary shrink-0 mt-0.5">
+              <CreditCard className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-bold text-sm sm:text-base leading-snug">
+                  Online Card &amp; E-Wallet Payments Coming Soon
+                </h4>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                  Verification in Progress
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                Instant checkout is currently undergoing partner onboarding. You can activate your plan immediately via Bank Transfer or GCash in the Offline Payment tab.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleNavigateToOffline}
+            className="shrink-0 font-semibold border-primary/30 text-primary hover:bg-primary/10 rounded-full"
+          >
+            <Building2 className="mr-1.5 h-4 w-4" />
+            Offline Payment Instructions
+          </Button>
+        </div>
+      )}
+
       {isSubscribed ? (
         <div className="flex flex-col gap-6">
           {/* Active Plan Overview */}
@@ -270,6 +333,8 @@ export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
         selectedPlanId={selectedPlanId}
         isAnnual={isAnnual}
         billingInfo={billingInfo || null}
+        isOnlinePaymentReady={isOnlinePaymentReady}
+        onSwitchTab={onSwitchTab}
       />
 
       {/* Plan Switch Confirmation Dialog */}

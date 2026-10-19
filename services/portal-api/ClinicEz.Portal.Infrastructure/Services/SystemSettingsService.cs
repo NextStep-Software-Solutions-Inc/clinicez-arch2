@@ -74,6 +74,7 @@ public sealed class SystemSettingsService(
         ("Billing:TrialDays", "14", "Billing", "Default workspace trial period in days upon registration."),
         ("Billing:DefaultPlanSlug", "starter", "Billing", "Default subscription plan tier assigned to new workspaces."),
         ("Billing:DefaultBillingCadence", "monthly", "Billing", "Default billing cadence selected on pricing and subscription pages (monthly or annually)."),
+        ("Billing:IsOnlinePaymentReady", "false", "Billing", "When true, online checkout via payment gateways (e.g. Xendit credit card / e-wallet) is enabled; when false, tenants are routed to offline payments."),
         ("Billing:BankAccountsJson", DefaultBankAccountsJson, "Billing", "JSON array of settlement bank and e-wallet accounts displayed to tenants for offline transfers."),
         ("Billing:BirTaxExempt", "false", "Billing", "When true, platform subscription billing and official receipts are treated as BIR VAT-Exempt (0% VAT)."),
         ("Billing:BirTaxPercentage", "12", "Billing", "BIR Value Added Tax (VAT) percentage applied to vatable subscription invoices and receipts (e.g., 12 for 12%)."),
@@ -185,6 +186,7 @@ public sealed class SystemSettingsService(
             ct);
         var supportEmail = await GetSettingValueAsync("Billing:SupportEmail", "billing@clinicez.ph", ct);
         var defaultBillingCadence = await GetSettingValueAsync("Billing:DefaultBillingCadence", "monthly", ct);
+        var isOnlinePaymentReady = await GetSettingBoolAsync("Billing:IsOnlinePaymentReady", false, ct);
 
         return new BillingPaymentConfigDto(
             BankAccounts: accounts,
@@ -194,7 +196,8 @@ public sealed class SystemSettingsService(
             CorporateTin: corporateTin,
             CorporateAddress: corporateAddress,
             BillingSupportEmail: supportEmail,
-            DefaultBillingCadence: defaultBillingCadence
+            DefaultBillingCadence: defaultBillingCadence,
+            IsOnlinePaymentReady: isOnlinePaymentReady
         );
     }
 
@@ -311,6 +314,13 @@ public sealed class SystemSettingsService(
                 if (cadence != "monthly" && cadence != "annually")
                 {
                     throw new ArgumentException("Billing:DefaultBillingCadence must be either 'monthly' or 'annually'.");
+                }
+            }
+            else if (string.Equals(key, "Billing:IsOnlinePaymentReady", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!bool.TryParse(val, out _))
+                {
+                    throw new ArgumentException("Billing:IsOnlinePaymentReady must be 'true' or 'false'.");
                 }
             }
         }
