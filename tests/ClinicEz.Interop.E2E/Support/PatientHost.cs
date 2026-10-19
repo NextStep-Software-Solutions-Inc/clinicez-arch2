@@ -24,7 +24,7 @@ public sealed class PatientHost : ServiceHostBase
 
     public PatientHost(HubFixture hub) : base(InteropServices.Patient)
     {
-        var settings = BaseConfig(InteropServices.Patient, "patient");
+        var settings = BaseConfig(InteropServices.Patient, "public");
         settings["Sharing:SigningKey"] = SigningKey;
         var config = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 

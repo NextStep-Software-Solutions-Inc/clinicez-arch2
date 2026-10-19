@@ -93,7 +93,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        var schemaName = _configuration["DbSchema"] ?? "clinic_dashboard";
+        var schemaName = _configuration["DbSchema"] ?? "public";
         modelBuilder.HasDefaultSchema(schemaName);
         modelBuilder.HasPostgresExtension("btree_gist");
 
@@ -892,7 +892,6 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
         modelBuilder.Entity<EodReconciliationAudit>(entity =>
         {
-            entity.ToTable("EodReconciliationAudits", "clinic_dashboard");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.TriggerType).IsRequired().HasMaxLength(50);

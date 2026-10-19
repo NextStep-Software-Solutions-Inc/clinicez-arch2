@@ -28,7 +28,7 @@ public static class DependencyInjection
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required (the hub's PostgreSQL database).");
 
-            var schema = configuration["DbSchema"];
+            var schema = configuration["DbSchema"] ?? "public";
             options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", schema));
         });
 

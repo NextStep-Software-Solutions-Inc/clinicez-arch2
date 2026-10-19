@@ -56,7 +56,7 @@ public sealed class AuditChallengerM4EmpiricalTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 
@@ -81,7 +81,7 @@ public sealed class AuditChallengerM4EmpiricalTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 

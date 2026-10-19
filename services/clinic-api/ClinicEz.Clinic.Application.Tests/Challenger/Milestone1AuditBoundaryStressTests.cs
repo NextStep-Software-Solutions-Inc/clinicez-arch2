@@ -82,7 +82,7 @@ public class Milestone1AuditBoundaryStressTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 
@@ -715,7 +715,7 @@ public class Milestone1AuditBoundaryStressTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 
@@ -799,7 +799,7 @@ public class Milestone1AuditBoundaryStressTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 
@@ -880,7 +880,7 @@ public class Milestone1AuditBoundaryStressTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 

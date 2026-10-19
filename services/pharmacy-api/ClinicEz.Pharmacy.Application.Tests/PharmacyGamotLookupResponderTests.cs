@@ -121,7 +121,7 @@ public class PharmacyGamotLookupResponderTests
             ["Messaging:Transport"] = "InProcess",
             ["Messaging:Service"] = InteropServices.Pharmacy,
             ["Messaging:Enabled"] = "false",
-            ["DbSchema"] = "pharmacy_dashboard"
+            ["DbSchema"] = "public"
         }).Build();
 
         var services = new ServiceCollection();

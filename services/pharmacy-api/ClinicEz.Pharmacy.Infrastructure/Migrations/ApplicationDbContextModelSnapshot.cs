@@ -17,8 +17,8 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("pharmacy_dashboard")
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasDefaultSchema("public")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -85,7 +85,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasIndex("PrescriptionOrderId");
 
-                    b.ToTable("DispenseAuditRecords", "pharmacy_dashboard");
+                    b.ToTable("DispenseAuditRecords", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.GamotBeneficiaryLedger", b =>
@@ -160,7 +160,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "PharmacyId", "PhilHealthIdentificationNumber", "BenefitYear");
 
-                    b.ToTable("GamotBeneficiaryLedgers", "pharmacy_dashboard");
+                    b.ToTable("GamotBeneficiaryLedgers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.GamotLedgerTransaction", b =>
@@ -286,7 +286,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "PharmacyId", "UniquePrescriptionSecurityCode");
 
-                    b.ToTable("GamotLedgerTransactions", "pharmacy_dashboard");
+                    b.ToTable("GamotLedgerTransactions", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.InventoryBatch", b =>
@@ -354,7 +354,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasIndex("InventoryItemId");
 
-                    b.ToTable("InventoryBatches", "pharmacy_dashboard");
+                    b.ToTable("InventoryBatches", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PharmacyInventoryItem", b =>
@@ -439,7 +439,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("InventoryItems", "pharmacy_dashboard");
+                    b.ToTable("InventoryItems", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PharmacyRefreshToken", b =>
@@ -511,7 +511,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.HasIndex("TokenHash")
                         .IsUnique();
 
-                    b.ToTable("RefreshTokens", "pharmacy_dashboard");
+                    b.ToTable("RefreshTokens", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PharmacySettings", b =>
@@ -582,7 +582,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PharmacySettings", "pharmacy_dashboard");
+                    b.ToTable("PharmacySettings", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PharmacyStaffMember", b =>
@@ -677,7 +677,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasIndex("PharmacyId", "Email");
 
-                    b.ToTable("PharmacyStaffMembers", "pharmacy_dashboard");
+                    b.ToTable("PharmacyStaffMembers", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PrescriptionOrder", b =>
@@ -884,7 +884,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.HasIndex("TenantId", "PharmacyId", "OrderingTenantId", "OrderingFacilityId", "ExternalPrescriptionId")
                         .IsUnique();
 
-                    b.ToTable("PrescriptionOrders", "pharmacy_dashboard");
+                    b.ToTable("PrescriptionOrders", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PrescriptionOrderItem", b =>
@@ -992,7 +992,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasIndex("PrescriptionOrderId");
 
-                    b.ToTable("PrescriptionOrderItems", "pharmacy_dashboard");
+                    b.ToTable("PrescriptionOrderItems", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.Product", b =>
@@ -1039,7 +1039,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Products", "pharmacy_dashboard");
+                    b.ToTable("Products", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropInboxMessage", b =>
@@ -1060,7 +1060,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasIndex("ProcessedAtUtc");
 
-                    b.ToTable("interop_inbox", "pharmacy_dashboard");
+                    b.ToTable("interop_inbox", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropOutboxMessage", b =>
@@ -1106,7 +1106,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasIndex("DispatchedAtUtc", "DeadLetteredAtUtc", "NextAttemptAtUtc");
 
-                    b.ToTable("interop_outbox", "pharmacy_dashboard");
+                    b.ToTable("interop_outbox", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Workspace.WorkspaceProfileRecord", b =>
@@ -1134,7 +1134,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.HasIndex("TenantSlug");
 
-                    b.ToTable("workspace_profiles", "pharmacy_dashboard");
+                    b.ToTable("workspace_profiles", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.DispenseAuditRecord", b =>

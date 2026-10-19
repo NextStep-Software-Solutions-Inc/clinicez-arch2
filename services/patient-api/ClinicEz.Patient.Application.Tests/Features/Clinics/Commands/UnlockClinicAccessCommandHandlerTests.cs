@@ -5,6 +5,7 @@ using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using FluentAssertions;
 using FluentValidation;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 using NSubstitute;
 
 namespace ClinicEz.Patient.Application.Tests.Features.Clinics.Commands;
@@ -230,7 +231,7 @@ public sealed class UnlockClinicAccessCommandHandlerTests
             Id = existingMembershipId,
             PatientId = patientId,
             ClinicId = clinicId,
-            Status = ClinicMembershipStatus.Inactive,
+            Status = ClinicMembershipStatus.Pending,
             IsDeleted = true
         };
 

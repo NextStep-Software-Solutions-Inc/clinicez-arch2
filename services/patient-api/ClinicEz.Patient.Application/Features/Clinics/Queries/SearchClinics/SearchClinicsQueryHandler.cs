@@ -38,7 +38,7 @@ public sealed class SearchClinicsQueryHandler
             {
                 var membership = userMemberships.FirstOrDefault(m => m.ClinicId == c.Id);
                 var isGated = c.IsGated;
-                var isUnlocked = !isGated || (membership != null && membership.Status == ClinicEz.Patient.Domain.Entities.ClinicMembershipStatus.Active);
+                var isUnlocked = !isGated || (membership != null && membership.Status == ClinicEz.Patient.Domain.Enums.ClinicMembershipStatus.Active);
                 return new ClinicSummaryDto(
                     c.Id, c.Name, c.Description, c.Address, c.IsPublic, c.SupportsAppointments,
                     c.LogoUrl, c.CoverImageUrl, c.SpecialtiesJson, c.RequiredShareFieldsJson, c.FeaturedScore, c.ActiveMemberCount,

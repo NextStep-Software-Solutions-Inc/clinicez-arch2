@@ -9,25 +9,32 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
 {
     public ApplicationDbContext CreateDbContext(string[] args)
     {
-        var evironment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
         var basePath = Directory.GetCurrentDirectory();
+        var apiPath = Directory.Exists(Path.Combine(basePath, "../ClinicEz.Laboratory.Api"))
+            ? Path.GetFullPath(Path.Combine(basePath, "../ClinicEz.Laboratory.Api"))
+            : basePath;
 
         IConfigurationRoot configuration = new ConfigurationBuilder()
-            .SetBasePath(Path.GetFullPath(Path.Combine(basePath, "../ClinicEz.Laboratory.Api")))
-            .AddJsonFile("appsettings.json", optional: true, true) // Make appsettings optional
-            .AddJsonFile($"appsettings.{evironment}.json", optional: true, true) // Make environment-specific appsettings optional
-            .AddUserSecrets(Assembly.Load("ClinicEz.Laboratory.Api"))
+            .SetBasePath(apiPath)
+            .AddJsonFile("appsettings.json", optional: true, true)
+            .AddJsonFile($"appsettings.{environment}.json", optional: true, true)
+            .AddEnvironmentVariables()
             .Build();
 
         var connectionString = configuration.GetConnectionString("DefaultConnection");
-
         if (string.IsNullOrEmpty(connectionString))
         {
-            throw new InvalidOperationException("Could not find a connection string named 'DefaultConnection'.");
+            throw new InvalidOperationException("Could not find a connection string named 'DefaultConnection'. Set it in configuration or via the ConnectionStrings__DefaultConnection environment variable.");
         }
 
+        var schemaName = configuration["DbSchema"] ?? "public";
+
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
-        optionsBuilder.UseNpgsql(connectionString);
+        optionsBuilder.UseNpgsql(connectionString, npgsql =>
+        {
+            npgsql.MigrationsHistoryTable("__EFMigrationsHistory", schemaName);
+        });
 
         return new ApplicationDbContext(optionsBuilder.Options, configuration);
     }

@@ -47,7 +47,7 @@ public class Milestone1AuditCoreStressTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 
@@ -67,7 +67,7 @@ public class Milestone1AuditCoreStressTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 
@@ -268,7 +268,7 @@ public class Milestone1AuditCoreStressTests
         var services = new ServiceCollection();
         var dbName = $"ClinicEz_LiveWorkerTest_{Guid.NewGuid():N}";
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard") })
+            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "public") })
             .Build();
 
         services.AddDbContext<ApplicationDbContext>(opts => opts.UseInMemoryDatabase(dbName));
@@ -349,7 +349,7 @@ public class Milestone1AuditCoreStressTests
         var services = new ServiceCollection();
         var dbName = $"ClinicEz_DropTest_{Guid.NewGuid():N}";
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "clinic_dashboard") })
+            .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("DbSchema", "public") })
             .Build();
 
         services.AddDbContext<ApplicationDbContext>(opts => opts.UseInMemoryDatabase(dbName));

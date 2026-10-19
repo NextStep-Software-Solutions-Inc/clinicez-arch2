@@ -507,19 +507,13 @@ export const adminService = {
     return res.data;
   },
 
-  getNewsletterSubscribers: async (): Promise<AdminNewsletterSubscriberDto[]> => {
-    try {
-      const res = await apiClient.get<{ subscribers: AdminNewsletterSubscriberDto[] }>("/admin/newsletter-subscribers");
-      return res.data?.subscribers || [];
-    } catch {
-      try {
-        const res = await fetch("/api/v1/admin/newsletter-subscribers");
-        const json = await res.json().catch(() => ({}));
-        return json?.subscribers || [];
-      } catch {
-        return [];
-      }
-    }
+  getNewsletterSubscribers: async (search?: string): Promise<AdminNewsletterSubscriberDto[]> => {
+    const params = search ? { search } : {};
+    const res = await apiClient.get<{ subscribers: AdminNewsletterSubscriberDto[]; totalCount?: number }>(
+      "/admin/newsletter-subscribers",
+      { params }
+    );
+    return res.data?.subscribers || [];
   },
 };
 

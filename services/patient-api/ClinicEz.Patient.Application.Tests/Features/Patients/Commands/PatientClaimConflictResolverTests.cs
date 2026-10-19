@@ -31,13 +31,13 @@ public sealed class PatientClaimConflictResolverTests
             expiresAtUtc: now.AddHours(48));
     }
 
-    private static Domain.Entities.Patient CreateAdultPatient(
+    private static ClinicEz.Patient.Domain.Entities.Patient CreateAdultPatient(
         string firstName = "Juan",
         string lastName = "Rizal",
         DateOnly? dob = null,
         string? email = "juan.personal@gmail.com")
     {
-        return new Domain.Entities.Patient
+        return new ClinicEz.Patient.Domain.Entities.Patient
         {
             Id = Guid.NewGuid(),
             ClerkUserId = "user_clerk_123",

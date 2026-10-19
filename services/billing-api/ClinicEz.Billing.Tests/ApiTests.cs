@@ -176,7 +176,7 @@ public class ApiTests
             ["Jwt:SigningKey"] = signingKey ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
             ["Jwt:Audience"] = audience,
             ["Jwt:Issuer"] = audience,
-            ["DbSchema"] = "billing",
+            ["DbSchema"] = "public",
             ["Messaging:Service"] = "billing",
             ["Messaging:Transport"] = "InProcess",
             ["Messaging:Enabled"] = "false",

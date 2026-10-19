@@ -17,7 +17,7 @@ public sealed class LabHost : ServiceHostBase
 {
     public LabHost(HubFixture hub) : base(InteropServices.Laboratory)
     {
-        var config = new ConfigurationBuilder().AddInMemoryCollection(BaseConfig(InteropServices.Laboratory, "laboratory_dashboard")).Build();
+        var config = new ConfigurationBuilder().AddInMemoryCollection(BaseConfig(InteropServices.Laboratory, "public")).Build();
 
         var dbName = $"e2e-lab-{Guid.NewGuid():N}";
         var services = new ServiceCollection();

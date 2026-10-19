@@ -96,10 +96,9 @@ internal class Program
             }
         }
 
-        // Default developer fallback for local Docker / edge PostgreSQL
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            connectionString = "Host=localhost;Port=5432;Database=CLINICEZ_CLINIC_DB;Username=clinicez;Password=clinicez_dev_secret";
+            throw new InvalidOperationException("Connection string 'DefaultConnection' was not provided via CLI, environment variable ConnectionStrings__DefaultConnection, or appsettings.json.");
         }
 
         Console.WriteLine($"[Config] Target Patients   : {count:N0}");
@@ -112,13 +111,13 @@ internal class Program
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
         optionsBuilder.UseNpgsql(connectionString, npgsqlOptions =>
         {
-            npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "clinic_dashboard");
+            npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "public");
         });
 
         var dummyConfig = new ConfigurationBuilder()
             .AddInMemoryCollection(new[]
             {
-                new System.Collections.Generic.KeyValuePair<string, string?>("DbSchema", "clinic_dashboard")
+                new System.Collections.Generic.KeyValuePair<string, string?>("DbSchema", "public")
             })
             .Build();
 

@@ -38,7 +38,7 @@ public sealed class BillingServiceHost : ServiceHostBase
 
     public BillingServiceHost(HubFixture hub) : base(InteropServices.Billing)
     {
-        var settings = BaseConfig(InteropServices.Billing, "billing");
+        var settings = BaseConfig(InteropServices.Billing, "public");
         settings["Jwt:Audience"] = "clinicez-billing";
         settings["Jwt:SigningKey"] = Convert.ToBase64String(new byte[64].Select((_, i) => (byte)(i + 1)).ToArray());
         var config = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();

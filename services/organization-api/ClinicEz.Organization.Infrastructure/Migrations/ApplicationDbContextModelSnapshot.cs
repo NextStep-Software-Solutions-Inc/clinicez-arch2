@@ -17,8 +17,8 @@ namespace ClinicEz.Organization.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("organization_dashboard")
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasDefaultSchema("public")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -83,7 +83,7 @@ namespace ClinicEz.Organization.Infrastructure.Migrations
                     b.HasIndex("TenantId", "FacilityId")
                         .IsUnique();
 
-                    b.ToTable("OrganizationFacilities", "organization_dashboard");
+                    b.ToTable("OrganizationFacilities", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Organization.Domain.Entities.Product", b =>
@@ -130,7 +130,7 @@ namespace ClinicEz.Organization.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Products", "organization_dashboard");
+                    b.ToTable("Products", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropInboxMessage", b =>
@@ -151,7 +151,7 @@ namespace ClinicEz.Organization.Infrastructure.Migrations
 
                     b.HasIndex("ProcessedAtUtc");
 
-                    b.ToTable("interop_inbox", "organization_dashboard");
+                    b.ToTable("interop_inbox", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropOutboxMessage", b =>
@@ -197,7 +197,7 @@ namespace ClinicEz.Organization.Infrastructure.Migrations
 
                     b.HasIndex("DispatchedAtUtc", "DeadLetteredAtUtc", "NextAttemptAtUtc");
 
-                    b.ToTable("interop_outbox", "organization_dashboard");
+                    b.ToTable("interop_outbox", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Workspace.WorkspaceProfileRecord", b =>
@@ -225,7 +225,7 @@ namespace ClinicEz.Organization.Infrastructure.Migrations
 
                     b.HasIndex("TenantSlug");
 
-                    b.ToTable("workspace_profiles", "organization_dashboard");
+                    b.ToTable("workspace_profiles", "public");
                 });
 #pragma warning restore 612, 618
         }

@@ -7,7 +7,7 @@ It never talks to the facilities directly and holds no PHI beyond what a printed
 | | |
 |---|---|
 | Stack | .NET 10, EF Core + PostgreSQL, `ClinicEz.Shared` interop SDK (no message broker) |
-| Database | `CLINICEZ_BILLING_DB`, schema `billing` (`DbSchema`) |
+| Database | `CLINICEZ_BILLING_DB`, schema `public` (`DbSchema`) |
 | Dev port | **5310** (`http://localhost:5310`, Scalar UI at `/scalar` in Development) |
 | Interop service name | `billing` (`Messaging:Service`) |
 | Dev hub | `http://localhost:5290`, credentials `dev-billing` / `dev-billing-secret` (Development only) |
