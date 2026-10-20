@@ -25,6 +25,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
     private readonly IRepository<ConsultationEncounter> _consultationRepo;
     private readonly IRepository<ClinicalProcedure> _procedureRepo;
     private readonly IRepository<ClinicLabOrder> _labOrderRepo;
+    private readonly IRepository<ClinicPatient>? _patientRepo;
     private readonly IClinicContext _clinicContext;
 
     public GetClinicAnalyticsQueryHandler(
@@ -34,7 +35,8 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
         IRepository<ConsultationEncounter> consultationRepo,
         IRepository<ClinicalProcedure> procedureRepo,
         IRepository<ClinicLabOrder> labOrderRepo,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<ClinicPatient>? patientRepo = null)
     {
         _queueRepo = queueRepo;
         _invoiceRepo = invoiceRepo;
@@ -43,6 +45,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
         _procedureRepo = procedureRepo;
         _labOrderRepo = labOrderRepo;
         _clinicContext = clinicContext;
+        _patientRepo = patientRepo;
     }
 
     public async Task<ClinicAnalyticsDto> Handle(GetClinicAnalyticsQuery request, CancellationToken cancellationToken)
@@ -222,6 +225,94 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
             .OrderByDescending(d => d.EncountersCount)
             .ToList();
 
+        // 6. Extended Telemetry: Window Queue Flow, Hourly Arrivals, Visit Type, and Acuity
+        var windowQueue = await _queueRepo.Query(q => q.CheckInTime >= start && q.CheckInTime < end)
+            .Select(q => new
+            {
+                q.CheckInTime,
+                q.AppointmentId,
+                q.Priority,
+                q.PatientId
+            })
+            .ToListAsync(cancellationToken);
+
+        int totalWindowQueue = windowQueue.Count;
+
+        // Hourly Arrival Velocity (Operating hours 07:00 through 18:00)
+        var hourlyFlow = new List<HourlyFlowPointDto>();
+        for (int h = 7; h <= 18; h++)
+        {
+            int hourCount = windowQueue.Count(q => q.CheckInTime.Hour == h);
+            double pct = totalWindowQueue > 0 ? Math.Round(((double)hourCount / totalWindowQueue) * 100, 1) : 0.0;
+            hourlyFlow.Add(new HourlyFlowPointDto(h, $"{h:D2}:00", hourCount, pct));
+        }
+
+        // Visit Type Split (Walk-In vs Pre-booked Appointment)
+        int walkInCount = windowQueue.Count(q => !q.AppointmentId.HasValue);
+        int apptCount = windowQueue.Count(q => q.AppointmentId.HasValue);
+        double walkInPct = totalWindowQueue > 0 ? Math.Round(((double)walkInCount / totalWindowQueue) * 100, 1) : 0.0;
+        double apptPct = totalWindowQueue > 0 ? Math.Round(((double)apptCount / totalWindowQueue) * 100, 1) : 0.0;
+        var visitTypeSplit = new VisitTypeSplitDto(walkInCount, walkInPct, apptCount, apptPct);
+
+        // Triage Acuity Distribution
+        int routineTotal = windowQueue.Count(q => q.Priority == QueuePriority.Routine);
+        int urgentTotal = windowQueue.Count(q => q.Priority == QueuePriority.Urgent);
+        int emergencyTotal = windowQueue.Count(q => q.Priority == QueuePriority.Emergency);
+        double routinePct = totalWindowQueue > 0 ? Math.Round(((double)routineTotal / totalWindowQueue) * 100, 1) : 0.0;
+        double urgentPct = totalWindowQueue > 0 ? Math.Round(((double)urgentTotal / totalWindowQueue) * 100, 1) : 0.0;
+        double emergencyPct = totalWindowQueue > 0 ? Math.Round(((double)emergencyTotal / totalWindowQueue) * 100, 1) : 0.0;
+        var acuitySplit = new AcuitySplitDto(routineTotal, routinePct, urgentTotal, urgentPct, emergencyTotal, emergencyPct);
+
+        // 7. Demographic Breakdown (Age Cohorts & Gender)
+        var distinctPatientIds = windowQueue.Select(q => q.PatientId).Distinct().ToList();
+        int pedCount = 0, adultCount = 0, seniorCount = 0;
+        int maleCount = 0, femaleCount = 0, otherGenderCount = 0;
+
+        if (_patientRepo != null && distinctPatientIds.Count > 0)
+        {
+            var patients = await _patientRepo.Query(p => distinctPatientIds.Contains(p.Id))
+                .Select(p => new { p.DateOfBirth, p.Gender })
+                .ToListAsync(cancellationToken);
+
+            var todayDateOnly = DateOnly.FromDateTime(today);
+            foreach (var p in patients)
+            {
+                var age = todayDateOnly.Year - p.DateOfBirth.Year;
+                if (p.DateOfBirth > todayDateOnly.AddYears(-age)) age--;
+
+                if (age < 18) pedCount++;
+                else if (age >= 60) seniorCount++;
+                else adultCount++;
+
+                var g = p.Gender?.ToLowerInvariant() ?? "";
+                if (g.StartsWith("m")) maleCount++;
+                else if (g.StartsWith("f")) femaleCount++;
+                else otherGenderCount++;
+            }
+        }
+        int totalDemoPatients = pedCount + adultCount + seniorCount;
+        var demographics = new DemographicDistributionDto(
+            pedCount, totalDemoPatients > 0 ? Math.Round(((double)pedCount / totalDemoPatients) * 100, 1) : 0.0,
+            adultCount, totalDemoPatients > 0 ? Math.Round(((double)adultCount / totalDemoPatients) * 100, 1) : 0.0,
+            seniorCount, totalDemoPatients > 0 ? Math.Round(((double)seniorCount / totalDemoPatients) * 100, 1) : 0.0,
+            maleCount, totalDemoPatients > 0 ? Math.Round(((double)maleCount / totalDemoPatients) * 100, 1) : 0.0,
+            femaleCount, totalDemoPatients > 0 ? Math.Round(((double)femaleCount / totalDemoPatients) * 100, 1) : 0.0,
+            otherGenderCount, totalDemoPatients > 0 ? Math.Round(((double)otherGenderCount / totalDemoPatients) * 100, 1) : 0.0
+        );
+
+        // 8. Financial Efficiency Metrics
+        double collectionRate = totalNet > 0 ? (double)Math.Round((totalCollections / totalNet) * 100, 1) : 0.0;
+        decimal totalDiscounts = seniorDiscounts + pwdDiscounts;
+        double discountImpact = totalGross > 0 ? (double)Math.Round(((totalDiscounts) / (totalGross > 0 ? totalGross : 1m)) * 100, 1) : 0.0;
+        decimal avgRevPerPatient = totalWindowQueue > 0 ? Math.Round(totalNet / totalWindowQueue, 2) : (invoices.Count > 0 ? Math.Round(totalNet / invoices.Count, 2) : 0m);
+
+        var financialEfficiency = new FinancialEfficiencyDto(
+            collectionRate,
+            discountImpact,
+            avgRevPerPatient,
+            totalDiscounts
+        );
+
         return new ClinicAnalyticsDto(
             start,
             end.AddDays(-1),
@@ -239,7 +330,12 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
             tenderShares,
             topDiagnoses,
             topServices,
-            doctorStats
+            doctorStats,
+            hourlyFlow,
+            visitTypeSplit,
+            acuitySplit,
+            demographics,
+            financialEfficiency
         );
     }
 }

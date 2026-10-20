@@ -6,6 +6,7 @@ using ClinicEz.Clinic.Api.Authorization;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.LabOrders.Queries;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
+using ClinicEz.Clinic.Application.Features.Reports.DTOs;
 using ClinicEz.Clinic.Application.Features.Settings.Commands;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Application.Features.Settings.Queries;
@@ -241,6 +242,152 @@ public sealed class SettingsController : ControllerBase
             };
             pdfBytes = _pdfService.GenerateReferralLetterPdf(referral, settings, samplePatient, sampleDoctor, signatureMode);
             fileName = "Sample-ClinicalReferralLetter.pdf";
+        }
+        else if (normalizedType.Contains("placard") || normalizedType.Contains("reception") || normalizedType.Contains("qr"))
+        {
+            pdfBytes = _pdfService.GenerateReceptionPlacardPdf(
+                settings,
+                "https://clinicez.ph/checkin/sample-qr-reception",
+                "CEZ-2026",
+                DateTime.UtcNow.AddHours(24).ToString("MMM dd, yyyy h:mm tt"));
+            fileName = "Sample-ReceptionQrPlacard.pdf";
+        }
+        else if (normalizedType.Contains("eod") || normalizedType.Contains("end of day") || normalizedType.Contains("daily"))
+        {
+            var eod = new DailyEodReportDto(
+                DateTime.UtcNow.Date,
+                settings.TenantId,
+                settings.ClinicId,
+                28, 19, 9, 26, 2,
+                24500m, 2940m, 1960m, 980m, 0m, 21560m, 21560m, 14200m, 0m,
+                new List<PaymentModeSummary>
+                {
+                    new("Cash", 14200m, 18),
+                    new("GCash", 5360m, 7),
+                    new("CreditCard", 2000m, 1)
+                },
+                new List<DoctorWorkloadSummary>
+                {
+                    new("Dr. Allan Ramos, MD", 16),
+                    new("Dr. Roberto Cruz, MD", 10)
+                },
+                4, 6, 22, 1
+            );
+            pdfBytes = _pdfService.GenerateDailyEodReportPdf(eod, settings, "Maria Santos, Cashier");
+            fileName = "Sample-DailyEodReport.pdf";
+        }
+        else if (normalizedType.Contains("morbidity") || normalizedType.Contains("doh"))
+        {
+            var morbidity = new MorbidityReportDto(
+                DateTime.UtcNow.AddDays(-30),
+                DateTime.UtcNow,
+                settings.TenantId,
+                settings.ClinicId,
+                settings.ClinicName,
+                184, 192,
+                new List<MorbidityDiseaseRowDto>
+                {
+                    new(1, "J06.9", "Acute Upper Respiratory Tract Infection", 64, 18, 38, 8, 30, 34, 33.3),
+                    new(2, "I10", "Essential (Primary) Hypertension", 48, 0, 22, 26, 22, 26, 25.0),
+                    new(3, "E11.9", "Type 2 Diabetes Mellitus without Complications", 32, 0, 18, 14, 15, 17, 16.7),
+                    new(4, "K21.9", "Gastro-Esophageal Reflux Disease without Esophagitis", 24, 2, 18, 4, 11, 13, 12.5),
+                    new(5, "M54.5", "Low Back Pain", 16, 0, 12, 4, 9, 7, 8.3)
+                }
+            );
+            pdfBytes = _pdfService.GenerateMorbidityReportPdf(morbidity, settings, "Dr. Allan Ramos, MD");
+            fileName = "Sample-DohOutpatientMorbidityReport.pdf";
+        }
+        else if (normalizedType.Contains("tax") || normalizedType.Contains("discount") || normalizedType.Contains("bir"))
+        {
+            var taxAudit = new TaxDiscountAuditReportDto(
+                DateTime.UtcNow.AddDays(-30),
+                DateTime.UtcNow,
+                settings.TenantId,
+                settings.ClinicId,
+                45, 54000m, 6800m, 4000m, 6480m, 43200m,
+                new List<TaxDiscountAuditRowDto>
+                {
+                    new("INV-2026-0042", DateTime.UtcNow.AddDays(-2), "Juan Dela Cruz", "SeniorCitizen", "OSCA-9921", 1200m, 240m, 960m, 115.2m, 960m, 960m, "OR-2026-0038", "Cash"),
+                    new("INV-2026-0056", DateTime.UtcNow.AddDays(-1), "Maria Clara", "Pwd", "PWD-4412", 1500m, 300m, 1200m, 144m, 1200m, 1200m, "OR-2026-0051", "GCash")
+                }
+            );
+            pdfBytes = _pdfService.GenerateTaxDiscountAuditReportPdf(taxAudit, settings, "Maria Santos, Billing Officer");
+            fileName = "Sample-BirTaxDiscountAuditReport.pdf";
+        }
+        else if (normalizedType.Contains("share") || normalizedType.Contains("doctor") || normalizedType.Contains("settlement"))
+        {
+            var docShares = new DoctorSharesReportDto(
+                DateTime.UtcNow.AddDays(-30),
+                DateTime.UtcNow,
+                settings.TenantId,
+                settings.ClinicId,
+                184, 142000m, 99400m, 42600m,
+                new List<DoctorWorkloadDetailDto>
+                {
+                    new(sampleDoctor.Id.ToString(), "Dr. Allan Ramos, MD", 112, 14, 84000m, 14000m, 98000m, 68600m, 29400m),
+                    new(Guid.NewGuid().ToString(), "Dr. Roberto Cruz, MD", 72, 6, 38000m, 6000m, 44000m, 30800m, 13200m)
+                }
+            );
+            pdfBytes = _pdfService.GenerateDoctorSharesReportPdf(docShares, settings, "Clinic Medical Director");
+            fileName = "Sample-DoctorSharesSettlement.pdf";
+        }
+        else if (normalizedType.Contains("analytics") || normalizedType.Contains("executive"))
+        {
+            var analytics = new ClinicAnalyticsDto(
+                DateTime.UtcNow.AddDays(-30),
+                DateTime.UtcNow,
+                settings.TenantId,
+                settings.ClinicId,
+                new FlowAnalyticsDto(32, 4, 1, 2, 26, 12.5, 16.0, 24, 6, 2),
+                185000m, 164000m, 158000m, 6000m, 980m, 12800m, 8200m,
+                new List<DailyTrendPointDto>
+                {
+                    new(DateTime.UtcNow.AddDays(-6).ToString("MMM dd"), 24000m, 26),
+                    new(DateTime.UtcNow.AddDays(-5).ToString("MMM dd"), 28000m, 31),
+                    new(DateTime.UtcNow.AddDays(-4).ToString("MMM dd"), 21000m, 22),
+                    new(DateTime.UtcNow.AddDays(-3).ToString("MMM dd"), 26000m, 29),
+                    new(DateTime.UtcNow.AddDays(-2).ToString("MMM dd"), 31000m, 34),
+                    new(DateTime.UtcNow.AddDays(-1).ToString("MMM dd"), 19000m, 20),
+                    new(DateTime.UtcNow.ToString("MMM dd"), 25000m, 28)
+                },
+                new List<TenderShareDto>
+                {
+                    new("Cash", 94800m, 60.0),
+                    new("GCash", 47400m, 30.0),
+                    new("CreditCard", 15800m, 10.0)
+                },
+                new List<MorbidityItemDto>
+                {
+                    new("J06.9", "Acute Upper Respiratory Tract Infection", 64, 33.3),
+                    new("I10", "Essential Hypertension", 48, 25.0),
+                    new("E11.9", "Type 2 Diabetes Mellitus", 32, 16.7)
+                },
+                new List<ServiceUsageDto>
+                {
+                    new("Procedure", "Wound Dressing & Suturing", 18),
+                    new("LabOrder", "Complete Blood Count (CBC)", 42)
+                },
+                new List<DoctorStatDto>
+                {
+                    new("Dr. Allan Ramos, MD", 112, 98000m),
+                    new("Dr. Roberto Cruz, MD", 72, 44000m)
+                },
+                new List<HourlyFlowPointDto>
+                {
+                    new(8, "08:00", 12, 11.2),
+                    new(9, "09:00", 22, 20.5),
+                    new(10, "10:00", 28, 26.1),
+                    new(11, "11:00", 18, 16.8),
+                    new(13, "13:00", 14, 13.1),
+                    new(14, "14:00", 13, 12.3)
+                },
+                new VisitTypeSplitDto(72, 67.3, 35, 32.7),
+                new AcuitySplitDto(85, 79.4, 18, 16.8, 4, 3.8),
+                new DemographicDistributionDto(24, 22.4, 58, 54.2, 25, 23.4, 48, 44.9, 57, 53.3, 2, 1.8),
+                new FinancialEfficiencyDto(96.3, 11.4, 1532.71m, 21000m)
+            );
+            pdfBytes = _pdfService.GenerateClinicAnalyticsPdf(analytics, settings, "Executive Audit");
+            fileName = "Sample-ExecutiveAnalyticsSummary.pdf";
         }
         else
         {

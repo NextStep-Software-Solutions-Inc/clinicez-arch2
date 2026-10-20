@@ -33,7 +33,10 @@ import {
   TenderDonutChart,
   MorbidityDistributionChart,
   WorkloadBarChart,
+  HourlyFlowBarChart,
+  AcuityDonutChart,
 } from '../../components/analytics';
+import DateRangePickerModal from '../../components/ui/DateRangePickerModal';
 import { getPortalBaseUrl } from '../../services/runtimeConfig';
 import { resolveTenantContext } from '@shared/safe';
 import {
@@ -188,6 +191,42 @@ function LoadingBlock({ rows = 4 }: { rows?: number }) {
   );
 }
 
+function getManilaTodayStr(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+  } catch {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+}
+
+function formatDateRangeLabel(start?: string, end?: string): string {
+  if (!start && !end) return 'Select Date Range';
+  if (start && !end) return `From ${start}`;
+  if (!start && end) return `Up to ${end}`;
+  if (start === end) return start;
+  return `${start} to ${end}`;
+}
+
+function computeDatePresetRange(preset: 'today' | '7d' | '30d' | 'ytd'): { start: string; end: string } {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+  if (preset === 'today') {
+    return { start: todayStr, end: todayStr };
+  }
+  if (preset === '7d') {
+    const d = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+    return { start: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, end: todayStr };
+  }
+  if (preset === '30d') {
+    const d = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
+    return { start: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, end: todayStr };
+  }
+  return { start: `${now.getFullYear()}-01-01`, end: todayStr };
+}
+
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
   const { facilityName, letterhead, settings, rooms } = useClinic();
@@ -254,6 +293,9 @@ export default function DashboardScreen() {
   const [reportsStartDate, setReportsStartDate] = useState('');
   const [reportsEndDate, setReportsEndDate] = useState('');
   const [eodDate, setEodDate] = useState('');
+  const [isAnalyticsDateRangeModalOpen, setIsAnalyticsDateRangeModalOpen] = useState(false);
+  const [isReportsDateRangeModalOpen, setIsReportsDateRangeModalOpen] = useState(false);
+  const [isEodDatePickerModalOpen, setIsEodDatePickerModalOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     const [
