@@ -36,3 +36,16 @@ export async function openDocument(url: string, _contentType?: string): Promise<
   setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60_000);
   return true;
 }
+
+/**
+ * Opens an in-memory document Blob (such as a dynamic backend QuestPDF preview) in a new tab.
+ */
+export function openDocumentBlob(blob: Blob, _contentType?: string): boolean {
+  if (typeof window === 'undefined') return false;
+  const mimeType = _contentType || blob.type || 'application/pdf';
+  const typedBlob = blob.type === mimeType ? blob : new Blob([blob], { type: mimeType });
+  const objectUrl = URL.createObjectURL(typedBlob);
+  window.open(objectUrl, '_blank', 'noopener,noreferrer');
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 5 * 60_000);
+  return true;
+}
