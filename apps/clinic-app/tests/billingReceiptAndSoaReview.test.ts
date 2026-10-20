@@ -239,11 +239,10 @@ describe('Billing Receipt & SOA Review Feature Tests', () => {
       expect(consultSource).toContain('onPress={handleInitiateSignAndReviewSoa}');
     });
 
-    test('4.3 Review SOA Modal displays billable items, statutory discounts, totals, and Print SOA (PDF)', () => {
+    test('4.3 Review SOA Modal displays billable items, totals, and Print SOA (PDF)', () => {
       expect(consultSource).toContain('title="Review Statement of Account (SOA)"');
       expect(consultSource).toContain('BILLABLE SERVICES &amp; PROCEDURES'.replace('&amp;', '&'));
-      expect(consultSource).toContain('STATUTORY DISCOUNT / PHILHEALTH');
-      expect(consultSource).toContain('Net Amount Payable');
+      expect(consultSource).toContain('Total Billable Clinical Services');
       expect(consultSource).toContain('title="Print SOA (PDF)"');
       expect(consultSource).toContain('onPress={handlePrintSoaPreview}');
       expect(consultSource).toContain('title="Confirm &amp; Sign Encounter"'.replace('&amp;', '&'));
@@ -272,7 +271,7 @@ describe('Billing Receipt & SOA Review Feature Tests', () => {
     );
 
     test('5.1 Billing screen contains handlePrintInvoicePdf for printing Statement of Account (SOA) PDF', () => {
-      expect(billingSource).toContain('const handlePrintInvoicePdf = () => {');
+      expect(billingSource).toContain('const handlePrintInvoicePdf = async () => {');
       expect(billingSource).toContain('title="Print SOA (PDF)"');
       expect(billingSource).toContain('onPress={handlePrintInvoicePdf}');
     });

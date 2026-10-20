@@ -2259,6 +2259,31 @@ export const clinicService = {
     return clinicApiClient.post<InvoiceRecord>(`/billing/invoices/${invoiceId}/pay`, payload);
   },
 
+  getInvoicePdfUrl(invoiceId: string) {
+    return clinicApiUrl(`/billing/invoices/${invoiceId}/pdf`);
+  },
+
+  async downloadInvoicePreviewPdf(payload: {
+    patientId?: string;
+    patientName: string;
+    queueNumber?: string;
+    attendingDoctorName?: string;
+    doctorPrcLicense?: string;
+    discountType: DiscountType;
+    discountIdNumber?: string;
+    lineItems: Array<{
+      serviceItemId?: string;
+      itemCode?: string;
+      description: string;
+      category: string;
+      unitPrice: number;
+      quantity: number;
+    }>;
+    notes?: string;
+  }) {
+    return clinicApiClient.postBlob<typeof payload>(clinicApiUrl('/billing/invoices/preview-pdf'), payload);
+  },
+
   // Services Catalog & Fee Schedule
   async getServices(category?: string, isActive?: boolean) {
     const params = new URLSearchParams();
