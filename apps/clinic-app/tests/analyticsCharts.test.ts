@@ -565,5 +565,125 @@ describe('Milestone 3: Interactive SVG Charting Components Suite', () => {
       expect(markup).not.toContain('NaN');
     });
   });
+
+  // =========================================================================
+  // 6. Extended Telemetry: HourlyFlowBarChart & AcuityDonutChart
+  // =========================================================================
+  describe('Extended Telemetry: HourlyFlowBarChart & AcuityDonutChart', () => {
+    test('HourlyFlowBarChart - State 1 (Loading): renders skeleton bars', async () => {
+      const { HourlyFlowBarChart } = await import('../components/analytics');
+      const markup = renderToStaticMarkup(
+        React.createElement(HourlyFlowBarChart, {
+          data: [],
+          loading: true,
+        })
+      );
+      expect(markup).toContain('data-testid="hourly-flow-bar-chart-loading"');
+    });
+
+    test('HourlyFlowBarChart - State 2 (Error): renders error message and retry button', async () => {
+      const { HourlyFlowBarChart } = await import('../components/analytics');
+      let retried = false;
+      const markup = renderToStaticMarkup(
+        React.createElement(HourlyFlowBarChart, {
+          data: [],
+          error: 'Connection timeout',
+          onRetry: () => { retried = true; },
+        })
+      );
+      expect(markup).toContain('data-testid="hourly-flow-bar-chart-error"');
+      expect(markup).toContain('Connection timeout');
+    });
+
+    test('HourlyFlowBarChart - State 3 (Empty): renders empty state when counts are 0', async () => {
+      const { HourlyFlowBarChart } = await import('../components/analytics');
+      const markup = renderToStaticMarkup(
+        React.createElement(HourlyFlowBarChart, {
+          data: [],
+        })
+      );
+      expect(markup).toContain('data-testid="hourly-flow-bar-chart-empty"');
+      expect(markup).toContain('No Arrival Telemetry');
+    });
+
+    test('HourlyFlowBarChart - State 4 (Active): renders peak hour and hourly bars', async () => {
+      const { HourlyFlowBarChart } = await import('../components/analytics');
+      const sampleHourly = [
+        { hour: 8, hourLabel: '08:00', checkInCount: 12, percentage: 20 },
+        { hour: 9, hourLabel: '09:00', checkInCount: 24, percentage: 40 },
+        { hour: 10, hourLabel: '10:00', checkInCount: 18, percentage: 30 },
+        { hour: 11, hourLabel: '11:00', checkInCount: 6, percentage: 10 },
+      ];
+      const markup = renderToStaticMarkup(
+        React.createElement(HourlyFlowBarChart, {
+          data: sampleHourly,
+        })
+      );
+      expect(markup).toContain('data-testid="hourly-flow-bar-chart-active"');
+      expect(markup).toContain('Peak Arrival Flow');
+      expect(markup).toContain('09:00');
+      expect(markup).toContain('60'); // total inflow: 12 + 24 + 18 + 6 = 60
+    });
+
+    test('AcuityDonutChart - State 1 (Loading): renders donut skeleton placeholder', async () => {
+      const { AcuityDonutChart } = await import('../components/analytics');
+      const markup = renderToStaticMarkup(
+        React.createElement(AcuityDonutChart, {
+          loading: true,
+        })
+      );
+      expect(markup).toContain('data-testid="acuity-donut-chart-loading"');
+    });
+
+    test('AcuityDonutChart - State 2 (Error): renders error state with retry', async () => {
+      const { AcuityDonutChart } = await import('../components/analytics');
+      const markup = renderToStaticMarkup(
+        React.createElement(AcuityDonutChart, {
+          error: 'Failed to fetch acuity',
+        })
+      );
+      expect(markup).toContain('data-testid="acuity-donut-chart-error"');
+      expect(markup).toContain('Failed to fetch acuity');
+    });
+
+    test('AcuityDonutChart - State 3 (Empty): renders empty state when zero patients', async () => {
+      const { AcuityDonutChart } = await import('../components/analytics');
+      const markup = renderToStaticMarkup(
+        React.createElement(AcuityDonutChart, {
+          acuityData: {
+            routineCount: 0,
+            routinePercentage: 0,
+            urgentCount: 0,
+            urgentPercentage: 0,
+            emergencyCount: 0,
+            emergencyPercentage: 0,
+          },
+        })
+      );
+      expect(markup).toContain('data-testid="acuity-donut-chart-empty"');
+      expect(markup).toContain('No Visit Telemetry');
+    });
+
+    test('AcuityDonutChart - State 4 (Active): renders acuity slices and legend', async () => {
+      const { AcuityDonutChart } = await import('../components/analytics');
+      const markup = renderToStaticMarkup(
+        React.createElement(AcuityDonutChart, {
+          acuityData: {
+            routineCount: 45,
+            routinePercentage: 75.0,
+            urgentCount: 12,
+            urgentPercentage: 20.0,
+            emergencyCount: 3,
+            emergencyPercentage: 5.0,
+          },
+        })
+      );
+      expect(markup).toContain('data-testid="acuity-donut-chart-active"');
+      expect(markup).toContain('Routine Priority');
+      expect(markup).toContain('Urgent Triage');
+      expect(markup).toContain('Emergency Critical');
+      expect(markup).toContain('60'); // total 45 + 12 + 3 = 60
+    });
+  });
 });
 

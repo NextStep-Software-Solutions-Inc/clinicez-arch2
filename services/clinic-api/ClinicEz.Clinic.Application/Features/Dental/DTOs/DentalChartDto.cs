@@ -19,9 +19,13 @@ public sealed record DentalToothRecordDto(
     string? Surface,
     string? Notes,
     DateTime CreatedAt,
-    DateTime? UpdatedAt,
+    DateTime? UpdatedAt = null,
     string? PatientName = null,
-    string? RecordedBy = null
+    string? RecordedBy = null,
+    string? ActiveSurface = null,
+    bool IsCurrent = true,
+    DateTime? SupersededAt = null,
+    Guid? SupersededByRecordId = null
 );
 
 /// <summary>

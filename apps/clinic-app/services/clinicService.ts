@@ -834,6 +834,51 @@ export interface DoctorStat {
   totalBilled: number;
 }
 
+export interface HourlyFlowPoint {
+  hour: number;
+  hourLabel: string;
+  checkInCount: number;
+  percentage: number;
+}
+
+export interface VisitTypeSplit {
+  walkInCount: number;
+  walkInPercentage: number;
+  appointmentCount: number;
+  appointmentPercentage: number;
+}
+
+export interface AcuitySplit {
+  routineCount: number;
+  routinePercentage: number;
+  urgentCount: number;
+  urgentPercentage: number;
+  emergencyCount: number;
+  emergencyPercentage: number;
+}
+
+export interface DemographicDistribution {
+  pediatricCount: number;
+  pediatricPercentage: number;
+  adultCount: number;
+  adultPercentage: number;
+  seniorCount: number;
+  seniorPercentage: number;
+  maleCount: number;
+  malePercentage: number;
+  femaleCount: number;
+  femalePercentage: number;
+  otherCount: number;
+  otherPercentage: number;
+}
+
+export interface FinancialEfficiency {
+  collectionEfficiencyRate: number;
+  discountImpactRate: number;
+  averageRevenuePerPatient: number;
+  totalDiscounts: number;
+}
+
 export interface ClinicAnalytics {
   startDate: string;
   endDate: string;
@@ -852,6 +897,11 @@ export interface ClinicAnalytics {
   topDiagnoses: MorbidityItem[];
   topServices: ServiceUsage[];
   doctorStats: DoctorStat[];
+  hourlyFlow?: HourlyFlowPoint[];
+  visitTypeSplit?: VisitTypeSplit;
+  acuitySplit?: AcuitySplit;
+  demographics?: DemographicDistribution;
+  financialEfficiency?: FinancialEfficiency;
 }
 
 export interface MorbidityDiseaseRow {
@@ -1462,9 +1512,14 @@ export interface DentalToothRecord {
   toothNumber: number;
   status: ToothStatus;
   surface?: string | null;
+  activeSurface?: string | null;
+  isCurrent?: boolean;
+  supersededAt?: string | null;
+  supersededByRecordId?: string | null;
   notes?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+  recordedBy?: string | null;
 }
 
 export interface DentalSummary {
@@ -1491,6 +1546,9 @@ export interface UpsertDentalToothRecordPayload {
   surface?: string | null;
   notes?: string | null;
   consultationId?: string | null;
+  removeCondition?: boolean;
+  conditionId?: string | null;
+  recordedBy?: string | null;
 }
 
 export interface BatchSaveDentalChartPayload {
@@ -1500,6 +1558,9 @@ export interface BatchSaveDentalChartPayload {
     status: ToothStatus;
     surface?: string | null;
     notes?: string | null;
+    removeCondition?: boolean;
+    conditionId?: string | null;
+    recordedBy?: string | null;
   }[];
 }
 
@@ -2257,6 +2318,31 @@ export const clinicService = {
 
   async recordPayment(invoiceId: string, payload: RecordPaymentRequest) {
     return clinicApiClient.post<InvoiceRecord>(`/billing/invoices/${invoiceId}/pay`, payload);
+  },
+
+  getInvoicePdfUrl(invoiceId: string) {
+    return clinicApiUrl(`/billing/invoices/${invoiceId}/pdf`);
+  },
+
+  async downloadInvoicePreviewPdf(payload: {
+    patientId?: string;
+    patientName: string;
+    queueNumber?: string;
+    attendingDoctorName?: string;
+    doctorPrcLicense?: string;
+    discountType: DiscountType;
+    discountIdNumber?: string;
+    lineItems: Array<{
+      serviceItemId?: string;
+      itemCode?: string;
+      description: string;
+      category: string;
+      unitPrice: number;
+      quantity: number;
+    }>;
+    notes?: string;
+  }) {
+    return clinicApiClient.postBlob<typeof payload>(clinicApiUrl('/billing/invoices/preview-pdf'), payload);
   },
 
   // Services Catalog & Fee Schedule

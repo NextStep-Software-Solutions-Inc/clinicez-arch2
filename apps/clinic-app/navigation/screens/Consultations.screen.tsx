@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Platform,
+  TextInput,
 } from 'react-native';
 import { Alert, notify } from '@utils/feedback';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -66,7 +67,7 @@ import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhil
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
-import { openDocument } from '../../services/documentOpener';
+import { openDocument, openDocumentBlob } from '../../services/documentOpener';
 import {
   clinicService,
   computeScopedStations,
@@ -92,8 +93,6 @@ import {
   DiscountType,
 } from '../../services/clinicService';
 import {
-  printInvoicePdf,
-  type InvoicePdfData,
   type PrintLetterhead,
 } from '../../utils/printHelper';
 
@@ -392,6 +391,7 @@ export default function ConsultationsScreen() {
   const [mobileWorkstationView, setMobileWorkstationView] = useState<'soap' | 'chart'>('soap');
   const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
   const [postEncounterModalVisible, setPostEncounterModalVisible] = useState(false);
+  const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
   const [createdInvoiceNumber, setCreatedInvoiceNumber] = useState<string | null>(null);
   const [createdInvoiceTotal, setCreatedInvoiceTotal] = useState<number | null>(null);
   const [reviewSoaModalVisible, setReviewSoaModalVisible] = useState(false);
@@ -2257,6 +2257,7 @@ export default function ConsultationsScreen() {
       if (invoiceErr) {
         followUpIssues.push('billing invoice');
       } else if (invoiceResult) {
+        setCreatedInvoiceId(invoiceResult.id);
         setCreatedInvoiceNumber(invoiceResult.invoiceNumber);
         setCreatedInvoiceTotal(invoiceResult.netAmount);
       }
@@ -2415,114 +2416,59 @@ export default function ConsultationsScreen() {
     // Auto-populate billable items
     const items = buildBillableItems();
     setSoaReviewItems(items);
-
-    // Auto-detect statutory discount from patient demographics
-    const pAge = patientRecord?.age ?? patientChart?.demographics?.age;
-    const isSenior = (typeof pAge === 'number' && pAge >= 60) || Boolean((patientRecord as any)?.isSenior) || Boolean(patientChart?.demographics?.isSenior);
-    const isPwd = Boolean((patientRecord as any)?.isPwd) || Boolean(patientChart?.demographics?.isPwd);
-
-    if (isYakapEligible) {
-      setSoaDiscountType('PhilHealthKonsulta');
-      setSoaDiscountId(patientRecord?.philHealthNumber || (patientRecord as any)?.pin || '');
-    } else if (isSenior) {
-      setSoaDiscountType('SeniorCitizen');
-      setSoaDiscountId((patientRecord as any)?.seniorCitizenId || (patientRecord as any)?.oscaId || '');
-    } else if (isPwd) {
-      setSoaDiscountType('Pwd');
-      setSoaDiscountId((patientRecord as any)?.pwdId || '');
-    } else {
-      setSoaDiscountType('None');
-      setSoaDiscountId('');
-    }
-
+    setSoaDiscountType('None');
+    setSoaDiscountId('');
     setReviewSoaModalVisible(true);
   };
 
-  const handlePrintSoaPreview = () => {
+  const updateSoaItemQty = (index: number, newQty: number) => {
+    setSoaReviewItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, quantity: Math.max(1, newQty) } : item))
+    );
+  };
+
+  const updateSoaItemPrice = (index: number, newPrice: number) => {
+    setSoaReviewItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, unitPrice: Math.max(0, newPrice) } : item))
+    );
+  };
+
+  const handlePrintSoaPreview = async () => {
     if (!selectedPatient) return;
-    const printLetterhead: PrintLetterhead = {
-      header: letterhead?.header || facilityName || 'ClinicEZ Healthcare Facility',
-      address: letterhead?.address,
-      contact: letterhead?.contact,
-      tin: taxIdentificationNumber || settings?.taxIdentificationNumber,
-      accreditationNumber: accreditationNumber || settings?.accreditationNumber,
-      subHeader: letterhead?.subHeader,
-      footer: letterhead?.footer,
-    };
-
-    const invoicePdfData: InvoicePdfData = {
-      invoiceNumber: createdInvoiceNumber || `SOA-PREVIEW-${selectedPatient.queueNumber}`,
-      invoiceDate: new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }),
-      status: createdInvoiceNumber ? 'Approved' : 'Draft',
-      patientName: selectedPatient.patientName,
-      patientId: selectedPatient.patientId,
-      patientAge: patientRecord?.age ?? patientChart?.demographics?.age,
-      patientGender: patientRecord?.gender ?? patientChart?.demographics?.gender,
-      attendingDoctorName: signerName,
-      doctorPrc: doctorPrc.trim() || signerPrc,
-      queueNumber: selectedPatient.queueNumber,
-      grossAmount: soaGrossAmount,
-      discountType: soaDiscountType,
-      discountIdNumber: soaDiscountId.trim() || undefined,
-      discountPercentage: soaDiscountPercentage,
-      discountAmount: soaDiscountAmount,
-      netAmount: soaNetAmount,
-      notes: 'Consultation & procedures Statement of Account',
-      items: soaReviewItems.map((item) => ({
-        code: item.itemCode,
-        description: item.description,
-        category: item.category,
-        unitPrice: item.unitPrice,
-        quantity: item.quantity,
-        totalPrice: item.unitPrice * item.quantity,
-      })),
-    };
-
-    printInvoicePdf(invoicePdfData, printLetterhead);
+    try {
+      const [blob, err] = await clinicService.downloadInvoicePreviewPdf({
+        patientId: selectedPatient.patientId,
+        patientName: selectedPatient.patientName,
+        queueNumber: selectedPatient.queueNumber,
+        attendingDoctorName: signerName,
+        doctorPrcLicense: doctorPrc.trim() || signerPrc,
+        discountType: 'None',
+        lineItems: soaReviewItems.map((item) => ({
+          serviceItemId: item.serviceItemId,
+          itemCode: item.itemCode,
+          description: item.description,
+          category: item.category,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+        })),
+        notes: 'Statement of Account Preview',
+      });
+      if (blob && !err) {
+        openDocumentBlob(blob);
+      } else {
+        notify.error('Unable to generate backend SOA PDF.');
+      }
+    } catch {
+      notify.error('Failed to stream SOA PDF.');
+    }
   };
 
   const handlePrintApprovedSoa = () => {
-    if (!selectedPatient) return;
-    const printLetterhead: PrintLetterhead = {
-      header: letterhead?.header || facilityName || 'ClinicEZ Healthcare Facility',
-      address: letterhead?.address,
-      contact: letterhead?.contact,
-      tin: taxIdentificationNumber || settings?.taxIdentificationNumber,
-      accreditationNumber: accreditationNumber || settings?.accreditationNumber,
-      subHeader: letterhead?.subHeader,
-      footer: letterhead?.footer,
-    };
-
-    const itemsToPrint = soaReviewItems.length > 0 ? soaReviewItems : buildBillableItems();
-    const invoicePdfData: InvoicePdfData = {
-      invoiceNumber: createdInvoiceNumber || `SOA-${selectedPatient.queueNumber}`,
-      invoiceDate: new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }),
-      status: 'Approved',
-      patientName: selectedPatient.patientName,
-      patientId: selectedPatient.patientId,
-      patientAge: patientRecord?.age ?? patientChart?.demographics?.age,
-      patientGender: patientRecord?.gender ?? patientChart?.demographics?.gender,
-      attendingDoctorName: signerName,
-      doctorPrc: doctorPrc.trim() || signerPrc,
-      queueNumber: selectedPatient.queueNumber,
-      grossAmount: soaGrossAmount,
-      discountType: soaDiscountType,
-      discountIdNumber: soaDiscountId.trim() || undefined,
-      discountPercentage: soaDiscountPercentage,
-      discountAmount: soaDiscountAmount,
-      netAmount: createdInvoiceTotal ?? soaNetAmount,
-      notes: 'Approved billing invoice forwarded to Cashier',
-      items: itemsToPrint.map((item) => ({
-        code: item.itemCode,
-        description: item.description,
-        category: item.category,
-        unitPrice: item.unitPrice,
-        quantity: item.quantity,
-        totalPrice: item.unitPrice * item.quantity,
-      })),
-    };
-
-    printInvoicePdf(invoicePdfData, printLetterhead);
+    if (createdInvoiceId) {
+      openDocument(clinicService.getInvoicePdfUrl(createdInvoiceId));
+    } else {
+      handlePrintSoaPreview();
+    }
   };
 
   const handleConfirmAndSignEncounter = async () => {
@@ -5874,8 +5820,11 @@ export default function ConsultationsScreen() {
                   <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 3 }}>
                     Service / Description
                   </ThemedText>
-                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 1, textAlign: 'center' }}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 1.5, textAlign: 'center' }}>
                     Qty
+                  </ThemedText>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 2, textAlign: 'right' }}>
+                    Unit Price
                   </ThemedText>
                   <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 2, textAlign: 'right' }}>
                     Amount
@@ -5893,12 +5842,48 @@ export default function ConsultationsScreen() {
                         {item.category} {item.itemCode ? `• ${item.itemCode}` : ''}
                       </ThemedText>
                     </View>
-                    <ThemedText variant="body" color={theme.colors.text} style={{ flex: 1, textAlign: 'center' }}>
-                      {item.quantity}
-                    </ThemedText>
-                    <ThemedText variant="bodyBold" color={theme.colors.text} style={{ flex: 2, textAlign: 'right' }}>
+
+                    {/* Quantity Stepper */}
+                    <View style={styles.soaQtyStepper}>
+                      <Pressable
+                        onPress={() => updateSoaItemQty(index, item.quantity - 1)}
+                        style={styles.soaStepperBtn}
+                        accessibilityLabel="Decrease quantity"
+                      >
+                        <Icon name="minus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                      </Pressable>
+                      <ThemedText variant="bodyBold" color={theme.colors.text} style={styles.soaQtyText}>
+                        {item.quantity}
+                      </ThemedText>
+                      <Pressable
+                        onPress={() => updateSoaItemQty(index, item.quantity + 1)}
+                        style={styles.soaStepperBtn}
+                        accessibilityLabel="Increase quantity"
+                      >
+                        <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                      </Pressable>
+                    </View>
+
+                    {/* Unit Price Input */}
+                    <View style={styles.soaPriceInputWrap}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>₱</ThemedText>
+                      <TextInput
+                        style={styles.soaPriceInput}
+                        keyboardType="numeric"
+                        value={String(item.unitPrice)}
+                        onChangeText={(val) => {
+                          const clean = val.replace(/[^0-9.]/g, '');
+                          const num = clean ? parseFloat(clean) : 0;
+                          updateSoaItemPrice(index, isNaN(num) ? 0 : num);
+                        }}
+                      />
+                    </View>
+
+                    {/* Total Amount */}
+                    <ThemedText variant="bodyBold" color={theme.colors.text} style={styles.soaRowTotal}>
                       ₱{(item.unitPrice * item.quantity).toFixed(2)}
                     </ThemedText>
+
                     <Pressable
                       onPress={() => {
                         setSoaReviewItems((prev) => prev.filter((_, i) => i !== index));
@@ -5913,74 +5898,19 @@ export default function ConsultationsScreen() {
               </View>
             )}
 
-            {/* Statutory Discount Selector */}
-            <ThemedText variant="smallBold" color={theme.colors.textSecondary} style={styles.soaSectionTitle}>
-              STATUTORY DISCOUNT / PHILHEALTH
-            </ThemedText>
-            <View style={styles.soaDiscountGrid}>
-              {[
-                { key: 'None' as DiscountType, label: 'Regular (0%)' },
-                { key: 'SeniorCitizen' as DiscountType, label: 'Senior Citizen (20%)' },
-                { key: 'Pwd' as DiscountType, label: 'PWD (20%)' },
-                { key: 'PhilHealthKonsulta' as DiscountType, label: 'PhilHealth (100%)' },
-              ].map((opt) => {
-                const isSelected = soaDiscountType === opt.key;
-                return (
-                  <Pressable
-                    key={opt.key}
-                    onPress={() => setSoaDiscountType(opt.key)}
-                    style={[styles.soaDiscountChip, isSelected && styles.soaDiscountChipActive]}
-                  >
-                    <ThemedText
-                      variant="smallBold"
-                      color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
-                    >
-                      {opt.label}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {(soaDiscountType === 'SeniorCitizen' || soaDiscountType === 'Pwd') && (
-              <View style={styles.soaDiscountInputWrap}>
-                <Input
-                  label={soaDiscountType === 'SeniorCitizen' ? 'Senior Citizen OSCA ID number' : 'PWD ID number'}
-                  placeholder="Enter ID number"
-                  value={soaDiscountId}
-                  onChangeText={setSoaDiscountId}
-                />
-              </View>
-            )}
-
             {/* Financial Summary Totals Card */}
             <View style={styles.soaTotalsCard}>
               <View style={styles.soaTotalRow}>
-                <ThemedText variant="small" color={theme.colors.textSecondary}>
-                  Subtotal (Gross)
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  Total Billable Clinical Services
                 </ThemedText>
-                <ThemedText variant="smallBold" color={theme.colors.text}>
+                <ThemedText variant="title" color={theme.colors.primary}>
                   ₱{soaGrossAmount.toFixed(2)}
                 </ThemedText>
               </View>
-              {soaDiscountAmount > 0 && (
-                <View style={styles.soaTotalRow}>
-                  <ThemedText variant="small" color={theme.colors.successText}>
-                    Statutory Discount ({soaDiscountPercentage}%)
-                  </ThemedText>
-                  <ThemedText variant="smallBold" color={theme.colors.successText}>
-                    -₱{soaDiscountAmount.toFixed(2)}
-                  </ThemedText>
-                </View>
-              )}
-              <View style={styles.soaNetTotalRow}>
-                <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  Net Amount Payable
-                </ThemedText>
-                <ThemedText variant="title" color={theme.colors.primary}>
-                  ₱{soaNetAmount.toFixed(2)}
-                </ThemedText>
-              </View>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Review clinical items, quantities, and procedure fees above. Statutory discounts (Senior Citizen / PWD / PhilHealth Konsulta) and official collection will be applied by the Cashier.
+              </ThemedText>
             </View>
 
             {/* Modal Actions */}
@@ -7066,25 +6996,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: theme.sizes.touchTarget,
   },
-  soaDiscountGrid: {
+  soaQtyStepper: {
+    flex: 1.5,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
   },
-  soaDiscountChip: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radii.full,
+  soaStepperBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surfaceMuted,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  soaQtyText: {
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  soaPriceInputWrap: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.sm,
+    paddingHorizontal: theme.spacing.xs,
+    height: 32,
+    justifyContent: 'flex-end',
   },
-  soaDiscountChipActive: {
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryLight,
+  soaPriceInput: {
+    flex: 1,
+    textAlign: 'right',
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.text,
+    paddingVertical: 0,
   },
-  soaDiscountInputWrap: {
-    marginTop: theme.spacing.xs,
+  soaRowTotal: {
+    flex: 2,
+    textAlign: 'right',
   },
   soaTotalsCard: {
     padding: theme.spacing.md,

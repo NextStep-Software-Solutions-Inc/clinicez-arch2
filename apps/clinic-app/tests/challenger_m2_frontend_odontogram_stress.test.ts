@@ -117,6 +117,10 @@ const {
   calculateDmftMetrics,
   normalizeTeethToMultiRecord,
   sortToothSurfaces,
+  subtractToothSurfaces,
+  resolveToothEffectiveState,
+  canApplyConditionToTooth,
+  applyStagedConditionToTooth,
   getDominantToothStatus,
   getConditionDotColor,
 } = await import('../components/dental');
@@ -526,6 +530,132 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(name99).toBe('Tooth #99');
       expect(name0).toBe('Tooth #0');
       expect(nameNeg).toBe('Tooth #-1');
+    });
+  });
+
+  // =========================================================================
+  // SUITE 5: 5-Surface Trapezoid SVG & Longitudinal Surface Progression (t1 -> t2 -> t3 -> t4)
+  // =========================================================================
+  describe('Suite 5: 5-Surface Trapezoid SVG & Longitudinal Surface Progression', () => {
+    test('5.1 ToothSurfaceDiagram renders 5 angled SVG trapezoid/rect zones (B, L, M, D, O) with soft semantic fills and cross overlay for Missing/Extraction', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(ToothSurfaceDiagram, {
+          toothNumber: 16,
+          conditions: [
+            { status: 'Decay', surface: 'M', activeSurface: 'M', isCurrent: true },
+            { status: 'Filled', surface: 'O', activeSurface: 'O', isCurrent: true },
+          ],
+          size: 80,
+          showLabels: true,
+        })
+      );
+
+      expect(html).toContain('M 0 0 L 100 0 L 72 28 L 28 28 Z');
+      expect(html).toContain('M 28 72 L 72 72 L 100 100 L 0 100 Z');
+      expect(html).toContain('M 0 0 L 28 28 L 28 72 L 0 100 Z');
+      expect(html).toContain('M 72 28 L 100 0 L 100 100 L 72 72 Z');
+
+      const missingHtml = renderToStaticMarkup(
+        React.createElement(ToothSurfaceDiagram, {
+          toothNumber: 18,
+          conditions: [{ status: 'Missing', surface: '', activeSurface: '', isCurrent: true }],
+          size: 40,
+        })
+      );
+      expect(missingHtml).toContain('x1="14"');
+      expect(missingHtml).toContain('y2="86"');
+    });
+
+    test('5.2 Longitudinal progression: Decay(MO) -> Filled(O) -> Filled(MO) -> Missing tracks activeSurface, supersedes prior records, and guards Missing teeth', () => {
+      // t1: Decay on MO
+      let records = applyStagedConditionToTooth([], {
+        id: 'rec-t1-decay',
+        toothNumber: 16,
+        status: 'Decay',
+        surface: 'MO',
+        notes: 'Initial mesial-occlusal caries',
+        recordedBy: 'Dr. Maria Santos',
+        createdAt: '2026-01-10T09:00:00Z',
+      });
+      expect(records.length).toBe(1);
+      expect(records[0].status).toBe('Decay');
+      expect(records[0].surface).toBe('MO');
+      expect(records[0].activeSurface).toBe('MO');
+      expect(records[0].isCurrent).toBe(true);
+
+      // t2: Partial restoration — Filled on O (M remains decayed)
+      records = applyStagedConditionToTooth(records, {
+        id: 'rec-t2-filled-o',
+        toothNumber: 16,
+        status: 'Filled',
+        surface: 'O',
+        notes: 'Occlusal composite placed',
+        recordedBy: 'Dr. Maria Santos',
+        createdAt: '2026-02-01T10:00:00Z',
+      });
+      expect(records.length).toBe(2);
+      const decayAfterPartial = records.find((r) => r.status === 'Decay')!;
+      const filledAfterPartial = records.find((r) => r.status === 'Filled')!;
+      expect(decayAfterPartial.surface).toBe('MO'); // Historical surface preserved
+      expect(decayAfterPartial.activeSurface).toBe('M'); // Only M still actively decayed
+      expect(decayAfterPartial.isCurrent).toBe(true);
+      expect(filledAfterPartial.activeSurface).toBe('O');
+      expect(filledAfterPartial.isCurrent).toBe(true);
+
+      expect(getSurfaceZoneColor('M', records).status).toBe('Decay');
+      expect(getSurfaceZoneColor('O', records).status).toBe('Filled');
+
+      // t3: Complete restoration — Filled on M (completing MO)
+      records = applyStagedConditionToTooth(records, {
+        id: 'rec-t3-filled-m',
+        toothNumber: 16,
+        status: 'Filled',
+        surface: 'M',
+        notes: 'Mesial restoration completed',
+        recordedBy: 'Dr. Maria Santos',
+        createdAt: '2026-02-15T11:00:00Z',
+      });
+      const decayAfterComplete = records.find((r) => r.status === 'Decay')!;
+      const filledAfterComplete = records.find((r) => r.status === 'Filled')!;
+      expect(decayAfterComplete.surface).toBe('MO'); // Original recorded surface intact for audit
+      expect(decayAfterComplete.activeSurface).toBe('');
+      expect(decayAfterComplete.isCurrent).toBe(false); // Superseded!
+      expect(decayAfterComplete.supersededAt).toBe('2026-02-15T11:00:00Z');
+      expect(filledAfterComplete.activeSurface).toBe('MO');
+      expect(filledAfterComplete.isCurrent).toBe(true);
+
+      // Surface M and O now both resolve to Filled
+      expect(getSurfaceZoneColor('M', records).status).toBe('Filled');
+      expect(getSurfaceZoneColor('O', records).status).toBe('Filled');
+
+      // DMFT metrics exclude superseded Decay from active decayedCount
+      const dmftAtT3 = calculateDmftMetrics({ 16: records });
+      expect(dmftAtT3.decayedCount).toBe(0);
+      expect(dmftAtT3.filledCount).toBe(1);
+      expect(dmftAtT3.dmftScore).toBe(1);
+
+      // t4: Tooth extracted -> Missing supersedes all prior records
+      records = applyStagedConditionToTooth(records, {
+        id: 'rec-t4-missing',
+        toothNumber: 16,
+        status: 'Missing',
+        notes: 'Tooth extracted',
+        recordedBy: 'Dr. Roberto Cruz',
+        createdAt: '2026-06-01T14:00:00Z',
+      });
+      expect(records.filter((r) => r.isCurrent !== false).length).toBe(1);
+      expect(records.find((r) => r.isCurrent !== false)?.status).toBe('Missing');
+
+      const dmftAtT4 = calculateDmftMetrics({ 16: records });
+      expect(dmftAtT4.decayedCount).toBe(0);
+      expect(dmftAtT4.filledCount).toBe(0);
+      expect(dmftAtT4.missingCount).toBe(1);
+      expect(dmftAtT4.dmftScore).toBe(1);
+
+      // Guard: Cannot add Decay/Filled/Crown to a Missing tooth until reset to Healthy
+      expect(canApplyConditionToTooth(records, 'Decay').allowed).toBe(false);
+      expect(canApplyConditionToTooth(records, 'Filled').allowed).toBe(false);
+      expect(canApplyConditionToTooth(records, 'Healthy').allowed).toBe(true);
     });
   });
 });
