@@ -311,7 +311,7 @@ function CheckRow({ checked, onPress, label, disabled }: CheckRowProps) {
 export default function ConsultationsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { facilityName, accreditationNumber, letterhead, rooms = [], settings } = useClinic();
+  const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead, rooms = [], settings } = useClinic();
   const allowChipLevelCalling = Boolean(settings?.enableChipLevelQueueCalling);
   const { current, staff, reload: reloadStaff } = useStaff();
 
@@ -2418,18 +2418,18 @@ export default function ConsultationsScreen() {
 
     // Auto-detect statutory discount from patient demographics
     const pAge = patientRecord?.age ?? patientChart?.demographics?.age;
-    const isSenior = (typeof pAge === 'number' && pAge >= 60) || patientRecord?.isSenior || patientChart?.demographics?.isSenior;
-    const isPwd = patientRecord?.isPwd || patientChart?.demographics?.isPwd;
+    const isSenior = (typeof pAge === 'number' && pAge >= 60) || Boolean((patientRecord as any)?.isSenior) || Boolean(patientChart?.demographics?.isSenior);
+    const isPwd = Boolean((patientRecord as any)?.isPwd) || Boolean(patientChart?.demographics?.isPwd);
 
     if (isYakapEligible) {
       setSoaDiscountType('PhilHealthKonsulta');
       setSoaDiscountId(patientRecord?.philHealthNumber || (patientRecord as any)?.pin || '');
     } else if (isSenior) {
       setSoaDiscountType('SeniorCitizen');
-      setSoaDiscountId(patientRecord?.seniorCitizenId || (patientRecord as any)?.oscaId || '');
+      setSoaDiscountId((patientRecord as any)?.seniorCitizenId || (patientRecord as any)?.oscaId || '');
     } else if (isPwd) {
       setSoaDiscountType('Pwd');
-      setSoaDiscountId(patientRecord?.pwdId || '');
+      setSoaDiscountId((patientRecord as any)?.pwdId || '');
     } else {
       setSoaDiscountType('None');
       setSoaDiscountId('');
@@ -2441,11 +2441,11 @@ export default function ConsultationsScreen() {
   const handlePrintSoaPreview = () => {
     if (!selectedPatient) return;
     const printLetterhead: PrintLetterhead = {
-      clinicName: letterhead?.header || facilityName || 'ClinicEZ Healthcare Facility',
+      header: letterhead?.header || facilityName || 'ClinicEZ Healthcare Facility',
       address: letterhead?.address,
-      contactNumber: letterhead?.contact,
-      tin: settings?.taxIdentificationNumber,
-      accreditationNumber: settings?.pmccNumber || settings?.accreditationNumber || accreditationNumber,
+      contact: letterhead?.contact,
+      tin: taxIdentificationNumber || settings?.taxIdentificationNumber,
+      accreditationNumber: accreditationNumber || settings?.accreditationNumber,
       subHeader: letterhead?.subHeader,
       footer: letterhead?.footer,
     };
@@ -2484,11 +2484,11 @@ export default function ConsultationsScreen() {
   const handlePrintApprovedSoa = () => {
     if (!selectedPatient) return;
     const printLetterhead: PrintLetterhead = {
-      clinicName: letterhead?.header || facilityName || 'ClinicEZ Healthcare Facility',
+      header: letterhead?.header || facilityName || 'ClinicEZ Healthcare Facility',
       address: letterhead?.address,
-      contactNumber: letterhead?.contact,
-      tin: settings?.taxIdentificationNumber,
-      accreditationNumber: settings?.pmccNumber || settings?.accreditationNumber || accreditationNumber,
+      contact: letterhead?.contact,
+      tin: taxIdentificationNumber || settings?.taxIdentificationNumber,
+      accreditationNumber: accreditationNumber || settings?.accreditationNumber,
       subHeader: letterhead?.subHeader,
       footer: letterhead?.footer,
     };
