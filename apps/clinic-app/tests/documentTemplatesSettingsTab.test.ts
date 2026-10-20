@@ -137,7 +137,7 @@ describe('DocumentTemplatesSettingsTab — Clinical Document Customization Studi
     primaryLogoUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErmCC',
     primaryColorHex: '#0284C7',
     paperSize: 'Letter' as const,
-    letterheadFooter: 'Valid Philippine Medical Certificate. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.',
+    letterheadFooter: 'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.',
   };
 
   test('1. Two-Column Workstation Layout specifications are defined for desktop screens (>=1024px)', () => {

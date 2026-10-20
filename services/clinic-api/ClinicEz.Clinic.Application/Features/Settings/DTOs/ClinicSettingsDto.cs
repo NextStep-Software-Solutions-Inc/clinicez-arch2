@@ -52,6 +52,7 @@ public sealed record ClinicSettingsDto(
     decimal DefaultDoctorSharePercentage = 0.70m,
     string CashierMode = "ClinicDesk",
     string? LetterheadDohLto = null,
+    string? LetterheadAccentColorHex = null,
     string? DefaultApproverName = null,
     string? DefaultApproverTitle = null,
     string? DocumentSignatoriesJson = null);

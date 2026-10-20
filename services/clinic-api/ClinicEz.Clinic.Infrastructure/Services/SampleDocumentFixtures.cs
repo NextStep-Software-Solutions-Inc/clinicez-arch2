@@ -81,7 +81,9 @@ public static class SampleDocumentFixtures
         DispensedReceiptNumber: null,
         DispensedReceiptUrl: null,
         DispensedAt: null,
-        DispenseNotes: null
+        DispenseNotes: null,
+        PharmacyStatus: null,
+        PatientDateOfBirth: samplePatient.DateOfBirth
     );
 
     public static LabOrderSlipDto CreateSampleLabOrderSlip(
@@ -111,7 +113,9 @@ public static class SampleDocumentFixtures
             new("Lipid Profile (Total Cholesterol, Triglycerides, HDL, LDL)", "Clinical Chemistry", "Serum separator tube (SST)")
         },
         PublicUploadUrl: "https://clinicez.ph/upload/sample-lab-tok",
-        QrPayload: "CLINICEZ:REQ:ORD-SAMPLE-0001"
+        QrPayload: "CLINICEZ:REQ:ORD-SAMPLE-0001",
+        ClaimToken: null,
+        PatientDateOfBirth: samplePatient.DateOfBirth
     );
 
     public static ReferralLetter CreateSampleReferralLetter(

@@ -1512,9 +1512,14 @@ export interface DentalToothRecord {
   toothNumber: number;
   status: ToothStatus;
   surface?: string | null;
+  activeSurface?: string | null;
+  isCurrent?: boolean;
+  supersededAt?: string | null;
+  supersededByRecordId?: string | null;
   notes?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+  recordedBy?: string | null;
 }
 
 export interface DentalSummary {
@@ -1541,6 +1546,9 @@ export interface UpsertDentalToothRecordPayload {
   surface?: string | null;
   notes?: string | null;
   consultationId?: string | null;
+  removeCondition?: boolean;
+  conditionId?: string | null;
+  recordedBy?: string | null;
 }
 
 export interface BatchSaveDentalChartPayload {
@@ -1550,6 +1558,9 @@ export interface BatchSaveDentalChartPayload {
     status: ToothStatus;
     surface?: string | null;
     notes?: string | null;
+    removeCondition?: boolean;
+    conditionId?: string | null;
+    recordedBy?: string | null;
   }[];
 }
 
@@ -1851,6 +1862,8 @@ export interface ClinicSettingsRecord {
   letterheadAddress?: string;
   letterheadContact?: string;
   letterheadFooter?: string;
+  letterheadAccentColorHex?: string | null;
+  documentAccentColorHex?: string | null;
   letterheadDohLto?: string;
   dohLicenseToOperate?: string;
   paperSize?: 'Letter' | 'A4' | 'A5';
@@ -2317,6 +2330,31 @@ export const clinicService = {
 
   async recordPayment(invoiceId: string, payload: RecordPaymentRequest) {
     return clinicApiClient.post<InvoiceRecord>(`/billing/invoices/${invoiceId}/pay`, payload);
+  },
+
+  getInvoicePdfUrl(invoiceId: string) {
+    return clinicApiUrl(`/billing/invoices/${invoiceId}/pdf`);
+  },
+
+  async downloadInvoicePreviewPdf(payload: {
+    patientId?: string;
+    patientName: string;
+    queueNumber?: string;
+    attendingDoctorName?: string;
+    doctorPrcLicense?: string;
+    discountType: DiscountType;
+    discountIdNumber?: string;
+    lineItems: Array<{
+      serviceItemId?: string;
+      itemCode?: string;
+      description: string;
+      category: string;
+      unitPrice: number;
+      quantity: number;
+    }>;
+    notes?: string;
+  }) {
+    return clinicApiClient.postBlob<typeof payload>(clinicApiUrl('/billing/invoices/preview-pdf'), payload);
   },
 
   // Services Catalog & Fee Schedule

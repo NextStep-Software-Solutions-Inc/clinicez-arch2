@@ -72,7 +72,7 @@ public class MilestoneM5Tier5AdversarialSearchTests
         {
             try
             {
-                await Task.Delay(3000, ct);
+                await Task.Delay(10000, ct);
                 return (IReadOnlyList<SearchResultItemDto>)new List<SearchResultItemDto> { CreateItem($"slow-{cat}", cat, $"Slow {cat}") };
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -184,7 +184,7 @@ public class MilestoneM5Tier5AdversarialSearchTests
         {
             try
             {
-                await Task.Delay(2000, ct);
+                await Task.Delay(10000, ct);
                 return new List<SearchResultItemDto> { CreateItem("p1", "Patients", "Patient") };
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -394,7 +394,7 @@ public class MilestoneM5Tier5AdversarialSearchTests
             CreateMockProvider("P3_NullReturn", 30, (q, t, l, ct) => Task.FromResult<IReadOnlyList<SearchResultItemDto>>(null!)),
             CreateMockProvider("P4_Timeout", 40, async (q, t, l, ct) =>
             {
-                await Task.Delay(2500, ct);
+                await Task.Delay(10000, ct);
                 return new List<SearchResultItemDto> { CreateItem("t1", "P4_Timeout", "Timeout Item") };
             }),
             CreateMockProvider("P5_Healthy", 50, (q, t, l, ct) => Task.FromResult<IReadOnlyList<SearchResultItemDto>>(new List<SearchResultItemDto>

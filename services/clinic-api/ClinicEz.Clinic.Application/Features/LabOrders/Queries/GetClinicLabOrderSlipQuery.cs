@@ -39,7 +39,8 @@ public record LabOrderSlipDto(
     List<LabOrderSlipItemDto> Items,
     string PublicUploadUrl,
     string QrPayload,
-    string? ClaimToken = null
+    string? ClaimToken = null,
+    DateOnly? PatientDateOfBirth = null
 );
 
 /// <summary>
@@ -118,7 +119,8 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
             order.Items.Select(i => new LabOrderSlipItemDto(i.TestName, i.Category, i.Instructions)).ToList(),
             upload.Url,
             qrPayload,
-            order.ClaimToken
+            order.ClaimToken,
+            patient?.DateOfBirth
         );
     }
 }

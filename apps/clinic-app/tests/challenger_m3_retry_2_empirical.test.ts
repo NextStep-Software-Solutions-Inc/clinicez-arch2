@@ -682,7 +682,8 @@ describe('Milestone 3 Gate 2: Empirical Challenger 2 Stress Suite', () => {
       expect(fs.existsSync(checkScriptPath)).toBe(true);
 
       const { execSync } = require('child_process');
-      const output = execSync(`node "${checkScriptPath}" --strict`, {
+      const runtime = process.execPath || 'node';
+      const output = execSync(`"${runtime}" "${checkScriptPath}" --strict`, {
         cwd: path.resolve(__dirname, '..'),
         encoding: 'utf8',
       });

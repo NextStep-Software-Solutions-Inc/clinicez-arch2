@@ -85,3 +85,15 @@ public record RecordPaymentRequest(
     string? ReferenceNumber,
     string? Notes
 );
+
+public record InvoicePreviewRequest(
+    Guid? PatientId,
+    string PatientName,
+    string? QueueNumber,
+    string? AttendingDoctorName,
+    string? DoctorPrcLicense,
+    DiscountType DiscountType,
+    string? DiscountIdNumber,
+    List<CreateInvoiceLineItemRequest> LineItems,
+    string? Notes
+);
