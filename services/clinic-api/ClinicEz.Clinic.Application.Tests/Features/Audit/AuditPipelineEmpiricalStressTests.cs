@@ -418,8 +418,11 @@ public class AuditPipelineEmpiricalStressTests
         smallQueue.TryDequeue(out var drained).Should().BeTrue();
         drained!.Action.Should().Be("prefill_0");
 
-        // Give background task a moment to write the 4th item into the vacated slot
-        await Task.Delay(200);
+        // Give background task time to write the 4th item into the vacated slot
+        for (int i = 0; i < 30 && smallQueue.Count < 3; i++)
+        {
+            await Task.Delay(50);
+        }
 
         // Assert: 4th item was successfully accepted into the queue!
         smallQueue.Count.Should().Be(3); // 2 remaining pre-fills + 1 newly enqueued
