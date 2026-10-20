@@ -212,7 +212,7 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
 
         await _invoiceRepo.AddAsync(invoice, cancellationToken);
 
-        var isCashierCounter = true;
+        var isCashierCounter = _settingsRepo == null;
         if (_settingsRepo != null)
         {
             var mode = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)
@@ -221,6 +221,10 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
             if (!string.IsNullOrEmpty(mode))
             {
                 isCashierCounter = string.Equals(mode, "CashierCounter", StringComparison.OrdinalIgnoreCase);
+            }
+            else
+            {
+                isCashierCounter = false;
             }
         }
 

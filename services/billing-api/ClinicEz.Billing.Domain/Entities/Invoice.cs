@@ -370,7 +370,8 @@ public class Invoice
         {
             if (string.IsNullOrWhiteSpace(input.Description)) throw new BadRequestException($"Line {index + 1} needs a description.");
             if (input.Quantity < 1 || input.Quantity > 10_000) throw new BadRequestException($"Line {index + 1} quantity must be between 1 and 10000.");
-            if (input.UnitPrice < 0m || input.UnitPrice > MaxUnitPrice) throw new BadRequestException($"Line {index + 1} has an invalid unit price.");
+            if (input.UnitPrice < -MaxUnitPrice || input.UnitPrice > MaxUnitPrice) throw new BadRequestException($"Line {index + 1} has an invalid unit price.");
+            if (input.UnitPrice < 0m && !string.Equals(input.Code, "DISCOUNT", StringComparison.OrdinalIgnoreCase)) throw new BadRequestException($"Line {index + 1} has an invalid unit price.");
 
             built.Add(new InvoiceLine
             {
@@ -391,7 +392,7 @@ public class Invoice
     private void Recalculate()
     {
         foreach (var line in Lines) line.LineTotal = Money.Round(line.Quantity * line.UnitPrice);
-        Subtotal = Lines.Sum(l => l.LineTotal);
+        Subtotal = Math.Max(0m, Lines.Sum(l => l.LineTotal));
 
         // Discounts are computed on the gross subtotal independently (no compounding) and are capped so that at
         // least one centavo stays payable: the invoice is never silently "free".
@@ -405,7 +406,7 @@ public class Invoice
         }
 
         DiscountTotal = running;
-        Total = Subtotal - DiscountTotal;
+        Total = Math.Max(0m, Subtotal - DiscountTotal);
     }
 
     private static string? Clean(string? value, int max)

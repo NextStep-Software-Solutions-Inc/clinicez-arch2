@@ -173,7 +173,7 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
 
     private async Task RePublishInvoiceRequestAsync(Invoice invoice, CancellationToken ct)
     {
-        if (invoice.NetAmount <= 0m) return;
+        if (invoice.NetAmount <= 0m && !invoice.BillingRequestedAt.HasValue) return;
 
         var visitKey = invoice.ConsultationId;
         if (visitKey is null && invoice.QueueItemId.HasValue)
