@@ -101,48 +101,47 @@ mock.module('../utils/useBreakpoint', () => ({
   }),
 }));
 
-// Mock feedback notify
-const mockNotify = {
-  success: mock((_msg: string) => {}),
-  error: mock((_msg: string) => {}),
-  info: mock((_msg: string) => {}),
-};
-mock.module('../utils/feedback', () => ({
-  notify: mockNotify,
-  subscribeFeedback: () => () => {},
-  getFeedbackState: () => ({ alerts: [], toasts: [] }),
-  dismissAlert: () => {},
-  dismissToast: () => {},
-  resetFeedbackState: () => {},
-  Alert: { alert: () => {} },
-}));
+// Mock clinicApiClient instead of whole clinicService to prevent module contamination
+let lastApiClientCall = { method: '', url: '', data: null as any };
+const mockApiClientPost = mock(async (url: string, data?: any) => {
+  lastApiClientCall = { method: 'POST', url, data };
+  if (url === '/services/seed-dental') {
+    return [
+      [
+        { id: 'dent-1', code: 'DENT-CONS', name: 'Dental Consultation & Oral Examination', category: 'Dental', standardPrice: 500, isActive: true },
+        { id: 'dent-2', code: 'DENT-CLEAN', name: 'Oral Prophylaxis / Dental Cleaning', category: 'Dental', standardPrice: 850, isActive: true },
+        { id: 'dent-3', code: 'DENT-FILL-COMP', name: 'Composite Light-Cure Tooth Restoration', category: 'Dental', standardPrice: 950, isActive: true },
+        { id: 'dent-4', code: 'DENT-EXT-SIMPLE', name: 'Tooth Extraction - Simple Exodontia', category: 'Dental', standardPrice: 1000, isActive: true },
+        { id: 'dent-5', code: 'DENT-EXT-SURG', name: 'Surgical Odontectomy - Impacted Third Molar', category: 'Dental', standardPrice: 3500, isActive: true },
+        { id: 'dent-6', code: 'DENT-SEALANT', name: 'Pit and Fissure Sealant', category: 'Dental', standardPrice: 600, isActive: true },
+        { id: 'dent-7', code: 'DENT-FLUOR', name: 'Topical Fluoride Varnish Application', category: 'Dental', standardPrice: 500, isActive: true },
+        { id: 'dent-8', code: 'DENT-XR-PA', name: 'Dental Periapical Radiograph / X-Ray', category: 'Dental', standardPrice: 400, isActive: true },
+        { id: 'dent-9', code: 'DENT-RCT', name: 'Root Canal Therapy / Endodontic Treatment', category: 'Dental', standardPrice: 4000, isActive: true },
+        { id: 'dent-10', code: 'DENT-PULP', name: 'Pediatric Pulpotomy', category: 'Dental', standardPrice: 1500, isActive: true },
+      ],
+      null,
+    ];
+  }
+  return [{ id: 'mock-created', ...data }, null];
+});
 
-// Mock clinicService
-const mockSeedDentalServices = mock(() =>
-  Promise.resolve([
-    [
-      { id: 'dent-1', code: 'DENT-CONS', name: 'Dental Consultation & Oral Examination', category: 'Dental', standardPrice: 500, isActive: true },
-      { id: 'dent-2', code: 'DENT-CLEAN', name: 'Oral Prophylaxis / Dental Cleaning', category: 'Dental', standardPrice: 850, isActive: true },
-      { id: 'dent-3', code: 'DENT-FILL-COMP', name: 'Composite Light-Cure Tooth Restoration', category: 'Dental', standardPrice: 950, isActive: true },
-      { id: 'dent-4', code: 'DENT-EXT-SIMPLE', name: 'Tooth Extraction - Simple Exodontia', category: 'Dental', standardPrice: 1000, isActive: true },
-      { id: 'dent-5', code: 'DENT-EXT-SURG', name: 'Surgical Odontectomy - Impacted Third Molar', category: 'Dental', standardPrice: 3500, isActive: true },
-      { id: 'dent-6', code: 'DENT-SEALANT', name: 'Pit and Fissure Sealant', category: 'Dental', standardPrice: 600, isActive: true },
-      { id: 'dent-7', code: 'DENT-FLUOR', name: 'Topical Fluoride Varnish Application', category: 'Dental', standardPrice: 500, isActive: true },
-      { id: 'dent-8', code: 'DENT-XR-PA', name: 'Dental Periapical Radiograph / X-Ray', category: 'Dental', standardPrice: 400, isActive: true },
-      { id: 'dent-9', code: 'DENT-RCT', name: 'Root Canal Therapy / Endodontic Treatment', category: 'Dental', standardPrice: 4000, isActive: true },
-      { id: 'dent-10', code: 'DENT-PULP', name: 'Pediatric Pulpotomy', category: 'Dental', standardPrice: 1500, isActive: true },
-    ],
-    null,
-  ])
-);
-
-mock.module('../services/clinicService', () => ({
-  clinicService: {
-    seedDentalServices: mockSeedDentalServices,
-    createService: mock((payload: any) => Promise.resolve([{ id: 'mock-created', ...payload }, null])),
-    updateService: mock((id: string, payload: any) => Promise.resolve([{ id, ...payload }, null])),
-    getServices: mock(() => Promise.resolve([[], null])),
+mock.module('../services/apiClient', () => ({
+  clinicApiClient: {
+    get: async (url: string) => {
+      lastApiClientCall = { method: 'GET', url, data: null };
+      return [[], null];
+    },
+    post: mockApiClientPost,
+    put: async (url: string, data?: any) => {
+      lastApiClientCall = { method: 'PUT', url, data };
+      return [{ id: 'mock-updated', ...data }, null];
+    },
+    delete: async (url: string) => {
+      lastApiClientCall = { method: 'DELETE', url, data: null };
+      return [true, null];
+    },
   },
+  clinicApiUrl: (p: string) => `http://localhost:5000/api/v1${p}`,
 }));
 
 // Imports after mocking
@@ -175,9 +174,7 @@ const SAMPLE_SERVICES: ClinicServiceItem[] = [
 
 describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () => {
   beforeEach(() => {
-    mockNotify.success.mockClear();
-    mockNotify.error.mockClear();
-    mockSeedDentalServices.mockClear();
+    mockApiClientPost.mockClear();
   });
 
   // -------------------------------------------------------------------------
@@ -263,7 +260,9 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
       const { clinicService } = await import('../services/clinicService');
       const [items, err] = await clinicService.seedDentalServices();
 
-      expect(mockSeedDentalServices).toHaveBeenCalled();
+      expect(mockApiClientPost).toHaveBeenCalled();
+      expect(lastApiClientCall.method).toBe('POST');
+      expect(lastApiClientCall.url).toBe('/services/seed-dental');
       expect(err).toBeNull();
       expect(items).toBeArray();
       expect(items?.length).toBe(10);

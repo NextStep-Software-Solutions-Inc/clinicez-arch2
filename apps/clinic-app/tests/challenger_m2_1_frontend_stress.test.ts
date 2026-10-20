@@ -101,21 +101,6 @@ mock.module('../utils/useBreakpoint', () => ({
   }),
 }));
 
-const mockNotify = {
-  success: mock((_msg: string) => {}),
-  error: mock((_msg: string) => {}),
-  info: mock((_msg: string) => {}),
-};
-mock.module('../utils/feedback', () => ({
-  notify: mockNotify,
-  subscribeFeedback: () => () => {},
-  getFeedbackState: () => ({ alerts: [], toasts: [] }),
-  dismissAlert: () => {},
-  dismissToast: () => {},
-  resetFeedbackState: () => {},
-  Alert: { alert: () => {} },
-}));
-
 // Imports after mocking
 const {
   OrderCatalogSearchModal,
