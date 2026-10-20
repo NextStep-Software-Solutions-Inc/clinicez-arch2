@@ -205,7 +205,7 @@ function formatDateRangeLabel(start?: string, end?: string): string {
   if (!start && !end) return 'Select Date Range';
   if (start && !end) return `From ${start}`;
   if (!start && end) return `Up to ${end}`;
-  if (start === end) return start;
+  if (start && end && start === end) return start;
   return `${start} to ${end}`;
 }
 
@@ -1182,7 +1182,7 @@ export default function DashboardScreen() {
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
                   Date Range
                 </ThemedText>
-                <ThemedText variant="bodyBold" color={theme.colors.textPrimary}>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
                   {formatDateRangeLabel(analyticsStartDate, analyticsEndDate)}
                 </ThemedText>
               </View>
@@ -1323,7 +1323,7 @@ export default function DashboardScreen() {
             <StatCard
               style={styles.statItem}
               label="Collection Efficiency"
-              value={`${analytics.financialEfficiency.collectionEfficiencyPercent.toFixed(1)}%`}
+              value={`${analytics.financialEfficiency.collectionEfficiencyRate.toFixed(1)}%`}
               subtext="Collections vs Net Billed"
               icon="cash"
               valueColor={theme.colors.success}
@@ -1331,7 +1331,7 @@ export default function DashboardScreen() {
             <StatCard
               style={styles.statItem}
               label="Discount Penetration"
-              value={`${analytics.financialEfficiency.discountPenetrationPercent.toFixed(1)}%`}
+              value={`${analytics.financialEfficiency.discountImpactRate.toFixed(1)}%`}
               subtext="Discounts vs Gross"
               icon="tag"
               valueColor={theme.colors.warningText}
@@ -1428,7 +1428,7 @@ export default function DashboardScreen() {
           <Card>
             <CardHeader
               title="Patient Demographics & Age Cohorts"
-              subtitle={`Total registered patient cohort: ${analytics.demographics.totalPatients}`}
+              subtitle={`Total registered patient cohort: ${analytics.demographics.pediatricCount + analytics.demographics.adultCount + analytics.demographics.seniorCount}`}
             />
             <CardContent>
               <View style={styles.demographicGrid}>
@@ -1436,47 +1436,41 @@ export default function DashboardScreen() {
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
                     Pediatric (&lt;18y)
                   </ThemedText>
-                  <ThemedText variant="titleMedium" color={theme.colors.primaryDark}>
+                  <ThemedText variant="title" color={theme.colors.primaryDark}>
                     {analytics.demographics.pediatricCount}
                   </ThemedText>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    {analytics.demographics.totalPatients > 0
-                      ? `${Math.round((analytics.demographics.pediatricCount / analytics.demographics.totalPatients) * 100)}%`
-                      : '0%'}
+                    {`${Math.round(analytics.demographics.pediatricPercentage)}%`}
                   </ThemedText>
                 </View>
                 <View style={styles.demoCohortItem}>
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
                     Adult (18–59y)
                   </ThemedText>
-                  <ThemedText variant="titleMedium" color={theme.colors.primaryDark}>
+                  <ThemedText variant="title" color={theme.colors.primaryDark}>
                     {analytics.demographics.adultCount}
                   </ThemedText>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    {analytics.demographics.totalPatients > 0
-                      ? `${Math.round((analytics.demographics.adultCount / analytics.demographics.totalPatients) * 100)}%`
-                      : '0%'}
+                    {`${Math.round(analytics.demographics.adultPercentage)}%`}
                   </ThemedText>
                 </View>
                 <View style={styles.demoCohortItem}>
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
                     Senior (60+y)
                   </ThemedText>
-                  <ThemedText variant="titleMedium" color={theme.colors.primaryDark}>
+                  <ThemedText variant="title" color={theme.colors.primaryDark}>
                     {analytics.demographics.seniorCount}
                   </ThemedText>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    {analytics.demographics.totalPatients > 0
-                      ? `${Math.round((analytics.demographics.seniorCount / analytics.demographics.totalPatients) * 100)}%`
-                      : '0%'}
+                    {`${Math.round(analytics.demographics.seniorPercentage)}%`}
                   </ThemedText>
                 </View>
                 <View style={styles.demoCohortItem}>
                   <ThemedText variant="caption" color={theme.colors.textMuted}>
                     Female / Male / Other
                   </ThemedText>
-                  <ThemedText variant="titleMedium" color={theme.colors.primaryDark}>
-                    {`${analytics.demographics.femaleCount} / ${analytics.demographics.maleCount} / ${analytics.demographics.otherGenderCount}`}
+                  <ThemedText variant="title" color={theme.colors.primaryDark}>
+                    {`${analytics.demographics.femaleCount} / ${analytics.demographics.maleCount} / ${analytics.demographics.otherCount}`}
                   </ThemedText>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
                     Gender split
@@ -1817,7 +1811,7 @@ export default function DashboardScreen() {
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
                   Report Date
                 </ThemedText>
-                <ThemedText variant="bodyBold" color={theme.colors.textPrimary}>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
                   {eodDate || getManilaTodayStr()}
                 </ThemedText>
               </View>
@@ -1869,7 +1863,7 @@ export default function DashboardScreen() {
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
                   Date Range
                 </ThemedText>
-                <ThemedText variant="bodyBold" color={theme.colors.textPrimary}>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
                   {formatDateRangeLabel(reportsStartDate, reportsEndDate)}
                 </ThemedText>
               </View>

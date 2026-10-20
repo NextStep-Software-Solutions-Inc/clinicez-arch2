@@ -864,7 +864,7 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                     <View style={styles.placardQrBox}>
                       <View style={[styles.placardQrPlaceholder, { borderColor: primaryColorHex }]}>
-                        <Icon name="qrCode" size={theme.sizes.iconXl} color={primaryColorHex} />
+                        <Icon name="scan" size={theme.sizes.iconLg} color={primaryColorHex} />
                         <ThemedText variant="captionBold" color={primaryColorHex}>
                           SCAN TO QUEUE
                         </ThemedText>
