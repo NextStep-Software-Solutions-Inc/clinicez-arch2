@@ -28,7 +28,7 @@ public static class QuestPdfInitializer
                 }
                 catch
                 {
-                    // Fallback to system fonts if custom font loading encounters an issue
+                    // Fallback to default system fonts if custom font loading fails
                 }
 
                 _initialized = true;

@@ -111,14 +111,14 @@ public sealed class SettingsController : ControllerBase
         {
             Id = Guid.NewGuid(),
             TenantId = settings.TenantId,
-            FirstName = "Allan",
-            LastName = "Ramos",
+            FirstName = "Roberto",
+            LastName = "Santos",
             Title = "Dr.",
             Role = ClinicEz.Clinic.Domain.Enums.StaffRole.Doctor,
             Specialty = "Internal Medicine",
-            PrcLicenseNumber = "0056789",
-            PtrNumber = "PTR-2026-9912",
-            S2LicenseNumber = "S2-0918-99214-A1",
+            PrcLicenseNumber = "0098451",
+            PtrNumber = "8472910",
+            S2LicenseNumber = "S2-2026-9912",
             DefaultSignatureMode = signatureMode
         };
 
@@ -128,11 +128,11 @@ public sealed class SettingsController : ControllerBase
             TenantId = settings.TenantId,
             PatientCode = "PAT-2026-0001",
             ContactNumber = "+63 917 123 4567",
-            FirstName = "Maria Clara",
-            LastName = "De Los Santos",
-            DateOfBirth = new DateOnly(1992, 5, 14),
+            FirstName = "Maria",
+            LastName = "Santos",
+            DateOfBirth = new DateOnly(1998, 4, 12),
             Gender = "Female",
-            PhilHealthNumber = "12-050192831-2"
+            PhilHealthNumber = "PHIC-ACC-2026-9912"
         };
 
         var normalizedType = docType.ToLowerInvariant();
@@ -143,32 +143,32 @@ public sealed class SettingsController : ControllerBase
         {
             var slip = new PrescriptionSlipDto(
                 ConsultationId: Guid.NewGuid(),
-                PrescriptionNumber: "RX-SAMPLE-0001",
+                PrescriptionNumber: "RX-2026-00891",
                 IssuedAt: DateTime.UtcNow,
                 ClinicName: settings.ClinicName,
                 ClinicAddress: settings.LetterheadAddress ?? "Philippines",
                 ClinicContact: settings.LetterheadContact ?? "Tel: (02) 8876-5432",
-                DoctorName: "Dr. Allan Ramos, MD",
-                DoctorPrcLicense: "0056789",
-                DoctorPtr: "PTR-2026-9912",
-                DoctorS2License: "S2-0918-99214-A1",
+                DoctorName: "DR. ROBERTO V. SANTOS, MD, FPCP",
+                DoctorPrcLicense: "0098451",
+                DoctorPtr: "8472910",
+                DoctorS2License: "S2-2026-9912",
                 DoctorSpecialization: "Internal Medicine",
                 PatientId: samplePatient.Id,
-                PatientName: "Maria Clara De Los Santos",
-                PatientAge: 34,
+                PatientName: "Maria Santos",
+                PatientAge: 28,
                 PatientGender: "Female",
-                PhilHealthNumber: "12-050192831-2",
+                PhilHealthNumber: "PHIC-ACC-2026-9912",
                 PatientAllergies: "None",
                 ClinicalDiagnosis: "Acute Upper Respiratory Tract Infection",
                 SpecialInstructions: "Take after meals. Complete full 7-day course of antibiotic.",
                 Items: new List<PrescriptionSlipItemDto>
                 {
-                    new(Guid.NewGuid(), "Amoxicillin + Clavulanic Acid", "Augmentin", "625 mg", "Tablet", "Take 1 tablet every 12 hours for 7 days", 14, 7, 0, false, "Take with food"),
-                    new(Guid.NewGuid(), "Paracetamol", "Biogesic", "500 mg", "Tablet", "Take 1 tablet every 4 to 6 hours as needed for fever", 10, 3, 0, false, "Maximum 4 grams per day")
+                    new(Guid.NewGuid(), "Amoxicillin + Clavulanic Acid", null, "625mg", "tablet", "Take 1 tablet twice daily with meals for 7 days.", 14, 7, 0, false, null),
+                    new(Guid.NewGuid(), "Paracetamol", null, "500mg", "tablet", "Take 1 tablet every 4 hours PRN for fever >= 38.0°C or severe pain.", 20, 3, 0, false, null)
                 },
                 PublicVerificationToken: "sample-rx-verify-tok",
                 PublicVerificationUrl: "https://clinicez.ph/verify/sample-rx-verify-tok",
-                QrPayload: "CLINICEZ:RX:RX-SAMPLE-0001:sample-rx-verify-tok",
+                QrPayload: "CLINICEZ:RX:RX-2026-00891:sample-rx-verify-tok",
                 DispenseStatus: "Pending",
                 DispensedPharmacyName: null,
                 DispensedPharmacistName: null,
@@ -185,29 +185,30 @@ public sealed class SettingsController : ControllerBase
         {
             var slip = new LabOrderSlipDto(
                 OrderId: Guid.NewGuid(),
-                OrderNumber: "ORD-SAMPLE-0001",
+                OrderNumber: "LAB-2026-00318",
                 OrderDate: DateTime.UtcNow,
                 ClinicName: settings.ClinicName,
                 ClinicAddress: settings.LetterheadAddress ?? "Philippines",
                 ClinicContact: settings.LetterheadContact ?? "Tel: (02) 8876-5432",
-                DoctorName: "Dr. Allan Ramos, MD",
-                DoctorPrcLicense: "0056789",
-                DoctorPtr: "PTR-2026-9912",
+                DoctorName: "DR. ROBERTO V. SANTOS, MD, FPCP",
+                DoctorPrcLicense: "0098451",
+                DoctorPtr: "8472910",
                 PatientId: samplePatient.Id,
-                PatientName: "Maria Clara De Los Santos",
-                PatientAge: 34,
-                PatientGender: "Female",
-                PhilHealthNumber: "12-050192831-2",
-                ClinicalDiagnosis: "Routine Annual Executive Checkup",
-                FastingInstructions: "Strict 10-hour fasting prior to blood draw",
+                PatientName: "Pedro Penduko",
+                PatientAge: 45,
+                PatientGender: "Male",
+                PhilHealthNumber: "PHIC-ACC-2026-9912",
+                ClinicalDiagnosis: "Annual Executive Health Wellness & Primary Hypertension Evaluation.",
+                FastingInstructions: "10 to 12 hours fasting required prior to blood extraction.",
                 Items: new List<LabOrderSlipItemDto>
                 {
-                    new("Complete Blood Count (CBC) with Platelet Count", "Hematology", "EDTA purple top tube"),
-                    new("Fasting Blood Sugar (FBS)", "Clinical Chemistry", "Serum separator tube (SST)"),
-                    new("Lipid Profile (Total Cholesterol, Triglycerides, HDL, LDL)", "Clinical Chemistry", "Serum separator tube (SST)")
+                    new("Complete Blood Count (CBC) with Platelet Count", "Hematology", "EDTA tube collection"),
+                    new("Fasting Blood Sugar (FBS)", "Clinical Chemistry", "10-12 hours fasting required"),
+                    new("Lipid Profile (Total Cholesterol, HDL, LDL, Triglycerides)", "Clinical Chemistry", "10-12 hours fasting required"),
+                    new("12-Lead Electrocardiogram (ECG)", "Cardiology", "Standard resting 12-lead protocol")
                 },
                 PublicUploadUrl: "https://clinicez.ph/upload/sample-lab-tok",
-                QrPayload: "CLINICEZ:REQ:ORD-SAMPLE-0001"
+                QrPayload: "CLINICEZ:REQ:LAB-2026-00318"
             );
             pdfBytes = _pdfService.GenerateLabRequisitionSlipPdf(slip, settings, sampleDoctor, signatureMode);
             fileName = "Sample-LabRequisitionSlip.pdf";
@@ -219,27 +220,39 @@ public sealed class SettingsController : ControllerBase
                 Id = Guid.NewGuid(),
                 TenantId = settings.TenantId,
                 ClinicId = settings.ClinicId,
-                ReferralNumber = "REF-SAMPLE-0001",
+                ReferralNumber = "REF-2026-00105",
                 PatientId = samplePatient.Id,
-                PatientName = "Maria Clara De Los Santos",
+                PatientName = "Juan Dela Cruz",
                 ReferringDoctorId = sampleDoctor.Id,
-                ReferringDoctorName = "Dr. Allan Ramos, MD",
-                ReferredToDoctor = "Dr. Roberto Cruz, MD",
-                ReferredToFacility = "National Kidney and Transplant Institute",
-                ReferredDepartment = "Department of Nephrology",
+                ReferringDoctorName = "DR. ROBERTO V. SANTOS, MD, FPCP",
+                ReferredToDoctor = "Attending Cardiologist / Specialist",
+                ReferredToFacility = "Philippine Heart Center",
+                ReferredDepartment = "East Avenue, Diliman, Quezon City",
                 ReferralDate = DateOnly.FromDateTime(DateTime.UtcNow),
                 Urgency = "Routine",
-                ProvisionalDiagnosis = "Chronic Kidney Disease Stage 2",
-                ReasonForReferral = "For specialist nephrology evaluation and co-management.",
-                ClinicalSummary = "34yo female with persistent mild proteinuria and elevated serum creatinine noted on routine screening.",
-                CurrentMedications = "Losartan 50mg OD, Multivitamins 1 tab OD",
-                AttachedDiagnostics = "Serum Creatinine: 1.4 mg/dL; eGFR: 62 mL/min; Urinalysis: Protein 1+",
+                ProvisionalDiagnosis = "Grade 2 Essential Hypertension & Cardiovascular Risk Evaluation",
+                ReasonForReferral = "For specialist cardiology assessment and 24-hr ambulatory blood pressure monitoring.",
+                ClinicalSummary = "58-year-old male with persistent elevated blood pressure refractory to initial single-agent therapy.",
+                CurrentMedications = "Amlodipine 10mg OD",
+                AttachedDiagnostics = "12-Lead ECG: Normal Sinus Rhythm; Fasting Blood Chemistry attached.",
                 IsSigned = true,
                 SignedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
-                CreatedBy = "Dr. Allan Ramos"
+                CreatedBy = "DR. ROBERTO V. SANTOS, MD"
             };
-            pdfBytes = _pdfService.GenerateReferralLetterPdf(referral, settings, samplePatient, sampleDoctor, signatureMode);
+            var refPatient = new ClinicPatient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = settings.TenantId,
+                PatientCode = "PAT-2026-00105",
+                ContactNumber = "+63 917 123 4567",
+                FirstName = "Juan",
+                LastName = "Dela Cruz",
+                DateOfBirth = new DateOnly(1968, 5, 14),
+                Gender = "Male",
+                PhilHealthNumber = "PHIC-ACC-2026-9912"
+            };
+            pdfBytes = _pdfService.GenerateReferralLetterPdf(referral, settings, refPatient, sampleDoctor, signatureMode);
             fileName = "Sample-ClinicalReferralLetter.pdf";
         }
         else
@@ -249,28 +262,40 @@ public sealed class SettingsController : ControllerBase
                 Id = Guid.NewGuid(),
                 TenantId = settings.TenantId,
                 ClinicId = settings.ClinicId,
-                CertificateNumber = "MC-SAMPLE-0001",
+                CertificateNumber = "MC-2026-0042",
                 PatientId = samplePatient.Id,
-                PatientName = "Maria Clara De Los Santos",
+                PatientName = "Juan Dela Cruz",
                 DoctorId = sampleDoctor.Id,
-                DoctorName = "Dr. Allan Ramos, MD",
-                PrcLicenseNumber = "0056789",
-                PtrNumber = "PTR-2026-9912",
+                DoctorName = "DR. ROBERTO V. SANTOS, MD, FPCP",
+                PrcLicenseNumber = "0098451",
+                PtrNumber = "8472910",
                 IssueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                Diagnosis = "Acute Bronchitis (ICD-10: J20.9)",
-                ClinicalFindings = "Bilateral rhonchi, dry persistent cough, low-grade fever of 37.8°C.",
-                FitnessStatus = "UnfitToWork",
+                Diagnosis = "Acute Upper Respiratory Tract Infection (ICD-10 J06.9)",
+                ClinicalFindings = "Mild pharyngeal congestion, clear breath sounds, normal vital signs.",
+                FitnessStatus = "FitToWork",
                 RecommendedRestDays = 3,
                 RestStartDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                RestEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3)),
-                Purpose = "Employment / Medical Sick Leave",
-                Remarks = "Advised oral hydration, rest, and follow-up if symptoms persist beyond 5 days.",
+                RestEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2)),
+                Purpose = "employment verification and medical leave",
+                Remarks = "Patient was advised home rest and conservative management for three (3) consecutive days. Fit to resume employment activities thereafter.",
                 IsSigned = true,
                 SignedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
-                CreatedBy = "Dr. Allan Ramos"
+                CreatedBy = "DR. ROBERTO V. SANTOS, MD"
             };
-            pdfBytes = _pdfService.GenerateMedicalCertificatePdf(cert, settings, samplePatient, sampleDoctor, signatureMode);
+            var medCertPatient = new ClinicPatient
+            {
+                Id = Guid.NewGuid(),
+                TenantId = settings.TenantId,
+                PatientCode = "PAT-2026-0042",
+                ContactNumber = "+63 917 123 4567",
+                FirstName = "Juan",
+                LastName = "Dela Cruz",
+                DateOfBirth = new DateOnly(1992, 10, 20),
+                Gender = "Male",
+                PhilHealthNumber = "PHIC-ACC-2026-9912"
+            };
+            pdfBytes = _pdfService.GenerateMedicalCertificatePdf(cert, settings, medCertPatient, sampleDoctor, signatureMode);
             fileName = "Sample-MedicalCertificate.pdf";
         }
 
