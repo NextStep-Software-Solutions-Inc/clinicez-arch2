@@ -1862,6 +1862,8 @@ export interface ClinicSettingsRecord {
   letterheadAddress?: string;
   letterheadContact?: string;
   letterheadFooter?: string;
+  letterheadAccentColorHex?: string | null;
+  documentAccentColorHex?: string | null;
   letterheadDohLto?: string;
   dohLicenseToOperate?: string;
   paperSize?: 'Letter' | 'A4' | 'A5';

@@ -2144,11 +2144,18 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     private const string LegacyDefaultAccent = "#0284C7";
 
     /// <summary>
-    /// Accent precedence: the clinic's own choice, then the workspace brand accent, then the product default.
+    /// Accent precedence: the clinic's dedicated Document Accent Color (LetterheadAccentColorHex),
+    /// then the clinic's workstation brand color (PrimaryColorHex), then the workspace brand accent,
+    /// then the product default.
     /// Reads the cached workspace profile only (no network), so printing never waits on the portal.
     /// </summary>
     private string ResolveAccent(ClinicSettings settings)
     {
+        if (!string.IsNullOrWhiteSpace(settings.LetterheadAccentColorHex))
+        {
+            return settings.LetterheadAccentColorHex;
+        }
+
         var workspaceAccent = _workspaceProfiles?.TryGetCached(settings.TenantId.ToString())?.AccentColorHex;
         return WorkspaceBrand.ResolveAccent(settings.PrimaryColorHex, workspaceAccent, LegacyDefaultAccent);
     }

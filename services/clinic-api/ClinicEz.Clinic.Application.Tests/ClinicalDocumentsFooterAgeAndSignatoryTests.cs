@@ -286,6 +286,37 @@ public class ClinicalDocumentsFooterAgeAndSignatoryTests
         pdfText.Should().Contain("Digitally Certified & Locked");
     }
 
+    [Fact]
+    public void DocumentAccentColor_IsIndependent_FromWorkstationPrimaryColorHex()
+    {
+        // Document accent is Purple, while Workstation color branding is Teal
+        var settings = CreateSettings();
+        settings.PrimaryColorHex = "#0D6963"; // Workstation UI brand (Teal)
+        settings.LetterheadAccentColorHex = "#7C3AED"; // Document stationery tone (Purple)
+
+        var cert = CreateCert();
+        var pdfBytes = _pdfService.GenerateMedicalCertificatePdf(cert, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(5000);
+        settings.PrimaryColorHex.Should().Be("#0D6963", "Workstation color branding must remain untouched");
+        settings.LetterheadAccentColorHex.Should().Be("#7C3AED");
+    }
+
+    [Fact]
+    public void DocumentAccentColor_WhenNull_FallsBackToPrimaryColorHex()
+    {
+        var settings = CreateSettings();
+        settings.PrimaryColorHex = "#0284C7";
+        settings.LetterheadAccentColorHex = null;
+
+        var cert = CreateCert();
+        var pdfBytes = _pdfService.GenerateMedicalCertificatePdf(cert, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(5000);
+    }
+
     private static string ExtractTextFromPdf(byte[] pdfBytes)
     {
         var sb = new StringBuilder();

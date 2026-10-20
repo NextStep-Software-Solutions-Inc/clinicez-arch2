@@ -59,6 +59,12 @@ public sealed class ClinicSettings : BaseEntity
     public string? LetterheadContact { get; set; }
     public string? LetterheadDohLto { get; set; }
     public string? LetterheadFooter { get; set; }
+    /// <summary>
+    /// Document / Letterhead Accent Color used for clinical printouts, divider bars, and document headers.
+    /// Completely independent of workstation UI color branding (<see cref="PrimaryColorHex"/>).
+    /// If null or empty, falls back to <see cref="PrimaryColorHex"/>.
+    /// </summary>
+    public string? LetterheadAccentColorHex { get; set; }
     public string PrimaryColorHex { get; set; } = "#0284C7";
     public string? PrimaryLogoUrl { get; set; }
     public string PaperSize { get; set; } = "Letter";

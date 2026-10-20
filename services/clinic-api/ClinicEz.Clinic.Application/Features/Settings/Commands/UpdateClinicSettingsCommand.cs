@@ -29,6 +29,8 @@ public sealed record UpdateClinicSettingsCommand(
     string? LetterheadContact = null,
     string? LetterheadDohLto = null,
     string? LetterheadFooter = null,
+    string? LetterheadAccentColorHex = null,
+    string? DocumentAccentColorHex = null,
     string? PrimaryColorHex = null,
     string? PrimaryLogoUrl = null,
     string? PaperSize = null,
@@ -134,6 +136,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
 
         if (request.LetterheadFooter != null)
             settings.LetterheadFooter = string.IsNullOrWhiteSpace(request.LetterheadFooter) ? null : request.LetterheadFooter.Trim();
+
+        var docAccent = request.LetterheadAccentColorHex ?? request.DocumentAccentColorHex;
+        if (docAccent != null)
+            settings.LetterheadAccentColorHex = string.IsNullOrWhiteSpace(docAccent) ? null : docAccent.Trim();
 
         if (request.PrimaryColorHex != null)
             settings.PrimaryColorHex = request.PrimaryColorHex.Trim();
@@ -280,7 +286,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.EnableDentalModule,
             settings.DefaultDoctorSharePercentage,
             settings.CashierMode,
-            LetterheadDohLto: settings.LetterheadDohLto);
+            LetterheadDohLto: settings.LetterheadDohLto,
+            LetterheadAccentColorHex: settings.LetterheadAccentColorHex);
     }
 
     private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)

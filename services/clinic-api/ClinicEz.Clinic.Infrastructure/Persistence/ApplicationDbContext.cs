@@ -882,6 +882,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.ClinicName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.AccreditationNumber).HasMaxLength(100);
             entity.Property(e => e.LetterheadDohLto).HasMaxLength(100);
+            entity.Property(e => e.LetterheadAccentColorHex).HasMaxLength(20);
             entity.Property(e => e.PmccNumber).HasMaxLength(100);
             entity.Property(e => e.SoftwareCertificateId).HasMaxLength(100);
             entity.Property(e => e.KonsultaEndpoint).HasMaxLength(255);
