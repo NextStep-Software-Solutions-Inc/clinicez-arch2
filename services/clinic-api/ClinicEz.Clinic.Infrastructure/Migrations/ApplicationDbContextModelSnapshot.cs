@@ -516,6 +516,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId", "ClinicId", "OrderDate");
+
                     b.HasIndex("TenantId", "ClinicId", "OrderNumber")
                         .IsUnique();
 
@@ -1328,6 +1330,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<decimal>("DefaultDoctorSharePercentage")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("DefaultSlotDurationMinutes")
                         .HasColumnType("integer");
 
@@ -1735,6 +1740,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
+                    b.HasIndex("TenantId", "ClinicId", "ScheduledAt");
+
                     b.ToTable("Procedures", "public");
                 });
 
@@ -1957,6 +1964,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("TenantId", "BranchId");
+
+                    b.HasIndex("TenantId", "ClinicId", "EncounterDate");
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
 
@@ -4055,6 +4064,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("InvoiceId");
 
+                    b.HasIndex("TenantId", "ClinicId", "PaymentDate");
+
                     b.ToTable("Payments", "public");
                 });
 
@@ -4501,6 +4512,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("AppointmentId");
 
                     b.HasIndex("RoomId");
+
+                    b.HasIndex("TenantId", "ClinicId", "CheckInTime");
 
                     b.HasIndex("TenantId", "ClinicId", "QueueDate");
 
