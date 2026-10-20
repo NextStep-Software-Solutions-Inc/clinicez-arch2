@@ -1858,8 +1858,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     gap: theme.spacing.lg,
     width: '100%',
-    maxWidth: theme.sizes.contentMaxWidth,
-    alignSelf: 'center',
     paddingBottom: theme.spacing['4xl'],
   },
   section: {

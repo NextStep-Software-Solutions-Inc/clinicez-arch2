@@ -224,7 +224,7 @@ describe('Consultations Workstation — Specialty Mode Gating & Dental Wiring', 
     );
 
     expect(html).toContain('Tooth #14');
-    expect(html).toContain('+ Order Procedure for Tooth #14 (MOD)');
+    expect(html).toContain('Order Procedure for Tooth #14 (MOD)');
     expect(html).toContain('inline-dental-chart-card-order-proc-btn');
 
     // Execute order callback

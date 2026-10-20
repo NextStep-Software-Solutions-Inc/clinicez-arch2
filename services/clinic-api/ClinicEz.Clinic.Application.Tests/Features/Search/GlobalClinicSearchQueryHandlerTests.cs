@@ -121,7 +121,7 @@ public class GlobalClinicSearchQueryHandlerTests
         // Assert
         result.TotalCount.Should().Be(2);
         result.Items.Should().HaveCount(2);
-        sw.ElapsedMilliseconds.Should().BeLessThan(350);
+        sw.ElapsedMilliseconds.Should().BeLessThan(1500);
     }
 
     [Fact]

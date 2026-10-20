@@ -10,7 +10,8 @@ import {
   SegmentedControl,
 } from '../ui';
 import { theme } from '../../constants/theme';
-import type { ClinicServiceItem } from '../../services/clinicService';
+import type { ClinicServiceItem, ClinicRoom } from '../../services/clinicService';
+import { useClinic } from '../../context/ClinicContext';
 
 export interface OrderCatalogItemPayload {
   serviceItemId: string;
@@ -25,6 +26,10 @@ export interface OrderCatalogItemPayload {
   instructions?: string;
   toothNumber?: number;
   toothSurface?: string;
+  roomId?: string;
+  roomName?: string;
+  targetRoomId?: string;
+  targetRoomName?: string;
 }
 
 export interface ExistingOrderItemContext {
@@ -34,12 +39,18 @@ export interface ExistingOrderItemContext {
   instructions?: string;
   toothNumber?: number;
   toothSurface?: string;
+  roomId?: string;
+  roomName?: string;
+  targetRoomId?: string;
+  targetRoomName?: string;
 }
 
 export interface OrderCatalogSearchModalProps {
   visible: boolean;
   onClose: () => void;
   catalog?: ClinicServiceItem[];
+  rooms?: ClinicRoom[];
+  initialRoomId?: string;
   initialCategory?: 'Diagnostic' | 'Procedure' | 'All';
   isYakapEligible?: boolean;
   onSelectOrder: (order: OrderCatalogItemPayload) => void;
@@ -48,6 +59,7 @@ export interface OrderCatalogSearchModalProps {
   existingOrders?: ExistingOrderItemContext[];
   initialToothNumber?: number;
   initialToothSurface?: string;
+  initialSelectedItem?: ClinicServiceItem;
   testID?: string;
 }
 
@@ -98,6 +110,8 @@ export function OrderCatalogSearchModal({
   visible,
   onClose,
   catalog = [],
+  rooms,
+  initialRoomId,
   initialCategory = 'All',
   isYakapEligible = false,
   onSelectOrder,
@@ -106,28 +120,65 @@ export function OrderCatalogSearchModal({
   existingOrders = [],
   initialToothNumber,
   initialToothSurface,
+  initialSelectedItem,
   testID = 'order-catalog-search-modal',
 }: OrderCatalogSearchModalProps) {
+  const clinic = useClinic();
+  const targetRooms = useMemo(() => {
+    if (rooms && rooms.length > 0) return rooms;
+    if (clinic?.rooms && clinic.rooms.length > 0) {
+      const treatment = clinic.rooms.filter((r) => r.isActive && r.type === 'Treatment');
+      return treatment.length > 0 ? treatment : clinic.rooms.filter((r) => r.isActive);
+    }
+    return [];
+  }, [rooms, clinic?.rooms]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryTab>(initialCategory);
-  const [selectedItem, setSelectedItem] = useState<ClinicServiceItem | null>(null);
-  const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>('in_house');
+  const [selectedItem, setSelectedItem] = useState<ClinicServiceItem | null>(() => initialSelectedItem ?? null);
+  const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>(() =>
+    initialSelectedItem ? getHeuristicFulfillmentMode(initialSelectedItem) : 'in_house'
+  );
   const [instructions, setInstructions] = useState('');
+  const [selectedRoomId, setSelectedRoomId] = useState<string>(() => {
+    return initialRoomId || (targetRooms[0]?.id ?? '');
+  });
 
   // Reset form when modal becomes visible or initialCategory changes
   useEffect(() => {
     if (visible) {
       setSearchQuery('');
       setSelectedCategory(initialCategory);
-      setSelectedItem(null);
-      setFulfillmentMode('in_house');
+      setSelectedItem(initialSelectedItem ?? null);
+      if (initialSelectedItem) {
+        setFulfillmentMode(getHeuristicFulfillmentMode(initialSelectedItem));
+        const existing = existingOrders?.find(
+          (o) =>
+            o.name.toLowerCase() === initialSelectedItem.name.toLowerCase() ||
+            (o.code && initialSelectedItem.code && o.code.toLowerCase() === initialSelectedItem.code.toLowerCase())
+        );
+        if (existing?.roomId || existing?.targetRoomId) {
+          setSelectedRoomId(existing.roomId || existing.targetRoomId || '');
+        } else if (initialRoomId) {
+          setSelectedRoomId(initialRoomId);
+        } else if (targetRooms.length > 0) {
+          setSelectedRoomId(targetRooms[0].id);
+        }
+      } else {
+        setFulfillmentMode('in_house');
+        if (initialRoomId) {
+          setSelectedRoomId(initialRoomId);
+        } else if (targetRooms.length > 0) {
+          setSelectedRoomId(targetRooms[0].id);
+        }
+      }
       if (initialToothNumber) {
         setInstructions(`Tooth #${initialToothNumber}${initialToothSurface ? ` (${initialToothSurface})` : ''}`);
       } else {
         setInstructions('');
       }
     }
-  }, [visible, initialCategory, initialToothNumber, initialToothSurface]);
+  }, [visible, initialCategory, initialToothNumber, initialToothSurface, initialRoomId, targetRooms, initialSelectedItem, existingOrders]);
 
   const filteredCatalog = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -171,9 +222,17 @@ export function OrderCatalogSearchModal({
     if (isOrdered && existing) {
       setFulfillmentMode(existing.fulfillmentMode || getHeuristicFulfillmentMode(item));
       setInstructions(existing.instructions || '');
+      if (existing.roomId || existing.targetRoomId) {
+        setSelectedRoomId(existing.roomId || existing.targetRoomId || '');
+      }
     } else {
       setFulfillmentMode(getHeuristicFulfillmentMode(item));
       setInstructions('');
+      if (initialRoomId) {
+        setSelectedRoomId(initialRoomId);
+      } else if (targetRooms.length > 0) {
+        setSelectedRoomId(targetRooms[0].id);
+      }
     }
   };
 
@@ -207,6 +266,8 @@ export function OrderCatalogSearchModal({
   const handleSubmit = () => {
     if (!selectedItem) return;
 
+    const resolvedRoom = targetRooms.find((r) => r.id === selectedRoomId) ?? targetRooms[0];
+
     const payload: OrderCatalogItemPayload = {
       serviceItemId: selectedItem.id,
       code: selectedItem.code,
@@ -220,6 +281,10 @@ export function OrderCatalogSearchModal({
       instructions: instructions.trim() ? instructions.trim() : undefined,
       toothNumber: initialToothNumber,
       toothSurface: initialToothSurface,
+      roomId: !isDiagnostic && resolvedRoom ? resolvedRoom.id : undefined,
+      roomName: !isDiagnostic && resolvedRoom ? resolvedRoom.name : undefined,
+      targetRoomId: !isDiagnostic && resolvedRoom ? resolvedRoom.id : undefined,
+      targetRoomName: !isDiagnostic && resolvedRoom ? resolvedRoom.name : undefined,
     };
 
     onSelectOrder(payload);
@@ -442,6 +507,44 @@ export function OrderCatalogSearchModal({
                   {fulfillmentMode === 'in_house'
                     ? 'In-House Clinic: Point-of-care test performed in clinic; billed on Cashier invoice.'
                     : 'Outside Laboratory: Send-out requisition slip; excluded from clinic invoice.'}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {/* Procedure Room Selection */}
+            {!isDiagnostic && targetRooms.length > 0 ? (
+              <View style={styles.configFieldSection}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Send / Assign to Room
+                </ThemedText>
+                <View style={styles.chipsWrap}>
+                  {targetRooms.map((room) => {
+                    const isSelected = selectedRoomId === room.id;
+                    return (
+                      <Pressable
+                        key={room.id}
+                        style={[
+                          styles.instructionChip,
+                          isSelected && styles.instructionChipActive,
+                        ]}
+                        onPress={() => setSelectedRoomId(room.id)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={`Assign to ${room.name}`}
+                        testID={`${testID}-room-option-${room.id}`}
+                      >
+                        <ThemedText
+                          variant="captionBold"
+                          color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                        >
+                          {room.name}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Select which treatment room or dental operatory to assign this procedure to.
                 </ThemedText>
               </View>
             ) : null}

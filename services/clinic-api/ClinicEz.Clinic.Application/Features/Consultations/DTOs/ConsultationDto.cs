@@ -1,5 +1,8 @@
+global using EncounterTimelineItemDto = ClinicEz.Clinic.Application.Features.Consultations.DTOs.ConsultationEncounterDto;
+
 using System;
 using System.Collections.Generic;
+using ClinicEz.Clinic.Application.Features.Dental.DTOs;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 
 namespace ClinicEz.Clinic.Application.Features.Consultations.DTOs;
@@ -61,4 +64,5 @@ public sealed record ConsultationEncounterDto(
     string? GeneralSurveyId = null,
     string? GeneralSurveyRemarks = null,
     string? PhysicalExamFindingsJson = null,
-    RxPharmacyStatusDto? RxStatus = null);
+    RxPharmacyStatusDto? RxStatus = null,
+    List<DentalToothRecordDto>? DentalFindings = null);

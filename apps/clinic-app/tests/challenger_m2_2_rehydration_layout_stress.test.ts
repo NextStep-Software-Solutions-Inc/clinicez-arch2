@@ -815,13 +815,13 @@ describe('Challenger M2-2: Adversarial Rehydration & Workstation Layout Stress S
     const consultationScreenPath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
     const sourceCode = fs.readFileSync(consultationScreenPath, 'utf8');
 
-    test('5.1 "+ Add test" button is conditionally rendered only when !isSigned', () => {
-      const addTestPattern = /rightAction=\{\s*!isSigned\s*\?\s*\(\s*<Button[^>]*title="\+ Add test"/;
+    test('5.1 "Add test" button is conditionally rendered only when !isSigned', () => {
+      const addTestPattern = /rightAction=\{\s*!isSigned\s*\?\s*\(\s*<Button[^>]*title="(\+\s*)?Add test"/;
       expect(addTestPattern.test(sourceCode)).toBe(true);
     });
 
-    test('5.2 "+ Add procedure" button is conditionally rendered only when !isSigned', () => {
-      const addProcPattern = /rightAction=\{\s*!isSigned\s*\?\s*\(\s*<Button[^>]*title="\+ Add procedure"/;
+    test('5.2 "Add procedure" button is conditionally rendered only when !isSigned', () => {
+      const addProcPattern = /rightAction=\{\s*!isSigned\s*\?\s*\(\s*<Button[^>]*title="(\+\s*)?Add procedure"/;
       expect(addProcPattern.test(sourceCode)).toBe(true);
     });
 

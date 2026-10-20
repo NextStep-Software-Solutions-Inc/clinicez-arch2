@@ -258,4 +258,99 @@ public class GetPatientDentalChartQueryHandlerTests
         result.Teeth.Should().BeEmpty();
         result.DentalProcedures.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task Handle_WithMultiConditionTooth_ReturnsBothRecordsAndDistinctToothSummaryMetrics()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var patientId = Guid.NewGuid();
+
+        // Tooth 16: Condition 1 - Filled on O
+        await toothRepo.AddAsync(new DentalToothRecord
+        {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ToothNumber = 16,
+            Status = ToothStatus.Filled,
+            Surface = "O",
+            Notes = "Occlusal composite",
+            CreatedBy = "Dr. Prior Dentist",
+            UpdatedBy = "Dr. Restoring Dentist"
+        }, CancellationToken.None);
+
+        // Tooth 16: Condition 2 - Decay on MD
+        await toothRepo.AddAsync(new DentalToothRecord
+        {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ToothNumber = 16,
+            Status = ToothStatus.Decay,
+            Surface = "MD",
+            Notes = "Mesial and distal recurrent decay",
+            CreatedBy = "Dr. Diagnostic Dentist"
+        }, CancellationToken.None);
+
+        // Tooth 21: Healthy
+        await toothRepo.AddAsync(new DentalToothRecord
+        {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ToothNumber = 21,
+            Status = ToothStatus.Healthy,
+            CreatedBy = "Dr. Diagnostic Dentist"
+        }, CancellationToken.None);
+
+        // Tooth 36: Missing
+        await toothRepo.AddAsync(new DentalToothRecord
+        {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ToothNumber = 36,
+            Status = ToothStatus.Missing,
+            CreatedBy = "Dr. Diagnostic Dentist"
+        }, CancellationToken.None);
+
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new GetPatientDentalChartQueryHandler(toothRepo, procRepo, _clinicContext);
+
+        // Act
+        var result = await handler.Handle(new GetPatientDentalChartQuery(patientId), CancellationToken.None);
+
+        // Assert: 4 record rows across 3 distinct teeth
+        result.Should().NotBeNull();
+        result.Teeth.Should().HaveCount(4);
+
+        // Both conditions on tooth 16 are present with their respective RecordedBy values
+        var tooth16Filled = result.Teeth.FirstOrDefault(t => t.ToothNumber == 16 && t.Status == ToothStatus.Filled);
+        tooth16Filled.Should().NotBeNull();
+        tooth16Filled!.Surface.Should().Be("O");
+        tooth16Filled.RecordedBy.Should().Be("Dr. Restoring Dentist"); // UpdatedBy ?? CreatedBy
+
+        var tooth16Decay = result.Teeth.FirstOrDefault(t => t.ToothNumber == 16 && t.Status == ToothStatus.Decay);
+        tooth16Decay.Should().NotBeNull();
+        tooth16Decay!.Surface.Should().Be("MD");
+        tooth16Decay.RecordedBy.Should().Be("Dr. Diagnostic Dentist"); // CreatedBy fallback
+
+        // Summary metrics strictly calculate distinct teeth
+        result.Summary.Should().NotBeNull();
+        result.Summary!.TotalTeethRecorded.Should().Be(3); // Distinct teeth: 16, 21, 36 (NOT 4 rows!)
+        result.Summary.HealthyCount.Should().Be(1); // Tooth 21
+        result.Summary.FilledCount.Should().Be(1);  // Tooth 16
+        result.Summary.DecayCount.Should().Be(1);   // Tooth 16
+        result.Summary.MissingCount.Should().Be(1); // Tooth 36
+        result.Summary.CrownCount.Should().Be(0);
+        result.Summary.ExtractionCount.Should().Be(0);
+
+        // DMFT: Distinct teeth with Decay, Missing, or Filled:
+        // Tooth 16 (has Decay and Filled) counts as 1. Tooth 36 (Missing) counts as 1. Total = 2.
+        result.Summary.DmftIndex.Should().Be(2);
+    }
 }

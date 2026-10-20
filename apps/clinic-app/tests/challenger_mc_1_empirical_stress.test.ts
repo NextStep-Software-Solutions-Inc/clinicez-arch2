@@ -159,7 +159,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
         disabled: false,
         initialToothNumber: 16,
         expectedRenderButton: true,
-        expectedButtonText: '+ Order Procedure for Tooth #16',
+        expectedButtonText: 'Order Procedure for Tooth #16',
       },
       {
         name: 'Permutation 2: onOrderProcedure only (alias compatibility path)',
@@ -168,7 +168,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
         disabled: false,
         initialToothNumber: 16,
         expectedRenderButton: true,
-        expectedButtonText: '+ Order Procedure for Tooth #16',
+        expectedButtonText: 'Order Procedure for Tooth #16',
       },
       {
         name: 'Permutation 3: Both callbacks provided simultaneously',
@@ -177,7 +177,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
         disabled: false,
         initialToothNumber: 16,
         expectedRenderButton: true,
-        expectedButtonText: '+ Order Procedure for Tooth #16',
+        expectedButtonText: 'Order Procedure for Tooth #16',
       },
       {
         name: 'Permutation 4: Neither callback provided',
@@ -342,7 +342,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
         })
       );
       expect(html).toContain('inline-dental-chart-card-order-proc-btn');
-      expect(html).toContain('+ Order Procedure for Tooth #54 (MO)');
+      expect(html).toContain('Order Procedure for Tooth #54 (MO)');
     });
   });
 

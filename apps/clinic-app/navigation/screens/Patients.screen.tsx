@@ -891,6 +891,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setPatientChart(null);
     const [chartData, chartErr] = await clinicService.getPatientChart(patient.id);
     if (chartData) {
+      if (!chartData.dentalTeeth || chartData.dentalTeeth.length === 0) {
+        const [dentalData] = await clinicService.getPatientDentalChart(patient.id);
+        if (dentalData?.teeth && dentalData.teeth.length > 0) {
+          chartData.dentalTeeth = dentalData.teeth;
+          chartData.dentalChart = dentalData;
+        }
+      }
       setPatientChart(chartData);
       setChartError(null);
       if (chartData.attachments && chartData.attachments.length > 0) {
@@ -2772,8 +2779,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     gap: theme.spacing.lg,
     width: '100%',
-    maxWidth: theme.sizes.contentMaxWidth,
-    alignSelf: 'center',
     paddingBottom: theme.spacing['4xl'],
   },
   offlineBanner: {
