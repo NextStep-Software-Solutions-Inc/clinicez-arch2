@@ -95,6 +95,7 @@ interface LoadErrors {
   services?: string;
   queue?: string;
   eod?: string;
+  invoices?: string;
 }
 
 const DISCOUNT_OPTIONS: Array<{ key: DiscountType; label: string }> = [
@@ -114,6 +115,15 @@ function paymentMethodLabel(method: PaymentMethod): string {
 
 function formatPeso(value?: number | null): string {
   return `₱${(value ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function getManilaTodayStr(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+  } catch {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
 }
 
 function toBillingPatient(
@@ -179,16 +189,16 @@ export default function BillingScreen() {
   const handledParamPatientRef = useRef<string | null>(null);
 
   const loadInitialData = useCallback(async () => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getManilaTodayStr();
     const [
       [servicesData, svcErr],
       [queueData, qErr],
       [eodData, eodErr],
-      [invoicesData],
+      [invoicesData, invErr],
       [settingsData],
     ] = await Promise.all([
       clinicService.getServices(),
-      clinicService.getQueue(),
+      clinicService.getQueue({ view: 'All' }),
       clinicService.getDailyEodReport(),
       clinicService.getInvoices(todayStr),
       clinicService.getSettings(),
@@ -200,6 +210,10 @@ export default function BillingScreen() {
       errors.services = svcErr.message || 'Unable to load the service catalog.';
     } else {
       setServices(servicesData ?? []);
+    }
+
+    if (invErr) {
+      errors.invoices = invErr.message || 'Unable to load today\'s invoices.';
     }
 
     const allInvoices = invoicesData ?? [];

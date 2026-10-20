@@ -9,6 +9,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Features.Reports.Queries;
 
@@ -47,7 +48,9 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
 
     public async Task<DailyEodReportDto> Handle(GetDailyEodReportQuery request, CancellationToken cancellationToken)
     {
-        var targetDate = request.Date?.Date ?? DateTime.UtcNow.Date;
+        var targetDate = request.Date.HasValue
+            ? request.Date.Value.ToStartOfDayUtc()
+            : DateTime.UtcNow.ToStartOfDayUtc();
         var nextDay = targetDate.AddDays(1);
 
         ClinicSettings? settings = null;

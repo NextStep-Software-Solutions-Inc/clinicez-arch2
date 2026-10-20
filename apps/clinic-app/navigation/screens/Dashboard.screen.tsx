@@ -309,7 +309,7 @@ export default function DashboardScreen() {
       [sharesData, sharesErr],
     ] = await Promise.all([
       clinicService.getQueueMetrics(),
-      clinicService.getQueue(),
+      clinicService.getQueue({ view: 'All' }),
       clinicService.getClinicAnalytics(),
       clinicService.getDailyEodReport(),
       clinicService.getMorbidityReport(),
@@ -781,10 +781,29 @@ export default function DashboardScreen() {
     };
   }, [queue]);
 
-  const filteredQueue = useMemo(
-    () => (queue ?? []).filter((item) => queueFilter === 'ALL' || item.status === queueFilter),
-    [queue, queueFilter]
-  );
+  const filteredQueue = useMemo(() => {
+    const list = (queue ?? []).filter((item) => queueFilter === 'ALL' || item.status === queueFilter);
+    if (queueFilter === 'ALL') {
+      const statusOrder: Record<string, number> = {
+        InConsultation: 0,
+        Triaged: 1,
+        Waiting: 2,
+        PendingProcedure: 3,
+        ReEvaluation: 4,
+        OnHold: 5,
+        Completed: 6,
+        NoShow: 7,
+        Cancelled: 8,
+      };
+      return [...list].sort((a, b) => {
+        const orderA = statusOrder[a.status] ?? 99;
+        const orderB = statusOrder[b.status] ?? 99;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.sequenceNumber - b.sequenceNumber;
+      });
+    }
+    return list;
+  }, [queue, queueFilter]);
 
   const reportTitle: Record<ReportType, string> = {
     DAILY_EOD: 'Daily end-of-day report',

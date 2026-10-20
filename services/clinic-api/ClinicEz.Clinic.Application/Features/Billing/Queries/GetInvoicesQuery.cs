@@ -9,6 +9,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Features.Billing.Queries;
 
@@ -20,7 +21,6 @@ public record GetInvoicesQuery(
 
 public class GetInvoicesQueryHandler : IRequestHandler<GetInvoicesQuery, List<InvoiceDto>>
 {
-    private static readonly TimeSpan ManilaOffset = TimeSpan.FromHours(8);
     private readonly IRepository<Invoice> _invoiceRepo;
     private readonly IClinicContext _clinicContext;
 
@@ -37,16 +37,16 @@ public class GetInvoicesQueryHandler : IRequestHandler<GetInvoicesQuery, List<In
         var query = _invoiceRepo.Query()
             .Include(i => i.LineItems)
             .Include(i => i.Payments)
+            .AsSplitQuery()
             .AsNoTracking();
 
         if (request.Date.HasValue)
         {
-            var date = DateOnly.FromDateTime(request.Date.Value);
-            var dayStartUtc = new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), ManilaOffset).UtcDateTime;
-            var dayEndUtc = new DateTimeOffset(date.AddDays(1).ToDateTime(TimeOnly.MinValue), ManilaOffset).UtcDateTime;
+            var dayStart = request.Date.Value.ToStartOfDayUtc();
+            var dayEnd = request.Date.Value.ToEndOfDayExclusiveUtc();
             query = query.Where(i =>
-                (i.InvoiceDate >= dayStartUtc && i.InvoiceDate < dayEndUtc) ||
-                i.Payments.Any(p => p.PaymentDate >= dayStartUtc && p.PaymentDate < dayEndUtc));
+                (i.InvoiceDate >= dayStart && i.InvoiceDate < dayEnd) ||
+                i.Payments.Any(p => p.PaymentDate >= dayStart && p.PaymentDate < dayEnd));
         }
 
         if (request.PatientId.HasValue)
