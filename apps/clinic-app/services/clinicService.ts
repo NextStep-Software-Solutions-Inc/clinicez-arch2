@@ -58,6 +58,8 @@ export interface ClinicRole {
   createdAt: string;
 }
 
+export type SignatureMode = 'ESignatureSpecimen' | 'DigitalSealOnly' | 'WetSignature';
+
 export interface StaffMember {
   id: string;
   tenantId: string;
@@ -80,6 +82,8 @@ export interface StaffMember {
   s2LicenseNumber?: string;
   philHealthPan?: string;
   specialty?: string;
+  signatureSpecimen?: string | null;
+  defaultSignatureMode?: SignatureMode;
   isActive: boolean;
   createdAt: string;
   hasCredentials?: boolean;
@@ -103,6 +107,8 @@ export interface CreateStaffPayload {
   s2LicenseNumber?: string;
   philHealthPan?: string;
   specialty?: string;
+  signatureSpecimen?: string | null;
+  defaultSignatureMode?: SignatureMode;
   initialPassword?: string;
   sendInviteEmail?: boolean;
 }
@@ -124,6 +130,8 @@ export interface UpdateStaffPayload {
   s2LicenseNumber?: string;
   philHealthPan?: string;
   specialty?: string;
+  signatureSpecimen?: string | null;
+  defaultSignatureMode?: SignatureMode;
   isActive?: boolean;
 }
 
@@ -138,6 +146,8 @@ export interface UpdateMyProfilePayload {
   s2LicenseNumber?: string;
   philHealthPan?: string;
   specialty?: string;
+  signatureSpecimen?: string | null;
+  defaultSignatureMode?: SignatureMode;
 }
 
 export interface ResetStaffPasswordResult {
@@ -1777,6 +1787,9 @@ export interface ClinicSettingsRecord {
   letterheadAddress?: string;
   letterheadContact?: string;
   letterheadFooter?: string;
+  letterheadDohLto?: string;
+  dohLicenseToOperate?: string;
+  paperSize?: 'Letter' | 'A4' | 'A5';
   preferredChartLayout?: 'modal' | 'split' | 'drawer';
   isJoinEnabled?: boolean;
   joinCode?: string | null;
@@ -2180,12 +2193,14 @@ export const clinicService = {
     return clinicApiClient.post<PrescriptionSlipData>(`/prescriptions/${consultationId}/record-external-dispense`, payload);
   },
 
-  getPrescriptionSlipPdfUrl(consultationId: string) {
-    return clinicApiUrl(`/prescriptions/${consultationId}/slip-pdf`);
+  getPrescriptionSlipPdfUrl(consultationId: string, options?: { wet?: boolean }) {
+    const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
+    return clinicApiUrl(`/prescriptions/${consultationId}/slip-pdf${qs}`);
   },
 
-  getPrescriptionSlipPdfByNumberUrl(prescriptionNumber: string) {
-    return clinicApiUrl(`/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf`);
+  getPrescriptionSlipPdfByNumberUrl(prescriptionNumber: string, options?: { wet?: boolean }) {
+    const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
+    return clinicApiUrl(`/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf${qs}`);
   },
 
   // ICD-10 Search
@@ -2356,8 +2371,9 @@ export const clinicService = {
     return clinicApiUrl(`/lab-orders/${orderId}/report-pdf`);
   },
 
-  getLabOrderSlipPdfUrl(orderId: string) {
-    return clinicApiUrl(`/lab-orders/${orderId}/slip-pdf`);
+  getLabOrderSlipPdfUrl(orderId: string, options?: { wet?: boolean }) {
+    const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
+    return clinicApiUrl(`/lab-orders/${orderId}/slip-pdf${qs}`);
   },
 
   // Interop: patient share-token import (scan-to-fetch)
@@ -2849,8 +2865,9 @@ export const clinicService = {
     return clinicApiClient.get<MedicalCertificateRecord[]>(`/documents/medical-certificates${qs ? `?${qs}` : ''}`);
   },
 
-  getMedicalCertificatePdfUrl(id: string) {
-    return clinicApiUrl(`/documents/medical-certificates/${id}/pdf`);
+  getMedicalCertificatePdfUrl(id: string, options?: { wet?: boolean }) {
+    const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
+    return clinicApiUrl(`/documents/medical-certificates/${id}/pdf${qs}`);
   },
 
   async issueReferralLetter(payload: {
@@ -2880,8 +2897,9 @@ export const clinicService = {
     return clinicApiClient.get<ReferralLetterRecord[]>(`/documents/referrals${qs ? `?${qs}` : ''}`);
   },
 
-  getReferralLetterPdfUrl(id: string) {
-    return clinicApiUrl(`/documents/referrals/${id}/pdf`);
+  getReferralLetterPdfUrl(id: string, options?: { wet?: boolean }) {
+    const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
+    return clinicApiUrl(`/documents/referrals/${id}/pdf${qs}`);
   },
 
   async verifyDocument(securityDigestOrNumber: string) {
@@ -3000,7 +3018,26 @@ export const clinicService = {
   },
 
   async updateSettings(payload: Partial<ClinicSettingsRecord>) {
-    return clinicApiClient.put<ClinicSettingsRecord>('/settings', payload);
+    const finalPayload = { ...payload };
+    if (finalPayload.dohLicenseToOperate !== undefined && finalPayload.letterheadDohLto === undefined) {
+      finalPayload.letterheadDohLto = finalPayload.dohLicenseToOperate;
+    } else if (finalPayload.letterheadDohLto !== undefined && finalPayload.dohLicenseToOperate === undefined) {
+      finalPayload.dohLicenseToOperate = finalPayload.letterheadDohLto;
+    }
+    return clinicApiClient.put<ClinicSettingsRecord>('/settings', finalPayload);
+  },
+
+  getSampleDocumentPdfUrl(docType: string, options?: { wet?: boolean; paperSize?: string }) {
+    const params: string[] = [];
+    if (docType) params.push(`docType=${encodeURIComponent(docType)}`);
+    if (options?.wet !== undefined) {
+      params.push(`wet=${options.wet ? 'true' : 'false'}`);
+    }
+    if (options?.paperSize) {
+      params.push(`paperSize=${encodeURIComponent(options.paperSize)}`);
+    }
+    const qs = params.length > 0 ? `?${params.join('&')}` : '';
+    return clinicApiUrl(`/settings/sample-document-pdf${qs}`);
   },
 
   async getWorkspaceProfile() {

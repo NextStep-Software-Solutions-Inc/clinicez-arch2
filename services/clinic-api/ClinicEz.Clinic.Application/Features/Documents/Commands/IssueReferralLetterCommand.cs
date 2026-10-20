@@ -5,6 +5,7 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Documents.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Documents.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,15 +32,21 @@ public sealed class IssueReferralLetterCommandHandler : IRequestHandler<IssueRef
     private readonly IRepository<ReferralLetter> _referralRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IDocumentSecurityService _security;
+    private readonly IRepository<StaffMember>? _staffRepo;
 
     public IssueReferralLetterCommandHandler(
         IRepository<ReferralLetter> referralRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IDocumentSecurityService? security = null,
+        IRepository<StaffMember>? staffRepo = null)
     {
         _referralRepo = referralRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _security = security ?? new DocumentSecurityService();
+        _staffRepo = staffRepo;
     }
 
     public async Task<ReferralLetterDto> Handle(IssueReferralLetterCommand request, CancellationToken ct)
@@ -52,6 +59,10 @@ public sealed class IssueReferralLetterCommandHandler : IRequestHandler<IssueRef
 
         var refNumber = $"REF-{datePrefix}-{(count + 1):D4}";
 
+        var issuedAt = DateTime.UtcNow;
+        var doctor = _staffRepo != null ? await _staffRepo.GetByIdAsync(request.ReferringDoctorId, ct) : null;
+        var prcNumber = doctor?.PrcLicenseNumber ?? "PRC-DOCTOR";
+
         var referral = new ReferralLetter
         {
             Id = Guid.NewGuid(),
@@ -63,6 +74,7 @@ public sealed class IssueReferralLetterCommandHandler : IRequestHandler<IssueRef
             ConsultationId = request.ConsultationId,
             ReferringDoctorId = request.ReferringDoctorId,
             ReferringDoctorName = request.ReferringDoctorName.Trim(),
+            ReferringDoctorPrcNumber = prcNumber,
             ReferredToDoctor = request.ReferredToDoctor?.Trim(),
             ReferredToFacility = request.ReferredToFacility.Trim(),
             ReferredDepartment = request.ReferredDepartment.Trim(),
@@ -74,10 +86,14 @@ public sealed class IssueReferralLetterCommandHandler : IRequestHandler<IssueRef
             CurrentMedications = request.CurrentMedications?.Trim(),
             AttachedDiagnostics = request.AttachedDiagnostics?.Trim(),
             IsSigned = true,
-            SignedAt = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow,
+            SignedAt = issuedAt,
+            CreatedAt = issuedAt,
             CreatedBy = request.ReferringDoctorName
         };
+
+        var digest = _security.ComputeDocumentDigest(
+            referral.TenantId, "REFERRAL", referral.ReferralNumber, referral.PatientId, referral.ReferringDoctorPrcNumber, issuedAt);
+        referral.SecurityDigest = digest;
 
         await _referralRepo.AddAsync(referral, ct);
         await _unitOfWork.SaveChangesAsync(ct);

@@ -4,6 +4,7 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.LabOrders.Queries;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Infrastructure.Common;
 using ClinicEz.Shared.Documents;
 using ClinicEz.Shared.Documents.Components;
 using ClinicEz.Shared.Documents.Configuration;
@@ -36,19 +37,26 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         _verificationBaseUrl = VerificationUrlResolver.Resolve(configuration);
     }
 
-    public byte[] GenerateMedicalCertificatePdf(MedicalCertificate cert, ClinicSettings settings, ClinicPatient? patient = null)
+    public byte[] GenerateMedicalCertificatePdf(
+        MedicalCertificate cert,
+        ClinicSettings settings,
+        ClinicPatient? patient = null,
+        StaffMember? doctor = null,
+        SignatureMode? signatureMode = null)
     {
         var config = MapToTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
 
         var issuedDateTime = cert.SignedAt ?? cert.CreatedAt;
-        var digest = _securityService.ComputeDocumentDigest(
+        var digest = cert.SecurityDigest ?? _securityService.ComputeDocumentDigest(
             cert.TenantId,
             "MED-CERT",
             cert.CertificateNumber,
             cert.PatientId,
             cert.PrcLicenseNumber,
             issuedDateTime);
+
+        cert.SecurityDigest = digest;
 
         var verifyUrl = _securityService.GenerateVerificationUrl(
             _verificationBaseUrl,
@@ -60,6 +68,19 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35;
         var patientGender = patient?.Gender.ToString() ?? "Patient";
+
+        var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
+        var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
+            ? (ImageDecoderHelper.TryDecode(doctor?.SignatureSpecimen) ?? config.DoctorSignatureBytes)
+            : null;
+
+        var doctorName = doctor != null
+            ? (!string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} {doctor.FirstName} {doctor.LastName}" : $"Dr. {doctor.FirstName} {doctor.LastName}")
+            : cert.DoctorName;
+        var prc = doctor?.PrcLicenseNumber ?? cert.PrcLicenseNumber;
+        var ptr = doctor?.PtrNumber ?? cert.PtrNumber;
+        var s2 = doctor?.S2LicenseNumber;
+        var specialty = doctor?.Specialty ?? "Attending Physician";
 
         var doc = Document.Create(container =>
         {
@@ -165,20 +186,16 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     });
 
                     // Doctor Signature & Stamp Box
-                    col.Item().PaddingTop(25).AlignRight().Column(c =>
-                    {
-                        c.Item().Width(220).Column(stamp =>
-                        {
-                            stamp.Item().Height(35); // Signature area
-                            stamp.Item().LineHorizontal(1).LineColor("#111827");
-                            stamp.Item().PaddingTop(4).AlignCenter().Text(cert.DoctorName).FontSize(11).Bold().FontColor("#111827");
-                            stamp.Item().AlignCenter().Text("Attending Physician").FontSize(8.5f).SemiBold().FontColor("#4B5563");
-                            stamp.Item().AlignCenter().Text($"PRC Lic. No.: {cert.PrcLicenseNumber}").FontSize(8).FontColor("#4B5563");
-                            if (!string.IsNullOrWhiteSpace(cert.PtrNumber))
-                                stamp.Item().AlignCenter().Text($"PTR No.: {cert.PtrNumber}").FontSize(8).FontColor("#4B5563");
-                            stamp.Item().PaddingTop(2).AlignCenter().Text("✓ Digitally Certified & Locked").FontSize(7.5f).Bold().FontColor("#16A34A");
-                        });
-                    });
+                    RenderDoctorSignatureStamp(
+                        col,
+                        doctorName,
+                        specialty,
+                        prc,
+                        ptr,
+                        s2,
+                        docSignatureBytes,
+                        mode,
+                        "✓ Digitally Certified & Locked");
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -188,7 +205,11 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    public byte[] GenerateLabRequisitionSlipPdf(LabOrderSlipDto slip, ClinicSettings settings)
+    public byte[] GenerateLabRequisitionSlipPdf(
+        LabOrderSlipDto slip,
+        ClinicSettings settings,
+        StaffMember? doctor = null,
+        SignatureMode? signatureMode = null)
     {
         var config = MapToTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -202,6 +223,19 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             slip.OrderDate);
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(slip.QrPayload, 4);
+
+        var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
+        var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
+            ? (ImageDecoderHelper.TryDecode(doctor?.SignatureSpecimen) ?? config.DoctorSignatureBytes)
+            : null;
+
+        var doctorName = doctor != null
+            ? (!string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} {doctor.FirstName} {doctor.LastName}" : slip.DoctorName)
+            : slip.DoctorName;
+        var prc = doctor?.PrcLicenseNumber ?? slip.DoctorPrcLicense;
+        var ptr = doctor?.PtrNumber ?? slip.DoctorPtr;
+        var s2 = doctor?.S2LicenseNumber;
+        var specialty = doctor?.Specialty ?? "Requesting Physician";
 
         var doc = Document.Create(container =>
         {
@@ -345,16 +379,16 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     });
 
                     // Doctor Stamp Block
-                    col.Item().PaddingTop(20).AlignRight().Column(c =>
-                    {
-                        c.Item().Width(200).Column(stamp =>
-                        {
-                            stamp.Item().Height(30);
-                            stamp.Item().LineHorizontal(1).LineColor("#111827");
-                            stamp.Item().PaddingTop(3).AlignCenter().Text(slip.DoctorName).FontSize(9.5f).Bold().FontColor("#111827");
-                            stamp.Item().AlignCenter().Text($"PRC: {slip.DoctorPrcLicense} • Requesting Physician").FontSize(7.5f).FontColor("#4B5563");
-                        });
-                    });
+                    RenderDoctorSignatureStamp(
+                        col,
+                        doctorName,
+                        specialty,
+                        prc,
+                        ptr,
+                        s2,
+                        docSignatureBytes,
+                        mode,
+                        "✓ Digitally Certified & Locked");
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -364,7 +398,11 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    public byte[] GeneratePrescriptionPdf(PrescriptionSlipDto slip, ClinicSettings settings)
+    public byte[] GeneratePrescriptionPdf(
+        PrescriptionSlipDto slip,
+        ClinicSettings settings,
+        StaffMember? doctor = null,
+        SignatureMode? signatureMode = null)
     {
         var config = MapToTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -384,6 +422,22 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             digest);
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(slip.QrPayload ?? verifyUrl, 4);
+
+        bool hasDangerousDrug = slip.Items.Any(i => i.IsDangerousDrug);
+        var preferredMode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
+        var mode = hasDangerousDrug ? SignatureMode.WetSignature : preferredMode;
+
+        var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
+            ? (ImageDecoderHelper.TryDecode(doctor?.SignatureSpecimen) ?? config.DoctorSignatureBytes)
+            : null;
+
+        var doctorName = doctor != null
+            ? (!string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} {doctor.FirstName} {doctor.LastName}" : slip.DoctorName)
+            : slip.DoctorName;
+        var prc = doctor?.PrcLicenseNumber ?? slip.DoctorPrcLicense;
+        var ptr = doctor?.PtrNumber ?? slip.DoctorPtr;
+        var s2 = doctor?.S2LicenseNumber ?? slip.DoctorS2License;
+        var specialty = doctor?.Specialty ?? slip.DoctorSpecialization ?? "Attending Physician";
 
         var doc = Document.Create(container =>
         {
@@ -472,6 +526,17 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             .Text($"⚠️ PATIENT ALLERGIES: {slip.PatientAllergies}").FontSize(8.5f).Bold().FontColor("#DC2626");
                     }
 
+                    // PDEA S2 Statutory Warning Badge
+                    if (hasDangerousDrug)
+                    {
+                        col.Item().PaddingTop(6).Border(1.5f).BorderColor("#DC2626").Background("#FEF2F2").Padding(6).Row(r =>
+                        {
+                            r.ConstantItem(18).Text("⚠️").FontSize(10);
+                            r.RelativeItem().Text("⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations.")
+                                .FontSize(8.5f).Bold().FontColor("#991B1B");
+                        });
+                    }
+
                     // Prescribed Medications Title (RA 6675 Generics Act)
                     col.Item().PaddingTop(10).Row(row =>
                     {
@@ -537,21 +602,16 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     });
 
                     // Physician Signature Stamp
-                    col.Item().PaddingTop(18).AlignRight().Column(c =>
-                    {
-                        c.Item().Width(210).Column(stamp =>
-                        {
-                            stamp.Item().Height(30);
-                            stamp.Item().LineHorizontal(1).LineColor("#111827");
-                            stamp.Item().PaddingTop(3).AlignCenter().Text(slip.DoctorName).FontSize(9.5f).Bold().FontColor("#111827");
-                            stamp.Item().AlignCenter().Text($"PRC: {slip.DoctorPrcLicense} • PTR: {slip.DoctorPtr ?? "N/A"}").FontSize(7.5f).FontColor("#4B5563");
-                            if (!string.IsNullOrWhiteSpace(slip.DoctorS2License))
-                            {
-                                stamp.Item().AlignCenter().Text($"PDEA S2: {slip.DoctorS2License}").FontSize(7.5f).Bold().FontColor("#DC2626");
-                            }
-                            stamp.Item().PaddingTop(2).AlignCenter().Text("✓ Officially Signed e-Prescription (FDA Circular 2020-004)").FontSize(7f).Bold().FontColor("#16A34A");
-                        });
-                    });
+                    RenderDoctorSignatureStamp(
+                        col,
+                        doctorName,
+                        specialty,
+                        prc,
+                        ptr,
+                        s2,
+                        docSignatureBytes,
+                        mode,
+                        "✓ Officially Signed e-Prescription (FDA Circular 2020-004)");
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -565,7 +625,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         ReferralLetter referral,
         ClinicSettings settings,
         ClinicPatient? patient = null,
-        StaffMember? doctor = null)
+        StaffMember? doctor = null,
+        SignatureMode? signatureMode = null)
     {
         var config = MapToTenantConfig(settings);
         var primaryColor = config.GetSafePrimaryColorHex();
@@ -578,15 +639,17 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         };
 
         var issuedDateTime = referral.SignedAt ?? referral.CreatedAt;
-        var prcLicense = doctor?.PrcLicenseNumber ?? "PRC-DOCTOR";
+        var prcLicense = doctor?.PrcLicenseNumber ?? referral.ReferringDoctorPrcNumber ?? "PRC-DOCTOR";
 
-        var digest = _securityService.ComputeDocumentDigest(
+        var digest = referral.SecurityDigest ?? _securityService.ComputeDocumentDigest(
             referral.TenantId,
             "REFERRAL",
             referral.ReferralNumber,
             referral.PatientId,
             prcLicense,
             issuedDateTime);
+
+        referral.SecurityDigest = digest;
 
         var verifyUrl = _securityService.GenerateVerificationUrl(
             _verificationBaseUrl,
@@ -598,6 +661,19 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35;
         var patientGender = patient?.Gender.ToString() ?? "Patient";
+
+        var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
+        var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
+            ? (ImageDecoderHelper.TryDecode(doctor?.SignatureSpecimen) ?? config.DoctorSignatureBytes)
+            : null;
+
+        var doctorName = doctor != null
+            ? (!string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} {doctor.FirstName} {doctor.LastName}" : referral.ReferringDoctorName)
+            : referral.ReferringDoctorName;
+        var prc = doctor?.PrcLicenseNumber ?? prcLicense;
+        var ptr = doctor?.PtrNumber;
+        var s2 = doctor?.S2LicenseNumber;
+        var specialty = doctor?.Specialty ?? "Referring Physician / Attending Clinician";
 
         var doc = Document.Create(container =>
         {
@@ -707,27 +783,16 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     });
 
                     // Referring Physician Stamp & Signature Block
-                    col.Item().PaddingTop(16).AlignRight().Width(240).Column(stamp =>
-                    {
-                        stamp.Item().AlignCenter().Text(referral.ReferringDoctorName)
-                            .FontSize(11).Bold().FontColor("#111827");
-                        stamp.Item().AlignCenter().Text("Referring Physician / Attending Clinician")
-                            .FontSize(8f).Italic().FontColor("#4B5563");
-                        stamp.Item().PaddingTop(2).AlignCenter().Text($"PRC License No: {doctor?.PrcLicenseNumber ?? prcLicense}")
-                            .FontSize(8f).SemiBold().FontColor("#374151");
-
-                        if (!string.IsNullOrWhiteSpace(doctor?.PtrNumber))
-                        {
-                            stamp.Item().AlignCenter().Text($"PTR No: {doctor.PtrNumber}").FontSize(8f).FontColor("#4B5563");
-                        }
-                        if (!string.IsNullOrWhiteSpace(doctor?.S2LicenseNumber))
-                        {
-                            stamp.Item().AlignCenter().Text($"PDEA S2: {doctor.S2LicenseNumber}").FontSize(8f).Bold().FontColor("#DC2626");
-                        }
-
-                        stamp.Item().PaddingTop(3).AlignCenter().Text("✓ Officially Certified Clinical Referral & Transfer")
-                            .FontSize(7.5f).Bold().FontColor("#16A34A");
-                    });
+                    RenderDoctorSignatureStamp(
+                        col,
+                        doctorName,
+                        specialty,
+                        prc,
+                        ptr,
+                        s2,
+                        docSignatureBytes,
+                        mode,
+                        "✓ Digitally Certified Clinical Referral & Transfer");
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -856,8 +921,10 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             FacilitySubHeader = settings.LetterheadSubHeader ?? "Accredited Outpatient Medical Facility",
             PhysicalAddress = settings.LetterheadAddress ?? "Philippines",
             ContactNumbers = settings.LetterheadContact,
+            DohLicenseToOperate = settings.LetterheadDohLto,
             PhilHealthAccreditationNumber = settings.AccreditationNumber,
             PrimaryColorHex = ResolveAccent(settings),
+            PrimaryLogoBytes = ImageDecoderHelper.TryDecode(settings.PrimaryLogoUrl),
             PaperSize = settings.PaperSize?.ToLowerInvariant() switch
             {
                 "a4" => DocumentPaperSize.A4,
@@ -866,5 +933,62 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             },
             CustomDisclaimerText = settings.LetterheadFooter ?? "Valid Philippine Medical Certificate & Prescription. Digitally issued via Clinic EZ in compliance with RA 8792 & RA 10173."
         };
+    }
+
+    private static void RenderDoctorSignatureStamp(
+        ColumnDescriptor col,
+        string doctorName,
+        string titleOrSpecialty,
+        string? prcLicense,
+        string? ptrNumber,
+        string? s2License,
+        byte[]? signatureBytes,
+        SignatureMode mode,
+        string digitalSealBadgeText)
+    {
+        col.Item().PaddingTop(16).AlignRight().Width(230).Column(stamp =>
+        {
+            if (mode == SignatureMode.ESignatureSpecimen && signatureBytes != null && signatureBytes.Length > 0)
+            {
+                stamp.Item().Height(38).AlignCenter().Image(signatureBytes).FitArea();
+            }
+            else
+            {
+                stamp.Item().Height(mode == SignatureMode.WetSignature ? 42 : 30);
+            }
+
+            stamp.Item().LineHorizontal(1).LineColor("#111827");
+            stamp.Item().PaddingTop(3).AlignCenter().Text(doctorName).FontSize(10.5f).Bold().FontColor("#111827");
+            if (!string.IsNullOrWhiteSpace(titleOrSpecialty))
+            {
+                stamp.Item().AlignCenter().Text(titleOrSpecialty).FontSize(8f).SemiBold().FontColor("#4B5563");
+            }
+            if (!string.IsNullOrWhiteSpace(prcLicense))
+            {
+                var prcText = prcLicense.StartsWith("PRC", StringComparison.OrdinalIgnoreCase)
+                    ? prcLicense
+                    : $"PRC Lic. No.: {prcLicense}";
+                stamp.Item().AlignCenter().Text(prcText).FontSize(7.5f).FontColor("#4B5563");
+            }
+            if (!string.IsNullOrWhiteSpace(ptrNumber))
+            {
+                var ptrText = ptrNumber.StartsWith("PTR", StringComparison.OrdinalIgnoreCase)
+                    ? ptrNumber
+                    : $"PTR No.: {ptrNumber}";
+                stamp.Item().AlignCenter().Text(ptrText).FontSize(7.5f).FontColor("#4B5563");
+            }
+            if (!string.IsNullOrWhiteSpace(s2License))
+            {
+                var s2Text = s2License.StartsWith("PDEA", StringComparison.OrdinalIgnoreCase)
+                    ? s2License
+                    : $"PDEA S2: {s2License}";
+                stamp.Item().AlignCenter().Text(s2Text).FontSize(7.5f).Bold().FontColor("#DC2626");
+            }
+
+            if (mode != SignatureMode.WetSignature && !string.IsNullOrWhiteSpace(digitalSealBadgeText))
+            {
+                stamp.Item().PaddingTop(2).AlignCenter().Text(digitalSealBadgeText).FontSize(7f).Bold().FontColor("#16A34A");
+            }
+        });
     }
 }

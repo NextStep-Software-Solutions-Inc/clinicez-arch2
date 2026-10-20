@@ -25,6 +25,7 @@ import {
   SkeletonList,
   Modal,
   SegmentedControl,
+  type SegmentedOption,
 } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
@@ -514,6 +515,7 @@ export default function ConsultationsScreen() {
 
   // Prescriptions
   const [prescriptions, setPrescriptions] = useState<LocalPrescription[]>([]);
+  const hasDangerousDrug = useMemo(() => prescriptions.some((p) => p.isDangerousDrug), [prescriptions]);
 
   // Diagnostic Lab Orders & In-Clinic Procedures
   const [orderedLabs, setOrderedLabs] = useState<LocalLabOrder[]>([]);
@@ -701,7 +703,36 @@ export default function ConsultationsScreen() {
   const [issuedReferral, setIssuedReferral] = useState<ReferralLetterRecord | null>(null);
 
   const [previewDocModal, setPreviewDocModal] = useState(false);
-  const [previewType, setPreviewType] = useState<'MEDCERT' | 'REFERRAL'>('MEDCERT');
+  const [previewType, setPreviewType] = useState<'MEDCERT' | 'REFERRAL' | 'PRESCRIPTION'>('MEDCERT');
+  const [docSigningMode, setDocSigningMode] = useState<'esign' | 'wet'>('esign');
+
+  const DOC_SIGNING_OPTIONS: SegmentedOption<'esign' | 'wet'>[] = [
+    { value: 'esign', label: 'E-Signed PDF' },
+    { value: 'wet', label: 'Wet Signature (Pen)' },
+  ];
+
+  useEffect(() => {
+    if (previewDocModal) {
+      if (hasDangerousDrug) {
+        setDocSigningMode('wet');
+      } else if (signerStaff?.defaultSignatureMode === 'WetSignature') {
+        setDocSigningMode('wet');
+      } else {
+        setDocSigningMode('esign');
+      }
+    }
+  }, [previewDocModal, hasDangerousDrug, signerStaff?.defaultSignatureMode]);
+
+  const handleDocSigningModeChange = (mode: 'esign' | 'wet') => {
+    if (hasDangerousDrug && mode === 'esign') {
+      Alert.alert(
+        'PDEA S2 Statutory Safeguard',
+        'Prescriptions containing Dangerous Drugs (PDEA S2 regulated substances) cannot be issued with electronic signature alone. A wet signature on a physical prescription pad is required under Philippine DOH-PDEA regulations (RA 9165).',
+      );
+      return;
+    }
+    setDocSigningMode(mode);
+  };
 
   // E-Prescription Slip & Dual-Path Interoperability States
   const [signedConsultationId, setSignedConsultationId] = useState<string | null>(null);
@@ -4785,18 +4816,24 @@ export default function ConsultationsScreen() {
         <Modal
           visible={previewDocModal}
           onClose={() => setPreviewDocModal(false)}
-          title={previewType === 'MEDCERT' ? 'Medical certificate' : 'Referral letter'}
+          title={
+            previewType === 'MEDCERT'
+              ? 'Medical certificate'
+              : previewType === 'REFERRAL'
+              ? 'Referral letter'
+              : 'Electronic prescription'
+          }
           maxWidth={640}
           footer={
             <View style={styles.modalFooter}>
               {previewType === 'MEDCERT' && issuedMedCert ? (
                 <Button
-                  title="Download official PDF"
+                  title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
                   icon="download"
                   variant="success"
                   onPress={() =>
                     downloadPdf(
-                      clinicService.getMedicalCertificatePdfUrl(issuedMedCert.id),
+                      clinicService.getMedicalCertificatePdfUrl(issuedMedCert.id, { wet: docSigningMode === 'wet' }),
                       'Could not open the medical certificate PDF. Please check your connection and try again.',
                     )
                   }
@@ -4804,13 +4841,29 @@ export default function ConsultationsScreen() {
               ) : null}
               {previewType === 'REFERRAL' && issuedReferral ? (
                 <Button
-                  title="Download official PDF"
+                  title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
                   icon="download"
                   variant="success"
                   onPress={() =>
                     downloadPdf(
-                      clinicService.getReferralLetterPdfUrl(issuedReferral.id),
+                      clinicService.getReferralLetterPdfUrl(issuedReferral.id, { wet: docSigningMode === 'wet' }),
                       'Could not open the referral letter PDF. Please check your connection and try again.',
+                    )
+                  }
+                />
+              ) : null}
+              {previewType === 'PRESCRIPTION' && (signedConsultationId || prescriptionSlip?.consultationId) ? (
+                <Button
+                  title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
+                  icon="download"
+                  variant="success"
+                  onPress={() =>
+                    downloadPdf(
+                      clinicService.getPrescriptionSlipPdfUrl(
+                        signedConsultationId || prescriptionSlip!.consultationId,
+                        { wet: docSigningMode === 'wet' },
+                      ),
+                      'Could not open the prescription slip PDF. Please check your connection and try again.',
                     )
                   }
                 />
@@ -4819,6 +4872,38 @@ export default function ConsultationsScreen() {
             </View>
           }
         >
+          {/* Document signing mode selector */}
+          <View style={styles.docModeCard}>
+            <View style={styles.docModeHeader}>
+              <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+                Signature & Print Mode
+              </ThemedText>
+              {docSigningMode === 'wet' ? (
+                <Badge label="Wet Signature (Pen)" variant="neutral" icon="pencil" />
+              ) : (
+                <Badge label="E-Signed PDF" variant="success" icon="check" />
+              )}
+            </View>
+
+            <SegmentedControl
+              options={DOC_SIGNING_OPTIONS}
+              value={docSigningMode}
+              onChange={handleDocSigningModeChange}
+            />
+
+            {hasDangerousDrug ? (
+              <View style={styles.pdeaWarningBox} testID="pdea-warning-badge">
+                <View style={styles.pdeaWarningHeader}>
+                  <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+                  <Badge label="PDEA S2 Regulated Substance" variant="warning" />
+                </View>
+                <ThemedText variant="captionBold" color={theme.colors.warningText}>
+                  PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations.
+                </ThemedText>
+              </View>
+            ) : null}
+          </View>
+
           <View style={styles.paper}>
             {/* Facility letterhead */}
             <View style={styles.paperHeader}>
@@ -4846,10 +4931,19 @@ export default function ConsultationsScreen() {
                 </ThemedText>
               ) : null}
               <ThemedText variant="bodyBold" color={theme.colors.primaryDark} style={styles.paperTitle}>
-                {previewType === 'MEDCERT' ? 'Medical certificate' : 'Referral letter'}
+                {previewType === 'MEDCERT'
+                  ? 'Medical certificate'
+                  : previewType === 'REFERRAL'
+                  ? 'Referral letter'
+                  : 'Electronic prescription'}
               </ThemedText>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Document No. {previewType === 'MEDCERT' ? issuedMedCert?.certificateNumber : issuedReferral?.referralNumber}
+                Document No.{' '}
+                {previewType === 'MEDCERT'
+                  ? issuedMedCert?.certificateNumber
+                  : previewType === 'REFERRAL'
+                  ? issuedReferral?.referralNumber
+                  : (prescriptionSlip?.prescriptionNumber || 'Rx')}
               </ThemedText>
             </View>
 
@@ -4915,6 +5009,29 @@ export default function ConsultationsScreen() {
               </View>
             ) : null}
 
+            {previewType === 'PRESCRIPTION' ? (
+              <View style={styles.stack}>
+                <ThemedText variant="bodyBold">Prescribed medications:</ThemedText>
+                {prescriptions.map((p, idx) => (
+                  <View key={p.id || idx} style={styles.paperBox}>
+                    <View style={styles.rxPaperRow}>
+                      <ThemedText variant="bodyBold">{p.genericName}</ThemedText>
+                      <Badge label={`Qty: ${p.quantity}`} variant="neutral" />
+                    </View>
+                    <ThemedText variant="small" color={theme.colors.textSecondary}>
+                      {p.dosage} · {p.form}
+                    </ThemedText>
+                    <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                      Sig: {p.sig}
+                    </ThemedText>
+                    {p.isDangerousDrug ? (
+                      <Badge label="Dangerous drug (PDEA S2)" variant="emergency" />
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
             {/* Physician signature block */}
             <View style={styles.signature}>
               <ThemedText variant="bodyBold">{docSignature.name}</ThemedText>
@@ -4928,7 +5045,11 @@ export default function ConsultationsScreen() {
                   PTR No. {docSignature.ptr}
                 </ThemedText>
               ) : null}
-              {docSignature.signed ? (
+              {docSigningMode === 'wet' ? (
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  [ Clean signature line for physical pen signing ]
+                </ThemedText>
+              ) : docSignature.signed ? (
                 <ThemedText variant="captionBold" color={theme.colors.successText}>
                   Digitally signed and sealed
                 </ThemedText>
@@ -4947,6 +5068,7 @@ export default function ConsultationsScreen() {
           visible={prescriptionSlipModalVisible}
           onClose={() => setPrescriptionSlipModalVisible(false)}
           slip={prescriptionSlip}
+          attendingDoctor={signerStaff}
           onOpenExternalDispense={() => {
             if (!signedConsultationId) {
               notify.info('Sign the encounter before recording an external dispense.');
@@ -6172,5 +6294,37 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
     marginTop: theme.spacing.xs,
+  },
+  docModeCard: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  docModeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  rxPaperRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pdeaWarningBox: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  pdeaWarningHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
 });

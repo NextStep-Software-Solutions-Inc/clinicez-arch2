@@ -12,6 +12,7 @@ using MediatR;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Documents.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 
@@ -30,6 +31,7 @@ public sealed class DocumentsController : ControllerBase
     private readonly IRepository<ClinicLabOrder> _labOrderRepo;
     private readonly IRepository<ClinicSettings> _settingsRepo;
     private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IUnitOfWork? _unitOfWork;
 
     public DocumentsController(
         ISender sender,
@@ -40,7 +42,8 @@ public sealed class DocumentsController : ControllerBase
         IRepository<ConsultationEncounter> encounterRepo,
         IRepository<ClinicLabOrder> labOrderRepo,
         IRepository<ClinicSettings> settingsRepo,
-        IRepository<ClinicPatient> patientRepo)
+        IRepository<ClinicPatient> patientRepo,
+        IUnitOfWork? unitOfWork = null)
     {
         _sender = sender;
         _pdfService = pdfService;
@@ -51,13 +54,15 @@ public sealed class DocumentsController : ControllerBase
         _labOrderRepo = labOrderRepo;
         _settingsRepo = settingsRepo;
         _patientRepo = patientRepo;
+        _unitOfWork = unitOfWork;
     }
 
     [HttpGet("medical-certificates/{id:guid}/pdf")]
     [HasPermission(ClinicPermissions.DocumentsRead)]
     public async Task<IActionResult> DownloadMedicalCertificatePdf(
         [FromRoute] Guid id,
-        CancellationToken ct)
+        [FromQuery] bool? wet = null,
+        CancellationToken ct = default)
     {
         var cert = await _medCertRepo.GetByIdAsync(id, ct);
         if (cert == null) return NotFound($"Medical certificate '{id}' was not found.");
@@ -70,7 +75,20 @@ public sealed class DocumentsController : ControllerBase
         };
 
         var patient = await _patientRepo.GetByIdAsync(cert.PatientId, ct);
-        var pdfBytes = _pdfService.GenerateMedicalCertificatePdf(cert, settings, patient);
+        var doctor = await _staffRepo.GetByIdAsync(cert.DoctorId, ct);
+        var signatureMode = wet == true
+            ? SignatureMode.WetSignature
+            : (wet == false ? SignatureMode.ESignatureSpecimen : (doctor?.DefaultSignatureMode ?? SignatureMode.ESignatureSpecimen));
+
+        var hadSecurityDigest = !string.IsNullOrWhiteSpace(cert.SecurityDigest);
+        var pdfBytes = _pdfService.GenerateMedicalCertificatePdf(cert, settings, patient, doctor, signatureMode);
+
+        if (!hadSecurityDigest && _unitOfWork != null)
+        {
+            _medCertRepo.Update(cert);
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+
         return File(pdfBytes, "application/pdf", $"MedicalCertificate-{cert.CertificateNumber}.pdf");
     }
 
@@ -78,7 +96,8 @@ public sealed class DocumentsController : ControllerBase
     [HasPermission(ClinicPermissions.DocumentsRead)]
     public async Task<IActionResult> DownloadReferralLetterPdf(
         [FromRoute] Guid id,
-        CancellationToken ct)
+        [FromQuery] bool? wet = null,
+        CancellationToken ct = default)
     {
         var referral = await _referralRepo.GetByIdAsync(id, ct);
         if (referral == null) return NotFound($"Referral letter '{id}' was not found.");
@@ -92,7 +111,19 @@ public sealed class DocumentsController : ControllerBase
 
         var patient = await _patientRepo.GetByIdAsync(referral.PatientId, ct);
         var doctor = await _staffRepo.GetByIdAsync(referral.ReferringDoctorId, ct);
-        var pdfBytes = _pdfService.GenerateReferralLetterPdf(referral, settings, patient, doctor);
+        var signatureMode = wet == true
+            ? SignatureMode.WetSignature
+            : (wet == false ? SignatureMode.ESignatureSpecimen : (doctor?.DefaultSignatureMode ?? SignatureMode.ESignatureSpecimen));
+
+        var hadSecurityDigest = !string.IsNullOrWhiteSpace(referral.SecurityDigest);
+        var pdfBytes = _pdfService.GenerateReferralLetterPdf(referral, settings, patient, doctor, signatureMode);
+
+        if (!hadSecurityDigest && _unitOfWork != null)
+        {
+            _referralRepo.Update(referral);
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+
         return File(pdfBytes, "application/pdf", $"ReferralLetter-{referral.ReferralNumber}.pdf");
     }
 
@@ -109,7 +140,7 @@ public sealed class DocumentsController : ControllerBase
 
         // 1. Check Medical Certificates
         var medCert = await _medCertRepo.Query()
-            .FirstOrDefaultAsync(c => c.CertificateNumber == trimmed, ct);
+            .FirstOrDefaultAsync(c => c.CertificateNumber == trimmed || c.SecurityDigest == trimmed, ct);
         if (medCert != null)
         {
             return Ok(ApiResponse<DocumentVerificationResultDto>.Success(new DocumentVerificationResultDto(
@@ -123,7 +154,7 @@ public sealed class DocumentsController : ControllerBase
                 DoctorPrcLicense: medCert.PrcLicenseNumber,
                 IssueDate: medCert.IssueDate.ToString("MMMM dd, yyyy"),
                 Status: "Officially Valid",
-                SecurityDigest: trimmed,
+                SecurityDigest: medCert.SecurityDigest ?? trimmed,
                 VerificationMessage: "This Medical Certificate is cryptographically verified and authentic on the Clinic EZ national healthcare registry.",
                 Notes: $"Fitness Status: {medCert.FitnessStatus} • Rest Recommended: {medCert.RecommendedRestDays ?? 0} day(s)"
             )));
@@ -131,7 +162,7 @@ public sealed class DocumentsController : ControllerBase
 
         // 2. Check Referral Letters
         var referral = await _referralRepo.Query()
-            .FirstOrDefaultAsync(r => r.ReferralNumber == trimmed, ct);
+            .FirstOrDefaultAsync(r => r.ReferralNumber == trimmed || r.SecurityDigest == trimmed, ct);
         if (referral != null)
         {
             return Ok(ApiResponse<DocumentVerificationResultDto>.Success(new DocumentVerificationResultDto(
@@ -145,7 +176,7 @@ public sealed class DocumentsController : ControllerBase
                 DoctorPrcLicense: "Licensed Referring Physician",
                 IssueDate: referral.ReferralDate.ToString("MMMM dd, yyyy"),
                 Status: "Officially Valid",
-                SecurityDigest: trimmed,
+                SecurityDigest: referral.SecurityDigest ?? trimmed,
                 VerificationMessage: "This Clinical Referral Letter is authentic and was issued by an accredited attending physician.",
                 Notes: $"Referred to: {referral.ReferredToFacility} ({referral.ReferredDepartment}) • Urgency: {referral.Urgency}"
             )));

@@ -40,4 +40,8 @@ public sealed class ReferralLetter : BaseEntity
 
     public bool IsSigned { get; set; }
     public DateTime? SignedAt { get; set; }
+    public string? SecurityDigest { get; set; }
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public string? ReferringDoctorPrcNumber { get; set; }
 }

@@ -68,7 +68,7 @@ public sealed class IssueMedicalCertificateCommandHandler : IRequestHandler<Issu
         if (clinic == null) return;
 
         var issuedAt = cert.SignedAt ?? cert.CreatedAt;
-        var digest = _security.ComputeDocumentDigest(
+        var digest = cert.SecurityDigest ?? _security.ComputeDocumentDigest(
             cert.TenantId, "MED-CERT", cert.CertificateNumber, cert.PatientId, cert.PrcLicenseNumber, issuedAt);
         var verifyUrl = _security.GenerateVerificationUrl(
             VerificationUrlResolver.Resolve(_configuration), "med-cert", cert.CertificateNumber, digest);
@@ -130,6 +130,9 @@ public sealed class IssueMedicalCertificateCommandHandler : IRequestHandler<Issu
             }
 
             var certNumber = $"{prefixPattern}{(maxSeq + attempt):D4}";
+            var issuedAt = DateTime.UtcNow;
+            var digest = _security.ComputeDocumentDigest(
+                _clinicContext.TenantId, "MED-CERT", certNumber, request.PatientId, request.PrcLicenseNumber.Trim(), issuedAt);
 
             var cert = new MedicalCertificate
             {
@@ -154,9 +157,10 @@ public sealed class IssueMedicalCertificateCommandHandler : IRequestHandler<Issu
                 Purpose = string.IsNullOrWhiteSpace(request.Purpose) ? "Employment" : request.Purpose,
                 Remarks = request.Remarks?.Trim(),
                 IsSigned = true,
-                SignedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-                CreatedBy = request.DoctorName
+                SignedAt = issuedAt,
+                CreatedAt = issuedAt,
+                CreatedBy = request.DoctorName,
+                SecurityDigest = digest
             };
 
             try

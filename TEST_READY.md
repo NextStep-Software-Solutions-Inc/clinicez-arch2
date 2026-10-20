@@ -1,176 +1,111 @@
-# TEST_READY: Dental Clinic Service Catalog Integration
+# TEST_READY — Clinical Document Customization Studio & Tri-Mode Doctor Signing
 
-**Test Suite Status**: `READY` — **114 / 114 Tests Passing (100% Green)**  
-**Execution Runtime**: `~130ms`  
-**Test Suite Path**: `tests/e2e/dental_service_catalog_e2e_scenarios.test.ts`  
-**Architecture Spec**: `TEST_INFRA.md` & `PROJECT.md`  
-
----
-
-## Test Execution Commands
-
-### 1. Primary E2E Test Suite (Dual Track E2E Runner)
-```bash
-/Users/macuser/.bun/bin/bun test tests/e2e/dental_service_catalog_e2e_scenarios.test.ts
-```
-
-### 2. Complete Monorepo E2E Runner (Universal Search + Dental Service Catalog)
-```bash
-/Users/macuser/.bun/bin/bun test tests/e2e/
-```
-
-### 3. Backend Unit & Integration Tests (.NET Core)
-```bash
-# Services Catalog backend unit tests
-/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ServicesCatalogTests"
-
-# Dental module backend tests
-/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Dental"
-
-# Directory publishing tests
-/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~PublishClinicToDirectoryTests"
-```
-
-### 4. Frontend Workstation Tests (Bun / React Native)
-```bash
-cd apps/clinic-app && /Users/macuser/.bun/bin/bun test tests/challenger_m1_1_catalog_search.test.ts tests/consultationsDynamicOrders.test.ts
-```
+**Status**: READY  
+**Timestamp**: 2026-10-20T02:30:00Z  
+**Author**: `e2e_testing_writer`  
+**Workspace**: `/Users/macuser/projects/github/nextstep/clinicez-docs-studio`  
 
 ---
 
-## Coverage Summary Table
+## 1. Test Suite Summary & Inventory
 
-| Tier | Category | Minimum Target | Tests Implemented | Pass Count | Fail Count | Duration |
-|:-----|:---------|:--------------:|:-----------------:|:----------:|:----------:|:--------:|
-| **Tier 1** | Feature Coverage (F1 to F16) | ≥ 5 / feature (80) | **80** | 80 | 0 | ~85ms |
-| **Tier 2** | Boundary & Corner Cases (B1 to B5) | ≥ 5 / area (25) | **25** | 25 | 0 | ~25ms |
-| **Tier 3** | Cross-Feature Combinations (Pairwise) | ≥ 4 | **4** | 4 | 0 | ~10ms |
-| **Tier 4** | Real-World Clinical Scenarios | 5 | **5** | 5 | 0 | ~10ms |
-| **TOTAL** | **Full E2E Test Suite** | **≥ 114** | **114** | **114** | **0** | **~130ms** |
+The complete 4-tier automated test harness for the Clinical Document Customization Studio and Tri-Mode Doctor Signing subsystem has been implemented and verified.
 
----
+### 1.1 Backend .NET Suite (`services/clinic-api/ClinicEz.Clinic.Application.Tests/`)
+- **File**: `HardenedDocumentGenerationTests.cs`
+- **Total Test Cases**: 58 test cases
+  1. **36-Combination Parameterized Theory Matrix** (`GeneratePdf_Across_All_DocumentTypes_SignatureModes_And_PaperSizes_Should_Produce_Valid_Pdf`):
+     - 4 Document Types: `MedicalCertificate`, `ElectronicPrescription`, `LabRequisitionSlip`, `ClinicalReferralLetter`
+     - 3 Signature Modes: `ESignatureSpecimen`, `DigitalSealOnly`, `WetSignature`
+     - 3 Paper Sizes: `Letter`, `A4`, `A5`
+     - 4 × 3 × 3 = 36 combinations verifying valid PDF headers (`%PDF-`), trailers (`%%EOF`), and non-empty streams (> 1000 bytes).
+  2. **Wet Signature Mode Regulatory Assertions**:
+     - Verifies suppression of `"✓ Digitally Certified & Locked"` and `"✓ Officially Signed e-Prescription"`.
+     - Verifies preservation of verification security digest and QR code.
+  3. **E-Signature Specimen Embedding & Credentials Assertions**:
+     - Verifies embedding of signature image bytes above the line.
+     - Verifies green digital certification badge and clinician credentials (PRC, PTR, S2, PAN).
+  4. **Custom Clinic Logo Rendering**:
+     - Verifies custom logo data URI / base64 bytes decoding and embedding into document header.
+  5. **PDEA S2 Dangerous Drug Regulatory Default**:
+     - Verifies prescriptions with `IsDangerousDrug == true` automatically default to Wet Signature mode and render the statutory regulatory warning badge text.
+  6. **Controller Query Parameter Contract Tests**:
+     - `DocumentsController`: verifies `?wet=true|false` on medical certificates and referral letters; verifies `/verify/<digest>` lookup.
+     - `PrescriptionsController`: verifies `?wet=true|false` on consultation ID and prescription number slip endpoints.
+     - `LabOrdersController`: verifies `?wet=true|false` on slip PDF endpoint.
+  7. **Sequential Document Numbering & Privacy Masking**:
+     - Sequential certificate numbers (`MC-YYYYMMDD-0001`).
+     - DPA RA 10173 privacy name masking (`J**n D**a C**z`).
+     - Clinic reception placard generation.
 
-## Detailed Tier Breakdown
+### 1.2 Frontend Clinic App Test Suites (`apps/clinic-app/tests/`)
+- **New Test Files Created**:
+  1. `apps/clinic-app/tests/documentTemplatesSettingsTab.test.ts` (8 tests):
+     - Desktop two-column workstation layout (form controls on left, live preview on right).
+     - Full letterhead form control inputs (Header, Sub-Header, Address, Contact, DOH LTO, PhilHealth Accreditation, Logo, Color, Paper Size, Disclaimer).
+     - Segmented switcher across 4 document types.
+     - Paper size dimensions (`Letter`, `A4`, `A5`).
+     - 4 UI States: Skeleton, Empty, Error, Active.
+     - Tri-mode toggle & sample test PDF generation action.
+     - Zero hardcoded colors; `@clinicez/design-tokens` compliance.
+  2. `apps/clinic-app/tests/staffSignatureSpecimen.test.ts` (7 tests):
+     - Physician Stamp Imprint with PRC, PTR, S2, PhilHealth PAN.
+     - Transparent PNG upload validation (MIME type and <= 500KB size limit).
+     - Rejection of invalid non-PNG or oversized assets.
+     - Canvas signature pad stroke recording.
+     - Default signing mode selector (`ESignatureSpecimen`, `DigitalSealOnly`, `WetSignature`).
+     - Dynamic stamp layout switching based on mode.
+  3. `apps/clinic-app/tests/pdeaPrescriptionHardening.test.ts` (7 tests):
+     - Instant print options selector `[ 🖋️ E-Signed PDF ]` | `[ 📝 Wet Signature (Pen) ]`.
+     - Attending clinician default signing mode preselection.
+     - Dangerous drug auto-detection (`isDangerousDrug === true` or PDEA S2 regulated drug).
+     - Automatic override/default to Wet Signature mode.
+     - Statutory regulatory warning badge rendering (*"⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations."*).
+     - Standard prescription clean fallback allowing E-Signed PDF selection.
+     - Print URL generator attaching `?wet=true` or `?wet=false`.
 
-### Tier 1: Feature Coverage (80 tests)
-- **F1: Canonical Dental Defaults (5 tests)**:
-  - F1.1: Exact count and structure of canonical dental defaults (10 presets)
-  - F1.2: Diagnostic and Consultation dental presets (`DENT-CONS`, `DENT-XR-PA`)
-  - F1.3: Preventive dental presets (`DENT-CLEAN`, `DENT-SEALANT`, `DENT-FLUOR`)
-  - F1.4: Restorative and Endodontic presets (`DENT-FILL-COMP`, `DENT-RCT`, `DENT-PULP`)
-  - F1.5: Exodontia and Surgical presets (`DENT-EXT-SIMPLE`, `DENT-EXT-SURG`)
-- **F2: Specialty-Aware Auto-Seeding (5 tests)**:
-  - F2.1: Empty catalog + `SpecialtyMode="Dental"` seeds exactly 10 dental presets
-  - F2.2: Empty catalog + `SpecialtyMode="MultiSpecialty"` seeds 19 presets (9 medical + 10 dental)
-  - F2.3: Empty catalog + `SpecialtyMode="Medical"` seeds 9 medical presets
-  - F2.4: Empty catalog + `SpecialtyMode` undefined/null defaults to 9 medical presets
-  - F2.5: Non-empty catalog bypasses auto-seeding preserving existing custom items
-- **F3: First-Class Dental Category (5 tests)**:
-  - F3.1: Filtering by `category="Dental"` returns only dental service items
-  - F3.2: Filtering category is case-insensitive (`"dental"` matches `"Dental"`)
-  - F3.3: Active status filtering on dental services works as expected
-  - F3.4: Category mapping resolves `"Dental"` to `"Dental Services"` display title
-  - F3.5: Non-dental categories strictly exclude dental service items
-- **F4: Idempotent Seed Command (5 tests)**:
-  - F4.1: Seeding into empty fee schedule creates all 10 presets
-  - F4.2: Consecutive subsequent seed execution is strictly idempotent adding 0 items
-  - F4.3: Seeding when partial dental presets exist adds only the missing items
-  - F4.4: Seeding does not overwrite existing customized prices or descriptions
-  - F4.5: Multi-tenant clinic isolation: seeding clinic A leaves clinic B untouched
-- **F5: Seed Dental REST API Endpoint (5 tests)**:
-  - F5.1: Authorized user with `ServicesManage` permission receives HTTP 200 with items
-  - F5.2: Unauthorized user lacking `ServicesManage` receives HTTP 403 Forbidden
-  - F5.3: User with empty permissions array is rejected with HTTP 403
-  - F5.4: Response payload conforms strictly to `ApiResponse<ClinicServiceItem[]>` schema
-  - F5.5: Repeated API calls return HTTP 200 idempotently with current full catalog
-- **F6: Directory Publishing Verification (5 tests)**:
-  - F6.1: Dental clinic publishes with `Classification="Dental Clinic"`
-  - F6.2: MultiSpecialty clinic publishes with `Classification="Multi-Specialty Clinic"`
-  - F6.3: General medical clinic publishes with `Classification="Ambulatory Clinic"`
-  - F6.4: Active dental services are exported with ServiceId, Name, Category, Price
-  - F6.5: Inactive dental services are excluded from public directory catalog
-- **F7: Frontend Services API Client (5 tests)**:
-  - F7.1: `seedDentalServices()` dispatches POST to `/services/seed-dental`
-  - F7.2: Handles successful response returning `[items, null]` tuple
-  - F7.3: Handles permission error returning `[null, error]` tuple
-  - F7.4: Network failure or timeout returns clean error without crashing
-  - F7.5: Deserializes response items preserving numbers, booleans, and string fields
-- **F8: Services Catalog Category Mapping & Chips (5 tests)**:
-  - F8.1: `SERVICE_CATEGORY_LABEL` maps `"Dental"` to `"Dental Services"`
-  - F8.2: Category filter chips array includes `"Dental"`
-  - F8.3: Filter chip label accurately displays dental item count: `"Dental Services (10)"`
-  - F8.4: Selecting `"Dental"` chip filters visible list to exactly 10 dental items
-  - F8.5: When 0 dental items exist, empty state title and description are appropriate
-- **F9: Services Catalog Modals Category (5 tests)**:
-  - F9.1: Add Service modal category options include `"Dental"`
-  - F9.2: Creating service item with `category="Dental"` saves and validates correctly
-  - F9.3: Edit Service modal pre-populates `category="Dental"` for existing dental item
-  - F9.4: Updating service category from Procedure to Dental persists cleanly
-  - F9.5: Modal validation permits ₱0 price for free dental examination
-- **F10: "Add Dental Services" Button in Settings (5 tests)**:
-  - F10.1: Button is defined with proper title and icon in settings
-  - F10.2: Clicking button transitions to loading state during API execution
-  - F10.3: Rapid double click is prevented while loading state is true
-  - F10.4: Successful seeding triggers positive toast notification feedback
-  - F10.5: Seeding when all presets already exist notifies user gracefully
-- **F11: Order Catalog Modal Category Tab (5 tests)**:
-  - F11.1: `CategoryTab` union and `CATEGORY_TABS` include `"Dental"`
-  - F11.2: Modal prop `initialCategory="Dental"` sets initial tab to Dental
-  - F11.3: User can switch tabs between `"Dental"`, `"Procedure"`, `"Diagnostic"`, and `"All"`
-  - F11.4: Tab indicator correctly reports count of dental items
-  - F11.5: Closing and re-opening modal resets to specified `initialCategory`
-- **F12: Order Catalog Dental Filtering (5 tests)**:
-  - F12.1: `selectedCategory === "Dental"` displays strictly dental catalog items
-  - F12.2: Searching text within `"Dental"` tab matches by name or code
-  - F12.3: `selectedCategory === "Procedure"` includes procedures, nursing services, AND dental
-  - F12.4: `selectedCategory === "Diagnostic"` includes labs and x-rays, excludes dental restorations
-  - F12.5: `selectedCategory === "All"` returns complete catalog of 19 items
-- **F13: Dental Clinical Instruction Chips (5 tests)**:
-  - F13.1: All 5 canonical dental instruction chips are present
-  - F13.2: Toggling single chip populates instructions field
-  - F13.3: Toggling an already selected chip removes it cleanly
-  - F13.4: Toggling multiple chips concatenates with semicolon and space
-  - F13.5: Dental chips render when `selectedCategory` is Dental OR `toothNumber` is set
-- **F14: Odontogram Quick Order Pre-Selection (5 tests)**:
-  - F14.1: Clicking quick order on tooth #18 pre-sets category to `"Dental"`
-  - F14.2: Pre-populates `initialToothNumber` and `initialToothSurface`
-  - F14.3: Pre-fills instructions with formatted tooth identifier `"Tooth #18 (MOD)"`
-  - F14.4: Appending instruction chip to pre-filled tooth maintains tooth header
-  - F14.5: Emitted `OrderCatalogItemPayload` retains `toothNumber`, `toothSurface`, and `in_house` mode
-- **F15: Procedure Catalog & Cashier Invoicing (5 tests)**:
-  - F15.1: `procedureCatalog` includes `"dental"` category items in Consultations screen
-  - F15.2: Ordered dental procedure matches fee schedule retrieving exact standard price
-  - F15.3: Cashier invoice item attaches `toothNumber` and `toothSurface` in line metadata
-  - F15.4: Multiple dental procedures in single encounter aggregate into invoice total balance
-  - F15.5: Non-catalog custom dental procedure falls back to custom pricing without error
-- **F16: Design Token & Strict UI Compliance (5 tests)**:
-  - F16.1: Brand teal color token `#0D6963` is mapped via semantic token `lightColors.primary`
-  - F16.2: Urgency badges adhere to design token variants: `routine`, `urgent`, `emergency`
-  - F16.3: Dental fee strings format correctly in Philippine Peso (₱)
-  - F16.4: Dental `EmptyState` provides clear iconography and CTA
-  - F16.5: Responsive density adapts button layouts between compact and desktop workstation
-
-### Tier 2: Boundary & Corner Cases (25 tests)
-- **B1: Price Value Boundaries (5 tests)**: ₱0 free service, negative price validation rejection, fractional centavo preservation, ₱999,999 extreme value handling, non-numeric/NaN parsing safety.
-- **B2: Code Sanitization, Whitespace & Collisions (5 tests)**: Whitespace auto-trimming and uppercase normalization, empty code rejection, 50-character max length constraint, special characters/punctuation support, HTTP 409 conflict on duplicate code.
-- **B3: SpecialtyMode Edge Cases (5 tests)**: Case-insensitivity (`"dental"`, `"DENTAL"`), leading/trailing whitespace handling, arbitrary unknown specialty fallback to Medical, empty string fallback, dynamic mode switching persistence.
-- **B4: Tooth Number and Surface Boundaries (5 tests)**: Adult FDI notation bounds (11–48), primary deciduous bounds (51–85), invalid tooth numbers (0, negative, >85) rejection, surface code sanitization (`"mod"` -> `"MOD"`), surface-optional extraction handling.
-- **B5: Re-seeding and Catalog Mutation Resilience (5 tests)**: 50-cycle re-seeding loop idempotency, inactive service non-duplication, catalog purge and re-seeding restoration, 100-item high throughput filtering under 5ms, regex special character safety.
-
-### Tier 3: Cross-Feature Combinations (4 tests)
-- **C1**: Pairwise: SpecialtyMode (`Dental`, `MultiSpecialty`, `Medical`) x Initial Catalog State Auto-Seeding Matrix
-- **C2**: Pairwise: Existing Service Overrides x Missing Preset Additions
-- **C3**: Pairwise: Tooth Types (Adult #18, Child #55, None) x Clinical Instruction Chips
-- **C4**: Pairwise: Procedure Catalog Inclusion x Multiple Tooth Tagging x Invoice Line Item Aggregation
-
-### Tier 4: Real-World Clinical Application Scenarios (5 tests)
-- **Scenario 1**: Complete End-to-End Clinical Workflow (Admin -> Seed -> Doctor -> Odontogram -> Invoice)
-- **Scenario 2**: Multi-Specialty Clinic Workflow (Medical + Dental Auto-Seed & Combined Billing)
-- **Scenario 3**: Custom Fee Schedule Preservation during Idempotent Re-seeding
-- **Scenario 4**: Pediatric Dental Patient Encounter (Deciduous Teeth 51–85)
-- **Scenario 5**: Search & Public Directory Integration for Dental Services
+### 1.3 Design Tokens Guard & Linter (`packages/design-tokens` & `apps/clinic-app/scripts/`)
+- `packages/design-tokens/src/tokens.test.ts`: 27 passing tests (color contrast >= 4.5:1, typography >= 12px, token key parity).
+- `apps/clinic-app/scripts/check-tokens.mjs --strict`: 0 violations across all components.
 
 ---
 
-## Test Readiness Certification
-The Dental Clinic Service Catalog E2E test suite is fully published, verified, and passing 100% green without regressions. It serves as the authoritative opaque-box contract verification harness for the remaining implementation milestones.
+## 2. Test Execution Commands
+
+```bash
+# 1. Backend .NET Test Suite
+~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests"
+
+# 2. Design Tokens Suite
+~/.bun/bin/bun test packages/design-tokens/src/tokens.test.ts
+
+# 3. Design Token Strict Guard Linter
+PATH="$HOME/.bun/bin:$PATH" node apps/clinic-app/scripts/check-tokens.mjs --strict
+
+# 4. Clinic App Frontend Workstation Suites
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/documentTemplatesSettingsTab.test.ts apps/clinic-app/tests/staffSignatureSpecimen.test.ts apps/clinic-app/tests/pdeaPrescriptionHardening.test.ts
+
+# 5. Full Clinic App Test Suite
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/
+
+# 6. Strict TypeScript Typecheck
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun run typecheck:clinic
+```
+
+---
+
+## 3. Baseline Status & Feature Handoff
+
+- **Test Infrastructure Health**:
+  - Frontend test suites compile with 0 TypeScript/Bun errors; 22/22 new tests pass.
+  - Design token guard reports 0 violations in `--strict` mode.
+  - Backend test assembly builds with 0 errors, 0 warnings.
+- **Baseline Feature Gap Checklist (To be satisfied by M1-M4 implementing workers)**:
+  - [x] Test contracts defined and committed.
+  - [ ] M1: `ClinicDocumentPdfService` wet signature text suppression ("✓ Digitally Certified" omitted in wet mode).
+  - [ ] M1: `ClinicDocumentPdfService` PDEA S2 automatic wet fallback & warning badge rendering.
+  - [ ] M1: `DocumentsController`, `PrescriptionsController`, `LabOrdersController` expose `[FromQuery] bool? wet`.
+  - [ ] M1: `DocumentsController.VerifyDocument` resolve by `SecurityDigest`.
+  - [ ] M2: `DocumentTemplatesSettingsTab.tsx` 2-column workstation component under `'documents'` tab.
+  - [ ] M3: Clinician signature specimen upload/draw pad and physician stamp imprint in `Profile.screen.tsx` & `StaffManagementTab.tsx`.
+  - [ ] M4: Instant print modal selector and PDEA S2 safeguard in `PrescriptionSlipModal.tsx` & `Consultations.screen.tsx`.

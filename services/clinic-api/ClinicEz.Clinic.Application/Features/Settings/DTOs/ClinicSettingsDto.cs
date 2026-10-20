@@ -49,5 +49,6 @@ public sealed record ClinicSettingsDto(
     bool IsOnlineBookingPaused = false,
     string? SpecialtyMode = "Medical",
     bool EnableDentalModule = false,
-    string CashierMode = "ClinicDesk");
+    string CashierMode = "ClinicDesk",
+    string? LetterheadDohLto = null);
 

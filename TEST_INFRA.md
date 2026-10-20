@@ -1,82 +1,139 @@
-# E2E Test Infra: Dental Clinic Service Catalog Integration
+# Test Infrastructure & 4-Tier Verification Architecture
 
-## Test Philosophy
-- **Requirement-Driven & Opaque-Box**: Tests are derived strictly from user requirements in `ORIGINAL_REQUEST.md` and feature contracts in `PROJECT.md`, testing observable behaviors and contracts through public APIs, DTOs, and UI state machines with zero coupling to private implementation internals.
-- **Dual Track Methodology**: Tests are engineered across 4 systematic tiers:
-  - **Tier 1: Feature Coverage (>=5 tests per feature)**: Isolated, comprehensive happy-path tests for all 16 features.
-  - **Tier 2: Boundary & Corner Cases (>=5 tests per boundary area)**: Zero/negative prices, empty/invalid codes, max string lengths, specialty mode edge cases, FDI tooth notation bounds, and re-seeding resilience.
-  - **Tier 3: Cross-Feature Combinations (Pairwise Coverage)**: Matrix testing across seeding state x specialty modes, custom overrides x missing presets, tooth numbers x clinical instruction chips, and procedure catalog x Cashier invoice lines.
-  - **Tier 4: Real-World Clinical Application Scenarios**: 5 full end-to-end clinical workflow journeys mirroring authentic dental and multi-specialty outpatient practice.
-- **Progressive Testability & Independence**: Tests are fully self-contained, isolated, and deterministic. Every test establishes its own state, executes without side effects on test order, and runs in sub-second time.
+This document defines the automated test methodology, toolchain execution commands, and comprehensive 4-tier test inventory for the **Clinical Document Customization Studio & Tri-Mode Doctor Signing** subsystem in ClinicEZ (`clinicez-docs-studio`).
 
 ---
 
-## Feature Inventory & Test Mapping
-| # | Feature | Requirement Source | Tier 1 (Coverage) | Tier 2 (Boundary) | Tier 3 (Pairwise) | Tier 4 (Workload) |
-|---|---------|-------------------|:-----------------:|:-----------------:|:-----------------:|:-----------------:|
-| F1 | Canonical Dental Defaults (10 presets) | R1 | 5 | 5 | ✓ | ✓ |
-| F2 | Specialty-Aware Auto-Seeding | R1 | 5 | 5 | ✓ | ✓ |
-| F3 | First-Class Dental Category | R1 | 5 | 5 | ✓ | ✓ |
-| F4 | Idempotent Seed Command | R2 | 5 | 5 | ✓ | ✓ |
-| F5 | Seed Dental API Endpoint | R2 | 5 | 5 | ✓ | ✓ |
-| F6 | Directory Publishing Verification | R5 | 5 | 5 | ✓ | ✓ |
-| F7 | Frontend Services API Client | R3 | 5 | 5 | ✓ | ✓ |
-| F8 | Services Catalog Category Mapping & Chips | R3 | 5 | 5 | ✓ | ✓ |
-| F9 | Services Catalog Modals Category | R3 | 5 | 5 | ✓ | ✓ |
-| F10 | "Add Dental Services" Button in Settings | R3 | 5 | 5 | ✓ | ✓ |
-| F11 | Order Catalog Modal Category Tab | R4 | 5 | 5 | ✓ | ✓ |
-| F12 | Order Catalog Dental Filtering | R4 | 5 | 5 | ✓ | ✓ |
-| F13 | Dental Clinical Instruction Chips | R4 | 5 | 5 | ✓ | ✓ |
-| F14 | Odontogram Quick Order Pre-Selection | R4 | 5 | 5 | ✓ | ✓ |
-| F15 | Procedure Catalog & Cashier Invoicing | R4 | 5 | 5 | ✓ | ✓ |
-| F16 | Design Token & Strict UI Compliance | R5 | 5 | 5 | ✓ | ✓ |
+## 1. 4-Tier Testing Methodology
+
+The testing architecture follows a 4-tier verification model guaranteeing regulatory compliance, rendering precision, UI fidelity, and transactional security across Philippine healthcare standards (RA 8792 E-Commerce Act, RA 10173 Data Privacy Act, RA 9165 Comprehensive Dangerous Drugs Act, and FDA Circular 2020-004 e-Prescription Guidelines).
+
+```
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │ TIER 1: DOMAIN & ENTITY VALIDATION                                     │
+ │ - StaffMember.DefaultSignatureMode enum parse & string conversion      │
+ │ - Transparent PNG SignatureSpecimen base64 & data URI validation       │
+ │ - DocumentPaperSize ("Letter", "A4", "A5") mapping                     │
+ │ - Patient privacy name masking (RA 10173 DPA compliance)               │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+ ┌───────────────────────────────────▼────────────────────────────────────┐
+ │ TIER 2: BACKEND QUESTPDF ENGINE & CONTROLLER APIS                      │
+ │ - 36-combination parameterized matrix (4 types × 3 modes × 3 sizes)    │
+ │ - WetSignature text suppression ("✓ Digitally Certified" omitted)      │
+ │ - Blank pen line spacing & verification hash/QR preservation           │
+ │ - E-Signature transparent PNG specimen embedding above line            │
+ │ - Custom clinic logo bytes decoding & letterhead rendering             │
+ │ - Controller ?wet=true|false query parameter binding & routing         │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+ ┌───────────────────────────────────▼────────────────────────────────────┐
+ │ TIER 3: FRONTEND WORKSTATION & STUDIO COMPONENTS                       │
+ │ - DocumentTemplatesSettingsTab 2-column workstation layout             │
+ │ - Live canvas preview with 4-document segmented switcher               │
+ │ - Paper size selector (Letter, A4, A5) & color overrides               │
+ │ - 4 core UI states: Skeleton, Empty, Error, Active                     │
+ │ - Doctor Physician Stamp Imprint with PRC, PTR, S2, PAN                │
+ │ - Zero-violation @clinicez/design-tokens compliance                    │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+ ┌───────────────────────────────────▼────────────────────────────────────┐
+ │ TIER 4: REGULATORY & CLINICAL ISSUANCE FLOW (PDEA S2 SAFEGUARD)        │
+ │ - Dangerous drug detection (isDangerousDrug == true)                   │
+ │ - Automatic default/enforcement of Wet Signature Mode                  │
+ │ - Prominent statutory amber regulatory warning badge                   │
+ │ - Tamper-evident QR code resolution to /verify/<digest>                │
+ └────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Test Architecture & Runners
-- **Primary E2E Test Suite**:
-  ```bash
-  /Users/macuser/.bun/bin/bun test tests/e2e/dental_service_catalog_e2e_scenarios.test.ts
-  ```
-- **Complete Monorepo E2E Runner**:
-  ```bash
-  /Users/macuser/.bun/bin/bun test tests/e2e/
-  ```
-- **Backend Unit & Integration Test Suites**:
-  ```bash
-  /Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ServicesCatalogTests"
-  /Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Dental"
-  /Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~PublishClinicToDirectoryTests"
-  ```
-- **Frontend Clinic App Test Suites**:
-  ```bash
-  cd apps/clinic-app && /Users/macuser/.bun/bin/bun test tests/challenger_m1_1_catalog_search.test.ts tests/consultationsDynamicOrders.test.ts
-  ```
+## 2. Test Execution Commands & Toolchain Setup
+
+### Environment Prerequisites
+- **.NET SDK**: `10.0.402` located at `~/.dotnet/dotnet`.
+- **Bun Runtime**: `1.4.3` located at `~/.bun/bin/bun`.
+- **Subshell PATH Requirement**: Non-interactive subshells must prepend `PATH="$HOME/.bun/bin:$PATH"` to enable child Node processes invoked by test runners and token guard scripts.
+
+### 2.1 Backend .NET Test Suite
+Runs the 36-combination document generation matrix, regulatory text suppression assertions, custom logo decoding, and controller query parameter routing:
+```bash
+~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests"
+```
+
+### 2.2 Design Tokens Test Suite
+Validates token parity, contrast ratios, and typography bounds (>= 12px):
+```bash
+~/.bun/bin/bun test packages/design-tokens/src/tokens.test.ts
+```
+
+### 2.3 Strict Design Token Guard Check
+Ensures zero hardcoded hex codes, unapproved font sizes, or inline non-tokenized styling:
+```bash
+PATH="$HOME/.bun/bin:$PATH" node apps/clinic-app/scripts/check-tokens.mjs --strict
+```
+
+### 2.4 Clinic App Workstation Suites
+Executes the full suite of clinic workstation component and workflow tests:
+```bash
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/
+```
+
+Individual suite execution:
+```bash
+# Document Templates Studio Tab tests
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/documentTemplatesSettingsTab.test.ts
+
+# Staff Signature Specimen & Physician Stamp tests
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/staffSignatureSpecimen.test.ts
+
+# PDEA S2 Prescription Print Hardening tests
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/pdeaPrescriptionHardening.test.ts
+```
+
+### 2.5 Strict TypeScript Typecheck
+Verifies type safety across all frontend components and contracts:
+```bash
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun run typecheck:clinic
+```
 
 ---
 
-## Pass / Fail Semantics
-- **Exit code `0`** on all test runners.
-- **Zero failures and zero unhandled exceptions**.
-- **Execution Performance**: Full 114-test E2E suite executes in `< 250ms`.
-- **Zero raw hex colors**: UI tokens strictly derived from `@clinicez/design-tokens`.
+## 3. Comprehensive 4-Tier Test Inventory
+
+| Tier | Test Suite File | Test Scenario / Method | Target Feature | Expected Output Derivation |
+|---|---|---|---|---|
+| **Tier 1** | `HardenedDocumentGenerationTests.cs` | `DocumentVerificationResultDto_MaskName_Should_Protect_Patient_Privacy` | F4 / DPA RA 10173 | Mathematical privacy masking rule: first/last letters visible, middle asterisks |
+| **Tier 1** | `HardenedDocumentGenerationTests.cs` | `IssueMedicalCertificateCommand_Should_Generate_Sequential_Numbers_Safely` | F2 / F3 | Database monotonic sequence generation `MC-YYYYMMDD-0001` |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `GeneratePdf_Across_All_DocumentTypes_SignatureModes_And_PaperSizes_Should_Produce_Valid_Pdf` (36 parameterized matrix cases) | F3 (QuestPDF Tri-Mode Engine) | Valid PDF binary stream (`%PDF-` header, `%%EOF` trailer, size > 1000 bytes) across 4 doc types × 3 modes × 3 sizes |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `ClinicDocumentPdfService_When_WetSignature_Mode_Should_Suppress_Digital_Certification_Badges` | F3 (Wet Mode Hardening) | Absence of `"✓ Digitally Certified & Locked"` and `"✓ Officially Signed"`; presence of blank pen line; preservation of cryptographic security digest and verification QR |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `ClinicDocumentPdfService_When_ESignatureSpecimen_Mode_Should_Embed_Signature_Image` | F3 (E-Signature Embedding) | Binary embedding of signature specimen above signature line; presence of green digital certification badge |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `ClinicDocumentPdfService_When_CustomLogoBytes_Present_Should_Render_In_Header` | F3 (Custom Branding) | Decompression of header stream contains image XObject / logo bytes; fallback to facility text when null |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `ClinicDocumentPdfService_When_Prescription_Contains_Pdea_S2_Dangerous_Drug_Should_Default_To_Wet_Mode` | F3 / F7 (RA 9165 Safeguard) | Automatic fallback to WetSignature; presence of statutory regulatory text warning badge |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `DocumentsController_DownloadMedicalCertificatePdf_Should_Honor_Wet_Query_Param` | F4 (Controller Routing) | Controller passes `wet: true` to service; returns PDF with wet mode attributes |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `DocumentsController_DownloadReferralLetterPdf_Should_Honor_Wet_Query_Param` | F4 (Controller Routing) | Controller honors `?wet=true` query parameter for referral letters |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `PrescriptionsController_DownloadPrescriptionSlipPdf_Should_Honor_Wet_Query_Param` | F4 (Controller Routing) | Controller honors `?wet=true` query parameter for prescription slips |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `LabOrdersController_DownloadLabOrderSlipPdf_Should_Honor_Wet_Query_Param` | F4 (Controller Routing) | Controller honors `?wet=true` query parameter for lab requisitions |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `DocumentsController_VerifyDocument_Should_Resolve_By_Security_Digest` | F4 (Verification Resolution) | `/api/v1/documents/verify/{digest}` resolves with `200 OK` and `isVerified: true` |
+| **Tier 3** | `documentTemplatesSettingsTab.test.ts` | Two-column workstation layout rendering | F5 (Studio Layout) | Left column form controls, right column live preview canvas (responsive breakpoint >= 1024px) |
+| **Tier 3** | `documentTemplatesSettingsTab.test.ts` | 4 Document type switcher reactivity | F5 (Studio Switcher) | Switching between MedCert, e-Rx, Lab Slip, and Referral Letter dynamically swaps canvas preview |
+| **Tier 3** | `documentTemplatesSettingsTab.test.ts` | Paper size selector (`Letter`, `A4`, `A5`) | F5 (Stationery Dimensions) | State update triggers dimension recalculation and canvas aspect ratio adjustment |
+| **Tier 3** | `documentTemplatesSettingsTab.test.ts` | 4 Core UI States (Skeleton, Empty, Error, Active) | F5 (UI Resilience) | Loading displays skeleton; error displays retry banner; empty displays setup guide; active displays full studio |
+| **Tier 3** | `documentTemplatesSettingsTab.test.ts` | Design Token Guard compliance | F5 (Design Standards) | Strict adherence to `@clinicez/design-tokens`; 0 raw hex literals, semantic theme colors |
+| **Tier 3** | `staffSignatureSpecimen.test.ts` | Signature upload & canvas draw pad | F6 (Clinician Specimen) | Transparent PNG file reader & base64 encoding; stroke recording on signature pad |
+| **Tier 3** | `staffSignatureSpecimen.test.ts` | Default signature mode preference selector | F6 (Doctor Preferences) | Radio/picker allowing `ESignatureSpecimen`, `DigitalSealOnly`, `WetSignature` selection |
+| **Tier 3** | `staffSignatureSpecimen.test.ts` | Real-time Physician Stamp Imprint preview | F6 (Physician Stamp) | Renders doctor full name, PRC License, PTR Number, PDEA S2 Number, PhilHealth PAN overlaid with specimen |
+| **Tier 4** | `pdeaPrescriptionHardening.test.ts` | Instant print options selector `[ E-Signed ]` \| `[ Wet Signature ]` | F7 (Issuance Hardening) | Modal displays selectable print format pills defaulting to clinician's configured preference |
+| **Tier 4** | `pdeaPrescriptionHardening.test.ts` | PDEA S2 Dangerous drug auto-detection | F7 (RA 9165 Enforcement) | Items with `isDangerousDrug === true` lock or auto-default mode to Wet Signature |
+| **Tier 4** | `pdeaPrescriptionHardening.test.ts` | Statutory PDEA S2 warning badge rendering | F7 (Regulatory Disclosure) | Renders warning: *"⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations."* |
+| **Tier 4** | `pdeaPrescriptionHardening.test.ts` | Non-dangerous prescription fallback | F7 (Clinical Flexibility) | Standard generic prescriptions without S2 drugs allow free toggle to E-Signed PDF |
 
 ---
 
-## Real-World Clinical Application Scenarios (Tier 4)
-| # | Scenario | Features Exercised | Expected Outcome |
-|---|----------|--------------------|------------------|
-| 1 | **Complete End-to-End Clinical Workflow**: Admin configures Dental clinic -> System auto-seeds 10 dental presets -> Doctor opens consultation with odontogram -> Quick orders composite restoration on tooth #18 (MOD) with local infiltration anesthesia -> Encounter is signed and generates Cashier invoice item with tooth tagging and ₱950 fee. | F1, F2, F11, F12, F13, F14, F15 | Cashier invoice item created with `serviceCode: DENT-FILL-COMP`, `unitPrice: 950`, `toothNumber: 18`, `toothSurface: MOD`, and total balance ₱950.00. |
-| 2 | **Multi-Specialty Clinic Workflow**: Multi-specialty clinic auto-seeds 19 presets (9 general medical + 10 dental) -> Medical doctor orders diagnostic ECG (₱450) and Dentist orders root canal therapy on tooth #24 (₱4,000) -> Cashier invoice combines both orders. | F2, F3, F12, F13, F15 | Invoice contains both `PROC-ECG` (₱450) and `DENT-RCT` (₱4,000) with total balance ₱4,450.00. |
-| 3 | **Custom Fee Schedule Preservation**: Clinic admin configures custom price for oral prophylaxis (₱1,200) and digital x-ray (₱600) -> Runs `SeedDentalServicesCommand` -> System idempotently adds only the 8 missing presets without altering custom prices. | F4, F5, F8, F10 | Exactly 8 missing presets added; customized `DENT-CLEAN` (₱1,200) and `DENT-XR-PA` (₱600) remain 100% intact. |
-| 4 | **Pediatric Dental Patient Encounter**: 6-year-old child patient arrives with toothache on deciduous molar -> Odontogram renders primary teeth 51–85 -> Dentist orders Pulpotomy on tooth #55 (₱1,500) and Pit and Fissure Sealant on tooth #54 (₱600) -> Cashier invoice reflects both procedures. | F1, F11, F13, F14, F15 | Primary teeth 54 and 55 tagged on invoice lines with total balance ₱2,100.00. |
-| 5 | **Search & Public Directory Integration**: Dental clinic publishes to public directory with classification `"Dental Clinic"` -> Patient or staff searches "Oral Prophylaxis" -> Directory search resolves service fee (₱850) and classification. | F1, F6, F8, F16 | Public directory classification is `"Dental Clinic"` and dental cleaning fee resolves to ₱850.00. |
+## 4. Expected Output Derivation & Verification Oracles
 
----
-
-## Coverage Thresholds
-- **Tier 1 (Feature Coverage)**: 16 features × 5 tests = **80 tests minimum** (Achieved: 80 tests).
-- **Tier 2 (Boundary & Corner Cases)**: 5 boundary categories × 5 tests = **25 tests minimum** (Achieved: 25 tests).
-- **Tier 3 (Cross-Feature Combinations)**: Pairwise combinatorial tests across catalog seeding, custom overrides, tooth numbers, and billing lines (Achieved: 4 tests).
-- **Tier 4 (Real-World Workloads)**: 5 comprehensive clinical workflow scenarios (Achieved: 5 tests).
-- **Total E2E Tests**: **114 tests, 100% passing**.
+All tests in this suite derive expected outputs from authoritative regulatory sources and formal interface specifications:
+1. **Philippine FDA Circular No. 2020-004**: Dictates required components of valid electronic prescriptions (doctor digital signature/seal, PRC number, PTR, patient identifier, generic name precedence).
+2. **Philippine Comprehensive Dangerous Drugs Act (RA 9165)**: Mandates wet ink signatures on physical prescription forms for Yellow Prescription / PDEA S2 regulated substances.
+3. **Data Privacy Act (RA 10173)**: Mandates patient name masking on public document verification endpoints (`DocumentVerificationResultDto.MaskName`).
+4. **ClinicEZ Design Tokens Specification (`@clinicez/design-tokens`)**: Authoritative source of truth for color semantics, typography scales, spacing units, and clinical urgency states.

@@ -108,7 +108,8 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.IsOnlineBookingPaused,
             settings.SpecialtyMode,
             settings.EnableDentalModule,
-            settings.CashierMode);
+            settings.CashierMode,
+            LetterheadDohLto: settings.LetterheadDohLto);
     }
 }
 

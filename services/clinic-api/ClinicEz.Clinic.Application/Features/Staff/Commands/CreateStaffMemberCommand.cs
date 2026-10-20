@@ -15,6 +15,7 @@ using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.LocalAuth;
+using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
@@ -34,7 +35,9 @@ public sealed record CreateStaffMemberCommand(
     string? InitialPassword = null,
     bool SendInviteEmail = false,
     string? PhilHealthPan = null,
-    IReadOnlyList<Guid>? AssignedRoomIds = null) : IRequest<StaffMemberDto>;
+    IReadOnlyList<Guid>? AssignedRoomIds = null,
+    string? SignatureSpecimen = null,
+    SignatureMode? DefaultSignatureMode = null) : IRequest<StaffMemberDto>;
 
 public sealed class CreateStaffMemberCommandValidator : AbstractValidator<CreateStaffMemberCommand>
 {
@@ -252,6 +255,8 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             S2LicenseNumber = request.S2LicenseNumber?.Trim(),
             Specialty = request.Specialty?.Trim(),
             PhilHealthPan = request.PhilHealthPan?.Trim(),
+            SignatureSpecimen = request.SignatureSpecimen,
+            DefaultSignatureMode = request.DefaultSignatureMode ?? SignatureMode.ESignatureSpecimen,
             IsActive = true,
             PasswordHash = passwordHash,
             MustChangePassword = mustChangePassword,
@@ -288,6 +293,8 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             TemporaryPassword: returnedTempPassword,
             PhilHealthPan: staff.PhilHealthPan,
             AssignedRoomIds: staff.GetAssignedRoomIds(),
-            AssignedRoomNames: assignedRoomNames);
+            AssignedRoomNames: assignedRoomNames,
+            SignatureSpecimen: staff.SignatureSpecimen,
+            DefaultSignatureMode: staff.DefaultSignatureMode);
     }
 }

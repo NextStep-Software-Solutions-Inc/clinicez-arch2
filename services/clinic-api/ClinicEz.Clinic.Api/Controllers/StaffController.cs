@@ -13,6 +13,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Api.Controllers;
 
@@ -62,7 +63,9 @@ public sealed class StaffController : ControllerBase
             request.PtrNumber,
             request.S2LicenseNumber,
             request.Specialty,
-            request.PhilHealthPan);
+            request.PhilHealthPan,
+            SignatureSpecimen: request.SignatureSpecimen,
+            DefaultSignatureMode: request.DefaultSignatureMode);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Profile updated successfully."));
@@ -128,7 +131,9 @@ public sealed class StaffController : ControllerBase
                 request.Specialty,
                 request.PhilHealthPan,
                 RequestedRole: request.Role,
-                RequestedClinicRoleId: request.ClinicRoleId);
+                RequestedClinicRoleId: request.ClinicRoleId,
+                SignatureSpecimen: request.SignatureSpecimen,
+                DefaultSignatureMode: request.DefaultSignatureMode);
 
             var myResult = await _sender.Send(myCommand, ct);
             return Ok(ApiResponse<StaffMemberDto>.Success(myResult, "Profile updated successfully."));
@@ -151,7 +156,9 @@ public sealed class StaffController : ControllerBase
             request.IsActive,
             request.PhilHealthPan,
             request.AssignedRoomIds,
-            request.ClearAssignedRoom);
+            request.ClearAssignedRoom,
+            SignatureSpecimen: request.SignatureSpecimen,
+            DefaultSignatureMode: request.DefaultSignatureMode);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member updated successfully."));
@@ -204,7 +211,9 @@ public sealed record UpdateStaffMemberRequest(
     bool IsActive = true,
     string? PhilHealthPan = null,
     IReadOnlyList<Guid>? AssignedRoomIds = null,
-    bool ClearAssignedRoom = false);
+    bool ClearAssignedRoom = false,
+    string? SignatureSpecimen = null,
+    SignatureMode? DefaultSignatureMode = null);
 
 public sealed record UpdateMyProfileRequest(
     string FirstName,
@@ -216,4 +225,6 @@ public sealed record UpdateMyProfileRequest(
     string? PtrNumber,
     string? S2LicenseNumber,
     string? Specialty,
-    string? PhilHealthPan = null);
+    string? PhilHealthPan = null,
+    string? SignatureSpecimen = null,
+    SignatureMode? DefaultSignatureMode = null);
