@@ -31,6 +31,12 @@ import { Alert, notify } from '../../utils/feedback';
 import LogoCropModal from './LogoCropModal';
 import ColorBrandingSection from './ColorBrandingSection';
 import DevDataSeederCard from './DevDataSeederCard';
+import CashierStationSettingsCard, {
+  CASHIER_MODE_OPTIONS,
+  type CashierModeOption,
+} from './CashierStationSettingsCard';
+
+export { CASHIER_MODE_OPTIONS, type CashierModeOption };
 
 export type ClinicSpecialtyMode = 'Medical' | 'Dental' | 'Multi-Specialty';
 
@@ -69,6 +75,7 @@ export const CLINIC_SPECIALTY_OPTIONS: SpecialtyOption[] = [
   },
 ];
 
+
 interface GeneralSettingsTabProps {
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
   preferredChartLayout?: string;
@@ -103,6 +110,8 @@ interface GeneralSettingsTabProps {
   setSpecialtyMode?: (v: ClinicSpecialtyMode) => void;
   enableDentalModule?: boolean;
   setEnableDentalModule?: (v: boolean) => void;
+  cashierMode?: 'ClinicDesk' | 'CashierCounter';
+  setCashierMode?: (v: 'ClinicDesk' | 'CashierCounter') => void;
 }
 
 export default function GeneralSettingsTab({
@@ -139,11 +148,48 @@ export default function GeneralSettingsTab({
   setSpecialtyMode,
   enableDentalModule,
   setEnableDentalModule,
+  cashierMode,
+  setCashierMode,
 }: GeneralSettingsTabProps) {
   const { clinicLogo, setClinicLogo } = useClinic();
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [cropModalVisible, setCropModalVisible] = useState(false);
   const [pendingLogoUri, setPendingLogoUri] = useState<string | null>(null);
+
+  // Billing & Cashier Station State
+  const [internalCashierMode, setInternalCashierMode] = useState<'ClinicDesk' | 'CashierCounter'>(() => {
+    if (cashierMode) return cashierMode;
+    if (settings?.cashierMode === 'CashierCounter') return 'CashierCounter';
+    return 'ClinicDesk';
+  });
+  const [savingCashierMode, setSavingCashierMode] = useState(false);
+
+  useEffect(() => {
+    if (settings?.cashierMode) {
+      setInternalCashierMode(settings.cashierMode);
+    }
+  }, [settings?.cashierMode]);
+
+  const effectiveCashierMode = cashierMode ?? internalCashierMode;
+
+  const handleSelectCashierMode = (mode: 'ClinicDesk' | 'CashierCounter') => {
+    setInternalCashierMode(mode);
+    setCashierMode?.(mode);
+  };
+
+  const handleSaveCashierMode = async () => {
+    setSavingCashierMode(true);
+    const [updated, err] = await clinicService.updateSettings({
+      cashierMode: effectiveCashierMode,
+    });
+    setSavingCashierMode(false);
+    if (err || !updated) {
+      notify.error(err?.message || 'Failed to update billing and cashier station settings.');
+      return;
+    }
+    notify.success('Billing & Cashier station preferences saved.');
+    onSettingsUpdated?.(updated);
+  };
 
   // Clinic Specialty & Dental Module State
   const [internalSpecialty, setInternalSpecialty] = useState<ClinicSpecialtyMode>(() => {
@@ -431,6 +477,15 @@ export default function GeneralSettingsTab({
         settings={settings}
         showSkeletons={showSkeletons}
         onSettingsUpdated={onSettingsUpdated}
+      />
+
+      {/* Billing & Cashier Station */}
+      <CashierStationSettingsCard
+        cashierMode={effectiveCashierMode}
+        onChangeCashierMode={handleSelectCashierMode}
+        onSave={handleSaveCashierMode}
+        saving={savingCashierMode || savingSettings}
+        showSkeletons={showSkeletons}
       />
 
       {/* Clinic Specialty Mode & Dental Module */}

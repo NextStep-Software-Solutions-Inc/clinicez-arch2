@@ -167,16 +167,6 @@ export const SETTINGS_NAV_ITEMS: SearchItem[] = [
     targetRoute: 'Settings',
     routeParams: { tab: 'license' },
   },
-  {
-    id: 'setting-audit',
-    category: 'Settings',
-    title: 'Audit Trail & Forensic Logs',
-    subtitle: 'Security event logs, user activity history, and forensic export',
-    badgeText: 'Audit',
-    badgeVariant: 'neutral',
-    targetRoute: 'Settings',
-    routeParams: { tab: 'audit' },
-  },
 ];
 
 export interface SearchNavigationResolution {

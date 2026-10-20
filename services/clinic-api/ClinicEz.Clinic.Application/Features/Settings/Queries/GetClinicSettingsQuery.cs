@@ -107,7 +107,10 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.IsDirectoryPublished,
             settings.IsOnlineBookingPaused,
             settings.SpecialtyMode,
-            settings.EnableDentalModule);
+            settings.EnableDentalModule,
+            settings.DefaultDoctorSharePercentage,
+            settings.CashierMode,
+            LetterheadDohLto: settings.LetterheadDohLto);
     }
 }
 

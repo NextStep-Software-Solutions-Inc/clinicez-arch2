@@ -27,6 +27,7 @@ const MOBILE_LABELS: Record<string, string> = {
   ShareImport: 'Scan QR',
   Yakap: 'PhilHealth',
   Settings: 'Settings',
+  Audit: 'Audit Log',
 };
 
 const MODULE_DESCRIPTIONS: Record<string, string> = {
@@ -38,7 +39,8 @@ const MODULE_DESCRIPTIONS: Record<string, string> = {
   ResultReview: 'Verify external and patient-uploaded lab results',
   ShareImport: 'Import a patient record from their share QR',
   Yakap: 'PhilHealth Yakap formulary & claims',
-  Settings: 'Clinic profile, staff permissions & audit',
+  Settings: 'Clinic profile, staff & permissions',
+  Audit: 'Clinic-wide forensic activity trail & privacy compliance',
 };
 
 type InteractionState = PressableStateCallbackType & { hovered?: boolean };

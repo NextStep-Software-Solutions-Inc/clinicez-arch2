@@ -38,7 +38,7 @@ public static class DependencyInjection
         var schemaName = configuration["DbSchema"] ?? "public";
 
         // Must be registered before Hangfire/interop so the schema exists when they start (fresh on-prem installs).
-        services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.DatabaseMigrationHostedService>();
+        services.AddHostedService<ClinicEz.Clinic.Infrastructure.Persistence.DatabaseMigrationHostedService>();
 
         services.AddHttpContextAccessor();
         services.AddScoped<IClinicContext, ClinicContext>();

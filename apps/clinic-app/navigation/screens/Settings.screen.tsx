@@ -22,6 +22,7 @@ import {
 
 import SettingsTabBar from '../../components/settings/SettingsTabBar';
 import GeneralSettingsTab from '../../components/settings/GeneralSettingsTab';
+import DocumentTemplatesSettingsTab from '../../components/settings/DocumentTemplatesSettingsTab';
 import FacilityReadinessTab from '../../components/settings/FacilityReadinessTab';
 import StaffManagementTab from '../../components/settings/StaffManagementTab';
 import AccessControlTab from '../../components/settings/AccessControlTab';
@@ -29,7 +30,6 @@ import ServicesCatalogTab from '../../components/settings/ServicesCatalogTab';
 import CustomFieldsTab from '../../components/settings/CustomFieldsTab';
 import PhilHealthSettingsTab from '../../components/settings/PhilHealthSettingsTab';
 import LicenseSystemTab from '../../components/settings/LicenseSystemTab';
-import AuditWorkstationView from '../../components/audit/AuditWorkstationView';
 import {
   type SettingsTabItem,
   type SettingsTabKey,
@@ -70,7 +70,6 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const canManageSettings = usePermission(PERMISSIONS.settingsManage);
   const canManageStaff = usePermission(PERMISSIONS.staffManage);
   const canManageRoles = usePermission(PERMISSIONS.rolesManage);
-  const canViewAudit = usePermission(PERMISSIONS.auditRead);
   const isAdmin = canManageSettings || canManageStaff || user?.role === 'Admin';
 
   const [activeTab, setActiveTab] = useState<SettingsTabKey>(() => initialIntent.targetTab ?? 'general');
@@ -107,6 +106,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const [preferredChartLayout, setPreferredChartLayout] = useState<'modal' | 'split' | 'drawer'>('modal');
   const [specialtyMode, setSpecialtyMode] = useState<'Medical' | 'Dental' | 'Multi-Specialty'>('Medical');
   const [enableDentalModule, setEnableDentalModule] = useState(false);
+  const [cashierMode, setCashierMode] = useState<'ClinicDesk' | 'CashierCounter'>('ClinicDesk');
 
   // Modals for sub-components
   const [showAddStaffModal, setShowAddStaffModal] = useState<boolean>(() => initialIntent.shouldOpenAddStaff);
@@ -176,6 +176,9 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       if (settingsData.enableDentalModule !== undefined) {
         setEnableDentalModule(settingsData.enableDentalModule);
       }
+      if (settingsData.cashierMode) {
+        setCashierMode(settingsData.cashierMode as 'ClinicDesk' | 'CashierCounter');
+      }
     }
 
     setStaffLoadError(staffErr ? staffErr.message || 'Unable to load staff.' : null);
@@ -235,6 +238,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       preferredChartLayout,
       specialtyMode,
       enableDentalModule: specialtyMode === 'Dental' ? true : enableDentalModule,
+      cashierMode,
     });
     setSavingSettings(false);
 
@@ -352,6 +356,12 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       icon: 'settings',
     });
 
+    list.push({
+      key: 'documents',
+      label: 'Document & Stationery Studio',
+      icon: 'file',
+    });
+
     if (isAdmin || canManageStaff) {
       list.push({
         key: 'staff',
@@ -400,21 +410,11 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       });
     }
 
-    if (isAdmin || canViewAudit) {
-      list.push({
-        key: 'audit',
-        label: 'Audit Log',
-        icon: 'scroll',
-        adminOnly: true,
-      });
-    }
-
     return list;
   }, [
     isAdmin,
     canManageStaff,
     canManageRoles,
-    canViewAudit,
     isFacilityReady,
     maxStaffSeats,
     activeStaffCount,
@@ -499,7 +499,22 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             setSpecialtyMode={setSpecialtyMode}
             enableDentalModule={enableDentalModule}
             setEnableDentalModule={setEnableDentalModule}
+            cashierMode={cashierMode}
+            setCashierMode={setCashierMode}
             onSettingsUpdated={setSettings}
+          />
+        )}
+
+        {activeTab === 'documents' && (
+          <DocumentTemplatesSettingsTab
+            settings={settings}
+            showSkeletons={showSkeletons}
+            settingsLoadError={settingsLoadError}
+            onSettingsUpdated={setSettings}
+            onRefreshSettings={async () => {
+              const [fresh] = await clinicService.getSettings();
+              if (fresh) setSettings(fresh);
+            }}
           />
         )}
 
@@ -583,10 +598,6 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             onOpenActivationModal={openActivationModal}
             onRefreshLicense={refreshLicense}
           />
-        )}
-
-        {activeTab === 'audit' && (
-          <AuditWorkstationView embeddedInSettings />
         )}
       </ScrollView>
     </ResponsiveLayout>

@@ -25,6 +25,7 @@ import {
   SkeletonList,
   Modal,
   SegmentedControl,
+  type SegmentedOption,
 } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
@@ -384,6 +385,9 @@ export default function ConsultationsScreen() {
   };
   const [mobileWorkstationView, setMobileWorkstationView] = useState<'soap' | 'chart'>('soap');
   const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
+  const [postEncounterModalVisible, setPostEncounterModalVisible] = useState(false);
+  const [createdInvoiceNumber, setCreatedInvoiceNumber] = useState<string | null>(null);
+  const [createdInvoiceTotal, setCreatedInvoiceTotal] = useState<number | null>(null);
 
   // Multi-Provider Queue Room / Station & Status Filter States (Persistent per staff)
   const staffKey = current?.id ? `clinicez:consultations:${current.id}` : 'clinicez:consultations:default';
@@ -529,6 +533,7 @@ export default function ConsultationsScreen() {
 
   // Prescriptions
   const [prescriptions, setPrescriptions] = useState<LocalPrescription[]>([]);
+  const hasDangerousDrug = useMemo(() => prescriptions.some((p) => p.isDangerousDrug), [prescriptions]);
 
   // Diagnostic Lab Orders & In-Clinic Procedures
   const [orderedLabs, setOrderedLabs] = useState<LocalLabOrder[]>([]);
@@ -582,7 +587,7 @@ export default function ConsultationsScreen() {
   const [editingInstructionText, setEditingInstructionText] = useState<string>('');
   const [isHandoffSending, setIsHandoffSending] = useState<boolean>(false);
   const [orderSearchModalVisible, setOrderSearchModalVisible] = useState(false);
-  const [orderSearchInitialCategory, setOrderSearchInitialCategory] = useState<'Diagnostic' | 'Procedure' | 'All'>('All');
+  const [orderSearchInitialCategory, setOrderSearchInitialCategory] = useState<'Diagnostic' | 'Procedure' | 'Dental' | 'All'>('All');
   const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
   const [recordVitalsModalVisible, setRecordVitalsModalVisible] = useState(false);
 
@@ -680,7 +685,7 @@ export default function ConsultationsScreen() {
     activeCatalog.filter((s) => categories.includes(s.category.toLowerCase()));
   const medicineCatalog = catalogByCategory('medicine');
   const diagnosticCatalog = catalogByCategory('diagnostic');
-  const procedureCatalog = catalogByCategory('procedure', 'nursingservice');
+  const procedureCatalog = catalogByCategory('procedure', 'nursingservice', 'dental');
   const consultationFee = catalogByCategory('consultation')[0];
 
   const handleSelectCatalogMedicine = (item: ClinicServiceItem) => {
@@ -754,7 +759,36 @@ export default function ConsultationsScreen() {
   const [issuedReferral, setIssuedReferral] = useState<ReferralLetterRecord | null>(null);
 
   const [previewDocModal, setPreviewDocModal] = useState(false);
-  const [previewType, setPreviewType] = useState<'MEDCERT' | 'REFERRAL'>('MEDCERT');
+  const [previewType, setPreviewType] = useState<'MEDCERT' | 'REFERRAL' | 'PRESCRIPTION'>('MEDCERT');
+  const [docSigningMode, setDocSigningMode] = useState<'esign' | 'wet'>('esign');
+
+  const DOC_SIGNING_OPTIONS: SegmentedOption<'esign' | 'wet'>[] = [
+    { value: 'esign', label: 'E-Signed PDF' },
+    { value: 'wet', label: 'Wet Signature (Pen)' },
+  ];
+
+  useEffect(() => {
+    if (previewDocModal) {
+      if (hasDangerousDrug) {
+        setDocSigningMode('wet');
+      } else if (signerStaff?.defaultSignatureMode === 'WetSignature') {
+        setDocSigningMode('wet');
+      } else {
+        setDocSigningMode('esign');
+      }
+    }
+  }, [previewDocModal, hasDangerousDrug, signerStaff?.defaultSignatureMode]);
+
+  const handleDocSigningModeChange = (mode: 'esign' | 'wet') => {
+    if (hasDangerousDrug && mode === 'esign') {
+      Alert.alert(
+        'PDEA S2 Statutory Safeguard',
+        'Prescriptions containing Dangerous Drugs (PDEA S2 regulated substances) cannot be issued with electronic signature alone. A wet signature on a physical prescription pad is required under Philippine DOH-PDEA regulations (RA 9165).',
+      );
+      return;
+    }
+    setDocSigningMode(mode);
+  };
 
   // E-Prescription Slip & Dual-Path Interoperability States
   const [signedConsultationId, setSignedConsultationId] = useState<string | null>(null);
@@ -1281,6 +1315,9 @@ export default function ConsultationsScreen() {
     setIsYakapEligible(false);
     setPhilHealthAtc('WALKEDIN');
     setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
+    setCreatedInvoiceNumber(null);
+    setCreatedInvoiceTotal(null);
+    setPostEncounterModalVisible(false);
   };
 
   const handleStartFollowUpEncounter = () => {
@@ -1854,7 +1891,7 @@ export default function ConsultationsScreen() {
     if (isSigned) return;
     setOrderInitialToothNumber(toothNumber);
     setOrderInitialToothSurface(toothSurface);
-    setOrderSearchInitialCategory('Procedure');
+    setOrderSearchInitialCategory('Dental');
     setOrderSearchModalVisible(true);
   };
 
@@ -2194,7 +2231,7 @@ export default function ConsultationsScreen() {
       });
     }
     if (billItems.length > 0) {
-      const [, invoiceErr] = await clinicService.createInvoice({
+      const [invoiceResult, invoiceErr] = await clinicService.createInvoice({
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
         queueItemId: selectedPatient.id,
@@ -2205,7 +2242,12 @@ export default function ConsultationsScreen() {
         notes: 'Consultation & procedures bill forwarded to Cashier',
         lineItems: billItems,
       });
-      if (invoiceErr) followUpIssues.push('billing invoice');
+      if (invoiceErr) {
+        followUpIssues.push('billing invoice');
+      } else if (invoiceResult) {
+        setCreatedInvoiceNumber(invoiceResult.invoiceNumber);
+        setCreatedInvoiceTotal(invoiceResult.netAmount);
+      }
     } else {
       followUpIssues.push('billing invoice (no consultation fee is set in the fee schedule)');
     }
@@ -2240,6 +2282,7 @@ export default function ConsultationsScreen() {
       });
       notify.success(successMsg);
     }
+    setPostEncounterModalVisible(true);
   };
 
   const vitalItems = (
@@ -3559,8 +3602,8 @@ export default function ConsultationsScreen() {
                               </Pressable>
                               {isYakapCopayFree ? (
                                 <Badge label="PhilHealth ₱0 Co-pay" variant="success" size="sm" />
-                              ) : isInHouse && lab.standardPrice > 0 ? (
-                                <Badge label={`₱${lab.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                              ) : isInHouse && (lab.standardPrice ?? 0) > 0 ? (
+                                <Badge label={`₱${(lab.standardPrice ?? 0).toLocaleString()}`} variant="neutral" size="sm" />
                               ) : null}
                             </View>
                           </View>
@@ -3731,8 +3774,8 @@ export default function ConsultationsScreen() {
                                   size="sm"
                                 />
                               )}
-                              {proc.standardPrice > 0 ? (
-                                <Badge label={`₱${proc.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                              {(proc.standardPrice ?? 0) > 0 ? (
+                                <Badge label={`₱${(proc.standardPrice ?? 0).toLocaleString()}`} variant="neutral" size="sm" />
                               ) : null}
                             </View>
                           </View>
@@ -4459,16 +4502,10 @@ export default function ConsultationsScreen() {
                     onPress={handleStartFollowUpEncounter}
                   />
                   <Button
-                    title="Forward to cashier"
+                    title="Forward / Checkout options"
                     icon="billing"
                     variant="success"
-                    onPress={() => {
-                      if (!selectedPatient) return;
-                      navigation.navigate('Billing', {
-                        patientId: selectedPatient.patientId,
-                        patientName: selectedPatient.patientName,
-                      });
-                    }}
+                    onPress={() => setPostEncounterModalVisible(true)}
                   />
                 </View>
               </Card>
@@ -4992,18 +5029,24 @@ export default function ConsultationsScreen() {
         <Modal
           visible={previewDocModal}
           onClose={() => setPreviewDocModal(false)}
-          title={previewType === 'MEDCERT' ? 'Medical certificate' : 'Referral letter'}
+          title={
+            previewType === 'MEDCERT'
+              ? 'Medical certificate'
+              : previewType === 'REFERRAL'
+              ? 'Referral letter'
+              : 'Electronic prescription'
+          }
           maxWidth={640}
           footer={
             <View style={styles.modalFooter}>
               {previewType === 'MEDCERT' && issuedMedCert ? (
                 <Button
-                  title="Download official PDF"
+                  title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
                   icon="download"
                   variant="success"
                   onPress={() =>
                     downloadPdf(
-                      clinicService.getMedicalCertificatePdfUrl(issuedMedCert.id),
+                      clinicService.getMedicalCertificatePdfUrl(issuedMedCert.id, { wet: docSigningMode === 'wet' }),
                       'Could not open the medical certificate PDF. Please check your connection and try again.',
                     )
                   }
@@ -5011,13 +5054,29 @@ export default function ConsultationsScreen() {
               ) : null}
               {previewType === 'REFERRAL' && issuedReferral ? (
                 <Button
-                  title="Download official PDF"
+                  title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
                   icon="download"
                   variant="success"
                   onPress={() =>
                     downloadPdf(
-                      clinicService.getReferralLetterPdfUrl(issuedReferral.id),
+                      clinicService.getReferralLetterPdfUrl(issuedReferral.id, { wet: docSigningMode === 'wet' }),
                       'Could not open the referral letter PDF. Please check your connection and try again.',
+                    )
+                  }
+                />
+              ) : null}
+              {previewType === 'PRESCRIPTION' && (signedConsultationId || prescriptionSlip?.consultationId) ? (
+                <Button
+                  title={docSigningMode === 'wet' ? 'Download official PDF (Wet)' : 'Download official PDF'}
+                  icon="download"
+                  variant="success"
+                  onPress={() =>
+                    downloadPdf(
+                      clinicService.getPrescriptionSlipPdfUrl(
+                        signedConsultationId || prescriptionSlip!.consultationId,
+                        { wet: docSigningMode === 'wet' },
+                      ),
+                      'Could not open the prescription slip PDF. Please check your connection and try again.',
                     )
                   }
                 />
@@ -5026,6 +5085,38 @@ export default function ConsultationsScreen() {
             </View>
           }
         >
+          {/* Document signing mode selector */}
+          <View style={styles.docModeCard}>
+            <View style={styles.docModeHeader}>
+              <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+                Signature & Print Mode
+              </ThemedText>
+              {docSigningMode === 'wet' ? (
+                <Badge label="Wet Signature (Pen)" variant="neutral" icon="pencil" />
+              ) : (
+                <Badge label="E-Signed PDF" variant="success" icon="check" />
+              )}
+            </View>
+
+            <SegmentedControl
+              options={DOC_SIGNING_OPTIONS}
+              value={docSigningMode}
+              onChange={handleDocSigningModeChange}
+            />
+
+            {hasDangerousDrug ? (
+              <View style={styles.pdeaWarningBox} testID="pdea-warning-badge">
+                <View style={styles.pdeaWarningHeader}>
+                  <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+                  <Badge label="PDEA S2 Regulated Substance" variant="warning" />
+                </View>
+                <ThemedText variant="captionBold" color={theme.colors.warningText}>
+                  PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations.
+                </ThemedText>
+              </View>
+            ) : null}
+          </View>
+
           <View style={styles.paper}>
             {/* Facility letterhead */}
             <View style={styles.paperHeader}>
@@ -5053,10 +5144,19 @@ export default function ConsultationsScreen() {
                 </ThemedText>
               ) : null}
               <ThemedText variant="bodyBold" color={theme.colors.primaryDark} style={styles.paperTitle}>
-                {previewType === 'MEDCERT' ? 'Medical certificate' : 'Referral letter'}
+                {previewType === 'MEDCERT'
+                  ? 'Medical certificate'
+                  : previewType === 'REFERRAL'
+                  ? 'Referral letter'
+                  : 'Electronic prescription'}
               </ThemedText>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Document No. {previewType === 'MEDCERT' ? issuedMedCert?.certificateNumber : issuedReferral?.referralNumber}
+                Document No.{' '}
+                {previewType === 'MEDCERT'
+                  ? issuedMedCert?.certificateNumber
+                  : previewType === 'REFERRAL'
+                  ? issuedReferral?.referralNumber
+                  : (prescriptionSlip?.prescriptionNumber || 'Rx')}
               </ThemedText>
             </View>
 
@@ -5122,6 +5222,29 @@ export default function ConsultationsScreen() {
               </View>
             ) : null}
 
+            {previewType === 'PRESCRIPTION' ? (
+              <View style={styles.stack}>
+                <ThemedText variant="bodyBold">Prescribed medications:</ThemedText>
+                {prescriptions.map((p, idx) => (
+                  <View key={p.id || idx} style={styles.paperBox}>
+                    <View style={styles.rxPaperRow}>
+                      <ThemedText variant="bodyBold">{p.genericName}</ThemedText>
+                      <Badge label={`Qty: ${p.quantity}`} variant="neutral" />
+                    </View>
+                    <ThemedText variant="small" color={theme.colors.textSecondary}>
+                      {p.dosage} · {p.form}
+                    </ThemedText>
+                    <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                      Sig: {p.sig}
+                    </ThemedText>
+                    {p.isDangerousDrug ? (
+                      <Badge label="Dangerous drug (PDEA S2)" variant="emergency" />
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
             {/* Physician signature block */}
             <View style={styles.signature}>
               <ThemedText variant="bodyBold">{docSignature.name}</ThemedText>
@@ -5135,7 +5258,11 @@ export default function ConsultationsScreen() {
                   PTR No. {docSignature.ptr}
                 </ThemedText>
               ) : null}
-              {docSignature.signed ? (
+              {docSigningMode === 'wet' ? (
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  [ Clean signature line for physical pen signing ]
+                </ThemedText>
+              ) : docSignature.signed ? (
                 <ThemedText variant="captionBold" color={theme.colors.successText}>
                   Digitally signed and sealed
                 </ThemedText>
@@ -5154,6 +5281,7 @@ export default function ConsultationsScreen() {
           visible={prescriptionSlipModalVisible}
           onClose={() => setPrescriptionSlipModalVisible(false)}
           slip={prescriptionSlip}
+          attendingDoctor={signerStaff}
           onOpenExternalDispense={() => {
             if (!signedConsultationId) {
               notify.info('Sign the encounter before recording an external dispense.');
@@ -5409,8 +5537,8 @@ export default function ConsultationsScreen() {
                   {editingOrderItem.name}
                 </ThemedText>
                 <Badge label={editingOrderItem.category} variant="neutral" size="sm" />
-                {editingOrderItem.standardPrice > 0 ? (
-                  <Badge label={`₱${editingOrderItem.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                {(editingOrderItem.standardPrice ?? 0) > 0 ? (
+                  <Badge label={`₱${(editingOrderItem.standardPrice ?? 0).toLocaleString()}`} variant="neutral" size="sm" />
                 ) : null}
               </View>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -5461,6 +5589,121 @@ export default function ConsultationsScreen() {
             </View>
           </Modal>
         ) : null}
+
+        {/* Post-Encounter Action Dialog */}
+        <Modal
+          visible={postEncounterModalVisible}
+          onClose={() => setPostEncounterModalVisible(false)}
+          title="Encounter Completed"
+          subtitle={selectedPatient ? `Patient: ${selectedPatient.patientName} (${selectedPatient.queueNumber})` : undefined}
+          maxWidth={500}
+        >
+          <View style={styles.postEncounterContainer}>
+            {/* Status notification */}
+            <View style={styles.postEncounterSuccessCard}>
+              <View style={styles.postEncounterSuccessIconRow}>
+                <View style={styles.postEncounterIconWrap}>
+                  <Icon name="checkCircle" size={theme.sizes.iconLg} color={theme.colors.success} />
+                </View>
+                <View style={styles.postEncounterSuccessText}>
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Clinical Encounter Signed & Synchronized
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    Clinical notes, prescriptions, and lab orders are securely saved.
+                  </ThemedText>
+                </View>
+              </View>
+
+              {createdInvoiceTotal !== null ? (
+                <View style={styles.postEncounterInvoiceBadge}>
+                  <Icon name="billing" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
+                  <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                    Invoice {createdInvoiceNumber || 'Created'}: ₱{createdInvoiceTotal.toFixed(2)} (Queued for Checkout)
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Next in Queue Section */}
+            {nextEligiblePatient ? (
+              <View style={styles.postEncounterNextQueueCard}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  NEXT PATIENT IN QUEUE
+                </ThemedText>
+                <View style={styles.postEncounterNextPatientRow}>
+                  <View style={styles.postEncounterQueueBadge}>
+                    <ThemedText variant="h3" color={theme.colors.primary}>
+                      {nextEligiblePatient.queueNumber}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.postEncounterNextPatientInfo}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      {nextEligiblePatient.patientName}
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      {nextEligiblePatient.chiefComplaint || 'Consultation'} • {nextEligiblePatient.priority}
+                    </ThemedText>
+                  </View>
+                </View>
+                <Button
+                  title={`Call Next Patient (${nextEligiblePatient.queueNumber})`}
+                  icon="phone"
+                  variant="primary"
+                  size="lg"
+                  onPress={() => {
+                    setPostEncounterModalVisible(false);
+                    handleOpenCallModal(nextEligiblePatient);
+                  }}
+                />
+              </View>
+            ) : (
+              <View style={styles.postEncounterEmptyQueueCard}>
+                <Icon name="checkCircle" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  No other patients are currently waiting in this queue.
+                </ThemedText>
+              </View>
+            )}
+
+            {/* Workflow Navigation Options */}
+            <View style={styles.postEncounterOptionsRow}>
+              {prescriptions.length > 0 && (
+                <Button
+                  title="Print Rx Slip"
+                  icon="print"
+                  variant="outline"
+                  size="sm"
+                  onPress={() => {
+                    setPostEncounterModalVisible(false);
+                    handleOpenPrescriptionSlip();
+                  }}
+                />
+              )}
+              <Button
+                title="Go to Billing Screen"
+                icon="billing"
+                variant="outline"
+                size="sm"
+                onPress={() => {
+                  setPostEncounterModalVisible(false);
+                  if (selectedPatient) {
+                    navigation.navigate('Billing', {
+                      patientId: selectedPatient.patientId,
+                      patientName: selectedPatient.patientName,
+                    });
+                  }
+                }}
+              />
+              <Button
+                title="Close"
+                variant="ghost"
+                size="sm"
+                onPress={() => setPostEncounterModalVisible(false)}
+              />
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </ResponsiveLayout>
   );
@@ -6219,5 +6462,116 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.primaryLight,
+  },
+  postEncounterContainer: {
+    gap: theme.spacing.md,
+  },
+  postEncounterSuccessCard: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.sm,
+  },
+  postEncounterSuccessIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  postEncounterIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postEncounterSuccessText: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  postEncounterInvoiceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: theme.radii.sm,
+  },
+  postEncounterNextQueueCard: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+    gap: theme.spacing.sm,
+  },
+  postEncounterNextPatientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  postEncounterQueueBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postEncounterNextPatientInfo: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  postEncounterEmptyQueueCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.sm,
+  },
+  postEncounterOptionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+    marginTop: theme.spacing.xs,
+  },
+  docModeCard: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  docModeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  rxPaperRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pdeaWarningBox: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  pdeaWarningHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
 });

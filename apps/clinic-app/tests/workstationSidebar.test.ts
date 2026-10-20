@@ -30,6 +30,7 @@ mock.module('react-native', () => ({
   View: createMockComponent('View'),
   Pressable: createMockComponent('Pressable'),
   ScrollView: createMockComponent('ScrollView'),
+  RefreshControl: createMockComponent('RefreshControl'),
   TextInput: createMockComponent('TextInput'),
   Text: createMockComponent('Text'),
   ActivityIndicator: createMockComponent('ActivityIndicator'),
@@ -92,6 +93,12 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('Rect'),
   Line: createMockComponent('Line'),
   default: createMockComponent('Svg'),
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -126,7 +133,7 @@ mock.module('../context/AuthContext', () => ({
 }));
 
 const staffContextMockFactory = () => ({
-  useStaff: () => (globalThis as any).__mockStaffContext ?? { current: null },
+  useStaff: () => (globalThis as any).__mockStaffContext ?? { current: null, staff: [] },
   formatStaffName: (s: any) => s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim(),
   staffInitials: (s: any) => `${s?.firstName?.[0] ?? ''}${s?.lastName?.[0] ?? ''}`.toUpperCase() || '?',
   StaffProvider: ({ children }: any) => children,
@@ -147,7 +154,7 @@ describe('WorkstationSidebar Component', () => {
       settings: { preferredChartLayout: 'centered' },
     };
     (globalThis as any).__mockClinicContext = mockClinicContext;
-    (globalThis as any).__mockStaffContext = { current: null };
+    (globalThis as any).__mockStaffContext = { current: null, staff: [] };
     mockAuthContext = {
       user: {
         id: 'user-1',
@@ -307,5 +314,6 @@ describe('WorkstationSidebar Component', () => {
 
   afterAll(() => {
     delete (globalThis as any).__mockClinicContext;
+    delete (globalThis as any).__mockStaffContext;
   });
 });

@@ -230,4 +230,81 @@ public class InvoiceRequestedHandlerTests
         host.Provider.GetService(typeof(InteropHandlerRegistry)).Should().BeOfType<InteropHandlerRegistry>()
             .Which.RegisteredTypes.Should().Contain(InteropTypes.BillingInvoiceRequested);
     }
+
+    [Fact]
+    public async Task A_request_with_a_discount_line_is_accepted_and_recalculates_total_accurately()
+    {
+        using var host = new BillingHost();
+        var payload = BillingHost.Request(
+            BillingHost.TenantA, BillingHost.Clinic, FacilityType.Clinic,
+            lines: new[]
+            {
+                BillingHost.Line("CONS", "General Consultation", 1, 500m),
+                BillingHost.Line("DISCOUNT", "Discount (SeniorCitizen)", 1, -100m)
+            });
+
+        var invoice = await host.ReceiveAsync(payload);
+
+        invoice.Status.Should().Be(InvoiceStatus.Open);
+        invoice.Subtotal.Should().Be(400m);
+        invoice.Total.Should().Be(400m);
+        invoice.Lines.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task A_request_discounted_to_zero_net_is_settled_on_arrival_and_payment_confirmed()
+    {
+        using var host = new BillingHost();
+        var payload = BillingHost.Request(
+            BillingHost.TenantA, BillingHost.Clinic, FacilityType.Clinic,
+            lines: new[]
+            {
+                BillingHost.Line("CONS", "General Consultation", 1, 500m),
+                BillingHost.Line("DISCOUNT", "Discount (PhilHealthKonsulta)", 1, -500m)
+            });
+
+        var invoice = await host.ReceiveAsync(payload);
+
+        invoice.Status.Should().Be(InvoiceStatus.Paid);
+        invoice.Subtotal.Should().Be(0m);
+        invoice.Total.Should().Be(0m);
+
+        var outbox = await host.OutboxAsync();
+        var message = outbox.Should().ContainSingle(m => m.Type == InteropTypes.BillingPaymentConfirmed).Subject;
+        var confirmed = InteropEnvelope.FromJson(message.EnvelopeJson).GetPayload<BillingPaymentConfirmedPayload>();
+        confirmed.FullyPaid.Should().BeTrue();
+        confirmed.AmountDue.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task A_resent_request_with_zero_net_settles_previously_open_invoice()
+    {
+        using var host = new BillingHost();
+        var requestId = Guid.NewGuid();
+
+        // 1. Initial request: 500 PHP
+        var initial = await host.ReceiveAsync(BillingHost.Request(
+            BillingHost.TenantA, BillingHost.Clinic, FacilityType.Clinic, requestId,
+            lines: new[] { BillingHost.Line("CONS", "General Consultation", 1, 500m) }));
+        initial.Status.Should().Be(InvoiceStatus.Open);
+        initial.Total.Should().Be(500m);
+
+        // 2. Updated request: 100% PhilHealth discount applied
+        var updated = await host.ReceiveAsync(BillingHost.Request(
+            BillingHost.TenantA, BillingHost.Clinic, FacilityType.Clinic, requestId,
+            lines: new[]
+            {
+                BillingHost.Line("CONS", "General Consultation", 1, 500m),
+                BillingHost.Line("DISCOUNT", "Discount (PhilHealthKonsulta)", 1, -500m)
+            }));
+
+        updated.Id.Should().Be(initial.Id);
+        updated.Status.Should().Be(InvoiceStatus.Paid);
+        updated.Total.Should().Be(0m);
+
+        var outbox = await host.OutboxAsync();
+        var message = outbox.Should().ContainSingle(m => m.Type == InteropTypes.BillingPaymentConfirmed).Subject;
+        var confirmed = InteropEnvelope.FromJson(message.EnvelopeJson).GetPayload<BillingPaymentConfirmedPayload>();
+        confirmed.FullyPaid.Should().BeTrue();
+    }
 }

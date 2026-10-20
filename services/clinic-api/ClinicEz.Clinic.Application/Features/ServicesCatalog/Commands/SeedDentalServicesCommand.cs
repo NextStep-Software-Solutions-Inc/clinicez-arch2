@@ -1,0 +1,92 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
+using ClinicEz.Clinic.Application.Features.ServicesCatalog.DTOs;
+using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Interfaces;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace ClinicEz.Clinic.Application.Features.ServicesCatalog.Commands;
+
+public sealed record SeedDentalServicesCommand : IRequest<List<ClinicServiceItemDto>>;
+
+public sealed class SeedDentalServicesCommandHandler : IRequestHandler<SeedDentalServicesCommand, List<ClinicServiceItemDto>>
+{
+    private readonly IRepository<ClinicServiceItem> _serviceRepo;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IClinicContext _clinicContext;
+
+    public SeedDentalServicesCommandHandler(
+        IRepository<ClinicServiceItem> serviceRepo,
+        IUnitOfWork unitOfWork,
+        IClinicContext clinicContext)
+    {
+        _serviceRepo = serviceRepo;
+        _unitOfWork = unitOfWork;
+        _clinicContext = clinicContext;
+    }
+
+    public async Task<List<ClinicServiceItemDto>> Handle(SeedDentalServicesCommand request, CancellationToken cancellationToken)
+    {
+        var existingServices = await _serviceRepo.Query().ToListAsync(cancellationToken);
+        var existingMap = existingServices
+            .GroupBy(s => s.Code.Trim().ToUpperInvariant())
+            .ToDictionary(g => g.Key, g => g.First());
+
+        bool anyCreated = false;
+        var canonicalCodes = DentalCatalogDefaults.Defaults
+            .Select(d => d.Code.Trim().ToUpperInvariant())
+            .ToHashSet();
+
+        foreach (var def in DentalCatalogDefaults.Defaults)
+        {
+            var codeUpper = def.Code.Trim().ToUpperInvariant();
+            if (!existingMap.ContainsKey(codeUpper))
+            {
+                var newItem = new ClinicServiceItem
+                {
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    Code = def.Code,
+                    Name = def.Name,
+                    Category = def.Category,
+                    StandardPrice = def.StandardPrice,
+                    Description = def.Description,
+                    IsActive = true
+                };
+
+                await _serviceRepo.AddAsync(newItem, cancellationToken);
+                existingMap[codeUpper] = newItem;
+                existingServices.Add(newItem);
+                anyCreated = true;
+            }
+        }
+
+        if (anyCreated)
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        return existingServices
+            .Where(s => canonicalCodes.Contains(s.Code.Trim().ToUpperInvariant()))
+            .OrderBy(s => s.Code)
+            .Select(s => new ClinicServiceItemDto(
+                s.Id,
+                s.TenantId ?? _clinicContext.TenantId,
+                s.ClinicId,
+                s.Code,
+                s.Name,
+                s.Category,
+                s.StandardPrice,
+                s.Description,
+                s.IsActive,
+                s.PhilHealthCode,
+                s.PhilHealthDescription,
+                s.IsPhilHealthFormulary
+            )).ToList();
+    }
+}

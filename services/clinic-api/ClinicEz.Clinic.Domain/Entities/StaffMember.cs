@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
@@ -85,6 +86,10 @@ public sealed class StaffMember : BaseEntity
     public string? S2LicenseNumber { get; set; }
     public string? Specialty { get; set; }
     public string? PhilHealthPan { get; set; }
+
+    // E-Signature Specimen & Tri-Mode Signing
+    public string? SignatureSpecimen { get; set; }
+    public SignatureMode DefaultSignatureMode { get; set; } = SignatureMode.ESignatureSpecimen;
 
     public bool IsActive { get; set; } = true;
 

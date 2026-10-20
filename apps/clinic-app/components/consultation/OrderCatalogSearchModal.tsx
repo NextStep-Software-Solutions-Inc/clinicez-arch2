@@ -51,7 +51,7 @@ export interface OrderCatalogSearchModalProps {
   catalog?: ClinicServiceItem[];
   rooms?: ClinicRoom[];
   initialRoomId?: string;
-  initialCategory?: 'Diagnostic' | 'Procedure' | 'All';
+  initialCategory?: 'Diagnostic' | 'Procedure' | 'Dental' | 'All';
   isYakapEligible?: boolean;
   onSelectOrder: (order: OrderCatalogItemPayload) => void;
   alreadyOrderedNames?: string[];
@@ -63,13 +63,14 @@ export interface OrderCatalogSearchModalProps {
   testID?: string;
 }
 
-type CategoryTab = 'All' | 'Diagnostic' | 'Procedure';
+export type CategoryTab = 'All' | 'Diagnostic' | 'Procedure' | 'Dental';
 type FulfillmentMode = 'in_house' | 'outside';
 
-const CATEGORY_TABS: Array<{ value: CategoryTab; label: string }> = [
+export const CATEGORY_TABS: Array<{ value: CategoryTab; label: string }> = [
   { value: 'All', label: 'All Items' },
   { value: 'Diagnostic', label: 'Diagnostic' },
   { value: 'Procedure', label: 'Procedure' },
+  { value: 'Dental', label: 'Dental' },
 ];
 
 const FULFILLMENT_OPTIONS: Array<{ value: FulfillmentMode; label: string }> = [
@@ -77,7 +78,7 @@ const FULFILLMENT_OPTIONS: Array<{ value: FulfillmentMode; label: string }> = [
   { value: 'outside', label: 'Outside Laboratory' },
 ];
 
-const DIAGNOSTIC_FASTING_CHIPS = [
+export const DIAGNOSTIC_FASTING_CHIPS = [
   '10-12 hr fasting',
   '8 hr fasting',
   'Random / Non-fasting',
@@ -85,11 +86,19 @@ const DIAGNOSTIC_FASTING_CHIPS = [
   'STAT',
 ];
 
-const PROCEDURE_INSTRUCTION_CHIPS = [
+export const PROCEDURE_INSTRUCTION_CHIPS = [
   'STAT',
   'Routine',
   'Pre/post vitals required',
   'Wound care / sterile technique',
+];
+
+export const DENTAL_CLINICAL_INSTRUCTION_CHIPS = [
+  'Local anesthesia (Infiltration)',
+  'Mandibular nerve block',
+  'Rubber dam isolation',
+  'Post-extraction care instructions',
+  'Suture removal 7 days',
 ];
 
 const IN_HOUSE_RAPID_TEST_REGEX = /fingerstick|ecg|dipstick|rapid|rbs|urinalysis/i;
@@ -189,7 +198,9 @@ export function OrderCatalogSearchModal({
       if (selectedCategory === 'Diagnostic') {
         if (!catLower.includes('diagnostic')) return false;
       } else if (selectedCategory === 'Procedure') {
-        if (!catLower.includes('procedure') && !catLower.includes('nursing')) return false;
+        if (!catLower.includes('procedure') && !catLower.includes('nursing') && !catLower.includes('dental')) return false;
+      } else if (selectedCategory === 'Dental') {
+        if (!catLower.includes('dental')) return false;
       }
 
       if (q) {
@@ -227,7 +238,11 @@ export function OrderCatalogSearchModal({
       }
     } else {
       setFulfillmentMode(getHeuristicFulfillmentMode(item));
-      setInstructions('');
+      if (initialToothNumber) {
+        setInstructions(`Tooth #${initialToothNumber}${initialToothSurface ? ` (${initialToothSurface})` : ''}`);
+      } else {
+        setInstructions('');
+      }
       if (initialRoomId) {
         setSelectedRoomId(initialRoomId);
       } else if (targetRooms.length > 0) {
@@ -252,6 +267,10 @@ export function OrderCatalogSearchModal({
   };
 
   const isDiagnostic = (selectedItem?.category || '').toLowerCase().includes('diagnostic');
+  const isDental =
+    selectedCategory === 'Dental' ||
+    Boolean(initialToothNumber) ||
+    Boolean(selectedItem && (selectedItem.category || '').toLowerCase().includes('dental'));
   const isSelectedAlreadyOrdered = selectedItem
     ? alreadyOrderedNames.some((n) => n.toLowerCase() === selectedItem.name.toLowerCase()) ||
       alreadyOrderedCodes.some((c) => c.toLowerCase() === selectedItem.code.toLowerCase())
@@ -461,7 +480,7 @@ export function OrderCatalogSearchModal({
 
                   <View style={styles.itemPriceCol}>
                     <ThemedText variant="smallBold" color={theme.colors.primary}>
-                      ₱{item.standardPrice.toLocaleString()}
+                      ₱{(item.standardPrice ?? 0).toLocaleString()}
                     </ThemedText>
                   </View>
                 </Pressable>
@@ -552,12 +571,19 @@ export function OrderCatalogSearchModal({
             {/* Clinical & Fasting Instructions */}
             <View style={styles.configFieldSection}>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                {isDiagnostic
+                {isDental
+                  ? 'Dental Clinical Instructions & Notes'
+                  : isDiagnostic
                   ? 'Fasting & Clinical Instructions'
                   : 'Procedure Instructions & Notes'}
               </ThemedText>
               <View style={styles.chipsWrap}>
-                {(isDiagnostic ? DIAGNOSTIC_FASTING_CHIPS : PROCEDURE_INSTRUCTION_CHIPS).map(
+                {(isDental
+                  ? DENTAL_CLINICAL_INSTRUCTION_CHIPS
+                  : isDiagnostic
+                  ? DIAGNOSTIC_FASTING_CHIPS
+                  : PROCEDURE_INSTRUCTION_CHIPS
+                ).map(
                   (chip) => {
                     const isActive = instructions.includes(chip);
                     return (
@@ -611,7 +637,7 @@ export function OrderCatalogSearchModal({
                     </>
                   ) : (
                     <ThemedText variant="title" color={theme.colors.primary}>
-                      ₱{selectedItem.standardPrice.toLocaleString()}
+                      ₱{(selectedItem.standardPrice ?? 0).toLocaleString()}
                     </ThemedText>
                   )}
                 </View>
@@ -619,7 +645,7 @@ export function OrderCatalogSearchModal({
               {isYakapCovered ? (
                 <ThemedText variant="caption" color={theme.colors.successText}>
                   PhilHealth Yakap formulary benefit covers 100% patient co-pay (Standard fee: ₱
-                  {selectedItem.standardPrice.toLocaleString()}).
+                  {(selectedItem.standardPrice ?? 0).toLocaleString()}).
                 </ThemedText>
               ) : isDiagnostic && fulfillmentMode === 'outside' ? (
                 <ThemedText variant="caption" color={theme.colors.textMuted}>

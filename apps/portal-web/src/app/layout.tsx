@@ -3,6 +3,7 @@ import { GeistMono } from "geist/font/mono";
 import { ClerkProvider } from '@clerk/nextjs'
 import { ApiProvider } from "@/components/providers/ApiProvider";
 import { Toaster } from "@/components/ui/sonner";
+import { VercelAnalytics } from "@/components/analytics/VercelAnalytics";
 import "./globals.css";
 
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,7 @@ export default function RootLayout({
             {children}
             <Toaster />
           </ApiProvider>
+          <VercelAnalytics />
         </body>
       </html>
     </ClerkProvider>

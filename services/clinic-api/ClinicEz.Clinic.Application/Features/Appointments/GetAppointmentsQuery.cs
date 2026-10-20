@@ -64,7 +64,10 @@ public sealed record AppointmentDto(
 
 public sealed record GetAppointmentsQuery(
     DateOnly? Date = null,
-    AppointmentStatus? Status = null) : IRequest<IReadOnlyList<AppointmentDto>>;
+    AppointmentStatus? Status = null,
+    DateOnly? StartDate = null,
+    DateOnly? EndDate = null,
+    Guid? DoctorId = null) : IRequest<IReadOnlyList<AppointmentDto>>;
 
 public sealed class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery, IReadOnlyList<AppointmentDto>>
 {
@@ -84,11 +87,35 @@ public sealed class GetAppointmentsQueryHandler : IRequestHandler<GetAppointment
         var query = _appointmentRepository.Query(a => a.ClinicId == _clinicContext.ClinicId)
             .AsQueryable();
 
-        if (request.Date.HasValue)
+        if (request.StartDate.HasValue || request.EndDate.HasValue)
+        {
+            if (request.StartDate.HasValue && request.EndDate.HasValue)
+            {
+                var startUtc = request.StartDate.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+                var endUtc = request.EndDate.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+                query = query.Where(a => a.ScheduledAt >= startUtc && a.ScheduledAt <= endUtc);
+            }
+            else if (request.StartDate.HasValue)
+            {
+                var startUtc = request.StartDate.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+                query = query.Where(a => a.ScheduledAt >= startUtc);
+            }
+            else if (request.EndDate.HasValue)
+            {
+                var endUtc = request.EndDate.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+                query = query.Where(a => a.ScheduledAt <= endUtc);
+            }
+        }
+        else if (request.Date.HasValue)
         {
             var startUtc = request.Date.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
             var endUtc = request.Date.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
             query = query.Where(a => a.ScheduledAt >= startUtc && a.ScheduledAt <= endUtc);
+        }
+
+        if (request.DoctorId.HasValue)
+        {
+            query = query.Where(a => a.DoctorId == request.DoctorId.Value);
         }
 
         if (request.Status.HasValue)

@@ -33,24 +33,3 @@ public sealed class AuthController : ControllerBase
         Ok(ApiResponse<AuthUserDto>.Success(await _auth.CurrentUserAsync(ct)));
 }
 
-[ApiController]
-[Route("api/v1/staff")]
-[HasPermission(BillingPermissions.StaffManage)]
-public sealed class StaffController : ControllerBase
-{
-    private readonly StaffAdminService _staff;
-
-    public StaffController(StaffAdminService staff) => _staff = staff;
-
-    [HttpGet]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<StaffDto>>>> List(CancellationToken ct) =>
-        Ok(ApiResponse<IReadOnlyList<StaffDto>>.Success(await _staff.ListAsync(ct)));
-
-    [HttpPost]
-    public async Task<ActionResult<ApiResponse<StaffDto>>> Create([FromBody] CreateStaffRequest request, CancellationToken ct) =>
-        StatusCode(StatusCodes.Status201Created, ApiResponse<StaffDto>.Success(await _staff.CreateAsync(request, ct)));
-
-    [HttpPost("{staffId:guid}/deactivate")]
-    public async Task<ActionResult<ApiResponse<StaffDto>>> Deactivate(Guid staffId, CancellationToken ct) =>
-        Ok(ApiResponse<StaffDto>.Success(await _staff.DeactivateAsync(staffId, ct)));
-}

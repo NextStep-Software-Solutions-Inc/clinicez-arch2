@@ -12,6 +12,14 @@ public enum DocumentPaperSize
     A5
 }
 
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
+public enum SignatureMode
+{
+    ESignatureSpecimen,
+    DigitalSealOnly,
+    WetSignature
+}
+
 public sealed class TenantPrintoutConfig
 {
     // Branding & Colors
@@ -21,6 +29,10 @@ public sealed class TenantPrintoutConfig
     public byte[]? SecondaryLogoBytes { get; set; }
     public string PrimaryColorHex { get; set; } = "#0284C7"; // Default clean clinical cyan/blue
     public string AccentColorHex { get; set; } = "#0369A1";
+
+    // Signature Mode & Doctor Specimen
+    public SignatureMode DefaultSignatureMode { get; set; } = SignatureMode.ESignatureSpecimen;
+    public byte[]? DoctorSignatureBytes { get; set; }
 
     // Layout
     public DocumentPaperSize PaperSize { get; set; } = DocumentPaperSize.Letter;
@@ -32,6 +44,7 @@ public sealed class TenantPrintoutConfig
     public string? PhysicalAddress { get; set; }
     public string? ContactNumbers { get; set; }
     public string? EmailAndWeb { get; set; }
+    public string? TaxIdentificationNumber { get; set; }
     public string? DohLicenseToOperate { get; set; }
     public string? PhilHealthAccreditationNumber { get; set; }
 

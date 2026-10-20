@@ -88,7 +88,9 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
                 MustChangePassword: staff.MustChangePassword,
                 PhilHealthPan: staff.PhilHealthPan,
                 AssignedRoomIds: roomIds,
-                AssignedRoomNames: roomNames
+                AssignedRoomNames: roomNames,
+                SignatureSpecimen: staff.SignatureSpecimen,
+                DefaultSignatureMode: staff.DefaultSignatureMode
             );
         }).ToList();
     }
@@ -157,6 +159,8 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
             MustChangePassword: staff.MustChangePassword,
             PhilHealthPan: staff.PhilHealthPan,
             AssignedRoomIds: roomIds,
-            AssignedRoomNames: roomNames);
+            AssignedRoomNames: roomNames,
+            SignatureSpecimen: staff.SignatureSpecimen,
+            DefaultSignatureMode: staff.DefaultSignatureMode);
     }
 }
