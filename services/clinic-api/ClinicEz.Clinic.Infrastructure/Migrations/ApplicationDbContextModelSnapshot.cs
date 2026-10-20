@@ -1302,6 +1302,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<string>("CashierMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("ClinicDesk");
+
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");
 
@@ -1404,6 +1411,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("LetterheadContact")
                         .HasColumnType("text");
+
+                    b.Property<string>("LetterheadDohLto")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("LetterheadFooter")
                         .HasColumnType("text");
@@ -2766,6 +2777,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<DateOnly?>("RestStartDate")
                         .HasColumnType("date");
 
+                    b.Property<string>("SecurityDigest")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime?>("SignedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2786,6 +2801,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
+
+                    b.HasIndex("TenantId", "ClinicId", "SecurityDigest");
 
                     b.ToTable("MedicalCertificates", "public");
                 });
@@ -4576,6 +4593,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<string>("SecurityDigest")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime?>("SignedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -4601,6 +4622,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ClinicId", "ReferralNumber")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "ClinicId", "SecurityDigest");
 
                     b.ToTable("ReferralLetters", "public");
                 });
@@ -4748,6 +4771,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("DefaultSignatureMode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -4817,6 +4845,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("S2LicenseNumber")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("SignatureSpecimen")
+                        .HasColumnType("text");
 
                     b.Property<string>("Specialty")
                         .HasMaxLength(100)
