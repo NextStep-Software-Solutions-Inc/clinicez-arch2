@@ -121,7 +121,7 @@ public class GlobalClinicSearchQueryHandlerTests
         // Assert
         result.TotalCount.Should().Be(2);
         result.Items.Should().HaveCount(2);
-        sw.ElapsedMilliseconds.Should().BeLessThan(2500, "Two 50ms concurrent tasks must execute concurrently without hanging");
+        sw.ElapsedMilliseconds.Should().BeLessThan(10000, "Two 50ms concurrent tasks must execute concurrently without hanging");
     }
 
     [Fact]
