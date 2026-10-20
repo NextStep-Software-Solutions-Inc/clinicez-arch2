@@ -98,6 +98,7 @@ mock.module('../utils/useBreakpoint', () => ({
   }),
 }));
 
+const previousClinicContext = (globalThis as any).__mockClinicContext;
 const modalStackingClinicContextFactory = () => ({
   useClinic: () =>
     (globalThis as any).__mockClinicContext ?? {
@@ -863,7 +864,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
           })
         );
         expect(markup).toContain('Maria Santos');
-        expect(markup).toContain('Medical chart');
+        expect(markup).toContain('Patient Chart');
       }
     });
 
@@ -1517,7 +1518,7 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
             })
           );
           expect(markup).toContain('Juan dela Cruz');
-          expect(markup).toContain('Medical chart');
+          expect(markup).toContain('Patient Chart');
         }
 
         // None of the tabs mounted dormant submodals into document.body
@@ -1761,7 +1762,11 @@ describe('Modal Stacking System — Nested & Layered Modals', () => {
   });
 
   afterAll(() => {
-    delete (globalThis as any).__mockClinicContext;
+    if (previousClinicContext !== undefined) {
+      (globalThis as any).__mockClinicContext = previousClinicContext;
+    } else {
+      delete (globalThis as any).__mockClinicContext;
+    }
   });
 });
 

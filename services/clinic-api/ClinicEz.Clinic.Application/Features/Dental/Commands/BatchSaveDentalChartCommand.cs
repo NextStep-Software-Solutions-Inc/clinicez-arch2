@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Dental.DTOs;
 using ClinicEz.Clinic.Application.Features.Dental.Queries;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
@@ -58,6 +59,7 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
         }
 
         var patientName = $"{patient.LastName}, {patient.FirstName}".Trim();
+        var staffName = _clinicContext.StaffName ?? "Staff";
 
         if (request.Teeth == null || request.Teeth.Count == 0)
         {
@@ -71,26 +73,157 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
             UpsertDentalToothRecordCommandHandler.NormalizeAndSortSurfaces(tooth.Surface);
         }
 
-        // 2. Deduplicate by ToothNumber, retaining the last item per tooth if duplicated
-        var distinctTeeth = request.Teeth
-            .GroupBy(t => t.ToothNumber)
-            .Select(g => g.Last())
-            .ToList();
-
-        // 3. Load existing records for the patient
+        // 2. Load existing active records for the patient
         var existingTeeth = await _toothRepo
             .Query(t => t.ClinicId == _clinicContext.ClinicId && t.PatientId == request.PatientId && !t.IsDeleted)
             .ToListAsync(ct);
 
-        // 4. Upsert distinct teeth
-        foreach (var tooth in distinctTeeth)
+        // 3. Deduplicate batch inputs per tooth while preserving distinct conditions:
+        // Group by (ToothNumber, Status) so distinct statuses on the same tooth are preserved.
+        // If an item has Healthy, it clears previous conditions on that tooth.
+        // If multiple items on the same tooth have the exact same surface (e.g. Decay on "m" then Filled on "m"), the last one wins.
+        var processedInputs = new List<ToothRecordInput>();
+        var toothGroups = request.Teeth.GroupBy(t => t.ToothNumber);
+
+        foreach (var group in toothGroups)
+        {
+            var list = group.ToList();
+            var lastHealthyIdx = list.FindLastIndex(t => t.Status == ToothStatus.Healthy);
+            var lastNonHealthyIdx = list.FindLastIndex(t => t.Status != ToothStatus.Healthy);
+
+            if (lastHealthyIdx > lastNonHealthyIdx)
+            {
+                // The final intent for this tooth was Healthy!
+                processedInputs.Add(list[lastHealthyIdx]);
+            }
+            else
+            {
+                // Non-healthy conditions: ignore any Healthy items that came before the non-healthy items
+                var nonHealthyList = list.Skip(lastHealthyIdx + 1).ToList();
+
+                var itemsForTooth = new List<ToothRecordInput>();
+                for (int i = 0; i < nonHealthyList.Count; i++)
+                {
+                    var item = nonHealthyList[i];
+                    var normSurface = UpsertDentalToothRecordCommandHandler.NormalizeAndSortSurfaces(item.Surface);
+                    bool superseded = false;
+                    for (int j = i + 1; j < nonHealthyList.Count; j++)
+                    {
+                        var later = nonHealthyList[j];
+                        var laterSurface = UpsertDentalToothRecordCommandHandler.NormalizeAndSortSurfaces(later.Surface);
+                        if (later.Status == item.Status 
+                            || normSurface == null 
+                            || laterSurface == null 
+                            || normSurface.All(c => laterSurface.Contains(c)))
+                        {
+                            superseded = true;
+                            break;
+                        }
+                    }
+
+                    if (!superseded)
+                    {
+                        itemsForTooth.Add(item);
+                    }
+                }
+
+                processedInputs.AddRange(itemsForTooth);
+            }
+        }
+
+        // 4. Apply tooth records
+        foreach (var tooth in processedInputs)
         {
             var normalizedSurface = UpsertDentalToothRecordCommandHandler.NormalizeAndSortSurfaces(tooth.Surface);
-            var existing = existingTeeth.FirstOrDefault(t => t.ToothNumber == tooth.ToothNumber);
+
+            // Case A: RemoveCondition == true
+            if (tooth.RemoveCondition)
+            {
+                var matches = existingTeeth
+                    .Where(t => t.ToothNumber == tooth.ToothNumber && t.Status == tooth.Status && !t.IsDeleted)
+                    .ToList();
+                foreach (var m in matches)
+                {
+                    m.IsDeleted = true;
+                    m.DeletedAt = DateTime.UtcNow;
+                    m.DeletedBy = staffName;
+                    _toothRepo.Update(m);
+                }
+                continue;
+            }
+
+            // Case B: Status == ToothStatus.Healthy
+            if (tooth.Status == ToothStatus.Healthy)
+            {
+                // Soft-delete all active non-healthy conditions on this tooth
+                var nonHealthy = existingTeeth
+                    .Where(t => t.ToothNumber == tooth.ToothNumber && t.Status != ToothStatus.Healthy && !t.IsDeleted)
+                    .ToList();
+                foreach (var nh in nonHealthy)
+                {
+                    nh.IsDeleted = true;
+                    nh.DeletedAt = DateTime.UtcNow;
+                    nh.DeletedBy = staffName;
+                    _toothRepo.Update(nh);
+                }
+
+                var healthyRecord = existingTeeth
+                    .FirstOrDefault(t => t.ToothNumber == tooth.ToothNumber && t.Status == ToothStatus.Healthy && !t.IsDeleted);
+
+                if (healthyRecord != null)
+                {
+                    healthyRecord.Notes = string.IsNullOrWhiteSpace(tooth.Notes) ? null : tooth.Notes.Trim();
+                    if (request.ConsultationId.HasValue)
+                    {
+                        healthyRecord.ConsultationId = request.ConsultationId.Value;
+                    }
+                    healthyRecord.PatientName = patientName;
+                    healthyRecord.UpdatedAt = DateTime.UtcNow;
+                    healthyRecord.UpdatedBy = staffName;
+                    _toothRepo.Update(healthyRecord);
+                }
+                else
+                {
+                    var newHealthy = new DentalToothRecord
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = _clinicContext.TenantId,
+                        ClinicId = _clinicContext.ClinicId,
+                        PatientId = request.PatientId,
+                        PatientName = patientName,
+                        ConsultationId = request.ConsultationId,
+                        ToothNumber = tooth.ToothNumber,
+                        Status = ToothStatus.Healthy,
+                        Surface = null,
+                        Notes = string.IsNullOrWhiteSpace(tooth.Notes) ? null : tooth.Notes.Trim(),
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = staffName
+                    };
+                    await _toothRepo.AddAsync(newHealthy, ct);
+                    existingTeeth.Add(newHealthy);
+                }
+                continue;
+            }
+
+            // Case C: Non-Healthy condition (Decay, Filled, Crown, Extraction, Missing)
+            // Remove any active Healthy placeholders on this tooth
+            var healthyPlaceholders = existingTeeth
+                .Where(t => t.ToothNumber == tooth.ToothNumber && t.Status == ToothStatus.Healthy && !t.IsDeleted)
+                .ToList();
+            foreach (var h in healthyPlaceholders)
+            {
+                h.IsDeleted = true;
+                h.DeletedAt = DateTime.UtcNow;
+                h.DeletedBy = staffName;
+                _toothRepo.Update(h);
+            }
+
+            // Match active record by (ToothNumber, Status)
+            var existing = existingTeeth
+                .FirstOrDefault(t => t.ToothNumber == tooth.ToothNumber && t.Status == tooth.Status && !t.IsDeleted);
 
             if (existing != null)
             {
-                existing.Status = tooth.Status;
                 existing.Surface = normalizedSurface;
                 existing.Notes = string.IsNullOrWhiteSpace(tooth.Notes) ? null : tooth.Notes.Trim();
                 if (request.ConsultationId.HasValue)
@@ -99,7 +232,7 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                 }
                 existing.PatientName = patientName;
                 existing.UpdatedAt = DateTime.UtcNow;
-                existing.UpdatedBy = _clinicContext.StaffName ?? "Staff";
+                existing.UpdatedBy = staffName;
                 _toothRepo.Update(existing);
             }
             else
@@ -117,7 +250,7 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                     Surface = normalizedSurface,
                     Notes = string.IsNullOrWhiteSpace(tooth.Notes) ? null : tooth.Notes.Trim(),
                     CreatedAt = DateTime.UtcNow,
-                    CreatedBy = _clinicContext.StaffName ?? "Staff"
+                    CreatedBy = staffName
                 };
                 await _toothRepo.AddAsync(newTooth, ct);
                 existingTeeth.Add(newTooth);

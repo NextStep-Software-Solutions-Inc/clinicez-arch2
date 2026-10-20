@@ -22,7 +22,7 @@ export { CHART_TABS };
 export type { ChartTab, ChartLayoutMode, PatientChartModalProps };
 
 /**
- * Top-Level Medical Chart Modal Orchestrator
+ * Top-Level Patient Chart Modal Orchestrator
  *
  * Responsibilities:
  *  - Manages modal visibility, active tab, active patient, and edit modal state.

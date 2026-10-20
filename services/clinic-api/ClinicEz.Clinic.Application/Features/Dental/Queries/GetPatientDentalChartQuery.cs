@@ -82,7 +82,8 @@ public sealed class GetPatientDentalChartQueryHandler : IRequestHandler<GetPatie
             r.Notes,
             r.CreatedAt,
             r.UpdatedAt,
-            r.PatientName
+            r.PatientName,
+            r.UpdatedBy ?? r.CreatedBy
         )).ToList();
 
         var procedures = await _procRepo
@@ -100,14 +101,21 @@ public sealed class GetPatientDentalChartQueryHandler : IRequestHandler<GetPatie
             ? records.Max(r => r.UpdatedAt ?? r.CreatedAt)
             : (DateTime?)null;
 
+        var dmftCount = records
+            .Where(r => r.Status == ToothStatus.Decay || r.Status == ToothStatus.Missing || r.Status == ToothStatus.Filled)
+            .Select(r => r.ToothNumber)
+            .Distinct()
+            .Count();
+
         var summary = new DentalSummaryDto(
-            TotalTeethRecorded: records.Count,
-            HealthyCount: records.Count(r => r.Status == ToothStatus.Healthy),
-            DecayCount: records.Count(r => r.Status == ToothStatus.Decay),
-            FilledCount: records.Count(r => r.Status == ToothStatus.Filled),
-            MissingCount: records.Count(r => r.Status == ToothStatus.Missing),
-            CrownCount: records.Count(r => r.Status == ToothStatus.Crown),
-            ExtractionCount: records.Count(r => r.Status == ToothStatus.Extraction)
+            TotalTeethRecorded: records.Select(r => r.ToothNumber).Distinct().Count(),
+            HealthyCount: records.Where(r => r.Status == ToothStatus.Healthy).Select(r => r.ToothNumber).Distinct().Count(),
+            DecayCount: records.Where(r => r.Status == ToothStatus.Decay).Select(r => r.ToothNumber).Distinct().Count(),
+            FilledCount: records.Where(r => r.Status == ToothStatus.Filled).Select(r => r.ToothNumber).Distinct().Count(),
+            MissingCount: records.Where(r => r.Status == ToothStatus.Missing).Select(r => r.ToothNumber).Distinct().Count(),
+            CrownCount: records.Where(r => r.Status == ToothStatus.Crown).Select(r => r.ToothNumber).Distinct().Count(),
+            ExtractionCount: records.Where(r => r.Status == ToothStatus.Extraction).Select(r => r.ToothNumber).Distinct().Count(),
+            DmftIndex: dmftCount
         );
 
         return new DentalChartDto(request.PatientId, teethDtos, procDtos, lastExaminedAt, summary);
