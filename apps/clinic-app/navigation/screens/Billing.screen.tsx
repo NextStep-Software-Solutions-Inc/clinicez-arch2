@@ -100,8 +100,8 @@ function paymentMethodLabel(method: PaymentMethod): string {
   return method;
 }
 
-function formatPeso(value: number): string {
-  return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function formatPeso(value?: number | null): string {
+  return `₱${(value ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function toBillingPatient(

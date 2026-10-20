@@ -3433,8 +3433,8 @@ export default function ConsultationsScreen() {
                               </Pressable>
                               {isYakapCopayFree ? (
                                 <Badge label="PhilHealth ₱0 Co-pay" variant="success" size="sm" />
-                              ) : isInHouse && lab.standardPrice > 0 ? (
-                                <Badge label={`₱${lab.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                              ) : isInHouse && (lab.standardPrice ?? 0) > 0 ? (
+                                <Badge label={`₱${(lab.standardPrice ?? 0).toLocaleString()}`} variant="neutral" size="sm" />
                               ) : null}
                             </View>
                           </View>
@@ -3597,8 +3597,8 @@ export default function ConsultationsScreen() {
                               ) : (
                                 <Badge label="Draft" variant="warning" size="sm" />
                               )}
-                              {proc.standardPrice > 0 ? (
-                                <Badge label={`₱${proc.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                              {(proc.standardPrice ?? 0) > 0 ? (
+                                <Badge label={`₱${(proc.standardPrice ?? 0).toLocaleString()}`} variant="neutral" size="sm" />
                               ) : null}
                             </View>
                           </View>
@@ -5196,8 +5196,8 @@ export default function ConsultationsScreen() {
                   {editingOrderItem.name}
                 </ThemedText>
                 <Badge label={editingOrderItem.category} variant="neutral" size="sm" />
-                {editingOrderItem.standardPrice > 0 ? (
-                  <Badge label={`₱${editingOrderItem.standardPrice.toLocaleString()}`} variant="neutral" size="sm" />
+                {(editingOrderItem.standardPrice ?? 0) > 0 ? (
+                  <Badge label={`₱${(editingOrderItem.standardPrice ?? 0).toLocaleString()}`} variant="neutral" size="sm" />
                 ) : null}
               </View>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>

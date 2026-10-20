@@ -415,7 +415,7 @@ export function OrderCatalogSearchModal({
 
                   <View style={styles.itemPriceCol}>
                     <ThemedText variant="smallBold" color={theme.colors.primary}>
-                      ₱{item.standardPrice.toLocaleString()}
+                      ₱{(item.standardPrice ?? item.price ?? 0).toLocaleString()}
                     </ThemedText>
                   </View>
                 </Pressable>
@@ -534,7 +534,7 @@ export function OrderCatalogSearchModal({
                     </>
                   ) : (
                     <ThemedText variant="title" color={theme.colors.primary}>
-                      ₱{selectedItem.standardPrice.toLocaleString()}
+                      ₱{(selectedItem.standardPrice ?? selectedItem.price ?? 0).toLocaleString()}
                     </ThemedText>
                   )}
                 </View>
@@ -542,7 +542,7 @@ export function OrderCatalogSearchModal({
               {isYakapCovered ? (
                 <ThemedText variant="caption" color={theme.colors.successText}>
                   PhilHealth Yakap formulary benefit covers 100% patient co-pay (Standard fee: ₱
-                  {selectedItem.standardPrice.toLocaleString()}).
+                  {(selectedItem.standardPrice ?? selectedItem.price ?? 0).toLocaleString()}).
                 </ThemedText>
               ) : isDiagnostic && fulfillmentMode === 'outside' ? (
                 <ThemedText variant="caption" color={theme.colors.textMuted}>

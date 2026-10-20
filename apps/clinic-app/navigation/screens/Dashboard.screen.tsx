@@ -53,8 +53,8 @@ type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'OnHold' |
 
 const PRIORITY_OPTIONS: QueuePriority[] = ['Routine', 'Urgent', 'Emergency'];
 
-const peso = (value: number) =>
-  `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const peso = (value?: number | null) =>
+  `₱${(value ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const parseOptionalInt = (value: string): number | undefined => {
   const parsed = parseInt(value, 10);
