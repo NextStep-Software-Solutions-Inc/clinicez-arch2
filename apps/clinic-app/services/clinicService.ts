@@ -834,6 +834,51 @@ export interface DoctorStat {
   totalBilled: number;
 }
 
+export interface HourlyFlowPoint {
+  hour: number;
+  hourLabel: string;
+  checkInCount: number;
+  percentage: number;
+}
+
+export interface VisitTypeSplit {
+  walkInCount: number;
+  walkInPercentage: number;
+  appointmentCount: number;
+  appointmentPercentage: number;
+}
+
+export interface AcuitySplit {
+  routineCount: number;
+  routinePercentage: number;
+  urgentCount: number;
+  urgentPercentage: number;
+  emergencyCount: number;
+  emergencyPercentage: number;
+}
+
+export interface DemographicDistribution {
+  pediatricCount: number;
+  pediatricPercentage: number;
+  adultCount: number;
+  adultPercentage: number;
+  seniorCount: number;
+  seniorPercentage: number;
+  maleCount: number;
+  malePercentage: number;
+  femaleCount: number;
+  femalePercentage: number;
+  otherCount: number;
+  otherPercentage: number;
+}
+
+export interface FinancialEfficiency {
+  collectionEfficiencyRate: number;
+  discountImpactRate: number;
+  averageRevenuePerPatient: number;
+  totalDiscounts: number;
+}
+
 export interface ClinicAnalytics {
   startDate: string;
   endDate: string;
@@ -852,6 +897,11 @@ export interface ClinicAnalytics {
   topDiagnoses: MorbidityItem[];
   topServices: ServiceUsage[];
   doctorStats: DoctorStat[];
+  hourlyFlow?: HourlyFlowPoint[];
+  visitTypeSplit?: VisitTypeSplit;
+  acuitySplit?: AcuitySplit;
+  demographics?: DemographicDistribution;
+  financialEfficiency?: FinancialEfficiency;
 }
 
 export interface MorbidityDiseaseRow {

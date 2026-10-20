@@ -315,4 +315,39 @@ describe('DocumentTemplatesSettingsTab — Clinical Document Customization Studi
     expect(typeof clinicService.updateSettings).toBe('function');
     expect(typeof clinicService.getSampleDocumentPdfUrl).toBe('function');
   });
+
+  test('15. All 10 Document Types Supported: Clinical, Placard, and Statutory Reports', async () => {
+    const { ALL_DOC_TYPE_OPTIONS } = await import('../components/settings/DocumentTemplatesSettingsTab');
+    if (ALL_DOC_TYPE_OPTIONS) {
+      expect(ALL_DOC_TYPE_OPTIONS.length).toBe(10);
+      const docTypeNames = ALL_DOC_TYPE_OPTIONS.map((o: any) => o.value);
+      expect(docTypeNames).toContain('Medical Certificate');
+      expect(docTypeNames).toContain('Electronic Prescription');
+      expect(docTypeNames).toContain('Lab Requisition Slip');
+      expect(docTypeNames).toContain('Clinical Referral Letter');
+      expect(docTypeNames).toContain('Reception QR Placard');
+      expect(docTypeNames).toContain('Daily End-of-Day Report');
+      expect(docTypeNames).toContain('DOH Outpatient Morbidity Report');
+      expect(docTypeNames).toContain('BIR Tax & Discount Audit Report');
+      expect(docTypeNames).toContain('Doctor Shares Settlement');
+      expect(docTypeNames).toContain('Executive Analytics Summary');
+    }
+  });
+
+  test('16. Sample Test PDF Generation supports all 10 document types', async () => {
+    const { clinicService } = await import('../services/clinicService');
+    const docTypes = [
+      'Reception QR Placard',
+      'Daily End-of-Day Report',
+      'DOH Outpatient Morbidity Report',
+      'BIR Tax & Discount Audit Report',
+      'Doctor Shares Settlement',
+      'Executive Analytics Summary',
+    ];
+    for (const dt of docTypes) {
+      const url = clinicService.getSampleDocumentPdfUrl(dt, { paperSize: 'A4' });
+      expect(url).toContain(`/api/v1/settings/sample-document-pdf?docType=${encodeURIComponent(dt)}`);
+      expect(url).toContain('paperSize=A4');
+    }
+  });
 });

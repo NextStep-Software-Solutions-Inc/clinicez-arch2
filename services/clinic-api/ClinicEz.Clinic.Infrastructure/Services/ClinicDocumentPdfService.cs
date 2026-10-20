@@ -1796,12 +1796,56 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         ComposeKpiCell(row, "AVG TICKET SIZE", $"₱{analytics.AverageTicketSize:N2}");
                     });
 
+                    if (analytics.FinancialEfficiency != null)
+                    {
+                        col.Item().PaddingTop(3).Row(row =>
+                        {
+                            ComposeKpiCell(row, "COLLECTION EFFICIENCY", $"{analytics.FinancialEfficiency.CollectionEfficiencyRate:F1}%");
+                            ComposeKpiCell(row, "DISCOUNT PENETRATION", $"{analytics.FinancialEfficiency.DiscountImpactRate:F1}%");
+                            ComposeKpiCell(row, "AVG REVENUE / PATIENT", $"₱{analytics.FinancialEfficiency.AverageRevenuePerPatient:N2}");
+                        });
+                    }
+
                     if (analytics.SeniorDiscountsGiven > 0 || analytics.PwdDiscountsGiven > 0)
                     {
                         col.Item().PaddingTop(3).Row(row =>
                         {
                             ComposeKpiCell(row, "SENIOR CITIZEN DISCOUNTS (RA 9994)", $"₱{analytics.SeniorDiscountsGiven:N2}");
                             ComposeKpiCell(row, "PWD DISCOUNTS (RA 10754)", $"₱{analytics.PwdDiscountsGiven:N2}");
+                        });
+                    }
+
+                    // Visit Type & Clinical Acuity Breakdown
+                    if (analytics.VisitTypeSplit != null || analytics.AcuitySplit != null)
+                    {
+                        ComposeSectionTitle(col, "VISIT FLOW & CLINICAL TRIAGE ACUITY PROFILE", primaryColor);
+                        col.Item().Row(row =>
+                        {
+                            if (analytics.VisitTypeSplit != null)
+                            {
+                                ComposeKpiCell(row, "WALK-IN PATIENTS", $"{analytics.VisitTypeSplit.WalkInCount} ({analytics.VisitTypeSplit.WalkInPercentage:F1}%)");
+                                ComposeKpiCell(row, "APPOINTMENTS", $"{analytics.VisitTypeSplit.AppointmentCount} ({analytics.VisitTypeSplit.AppointmentPercentage:F1}%)");
+                            }
+                            if (analytics.AcuitySplit != null)
+                            {
+                                ComposeKpiCell(row, "ROUTINE TRIAGE", $"{analytics.AcuitySplit.RoutineCount} ({analytics.AcuitySplit.RoutinePercentage:F1}%)");
+                                ComposeKpiCell(row, "URGENT TRIAGE", $"{analytics.AcuitySplit.UrgentCount} ({analytics.AcuitySplit.UrgentPercentage:F1}%)");
+                                ComposeKpiCell(row, "EMERGENCY TRIAGE", $"{analytics.AcuitySplit.EmergencyCount} ({analytics.AcuitySplit.EmergencyPercentage:F1}%)");
+                            }
+                        });
+                    }
+
+                    // Patient Demographic Profile
+                    if (analytics.Demographics != null && (analytics.Demographics.PediatricCount > 0 || analytics.Demographics.AdultCount > 0 || analytics.Demographics.SeniorCount > 0))
+                    {
+                        ComposeSectionTitle(col, "PATIENT DEMOGRAPHIC PROFILE (AGE COHORTS & GENDER)", primaryColor);
+                        col.Item().Row(row =>
+                        {
+                            ComposeKpiCell(row, "PEDIATRIC (<18 Y)", $"{analytics.Demographics.PediatricCount} ({analytics.Demographics.PediatricPercentage:F1}%)");
+                            ComposeKpiCell(row, "ADULT (18-59 Y)", $"{analytics.Demographics.AdultCount} ({analytics.Demographics.AdultPercentage:F1}%)");
+                            ComposeKpiCell(row, "SENIOR (60+ Y)", $"{analytics.Demographics.SeniorCount} ({analytics.Demographics.SeniorPercentage:F1}%)");
+                            ComposeKpiCell(row, "MALE", $"{analytics.Demographics.MaleCount} ({analytics.Demographics.MalePercentage:F1}%)");
+                            ComposeKpiCell(row, "FEMALE", $"{analytics.Demographics.FemaleCount} ({analytics.Demographics.FemalePercentage:F1}%)");
                         });
                     }
 

@@ -389,8 +389,8 @@ public class PatientClaimingFlowTests
         var token = ClaimTokenOracle.GenerateToken(claims);
         var parts = token.Split('.');
 
-        // Tamper signature
-        var tamperedSig = parts[1][..^2] + "XX";
+        // Tamper signature by inverting the first character
+        var tamperedSig = (parts[1][0] == 'A' ? 'B' : 'A') + parts[1][1..];
         var tamperedToken = $"{parts[0]}.{tamperedSig}";
 
         var isValid = ClaimTokenOracle.TryValidateToken(tamperedToken, out _, out var failure);
