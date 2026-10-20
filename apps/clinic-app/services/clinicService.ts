@@ -1462,9 +1462,14 @@ export interface DentalToothRecord {
   toothNumber: number;
   status: ToothStatus;
   surface?: string | null;
+  activeSurface?: string | null;
+  isCurrent?: boolean;
+  supersededAt?: string | null;
+  supersededByRecordId?: string | null;
   notes?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+  recordedBy?: string | null;
 }
 
 export interface DentalSummary {
@@ -1491,6 +1496,9 @@ export interface UpsertDentalToothRecordPayload {
   surface?: string | null;
   notes?: string | null;
   consultationId?: string | null;
+  removeCondition?: boolean;
+  conditionId?: string | null;
+  recordedBy?: string | null;
 }
 
 export interface BatchSaveDentalChartPayload {
@@ -1500,6 +1508,9 @@ export interface BatchSaveDentalChartPayload {
     status: ToothStatus;
     surface?: string | null;
     notes?: string | null;
+    removeCondition?: boolean;
+    conditionId?: string | null;
+    recordedBy?: string | null;
   }[];
 }
 

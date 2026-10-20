@@ -134,7 +134,7 @@ public class ChallengerM1MultiConditionStressTests
         dbFilled.CreatedAt.Should().BeBefore(dbDecay.CreatedAt);
         dbDecay.CreatedAt.Should().BeBefore(dbCrown.CreatedAt);
 
-        // Step 4: Now update the 'Filled' condition surface from "O" to "MOD"
+        // Step 4: Now update the 'Filled' condition surface from "O" to "OL" within the same consultation
         var originalFilledCreatedAt = dbFilled.CreatedAt;
         var originalFilledId = dbFilled.Id;
 
@@ -144,15 +144,16 @@ public class ChallengerM1MultiConditionStressTests
             PatientId: patientId,
             ToothNumber: 16,
             Status: ToothStatus.Filled,
-            Surface: "MOD",
-            Notes: "Extended composite to MOD",
-            ConsultationId: consult2Id
+            Surface: "OL",
+            Notes: "Extended composite to OL",
+            ConsultationId: consult1Id
         ), CancellationToken.None);
 
-        // Assert Step D: Filled condition updated in place without duplicate record or touching Decay/Crown
+        // Assert Step D: Filled condition updated in place without duplicate record or touching Decay(MD)/Crown(B)
         updateFilledResult.Id.Should().Be(originalFilledId);
-        updateFilledResult.Surface.Should().Be("MOD");
-        updateFilledResult.Notes.Should().Be("Extended composite to MOD");
+        updateFilledResult.Surface.Should().Be("OL");
+        updateFilledResult.ActiveSurface.Should().Be("OL");
+        updateFilledResult.Notes.Should().Be("Extended composite to OL");
 
         var dbRecordsAfterUpdate = await toothRepo.Query(t => t.PatientId == patientId && t.ToothNumber == 16 && !t.IsDeleted).ToListAsync();
         dbRecordsAfterUpdate.Should().HaveCount(3);
@@ -161,7 +162,8 @@ public class ChallengerM1MultiConditionStressTests
         updatedDbFilled.Id.Should().Be(originalFilledId);
         updatedDbFilled.CreatedAt.Should().Be(originalFilledCreatedAt); // Original timestamp retained!
         updatedDbFilled.UpdatedAt.Should().NotBeNull();
-        updatedDbFilled.Surface.Should().Be("MOD");
+        updatedDbFilled.Surface.Should().Be("OL");
+        updatedDbFilled.ActiveSurface.Should().Be("OL");
 
         // Assert Step E: Dental Chart query reflects all 3 conditions on tooth 16
         var chart = await chartQueryHandler.Handle(new GetPatientDentalChartQuery(patientId), CancellationToken.None);

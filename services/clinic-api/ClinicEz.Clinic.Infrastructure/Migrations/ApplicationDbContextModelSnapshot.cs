@@ -1978,6 +1978,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ActiveSurface")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");
 
@@ -1997,6 +2001,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
 
+                    b.Property<bool>("IsCurrent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -2011,10 +2020,20 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<string>("RecordedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("SupersededAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SupersededByRecordId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Surface")
                         .HasMaxLength(20)
@@ -2041,6 +2060,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("ClinicId", "PatientId", "ToothNumber");
 
                     b.HasIndex("TenantId", "ClinicId", "PatientId");
+
+                    b.HasIndex("ClinicId", "PatientId", "ToothNumber", "IsCurrent");
 
                     b.ToTable("DentalToothRecords", "public");
                 });
