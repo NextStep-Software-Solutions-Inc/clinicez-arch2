@@ -964,8 +964,8 @@ describe('Challenger 2 Empirical Verification: 4 UX States & Deep Navigation', (
     });
 
     // Category 7: Settings & Tabs
-    describe('Category 7: Settings (All 9 Subtabs)', () => {
-      test('verifies all 9 settings navigation items produce exact tab and parameters', () => {
+    describe('Category 7: Settings (All 8 Subtabs)', () => {
+      test('verifies all 8 settings navigation items produce exact tab and parameters', () => {
         const expectedTabs = [
           'general',
           'services',
@@ -975,10 +975,9 @@ describe('Challenger 2 Empirical Verification: 4 UX States & Deep Navigation', (
           'fields',
           'philhealth',
           'license',
-          'audit',
         ];
 
-        expect(SETTINGS_NAV_ITEMS.length).toBe(9);
+        expect(SETTINGS_NAV_ITEMS.length).toBe(8);
 
         for (const item of SETTINGS_NAV_ITEMS) {
           const nav = resolveNavigation(item);

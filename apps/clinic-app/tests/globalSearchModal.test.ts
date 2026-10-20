@@ -1097,7 +1097,7 @@ describe('Milestone 3: Clinic Workstation Command Palette UX & Deep Navigation',
     });
 
     // Category 7: Settings (All 9 Settings Tabs)
-    describe('Category 7: Settings Navigation across all 9 Settings Tabs', () => {
+    describe('Category 7: Settings Navigation across all 8 Settings Tabs', () => {
       const settingsTabs: Array<{ tab: string; subtab?: string; roomId?: string; serviceId?: string }> = [
         { tab: 'general' },
         { tab: 'services', serviceId: 'srv-1' },
@@ -1107,7 +1107,6 @@ describe('Milestone 3: Clinic Workstation Command Palette UX & Deep Navigation',
         { tab: 'fields' },
         { tab: 'philhealth' },
         { tab: 'license' },
-        { tab: 'audit' },
       ];
 
       for (const t of settingsTabs) {
@@ -1135,8 +1134,8 @@ describe('Milestone 3: Clinic Workstation Command Palette UX & Deep Navigation',
         });
       }
 
-      test('maps all 9 pre-defined SETTINGS_NAV_ITEMS directly via resolveSearchNavigation', () => {
-        expect(SETTINGS_NAV_ITEMS.length).toBe(9);
+      test('maps all 8 pre-defined SETTINGS_NAV_ITEMS directly via resolveSearchNavigation', () => {
+        expect(SETTINGS_NAV_ITEMS.length).toBe(8);
         const resolvedTabs = SETTINGS_NAV_ITEMS.map((navItem) => {
           const res = resolveSearchNavigation(navItem);
           expect(res.destinationRoute).toBe('Settings');
@@ -1152,7 +1151,6 @@ describe('Milestone 3: Clinic Workstation Command Palette UX & Deep Navigation',
           'fields',
           'philhealth',
           'license',
-          'audit',
         ]);
       });
     });

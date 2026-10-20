@@ -29,7 +29,6 @@ import ServicesCatalogTab from '../../components/settings/ServicesCatalogTab';
 import CustomFieldsTab from '../../components/settings/CustomFieldsTab';
 import PhilHealthSettingsTab from '../../components/settings/PhilHealthSettingsTab';
 import LicenseSystemTab from '../../components/settings/LicenseSystemTab';
-import AuditWorkstationView from '../../components/audit/AuditWorkstationView';
 import {
   type SettingsTabItem,
   type SettingsTabKey,
@@ -70,7 +69,6 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const canManageSettings = usePermission(PERMISSIONS.settingsManage);
   const canManageStaff = usePermission(PERMISSIONS.staffManage);
   const canManageRoles = usePermission(PERMISSIONS.rolesManage);
-  const canViewAudit = usePermission(PERMISSIONS.auditRead);
   const isAdmin = canManageSettings || canManageStaff || user?.role === 'Admin';
 
   const [activeTab, setActiveTab] = useState<SettingsTabKey>(() => initialIntent.targetTab ?? 'general');
@@ -405,21 +403,11 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       });
     }
 
-    if (isAdmin || canViewAudit) {
-      list.push({
-        key: 'audit',
-        label: 'Audit Log',
-        icon: 'scroll',
-        adminOnly: true,
-      });
-    }
-
     return list;
   }, [
     isAdmin,
     canManageStaff,
     canManageRoles,
-    canViewAudit,
     isFacilityReady,
     maxStaffSeats,
     activeStaffCount,
@@ -590,10 +578,6 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             onOpenActivationModal={openActivationModal}
             onRefreshLicense={refreshLicense}
           />
-        )}
-
-        {activeTab === 'audit' && (
-          <AuditWorkstationView embeddedInSettings />
         )}
       </ScrollView>
     </ResponsiveLayout>
