@@ -37,7 +37,16 @@ import {
   InvoiceRecord,
   ClinicSettingsRecord,
 } from '../../services/clinicService';
-import { printReceiptDialog } from '../../utils/printHelper';
+import {
+  printReceiptDialog,
+  printThermalReceipt,
+  printProfessionalReceipt,
+  printInvoicePdf,
+  type PrintLetterhead,
+  type ReceiptData,
+  type InvoicePdfData,
+  type ReceiptItem,
+} from '../../utils/printHelper';
 
 interface LineItemForm {
   id: string;
@@ -70,7 +79,7 @@ interface Remittance {
   discountsGiven: number;
 }
 
-interface ReceiptSummary {
+interface ReceiptSummary extends ReceiptData {
   orNumber: string;
   netAmount: number;
   change: number;
@@ -230,23 +239,24 @@ export default function BillingScreen() {
     loadInitialData();
   }, [loadInitialData]);
 
-  const handleSelectPatient = useCallback((p: BillingPatient) => {
+  const handleSelectPatient = useCallback(async (p: BillingPatient) => {
     setSelectedPatient(p);
     setLastReceipt(null);
     setAllowDuplicate(false);
 
-    if (p.activeInvoice) {
+    let initialItems: LineItemForm[] = [];
+
+    if (p.activeInvoice && p.activeInvoice.lineItems && p.activeInvoice.lineItems.length > 0) {
       setActiveInvoice(p.activeInvoice);
-      setLineItems(
-        p.activeInvoice.lineItems.map(l => ({
-          id: l.id || `li-${Date.now()}-${Math.random()}`,
-          code: l.itemCode || '',
-          name: l.description,
-          category: l.category,
-          price: l.unitPrice,
-          qty: l.quantity,
-        }))
-      );
+      initialItems = p.activeInvoice.lineItems.map(l => ({
+        id: l.id || `li-${Date.now()}-${Math.random()}`,
+        code: l.itemCode || '',
+        name: l.description,
+        category: l.category,
+        price: l.unitPrice,
+        qty: l.quantity,
+      }));
+      setLineItems(initialItems);
       setDiscountType(p.activeInvoice.discountType || 'None');
       setDiscountId(p.activeInvoice.discountIdNumber || '');
     } else {
@@ -255,7 +265,71 @@ export default function BillingScreen() {
       setDiscountType('None');
       setDiscountId('');
     }
-  }, []);
+
+    // Auto-rehydrate any in-clinic procedures or consultations for today if missing
+    try {
+      const [[procsData], [consultsData]] = await Promise.all([
+        clinicService.getProcedures(p.patientId),
+        clinicService.getConsultations(p.patientId),
+      ]);
+
+      const updatedItems = [...initialItems];
+      let addedCount = 0;
+
+      // Ensure consultation service fee is present
+      const hasConsultationItem = updatedItems.some(
+        (i) => i.category?.toLowerCase() === 'consultation' || i.name.toLowerCase().includes('consultation')
+      );
+      if (!hasConsultationItem && (p.doctorId || (consultsData && consultsData.length > 0))) {
+        const consultSvc = services.find(
+          (s) => s.category?.toLowerCase() === 'consultation' || s.name.toLowerCase().includes('consultation')
+        );
+        const consultPrice = consultSvc?.standardPrice ?? clinicSettings?.defaultConsultationFee ?? 500;
+        updatedItems.unshift({
+          id: `consult-${Date.now()}`,
+          code: consultSvc?.code || 'CONSULT',
+          name: consultSvc?.name || 'General Medical Consultation',
+          category: 'Consultation',
+          price: consultPrice,
+          qty: 1,
+        });
+        addedCount++;
+      }
+
+      // Check for ordered in-clinic procedures not yet in line items
+      if (procsData && procsData.length > 0) {
+        for (const proc of procsData) {
+          if (proc.status === 'Cancelled') continue;
+          const alreadyBilled = updatedItems.some(
+            (i) => i.name.toLowerCase() === proc.procedureName.toLowerCase() ||
+                   (proc.procedureCode && i.code === proc.procedureCode)
+          );
+          if (!alreadyBilled) {
+            const matchedSvc = services.find(
+              (s) => s.name.toLowerCase() === proc.procedureName.toLowerCase() ||
+                     (proc.procedureCode && s.code === proc.procedureCode)
+            );
+            updatedItems.push({
+              id: `proc-${proc.id || Date.now()}-${Math.random()}`,
+              code: proc.procedureCode || matchedSvc?.code || '',
+              name: proc.procedureName,
+              category: proc.category || matchedSvc?.category || 'Procedure',
+              price: matchedSvc?.standardPrice ?? 0,
+              qty: 1,
+            });
+            addedCount++;
+          }
+        }
+      }
+
+      if (addedCount > 0) {
+        setLineItems(updatedItems);
+        notify.info(`Auto-populated ${addedCount} consultation & procedure service(s) for ${p.patientName}.`);
+      }
+    } catch {
+      // Non-fatal if procedure lookup fails
+    }
+  }, [services, clinicSettings]);
 
   useEffect(() => {
     if (loading) return;
@@ -329,24 +403,66 @@ export default function BillingScreen() {
     setLineItems(prev => prev.filter(i => i.id !== id));
   };
 
-  const handlePrintReceipt = () => {
+  const printLetterhead: PrintLetterhead = {
+    header: letterhead?.header || facilityName || clinicSettings?.clinicName || 'Clinic EZ Healthcare',
+    subHeader: letterhead?.subHeader,
+    address: letterhead?.address,
+    contact: letterhead?.contact,
+    tin: taxIdentificationNumber || clinicSettings?.taxIdentificationNumber,
+    accreditationNumber: accreditationNumber || clinicSettings?.accreditationNumber,
+    dohLto: clinicSettings?.letterheadDohLto,
+  };
+
+  const handlePrintThermalReceipt = () => {
     if (!lastReceipt) return;
-    const receiptDetails = [
-      `OFFICIAL RECEIPT: OR #${lastReceipt.orNumber}`,
-      `DATE: ${lastReceipt.paidAt}`,
-      facilityName ? `FACILITY: ${facilityName}` : '',
-      taxIdentificationNumber ? `TIN: ${taxIdentificationNumber}` : '',
-      accreditationNumber ? `ACCREDITATION NO.: ${accreditationNumber}` : '',
-      `PATIENT: ${lastReceipt.patientName}`,
-      `CASHIER: ${lastReceipt.cashierName}`,
-      `----------------------------------------`,
-      `NET AMOUNT PAID: ${formatPeso(lastReceipt.netAmount)}`,
-      `CHANGE RETURNED: ${formatPeso(lastReceipt.change)}`,
-      `STATUS: Settled & Validated`,
-    ]
-      .filter(Boolean)
-      .join('\n');
-    printReceiptDialog(`Official Receipt #${lastReceipt.orNumber}`, receiptDetails, letterhead);
+    printThermalReceipt(lastReceipt, printLetterhead);
+  };
+
+  const handlePrintProfessionalReceipt = () => {
+    if (!lastReceipt) return;
+    printProfessionalReceipt(lastReceipt, printLetterhead);
+  };
+
+  const handlePrintReceipt = () => {
+    handlePrintThermalReceipt();
+  };
+
+  const handlePrintInvoicePdf = () => {
+    if (!selectedPatient && !activeInvoice) return;
+    const invNumber =
+      activeInvoice?.invoiceNumber ||
+      selectedPatient?.existingInvoiceNumber ||
+      `SOA-${Date.now().toString().slice(-6)}`;
+    const invDate = activeInvoice?.invoiceDate
+      ? new Date(activeInvoice.invoiceDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
+      : new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+
+    const invoicePdfData: InvoicePdfData = {
+      invoiceNumber: invNumber,
+      invoiceDate: invDate,
+      status: activeInvoice?.status || 'Approved',
+      patientName: selectedPatient?.patientName || activeInvoice?.patientName || 'Patient',
+      patientId: selectedPatient?.patientId || activeInvoice?.patientId,
+      attendingDoctorName: selectedPatient?.doctorName || activeInvoice?.attendingDoctorName,
+      queueNumber: selectedPatient?.queueNumber,
+      grossAmount,
+      discountType,
+      discountIdNumber: discountId,
+      discountPercentage,
+      discountAmount,
+      netAmount,
+      notes: activeInvoice?.notes || 'Approved Clinical Invoice / Statement of Account',
+      items: lineItems.map((li) => ({
+        code: li.code,
+        description: li.name,
+        category: li.category,
+        unitPrice: li.price,
+        quantity: li.qty,
+        totalPrice: li.price * li.qty,
+      })),
+    };
+
+    printInvoicePdf(invoicePdfData, printLetterhead);
   };
 
   const handleSettlePayment = async () => {
@@ -476,13 +592,32 @@ export default function BillingScreen() {
 
     setIsProcessing(false);
 
+    const receiptItems: ReceiptItem[] = lineItems.map((li) => ({
+      code: li.code,
+      description: li.name,
+      category: li.category,
+      unitPrice: li.price,
+      quantity: li.qty,
+      totalPrice: li.price * li.qty,
+    }));
+
     setLastReceipt({
       orNumber,
-      netAmount,
-      change: changeDue,
-      cashierName: currentName,
+      invoiceNumber: activeInvoice?.invoiceNumber,
       patientName: selectedPatient.patientName,
+      patientId: selectedPatient.patientId,
+      cashierName: currentName,
       paidAt: new Date().toLocaleString('en-PH'),
+      paymentMethod,
+      referenceNumber: referenceNumber || undefined,
+      grossAmount,
+      discountType,
+      discountIdNumber: discountId,
+      discountAmount,
+      netAmount,
+      cashTendered: paymentMethod === 'Cash' ? tenderedVal : undefined,
+      change: changeDue,
+      items: receiptItems,
     });
 
     setRemittance(prev =>
@@ -616,10 +751,22 @@ export default function BillingScreen() {
           {facilityName ? ` · ${facilityName}` : ''}
         </ThemedText>
         <View style={styles.chipRow}>
-          <Button size="sm" icon="print" title="Print receipt" onPress={handlePrintReceipt} />
+          <Button
+            size="sm"
+            icon="print"
+            title="Thermal Paper (POS)"
+            onPress={handlePrintThermalReceipt}
+          />
           <Button
             size="sm"
             variant="secondary"
+            icon="fileText"
+            title="Professional PDF"
+            onPress={handlePrintProfessionalReceipt}
+          />
+          <Button
+            size="sm"
+            variant="outline"
             title="Back to dashboard"
             onPress={() => navigation.navigate('Dashboard')}
           />
@@ -647,10 +794,41 @@ export default function BillingScreen() {
               Status: {activeInvoice.status}
             </ThemedText>
           </View>
-          <Badge
-            label={activeInvoice.status === 'Draft' ? 'Draft SOA' : activeInvoice.status}
-            variant={activeInvoice.status === 'Draft' ? 'warning' : 'info'}
+          <View style={styles.chipRow}>
+            <Button
+              size="sm"
+              variant="outline"
+              icon="fileText"
+              title="Print SOA (PDF)"
+              onPress={handlePrintInvoicePdf}
+            />
+            <Badge
+              label={activeInvoice.status === 'Draft' ? 'Draft SOA' : activeInvoice.status}
+              variant={activeInvoice.status === 'Draft' ? 'warning' : 'info'}
+              size="sm"
+            />
+          </View>
+        </View>
+      )}
+
+      {!activeInvoice && lineItems.length > 0 && (
+        <View style={styles.soaHeaderBanner}>
+          <Icon name="receipt" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+          <View style={styles.flexFill}>
+            <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+              Draft Statement of Account
+            </ThemedText>
+            <ThemedText variant="caption" color={theme.colors.primaryDark}>
+              {selectedPatient?.doctorName ? `Attending: Dr. ${selectedPatient.doctorName} • ` : ''}
+              Auto-populated from today's encounter &amp; procedures
+            </ThemedText>
+          </View>
+          <Button
             size="sm"
+            variant="outline"
+            icon="fileText"
+            title="Print SOA (PDF)"
+            onPress={handlePrintInvoicePdf}
           />
         </View>
       )}

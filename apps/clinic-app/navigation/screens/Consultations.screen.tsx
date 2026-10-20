@@ -89,7 +89,13 @@ import {
   CdsAlertSeverity,
   ClinicServiceItem,
   CreateInvoiceRequest,
+  DiscountType,
 } from '../../services/clinicService';
+import {
+  printInvoicePdf,
+  type InvoicePdfData,
+  type PrintLetterhead,
+} from '../../utils/printHelper';
 
 interface LocalPrescription {
   id: string;
@@ -388,6 +394,10 @@ export default function ConsultationsScreen() {
   const [postEncounterModalVisible, setPostEncounterModalVisible] = useState(false);
   const [createdInvoiceNumber, setCreatedInvoiceNumber] = useState<string | null>(null);
   const [createdInvoiceTotal, setCreatedInvoiceTotal] = useState<number | null>(null);
+  const [reviewSoaModalVisible, setReviewSoaModalVisible] = useState(false);
+  const [soaReviewItems, setSoaReviewItems] = useState<CreateInvoiceRequest['lineItems']>([]);
+  const [soaDiscountType, setSoaDiscountType] = useState<DiscountType>('None');
+  const [soaDiscountId, setSoaDiscountId] = useState('');
 
   // Multi-Provider Queue Room / Station & Status Filter States (Persistent per staff)
   const staffKey = current?.id ? `clinicez:consultations:${current.id}` : 'clinicez:consultations:default';
@@ -2230,7 +2240,8 @@ export default function ConsultationsScreen() {
         quantity: 1,
       });
     }
-    if (billItems.length > 0) {
+    const effectiveBillItems = soaReviewItems.length > 0 ? soaReviewItems : billItems;
+    if (effectiveBillItems.length > 0) {
       const [invoiceResult, invoiceErr] = await clinicService.createInvoice({
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
@@ -2238,9 +2249,10 @@ export default function ConsultationsScreen() {
         consultationId,
         attendingDoctorId: doctor.id,
         attendingDoctorName: doctor.name,
-        discountType: 'None',
+        discountType: soaDiscountType || 'None',
+        discountIdNumber: soaDiscountId.trim() || undefined,
         notes: 'Consultation & procedures bill forwarded to Cashier',
-        lineItems: billItems,
+        lineItems: effectiveBillItems,
       });
       if (invoiceErr) {
         followUpIssues.push('billing invoice');
@@ -2283,6 +2295,239 @@ export default function ConsultationsScreen() {
       notify.success(successMsg);
     }
     setPostEncounterModalVisible(true);
+  };
+
+  const buildBillableItems = (): CreateInvoiceRequest['lineItems'] => {
+    const items: CreateInvoiceRequest['lineItems'] = [];
+    if (consultationFee) {
+      items.push({
+        serviceItemId: consultationFee.id,
+        itemCode: consultationFee.code,
+        description: consultationFee.name,
+        category: consultationFee.category,
+        unitPrice: consultationFee.standardPrice,
+        quantity: 1,
+      });
+    }
+    for (const proc of orderedProcedures) {
+      const procInfo = procedureCatalog.find(
+        (p) => p.name.toLowerCase() === proc.name.toLowerCase() || (p.code && p.code === proc.code)
+      );
+      items.push({
+        serviceItemId: proc.serviceItemId || procInfo?.id,
+        itemCode: proc.code || procInfo?.code,
+        description: proc.name,
+        category: proc.category || procInfo?.category || 'Procedure',
+        unitPrice: proc.standardPrice || procInfo?.standardPrice || 0,
+        quantity: 1,
+      });
+    }
+    const inHouseLabs = orderedLabs.filter((l) => l.fulfillmentMode === 'in_house');
+    for (const inHouseLab of inHouseLabs) {
+      const matchedDiag = diagnosticCatalog.find((d) => d.name.toLowerCase() === inHouseLab.name.toLowerCase());
+      const philHealthCode = inHouseLab.philHealthCode || matchedDiag?.philHealthCode;
+      const isCoveredByYakap = Boolean(isYakapEligible && philHealthCode);
+      const unitPrice = isCoveredByYakap ? 0 : (inHouseLab.standardPrice ?? matchedDiag?.standardPrice ?? 0);
+      const description = isCoveredByYakap
+        ? `${inHouseLab.name} (PhilHealth Yakap - ₱0 Co-pay)`
+        : inHouseLab.name;
+
+      items.push({
+        serviceItemId: inHouseLab.serviceItemId || matchedDiag?.id,
+        itemCode: inHouseLab.code || matchedDiag?.code,
+        description,
+        category: inHouseLab.category || matchedDiag?.category || 'Diagnostic',
+        unitPrice,
+        quantity: 1,
+      });
+    }
+    return items;
+  };
+
+  const soaGrossAmount = useMemo(
+    () => soaReviewItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
+    [soaReviewItems]
+  );
+
+  const soaDiscountPercentage = useMemo(() => {
+    if (soaDiscountType === 'SeniorCitizen' || soaDiscountType === 'Pwd') return 20;
+    if (soaDiscountType === 'PhilHealthKonsulta') return 100;
+    return 0;
+  }, [soaDiscountType]);
+
+  const soaDiscountAmount = useMemo(
+    () => Math.round(soaGrossAmount * (soaDiscountPercentage / 100)),
+    [soaGrossAmount, soaDiscountPercentage]
+  );
+
+  const soaNetAmount = useMemo(
+    () => Math.max(0, soaGrossAmount - soaDiscountAmount),
+    [soaGrossAmount, soaDiscountAmount]
+  );
+
+  const handleInitiateSignAndReviewSoa = () => {
+    if (!selectedPatient) return;
+    setBanner(null);
+
+    const doctor = requireSigner();
+    if (!doctor) return;
+
+    // Clinical Decision Support (CDS) Critical Override Gate
+    const criticalAlerts = cdsAlerts.filter((a) => a.requiresOverrideReason);
+    if (criticalAlerts.length > 0 && (!cdsOverrideReason.trim() || !overrideConfirmed)) {
+      const msg = `Safety check: ${criticalAlerts.length} critical drug allergy or severe interaction alert(s) need a documented clinical override before the encounter can be signed.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg);
+      setShowOverrideInput(true);
+      return;
+    }
+
+    // PDEA Dangerous Drug validation (Philippine Comprehensive Dangerous Drugs Act RA 9165)
+    const hasDangerousDrugs = prescriptions.some((p) => p.isDangerousDrug);
+    if (hasDangerousDrugs) {
+      const finalS2 = (doctorS2.trim() || signerStaff?.s2LicenseNumber?.trim()) || '';
+      if (!finalS2) {
+        const msg = 'PDEA dangerous drug prescribed: Doctor S2 license number is required before signing.';
+        setBanner({
+          text: msg,
+          isError: true,
+        });
+        notify.error(msg);
+        return;
+      }
+    }
+
+    // PhilHealth Yakap statutory signing gate
+    if (isYakapEligible && !isYakapReady) {
+      const missing = (serverReadiness || localEvaluation).missingFields;
+      const msg = `PhilHealth Yakap encounter cannot be signed: ${missing.length} required field(s) missing (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '...' : ''}). Complete these fields or switch off the Yakap toggle.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg);
+      return;
+    }
+
+    // Auto-populate billable items
+    const items = buildBillableItems();
+    setSoaReviewItems(items);
+
+    // Auto-detect statutory discount from patient demographics
+    const pAge = patientRecord?.age ?? patientChart?.demographics?.age;
+    const isSenior = (typeof pAge === 'number' && pAge >= 60) || patientRecord?.isSenior || patientChart?.demographics?.isSenior;
+    const isPwd = patientRecord?.isPwd || patientChart?.demographics?.isPwd;
+
+    if (isYakapEligible) {
+      setSoaDiscountType('PhilHealthKonsulta');
+      setSoaDiscountId(patientRecord?.philHealthNumber || (patientRecord as any)?.pin || '');
+    } else if (isSenior) {
+      setSoaDiscountType('SeniorCitizen');
+      setSoaDiscountId(patientRecord?.seniorCitizenId || (patientRecord as any)?.oscaId || '');
+    } else if (isPwd) {
+      setSoaDiscountType('Pwd');
+      setSoaDiscountId(patientRecord?.pwdId || '');
+    } else {
+      setSoaDiscountType('None');
+      setSoaDiscountId('');
+    }
+
+    setReviewSoaModalVisible(true);
+  };
+
+  const handlePrintSoaPreview = () => {
+    if (!selectedPatient) return;
+    const printLetterhead: PrintLetterhead = {
+      clinicName: letterhead?.header || facilityName || 'ClinicEZ Healthcare Facility',
+      address: letterhead?.address,
+      contactNumber: letterhead?.contact,
+      tin: settings?.taxIdentificationNumber,
+      accreditationNumber: settings?.pmccNumber || settings?.accreditationNumber || accreditationNumber,
+      subHeader: letterhead?.subHeader,
+      footer: letterhead?.footer,
+    };
+
+    const invoicePdfData: InvoicePdfData = {
+      invoiceNumber: createdInvoiceNumber || `SOA-PREVIEW-${selectedPatient.queueNumber}`,
+      invoiceDate: new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }),
+      status: createdInvoiceNumber ? 'Approved' : 'Draft',
+      patientName: selectedPatient.patientName,
+      patientId: selectedPatient.patientId,
+      patientAge: patientRecord?.age ?? patientChart?.demographics?.age,
+      patientGender: patientRecord?.gender ?? patientChart?.demographics?.gender,
+      attendingDoctorName: signerName,
+      doctorPrc: doctorPrc.trim() || signerPrc,
+      queueNumber: selectedPatient.queueNumber,
+      grossAmount: soaGrossAmount,
+      discountType: soaDiscountType,
+      discountIdNumber: soaDiscountId.trim() || undefined,
+      discountPercentage: soaDiscountPercentage,
+      discountAmount: soaDiscountAmount,
+      netAmount: soaNetAmount,
+      notes: 'Consultation & procedures Statement of Account',
+      items: soaReviewItems.map((item) => ({
+        code: item.itemCode,
+        description: item.description,
+        category: item.category,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        totalPrice: item.unitPrice * item.quantity,
+      })),
+    };
+
+    printInvoicePdf(invoicePdfData, printLetterhead);
+  };
+
+  const handlePrintApprovedSoa = () => {
+    if (!selectedPatient) return;
+    const printLetterhead: PrintLetterhead = {
+      clinicName: letterhead?.header || facilityName || 'ClinicEZ Healthcare Facility',
+      address: letterhead?.address,
+      contactNumber: letterhead?.contact,
+      tin: settings?.taxIdentificationNumber,
+      accreditationNumber: settings?.pmccNumber || settings?.accreditationNumber || accreditationNumber,
+      subHeader: letterhead?.subHeader,
+      footer: letterhead?.footer,
+    };
+
+    const itemsToPrint = soaReviewItems.length > 0 ? soaReviewItems : buildBillableItems();
+    const invoicePdfData: InvoicePdfData = {
+      invoiceNumber: createdInvoiceNumber || `SOA-${selectedPatient.queueNumber}`,
+      invoiceDate: new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }),
+      status: 'Approved',
+      patientName: selectedPatient.patientName,
+      patientId: selectedPatient.patientId,
+      patientAge: patientRecord?.age ?? patientChart?.demographics?.age,
+      patientGender: patientRecord?.gender ?? patientChart?.demographics?.gender,
+      attendingDoctorName: signerName,
+      doctorPrc: doctorPrc.trim() || signerPrc,
+      queueNumber: selectedPatient.queueNumber,
+      grossAmount: soaGrossAmount,
+      discountType: soaDiscountType,
+      discountIdNumber: soaDiscountId.trim() || undefined,
+      discountPercentage: soaDiscountPercentage,
+      discountAmount: soaDiscountAmount,
+      netAmount: createdInvoiceTotal ?? soaNetAmount,
+      notes: 'Approved billing invoice forwarded to Cashier',
+      items: itemsToPrint.map((item) => ({
+        code: item.itemCode,
+        description: item.description,
+        category: item.category,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        totalPrice: item.unitPrice * item.quantity,
+      })),
+    };
+
+    printInvoicePdf(invoicePdfData, printLetterhead);
+  };
+
+  const handleConfirmAndSignEncounter = async () => {
+    setReviewSoaModalVisible(false);
+    await handleSignAndSync();
   };
 
   const vitalItems = (
@@ -4521,7 +4766,7 @@ export default function ConsultationsScreen() {
                 variant={isYakapEligible && !isYakapReady ? 'outline' : 'primary'}
                 loading={isSigning}
                 disabled={isSigning || (isYakapEligible && !isYakapReady)}
-                onPress={handleSignAndSync}
+                onPress={handleInitiateSignAndReviewSoa}
               />
             )}
     </View>
@@ -5590,6 +5835,184 @@ export default function ConsultationsScreen() {
           </Modal>
         ) : null}
 
+        {/* Review Statement of Account (SOA) Modal */}
+        <Modal
+          visible={reviewSoaModalVisible}
+          onClose={() => setReviewSoaModalVisible(false)}
+          title="Review Statement of Account (SOA)"
+          subtitle={selectedPatient ? `Patient: ${selectedPatient.patientName} (${selectedPatient.queueNumber})` : undefined}
+          maxWidth={620}
+        >
+          <View style={styles.soaModalContent}>
+            <View style={styles.soaHeaderNotice}>
+              <Icon name="billing" size={theme.sizes.iconMd} color={theme.colors.primary} />
+              <View style={styles.soaHeaderNoticeText}>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  Review Services & Statutory Discounts
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Verify billable items and statutory discounts before signing and forwarding the invoice to the Cashier.
+                </ThemedText>
+              </View>
+            </View>
+
+            {/* Billable Items List */}
+            <ThemedText variant="smallBold" color={theme.colors.textSecondary} style={styles.soaSectionTitle}>
+              BILLABLE SERVICES & PROCEDURES ({soaReviewItems.length})
+            </ThemedText>
+
+            {soaReviewItems.length === 0 ? (
+              <View style={styles.soaEmptyItemsBox}>
+                <Icon name="info" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
+                <ThemedText variant="small" color={theme.colors.textMuted}>
+                  No billable consultation fee or procedures detected. If this is a free follow-up, you may proceed with signing.
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={styles.soaItemsTable}>
+                <View style={styles.soaTableHeaderRow}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 3 }}>
+                    Service / Description
+                  </ThemedText>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 1, textAlign: 'center' }}>
+                    Qty
+                  </ThemedText>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 2, textAlign: 'right' }}>
+                    Amount
+                  </ThemedText>
+                  <View style={{ width: 32 }} />
+                </View>
+
+                {soaReviewItems.map((item, index) => (
+                  <View key={`${item.description}-${index}`} style={styles.soaTableRow}>
+                    <View style={{ flex: 3 }}>
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
+                        {item.description}
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        {item.category} {item.itemCode ? `• ${item.itemCode}` : ''}
+                      </ThemedText>
+                    </View>
+                    <ThemedText variant="body" color={theme.colors.text} style={{ flex: 1, textAlign: 'center' }}>
+                      {item.quantity}
+                    </ThemedText>
+                    <ThemedText variant="bodyBold" color={theme.colors.text} style={{ flex: 2, textAlign: 'right' }}>
+                      ₱{(item.unitPrice * item.quantity).toFixed(2)}
+                    </ThemedText>
+                    <Pressable
+                      onPress={() => {
+                        setSoaReviewItems((prev) => prev.filter((_, i) => i !== index));
+                      }}
+                      style={styles.soaDeleteButton}
+                      accessibilityLabel="Remove item"
+                    >
+                      <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Statutory Discount Selector */}
+            <ThemedText variant="smallBold" color={theme.colors.textSecondary} style={styles.soaSectionTitle}>
+              STATUTORY DISCOUNT / PHILHEALTH
+            </ThemedText>
+            <View style={styles.soaDiscountGrid}>
+              {[
+                { key: 'None' as DiscountType, label: 'Regular (0%)' },
+                { key: 'SeniorCitizen' as DiscountType, label: 'Senior Citizen (20%)' },
+                { key: 'Pwd' as DiscountType, label: 'PWD (20%)' },
+                { key: 'PhilHealthKonsulta' as DiscountType, label: 'PhilHealth (100%)' },
+              ].map((opt) => {
+                const isSelected = soaDiscountType === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => setSoaDiscountType(opt.key)}
+                    style={[styles.soaDiscountChip, isSelected && styles.soaDiscountChipActive]}
+                  >
+                    <ThemedText
+                      variant="smallBold"
+                      color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                    >
+                      {opt.label}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {(soaDiscountType === 'SeniorCitizen' || soaDiscountType === 'Pwd') && (
+              <View style={styles.soaDiscountInputWrap}>
+                <Input
+                  label={soaDiscountType === 'SeniorCitizen' ? 'Senior Citizen OSCA ID number' : 'PWD ID number'}
+                  placeholder="Enter ID number"
+                  value={soaDiscountId}
+                  onChangeText={setSoaDiscountId}
+                />
+              </View>
+            )}
+
+            {/* Financial Summary Totals Card */}
+            <View style={styles.soaTotalsCard}>
+              <View style={styles.soaTotalRow}>
+                <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  Subtotal (Gross)
+                </ThemedText>
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  ₱{soaGrossAmount.toFixed(2)}
+                </ThemedText>
+              </View>
+              {soaDiscountAmount > 0 && (
+                <View style={styles.soaTotalRow}>
+                  <ThemedText variant="small" color={theme.colors.successText}>
+                    Statutory Discount ({soaDiscountPercentage}%)
+                  </ThemedText>
+                  <ThemedText variant="smallBold" color={theme.colors.successText}>
+                    -₱{soaDiscountAmount.toFixed(2)}
+                  </ThemedText>
+                </View>
+              )}
+              <View style={styles.soaNetTotalRow}>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  Net Amount Payable
+                </ThemedText>
+                <ThemedText variant="title" color={theme.colors.primary}>
+                  ₱{soaNetAmount.toFixed(2)}
+                </ThemedText>
+              </View>
+            </View>
+
+            {/* Modal Actions */}
+            <View style={styles.soaActionsRow}>
+              <Button
+                title="Print SOA (PDF)"
+                icon="print"
+                variant="outline"
+                size="md"
+                onPress={handlePrintSoaPreview}
+              />
+              <View style={styles.soaActionsRight}>
+                <Button
+                  title="Back to SOAP"
+                  variant="ghost"
+                  size="md"
+                  onPress={() => setReviewSoaModalVisible(false)}
+                />
+                <Button
+                  title="Confirm & Sign Encounter"
+                  icon="check"
+                  variant="primary"
+                  size="md"
+                  loading={isSigning}
+                  disabled={isSigning}
+                  onPress={handleConfirmAndSignEncounter}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         {/* Post-Encounter Action Dialog */}
         <Modal
           visible={postEncounterModalVisible}
@@ -5678,6 +6101,15 @@ export default function ConsultationsScreen() {
                     setPostEncounterModalVisible(false);
                     handleOpenPrescriptionSlip();
                   }}
+                />
+              )}
+              {createdInvoiceNumber && (
+                <Button
+                  title="Print SOA (PDF)"
+                  icon="print"
+                  variant="outline"
+                  size="sm"
+                  onPress={handlePrintApprovedSoa}
                 />
               )}
               <Button
@@ -6573,5 +7005,120 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  soaModalContent: {
+    gap: theme.spacing.md,
+  },
+  soaHeaderNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+  },
+  soaHeaderNoticeText: {
+    flex: 1,
+    gap: 2,
+  },
+  soaSectionTitle: {
+    marginTop: theme.spacing.xs,
+  },
+  soaEmptyItemsBox: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  soaItemsTable: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    overflow: 'hidden',
+  },
+  soaTableHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  soaTableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  soaDeleteButton: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: theme.sizes.touchTarget,
+  },
+  soaDiscountGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  soaDiscountChip: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.full,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  soaDiscountChipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  soaDiscountInputWrap: {
+    marginTop: theme.spacing.xs,
+  },
+  soaTotalsCard: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.xs,
+  },
+  soaTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  soaNetTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: theme.spacing.xs,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.border,
+  },
+  soaActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  soaActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
 });
