@@ -37,6 +37,7 @@ import {
   AcuityDonutChart,
 } from '../../components/analytics';
 import DateRangePickerModal from '../../components/ui/DateRangePickerModal';
+import DatePickerModal from '../../components/ui/DatePickerModal';
 import { getPortalBaseUrl } from '../../services/runtimeConfig';
 import { resolveTenantContext } from '@shared/safe';
 import {
@@ -1170,23 +1171,52 @@ export default function DashboardScreen() {
       <View style={styles.section}>
         {/* Top Controls: Date Range Filters & 1-Click PDF Actions */}
         <View style={styles.analyticsHeaderRow}>
-          <View style={styles.dateRangePickerRow}>
-            <View style={styles.dateInputWrap}>
-              <Input
-                label="Start Date"
-                placeholder="YYYY-MM-DD"
-                value={analyticsStartDate}
-                onChangeText={setAnalyticsStartDate}
-              />
+          <View style={styles.datePickerToolbar}>
+            <Pressable
+              style={styles.dateRangeTriggerBtn}
+              onPress={() => setIsAnalyticsDateRangeModalOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Select analytics date range"
+            >
+              <View style={styles.dateRangeTriggerContent}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Date Range
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.textPrimary}>
+                  {formatDateRangeLabel(analyticsStartDate, analyticsEndDate)}
+                </ThemedText>
+              </View>
+            </Pressable>
+
+            <View style={styles.presetChipsRow}>
+              {(['today', '7d', '30d', 'ytd'] as const).map((preset) => {
+                const labelMap = {
+                  today: 'Today',
+                  '7d': 'Last 7 Days',
+                  '30d': 'Last 30 Days',
+                  ytd: 'Year to Date',
+                };
+                return (
+                  <Pressable
+                    key={preset}
+                    style={styles.presetChip}
+                    onPress={() => {
+                      const range = computeDatePresetRange(preset);
+                      setAnalyticsStartDate(range.start);
+                      setAnalyticsEndDate(range.end);
+                      loadAnalytics(range.start, range.end);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${labelMap[preset]}`}
+                  >
+                    <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                      {labelMap[preset]}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
             </View>
-            <View style={styles.dateInputWrap}>
-              <Input
-                label="End Date"
-                placeholder="YYYY-MM-DD"
-                value={analyticsEndDate}
-                onChangeText={setAnalyticsEndDate}
-              />
-            </View>
+
             <View style={styles.applyButtonWrap}>
               <Button
                 title={analyticsLoading ? 'Filtering...' : 'Apply Filter'}
@@ -1219,6 +1249,20 @@ export default function DashboardScreen() {
             />
           </View>
         </View>
+
+        <DateRangePickerModal
+          visible={isAnalyticsDateRangeModalOpen}
+          onClose={() => setIsAnalyticsDateRangeModalOpen(false)}
+          startDate={analyticsStartDate}
+          endDate={analyticsEndDate}
+          boundaryMode="pastOrToday"
+          onApply={(start, end) => {
+            setAnalyticsStartDate(start);
+            setAnalyticsEndDate(end);
+            setIsAnalyticsDateRangeModalOpen(false);
+            loadAnalytics(start, end);
+          }}
+        />
 
         {/* KPI Stat Cards */}
         <View style={styles.statRow}>
@@ -1274,6 +1318,34 @@ export default function DashboardScreen() {
           />
         </View>
 
+        {analytics.financialEfficiency ? (
+          <View style={styles.statRow}>
+            <StatCard
+              style={styles.statItem}
+              label="Collection Efficiency"
+              value={`${analytics.financialEfficiency.collectionEfficiencyPercent.toFixed(1)}%`}
+              subtext="Collections vs Net Billed"
+              icon="cash"
+              valueColor={theme.colors.success}
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Discount Penetration"
+              value={`${analytics.financialEfficiency.discountPenetrationPercent.toFixed(1)}%`}
+              subtext="Discounts vs Gross"
+              icon="tag"
+              valueColor={theme.colors.warningText}
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Avg Revenue / Patient"
+              value={peso(analytics.financialEfficiency.averageRevenuePerPatient)}
+              subtext="Per unique patient"
+              icon="receipt"
+            />
+          </View>
+        ) : null}
+
         {/* 1. TrendLineChart: Daily Revenue vs Patient Volume Trend */}
         <Card>
           <CardHeader
@@ -1317,7 +1389,105 @@ export default function DashboardScreen() {
           </Card>
         </View>
 
-        {/* 3. MorbidityDistributionChart: Top ICD-10 Conditions with Demographic Age Cohorts */}
+        {/* 3. Responsive 2-Column: Hourly Peak Arrival Flow & Triage Acuity / Visit Channel */}
+        <View style={styles.twoCol}>
+          <Card style={styles.col}>
+            <CardHeader
+              title="Hourly Peak Arrival Flow"
+              subtitle="Queue check-in velocity (7 AM - 6 PM)"
+            />
+            <CardContent>
+              <HourlyFlowBarChart
+                data={analytics.hourlyFlow ?? []}
+                loading={analyticsLoading}
+                error={analyticsError}
+                onRetry={() => loadAnalytics(analyticsStartDate, analyticsEndDate)}
+              />
+            </CardContent>
+          </Card>
+
+          <Card style={styles.col}>
+            <CardHeader
+              title="Triage Acuity & Channel Distribution"
+              subtitle="Acuity triage breakdown & walk-in ratio"
+            />
+            <CardContent>
+              <AcuityDonutChart
+                acuityData={analytics.acuitySplit}
+                visitTypeData={analytics.visitTypeSplit}
+                loading={analyticsLoading}
+                error={analyticsError}
+                onRetry={() => loadAnalytics(analyticsStartDate, analyticsEndDate)}
+              />
+            </CardContent>
+          </Card>
+        </View>
+
+        {/* 4. Patient Demographics & Age Cohort Breakdown */}
+        {analytics.demographics ? (
+          <Card>
+            <CardHeader
+              title="Patient Demographics & Age Cohorts"
+              subtitle={`Total registered patient cohort: ${analytics.demographics.totalPatients}`}
+            />
+            <CardContent>
+              <View style={styles.demographicGrid}>
+                <View style={styles.demoCohortItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Pediatric (&lt;18y)
+                  </ThemedText>
+                  <ThemedText variant="titleMedium" color={theme.colors.primaryDark}>
+                    {analytics.demographics.pediatricCount}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {analytics.demographics.totalPatients > 0
+                      ? `${Math.round((analytics.demographics.pediatricCount / analytics.demographics.totalPatients) * 100)}%`
+                      : '0%'}
+                  </ThemedText>
+                </View>
+                <View style={styles.demoCohortItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Adult (18–59y)
+                  </ThemedText>
+                  <ThemedText variant="titleMedium" color={theme.colors.primaryDark}>
+                    {analytics.demographics.adultCount}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {analytics.demographics.totalPatients > 0
+                      ? `${Math.round((analytics.demographics.adultCount / analytics.demographics.totalPatients) * 100)}%`
+                      : '0%'}
+                  </ThemedText>
+                </View>
+                <View style={styles.demoCohortItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Senior (60+y)
+                  </ThemedText>
+                  <ThemedText variant="titleMedium" color={theme.colors.primaryDark}>
+                    {analytics.demographics.seniorCount}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {analytics.demographics.totalPatients > 0
+                      ? `${Math.round((analytics.demographics.seniorCount / analytics.demographics.totalPatients) * 100)}%`
+                      : '0%'}
+                  </ThemedText>
+                </View>
+                <View style={styles.demoCohortItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Female / Male / Other
+                  </ThemedText>
+                  <ThemedText variant="titleMedium" color={theme.colors.primaryDark}>
+                    {`${analytics.demographics.femaleCount} / ${analytics.demographics.maleCount} / ${analytics.demographics.otherGenderCount}`}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    Gender split
+                  </ThemedText>
+                </View>
+              </View>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {/* 5. MorbidityDistributionChart: Top ICD-10 Conditions with Demographic Age Cohorts */}
         <Card>
           <CardHeader
             title="Top ICD-10 Morbidity Distribution"
@@ -1634,33 +1804,103 @@ export default function DashboardScreen() {
       </View>
 
       {/* Date Filter Bar for Reports */}
-      <View style={styles.dateRangePickerRow}>
+      <View style={styles.datePickerToolbar}>
         {reportType === 'DAILY_EOD' ? (
-          <View style={styles.dateInputWrap}>
-            <Input
-              label="Report Date"
-              placeholder="YYYY-MM-DD"
-              value={eodDate}
-              onChangeText={setEodDate}
-            />
-          </View>
+          <>
+            <Pressable
+              style={styles.dateRangeTriggerBtn}
+              onPress={() => setIsEodDatePickerModalOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Select EOD report date"
+            >
+              <View style={styles.dateRangeTriggerContent}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Report Date
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.textPrimary}>
+                  {eodDate || getManilaTodayStr()}
+                </ThemedText>
+              </View>
+            </Pressable>
+
+            <View style={styles.presetChipsRow}>
+              <Pressable
+                style={styles.presetChip}
+                onPress={() => {
+                  const today = getManilaTodayStr();
+                  setEodDate(today);
+                  loadReports('DAILY_EOD', undefined, undefined, today);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Select Today for EOD"
+              >
+                <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                  Today
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={styles.presetChip}
+                onPress={() => {
+                  const now = new Date();
+                  const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                  const pad = (n: number) => String(n).padStart(2, '0');
+                  const yStr = `${y.getFullYear()}-${pad(y.getMonth() + 1)}-${pad(y.getDate())}`;
+                  setEodDate(yStr);
+                  loadReports('DAILY_EOD', undefined, undefined, yStr);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Select Yesterday for EOD"
+              >
+                <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                  Yesterday
+                </ThemedText>
+              </Pressable>
+            </View>
+          </>
         ) : (
           <>
-            <View style={styles.dateInputWrap}>
-              <Input
-                label="Start Date"
-                placeholder="YYYY-MM-DD"
-                value={reportsStartDate}
-                onChangeText={setReportsStartDate}
-              />
-            </View>
-            <View style={styles.dateInputWrap}>
-              <Input
-                label="End Date"
-                placeholder="YYYY-MM-DD"
-                value={reportsEndDate}
-                onChangeText={setReportsEndDate}
-              />
+            <Pressable
+              style={styles.dateRangeTriggerBtn}
+              onPress={() => setIsReportsDateRangeModalOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Select report date range"
+            >
+              <View style={styles.dateRangeTriggerContent}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Date Range
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.textPrimary}>
+                  {formatDateRangeLabel(reportsStartDate, reportsEndDate)}
+                </ThemedText>
+              </View>
+            </Pressable>
+
+            <View style={styles.presetChipsRow}>
+              {(['today', '7d', '30d'] as const).map((preset) => {
+                const labelMap = {
+                  today: 'Today',
+                  '7d': 'Last 7 Days',
+                  '30d': 'This Month',
+                };
+                return (
+                  <Pressable
+                    key={preset}
+                    style={styles.presetChip}
+                    onPress={() => {
+                      const range = computeDatePresetRange(preset);
+                      setReportsStartDate(range.start);
+                      setReportsEndDate(range.end);
+                      loadReports(reportType, range.start, range.end);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${labelMap[preset]}`}
+                  >
+                    <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                      {labelMap[preset]}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
             </View>
           </>
         )}
@@ -1680,6 +1920,33 @@ export default function DashboardScreen() {
           />
         </View>
       </View>
+
+      <DatePickerModal
+        visible={isEodDatePickerModalOpen}
+        onClose={() => setIsEodDatePickerModalOpen(false)}
+        value={eodDate || getManilaTodayStr()}
+        boundaryMode="pastOrToday"
+        label="Select EOD Report Date"
+        onSelect={(date) => {
+          setEodDate(date);
+          setIsEodDatePickerModalOpen(false);
+          loadReports('DAILY_EOD', undefined, undefined, date);
+        }}
+      />
+
+      <DateRangePickerModal
+        visible={isReportsDateRangeModalOpen}
+        onClose={() => setIsReportsDateRangeModalOpen(false)}
+        startDate={reportsStartDate}
+        endDate={reportsEndDate}
+        boundaryMode="pastOrToday"
+        onApply={(start, end) => {
+          setReportsStartDate(start);
+          setReportsEndDate(end);
+          setIsReportsDateRangeModalOpen(false);
+          loadReports(reportType, start, end);
+        }}
+      />
 
       {renderReportBody()}
     </View>
@@ -2306,5 +2573,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
+  },
+  datePickerToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+    flex: 1,
+  },
+  dateRangeTriggerBtn: {
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    minWidth: 180,
+    justifyContent: 'center',
+  },
+  dateRangeTriggerContent: {
+    gap: 2,
+  },
+  presetChipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  presetChip: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+    borderRadius: theme.radii.full,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  demographicGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  demoCohortItem: {
+    flexGrow: 1,
+    flexBasis: 160,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
 });
