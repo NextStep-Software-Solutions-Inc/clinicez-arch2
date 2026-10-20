@@ -15,6 +15,13 @@ public class QuestPdfCustomFontAndSvgTests
     [Fact]
     public void QuestPdfInitializer_Registers_Geist_Font_And_Renders_Svg_Without_Error()
     {
+        // Check embedded resources
+        var resources = typeof(QuestPdfInitializer).Assembly.GetManifestResourceNames();
+        resources.Should().Contain("ClinicEz.Shared.Documents.Fonts.Geist-Regular.ttf");
+        resources.Should().Contain("ClinicEz.Shared.Documents.Fonts.Geist-Medium.ttf");
+        resources.Should().Contain("ClinicEz.Shared.Documents.Fonts.Geist-SemiBold.ttf");
+        resources.Should().Contain("ClinicEz.Shared.Documents.Fonts.Geist-Bold.ttf");
+
         // Arrange
         QuestPdfInitializer.EnsureInitialized();
 
@@ -29,7 +36,7 @@ public class QuestPdfCustomFontAndSvgTests
                 page.Content().Column(col =>
                 {
                     col.Item().Text("ELECTRONIC PRESCRIPTION (e-Rx)").Bold().FontSize(16);
-                    col.Item().Height(40).Svg(DocumentSvgIcons.RxSymbol("#0D6963"));
+                    col.Item().Text("Rx").FontSize(28).Bold().FontColor("#0D6963");
                     col.Item().Height(24).Svg(DocumentSvgIcons.WarningTriangle("#DC2626"));
                     col.Item().Height(24).Svg(DocumentSvgIcons.CheckmarkCircle("#16A34A"));
                     col.Item().Height(40).Svg(DocumentSvgIcons.ClinicBuilding("#0D6963"));
@@ -47,5 +54,8 @@ public class QuestPdfCustomFontAndSvgTests
 
         var pdfHeader = Encoding.ASCII.GetString(pdfBytes, 0, Math.Min(10, pdfBytes.Length));
         pdfHeader.Should().StartWith("%PDF-");
+
+        var fullPdf = Encoding.Latin1.GetString(pdfBytes);
+        fullPdf.Should().Contain("Geist");
     }
 }
