@@ -1411,6 +1411,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<string>("LetterheadAccentColorHex")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("LetterheadAddress")
                         .HasColumnType("text");
 

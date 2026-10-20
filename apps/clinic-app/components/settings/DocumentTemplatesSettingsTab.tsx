@@ -123,8 +123,18 @@ export default function DocumentTemplatesSettingsTab({
   const [dohLicenseToOperate, setDohLicenseToOperate] = useState('');
   const [accreditationNumber, setAccreditationNumber] = useState('');
   const [primaryLogoUrl, setPrimaryLogoUrl] = useState<string | null>(null);
-  const [primaryColorHex, setPrimaryColorHex] = useState<string>(DEFAULT_CLINIC_BRAND_COLOR);
-  const [customHexInput, setCustomHexInput] = useState<string>(DEFAULT_CLINIC_BRAND_COLOR);
+  const [letterheadAccentColorHex, setLetterheadAccentColorHex] = useState<string>(
+    initialSettings?.letterheadAccentColorHex ||
+      initialSettings?.documentAccentColorHex ||
+      initialSettings?.primaryColorHex ||
+      DEFAULT_CLINIC_BRAND_COLOR
+  );
+  const [customHexInput, setCustomHexInput] = useState<string>(
+    initialSettings?.letterheadAccentColorHex ||
+      initialSettings?.documentAccentColorHex ||
+      initialSettings?.primaryColorHex ||
+      DEFAULT_CLINIC_BRAND_COLOR
+  );
   const [paperSize, setPaperSize] = useState<PaperSize>('Letter');
   const [letterheadFooter, setLetterheadFooter] = useState('');
 
@@ -176,13 +186,19 @@ export default function DocumentTemplatesSettingsTab({
     setDohLicenseToOperate(record.dohLicenseToOperate || record.letterheadDohLto || '');
     setAccreditationNumber(record.accreditationNumber || '');
     setPrimaryLogoUrl(record.primaryLogoUrl ?? null);
-    const brandColor = record.primaryColorHex || DEFAULT_CLINIC_BRAND_COLOR;
-    setPrimaryColorHex(brandColor);
-    setCustomHexInput(brandColor);
+    // Document Accent Color is completely independent of Workstation Color Branding (primaryColorHex).
+    // Falls back to record.primaryColorHex only if not explicitly set.
+    const docAccent =
+      record.letterheadAccentColorHex ||
+      record.documentAccentColorHex ||
+      record.primaryColorHex ||
+      DEFAULT_CLINIC_BRAND_COLOR;
+    setLetterheadAccentColorHex(docAccent);
+    setCustomHexInput(docAccent);
     setPaperSize((record.paperSize as PaperSize) || 'Letter');
     setLetterheadFooter(
       record.letterheadFooter ||
-        'Valid Philippine Medical Certificate. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'
+        'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'
     );
   }, []);
 
@@ -229,7 +245,7 @@ export default function DocumentTemplatesSettingsTab({
 
   // Color picker handlers
   const handleSelectPreset = (color: string) => {
-    setPrimaryColorHex(color);
+    setLetterheadAccentColorHex(color);
     setCustomHexInput(color);
     setAccentColorError(null);
   };
@@ -249,7 +265,7 @@ export default function DocumentTemplatesSettingsTab({
         setAccentColorError('Insufficient contrast. Please choose a darker or more vibrant shade.');
       } else {
         setAccentColorError(null);
-        setPrimaryColorHex(clean);
+        setLetterheadAccentColorHex(clean);
       }
     } else if (clean.length > 7) {
       setAccentColorError('Hex color must be exactly 7 characters including #.');
@@ -290,7 +306,8 @@ export default function DocumentTemplatesSettingsTab({
         letterheadDohLto: dohLicenseToOperate.trim(),
         accreditationNumber: accreditationNumber.trim(),
         primaryLogoUrl,
-        primaryColorHex,
+        letterheadAccentColorHex,
+        documentAccentColorHex: letterheadAccentColorHex,
         paperSize,
         letterheadFooter: letterheadFooter.trim(),
       };
@@ -392,7 +409,7 @@ export default function DocumentTemplatesSettingsTab({
               letterheadContact: 'Tel: (02) 8000-0000',
               paperSize: 'Letter',
               letterheadFooter:
-                'Valid Philippine Medical Certificate. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.',
+                'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.',
             };
             setInternalSettings(defaults);
             populateForm(defaults);
@@ -508,7 +525,7 @@ export default function DocumentTemplatesSettingsTab({
             <View style={styles.colorPaletteWrapper}>
               <View style={styles.presetsRow}>
                 {BRAND_COLOR_PRESETS.map((preset) => {
-                  const isSelected = primaryColorHex.toUpperCase() === preset.color.toUpperCase();
+                  const isSelected = letterheadAccentColorHex.toUpperCase() === preset.color.toUpperCase();
                   return (
                     <Pressable
                       key={preset.color}
@@ -570,7 +587,7 @@ export default function DocumentTemplatesSettingsTab({
                 onChangeText={setLetterheadFooter}
                 multiline
                 numberOfLines={3}
-                placeholder="Valid Philippine Medical Certificate. Digitally certified via Clinic EZ..."
+                placeholder="Valid Philippine Clinical Document. Digitally certified via Clinic EZ..."
                 helperText="Enforces Philippine RA 8792 (E-Commerce Act) and RA 10173 (Data Privacy Act) compliance."
                 testID="input-statutory-footer"
               />
@@ -677,12 +694,12 @@ export default function DocumentTemplatesSettingsTab({
                   {primaryLogoUrl ? (
                     <Image source={{ uri: primaryLogoUrl }} style={styles.canvasLogo} resizeMode="contain" />
                   ) : (
-                    <View style={[styles.canvasLogoPlaceholder, { borderColor: primaryColorHex }]}>
-                      <Icon name="clinic" size={theme.sizes.iconLg} color={primaryColorHex} />
+                    <View style={[styles.canvasLogoPlaceholder, { borderColor: letterheadAccentColorHex }]}>
+                      <Icon name="clinic" size={theme.sizes.iconLg} color={letterheadAccentColorHex} />
                     </View>
                   )}
                   <View style={styles.canvasHeaderTitleBlock}>
-                    <ThemedText variant="h2" style={[styles.canvasFacilityTitle, { color: primaryColorHex }]}>
+                    <ThemedText variant="h2" style={[styles.canvasFacilityTitle, { color: letterheadAccentColorHex }]}>
                       {letterheadHeader.trim() || 'ST. JUDE FAMILY MEDICAL CLINIC'}
                     </ThemedText>
                     {letterheadSubHeader.trim() ? (
@@ -701,7 +718,7 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                   </View>
                 </View>
-                <View style={[styles.canvasDividerBar, { backgroundColor: primaryColorHex }]} />
+                <View style={[styles.canvasDividerBar, { backgroundColor: letterheadAccentColorHex }]} />
               </View>
 
               {/* Canvas Body by Document Type */}
@@ -723,8 +740,8 @@ export default function DocumentTemplatesSettingsTab({
                       TO WHOM IT MAY CONCERN:
                     </ThemedText>
                     <ThemedText variant="body" style={styles.docParagraph}>
-                      This is to certify that <ThemedText variant="bodyBold">Juan Dela Cruz</ThemedText>, 34 years
-                      old, Male, Filipino, residing at City of San Pedro, Laguna, was examined and treated at this
+                      This is to certify that <ThemedText variant="bodyBold">Juan Dela Cruz</ThemedText>, 34 yrs, 5 mos, 2 wks, 3 days of
+                      age, Male, Filipino, residing at City of San Pedro, Laguna, was examined and treated at this
                       facility on October 20, 2026.
                     </ThemedText>
                     <View style={styles.calloutBox}>
@@ -750,14 +767,14 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                     <View style={styles.docMetadataRow}>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Patient: Maria Santos (28/F)
+                        Patient: Maria Santos (28 yrs, 6 mos, 1 wk, 2 days • Female)
                       </ThemedText>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
                         Rx No: RX-2026-00891
                       </ThemedText>
                     </View>
                     <View style={styles.rxSymbolBox}>
-                      <ThemedText variant="display" color={primaryColorHex}>
+                      <ThemedText variant="display" color={letterheadAccentColorHex}>
                         Rx
                       </ThemedText>
                     </View>
@@ -794,7 +811,7 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                     <View style={styles.docMetadataRow}>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Patient: Pedro Penduko (45/M)
+                        Patient: Pedro Penduko (45 yrs, 2 mos, 3 days • Male)
                       </ThemedText>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
                         Req No: LAB-2026-00318
@@ -805,19 +822,19 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                     <View style={styles.labChecklist}>
                       <View style={styles.checkItem}>
-                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={primaryColorHex} />
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={letterheadAccentColorHex} />
                         <ThemedText variant="body">Complete Blood Count (CBC) with Platelet Count</ThemedText>
                       </View>
                       <View style={styles.checkItem}>
-                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={primaryColorHex} />
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={letterheadAccentColorHex} />
                         <ThemedText variant="body">Fasting Blood Sugar (FBS) - 10 to 12 hours fast</ThemedText>
                       </View>
                       <View style={styles.checkItem}>
-                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={primaryColorHex} />
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={letterheadAccentColorHex} />
                         <ThemedText variant="body">Lipid Profile (Total Cholesterol, HDL, LDL, Triglycerides)</ThemedText>
                       </View>
                       <View style={styles.checkItem}>
-                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={primaryColorHex} />
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={letterheadAccentColorHex} />
                         <ThemedText variant="body">12-Lead Electrocardiogram (ECG)</ThemedText>
                       </View>
                     </View>
@@ -847,25 +864,25 @@ export default function DocumentTemplatesSettingsTab({
                       Dear Colleague,
                     </ThemedText>
                     <ThemedText variant="body" style={styles.docParagraph}>
-                      Respectfully referring Juan Dela Cruz, 58-year-old male with persistent Grade 2 Essential
-                      Hypertension and exertional dyspnea, for 2D-Echocardiogram and comprehensive cardiac risk
-                      stratification.
+                      Respectfully referring Juan Dela Cruz, 58 yrs, 8 mos, 2 wks, 1 day of age, Male, with persistent
+                      Grade 2 Essential Hypertension and exertional dyspnea, for 2D-Echocardiogram and comprehensive
+                      cardiac risk stratification.
                     </ThemedText>
                   </View>
                 )}
 
                 {selectedDocType === 'Reception QR Placard' && (
                   <View style={styles.docTypeContent}>
-                    <ThemedText variant="h2" style={[styles.docTypeTitle, { color: primaryColorHex }]}>
+                    <ThemedText variant="h2" style={[styles.docTypeTitle, { color: letterheadAccentColorHex }]}>
                       CLINIC RECEPTION &amp; PATIENT CHECK-IN
                     </ThemedText>
                     <ThemedText variant="body" color={theme.colors.textSecondary} style={{ textAlign: 'center' }}>
                       Scan this QR code with your smartphone camera to check-in or join the waiting queue
                     </ThemedText>
                     <View style={styles.placardQrBox}>
-                      <View style={[styles.placardQrPlaceholder, { borderColor: primaryColorHex }]}>
-                        <Icon name="scan" size={theme.sizes.iconLg} color={primaryColorHex} />
-                        <ThemedText variant="captionBold" color={primaryColorHex}>
+                      <View style={[styles.placardQrPlaceholder, { borderColor: letterheadAccentColorHex }]}>
+                        <Icon name="scan" size={theme.sizes.iconLg} color={letterheadAccentColorHex} />
+                        <ThemedText variant="captionBold" color={letterheadAccentColorHex}>
                           SCAN TO QUEUE
                         </ThemedText>
                       </View>
@@ -1144,7 +1161,7 @@ export default function DocumentTemplatesSettingsTab({
                 <View style={styles.canvasFooterDivider} />
                 <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.footerDisclaimerText}>
                   {letterheadFooter.trim() ||
-                    'Valid Philippine Medical Certificate. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'}
+                    'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textLight}>
                   Verify online: portal.clinicez.ph/verify/DOC-SEC-2026
@@ -1285,6 +1302,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+    minHeight: 720,
+    justifyContent: 'space-between',
     gap: theme.spacing.lg,
     ...theme.shadows.md,
   },
@@ -1386,8 +1405,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   signatureBlock: {
-    marginTop: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    marginTop: 'auto',
+    paddingTop: theme.spacing.lg,
     alignItems: 'flex-end',
     gap: theme.spacing.xs,
   },

@@ -1201,7 +1201,8 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
         : path.resolve(process.cwd());
 
       const scriptPath = path.resolve(rootDir, 'apps/clinic-app/scripts/check-tokens.mjs');
-      const output = execSync(`node "${scriptPath}" --strict`, {
+      const runtime = process.execPath || 'node';
+      const output = execSync(`"${runtime}" "${scriptPath}" --strict`, {
         cwd: rootDir,
         encoding: 'utf8',
       });

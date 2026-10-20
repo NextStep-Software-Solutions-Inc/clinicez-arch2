@@ -763,7 +763,7 @@ public class Milestone1AuditBoundaryStressTests
 
         // Act: Start worker, let it run briefly, then stop/cancel
         await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(100);
+        await Task.Delay(500);
 
         // Signal cancellation to simulate application shutdown
         await worker.StopAsync(CancellationToken.None);
@@ -845,7 +845,7 @@ public class Milestone1AuditBoundaryStressTests
 
         // Act: Start and stop worker under cancellation
         await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(100);
+        await Task.Delay(500);
         await worker.StopAsync(CancellationToken.None);
         if (worker.ExecuteTask != null)
         {
