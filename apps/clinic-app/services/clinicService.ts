@@ -373,6 +373,12 @@ export interface AppointmentItem {
   reason?: string;
   notes?: string;
   createdAt: string;
+  reminder24hSent?: boolean;
+  reminder2hSent?: boolean;
+  reminder24hSentAt?: string | null;
+  reminder2hSentAt?: string | null;
+  lastReminderSentAt?: string | null;
+  lastReminderType?: string | null;
 }
 
 export interface GetAppointmentsOptions {
@@ -1896,10 +1902,16 @@ export interface ClinicSettingsRecord {
   primaryColorHex?: string;
   specialtyMode?: 'Medical' | 'Dental' | 'Multi-Specialty' | 'MultiSpecialty';
   enableDentalModule?: boolean;
+
+  // Milestone 5 Calendar Appointment Reminders & Push Notification Settings
+  enableAppointmentReminders?: boolean;
+  appointmentReminder24hEnabled?: boolean;
+  appointmentReminder2hEnabled?: boolean;
+  enableStaffAppointmentNotifications?: boolean;
 }
 
 export type NotificationUrgency = 'Routine' | 'Urgent' | 'Stat';
-export type StaffNotificationCategory = 'LabResult' | 'Queue' | 'ClinicalAlert' | 'System';
+export type StaffNotificationCategory = 'LabResult' | 'Queue' | 'ClinicalAlert' | 'System' | 'Appointment';
 
 export interface ClinicStaffNotification {
   id: string;
@@ -2957,6 +2969,10 @@ export const clinicService = {
 
   async cancelAppointment(id: string, reason?: string) {
     return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/cancel`, { reason });
+  },
+
+  async sendAppointmentReminder(id: string) {
+    return clinicApiClient.post<AppointmentItem>(`/appointments/${id}/remind`);
   },
 
   // Doctor Schedules, Rosters & Availability

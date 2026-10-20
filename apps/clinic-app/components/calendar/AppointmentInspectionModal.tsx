@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
 import { theme } from '../../constants/theme';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
+import { notify } from '../../utils/feedback';
+import { clinicService } from '../../services/clinicService';
 import type { ExtendedAppointmentItem } from './types';
 import {
   resolveAppointmentUrgency,
@@ -18,6 +20,20 @@ export interface AppointmentInspectionModalProps {
   onCheckIn?: (appointment: ExtendedAppointmentItem) => void;
   onReschedule?: (appointment: ExtendedAppointmentItem) => void;
   onCancel?: (appointment: ExtendedAppointmentItem) => void;
+  onReminderSent?: (appointment: ExtendedAppointmentItem) => void;
+}
+
+function formatDateTimeDisplay(dateStr?: string | null): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const date = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${date} at ${time}`;
+  } catch {
+    return dateStr;
+  }
 }
 
 export function AppointmentInspectionModal({
@@ -27,23 +43,59 @@ export function AppointmentInspectionModal({
   onCheckIn,
   onReschedule,
   onCancel,
+  onReminderSent,
 }: AppointmentInspectionModalProps) {
-  if (!visible || !appointment) {
+  const [currentAppointment, setCurrentAppointment] = useState<ExtendedAppointmentItem | null>(appointment);
+  const [sendingReminder, setSendingReminder] = useState<boolean>(false);
+
+  useEffect(() => {
+    setCurrentAppointment(appointment);
+  }, [appointment]);
+
+  if (!visible || !currentAppointment) {
     return null;
   }
 
-  const urgency = resolveAppointmentUrgency(appointment);
-  const urgencyTokens = resolveUrgencyTokens(urgency);
-  const statusTokens = resolveStatusTokens(appointment.status);
+  const isReminderDisabled =
+    currentAppointment.status === 'Cancelled' ||
+    currentAppointment.status === 'Completed' ||
+    sendingReminder;
 
-  const timeStr = appointment.scheduledAt.includes('T')
-    ? appointment.scheduledAt.split('T')[1].slice(0, 5)
+  const handleSendReminder = async () => {
+    if (isReminderDisabled) return;
+    setSendingReminder(true);
+    try {
+      const [updated, err] = await clinicService.sendAppointmentReminder(currentAppointment.id);
+      if (err || !updated) {
+        notify.error(err?.message || 'Failed to dispatch appointment push reminder.');
+        return;
+      }
+      const merged: ExtendedAppointmentItem = {
+        ...currentAppointment,
+        ...updated,
+      };
+      setCurrentAppointment(merged);
+      onReminderSent?.(merged);
+      notify.success('Appointment push reminder sent to patient.');
+    } catch {
+      notify.error('Failed to dispatch appointment push reminder.');
+    } finally {
+      setSendingReminder(false);
+    }
+  };
+
+  const urgency = resolveAppointmentUrgency(currentAppointment);
+  const urgencyTokens = resolveUrgencyTokens(urgency);
+  const statusTokens = resolveStatusTokens(currentAppointment.status);
+
+  const timeStr = currentAppointment.scheduledAt.includes('T')
+    ? currentAppointment.scheduledAt.split('T')[1].slice(0, 5)
     : '';
-  const dateStr = appointment.scheduledAt.split('T')[0];
+  const dateStr = currentAppointment.scheduledAt.split('T')[0];
   const formattedTime = timeStr ? formatTime12(timeStr) : '';
 
   const canCheckIn =
-    (appointment.status === 'Confirmed' || appointment.status === 'Pending') &&
+    (currentAppointment.status === 'Confirmed' || currentAppointment.status === 'Pending') &&
     !!onCheckIn;
 
   return (
@@ -62,7 +114,7 @@ export function AppointmentInspectionModal({
           data-visible="true"
           role="dialog"
           aria-modal={true}
-          aria-label={`Appointment details for ${appointment.patientName}`}
+          aria-label={`Appointment details for ${currentAppointment.patientName}`}
           style={styles.drawerCard}
         >
           {/* Header */}
@@ -73,14 +125,14 @@ export function AppointmentInspectionModal({
                 variant="h3"
                 color={theme.colors.text}
               >
-                {appointment.patientName}
+                {currentAppointment.patientName}
               </ThemedText>
               <ThemedText
                 data-testid="drawer-patient-id"
                 variant="small"
                 color={theme.colors.textMuted}
               >
-                {appointment.patientId}
+                {currentAppointment.patientId}
               </ThemedText>
             </View>
 
@@ -148,7 +200,7 @@ export function AppointmentInspectionModal({
                   variant="body"
                   color={theme.colors.text}
                 >
-                  {appointment.doctorName || 'Unassigned'}
+                  {currentAppointment.doctorName || 'Unassigned'}
                 </ThemedText>
               </View>
 
@@ -161,12 +213,12 @@ export function AppointmentInspectionModal({
                   variant="body"
                   color={theme.colors.text}
                 >
-                  {appointment.scheduledAt}
+                  {currentAppointment.scheduledAt}
                   {formattedTime ? ` (${dateStr} at ${formattedTime})` : ''}
                 </ThemedText>
               </View>
 
-              {appointment.roomName ? (
+              {currentAppointment.roomName ? (
                 <View style={styles.infoRow}>
                   <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
                     Assigned Room
@@ -176,7 +228,7 @@ export function AppointmentInspectionModal({
                     variant="body"
                     color={theme.colors.text}
                   >
-                    {appointment.roomName}
+                    {currentAppointment.roomName}
                   </ThemedText>
                 </View>
               ) : null}
@@ -186,7 +238,7 @@ export function AppointmentInspectionModal({
                   Service Type
                 </ThemedText>
                 <ThemedText variant="body" color={theme.colors.text}>
-                  {appointment.serviceType || 'General Consultation'}
+                  {currentAppointment.serviceType || 'General Consultation'}
                 </ThemedText>
               </View>
 
@@ -199,7 +251,7 @@ export function AppointmentInspectionModal({
                   variant="body"
                   color={theme.colors.text}
                 >
-                  {appointment.reason || 'General Consultation'}
+                  {currentAppointment.reason || 'General Consultation'}
                 </ThemedText>
               </View>
 
@@ -212,8 +264,110 @@ export function AppointmentInspectionModal({
                   variant="body"
                   color={theme.colors.textSecondary}
                 >
-                  {appointment.notes || 'None'}
+                  {currentAppointment.notes || 'None'}
                 </ThemedText>
+              </View>
+            </View>
+
+            {/* Push Notification & Reminder Status Section */}
+            <View
+              data-testid="reminder-status-section"
+              testID="reminder-status-section"
+              style={styles.reminderSection}
+            >
+              <View style={styles.reminderHeader}>
+                <Icon name="bell" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  Push Notification & Reminder Status
+                </ThemedText>
+              </View>
+
+              <View style={styles.reminderContent}>
+                <View style={styles.infoRow}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
+                    24-Hour Advance Reminder
+                  </ThemedText>
+                  <View style={styles.statusRow}>
+                    <Icon
+                      name={currentAppointment.reminder24hSent ? 'check' : 'clock'}
+                      size={14}
+                      color={currentAppointment.reminder24hSent ? theme.colors.success : theme.colors.textSecondary}
+                    />
+                    <ThemedText
+                      data-testid="status-reminder-24h"
+                      variant="body"
+                      color={currentAppointment.reminder24hSent ? theme.colors.successText : theme.colors.text}
+                    >
+                      {currentAppointment.reminder24hSent
+                        ? `Sent at ${formatDateTimeDisplay(currentAppointment.reminder24hSentAt)}`
+                        : 'Scheduled (24h advance)'}
+                    </ThemedText>
+                  </View>
+                </View>
+
+                <View style={styles.infoRow}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
+                    2-Hour Advance Reminder
+                  </ThemedText>
+                  <View style={styles.statusRow}>
+                    <Icon
+                      name={currentAppointment.reminder2hSent ? 'check' : 'clock'}
+                      size={14}
+                      color={currentAppointment.reminder2hSent ? theme.colors.success : theme.colors.textSecondary}
+                    />
+                    <ThemedText
+                      data-testid="status-reminder-2h"
+                      variant="body"
+                      color={currentAppointment.reminder2hSent ? theme.colors.successText : theme.colors.text}
+                    >
+                      {currentAppointment.reminder2hSent
+                        ? `Sent at ${formatDateTimeDisplay(currentAppointment.reminder2hSentAt)}`
+                        : 'Scheduled (2h advance)'}
+                    </ThemedText>
+                  </View>
+                </View>
+
+                <View style={styles.infoRow}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.label}>
+                    Last Dispatched Reminder
+                  </ThemedText>
+                  <ThemedText
+                    data-testid="status-last-reminder"
+                    variant="body"
+                    color={currentAppointment.lastReminderSentAt ? theme.colors.text : theme.colors.textMuted}
+                  >
+                    {currentAppointment.lastReminderSentAt
+                      ? `${formatDateTimeDisplay(currentAppointment.lastReminderSentAt)} (${currentAppointment.lastReminderType || 'manual'})`
+                      : 'None sent yet'}
+                  </ThemedText>
+                </View>
+
+                {/* Send Push Reminder CTA */}
+                <Pressable
+                  data-testid="btn-send-push-reminder"
+                  testID="btn-send-push-reminder"
+                  accessibilityRole="button"
+                  accessibilityLabel="Send push reminder to patient"
+                  disabled={isReminderDisabled}
+                  onPress={handleSendReminder}
+                  style={({ pressed }) => [
+                    styles.btnSendReminder,
+                    isReminderDisabled && styles.btnSendReminderDisabled,
+                    pressed && !isReminderDisabled && styles.pressed,
+                  ]}
+                >
+                  <Icon
+                    name={sendingReminder ? 'clock' : 'bell'}
+                    size={theme.sizes.iconSm}
+                    color={isReminderDisabled ? theme.colors.textMuted : theme.colors.onPrimary}
+                  />
+                  <ThemedText
+                    variant="smallBold"
+                    color={isReminderDisabled ? theme.colors.textMuted : theme.colors.onPrimary}
+                  >
+                    {sendingReminder ? 'Sending Reminder...' : 'Send Push Reminder'}
+                  </ThemedText>
+                </Pressable>
               </View>
             </View>
           </ScrollView>
@@ -229,7 +383,7 @@ export function AppointmentInspectionModal({
                 data-testid="btn-drawer-checkin"
                 testID="btn-drawer-checkin"
                 accessibilityRole="button"
-                onPress={() => onCheckIn(appointment)}
+                onPress={() => onCheckIn(currentAppointment)}
                 style={({ pressed }) => [
                   styles.btn,
                   styles.btnPrimary,
@@ -247,12 +401,12 @@ export function AppointmentInspectionModal({
               </Pressable>
             ) : null}
 
-            {onReschedule && appointment.status !== 'Cancelled' ? (
+            {onReschedule && currentAppointment.status !== 'Cancelled' ? (
               <Pressable
                 data-testid="btn-drawer-reschedule"
                 testID="btn-drawer-reschedule"
                 accessibilityRole="button"
-                onPress={() => onReschedule(appointment)}
+                onPress={() => onReschedule(currentAppointment)}
                 style={({ pressed }) => [
                   styles.btn,
                   styles.btnSecondary,
@@ -270,12 +424,12 @@ export function AppointmentInspectionModal({
               </Pressable>
             ) : null}
 
-            {onCancel && appointment.status !== 'Cancelled' ? (
+            {onCancel && currentAppointment.status !== 'Cancelled' ? (
               <Pressable
                 data-testid="btn-drawer-cancel"
                 testID="btn-drawer-cancel"
                 accessibilityRole="button"
-                onPress={() => onCancel(appointment)}
+                onPress={() => onCancel(currentAppointment)}
                 style={({ pressed }) => [
                   styles.btn,
                   styles.btnDanger,
@@ -390,6 +544,44 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.75,
+  },
+  reminderSection: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  reminderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  reminderContent: {
+    gap: theme.spacing.sm,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  btnSendReminder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    marginTop: theme.spacing.xs,
+  },
+  btnSendReminderDisabled: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
   },
 });
 

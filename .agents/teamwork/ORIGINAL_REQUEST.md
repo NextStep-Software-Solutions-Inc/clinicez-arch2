@@ -1614,3 +1614,100 @@ Ensure full backward compatibility with all existing route parameters (patientId
 - [ ] cd apps/clinic-app && bun run typecheck passes with 0 TypeScript errors.
 - [ ] cd apps/clinic-app && bun test tests passes with 0 failures, including new comprehensive calendar view tests.
 - [ ] Existing appointment regression tests pass: bun test apps/clinic-app/tests/appointmentsPreselectBooking.test.ts and rosterEdgeStates.test.ts.
+
+## 2026-10-20T08:02:47Z
+
+Implement a production-grade, end-to-end Calendar Appointment Push Notification and Reminder System in ClinicEZ across packages/shared-dotnet, services/clinic-api, services/patient-api, and apps/clinic-app. The system must feature automated scheduled 24-hour and 2-hour advance reminders via a dedicated background service, instant push notifications for appointment lifecycle events (booking, rescheduling, cancellation), doctor staff notifications in the clinic workstation notification center, on-demand manual reminder dispatch from the appointment inspection drawer, and configurable reminder settings strictly governed by @clinicez/design-tokens.
+
+Working directory: /Users/macuser/projects/github/nextstep/clinicez-reminders
+Integrity mode: development
+Reference skills:
+- .agents/skills/clinicez-ui-ux-expert/SKILL.md
+- .agents/skills/interop-hub-expert/SKILL.md
+
+## Requirements
+
+### R1. Shared Interoperability Envelope & Contracts (packages/shared-dotnet)
+Define the cross-service interop contracts in packages/shared-dotnet:
+- In packages/shared-dotnet/Interop/InteropTypes.cs, register public const string PatientAppointmentAlert = "patient.appointment.alert";.
+- In packages/shared-dotnet/Interop/Contracts/AppointmentNotificationContracts.cs, define AppointmentAlertKinds:
+  - Booked = "appointment_booked"
+  - Rescheduled = "appointment_rescheduled"
+  - Cancelled = "appointment_cancelled"
+  - Reminder24h = "appointment_reminder_24h"
+  - Reminder2h = "appointment_reminder_2h"
+  - ManualReminder = "appointment_reminder_manual"
+- Define PatientAppointmentAlertPayload containing:
+  - AppointmentId (Guid), ClinicId (Guid), ClinicName (string), DoctorId (Guid?), DoctorName (string?), ServiceType (string?), ScheduledAtUtc (DateTime), DurationMinutes (int), AlertKind (string), Message (string), TimestampUtc (DateTime).
+
+### R2. Instant Event Push Notifications & Interop Delivery (services/clinic-api, services/patient-api)
+- In services/clinic-api, implement IAppointmentNotificationDispatcher and AppointmentNotificationDispatcher:
+  - Resolve the patient's linked mobile app account (ClinicPatient.SyncPatientId).
+  - When linked, format human-readable messages and enqueue patient.appointment.alert via IInteropPublisher inside the transactional outbox before SaveChanges.
+  - Trigger appointment_booked alert on CreateAppointmentCommand.
+  - Trigger appointment_rescheduled alert on RescheduleAppointmentCommand and reset Reminder24hSent and Reminder2hSent flags to false so the rescheduled slot receives timely reminders.
+  - Trigger appointment_cancelled alert on CancelAppointmentCommand.
+- In services/patient-api, implement PatientAppointmentAlertInteropHandler implementing IInteropHandler<PatientAppointmentAlertPayload>:
+  - Idempotently record an in-app Notification entity (Type = NotificationType.AppointmentReminder, Category = NotificationCategory.Appointments or Reminders, SourceId = $"appointment:{message.AppointmentId}:{message.AlertKind}").
+  - Resolve active device sessions for the patient via IDeviceSessionRepository and dispatch FCM push notifications via IPushNotificationService.SendPushNotificationAsync(token, title, body, action, ct).
+  - Register the handler in DependencyInjection.cs.
+
+### R3. Automated Background Reminder Service (services/clinic-api)
+- In services/clinic-api/ClinicEz.Clinic.Infrastructure/BackgroundServices/, build AppointmentReminderBackgroundService.cs:
+  - Implements BackgroundService running on a periodic 60-second polling cycle.
+  - Scans active clinics where EnableAppointmentReminders == true.
+  - Evaluates confirmed upcoming appointments:
+    - 24-Hour Window: Scheduled between now + 23h and now + 25h where !Reminder24hSent and AppointmentReminder24hEnabled == true. Dispatches appointment_reminder_24h alert and sets Reminder24hSent = true, Reminder24hSentAt = DateTime.UtcNow, LastReminderSentAt = DateTime.UtcNow, LastReminderType = "24h".
+    - 2-Hour Window: Scheduled between now + 1h and now + 2.5h where !Reminder2hSent and AppointmentReminder2hEnabled == true. Dispatches appointment_reminder_2h alert and sets Reminder2hSent = true, Reminder2hSentAt = DateTime.UtcNow, LastReminderSentAt = DateTime.UtcNow, LastReminderType = "2h".
+  - Atomically records updates to Appointment entity in PostgreSQL.
+  - Registered as AddHostedService<AppointmentReminderBackgroundService> in DependencyInjection.cs.
+- Add composite indices on Appointment in ApplicationDbContext.cs for performant reminder scanning:
+  - entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.Reminder24hSent });
+  - entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.Reminder2hSent });
+- Add an EF Core migration AddAppointmentRemindersAndNotificationSettings.
+
+### R4. Clinic Staff Notifications & On-Demand Manual Reminder (services/clinic-api, apps/clinic-app)
+- In services/clinic-api:
+  - Add Appointment = 4 to StaffNotificationCategory in ClinicStaffNotification.cs.
+  - When appointments are created, rescheduled, or cancelled, and EnableStaffAppointmentNotifications is active: create a ClinicStaffNotification for the assigned doctor (RecipientStaffId = DoctorId, ActionRoute = "Appointments", ActionParamsJson = { appointmentId, date }).
+  - Implement SendAppointmentReminderCommand and expose POST /api/v1/appointments/{id}/remind in AppointmentsController.cs guarded by [HasPermission(ClinicPermissions.AppointmentsManage)]. Dispatches an immediate appointment_reminder_manual push alert and updates LastReminderSentAt = DateTime.UtcNow and LastReminderType = "manual".
+- In apps/clinic-app:
+  - In AppointmentInspectionModal.tsx, add a Push Notification & Reminder Status section:
+    - Display confirmation status and 24h/2h reminder statuses (Sent vs Scheduled).
+    - Display last reminder sent timestamp.
+    - Provide an interactive "Send Push Reminder" button with icon, loading state, error handling, and notify.success('Appointment push reminder sent to patient.') feedback.
+  - In AppointmentCard.tsx, display a reminder bell icon / badge when lastReminderSentAt is present.
+  - In ClinicNotificationCenterModal.tsx, add an 'appointments' tab in filter tabs (all | stat | appointments | queue | system), map Appointment category to calendar icon, and navigate to Appointments on press.
+  - In services/clinicService.ts, add sendAppointmentReminder(id: string).
+
+### R5. Configurable Reminder Settings Card (services/clinic-api, apps/clinic-app)
+- In services/clinic-api:
+  - Add to ClinicSettings:
+    - bool EnableAppointmentReminders = true;
+    - bool AppointmentReminder24hEnabled = true;
+    - bool AppointmentReminder2hEnabled = true;
+    - bool EnableStaffAppointmentNotifications = true;
+  - Expose in ClinicSettingsDto and support in UpdateClinicSettingsCommand and GetClinicSettingsQuery.
+- In apps/clinic-app:
+  - Build AppointmentReminderSettingsCard.tsx in components/settings/ and embed into GeneralSettingsTab.tsx.
+  - Include toggles for Master Reminders, 24-Hour advance reminder, 2-Hour advance reminder, and Staff appointment notifications.
+  - Strictly adhere to @clinicez/design-tokens (zero raw hex colors, semantic tokens via theme.colors).
+
+## Acceptance Criteria
+
+### Automated Backend Tests
+- [ ] dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Appointment" passes with 0 failures, including new tests for:
+  - AppointmentNotificationDispatcher (booked, rescheduled, cancelled, manual reminders).
+  - SendAppointmentReminderCommand (dispatch, timestamp updates, not found error).
+  - AppointmentReminderBackgroundService (24h window, 2h window, disabled settings, idempotent skip).
+- [ ] dotnet test services/patient-api/ClinicEz.Patient.Application.Tests/ClinicEz.Patient.Application.Tests.csproj passes with 0 failures, verifying PatientAppointmentAlertInteropHandler creates in-app notification and dispatches FCM push notification.
+- [ ] dotnet build passes with 0 errors across the solution.
+
+### Automated Frontend Tests & UI/UX Compliance
+- [ ] New unit test suite apps/clinic-app/tests/appointmentReminders.test.ts passes with 0 failures, verifying:
+  - AppointmentInspectionModal renders reminder status and triggers "Send Push Reminder".
+  - AppointmentCard displays reminder bell indicator.
+  - AppointmentReminderSettingsCard toggles and persists settings.
+  - ClinicNotificationCenterModal filters appointment notifications.
+- [ ] cd apps/clinic-app && bun scripts/check-tokens.mjs --strict passes with 0 violations (no raw hex codes).
+- [ ] cd apps/clinic-app && bun run typecheck passes with 0 TypeScript errors.

@@ -111,7 +111,11 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.DefaultDoctorSharePercentage,
             settings.CashierMode,
             LetterheadDohLto: settings.LetterheadDohLto,
-            LetterheadAccentColorHex: settings.LetterheadAccentColorHex);
+            LetterheadAccentColorHex: settings.LetterheadAccentColorHex,
+            EnableAppointmentReminders: settings.EnableAppointmentReminders,
+            AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
+            AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
+            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications);
     }
 }
 

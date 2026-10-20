@@ -2,10 +2,12 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.Appointments.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interop.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,15 +29,18 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
     private readonly IRepository<Appointment> _appointmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IAppointmentNotificationDispatcher? _dispatcher;
 
     public CreateAppointmentCommandHandler(
         IRepository<Appointment> appointmentRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IAppointmentNotificationDispatcher? dispatcher = null)
     {
         _appointmentRepo = appointmentRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _dispatcher = dispatcher;
     }
 
     public async Task<AppointmentDto> Handle(CreateAppointmentCommand request, CancellationToken ct)
@@ -84,6 +89,11 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
         try
         {
             await _appointmentRepo.AddAsync(appointment, ct);
+            if (_dispatcher != null)
+            {
+                await _dispatcher.DispatchAlertAsync(appointment, AppointmentAlertKinds.Booked, ct);
+                await _dispatcher.DispatchStaffNotificationAsync(appointment, "booked", ct);
+            }
             await _unitOfWork.SaveChangesAsync(ct);
         }
         catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23P01" })
