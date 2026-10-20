@@ -473,11 +473,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             .FontSize(8.5f).FontColor("#64748B");
                     });
 
-                    // Large Rx Symbol
-                    col.Item().PaddingTop(6).Row(row =>
-                    {
-                        row.ConstantItem(40).Height(40).Svg(DocumentSvgIcons.RxSymbol(primaryColor));
-                    });
+                    // Rx Emblem matching Studio Preview (Geist Bold display)
+                    col.Item().PaddingTop(4).Text("Rx")
+                        .FontSize(28).Bold().FontColor(primaryColor);
 
                     // Statutory PDEA S2 Regulatory Warning Badge
                     if (hasDangerousDrug)
