@@ -11,6 +11,7 @@ using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
@@ -27,7 +28,9 @@ public sealed record UpdateMyProfileCommand(
     string? Specialty,
     string? PhilHealthPan = null,
     StaffRole? RequestedRole = null,
-    Guid? RequestedClinicRoleId = null) : IRequest<StaffMemberDto>;
+    Guid? RequestedClinicRoleId = null,
+    string? SignatureSpecimen = null,
+    SignatureMode? DefaultSignatureMode = null) : IRequest<StaffMemberDto>;
 
 public sealed class UpdateMyProfileCommandValidator : AbstractValidator<UpdateMyProfileCommand>
 {
@@ -98,6 +101,14 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
         staff.S2LicenseNumber = request.S2LicenseNumber?.Trim();
         staff.Specialty = request.Specialty?.Trim();
         staff.PhilHealthPan = request.PhilHealthPan?.Trim();
+        if (request.SignatureSpecimen != null)
+        {
+            staff.SignatureSpecimen = string.IsNullOrWhiteSpace(request.SignatureSpecimen) ? null : request.SignatureSpecimen;
+        }
+        if (request.DefaultSignatureMode.HasValue)
+        {
+            staff.DefaultSignatureMode = request.DefaultSignatureMode.Value;
+        }
         staff.UpdatedAt = DateTime.UtcNow;
         staff.UpdatedBy = staff.Id.ToString();
 
@@ -140,6 +151,8 @@ public sealed class UpdateMyProfileCommandHandler : IRequestHandler<UpdateMyProf
             MustChangePassword: staff.MustChangePassword,
             PhilHealthPan: staff.PhilHealthPan,
             AssignedRoomIds: roomIds,
-            AssignedRoomNames: roomNames);
+            AssignedRoomNames: roomNames,
+            SignatureSpecimen: staff.SignatureSpecimen,
+            DefaultSignatureMode: staff.DefaultSignatureMode);
     }
 }

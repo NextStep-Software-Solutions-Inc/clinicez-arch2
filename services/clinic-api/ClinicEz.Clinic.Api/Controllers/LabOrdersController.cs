@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Mvc;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Documents.Configuration;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Api.Controllers;
@@ -64,7 +65,8 @@ public sealed class LabOrdersController : ControllerBase
     [HasPermission(ClinicPermissions.LabOrdersRead)]
     public async Task<IActionResult> DownloadLabOrderSlipPdf(
         [FromRoute] Guid id,
-        CancellationToken ct)
+        [FromQuery] bool? wet = null,
+        CancellationToken ct = default)
     {
         var slip = await _sender.Send(new GetClinicLabOrderSlipQuery(id), ct);
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
@@ -74,7 +76,8 @@ public sealed class LabOrdersController : ControllerBase
             ClinicName = slip.ClinicName
         };
 
-        var pdfBytes = _pdfService.GenerateLabRequisitionSlipPdf(slip, settings);
+        var signatureMode = wet == true ? SignatureMode.WetSignature : SignatureMode.ESignatureSpecimen;
+        var pdfBytes = _pdfService.GenerateLabRequisitionSlipPdf(slip, settings, doctor: null, signatureMode: signatureMode);
         return File(pdfBytes, "application/pdf", $"LabRequisition-{slip.OrderNumber}.pdf");
     }
 

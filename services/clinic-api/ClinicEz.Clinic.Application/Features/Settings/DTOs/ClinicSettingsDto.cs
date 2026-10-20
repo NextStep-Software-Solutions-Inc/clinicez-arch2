@@ -50,5 +50,6 @@ public sealed record ClinicSettingsDto(
     string? SpecialtyMode = "Medical",
     bool EnableDentalModule = false,
     decimal DefaultDoctorSharePercentage = 0.70m,
-    string CashierMode = "ClinicDesk");
+    string CashierMode = "ClinicDesk",
+    string? LetterheadDohLto = null);
 

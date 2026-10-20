@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
@@ -11,9 +11,18 @@ import { SkeletonList } from '../ui/Skeleton';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import Icon, { IconName } from '../ui/Icon';
 import ActionMenu from '../ui/ActionMenu';
+import SegmentedControl from '../ui/SegmentedControl';
+import SignatureSpecimenModal from './SignatureSpecimenModal';
 import { theme } from '../../constants/theme';
 import { notify, Alert } from '../../utils/feedback';
-import { clinicService, StaffMember, StaffRole, ResetStaffPasswordResult, ClinicRole } from '../../services/clinicService';
+import {
+  clinicService,
+  StaffMember,
+  StaffRole,
+  ResetStaffPasswordResult,
+  ClinicRole,
+  SignatureMode,
+} from '../../services/clinicService';
 import { Chip, FieldGroup } from './common';
 
 import {
@@ -135,6 +144,9 @@ export default function StaffManagementTab({
   const [isActiveStaff, setIsActiveStaff] = useState(true);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [signatureSpecimen, setSignatureSpecimen] = useState<string | null>(null);
+  const [defaultSignatureMode, setDefaultSignatureMode] = useState<SignatureMode>('ESignatureSpecimen');
+  const [signatureModalVisible, setSignatureModalVisible] = useState(false);
 
   const isEditingSelf = isSelf(editingStaff);
   const isSystemAdminStaff = (s?: StaffMember | null) => {
@@ -227,6 +239,8 @@ export default function StaffManagementTab({
     setAssignedRoomIds([]);
     setProvisionLogin(true);
     setTemporaryPassword(generateRandomPassword());
+    setSignatureSpecimen(null);
+    setDefaultSignatureMode('ESignatureSpecimen');
     setAddError(null);
     setShowAddModal(true);
   };
@@ -260,6 +274,8 @@ export default function StaffManagementTab({
     setS2(s.s2LicenseNumber || '');
     setPan(s.philHealthPan || '');
     setSpecialty(s.specialty || '');
+    setSignatureSpecimen(s.signatureSpecimen || null);
+    setDefaultSignatureMode(s.defaultSignatureMode || 'ESignatureSpecimen');
     setAssignedRoomIds(s.assignedRoomIds ?? (s.assignedRoomId ? [s.assignedRoomId] : []));
     setRole(s.role);
     setIsActiveStaff(s.isActive);
@@ -332,6 +348,8 @@ export default function StaffManagementTab({
       specialty: specialty.trim() || undefined,
       assignedRoomIds: nextRoomIds,
       isActive: isEditingSelf ? editingStaff.isActive : isActiveStaff,
+      signatureSpecimen: effectiveStaffRole === 'Doctor' ? signatureSpecimen : undefined,
+      defaultSignatureMode: effectiveStaffRole === 'Doctor' ? defaultSignatureMode : undefined,
     });
 
     setSavingEdit(false);
@@ -390,6 +408,8 @@ export default function StaffManagementTab({
       s2LicenseNumber: role === 'Doctor' ? s2.trim() || undefined : undefined,
       philHealthPan: role === 'Doctor' ? pan.trim() || undefined : undefined,
       specialty: specialty.trim() || undefined,
+      signatureSpecimen: role === 'Doctor' ? signatureSpecimen : undefined,
+      defaultSignatureMode: role === 'Doctor' ? defaultSignatureMode : undefined,
       assignedRoomIds: canHaveRoom && assignedRoomIds.length > 0 ? assignedRoomIds : undefined,
       initialPassword: provisionLogin ? temporaryPassword : undefined,
       sendInviteEmail: false,
@@ -886,12 +906,68 @@ export default function StaffManagementTab({
               />
             </View>
 
-            {/* Official Doctor Stamp Live Specimen */}
+            {/* Official Doctor Stamp & Signature Live Specimen */}
             <View style={styles.stampPreviewCard}>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                Official Doctor Stamp Live Preview
-              </ThemedText>
+              <View style={styles.stampHeaderRow}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Official Doctor Stamp & Signature Preview
+                </ThemedText>
+                {defaultSignatureMode === 'ESignatureSpecimen' ? (
+                  <Badge label="Digitally Certified" variant="success" icon="check" size="sm" />
+                ) : defaultSignatureMode === 'DigitalSealOnly' ? (
+                  <Badge label="Digital Seal" variant="primary" icon="shield" size="sm" />
+                ) : (
+                  <Badge label="Wet Signature" variant="neutral" size="sm" />
+                )}
+              </View>
+
+              <View style={styles.stampControlsRow}>
+                <View style={styles.segmentedWrapperSmall}>
+                  <SegmentedControl<SignatureMode>
+                    value={defaultSignatureMode}
+                    onChange={(mode) => setDefaultSignatureMode(mode)}
+                    options={[
+                      { value: 'ESignatureSpecimen', label: 'E-Sign' },
+                      { value: 'DigitalSealOnly', label: 'Seal' },
+                      { value: 'WetSignature', label: 'Wet' },
+                    ]}
+                  />
+                </View>
+                <Button
+                  title={signatureSpecimen ? 'Edit Specimen' : 'Upload / Draw'}
+                  variant="outline"
+                  size="sm"
+                  icon="edit"
+                  onPress={() => setSignatureModalVisible(true)}
+                />
+              </View>
+
               <View style={styles.stampBox}>
+                {defaultSignatureMode === 'ESignatureSpecimen' ? (
+                  signatureSpecimen ? (
+                    <View style={styles.stampSignatureOverlay}>
+                      <Image
+                        source={{ uri: signatureSpecimen }}
+                        style={styles.stampSignatureImage}
+                        resizeMode="contain"
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.stampSignatureEmpty}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        [No E-Signature specimen configured]
+                      </ThemedText>
+                    </View>
+                  )
+                ) : defaultSignatureMode === 'WetSignature' ? (
+                  <View style={styles.stampWetSignatureBox}>
+                    <View style={styles.stampWetLine} />
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Physician Wet Signature (Pen)
+                    </ThemedText>
+                  </View>
+                ) : null}
+
                 <ThemedText variant="smallBold" color={theme.colors.primary} style={styles.stampName}>
                   {`${title ? `${title} ` : 'DR. '}${firstName || 'First'} ${lastName || 'Last'}`.toUpperCase()}
                 </ThemedText>
@@ -1337,12 +1413,68 @@ export default function StaffManagementTab({
                 />
               </View>
 
-              {/* Official Doctor Stamp Live Specimen */}
+              {/* Official Doctor Stamp & Signature Live Specimen */}
               <View style={styles.stampPreviewCard}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  Official Doctor Stamp Live Preview
-                </ThemedText>
+                <View style={styles.stampHeaderRow}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Official Doctor Stamp & Signature Preview
+                  </ThemedText>
+                  {defaultSignatureMode === 'ESignatureSpecimen' ? (
+                    <Badge label="Digitally Certified" variant="success" icon="check" size="sm" />
+                  ) : defaultSignatureMode === 'DigitalSealOnly' ? (
+                    <Badge label="Digital Seal" variant="primary" icon="shield" size="sm" />
+                  ) : (
+                    <Badge label="Wet Signature" variant="neutral" size="sm" />
+                  )}
+                </View>
+
+                <View style={styles.stampControlsRow}>
+                  <View style={styles.segmentedWrapperSmall}>
+                    <SegmentedControl<SignatureMode>
+                      value={defaultSignatureMode}
+                      onChange={(mode) => setDefaultSignatureMode(mode)}
+                      options={[
+                        { value: 'ESignatureSpecimen', label: 'E-Sign' },
+                        { value: 'DigitalSealOnly', label: 'Seal' },
+                        { value: 'WetSignature', label: 'Wet' },
+                      ]}
+                    />
+                  </View>
+                  <Button
+                    title={signatureSpecimen ? 'Edit Specimen' : 'Upload / Draw'}
+                    variant="outline"
+                    size="sm"
+                    icon="edit"
+                    onPress={() => setSignatureModalVisible(true)}
+                  />
+                </View>
+
                 <View style={styles.stampBox}>
+                  {defaultSignatureMode === 'ESignatureSpecimen' ? (
+                    signatureSpecimen ? (
+                      <View style={styles.stampSignatureOverlay}>
+                        <Image
+                          source={{ uri: signatureSpecimen }}
+                          style={styles.stampSignatureImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    ) : (
+                      <View style={styles.stampSignatureEmpty}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          [No E-Signature specimen configured]
+                        </ThemedText>
+                      </View>
+                    )
+                  ) : defaultSignatureMode === 'WetSignature' ? (
+                    <View style={styles.stampWetSignatureBox}>
+                      <View style={styles.stampWetLine} />
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Physician Wet Signature (Pen)
+                      </ThemedText>
+                    </View>
+                  ) : null}
+
                   <ThemedText variant="smallBold" color={theme.colors.primary} style={styles.stampName}>
                     {`${title ? `${title} ` : 'DR. '}${firstName || 'First'} ${lastName || 'Last'}`.toUpperCase()}
                   </ThemedText>
@@ -1577,6 +1709,36 @@ export default function StaffManagementTab({
         >
           <View style={styles.stampModalContent}>
             <View style={styles.stampBoxLarge}>
+              {/* Signature Specimen Overlay or Mode Indicator */}
+              {stampModalStaff.defaultSignatureMode === 'ESignatureSpecimen' || (!stampModalStaff.defaultSignatureMode && stampModalStaff.signatureSpecimen) ? (
+                stampModalStaff.signatureSpecimen ? (
+                  <View style={styles.stampSignatureOverlayLarge}>
+                    <Image
+                      source={{ uri: stampModalStaff.signatureSpecimen }}
+                      style={styles.stampSignatureImageLarge}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.stampSignatureEmptyLarge}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      [No E-Signature specimen uploaded]
+                    </ThemedText>
+                  </View>
+                )
+              ) : stampModalStaff.defaultSignatureMode === 'WetSignature' ? (
+                <View style={styles.stampWetSignatureBox}>
+                  <View style={styles.stampWetLine} />
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Physician Wet Signature (Pen)
+                  </ThemedText>
+                </View>
+              ) : (
+                <View style={styles.stampSealBox}>
+                  <Badge label="Digital Verification Seal" variant="primary" icon="shield" size="sm" />
+                </View>
+              )}
+
               <ThemedText variant="bodyBold" color={theme.colors.primary} style={styles.stampNameLarge}>
                 {`${stampModalStaff.title ? `${stampModalStaff.title} ` : 'DR. '}${stampModalStaff.firstName} ${stampModalStaff.lastName}`.toUpperCase()}
               </ThemedText>
@@ -1604,11 +1766,43 @@ export default function StaffManagementTab({
               ) : null}
             </View>
 
+            <View style={styles.stampModalBadgeRow}>
+              {stampModalStaff.defaultSignatureMode === 'ESignatureSpecimen' || (!stampModalStaff.defaultSignatureMode && stampModalStaff.signatureSpecimen) ? (
+                <Badge label="Digitally Certified & Locked" variant="success" icon="check" />
+              ) : stampModalStaff.defaultSignatureMode === 'DigitalSealOnly' ? (
+                <Badge label="Digital Verification Seal" variant="primary" icon="shield" />
+              ) : (
+                <Badge label="Wet Signature Mode" variant="neutral" />
+              )}
+            </View>
+
             <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.stampNotice}>
               This official statutory stamp is applied to digital consultation slips, e-prescriptions, laboratory orders, and official medical certificates.
             </ThemedText>
           </View>
         </Modal>
+      ) : null}
+
+      {/* Signature Specimen Modal */}
+      {signatureModalVisible ? (
+        <SignatureSpecimenModal
+          visible={signatureModalVisible}
+          onClose={() => setSignatureModalVisible(false)}
+          initialSignature={signatureSpecimen}
+          initialMode={defaultSignatureMode}
+          doctorName={`${title ? `${title} ` : 'Dr. '}${firstName || 'First'} ${lastName || 'Last'}`}
+          credentials={{
+            specialty,
+            prc,
+            ptr,
+            s2,
+            pan,
+          }}
+          onSave={(newSig, newMode) => {
+            setSignatureSpecimen(newSig);
+            setDefaultSignatureMode(newMode);
+          }}
+        />
       ) : null}
 
       {rosterModalVisible ? (
@@ -1845,6 +2039,23 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     marginTop: theme.spacing.xs,
   },
+  stampHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.xs,
+  },
+  stampControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  segmentedWrapperSmall: {
+    flex: 1,
+    minWidth: 160,
+  },
   stampBox: {
     borderWidth: 1.5,
     borderStyle: 'dashed',
@@ -1853,6 +2064,23 @@ const styles = StyleSheet.create({
     padding: theme.spacing.sm,
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
+  },
+  stampSignatureOverlay: {
+    width: '100%',
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  stampSignatureImage: {
+    width: 180,
+    height: 46,
+  },
+  stampSignatureEmpty: {
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
   },
   stampBoxLarge: {
     borderWidth: 2,
@@ -1863,6 +2091,42 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     gap: 4,
     width: '100%',
+  },
+  stampSignatureOverlayLarge: {
+    width: '100%',
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  stampSignatureImageLarge: {
+    width: 240,
+    height: 56,
+  },
+  stampSignatureEmptyLarge: {
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  stampWetSignatureBox: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+    paddingTop: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  stampWetLine: {
+    width: 180,
+    height: theme.sizes.borderWidth,
+    backgroundColor: theme.colors.textMuted,
+  },
+  stampSealBox: {
+    marginBottom: theme.spacing.xs,
+  },
+  stampModalBadgeRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   stampName: {
     textAlign: 'center',

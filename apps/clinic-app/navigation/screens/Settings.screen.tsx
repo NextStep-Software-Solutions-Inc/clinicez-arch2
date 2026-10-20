@@ -22,6 +22,7 @@ import {
 
 import SettingsTabBar from '../../components/settings/SettingsTabBar';
 import GeneralSettingsTab from '../../components/settings/GeneralSettingsTab';
+import DocumentTemplatesSettingsTab from '../../components/settings/DocumentTemplatesSettingsTab';
 import FacilityReadinessTab from '../../components/settings/FacilityReadinessTab';
 import StaffManagementTab from '../../components/settings/StaffManagementTab';
 import AccessControlTab from '../../components/settings/AccessControlTab';
@@ -355,6 +356,12 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       icon: 'settings',
     });
 
+    list.push({
+      key: 'documents',
+      label: 'Document & Stationery Studio',
+      icon: 'file',
+    });
+
     if (isAdmin || canManageStaff) {
       list.push({
         key: 'staff',
@@ -495,6 +502,19 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             cashierMode={cashierMode}
             setCashierMode={setCashierMode}
             onSettingsUpdated={setSettings}
+          />
+        )}
+
+        {activeTab === 'documents' && (
+          <DocumentTemplatesSettingsTab
+            settings={settings}
+            showSkeletons={showSkeletons}
+            settingsLoadError={settingsLoadError}
+            onSettingsUpdated={setSettings}
+            onRefreshSettings={async () => {
+              const [fresh] = await clinicService.getSettings();
+              if (fresh) setSettings(fresh);
+            }}
           />
         )}
 

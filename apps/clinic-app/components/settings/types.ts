@@ -1,6 +1,7 @@
 export type SettingsTabKey =
   | 'general'
   | 'readiness'
+  | 'documents'
   | 'staff'
   | 'rbac'
   | 'services'

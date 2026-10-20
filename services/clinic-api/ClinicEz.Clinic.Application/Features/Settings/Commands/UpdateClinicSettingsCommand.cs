@@ -24,6 +24,7 @@ public sealed record UpdateClinicSettingsCommand(
     string? LetterheadSubHeader = null,
     string? LetterheadAddress = null,
     string? LetterheadContact = null,
+    string? LetterheadDohLto = null,
     string? LetterheadFooter = null,
     string? PrimaryColorHex = null,
     string? PrimaryLogoUrl = null,
@@ -121,6 +122,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
 
         if (request.LetterheadContact != null)
             settings.LetterheadContact = string.IsNullOrWhiteSpace(request.LetterheadContact) ? null : request.LetterheadContact.Trim();
+
+        if (request.LetterheadDohLto != null)
+            settings.LetterheadDohLto = string.IsNullOrWhiteSpace(request.LetterheadDohLto) ? null : request.LetterheadDohLto.Trim();
 
         if (request.LetterheadFooter != null)
             settings.LetterheadFooter = string.IsNullOrWhiteSpace(request.LetterheadFooter) ? null : request.LetterheadFooter.Trim();
@@ -261,7 +265,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.SpecialtyMode,
             settings.EnableDentalModule,
             settings.DefaultDoctorSharePercentage,
-            settings.CashierMode);
+            settings.CashierMode,
+            LetterheadDohLto: settings.LetterheadDohLto);
     }
 }
 

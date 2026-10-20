@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { theme } from '@constants/theme';
-import { Modal, Button, Badge, Icon, ThemedText } from '@ui';
+import { Modal, Button, Badge, Icon, ThemedText, SegmentedControl, type SegmentedOption } from '@ui';
 import { Alert } from '@utils/feedback';
 import { useClinic } from '../context/ClinicContext';
 import { useStaff } from '../context/StaffContext';
-import { PrescriptionSlipData, clinicService } from '../services/clinicService';
+import { PrescriptionSlipData, clinicService, StaffMember } from '../services/clinicService';
 import { openPrintableUrl } from '../utils/printHelper';
 import { RxStageChip } from './interop/InteropBadges';
 
@@ -14,16 +14,68 @@ interface PrescriptionSlipModalProps {
   onClose: () => void;
   slip: PrescriptionSlipData | null;
   onOpenExternalDispense?: () => void;
+  attendingDoctor?: StaffMember | null;
 }
+
+const PRINT_OPTIONS: SegmentedOption<'esign' | 'wet'>[] = [
+  { value: 'esign', label: 'E-Signed PDF' },
+  { value: 'wet', label: 'Wet Signature (Pen)' },
+];
 
 export default function PrescriptionSlipModal({
   visible,
   onClose,
   slip,
   onOpenExternalDispense,
+  attendingDoctor,
 }: PrescriptionSlipModalProps) {
   const { letterhead, facilityName, accreditationNumber } = useClinic();
-  const { currentName } = useStaff();
+  const { current, currentName, staff } = useStaff();
+
+  const resolvedDoctor = useMemo(() => {
+    if (attendingDoctor) return attendingDoctor;
+    if (!slip) return current;
+    if (slip.doctorPrcLicense) {
+      const match = staff.find((s) => s.prcLicenseNumber && s.prcLicenseNumber === slip.doctorPrcLicense);
+      if (match) return match;
+    }
+    if (slip.doctorName) {
+      const match = staff.find(
+        (s) =>
+          `${s.firstName} ${s.lastName}`.toLowerCase().trim() === slip.doctorName.toLowerCase().trim() ||
+          `${s.title ? `${s.title} ` : ''}${s.firstName} ${s.lastName}`.toLowerCase().trim() ===
+            slip.doctorName.toLowerCase().trim(),
+      );
+      if (match) return match;
+    }
+    return current;
+  }, [attendingDoctor, slip, staff, current]);
+
+  const hasDangerousDrug = Boolean(slip?.items?.some((i) => i.isDangerousDrug));
+
+  const resolveInitialMode = (defaultMode?: string, dangerous?: boolean): 'esign' | 'wet' => {
+    if (dangerous) return 'wet';
+    return defaultMode === 'WetSignature' ? 'wet' : 'esign';
+  };
+
+  const [printMode, setPrintMode] = useState<'esign' | 'wet'>('esign');
+
+  useEffect(() => {
+    if (visible && slip) {
+      setPrintMode(resolveInitialMode(resolvedDoctor?.defaultSignatureMode, hasDangerousDrug));
+    }
+  }, [visible, slip, resolvedDoctor?.defaultSignatureMode, hasDangerousDrug]);
+
+  const handleModeChange = (mode: 'esign' | 'wet') => {
+    if (hasDangerousDrug && mode === 'esign') {
+      Alert.alert(
+        'PDEA S2 Statutory Warning',
+        'Prescriptions containing Dangerous Drugs (PDEA S2 regulated substances) cannot be issued with electronic signature alone. A wet signature on a physical prescription pad is required under Philippine DOH-PDEA regulations (RA 9165).',
+      );
+      return;
+    }
+    setPrintMode(mode);
+  };
 
   if (!slip) return null;
 
@@ -40,9 +92,10 @@ export default function PrescriptionSlipModal({
 
   const handlePrint = async () => {
     try {
+      const isWetMode = printMode === 'wet';
       const url = slip.consultationId
-        ? clinicService.getPrescriptionSlipPdfUrl(slip.consultationId)
-        : clinicService.getPrescriptionSlipPdfByNumberUrl(slip.prescriptionNumber);
+        ? clinicService.getPrescriptionSlipPdfUrl(slip.consultationId, { wet: isWetMode })
+        : clinicService.getPrescriptionSlipPdfByNumberUrl(slip.prescriptionNumber, { wet: isWetMode });
       const opened = await openPrintableUrl(url);
       if (!opened) {
         Alert.alert('Notice', 'Unable to automatically open the PDF. Please check your browser popup blocker.');
@@ -61,11 +114,48 @@ export default function PrescriptionSlipModal({
       maxHeight="95%"
       footer={
         <View style={styles.footerBar}>
-          <Button title="Download / print PDF" icon="print" variant="outline" onPress={handlePrint} />
+          <Button
+            title={printMode === 'wet' ? 'Download / print PDF (Wet)' : 'Download / print PDF'}
+            icon="print"
+            variant="outline"
+            onPress={handlePrint}
+          />
           <Button title="Close" onPress={onClose} />
         </View>
       }
     >
+      {/* Print & Signing Mode Selector */}
+      <View style={styles.printModeCard}>
+        <View style={styles.printModeHeader}>
+          <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+            Signature & Print Mode
+          </ThemedText>
+          {printMode === 'wet' ? (
+            <Badge label="Wet Signature (Pen)" variant="neutral" icon="pencil" />
+          ) : (
+            <Badge label="E-Signed PDF" variant="success" icon="check" />
+          )}
+        </View>
+
+        <SegmentedControl
+          options={PRINT_OPTIONS}
+          value={printMode}
+          onChange={handleModeChange}
+        />
+
+        {hasDangerousDrug ? (
+          <View style={styles.pdeaWarningBox} testID="pdea-warning-badge">
+            <View style={styles.pdeaWarningHeader}>
+              <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+              <Badge label="PDEA S2 Regulated Substance" variant="warning" />
+            </View>
+            <ThemedText variant="captionBold" color={theme.colors.warningText}>
+              PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations.
+            </ThemedText>
+          </View>
+        ) : null}
+      </View>
+
       {/* Clinic Letterhead */}
       <View style={styles.letterhead}>
         <ThemedText variant="display" color={theme.colors.primary}>
@@ -534,5 +624,32 @@ const styles = StyleSheet.create({
   },
   portalLabel: {
     marginTop: theme.spacing.xs,
+  },
+  printModeCard: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.lg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  printModeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pdeaWarningBox: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  pdeaWarningHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
 });

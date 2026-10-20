@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.DTOs;
 
@@ -28,7 +29,9 @@ public sealed record StaffMemberDto(
     string? TemporaryPassword = null,
     string? PhilHealthPan = null,
     IReadOnlyList<Guid>? AssignedRoomIds = null,
-    IReadOnlyList<string>? AssignedRoomNames = null)
+    IReadOnlyList<string>? AssignedRoomNames = null,
+    string? SignatureSpecimen = null,
+    SignatureMode DefaultSignatureMode = SignatureMode.ESignatureSpecimen)
 {
     public StaffMemberDto(
         Guid Id,
@@ -41,7 +44,9 @@ public sealed record StaffMemberDto(
         string FirstName,
         string LastName,
         IReadOnlyList<Guid>? AssignedRoomIds = null,
-        IReadOnlyList<string>? AssignedRoomNames = null)
+        IReadOnlyList<string>? AssignedRoomNames = null,
+        string? SignatureSpecimen = null,
+        SignatureMode DefaultSignatureMode = SignatureMode.ESignatureSpecimen)
         : this(
             Id,
             TenantId: UserId,
@@ -66,7 +71,9 @@ public sealed record StaffMemberDto(
             TemporaryPassword: null,
             PhilHealthPan: null,
             AssignedRoomIds: AssignedRoomIds,
-            AssignedRoomNames: AssignedRoomNames)
+            AssignedRoomNames: AssignedRoomNames,
+            SignatureSpecimen: SignatureSpecimen,
+            DefaultSignatureMode: DefaultSignatureMode)
     {
     }
 
