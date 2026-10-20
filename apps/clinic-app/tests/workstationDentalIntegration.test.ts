@@ -343,25 +343,28 @@ describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration
       );
     });
 
-    test('3.2 renderLongitudinalChartContent conditionally includes Dental tab and dispatches DentalChartTab', () => {
+    test('3.2 renderLongitudinalChartContent conditionally includes Dental tab and dispatches read-only DentalChartTab', () => {
       const filePath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
       const content = fs.readFileSync(filePath, 'utf8');
 
       // Verify conditional tab inclusion
       expect(content).toContain("...(isDentalEnabled ? [{ id: 'dental', label: 'Dental', icon: 'medical' }] : [])");
 
-      // Verify DentalChartTab is rendered when activeChartTab === 'dental'
+      // Verify DentalChartTab is rendered read-only when activeChartTab === 'dental'
       expect(content).toContain("activeChartTab === 'dental'");
       expect(content).toContain('<DentalChartTab');
-      expect(content).toContain('onOrderProcedure=');
+      const dentalTabBlockMatch = content.match(/activeChartTab === 'dental' && \([\s\S]*?\/>/);
+      expect(dentalTabBlockMatch).toBeTruthy();
+      expect(dentalTabBlockMatch![0]).not.toContain('onOrderProcedure=');
+      expect(dentalTabBlockMatch![0]).not.toContain('onRemoveCondition=');
     });
   });
 
   // =========================================================================
-  // 4. Instant Patient Chart Dental Sync (R1)
+  // 4. Read-Only Left-Pane History Until Encounter Signing Sync (R1)
   // =========================================================================
-  describe('4. Instant Patient Chart Dental Sync (R1)', () => {
-    test('4.1 Consultations.screen.tsx syncs dentalTeeth immediately on handleDentalChartChange with multi-condition records', () => {
+  describe('4. Read-Only Left-Pane History Until Encounter Signing Sync (R1)', () => {
+    test('4.1 Consultations.screen.tsx keeps left-pane patientChart.dentalTeeth read-only during unsigned encounter and syncs on encounter signing', () => {
       const filePath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
       const content = fs.readFileSync(filePath, 'utf8');
 
@@ -371,8 +374,30 @@ describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration
       expect(content).toContain('syncedTeeth: DentalToothRecord[]');
       expect(content).toContain('dentalTeeth: syncedTeeth');
       expect(content).toContain('onChange={handleDentalChartChange}');
+      expect(content).toContain('refreshPatientChart(selectedPatient.patientId)');
 
-      // 2. Functional execution with multi-condition records emitted by InlineDentalChartCard
+      // Verify handleDentalChartChange only updates right-side dentalChart state while unsigned
+      const handlerMatch = content.match(/const handleDentalChartChange = useCallback\([\s\S]*?\n  \}, \[\]\);/);
+      expect(handlerMatch).toBeTruthy();
+      expect(handlerMatch![0]).toContain('setDentalChart(nextChart as any)');
+      expect(handlerMatch![0]).not.toContain('setPatientChart');
+
+      // 2. Functional execution: Left-pane patientChart.dentalTeeth stays historical while unsigned, then updates on sign
+      const historicalTeeth: DentalToothRecord[] = [
+        {
+          id: 'rec-16-filled',
+          tenantId: 'tenant-1',
+          clinicId: 'clinic-1',
+          patientId: 'pat-integration-1',
+          toothNumber: 16,
+          status: 'Filled',
+          surface: 'O',
+          notes: 'Existing composite',
+          createdAt: '2026-10-18T10:00:00Z',
+          recordedBy: 'Dr. Jane Dela Cruz',
+        },
+      ];
+
       const emittedMultiFromInlineDentalChart: Record<number, DentalToothRecord[]> = {
         16: [
           {
@@ -418,7 +443,7 @@ describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration
 
       let patientChartState: any = {
         patientId: 'pat-integration-1',
-        dentalTeeth: [],
+        dentalTeeth: [...historicalTeeth],
       };
       let dentalChartState: any = {};
 
@@ -426,11 +451,21 @@ describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration
       const patientRecord = { id: 'pat-integration-1', tenantId: 'tenant-1', clinicId: 'clinic-1' };
       const settings = { tenantId: 'tenant-1', clinicId: 'clinic-1' };
 
-      // Exact functional handleDentalChartChange matching Consultations.screen.tsx
+      // Step A: Unsigned encounter edits only update right-side dentalChartState
       const handleDentalChartChange = (nextChart: Record<number, any>) => {
         dentalChartState = nextChart;
+      };
+
+      handleDentalChartChange(emittedMultiFromInlineDentalChart);
+
+      // Left-side patientChartState.dentalTeeth MUST remain the historical read-only snapshot before signing!
+      expect(patientChartState.dentalTeeth.length).toBe(1);
+      expect(patientChartState.dentalTeeth[0].id).toBe('rec-16-filled');
+
+      // Step B: Doctor signs the encounter -> synchronizes patientChartState.dentalTeeth
+      const syncOnEncounterSign = () => {
         const targetPatientId = selectedPatient?.patientId || patientRecord?.id || '';
-        const multiMap = normalizeTeethToMultiRecord(nextChart as any);
+        const multiMap = normalizeTeethToMultiRecord(dentalChartState as any);
         const syncedTeeth: DentalToothRecord[] = Object.values(multiMap).flat().map((rec) => ({
           ...rec,
           tenantId: rec.tenantId || settings?.tenantId || (patientRecord as any)?.tenantId || '',
@@ -445,9 +480,9 @@ describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration
         };
       };
 
-      handleDentalChartChange(emittedMultiFromInlineDentalChart);
+      syncOnEncounterSign();
 
-      // Verify that status is NOT undefined (fixing critical reviewer_1_m4 & challenger_2_m4 defect)
+      // Verify that after signing, patientChartState.dentalTeeth has all 3 records with valid statuses
       expect(patientChartState.dentalTeeth.length).toBe(3);
       expect(patientChartState.dentalTeeth.every((t: any) => t.status !== undefined)).toBe(true);
       expect(patientChartState.dentalTeeth.every((t: any) => t.patientId === 'pat-integration-1')).toBe(true);
