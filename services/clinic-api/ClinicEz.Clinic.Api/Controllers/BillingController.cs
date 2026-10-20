@@ -63,6 +63,26 @@ public sealed class BillingController : ControllerBase
         return Ok(ApiResponse<InvoiceDto>.Success(result, "Invoice generated successfully."));
     }
 
+    [HttpPut("invoices/{id:guid}")]
+    [HasPermission(ClinicPermissions.BillingWrite)]
+    public async Task<ActionResult<ApiResponse<InvoiceDto>>> UpdateInvoice(
+        Guid id,
+        [FromBody] UpdateInvoiceRequest request,
+        CancellationToken ct)
+    {
+        var command = new UpdateInvoiceCommand(
+            id,
+            request.DiscountType,
+            request.DiscountIdNumber,
+            request.CustomDiscountPercentage,
+            request.Notes,
+            request.LineItems
+        );
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<InvoiceDto>.Success(result, "Invoice updated successfully."));
+    }
+
     [HttpPost("invoices/{id:guid}/pay")]
     [HasPermission(ClinicPermissions.BillingWrite)]
     public async Task<ActionResult<ApiResponse<InvoiceDto>>> RecordPayment(

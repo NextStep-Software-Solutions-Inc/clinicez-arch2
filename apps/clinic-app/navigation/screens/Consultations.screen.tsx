@@ -366,6 +366,9 @@ export default function ConsultationsScreen() {
   };
   const [mobileWorkstationView, setMobileWorkstationView] = useState<'soap' | 'chart'>('soap');
   const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
+  const [postEncounterModalVisible, setPostEncounterModalVisible] = useState(false);
+  const [createdInvoiceNumber, setCreatedInvoiceNumber] = useState<string | null>(null);
+  const [createdInvoiceTotal, setCreatedInvoiceTotal] = useState<number | null>(null);
 
   // Multi-Provider Queue Room / Station & Status Filter States (Persistent per staff)
   const staffKey = current?.id ? `clinicez:consultations:${current.id}` : 'clinicez:consultations:default';
@@ -1234,6 +1237,9 @@ export default function ConsultationsScreen() {
     setIsYakapEligible(false);
     setPhilHealthAtc('WALKEDIN');
     setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
+    setCreatedInvoiceNumber(null);
+    setCreatedInvoiceTotal(null);
+    setPostEncounterModalVisible(false);
   };
 
   const handleStartFollowUpEncounter = () => {
@@ -2116,7 +2122,7 @@ export default function ConsultationsScreen() {
       });
     }
     if (billItems.length > 0) {
-      const [, invoiceErr] = await clinicService.createInvoice({
+      const [invoiceResult, invoiceErr] = await clinicService.createInvoice({
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
         queueItemId: selectedPatient.id,
@@ -2127,7 +2133,12 @@ export default function ConsultationsScreen() {
         notes: 'Consultation & procedures bill forwarded to Cashier',
         lineItems: billItems,
       });
-      if (invoiceErr) followUpIssues.push('billing invoice');
+      if (invoiceErr) {
+        followUpIssues.push('billing invoice');
+      } else if (invoiceResult) {
+        setCreatedInvoiceNumber(invoiceResult.invoiceNumber);
+        setCreatedInvoiceTotal(invoiceResult.netAmount);
+      }
     } else {
       followUpIssues.push('billing invoice (no consultation fee is set in the fee schedule)');
     }
@@ -2162,6 +2173,7 @@ export default function ConsultationsScreen() {
       });
       notify.success(successMsg);
     }
+    setPostEncounterModalVisible(true);
   };
 
   const vitalItems = (
@@ -4246,16 +4258,10 @@ export default function ConsultationsScreen() {
                     onPress={handleStartFollowUpEncounter}
                   />
                   <Button
-                    title="Forward to cashier"
+                    title="Forward / Checkout options"
                     icon="billing"
                     variant="success"
-                    onPress={() => {
-                      if (!selectedPatient) return;
-                      navigation.navigate('Billing', {
-                        patientId: selectedPatient.patientId,
-                        patientName: selectedPatient.patientName,
-                      });
-                    }}
+                    onPress={() => setPostEncounterModalVisible(true)}
                   />
                 </View>
               </Card>
@@ -5242,6 +5248,121 @@ export default function ConsultationsScreen() {
             </View>
           </Modal>
         ) : null}
+
+        {/* Post-Encounter Action Dialog */}
+        <Modal
+          visible={postEncounterModalVisible}
+          onClose={() => setPostEncounterModalVisible(false)}
+          title="Encounter Completed"
+          subtitle={selectedPatient ? `Patient: ${selectedPatient.patientName} (${selectedPatient.queueNumber})` : undefined}
+          maxWidth={500}
+        >
+          <View style={styles.postEncounterContainer}>
+            {/* Status notification */}
+            <View style={styles.postEncounterSuccessCard}>
+              <View style={styles.postEncounterSuccessIconRow}>
+                <View style={styles.postEncounterIconWrap}>
+                  <Icon name="checkCircle" size={theme.sizes.iconLg} color={theme.colors.success} />
+                </View>
+                <View style={styles.postEncounterSuccessText}>
+                  <ThemedText variant="bodyBold" color={theme.colors.text}>
+                    Clinical Encounter Signed & Synchronized
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    Clinical notes, prescriptions, and lab orders are securely saved.
+                  </ThemedText>
+                </View>
+              </View>
+
+              {createdInvoiceTotal !== null ? (
+                <View style={styles.postEncounterInvoiceBadge}>
+                  <Icon name="billing" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
+                  <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                    Invoice {createdInvoiceNumber || 'Created'}: ₱{createdInvoiceTotal.toFixed(2)} (Queued for Checkout)
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Next in Queue Section */}
+            {nextEligiblePatient ? (
+              <View style={styles.postEncounterNextQueueCard}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  NEXT PATIENT IN QUEUE
+                </ThemedText>
+                <View style={styles.postEncounterNextPatientRow}>
+                  <View style={styles.postEncounterQueueBadge}>
+                    <ThemedText variant="h3" color={theme.colors.primary}>
+                      {nextEligiblePatient.queueNumber}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.postEncounterNextPatientInfo}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      {nextEligiblePatient.patientName}
+                    </ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      {nextEligiblePatient.chiefComplaint || 'Consultation'} • {nextEligiblePatient.priority}
+                    </ThemedText>
+                  </View>
+                </View>
+                <Button
+                  title={`Call Next Patient (${nextEligiblePatient.queueNumber})`}
+                  icon="phone"
+                  variant="primary"
+                  size="lg"
+                  onPress={() => {
+                    setPostEncounterModalVisible(false);
+                    handleOpenCallModal(nextEligiblePatient);
+                  }}
+                />
+              </View>
+            ) : (
+              <View style={styles.postEncounterEmptyQueueCard}>
+                <Icon name="checkCircle" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  No other patients are currently waiting in this queue.
+                </ThemedText>
+              </View>
+            )}
+
+            {/* Workflow Navigation Options */}
+            <View style={styles.postEncounterOptionsRow}>
+              {prescriptions.length > 0 && (
+                <Button
+                  title="Print Rx Slip"
+                  icon="print"
+                  variant="outline"
+                  size="sm"
+                  onPress={() => {
+                    setPostEncounterModalVisible(false);
+                    handleOpenPrescriptionSlip();
+                  }}
+                />
+              )}
+              <Button
+                title="Go to Billing Screen"
+                icon="billing"
+                variant="outline"
+                size="sm"
+                onPress={() => {
+                  setPostEncounterModalVisible(false);
+                  if (selectedPatient) {
+                    navigation.navigate('Billing', {
+                      patientId: selectedPatient.patientId,
+                      patientName: selectedPatient.patientName,
+                    });
+                  }
+                }}
+              />
+              <Button
+                title="Close"
+                variant="ghost"
+                size="sm"
+                onPress={() => setPostEncounterModalVisible(false)}
+              />
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </ResponsiveLayout>
   );
@@ -5972,5 +6093,84 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.primaryLight,
+  },
+  postEncounterContainer: {
+    gap: theme.spacing.md,
+  },
+  postEncounterSuccessCard: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.sm,
+  },
+  postEncounterSuccessIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  postEncounterIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postEncounterSuccessText: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
+  postEncounterInvoiceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: theme.radii.sm,
+  },
+  postEncounterNextQueueCard: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: 1.5,
+    borderColor: theme.colors.primary,
+    gap: theme.spacing.sm,
+  },
+  postEncounterNextPatientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  postEncounterQueueBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postEncounterNextPatientInfo: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
+  postEncounterEmptyQueueCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.sm,
+  },
+  postEncounterOptionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+    marginTop: theme.spacing.xs,
   },
 });

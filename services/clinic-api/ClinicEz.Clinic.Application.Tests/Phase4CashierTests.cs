@@ -59,15 +59,26 @@ public class LocalCashierOwnershipTests
         LineItems: new List<CreateInvoiceLineItemRequest> { new(null, "CONS-GEN", "General Consultation", "Consultation", 500m, 1) });
 
     private async Task<(Invoice Invoice, ApplicationDbContext Db, IUnitOfWork Uow, IBillingRequestPublisher Billing)> CreateInvoiceAsync(
-        bool billingAcceptsRequest, DiscountType discount = DiscountType.None)
+        bool billingAcceptsRequest, DiscountType discount = DiscountType.None, string cashierMode = "CashierCounter")
     {
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        db.ClinicSettings.Add(new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Tenant,
+            ClinicId = _clinicId,
+            ClinicName = "Test Clinic",
+            CashierMode = cashierMode
+        });
+        await db.SaveChangesAsync();
+
         var billing = Substitute.For<IBillingRequestPublisher>();
         billing.PublishInvoiceRequestedAsync(Arg.Any<BillingInvoiceRequestedPayload>(), Arg.Any<CancellationToken>()).Returns(billingAcceptsRequest);
         var handler = new CreateInvoiceCommandHandler(
             TestDbHelper.CreateRepository<Invoice>(db, sieve),
             TestDbHelper.CreateRepository<ClinicPatient>(db, sieve),
             TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve),
+            TestDbHelper.CreateRepository<ClinicSettings>(db, sieve),
             uow,
             _clinicContext,
             billing);
@@ -249,5 +260,49 @@ public class LocalCashierOwnershipTests
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         json.RootElement.GetProperty("errors")[0].GetProperty("code").GetString().Should().Be("CONFLICT");
+    }
+
+    [Fact]
+    public async Task When_In_ClinicDesk_Mode_Invoice_Is_Not_Sent_To_Billing_And_Local_Payment_Succeeds()
+    {
+        var (invoice, db, uow, billing) = await CreateInvoiceAsync(billingAcceptsRequest: true, cashierMode: "ClinicDesk");
+
+        invoice.BillingRequestedAt.Should().BeNull("ClinicDesk mode keeps invoices local");
+        await billing.DidNotReceiveWithAnyArgs().PublishInvoiceRequestedAsync(default!, default);
+
+        var result = await PaymentHandler(db, uow, _clinicContext)
+            .Handle(new RecordPaymentCommand(invoice.Id, 500m, PaymentMethod.Cash), CancellationToken.None);
+
+        result.Status.Should().Be(InvoiceStatus.Paid);
+        result.AmountPaid.Should().Be(500m);
+        result.Payments.Should().HaveCount(1);
+        result.Payments[0].PaymentNumber.Should().StartWith("OR-");
+    }
+
+    [Fact]
+    public async Task UpdateInvoice_WhenDraft_UpdatesDiscountAndRecalculatesNetAmount()
+    {
+        var (invoice, db, uow, billing) = await CreateInvoiceAsync(billingAcceptsRequest: true, cashierMode: "ClinicDesk");
+
+        var updateHandler = new UpdateInvoiceCommandHandler(
+            TestDbHelper.CreateRepository<Invoice>(db, Substitute.For<ISieveProcessor>()),
+            TestDbHelper.CreateRepository<ClinicPatient>(db, Substitute.For<ISieveProcessor>()),
+            TestDbHelper.CreateRepository<ConsultationEncounter>(db, Substitute.For<ISieveProcessor>()),
+            TestDbHelper.CreateRepository<ClinicSettings>(db, Substitute.For<ISieveProcessor>()),
+            uow,
+            _clinicContext,
+            billing);
+
+        var updated = await updateHandler.Handle(new UpdateInvoiceCommand(
+            invoice.Id,
+            DiscountType.SeniorCitizen,
+            "OSCA-12345",
+            Notes: "Updated with Senior Citizen discount"), CancellationToken.None);
+
+        updated.DiscountType.Should().Be(DiscountType.SeniorCitizen);
+        updated.DiscountPercentage.Should().Be(20m);
+        updated.DiscountAmount.Should().Be(100m);
+        updated.NetAmount.Should().Be(400m);
+        updated.BalanceDue.Should().Be(400m);
     }
 }

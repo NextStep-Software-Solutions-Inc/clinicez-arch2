@@ -193,7 +193,9 @@ State as read from the working tree, not a promise.
 | billing-api **Infrastructure** (EF `DbContext`, migrations, DI, interop wiring) | Not present yet (empty project) |
 | billing-api **Api** (`Program`, REST endpoints, token validation, health) | Not present yet (empty project) |
 | billing-api tests | Not present yet (empty project) |
-| Clinic requesting an invoice from billing-api | **Not implemented.** Clinic keeps its own legacy cashiering; nothing sends `billing.invoice.requested` from clinic-api |
+| Clinic requesting an invoice from billing-api | **Implemented.** Configured via `ClinicSettings.CashierMode` (`ClinicDesk` vs `CashierCounter`). In `CashierCounter` mode, `CreateInvoiceCommand` and `UpdateInvoiceCommand` dispatch `billing.invoice.requested` to `billing-api`. In `ClinicDesk` mode, invoices remain local for in-clinic cashiering. |
+| Clinic desk SOA review & update (`UpdateInvoiceCommand`) | **Implemented.** `PUT api/v1/billing/invoices/{id}` allows editing line items, applying Senior Citizen/PWD statutory discounts, and re-publishing to `billing-api` when counter-owned. |
+| Post-Encounter Workstation Action Dialog | **Implemented.** Non-disruptive post-sign modal in `Consultations.screen.tsx` prioritizing "Call Next Patient" while offering direct navigation to billing and prescription printing. |
 | Portal rollup | Entities exist (`FinanceDailySummary`, `FinanceInvoiceRecord`: per facility, day, source type; idempotent per invoice). **No handler** is registered for `billing.invoice.paid` or `billing.invoice.voided` in portal-api, so nothing fills the rollup yet |
 | `daybook.closed` summary (in the original plan) | Not implemented |
 | Cashier web screen (`apps/cashier-app`) | Not present; compose references a `cashier-web` image published "once apps/cashier-app lands" |

@@ -34,6 +34,8 @@ import {
   PaymentMethod,
   ClinicServiceItem,
   PatientQueueItem,
+  InvoiceRecord,
+  ClinicSettingsRecord,
 } from '../../services/clinicService';
 import { printReceiptDialog } from '../../utils/printHelper';
 
@@ -57,6 +59,8 @@ interface BillingPatient {
   doctorName?: string;
   isAlreadyBilled?: boolean;
   existingInvoiceNumber?: string;
+  hasOpenSoa?: boolean;
+  activeInvoice?: InvoiceRecord;
 }
 
 interface Remittance {
@@ -100,8 +104,13 @@ function formatPeso(value: number): string {
   return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function toBillingPatient(item: PatientQueueItem, billedMap?: Map<string, string>): BillingPatient {
-  const invNum = billedMap?.get(item.id);
+function toBillingPatient(
+  item: PatientQueueItem,
+  billedMap?: Map<string, string>,
+  openSoaMap?: Map<string, InvoiceRecord>
+): BillingPatient {
+  const openInv = openSoaMap?.get(item.id) || openSoaMap?.get(item.patientId);
+  const paidInvNum = billedMap?.get(item.id) || billedMap?.get(item.patientId);
   return {
     key: item.id,
     patientId: item.patientId,
@@ -110,8 +119,10 @@ function toBillingPatient(item: PatientQueueItem, billedMap?: Map<string, string
     queueNumber: item.queueNumber,
     doctorId: item.doctorId,
     doctorName: item.doctorName,
-    isAlreadyBilled: Boolean(invNum),
-    existingInvoiceNumber: invNum,
+    hasOpenSoa: Boolean(openInv),
+    activeInvoice: openInv,
+    isAlreadyBilled: !openInv && Boolean(paidInvNum),
+    existingInvoiceNumber: openInv ? openInv.invoiceNumber : paidInvNum,
   };
 }
 
@@ -126,7 +137,10 @@ export default function BillingScreen() {
 
   const [services, setServices] = useState<ClinicServiceItem[]>([]);
   const [patients, setPatients] = useState<BillingPatient[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
+  const [clinicSettings, setClinicSettings] = useState<ClinicSettingsRecord | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<BillingPatient | null>(null);
+  const [activeInvoice, setActiveInvoice] = useState<InvoiceRecord | null>(null);
   const [allowDuplicate, setAllowDuplicate] = useState(false);
   const [remittance, setRemittance] = useState<Remittance | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,11 +165,18 @@ export default function BillingScreen() {
 
   const loadInitialData = useCallback(async () => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const [[servicesData, svcErr], [queueData, qErr], [eodData, eodErr], [invoicesData]] = await Promise.all([
+    const [
+      [servicesData, svcErr],
+      [queueData, qErr],
+      [eodData, eodErr],
+      [invoicesData],
+      [settingsData],
+    ] = await Promise.all([
       clinicService.getServices(),
       clinicService.getQueue(),
       clinicService.getDailyEodReport(),
       clinicService.getInvoices(todayStr),
+      clinicService.getSettings(),
     ]);
 
     const errors: LoadErrors = {};
@@ -166,19 +187,27 @@ export default function BillingScreen() {
       setServices(servicesData ?? []);
     }
 
+    const allInvoices = invoicesData ?? [];
+    setInvoices(allInvoices);
+    if (settingsData) setClinicSettings(settingsData);
+
     const billedMap = new Map<string, string>();
-    if (invoicesData) {
-      for (const inv of invoicesData) {
-        if (inv.status !== 'Voided' && inv.queueItemId) {
-          billedMap.set(inv.queueItemId, inv.invoiceNumber);
-        }
+    const openSoaMap = new Map<string, InvoiceRecord>();
+
+    for (const inv of allInvoices) {
+      if (inv.status === 'Voided') continue;
+      const key = inv.queueItemId || inv.patientId;
+      if (inv.status === 'Draft' || inv.status === 'PartiallyPaid') {
+        openSoaMap.set(key, inv);
+      } else if (inv.status === 'Paid') {
+        billedMap.set(key, inv.invoiceNumber);
       }
     }
 
     if (qErr) {
       errors.queue = qErr.message || 'Unable to load today\'s queue.';
     } else {
-      setPatients((queueData ?? []).map((item) => toBillingPatient(item, billedMap)));
+      setPatients((queueData ?? []).map((item) => toBillingPatient(item, billedMap, openSoaMap)));
     }
 
     if (eodErr || !eodData) {
@@ -201,22 +230,56 @@ export default function BillingScreen() {
     loadInitialData();
   }, [loadInitialData]);
 
+  const handleSelectPatient = useCallback((p: BillingPatient) => {
+    setSelectedPatient(p);
+    setLastReceipt(null);
+    setAllowDuplicate(false);
+
+    if (p.activeInvoice) {
+      setActiveInvoice(p.activeInvoice);
+      setLineItems(
+        p.activeInvoice.lineItems.map(l => ({
+          id: l.id || `li-${Date.now()}-${Math.random()}`,
+          code: l.itemCode || '',
+          name: l.description,
+          category: l.category,
+          price: l.unitPrice,
+          qty: l.quantity,
+        }))
+      );
+      setDiscountType(p.activeInvoice.discountType || 'None');
+      setDiscountId(p.activeInvoice.discountIdNumber || '');
+    } else {
+      setActiveInvoice(null);
+      setLineItems([]);
+      setDiscountType('None');
+      setDiscountId('');
+    }
+  }, []);
+
   useEffect(() => {
     if (loading) return;
     const params = route.params as { patientId?: string; patientName?: string } | undefined;
     if (params?.patientId) {
       const p = patients.find((x) => x.patientId === params.patientId);
       if (p) {
-        setSelectedPatient(p);
+        handleSelectPatient(p);
       } else if (params.patientName) {
-        setSelectedPatient({
+        const matchingInv = invoices.find(
+          inv => inv.patientId === params.patientId && (inv.status === 'Draft' || inv.status === 'PartiallyPaid')
+        );
+        const newP: BillingPatient = {
           key: `patient-${params.patientId}`,
           patientId: params.patientId,
           patientName: params.patientName,
-        });
+          hasOpenSoa: Boolean(matchingInv),
+          activeInvoice: matchingInv,
+          existingInvoiceNumber: matchingInv?.invoiceNumber,
+        };
+        handleSelectPatient(newP);
       }
     }
-  }, [route.params, patients, loading]);
+  }, [route.params, patients, loading, invoices, handleSelectPatient]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -317,48 +380,77 @@ export default function BillingScreen() {
       return;
     }
 
-    if (selectedPatient.isAlreadyBilled && !allowDuplicate) {
-      Alert.alert(
-        'Duplicate invoice blocked',
-        `Invoice #${selectedPatient.existingInvoiceNumber} has already been issued for this queue visit. To bill additional services, check 'Authorize additional / duplicate invoice' below.`,
-      );
-      return;
-    }
-
     setIsProcessing(true);
 
-    const invoicePayload = {
-      patientId: selectedPatient.patientId,
-      patientName: selectedPatient.patientName,
-      queueItemId: selectedPatient.queueItemId,
-      attendingDoctorId: selectedPatient.doctorId,
-      attendingDoctorName: selectedPatient.doctorName,
-      discountType,
-      discountIdNumber: discountId,
-      notes: `Settled via ${paymentMethod}`,
-      allowDuplicate,
-      lineItems: lineItems.map(l => ({
-        serviceItemId: undefined,
-        itemCode: l.code,
-        description: l.name,
-        category: l.category,
-        unitPrice: l.price,
-        quantity: l.qty,
-      })),
-    };
+    let invoiceToPayId: string;
+    let orNumber: string;
 
-    const [invoice, invErr] = await clinicService.createInvoice(invoicePayload);
+    if (activeInvoice) {
+      invoiceToPayId = activeInvoice.id;
+      orNumber = activeInvoice.invoiceNumber;
 
-    if (invErr || !invoice) {
-      setIsProcessing(false);
-      Alert.alert('Invoice not created', invErr?.message || 'The invoice could not be created. Please try again.');
-      return;
+      const [updatedInvoice, updateErr] = await clinicService.updateInvoice(activeInvoice.id, {
+        discountType,
+        discountIdNumber: discountId,
+        notes: `Settled via ${paymentMethod}`,
+        lineItems: lineItems.map(l => ({
+          itemCode: l.code,
+          description: l.name,
+          category: l.category,
+          unitPrice: l.price,
+          quantity: l.qty,
+        })),
+      });
+
+      if (updateErr || !updatedInvoice) {
+        setIsProcessing(false);
+        Alert.alert('Invoice update failed', updateErr?.message || 'The Statement of Account could not be updated. Please try again.');
+        return;
+      }
+    } else {
+      if (selectedPatient.isAlreadyBilled && !allowDuplicate) {
+        setIsProcessing(false);
+        Alert.alert(
+          'Duplicate invoice blocked',
+          `Invoice #${selectedPatient.existingInvoiceNumber} has already been issued for this queue visit. To bill additional services, check 'Authorize additional / duplicate invoice' below.`,
+        );
+        return;
+      }
+
+      const invoicePayload = {
+        patientId: selectedPatient.patientId,
+        patientName: selectedPatient.patientName,
+        queueItemId: selectedPatient.queueItemId,
+        attendingDoctorId: selectedPatient.doctorId,
+        attendingDoctorName: selectedPatient.doctorName,
+        discountType,
+        discountIdNumber: discountId,
+        notes: `Settled via ${paymentMethod}`,
+        allowDuplicate,
+        lineItems: lineItems.map(l => ({
+          serviceItemId: undefined,
+          itemCode: l.code,
+          description: l.name,
+          category: l.category,
+          unitPrice: l.price,
+          quantity: l.qty,
+        })),
+      };
+
+      const [invoice, invErr] = await clinicService.createInvoice(invoicePayload);
+
+      if (invErr || !invoice) {
+        setIsProcessing(false);
+        Alert.alert('Invoice not created', invErr?.message || 'The invoice could not be created. Please try again.');
+        return;
+      }
+
+      invoiceToPayId = invoice.id;
+      orNumber = invoice.invoiceNumber;
     }
 
-    let orNumber = invoice.invoiceNumber;
-
     if (netAmount > 0) {
-      const [paidInvoice, payErr] = await clinicService.recordPayment(invoice.id, {
+      const [paidInvoice, payErr] = await clinicService.recordPayment(invoiceToPayId, {
         amount: netAmount,
         method: paymentMethod,
         referenceNumber: referenceNumber || undefined,
@@ -369,7 +461,7 @@ export default function BillingScreen() {
         setIsProcessing(false);
         Alert.alert(
           'Payment not recorded',
-          `Invoice ${invoice.invoiceNumber} was created but the payment could not be recorded: ${
+          `Invoice ${orNumber} was prepared but the payment could not be recorded: ${
             payErr?.message || 'unknown error'
           }. Check the invoice before trying again to avoid billing twice.`,
         );
@@ -408,6 +500,7 @@ export default function BillingScreen() {
 
     // Reset billing form to prevent accidental duplicate submission
     setSelectedPatient(null);
+    setActiveInvoice(null);
     setLineItems([]);
     setCashTendered('');
     setReferenceNumber('');
@@ -477,20 +570,21 @@ export default function BillingScreen() {
         <View style={styles.chipRow}>
           {patientChoices.map(p => {
             const isSelected = selectedPatient?.key === p.key;
+            let statusTag = '';
+            if (p.hasOpenSoa) {
+              statusTag = ' (SOA Ready)';
+            } else if (p.isAlreadyBilled) {
+              statusTag = ' (Paid)';
+            }
             return (
               <Button
                 key={p.key}
                 size="sm"
-                variant={isSelected ? 'primary' : p.isAlreadyBilled ? 'outline' : 'secondary'}
+                variant={isSelected ? 'primary' : p.hasOpenSoa ? 'secondary' : p.isAlreadyBilled ? 'outline' : 'secondary'}
                 title={
-                  (p.queueNumber ? `${p.queueNumber} · ${p.patientName}` : p.patientName) +
-                  (p.isAlreadyBilled ? ' (Billed)' : '')
+                  (p.queueNumber ? `${p.queueNumber} · ${p.patientName}` : p.patientName) + statusTag
                 }
-                onPress={() => {
-                  setSelectedPatient(p);
-                  setLastReceipt(null);
-                  setAllowDuplicate(false);
-                }}
+                onPress={() => handleSelectPatient(p)}
               />
             );
           })}
@@ -540,6 +634,41 @@ export default function BillingScreen() {
         icon="receipt"
         rightAction={<Badge label={`${lineItems.length}`} variant="neutral" />}
       />
+
+      {activeInvoice && (
+        <View style={styles.soaHeaderBanner}>
+          <Icon name="receipt" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+          <View style={styles.flexFill}>
+            <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+              Statement of Account: #{activeInvoice.invoiceNumber}
+            </ThemedText>
+            <ThemedText variant="caption" color={theme.colors.primaryDark}>
+              {activeInvoice.attendingDoctorName ? `Attending: Dr. ${activeInvoice.attendingDoctorName} • ` : ''}
+              Status: {activeInvoice.status}
+            </ThemedText>
+          </View>
+          <Badge
+            label={activeInvoice.status === 'Draft' ? 'Draft SOA' : activeInvoice.status}
+            variant={activeInvoice.status === 'Draft' ? 'warning' : 'info'}
+            size="sm"
+          />
+        </View>
+      )}
+
+      {activeInvoice?.billingRequestedAt && (
+        <View style={styles.cashierCounterBanner}>
+          <Icon name="clinic" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
+          <View style={styles.flexFill}>
+            <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
+              Dispatched to Central Cashier Station
+            </ThemedText>
+            <ThemedText variant="caption" color={theme.colors.emergencyText}>
+              This invoice was routed to the central cashier counter (Cashier App). Official receipts and cash collections should be processed at the cashier station.
+            </ThemedText>
+          </View>
+        </View>
+      )}
+
       {lineItems.length === 0 ? (
         <ThemedText variant="body" color={theme.colors.textMuted}>
           No items yet. Add a service from the catalog below.
@@ -700,22 +829,22 @@ export default function BillingScreen() {
         </ThemedText>
       </View>
 
-      {selectedPatient?.isAlreadyBilled && (
+      {selectedPatient?.isAlreadyBilled && !activeInvoice && (
         <View style={styles.duplicateWarningBox}>
           <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
           <View style={styles.flexFill}>
             <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
-              Patient Already Billed
+              Patient Already Billed & Settled
             </ThemedText>
             <ThemedText variant="caption" color={theme.colors.emergencyText}>
-              Invoice #{selectedPatient.existingInvoiceNumber} was already issued for this encounter today.
+              Invoice #{selectedPatient.existingInvoiceNumber} was already issued and paid for this encounter today.
             </ThemedText>
             <Pressable
               onPress={() => setAllowDuplicate((prev) => !prev)}
               style={styles.overrideCheck}
             >
               <ThemedText variant="captionBold" color={allowDuplicate ? theme.colors.emergencyText : theme.colors.primary}>
-                {allowDuplicate ? '[Authorized] Duplicate billing permitted' : 'Authorize additional / duplicate invoice'}
+                {allowDuplicate ? '[Authorized] Additional billing permitted' : 'Authorize additional / duplicate invoice'}
               </ThemedText>
             </Pressable>
           </View>
@@ -726,9 +855,17 @@ export default function BillingScreen() {
         variant="success"
         size="lg"
         icon="check"
-        title={`Collect ${formatPeso(netAmount)} and issue receipt`}
+        title={
+          activeInvoice
+            ? `Settle SOA (${formatPeso(netAmount)}) and issue receipt`
+            : `Collect ${formatPeso(netAmount)} and issue receipt`
+        }
         loading={isProcessing}
-        disabled={!selectedPatient || lineItems.length === 0 || (Boolean(selectedPatient.isAlreadyBilled) && !allowDuplicate)}
+        disabled={
+          !selectedPatient ||
+          lineItems.length === 0 ||
+          (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate)
+        }
         onPress={handleSettlePayment}
       />
     </Card>
@@ -853,5 +990,27 @@ const styles = StyleSheet.create({
   overrideCheck: {
     marginTop: theme.spacing.xs,
     paddingVertical: theme.spacing.xs,
+  },
+  soaHeaderBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  cashierCounterBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.emergencySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
   },
 });

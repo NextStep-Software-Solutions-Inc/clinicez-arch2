@@ -107,6 +107,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
   const [preferredChartLayout, setPreferredChartLayout] = useState<'modal' | 'split' | 'drawer'>('modal');
   const [specialtyMode, setSpecialtyMode] = useState<'Medical' | 'Dental' | 'Multi-Specialty'>('Medical');
   const [enableDentalModule, setEnableDentalModule] = useState(false);
+  const [cashierMode, setCashierMode] = useState<'ClinicDesk' | 'CashierCounter'>('ClinicDesk');
 
   // Modals for sub-components
   const [showAddStaffModal, setShowAddStaffModal] = useState<boolean>(() => initialIntent.shouldOpenAddStaff);
@@ -176,6 +177,9 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       if (settingsData.enableDentalModule !== undefined) {
         setEnableDentalModule(settingsData.enableDentalModule);
       }
+      if (settingsData.cashierMode) {
+        setCashierMode(settingsData.cashierMode as 'ClinicDesk' | 'CashierCounter');
+      }
     }
 
     setStaffLoadError(staffErr ? staffErr.message || 'Unable to load staff.' : null);
@@ -235,6 +239,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       preferredChartLayout,
       specialtyMode,
       enableDentalModule: specialtyMode === 'Dental' ? true : enableDentalModule,
+      cashierMode,
     });
     setSavingSettings(false);
 
@@ -499,6 +504,8 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             setSpecialtyMode={setSpecialtyMode}
             enableDentalModule={enableDentalModule}
             setEnableDentalModule={setEnableDentalModule}
+            cashierMode={cashierMode}
+            setCashierMode={setCashierMode}
             onSettingsUpdated={setSettings}
           />
         )}
