@@ -2261,6 +2261,10 @@ export const clinicService = {
     return clinicApiClient.post<BulkImportResult>('/services/bulk-import', { items });
   },
 
+  async seedDentalServices() {
+    return clinicApiClient.post<ClinicServiceItem[]>('/services/seed-dental');
+  },
+
   // Procedures & Nursing Station
   async getProcedures(patientId?: string, status?: ProcedureStatus, date?: string) {
     const params = new URLSearchParams();

@@ -9,7 +9,10 @@ public sealed class ClinicServiceItem : BaseEntity
     public Guid ClinicId { get; set; }
     public required string Code { get; set; }
     public required string Name { get; set; }
-    public required string Category { get; set; } // Consultation, Procedure, NursingService, Diagnostic, Supply
+    /// <summary>
+    /// Service category: "Consultation", "Procedure", "NursingService", "Diagnostic", "Supply", or "Dental".
+    /// </summary>
+    public required string Category { get; set; }
     public decimal StandardPrice { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;

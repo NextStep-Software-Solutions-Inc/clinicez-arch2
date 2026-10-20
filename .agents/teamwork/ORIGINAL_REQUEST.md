@@ -1233,6 +1233,84 @@ Reference skills:
 - [ ] UI labels are concise and free of technical jargon; existing Room assignment, Prescriptions, Certificates, and Lab Orders work seamlessly for dental encounters.
 
 
+## 2026-10-20T02:05:39Z
+
+Implement first-class Dental Clinic support within the ClinicEZ Service Catalog across `services/clinic-api` and `apps/clinic-app`, providing canonical dental service presets, specialty-aware auto-seeding, and seamless ordering integration with the dental chart.
+
+Working directory: /Users/macuser/projects/github/nextstep/clinicez-dental-services
+Integrity mode: development
+
+## Reference Skills
+- `.agents/skills/clinicez-ui-ux-expert/SKILL.md`
+
+## Requirements
+
+### R1. Canonical Dental Clinic Service Catalog & Specialty-Aware Seeding (`services/clinic-api`)
+- Define canonical Philippine primary care dental service catalog defaults in `services/clinic-api/ClinicEz.Clinic.Application/Features/ServicesCatalog/Common/DentalCatalogDefaults.cs`:
+  - `DENT-CONS`: Dental Consultation & Oral Examination (₱500, Category: `Dental`)
+  - `DENT-CLEAN`: Oral Prophylaxis / Dental Cleaning (₱850, Category: `Dental`)
+  - `DENT-FILL-COMP`: Composite Light-Cure Tooth Restoration (₱950, Category: `Dental`)
+  - `DENT-EXT-SIMPLE`: Tooth Extraction - Simple Exodontia (₱1,000, Category: `Dental`)
+  - `DENT-EXT-SURG`: Surgical Odontectomy - Impacted Third Molar (₱3,500, Category: `Dental`)
+  - `DENT-SEALANT`: Pit and Fissure Sealant (₱600, Category: `Dental`)
+  - `DENT-FLUOR`: Topical Fluoride Varnish Application (₱500, Category: `Dental`)
+  - `DENT-XR-PA`: Dental Periapical Radiograph / X-Ray (₱400, Category: `Dental`)
+  - `DENT-RCT`: Root Canal Therapy / Endodontic Treatment (₱4,000, Category: `Dental`)
+  - `DENT-PULP`: Pediatric Pulpotomy (₱1,500, Category: `Dental`)
+- Update `GetClinicServicesQueryHandler` (`services/clinic-api/ClinicEz.Clinic.Application/Features/ServicesCatalog/Queries/GetClinicServicesQuery.cs`) with optional `IRepository<ClinicSettings>? settingsRepo = null`:
+  - When the clinic catalog is empty:
+    - If `ClinicSettings.SpecialtyMode == "Dental"`, auto-seed the canonical dental catalog items.
+    - If `ClinicSettings.SpecialtyMode == "MultiSpecialty"`, auto-seed both medical primary care and dental catalog items.
+    - If `ClinicSettings.SpecialtyMode == "Medical"` (or unspecified), seed general medical defaults.
+- Document and support `Dental` as a standard category on `ClinicServiceItem` entity.
+
+### R2. Idempotent Dental Preset Seeding Command & API Endpoint (`services/clinic-api`)
+- Implement `SeedDentalServicesCommand` in `services/clinic-api/ClinicEz.Clinic.Application/Features/ServicesCatalog/Commands/SeedDentalServicesCommand.cs`:
+  - Checks existing service codes for the clinic.
+  - Adds any missing dental items from `DentalCatalogDefaults` without overwriting or duplicating existing items.
+  - Returns the list of created/existing `ClinicServiceItemDto` items.
+- Expose `POST /api/v1/services/seed-dental` in `services/clinic-api/ClinicEz.Clinic.Api/Controllers/ServicesController.cs` guarded with `[HasPermission(ClinicPermissions.ServicesManage)]`.
+
+### R3. First-Class Dental Category & Preset Seeding UI in Services Catalog (`apps/clinic-app`)
+- In `apps/clinic-app/services/clinicService.ts`, add `seedDentalServices()` invoking `POST /services/seed-dental`.
+- In `apps/clinic-app/components/settings/ServicesCatalogTab.tsx`:
+  - Add `'Dental': 'Dental Services'` to `SERVICE_CATEGORY_LABEL`.
+  - Include `'Dental'` in the category filter chips bar: `(['All', 'Consultation', 'Procedure', 'Diagnostic', 'Dental', 'Medicine', 'NursingService'] as const)`.
+  - Include `'Dental'` in the category selector in both the "Add Service" and "Edit Service" modals.
+  - Add a clean "Add Dental Services" button with loading and success feedback to allow clinic administrators to populate dental services on demand.
+
+### R4. Consultation Odontogram & Order Catalog Modal Integration (`apps/clinic-app`)
+- In `apps/clinic-app/components/consultation/OrderCatalogSearchModal.tsx`:
+  - Add `'Dental'` to `CategoryTab`: `type CategoryTab = 'All' | 'Diagnostic' | 'Procedure' | 'Dental';`.
+  - Add `'Dental'` to `CATEGORY_TABS`.
+  - When `selectedCategory === 'Dental'`, filter items with `item.category.toLowerCase().includes('dental')`.
+  - When `selectedCategory === 'Procedure'`, include items where category contains `procedure`, `nursing`, or `dental`.
+  - When `selectedCategory === 'Dental'` or tooth number is set, provide dental clinical instruction chips (`Local anesthesia (Infiltration)`, `Mandibular nerve block`, `Rubber dam isolation`, `Post-extraction care instructions`, `Suture removal 7 days`).
+- In `apps/clinic-app/navigation/screens/Consultations.screen.tsx`:
+  - Update `procedureCatalog = catalogByCategory('procedure', 'nursingservice', 'dental')` so ordered dental procedures properly match catalog items and flow through to Cashier billing invoice line items upon signing.
+  - In `handleQuickOrderDentalProcedure`, set `orderSearchInitialCategory('Dental')` so clicking "+ Order Dental Procedure" from the tooth odontogram opens directly to the Dental tab.
+
+### R5. Directory Publishing & Regression Integrity
+- Ensure active dental catalog items are included in `PublishClinicToDirectoryCommand` and verified through existing tests.
+- Strictly adhere to `@clinicez/design-tokens` (zero raw hex colors).
+
+## Acceptance Criteria
+
+### Automated Backend Tests
+- [ ] `/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ServicesCatalogTests"` passes with 0 failures, including new tests for dental seeding and idempotent preset addition.
+- [ ] `/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Dental"` passes with 0 failures.
+- [ ] `/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~PublishClinicToDirectoryTests"` passes with 0 failures.
+
+### Automated Frontend Tests
+- [ ] `cd apps/clinic-app && /Users/macuser/.bun/bin/bun test tests/challenger_m1_1_catalog_search.test.ts` passes with 0 failures.
+- [ ] `cd apps/clinic-app && /Users/macuser/.bun/bin/bun test tests/consultationsDynamicOrders.test.ts` passes with 0 failures.
+- [ ] New unit test file `apps/clinic-app/tests/dentalServiceCatalog.test.ts` passes verifying:
+  - `ServicesCatalogTab` displays `Dental Services` category, filter counts, and category chip selection in modal.
+  - `OrderCatalogSearchModal` filters by `'Dental'` category tab and includes dental procedures.
+  - Quick order with tooth number from dental odontogram pre-selects Dental category.
+- [ ] Design token check passes: `cd apps/clinic-app && bun run check-tokens.mjs --strict` or no raw hex colors in modified files.
+- [ ] TypeScript check passes: `cd apps/clinic-app && /Users/macuser/.bun/bin/bun run typecheck:clinic` with 0 errors.
+
 ## 2026-10-20T02:26:31Z
 
 Implement a production-ready, interactive, multi-provider Clinic Calendar feature in apps/clinic-app rooted in @clinicez/design-tokens, featuring Month, Week, Day, and Agenda views, 1-click slot booking, arrival check-in routing, appointment rescheduling, doctor shift overlays, and date-range filtering in services/clinic-api.
