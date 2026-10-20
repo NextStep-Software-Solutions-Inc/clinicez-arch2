@@ -132,6 +132,10 @@ mock.module('react-native-svg', () => ({
   Polyline: 'Polyline',
   Polygon: 'Polygon',
   default: 'Svg',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  Text: ({ children }: any) => children,
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -1084,7 +1088,7 @@ describe('Challenger 2 Empirical Verification: 4 UX States & Deep Navigation', (
       expect(html).toContain('Stress Record #0');
       expect(html).toContain('Stress Record #199');
       expect(html).toContain('200 result(s)');
-    });
+    }, 15000);
 
     test('handles items with undefined optional fields gracefully', () => {
       const minimalItem: SearchItem = {

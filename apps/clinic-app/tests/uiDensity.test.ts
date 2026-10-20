@@ -64,6 +64,12 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('Rect'),
   Line: createMockComponent('Line'),
   default: createMockComponent('Svg'),
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('react-native-safe-area-context', () => ({

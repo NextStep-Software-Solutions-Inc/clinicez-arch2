@@ -5,6 +5,7 @@ import { Navigation } from './navigation/Navigation';
 import { FacilityActivationGate } from './components/FacilityActivationGate';
 import { AuthGate } from './components/AuthGate';
 import { ConnectionGate } from './components/ConnectionGate';
+import { VercelInsights } from './components/analytics/VercelInsights';
 import { loadRuntimeConfig } from './services/runtimeConfig';
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
           </AuthGate>
         </FacilityActivationGate>
       </ConnectionGate>
+      <VercelInsights />
     </SafeAreaProvider>
   );
 }

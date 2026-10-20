@@ -23,6 +23,8 @@
     "@react-navigation/native": "^8.0.0-alpha.28",
     "@react-navigation/native-stack": "^8.0.0-alpha.34",
     "@shared/safe": "workspace:*",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "axios": "^1.18.0",
     "buffer": "^6.0.3",
     "date-fns": "^4.4.0",

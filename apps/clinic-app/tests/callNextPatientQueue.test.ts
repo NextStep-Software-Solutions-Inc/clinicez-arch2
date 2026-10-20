@@ -47,6 +47,12 @@ mock.module('react-native-svg', () => ({
   Rect: 'Rect',
   Line: 'Line',
   default: 'Svg',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 import type {

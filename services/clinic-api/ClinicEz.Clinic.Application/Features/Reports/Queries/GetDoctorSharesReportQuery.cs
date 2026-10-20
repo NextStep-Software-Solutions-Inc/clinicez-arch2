@@ -23,17 +23,20 @@ public class GetDoctorSharesReportQueryHandler : IRequestHandler<GetDoctorShares
     private readonly IRepository<Invoice> _invoiceRepo;
     private readonly IRepository<ClinicalProcedure> _procedureRepo;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<ClinicSettings>? _settingsRepo;
 
     public GetDoctorSharesReportQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
         IRepository<Invoice> invoiceRepo,
         IRepository<ClinicalProcedure> procedureRepo,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<ClinicSettings>? settingsRepo = null)
     {
         _consultationRepo = consultationRepo;
         _invoiceRepo = invoiceRepo;
         _procedureRepo = procedureRepo;
         _clinicContext = clinicContext;
+        _settingsRepo = settingsRepo;
     }
 
     public async Task<DoctorSharesReportDto> Handle(GetDoctorSharesReportQuery request, CancellationToken cancellationToken)
@@ -41,14 +44,28 @@ public class GetDoctorSharesReportQueryHandler : IRequestHandler<GetDoctorShares
         var end = request.EndDate?.Date.AddDays(1) ?? DateTime.UtcNow.Date.AddDays(1);
         var start = request.StartDate?.Date ?? end.AddDays(-30);
 
+        ClinicSettings? settings = null;
+        if (_settingsRepo != null)
+        {
+            settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
+        }
+        decimal doctorSharePct = settings?.DefaultDoctorSharePercentage ?? 0.70m;
+
         var consultations = await _consultationRepo.Query(c => c.EncounterDate >= start && c.EncounterDate < end)
+            .Select(c => new { c.DoctorId, c.DoctorName })
             .ToListAsync(cancellationToken);
 
         var invoices = await _invoiceRepo.Query(i => i.InvoiceDate >= start && i.InvoiceDate < end && i.Status != InvoiceStatus.Voided)
-            .Include(i => i.LineItems)
+            .Select(i => new
+            {
+                i.AttendingDoctorId,
+                i.AttendingDoctorName,
+                LineItems = i.LineItems.Select(li => new { li.Category, li.TotalPrice }).ToList()
+            })
             .ToListAsync(cancellationToken);
 
         var procedures = await _procedureRepo.Query(p => p.ScheduledAt >= start && p.ScheduledAt < end)
+            .Select(p => new { p.OrderedByDoctorName, p.PerformedByStaffName })
             .ToListAsync(cancellationToken);
 
         var doctorGroups = consultations
@@ -64,16 +81,11 @@ public class GetDoctorSharesReportQueryHandler : IRequestHandler<GetDoctorShares
             int encounterCount = group.Count();
 
             // Consultations line items for this doctor
-            var docInvoices = invoices.Where(i => i.AttendingDoctorName == docName || i.AttendingDoctorId == group.Key.DoctorId).ToList();
+            var docInvoices = invoices.Where(i => i.AttendingDoctorName == docName || (group.Key.DoctorId != Guid.Empty && i.AttendingDoctorId == group.Key.DoctorId)).ToList();
             decimal consultGross = docInvoices
                 .SelectMany(i => i.LineItems)
                 .Where(li => li.Category.Contains("Consultation", StringComparison.OrdinalIgnoreCase))
                 .Sum(li => li.TotalPrice);
-
-            if (consultGross == 0)
-            {
-                consultGross = encounterCount * 500m; // standard baseline consultation fee
-            }
 
             int procedureCount = procedures.Count(p => p.OrderedByDoctorName == docName || p.PerformedByStaffName == docName);
             decimal procedureGross = docInvoices
@@ -82,8 +94,7 @@ public class GetDoctorSharesReportQueryHandler : IRequestHandler<GetDoctorShares
                 .Sum(li => li.TotalPrice);
 
             decimal totalGross = consultGross + procedureGross;
-            // 70% Doctor PF share, 30% Clinic Facility share (Philippine outpatient standard)
-            decimal doctorShare = Math.Round(totalGross * 0.70m, 2);
+            decimal doctorShare = Math.Round(totalGross * doctorSharePct, 2);
             decimal facilityShare = totalGross - doctorShare;
 
             details.Add(new DoctorWorkloadDetailDto(
@@ -97,17 +108,6 @@ public class GetDoctorSharesReportQueryHandler : IRequestHandler<GetDoctorShares
                 doctorShare,
                 facilityShare
             ));
-        }
-
-        // Realistic seed doctors if newly initialized clinic
-        if (!details.Any())
-        {
-            details = new List<DoctorWorkloadDetailDto>
-            {
-                new("doc-001", "Dr. Cruz, MD (Family Medicine)", 24, 6, 12000.00m, 3500.00m, 15500.00m, 10850.00m, 4650.00m),
-                new("doc-002", "Dr. Reyes, MD (Internal Medicine)", 18, 4, 9900.00m, 2200.00m, 12100.00m, 8470.00m, 3630.00m),
-                new("doc-003", "Dr. Santos, MD (Pediatrics)", 15, 8, 9000.00m, 4200.00m, 13200.00m, 9240.00m, 3960.00m)
-            };
         }
 
         int totalEncounters = details.Sum(d => d.TotalEncounters);

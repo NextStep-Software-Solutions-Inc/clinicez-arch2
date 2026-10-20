@@ -38,14 +38,25 @@ public class GetTaxDiscountAuditReportQueryHandler : IRequestHandler<GetTaxDisco
         var invoices = await _invoiceRepo.Query(i => i.InvoiceDate >= start && i.InvoiceDate < end
                 && (i.DiscountType == DiscountType.SeniorCitizen || i.DiscountType == DiscountType.Pwd)
                 && i.Status != InvoiceStatus.Voided)
-            .Include(i => i.Payments)
             .OrderByDescending(i => i.InvoiceDate)
+            .Select(i => new
+            {
+                i.InvoiceNumber,
+                i.InvoiceDate,
+                i.PatientName,
+                i.DiscountType,
+                i.DiscountIdNumber,
+                i.GrossAmount,
+                i.DiscountAmount,
+                i.NetAmount,
+                i.AmountPaid,
+                FirstPayment = i.Payments.OrderBy(p => p.PaymentDate).Select(p => new { p.PaymentNumber, Method = p.Method.ToString() }).FirstOrDefault()
+            })
             .ToListAsync(cancellationToken);
 
         var rows = new List<TaxDiscountAuditRowDto>();
         foreach (var inv in invoices)
         {
-            var firstPayment = inv.Payments.OrderBy(p => p.PaymentDate).FirstOrDefault();
             decimal gross = inv.GrossAmount;
             decimal discount = inv.DiscountAmount;
             decimal net = inv.NetAmount;
@@ -63,19 +74,9 @@ public class GetTaxDiscountAuditReportQueryHandler : IRequestHandler<GetTaxDisco
                 vatExempted,
                 net,
                 inv.AmountPaid,
-                firstPayment?.PaymentNumber ?? "PENDING-OR",
-                firstPayment?.Method.ToString() ?? "Unpaid"
+                inv.FirstPayment?.PaymentNumber ?? "PENDING-OR",
+                inv.FirstPayment?.Method ?? "Unpaid"
             ));
-        }
-
-        // Realistic seed items if newly created clinic
-        if (!rows.Any())
-        {
-            rows = new List<TaxDiscountAuditRowDto>
-            {
-                new("INV-20260929-0001", DateTime.UtcNow.AddHours(-3), "Maria Santos", "Senior Citizen (RA 9994)", "OSCA-MNL-2018-4491", 750.00m, 150.00m, 750.00m, 90.00m, 600.00m, 600.00m, "OR-20260929-0001", "Cash"),
-                new("INV-20260929-0004", DateTime.UtcNow.AddHours(-1), "Antonio Reyes", "PWD (RA 10754)", "PWD-QC-2021-9932", 900.00m, 180.00m, 900.00m, 108.00m, 720.00m, 720.00m, "OR-20260929-0003", "GCash"),
-            };
         }
 
         decimal totalGross = rows.Sum(r => r.GrossAmount);

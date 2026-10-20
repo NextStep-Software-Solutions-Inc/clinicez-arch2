@@ -1310,3 +1310,247 @@ Integrity mode: development
   - Quick order with tooth number from dental odontogram pre-selects Dental category.
 - [ ] Design token check passes: `cd apps/clinic-app && bun run check-tokens.mjs --strict` or no raw hex colors in modified files.
 - [ ] TypeScript check passes: `cd apps/clinic-app && /Users/macuser/.bun/bin/bun run typecheck:clinic` with 0 errors.
+
+## 2026-10-20T01:24:26Z
+
+Resolve all 10 live-testing bug reports and UX enhancements for the **Dental Module & Clinical Workstation** in ClinicEZ (`services/clinic-api` and `apps/clinic-app`), strictly governed by the project skill `clinicez-ui-ux-expert` and executed inside the dedicated isolated git worktree `/Users/macuser/projects/github/nextstep/clinicez-dental-fix` (branch `fix/dental-chart-and-workstation-ux`).
+
+Working directory: `/Users/macuser/projects/github/nextstep/clinicez-dental-fix`
+Integrity mode: development
+Reference skills:
+- `.agents/skills/clinicez-ui-ux-expert/SKILL.md`
+- `.agents/skills/clinicez-search-provider-expert/SKILL.md`
+
+## Requirements
+
+### R1. Patient Chart Dental Sync & Longitudinal Encounter Dental Summary (`services/clinic-api`, `apps/clinic-app`)
+- **Backend `GetPatientChartQuery` & `PatientChartDto`**:
+  - Inject `IRepository<DentalToothRecord>` into `GetPatientChartQueryHandler` (`services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/Queries/GetPatientChartQuery.cs`) and include `DentalTeeth` (`List<DentalToothRecordDto>`) in `PatientChartDto`.
+  - Map `ToothNumber` (`int?`) and `ToothSurface` (`string?`) onto `ClinicalProcedureDto` in `PatientChartDto.Procedures`.
+  - Add `DentalFindings` (`List<DentalToothRecordDto>`) to `EncounterTimelineItemDto` (grouped by `ConsultationId` or encounter date) so each historical consultation encounter carries the teeth charted during that visit.
+- **Frontend Chart Sync (`Consultations.screen.tsx`, `Patients.screen.tsx`)**:
+  - In `Consultations.screen.tsx`, persist tooth updates via `clinicService.upsertDentalTooth` / `batchSaveDentalChart` and immediately synchronize `patientChart.dentalTeeth` / `patientChart.dentalChart` in state and inside `refreshPatientChart()` so tooth statuses, surfaces, and DMFT counts are always up to date both before and after signing.
+  - In `Patients.screen.tsx` (`handleOpenChart`), ensure `PatientChartModal` receives the populated `dentalTeeth` from `getPatientChart` (with `getPatientDentalChart` fallback if needed).
+- **Consultation Left-Pane `Dental` Tab (`Consultations.screen.tsx`)**:
+  - Add `'dental'` (`label: 'Dental'`) to `ChartReviewTab` and `chartTabs` in the left-pane longitudinal chart when `isDentalEnabled` is true, rendering `<DentalChartTab />`.
+- **Generic `"Patient Chart"` Labeling & Encounter Tab Dental Summary**:
+  - Rename `"Medical chart"` / `"Patient Medical Chart"` to `"Patient Chart"` (and `"Open full patient chart"`) across `CenteredModalChartLayout.tsx`, `SlideOverDrawerChartLayout.tsx`, `SplitPaneChartLayout.tsx`, and `Consultations.screen.tsx`.
+  - In `EncountersTimelineTab.tsx`, render a concise **"Dental Findings & Procedures"** summary section inside each encounter card whenever that encounter has `dentalFindings` or tooth-tagged procedures (`toothNumber != null`).
+
+### R2. 5-Surface Odontogram Visualization & Multi-Condition Tooth Status (`apps/clinic-app`, `services/clinic-api`)
+- **5-Surface Geometric Tooth Diagram (`ToothSurfaceDiagram.tsx`)**:
+  - Build a reusable `ToothSurfaceDiagram` component in `apps/clinic-app/components/dental/ToothSurfaceDiagram.tsx` that renders a visual 5-zone tooth schematic: Top (`B` Buccal/Labial), Bottom (`L` Lingual/Palatal), Left/Right (`M` Mesial / `D` Distal oriented toward the dental midline), and Center (`O` Occlusal/Incisal).
+  - Embed `ToothSurfaceDiagram` in every tooth cell of `InlineDentalChartCard.tsx` and `DentalChartTab.tsx`, and render a larger interactive `ToothSurfaceDiagram` in the Tooth Inspector where clicking any surface zone (`M, O, D, B, L`) toggles that surface.
+- **Multi-Condition Tooth Status**:
+  - Support multiple simultaneous conditions on a single tooth (e.g., an existing `Filled` or `Crown` tooth with recurrent `Decay`, or `Decay` with `Extraction` planned).
+  - Update backend validation in `UpsertDentalToothRecordCommand` and `BatchSaveDentalChartCommand` to accept comma-separated multi-condition status strings (e.g., `"Filled,Decay"`, `"Crown,Decay"`, `"Decay,Extraction"`) where every token is a valid `AllowedStatuses` value (`Healthy`, `Decay`, `Filled`, `Missing`, `Crown`, `Extraction`).
+  - In `InlineDentalChartCard.tsx` and `DentalChartTab.tsx`, selecting `Healthy` clears other conditions; selecting non-healthy conditions toggles them in the tooth's condition set (`conditions: ToothStatus[]`, serialized in `status` as comma-joined tokens) and displays multi-condition badges/dots on the tooth cell. Update DMFT calculation so multi-condition teeth are accurately counted in `Decayed`, `Missing`, `Filled`, and `DMFT Index`.
+
+### R3. Procedure Room Selection, Per-Procedure Sent Indicator & Button Label Polish (`apps/clinic-app`)
+- **Room Selection When Ordering or Sending Procedures (`OrderCatalogSearchModal.tsx`, `Consultations.screen.tsx`)**:
+  - Pass active procedure/treatment rooms (`ClinicRoom[]`) into `OrderCatalogSearchModal.tsx`. When ordering a `Procedure` and active rooms exist, display a **"Send / Assign to Room"** selector in the modal so the clinician can pick which room (e.g., `Treatment Room 1`, `Dental Chair 2`) the procedure is assigned to.
+  - On each ordered procedure row in `Consultations.screen.tsx`, allow changing the target room inline while in `Draft` state (when multiple rooms exist) and provide both per-procedure **"Send to [Room]"** and batch **"Send Draft Procedures to Room"** actions.
+- **Per-Procedure Sent & Room Indicator (`Consultations.screen.tsx`)**:
+  - Display an explicit badge on every added procedure row:
+    - Before handoff: `Draft • Room: [Room Name]` (`warning` / `outline` badge).
+    - After handoff: `Sent to [Room Name] • HH:MM AM` (`success` badge with `checkCircle` icon).
+- **Fix Double `+ +` in Action Button Labels (`Button.tsx`, `InlineDentalChartCard.tsx`, `DentalChartTab.tsx`, `Consultations.screen.tsx`)**:
+  - Remove literal leading `"+ "` prefixes from button titles that also pass `icon="plus"`, and normalize `title` in `Button.tsx` (`icon === 'plus' ? title.replace(/^\+\s*/, '') : title`) so double `+ +` never renders.
+
+### R4. Full-Width Responsive Workstation Layout (`apps/clinic-app`)
+- Remove `maxWidth: theme.sizes.contentMaxWidth` and `alignSelf: 'center'` from `styles.content` in `Consultations.screen.tsx`, `Patients.screen.tsx`, and `Dashboard.screen.tsx` so these screens span the full remaining width of wide desktop displays (matching `Settings.screen.tsx`, `Billing.screen.tsx`, and `Appointments.screen.tsx`) while preserving mobile responsiveness.
+
+## Acceptance Criteria
+
+### Backend & Data Sync Verification
+- [ ] `dotnet build` and `dotnet test` pass across `ClinicEz.Clinic.Application.Tests` and `ClinicEz.Shared.Tests` with 0 errors.
+- [ ] Unit tests verify `GetPatientChartQuery` populates `DentalTeeth`, `ClinicalProcedureDto.ToothNumber`/`ToothSurface`, and `EncounterTimelineItemDto.DentalFindings`.
+- [ ] Unit tests verify `UpsertDentalToothRecordCommand` and `BatchSaveDentalChartCommand` accept and persist multi-condition statuses (e.g. `"Filled,Decay"`).
+
+### Frontend, Visual Odontogram & Workstation UX Verification
+- [ ] `bun test` passes across `packages/design-tokens`, `packages/shared-ts`, and `apps/clinic-app` with new tests covering `ToothSurfaceDiagram`, multi-condition tooth toggling and DMFT calculation, procedure room selection/indicators, and `Button` `+` normalization.
+- [ ] Zero raw hex color literals or direct `palette.ts` imports exist in any new or modified `.tsx`/`.ts` files (strict `@clinicez/design-tokens` compliance).
+- [ ] `Consultations.screen.tsx`, `Patients.screen.tsx`, and `Dashboard.screen.tsx` span the full remaining width on desktop without `maxWidth: theme.sizes.contentMaxWidth` constraint.
+
+
+## 2026-10-20T01:34:11Z
+
+Resolve all 10 live-testing bug reports and UX enhancements for the **Dental Module & Clinical Workstation** in ClinicEZ (`services/clinic-api` and `apps/clinic-app`), strictly governed by the project skill `clinicez-ui-ux-expert` and executed inside the dedicated isolated git worktree `/Users/macuser/projects/github/nextstep/clinicez-dental-fix` (branch `fix/dental-chart-and-workstation-ux`).
+
+Working directory: `/Users/macuser/projects/github/nextstep/clinicez-dental-fix`
+Integrity mode: development
+Reference skills:
+- `.agents/skills/clinicez-ui-ux-expert/SKILL.md`
+- `.agents/skills/clinicez-search-provider-expert/SKILL.md`
+
+## Requirements
+
+### R1. Patient Chart Dental Sync & Longitudinal Encounter Dental Summary (`services/clinic-api`, `apps/clinic-app`)
+- **Backend `GetPatientChartQuery` & `PatientChartDto`**:
+  - Inject `IRepository<DentalToothRecord>` into `GetPatientChartQueryHandler` (`services/clinic-api/ClinicEz.Clinic.Application/Features/Patients/Queries/GetPatientChartQuery.cs`) and include `DentalTeeth` (`List<DentalToothRecordDto>`) in `PatientChartDto`.
+  - Map `ToothNumber` (`int?`) and `ToothSurface` (`string?`) onto `ClinicalProcedureDto` in `PatientChartDto.Procedures`.
+  - Add `DentalFindings` (`List<DentalToothRecordDto>`) to `EncounterTimelineItemDto` (grouped by `ConsultationId` or encounter date) so each historical consultation encounter carries the tooth condition records noted during that visit.
+- **Frontend Chart Sync (`Consultations.screen.tsx`, `Patients.screen.tsx`)**:
+  - In `Consultations.screen.tsx`, persist tooth updates via `clinicService.upsertDentalTooth` / `batchSaveDentalChart` and immediately synchronize `patientChart.dentalTeeth` / `patientChart.dentalChart` in state and inside `refreshPatientChart()` so tooth statuses, surfaces, and DMFT counts are always up to date both before and after signing.
+  - In `Patients.screen.tsx` (`handleOpenChart`), ensure `PatientChartModal` receives the populated `dentalTeeth` from `getPatientChart` (with `getPatientDentalChart` fallback if needed).
+- **Consultation Left-Pane `Dental` Tab (`Consultations.screen.tsx`)**:
+  - Add `'dental'` (`label: 'Dental'`) to `ChartReviewTab` and `chartTabs` in the left-pane longitudinal chart when `isDentalEnabled` is true, rendering `<DentalChartTab />`.
+- **Generic `"Patient Chart"` Labeling & Encounter Tab Dental Summary**:
+  - Rename `"Medical chart"` / `"Patient Medical Chart"` to `"Patient Chart"` (and `"Open full patient chart"`) across `CenteredModalChartLayout.tsx`, `SlideOverDrawerChartLayout.tsx`, `SplitPaneChartLayout.tsx`, and `Consultations.screen.tsx`.
+  - In `EncountersTimelineTab.tsx`, render a concise **"Dental Findings & Procedures"** summary section inside each encounter card whenever that encounter has `dentalFindings` or tooth-tagged procedures (`toothNumber != null`).
+
+### R2. 5-Surface Odontogram Visualization & Structured Multi-Condition Tooth Records (`apps/clinic-app`, `services/clinic-api`)
+- **Structured Multi-Condition Records per Tooth (With Recorded Timestamp, Doctor, Surface & Notes)**:
+  - A single tooth (`ToothNumber`) can have multiple simultaneous condition records (`DentalToothRecord`), where each condition record stores its own `Status` (`Decay`, `Filled`, `Crown`, `Extraction`, `Missing`, `Healthy`), its own `Surface` (`MODBL` specific to that condition, e.g., `Filled` on `O` from a prior visit and `Decay` on `MD` noted today), its own clinical `Notes`, its own `CreatedAt`/`UpdatedAt` timestamp (**when** that condition was recorded), its own `RecordedBy` (`CreatedBy`/`UpdatedBy` clinician name), and its `ConsultationId`.
+  - Update `DentalToothRecordDto` to include `string? RecordedBy = null` (populated from `UpdatedBy ?? CreatedBy`).
+  - Update `UpsertDentalToothRecordCommand` and `BatchSaveDentalChartCommand`:
+    - When upserting a non-healthy condition (`Decay`, `Filled`, `Crown`, `Extraction`, `Missing`), match existing active records by `(ClinicId, PatientId, ToothNumber, Status)` so adding `Decay` to a tooth that already has `Filled` inserts a new `DentalToothRecord` row for `Decay` while preserving the existing `Filled` record (and its original `CreatedAt` timestamp, `Surface`, and `Notes`), and removes any `Healthy` placeholder row on that tooth.
+    - When `Status == ToothStatus.Healthy` (or when `RemoveCondition = true` is passed on `UpsertDentalToothRecordCommand` / `ToothRecordInput`), soft-delete (`IsDeleted = true`) the targeted condition(s) on that tooth.
+  - Update `GetPatientDentalChartQuery` summary counts (`DentalSummaryDto`) to compute distinct tooth counts per condition and total distinct teeth charted.
+- **5-Surface Geometric Tooth Diagram (`ToothSurfaceDiagram.tsx`)**:
+  - Build a reusable `ToothSurfaceDiagram` component in `apps/clinic-app/components/dental/ToothSurfaceDiagram.tsx` that renders a visual 5-zone tooth schematic: Top (`B` Buccal/Labial), Bottom (`L` Lingual/Palatal), Left/Right (`M` Mesial / `D` Distal oriented toward the dental midline), and Center (`O` Occlusal/Incisal).
+  - Color each surface zone (`B, L, M, D, O`) with the semantic color of the condition affecting that surface (so a tooth with `Filled (O)` and `Decay (M, D)` visually shows a Blue center `O` and Red `M`/`D` sides!), and display multi-condition dots below the tooth cell.
+  - In the Tooth Inspector of `InlineDentalChartCard.tsx` and `DentalChartTab.tsx`, display the list of **Recorded Conditions on Tooth #XX** (each showing its Status badge, Surfaces, Notes, Recorded Date/Time, and Recorded By doctor, plus a Remove action in editable mode) alongside the interactive 5-surface diagram for adding/updating a condition.
+
+### R3. Procedure Room Selection, Per-Procedure Sent Indicator & Button Label Polish (`apps/clinic-app`)
+- **Room Selection When Ordering or Sending Procedures (`OrderCatalogSearchModal.tsx`, `Consultations.screen.tsx`)**:
+  - Pass active procedure/treatment rooms (`ClinicRoom[]`) into `OrderCatalogSearchModal.tsx`. When ordering a `Procedure` and active rooms exist, display a **"Send / Assign to Room"** selector in the modal so the clinician can pick which room (e.g., `Treatment Room 1`, `Dental Chair 2`) the procedure is assigned to.
+  - On each ordered procedure row in `Consultations.screen.tsx`, allow changing the target room inline while in `Draft` state (when multiple rooms exist) and provide both per-procedure **"Send to [Room]"** and batch **"Send Draft Procedures to Room"** actions.
+- **Per-Procedure Sent & Room Indicator (`Consultations.screen.tsx`)**:
+  - Display an explicit badge on every added procedure row:
+    - Before handoff: `Draft • Room: [Room Name]` (`warning` / `outline` badge).
+    - After handoff: `Sent to [Room Name] • HH:MM AM` (`success` badge with `checkCircle` icon).
+- **Fix Double `+ +` in Action Button Labels (`Button.tsx`, `InlineDentalChartCard.tsx`, `DentalChartTab.tsx`, `Consultations.screen.tsx`)**:
+  - Remove literal leading `"+ "` prefixes from button titles that also pass `icon="plus"`, and normalize `title` in `Button.tsx` (`icon === 'plus' ? title.replace(/^\+\s*/, '') : title`) so double `+ +` never renders.
+
+### R4. Full-Width Responsive Workstation Layout (`apps/clinic-app`)
+- Remove `maxWidth: theme.sizes.contentMaxWidth` and `alignSelf: 'center'` from `styles.content` in `Consultations.screen.tsx`, `Patients.screen.tsx`, and `Dashboard.screen.tsx` so these screens span the full remaining width of wide desktop displays (matching `Settings.screen.tsx`, `Billing.screen.tsx`, and `Appointments.screen.tsx`) while preserving mobile responsiveness.
+
+## Acceptance Criteria
+
+### Backend & Structured Multi-Condition Verification
+- [ ] `dotnet build` and `dotnet test` pass across `ClinicEz.Clinic.Application.Tests` and `ClinicEz.Shared.Tests` with 0 errors.
+- [ ] Unit tests verify `GetPatientChartQuery` populates `DentalTeeth`, `ClinicalProcedureDto.ToothNumber`/`ToothSurface`, and `EncounterTimelineItemDto.DentalFindings`.
+- [ ] Unit tests verify `UpsertDentalToothRecordCommand` and `BatchSaveDentalChartCommand` support multiple `DentalToothRecord` entries on the same `ToothNumber` (e.g. `Filled` on `O` + `Decay` on `MD`), preserving each condition's own `Surface`, `Notes`, `CreatedAt` timestamp, `RecordedBy`, and `ConsultationId`.
+
+### Frontend, Visual Odontogram & Workstation UX Verification
+- [ ] `bun test` passes across `packages/design-tokens`, `packages/shared-ts`, and `apps/clinic-app` with new tests covering `ToothSurfaceDiagram`, structured multi-condition tooth records (with per-condition surfaces, notes, and timestamps), DMFT calculation, procedure room selection/indicators, and `Button` `+` normalization.
+- [ ] Zero raw hex color literals or direct `palette.ts` imports exist in any new or modified `.tsx`/`.ts` files (strict `@clinicez/design-tokens` compliance).
+- [ ] `Consultations.screen.tsx`, `Patients.screen.tsx`, and `Dashboard.screen.tsx` span the full remaining width on desktop without `maxWidth: theme.sizes.contentMaxWidth` constraint.
+
+
+## 2026-10-20T02:23:38Z
+
+Overhaul and harden the Clinic Analytics and Statutory Reports module in ClinicEZ to production-grade quality. This involves completely eliminating hardcoded mock fallbacks across queries, implementing performant server-side aggregations with indexed database queries in PostgreSQL, delivering comprehensive interactive SVG charts (Line, Bar, Donut, Pie) in `apps/clinic-app` rooted in `@clinicez/design-tokens`, and generating enterprise-grade, print-ready vector PDF reports with QuestPDF in .NET featuring cryptographic verification, institutional letterhead, and DOH/BIR audit compliance.
+
+Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Elimination of Mock Fallbacks & Genuine Data Fidelity
+Remove all synthetic dummy doctors (e.g. Dr. Cruz, Dr. Reyes), hardcoded diagnoses (e.g. I10, J06.9), static wait/consult durations (14.5m, 18.0m), hardcoded clinic names, and mock invoices across all handlers in `services/clinic-api/ClinicEz.Clinic.Application/Features/Reports/Queries/`. Queries must return genuine zero counts and empty lists when no records match the query window. Retrieve actual clinic metadata (clinic name, consultation fee, default share) from `ClinicSettings`.
+
+### R2. High-Performance Server-Side DB Aggregations & Indexing
+Refactor memory-heavy in-process iterations (`ToListAsync()` followed by C# LINQ `.Where()` and `.Sum()`) into database-level EF Core aggregations (`SumAsync`, `CountAsync`, `GroupBy` projections). Add composite temporal indexes on `(TenantId, ClinicId, Date/Time)` for `ConsultationEncounters`, `PaymentRecords`, `ClinicalProcedures`, `ClinicLabOrders`, and `QueueItems` in `ApplicationDbContext.cs`.
+
+### R3. Comprehensive Interactive Charting Components (`@clinicez/design-tokens`)
+Build responsive, interactive SVG chart components (`TrendLineChart`, `WorkloadBarChart`, `TenderDonutChart`, `MorbidityDistributionChart`) in `apps/clinic-app/components/analytics/` using `react-native-svg` and semantic colors from `@clinicez/design-tokens`. Charts must feature hover/touch tooltips, filter toggles, smooth responsiveness across workstation widths, and full 4-state completion (Skeleton loader, Empty state with CTA, Error state with retry, Active data). Zero hardcoded hex colors or external network dependencies.
+
+### R4. Enterprise-Grade Print-Ready Vector PDF Generation
+Implement QuestPDF document builders in `ClinicEz.Clinic.Infrastructure/Services/ClinicDocumentPdfService` and expose streaming endpoints in `ReportsController.cs` (`/api/v1/reports/{reportType}/pdf`). Generate publication-ready vector PDFs for Daily EOD Reconciliation, DOH Outpatient Morbidity Summary, BIR Tax/Discount Audit, and Doctor Shares Settlement. Include institutional letterhead, QR cryptographic verification stamp, multi-page data tables, and print formatting. Update `Dashboard.screen.tsx` to stream and preview these PDFs directly.
+
+## Acceptance Criteria
+
+### Data Authenticity & Query Performance
+- [ ] No hardcoded fallback diagnoses, doctors, consult fees, or arbitrary wait-time constants exist in report queries.
+- [ ] Empty date ranges or newly provisioned clinics return genuine zero counts and empty lists without mock data injection.
+- [ ] EF Core queries execute aggregations (`SumAsync`, `CountAsync`, `GroupBy`) on PostgreSQL rather than loading unpaged entity trees into memory.
+- [ ] Composite date indexes are added to `ApplicationDbContext.cs` for `ConsultationEncounters`, `PaymentRecords`, `ClinicalProcedures`, `ClinicLabOrders`, and `QueueItems`.
+
+### Interactive Data Visualization (UI/UX)
+- [ ] Interactive charts (Line, Bar, Donut/Pie) render cleanly and responsively in `apps/clinic-app` on mobile (<768px), tablet (768-1023px), and desktop (>=1024px).
+- [ ] Hover and touch interactions display exact metrics (currency formatted in Philippine Peso `₱`, case counts, percentages).
+- [ ] All 4 UI states (Skeleton loading, Empty state with CTA, Error state with retry, Active data) are explicitly handled.
+- [ ] Passes design tokens audit: `cd apps/clinic-app && bun run lint:tokens` passes with 0 violations.
+- [ ] Passes network isolation audit: `cd apps/clinic-app && bun run lint:hosts` passes with 0 violations.
+
+### Enterprise Print & PDF
+- [ ] Dedicated endpoints exist for streaming vector PDFs:
+  - `GET /api/v1/reports/daily-eod/pdf`
+  - `GET /api/v1/reports/morbidity/pdf`
+  - `GET /api/v1/reports/tax-discounts/pdf`
+  - `GET /api/v1/reports/doctor-shares/pdf`
+  - `GET /api/v1/reports/analytics/pdf`
+- [ ] Generated PDFs contain institutional letterhead (clinic name, address, contact, TIN/Accreditation), cryptographic digest, and QR verification code.
+- [ ] The raw monospace `<pre>` receipt print dialog in `Dashboard.screen.tsx` is replaced by official PDF preview/print actions.
+
+### Automated Test Verification
+- [ ] `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj` passes with 0 failures, including empty-dataset assertions.
+- [ ] `cd apps/clinic-app && bun test tests` passes with 0 failures.
+
+
+## 2026-10-20T02:28:31Z
+
+Conduct a rigorous multi-perspective code, architecture, and security review of the ClinicEZ Billing System hardening across `services/clinic-api`, `apps/clinic-app`, `services/billing-api`, and `apps/cashier-app`.
+
+Working directory: /Users/macuser/projects/github/nextstep/clinicez-billing
+Integrity mode: development
+
+## Requirements
+
+### R1. Dual-Mode Cashier Routing & Concurrency Audit (`services/clinic-api`)
+Review the implementation of `ClinicSettings.CashierMode` (`ClinicDesk` vs `CashierCounter`):
+- Audit `CreateInvoiceCommandHandler` and `UpdateInvoiceCommandHandler`: ensure `billing.invoice.requested` is only enqueued to `billing-api` in `CashierCounter` mode, and that `ClinicDesk` mode leaves `BillingRequestedAt` null so local payments never encounter HTTP 409 `PaidAtBillingCounterException`.
+- Audit `RecordPaymentCommandHandler`: verify payment allocation, receipt numbering (`OR-YYYYMMDD-XXX`), and idempotency.
+- Verify `UpdateInvoiceCommand` (`PUT api/v1/billing/invoices/{id}`) properly recalculates gross, net, and statutory discounts (Senior/PWD 20%, PhilHealth Konsulta 100%) and re-publishes to `billing-api` when counter-owned.
+
+### R2. Clinic Station Settings & UI/UX Audit (`apps/clinic-app`)
+Review `GeneralSettingsTab.tsx` and `Settings.screen.tsx` against `@clinicez/design-tokens`:
+- Verify strict adherence to design tokens: zero raw hex color values, use of semantic tokens (`theme.colors.primary` Teal `#0D6963`, `surface`, `border`, `textSecondary`), and standard typography scales.
+- Verify 4-state lifecycle (Skeleton loading, Error with retry, Empty, Active saved state) and seamless persistence of `cashierMode`.
+
+### R3. Clinical Workstation Non-Disruptive Queue Flow Audit (`apps/clinic-app`)
+Review `Consultations.screen.tsx`:
+- Confirm that encounter signing does NOT forcefully redirect the doctor to `Billing.screen.tsx`.
+- Review the **Post-Encounter Action Dialog**: ensure the primary action is **"Call Next Patient"** (using `nextEligiblePatient`) to maintain clinical momentum, while providing secondary options for printing Rx slips, opening billing, or closing.
+
+### R4. Statement of Account (SOA) Review & Settlement Audit (`apps/clinic-app`)
+Review `Billing.screen.tsx`:
+- Verify that patients with existing open draft invoices load their Statement of Account (SOA) directly instead of triggering a duplicate invoice error.
+- Verify rehydration of consultation fees, ordered procedures, and point-of-care lab tests.
+- Verify statutory discount computation (Senior OSCA ID, PWD ID, PhilHealth Konsulta) and seamless settlement via `updateInvoice` + `recordPayment`.
+- Confirm advisory banner display when an SOA has been dispatched to the central cashier station.
+
+### R5. Architecture Documentation & Interop Integrity
+Review `docs/architecture/billing.md`:
+- Verify that documentation accurately reflects the `CashierMode` topology, `UpdateInvoiceCommand`, and post-encounter workstation flows.
+- Ensure cross-service interop message schemas (`BillingInvoiceRequestedPayload`, `BillingPaymentConfirmedPayload`) match the shared library contracts.
+
+## Verification Resources & Test Suites
+
+The review team should execute and verify the following test suites in `/Users/macuser/projects/github/nextstep/clinicez-billing`:
+1. Clinic API Billing & Cashier Tests:
+   `~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ --filter "FullyQualifiedName~Billing|FullyQualifiedName~Cashier"`
+2. Billing API Service Tests:
+   `~/.dotnet/dotnet test services/billing-api/ClinicEz.Billing.Tests/`
+3. Clinic App Billing & Cashier Mode Test Suite:
+   `ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/node_modules node_modules && ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/apps/clinic-app/node_modules apps/clinic-app/node_modules && ~/.bun/bin/bun test apps/clinic-app/tests/billing_and_cashier_mode.test.ts && rm node_modules apps/clinic-app/node_modules`
+4. Clinic App Fulfillment & Billing Stress Tests:
+   `ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/node_modules node_modules && ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/apps/clinic-app/node_modules apps/clinic-app/node_modules && ~/.bun/bin/bun test apps/clinic-app/tests/challenger_m2_1_fulfillment_billing_stress.test.ts && rm node_modules apps/clinic-app/node_modules`
+5. Cashier App Tests:
+   `ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/node_modules node_modules && ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/apps/cashier-app/node_modules apps/cashier-app/node_modules && ~/.bun/bin/bun test apps/cashier-app/tests/ && rm node_modules apps/cashier-app/node_modules`
+6. Design Tokens Compliance:
+   `~/.bun/bin/bun test packages/design-tokens/src/tokens.test.ts`
+7. Static Token Audit:
+   Verify 0 raw hex color values (`#[0-9a-fA-F]{3,8}`) exist in `Consultations.screen.tsx` and `Billing.screen.tsx`.
+
+## Acceptance Criteria
+
+### Audit Findings & Quality Gates
+- [ ] Concurrency and double-payment risk: Confirm no possibility of a 409 conflict in `ClinicDesk` mode and no duplicate payment risk in `CashierCounter` mode.
+- [ ] UI/UX Design System Compliance: 100% compliance with `@clinicez/design-tokens` (0 raw hex values).
+- [ ] Clinical Momentum: Verified that "Call Next Patient" is the primary autofocused action in the post-encounter flow.
+- [ ] SOA Rehydration: Verified that opening an open visit bill loads all consultation line items and permits discount application and receipt generation without false duplicate blocks.
+- [ ] Test Suite Execution: All automated test suites report 100% pass rate.
+- [ ] Deliver a structured Review & Verification Report detailing findings, risk assessment, and merge readiness.

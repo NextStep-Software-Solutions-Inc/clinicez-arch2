@@ -54,6 +54,14 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
 
         // 1. Flow & Telemetry (Today's queue telemetry)
         var todayQueue = await _queueRepo.Query(q => q.CheckInTime >= today && q.CheckInTime < tomorrow)
+            .Select(q => new
+            {
+                q.Status,
+                q.Priority,
+                q.CheckInTime,
+                q.CalledTime,
+                q.CompletedTime
+            })
             .ToListAsync(cancellationToken);
 
         int totalToday = todayQueue.Count;
@@ -65,12 +73,12 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
         var waitedItems = todayQueue.Where(q => q.CalledTime.HasValue && q.CalledTime > q.CheckInTime).ToList();
         double avgWait = waitedItems.Any()
             ? waitedItems.Average(q => (q.CalledTime!.Value - q.CheckInTime).TotalMinutes)
-            : 14.5; // realistic baseline if early in shift
+            : 0.0;
 
         var consultedItems = todayQueue.Where(q => q.CompletedTime.HasValue && q.CalledTime.HasValue && q.CompletedTime > q.CalledTime).ToList();
         double avgConsult = consultedItems.Any()
             ? consultedItems.Average(q => (q.CompletedTime!.Value - q.CalledTime!.Value).TotalMinutes)
-            : 18.0;
+            : 0.0;
 
         int routineCount = todayQueue.Count(q => q.Priority == QueuePriority.Routine);
         int urgentCount = todayQueue.Count(q => q.Priority == QueuePriority.Urgent);
@@ -91,6 +99,16 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
 
         // 2. Financial & Revenue
         var invoices = await _invoiceRepo.Query(i => i.InvoiceDate >= start && i.InvoiceDate < end && i.Status != InvoiceStatus.Voided && i.Status != InvoiceStatus.Refunded)
+            .Select(i => new
+            {
+                i.InvoiceDate,
+                i.GrossAmount,
+                i.NetAmount,
+                i.BalanceDue,
+                i.DiscountType,
+                i.DiscountAmount,
+                i.AttendingDoctorName
+            })
             .ToListAsync(cancellationToken);
 
         decimal totalGross = invoices.Sum(i => i.GrossAmount);
@@ -101,6 +119,12 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
         decimal avgTicket = invoices.Any() ? Math.Round(totalNet / invoices.Count, 2) : 0;
 
         var payments = await _paymentRepo.Query(p => p.PaymentDate >= start && p.PaymentDate < end)
+            .Select(p => new
+            {
+                p.PaymentDate,
+                p.Amount,
+                p.Method
+            })
             .ToListAsync(cancellationToken);
         decimal totalCollections = payments.Sum(p => p.Amount);
 
@@ -133,6 +157,11 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
         // 3. Clinical Morbidity (Top ICD-10 Diagnoses)
         var consultations = await _consultationRepo.Query(c => c.EncounterDate >= start && c.EncounterDate < end)
             .Include(c => c.Diagnoses)
+            .Select(c => new
+            {
+                c.DoctorName,
+                Diagnoses = c.Diagnoses.Select(d => new { d.Icd10Code, d.Description }).ToList()
+            })
             .ToListAsync(cancellationToken);
 
         var allDiagnoses = consultations.SelectMany(c => c.Diagnoses).ToList();
@@ -150,38 +179,29 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
             .Take(10)
             .ToList();
 
-        // Fallback default top primary care diagnoses if clean/new database
-        if (!topDiagnoses.Any())
-        {
-            topDiagnoses = new List<MorbidityItemDto>
-            {
-                new("I10", "Essential (Primary) Hypertension", 18, 28.5),
-                new("J06.9", "Acute Upper Respiratory Tract Infection", 14, 22.2),
-                new("E11.9", "Type 2 Diabetes Mellitus without complications", 11, 17.5),
-                new("A09", "Infectious Gastroenteritis and Colitis", 8, 12.7),
-                new("J45.9", "Bronchial Asthma, Unspecified", 7, 11.1),
-                new("M54.5", "Low Back Pain, Lumbago", 5, 8.0)
-            };
-        }
-
         // 4. Clinical Service Item Usage (Procedures & Lab Requisitions)
-        var procedures = await _procedureRepo.Query(p => p.ScheduledAt >= start && p.ScheduledAt < end)
-            .ToListAsync(cancellationToken);
-
-        var topProcedures = procedures
+        var topProceduresData = await _procedureRepo.Query(p => p.ScheduledAt >= start && p.ScheduledAt < end)
             .GroupBy(p => p.ProcedureName)
-            .Select(g => new ServiceUsageDto("Procedure", g.Key, g.Count()))
+            .Select(g => new
+            {
+                ProcedureName = g.Key,
+                Quantity = g.Count()
+            })
             .OrderByDescending(s => s.Quantity)
             .Take(5)
+            .ToListAsync(cancellationToken);
+
+        var topProcedures = topProceduresData
+            .Select(g => new ServiceUsageDto("Procedure", g.ProcedureName, g.Quantity))
             .ToList();
 
         var labOrders = await _labOrderRepo.Query(o => o.OrderDate >= start && o.OrderDate < end)
-            .Include(o => o.Items)
+            .Select(o => o.Items.Select(i => i.TestName).ToList())
             .ToListAsync(cancellationToken);
 
         var topLabs = labOrders
-            .SelectMany(o => o.Items)
-            .GroupBy(i => i.TestName)
+            .SelectMany(items => items)
+            .GroupBy(testName => testName)
             .Select(g => new ServiceUsageDto("LabOrder", g.Key, g.Count()))
             .OrderByDescending(s => s.Quantity)
             .Take(5)

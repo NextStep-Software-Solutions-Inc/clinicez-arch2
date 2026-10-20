@@ -32,6 +32,7 @@ public sealed class TenantPrintoutConfig
     public string? PhysicalAddress { get; set; }
     public string? ContactNumbers { get; set; }
     public string? EmailAndWeb { get; set; }
+    public string? TaxIdentificationNumber { get; set; }
     public string? DohLicenseToOperate { get; set; }
     public string? PhilHealthAccreditationNumber { get; set; }
 

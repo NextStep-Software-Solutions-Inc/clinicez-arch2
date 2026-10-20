@@ -21,15 +21,18 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
     private readonly IRepository<ConsultationEncounter> _consultationRepo;
     private readonly IRepository<ClinicPatient> _patientRepo;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<ClinicSettings>? _settingsRepo;
 
     public GetMorbidityReportQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
         IRepository<ClinicPatient> patientRepo,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<ClinicSettings>? settingsRepo = null)
     {
         _consultationRepo = consultationRepo;
         _patientRepo = patientRepo;
         _clinicContext = clinicContext;
+        _settingsRepo = settingsRepo;
     }
 
     public async Task<MorbidityReportDto> Handle(GetMorbidityReportQuery request, CancellationToken cancellationToken)
@@ -39,10 +42,16 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
 
         var encounters = await _consultationRepo.Query(c => c.EncounterDate >= start && c.EncounterDate < end)
             .Include(c => c.Diagnoses)
+            .Select(c => new
+            {
+                c.PatientId,
+                Diagnoses = c.Diagnoses.Select(d => new { d.Icd10Code, d.Description }).ToList()
+            })
             .ToListAsync(cancellationToken);
 
         var patientIds = encounters.Select(e => e.PatientId).Distinct().ToList();
         var patients = await _patientRepo.Query(p => patientIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.DateOfBirth, p.Gender })
             .ToListAsync(cancellationToken);
         var patientLookup = patients.ToDictionary(p => p.Id);
 
@@ -51,13 +60,14 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
         foreach (var enc in encounters)
         {
             patientLookup.TryGetValue(enc.PatientId, out var patient);
-            int age = 35; // default fallback adult
-            string gender = "Male";
+            int? age = null;
+            string? gender = null;
             if (patient != null)
             {
                 var today = DateOnly.FromDateTime(DateTime.UtcNow);
-                age = today.Year - patient.DateOfBirth.Year;
-                if (patient.DateOfBirth > today.AddYears(-age)) age--;
+                int calcAge = today.Year - patient.DateOfBirth.Year;
+                if (patient.DateOfBirth > today.AddYears(-calcAge)) calcAge--;
+                age = calcAge;
                 gender = patient.Gender;
             }
 
@@ -70,11 +80,11 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
                 }
 
                 var curr = diseaseMap[key];
-                int isPedia = age < 18 ? 1 : 0;
-                int isAdult = age >= 18 && age < 60 ? 1 : 0;
-                int isSenior = age >= 60 ? 1 : 0;
-                int isMale = gender.Equals("Male", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-                int isFemale = gender.Equals("Female", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+                int isPedia = (age.HasValue && age.Value < 18) ? 1 : 0;
+                int isAdult = (age.HasValue && age.Value >= 18 && age.Value < 60) ? 1 : 0;
+                int isSenior = (age.HasValue && age.Value >= 60) ? 1 : 0;
+                int isMale = (!string.IsNullOrEmpty(gender) && gender.Equals("Male", StringComparison.OrdinalIgnoreCase)) ? 1 : 0;
+                int isFemale = (!string.IsNullOrEmpty(gender) && gender.Equals("Female", StringComparison.OrdinalIgnoreCase)) ? 1 : 0;
 
                 diseaseMap[key] = (
                     curr.Description,
@@ -111,26 +121,19 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
             })
             .ToList();
 
-        // Standard DOH primary care fallback entries if fresh deployment
-        if (!diseaseRows.Any())
+        ClinicSettings? settings = null;
+        if (_settingsRepo != null)
         {
-            diseaseRows = new List<MorbidityDiseaseRowDto>
-            {
-                new(1, "I10", "Essential (Primary) Hypertension", 42, 0, 24, 18, 20, 22, 32.8),
-                new(2, "J06.9", "Acute Upper Respiratory Tract Infection", 31, 14, 15, 2, 14, 17, 24.2),
-                new(3, "E11.9", "Type 2 Diabetes Mellitus without complications", 26, 0, 16, 10, 11, 15, 20.3),
-                new(4, "A09", "Infectious Gastroenteritis and Colitis", 16, 6, 8, 2, 7, 9, 12.5),
-                new(5, "J45.9", "Bronchial Asthma, Unspecified", 13, 5, 6, 2, 6, 7, 10.2)
-            };
-            totalDiagnoses = diseaseRows.Sum(d => d.TotalCases);
+            settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
         }
+        var clinicName = settings?.ClinicName ?? "Clinic Facility";
 
         return new MorbidityReportDto(
             start,
             end.AddDays(-1),
             _clinicContext.TenantId,
             _clinicContext.ClinicId,
-            "Clinic EZ Primary Care Clinic",
+            clinicName,
             encounters.Count,
             totalDiagnoses,
             diseaseRows

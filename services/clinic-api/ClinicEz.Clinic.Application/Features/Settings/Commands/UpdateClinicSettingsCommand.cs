@@ -44,7 +44,8 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableStatAudioAlert = null,
     bool? EnableStatVibrationAlert = null,
     string? SpecialtyMode = null,
-    bool? EnableDentalModule = null) : IRequest<ClinicSettingsDto>;
+    bool? EnableDentalModule = null,
+    decimal? DefaultDoctorSharePercentage = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -195,6 +196,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.EnableDentalModule.HasValue)
             settings.EnableDentalModule = request.EnableDentalModule.Value;
 
+        if (request.DefaultDoctorSharePercentage.HasValue && request.DefaultDoctorSharePercentage.Value >= 0)
+            settings.DefaultDoctorSharePercentage = request.DefaultDoctorSharePercentage.Value;
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -246,7 +250,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.IsDirectoryPublished,
             settings.IsOnlineBookingPaused,
             settings.SpecialtyMode,
-            settings.EnableDentalModule);
+            settings.EnableDentalModule,
+            settings.DefaultDoctorSharePercentage);
     }
 }
 

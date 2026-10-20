@@ -7,11 +7,18 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Documents.Commands;
 using ClinicEz.Clinic.Application.Features.LabOrders.Queries;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
+using ClinicEz.Clinic.Application.Features.Reports.DTOs;
+using ClinicEz.Clinic.Application.Features.Reports.Queries;
+using ClinicEz.Clinic.Api.Controllers;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Services;
+using ClinicEz.Shared.Documents.Components;
+using ClinicEz.Shared.Documents.Configuration;
 using FluentAssertions;
+using MediatR;
+using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Xunit;
 
@@ -387,5 +394,493 @@ public class HardenedDocumentGenerationTests
         var pdfText = Encoding.ASCII.GetString(pdfBytes);
         pdfText.Should().StartWith("%PDF-");
         pdfText.Should().Contain("%%EOF");
+    }
+
+    private static ClinicSettings CreateReportTestSettings() => new()
+    {
+        TenantId = "tenant-test-01",
+        ClinicId = Guid.NewGuid(),
+        ClinicName = "St. Jude Family Medical Clinic & Diagnostic Center",
+        TaxIdentificationNumber = "234-567-890-000",
+        AccreditationNumber = "PHIC-KONSULTA-09214",
+        LetterheadHeader = "ST. JUDE FAMILY MEDICAL CLINIC",
+        LetterheadSubHeader = "Accredited Outpatient Medical Facility & Diagnostic Center",
+        LetterheadAddress = "124 Rizal Avenue, San Pedro, Laguna, Philippines",
+        LetterheadContact = "Tel: (02) 8876-5432 • Mobile: +63 917 123 4567",
+        LetterheadFooter = "Official Clinic EZ Electronic Report. Valid Philippine medical & financial document issued in compliance with RA 8792 & RA 10173.",
+        PrimaryColorHex = "#0D6963",
+        PaperSize = "Letter"
+    };
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_DailyEodReport_PDF_When_Populated()
+    {
+        var settings = CreateReportTestSettings();
+        var reportDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var report = new DailyEodReportDto(
+            ReportDate: reportDate,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalCheckedIn: 35,
+            TotalWalkIns: 20,
+            TotalAppointments: 15,
+            TotalCompletedVisits: 32,
+            TotalWaitingOrInConsultation: 3,
+            TotalGrossAmount: 51900.00m,
+            TotalDiscountsGiven: 5100.00m,
+            TotalSeniorDiscounts: 3500.00m,
+            TotalPwdDiscounts: 1600.00m,
+            TotalPhilHealthCovered: 12000.00m,
+            TotalNetAmount: 46800.00m,
+            TotalAmountCollected: 46800.00m,
+            CashInDrawer: 18450.00m,
+            TotalUnpaidBalances: 0.00m,
+            CollectionsByMethod: new List<PaymentModeSummary>
+            {
+                new("Cash", 18450.00m, 14),
+                new("GCash", 12300.00m, 9),
+                new("Maya", 6150.00m, 4),
+                new("Credit / Debit Card", 9900.00m, 5)
+            },
+            DoctorWorkloads: new List<DoctorWorkloadSummary>
+            {
+                new("Dr. Jose Rizal, MD", 18),
+                new("Dr. Antonio Luna, MD", 14)
+            },
+            TotalProceduresPerformed: 12,
+            TotalLabOrdersIssued: 24,
+            TotalPrescriptionsWritten: 38,
+            TotalDangerousDrugPrescriptions: 2
+        );
+
+        var pdfBytes = _pdfService.GenerateDailyEodReportPdf(report, settings, "Maria Santos (Cashier)");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_DailyEodReport_PDF_When_Empty()
+    {
+        var settings = CreateReportTestSettings();
+        var report = new DailyEodReportDto(
+            ReportDate: DateTime.UtcNow,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalCheckedIn: 0,
+            TotalWalkIns: 0,
+            TotalAppointments: 0,
+            TotalCompletedVisits: 0,
+            TotalWaitingOrInConsultation: 0,
+            TotalGrossAmount: 0m,
+            TotalDiscountsGiven: 0m,
+            TotalSeniorDiscounts: 0m,
+            TotalPwdDiscounts: 0m,
+            TotalPhilHealthCovered: 0m,
+            TotalNetAmount: 0m,
+            TotalAmountCollected: 0m,
+            CashInDrawer: 0m,
+            TotalUnpaidBalances: 0m,
+            CollectionsByMethod: new List<PaymentModeSummary>(),
+            DoctorWorkloads: new List<DoctorWorkloadSummary>(),
+            TotalProceduresPerformed: 0,
+            TotalLabOrdersIssued: 0,
+            TotalPrescriptionsWritten: 0,
+            TotalDangerousDrugPrescriptions: 0
+        );
+
+        var pdfBytes = _pdfService.GenerateDailyEodReportPdf(report, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(500);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_MorbidityReport_PDF_When_Populated()
+    {
+        var settings = CreateReportTestSettings();
+        var startDate = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var report = new MorbidityReportDto(
+            StartDate: startDate,
+            EndDate: endDate,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            ClinicName: settings.ClinicName,
+            TotalEncountersReviewed: 150,
+            TotalDiagnosesRecorded: 180,
+            Diseases: new List<MorbidityDiseaseRowDto>
+            {
+                new(1, "J06.9", "Acute upper respiratory infection, unspecified", 45, 15, 25, 5, 20, 25, 25.0),
+                new(2, "I10", "Essential (primary) hypertension", 38, 0, 18, 20, 18, 20, 21.1),
+                new(3, "E11.9", "Type 2 diabetes mellitus without complications", 28, 0, 12, 16, 13, 15, 15.6),
+                new(4, "A09", "Infectious gastroenteritis and colitis, unspecified", 22, 10, 9, 3, 10, 12, 12.2),
+                new(5, "M79.1", "Myalgia", 18, 1, 12, 5, 8, 10, 10.0)
+            }
+        );
+
+        var pdfBytes = _pdfService.GenerateMorbidityReportPdf(report, settings, "Dr. Roberto Cruz, MD");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_MorbidityReport_PDF_When_Empty()
+    {
+        var settings = CreateReportTestSettings();
+        var report = new MorbidityReportDto(
+            StartDate: DateTime.UtcNow.AddDays(-30),
+            EndDate: DateTime.UtcNow,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            ClinicName: settings.ClinicName,
+            TotalEncountersReviewed: 0,
+            TotalDiagnosesRecorded: 0,
+            Diseases: new List<MorbidityDiseaseRowDto>()
+        );
+
+        var pdfBytes = _pdfService.GenerateMorbidityReportPdf(report, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(500);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_TaxDiscountAuditReport_PDF_When_Populated()
+    {
+        var settings = CreateReportTestSettings();
+        var startDate = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var report = new TaxDiscountAuditReportDto(
+            StartDate: startDate,
+            EndDate: endDate,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalInvoicesAudited: 3,
+            TotalGrossSales: 7500.00m,
+            TotalSeniorDiscounts: 1000.00m,
+            TotalPwdDiscounts: 500.00m,
+            TotalVatExempted: 720.00m,
+            TotalNetCollections: 6000.00m,
+            Items: new List<TaxDiscountAuditRowDto>
+            {
+                new("INV-2026-0001", new DateTime(2026, 10, 5), "Lourdes Mercado", "SeniorCitizen", "OSCA-1954-0912", 2500.00m, 500.00m, 2000.00m, 240.00m, 2000.00m, 2000.00m, "OR-20261005-001", "Cash"),
+                new("INV-2026-0002", new DateTime(2026, 10, 8), "Federico Garcia", "SeniorCitizen", "OSCA-1950-8812", 2500.00m, 500.00m, 2000.00m, 240.00m, 2000.00m, 2000.00m, "OR-20261008-002", "GCash"),
+                new("INV-2026-0003", new DateTime(2026, 10, 12), "Ramon Magsaysay", "PWD", "PWD-2022-7718", 2500.00m, 500.00m, 2000.00m, 240.00m, 2000.00m, 2000.00m, "OR-20261012-003", "Cash")
+            }
+        );
+
+        var pdfBytes = _pdfService.GenerateTaxDiscountAuditReportPdf(report, settings, "Maria Clara (Cashier)");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_TaxDiscountAuditReport_PDF_When_Empty()
+    {
+        var settings = CreateReportTestSettings();
+        var report = new TaxDiscountAuditReportDto(
+            StartDate: DateTime.UtcNow.AddDays(-30),
+            EndDate: DateTime.UtcNow,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalInvoicesAudited: 0,
+            TotalGrossSales: 0m,
+            TotalSeniorDiscounts: 0m,
+            TotalPwdDiscounts: 0m,
+            TotalVatExempted: 0m,
+            TotalNetCollections: 0m,
+            Items: new List<TaxDiscountAuditRowDto>()
+        );
+
+        var pdfBytes = _pdfService.GenerateTaxDiscountAuditReportPdf(report, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(500);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_DoctorSharesReport_PDF_When_Populated()
+    {
+        var settings = CreateReportTestSettings();
+        var startDate = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var report = new DoctorSharesReportDto(
+            StartDate: startDate,
+            EndDate: endDate,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalClinicEncounters: 60,
+            TotalClinicGrossRevenue: 74500.00m,
+            TotalPhysicianShares: 52150.00m,
+            TotalFacilityShares: 22350.00m,
+            DoctorShares: new List<DoctorWorkloadDetailDto>
+            {
+                new("doc-01", "Dr. Jose Rizal, MD", 35, 8, 28000.00m, 14500.00m, 42500.00m, 29750.00m, 12750.00m),
+                new("doc-02", "Dr. Antonio Luna, MD", 25, 6, 20000.00m, 12000.00m, 32000.00m, 22400.00m, 9600.00m)
+            }
+        );
+
+        var pdfBytes = _pdfService.GenerateDoctorSharesReportPdf(report, settings, "Finance Office");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_DoctorSharesReport_PDF_When_Empty()
+    {
+        var settings = CreateReportTestSettings();
+        var report = new DoctorSharesReportDto(
+            StartDate: DateTime.UtcNow.AddDays(-30),
+            EndDate: DateTime.UtcNow,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalClinicEncounters: 0,
+            TotalClinicGrossRevenue: 0m,
+            TotalPhysicianShares: 0m,
+            TotalFacilityShares: 0m,
+            DoctorShares: new List<DoctorWorkloadDetailDto>()
+        );
+
+        var pdfBytes = _pdfService.GenerateDoctorSharesReportPdf(report, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(500);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_ClinicAnalytics_PDF_When_Populated()
+    {
+        var settings = CreateReportTestSettings();
+        var startDate = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var analytics = new ClinicAnalyticsDto(
+            StartDate: startDate,
+            EndDate: endDate,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            Flow: new FlowAnalyticsDto(
+                TotalEncountersToday: 42,
+                InQueueNow: 5,
+                UrgentTriageNow: 1,
+                InConsultationNow: 3,
+                CompletedToday: 34,
+                AverageWaitMinutes: 12.5,
+                AverageConsultMinutes: 16.2,
+                RoutineCount: 30,
+                UrgentCount: 10,
+                EmergencyCount: 2
+            ),
+            TotalGrossRevenue: 360000.00m,
+            TotalNetRevenue: 345000.00m,
+            TotalCollections: 340000.00m,
+            TotalUnpaidBalances: 5000.00m,
+            AverageTicketSize: 1250.00m,
+            SeniorDiscountsGiven: 10500.00m,
+            PwdDiscountsGiven: 4500.00m,
+            RevenueTrend: new List<DailyTrendPointDto>
+            {
+                new("Oct 18", 18500.00m, 15),
+                new("Oct 19", 22000.00m, 18),
+                new("Oct 20", 25400.00m, 21)
+            },
+            TenderShares: new List<TenderShareDto>
+            {
+                new("Cash", 170000.00m, 50.0),
+                new("GCash", 102000.00m, 30.0),
+                new("Card", 68000.00m, 20.0)
+            },
+            TopDiagnoses: new List<MorbidityItemDto>
+            {
+                new("J06.9", "Acute upper respiratory infection", 25, 28.4),
+                new("I10", "Essential hypertension", 18, 20.5)
+            },
+            TopServices: new List<ServiceUsageDto>
+            {
+                new("Procedure", "Minor Wound Dressing", 12),
+                new("LabOrder", "Complete Blood Count (CBC)", 20)
+            },
+            DoctorStats: new List<DoctorStatDto>
+            {
+                new("Dr. Jose Rizal, MD", 25, 180000.00m),
+                new("Dr. Antonio Luna, MD", 17, 165000.00m)
+            }
+        );
+
+        var pdfBytes = _pdfService.GenerateClinicAnalyticsPdf(analytics, settings, "Executive Analytics");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_ClinicAnalytics_PDF_When_Empty()
+    {
+        var settings = CreateReportTestSettings();
+        var analytics = new ClinicAnalyticsDto(
+            StartDate: DateTime.UtcNow.AddDays(-30),
+            EndDate: DateTime.UtcNow,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            Flow: new FlowAnalyticsDto(0, 0, 0, 0, 0, 0.0, 0.0, 0, 0, 0),
+            TotalGrossRevenue: 0m,
+            TotalNetRevenue: 0m,
+            TotalCollections: 0m,
+            TotalUnpaidBalances: 0m,
+            AverageTicketSize: 0m,
+            SeniorDiscountsGiven: 0m,
+            PwdDiscountsGiven: 0m,
+            RevenueTrend: new List<DailyTrendPointDto>(),
+            TenderShares: new List<TenderShareDto>(),
+            TopDiagnoses: new List<MorbidityItemDto>(),
+            TopServices: new List<ServiceUsageDto>(),
+            DoctorStats: new List<DoctorStatDto>()
+        );
+
+        var pdfBytes = _pdfService.GenerateClinicAnalyticsPdf(analytics, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(500);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void TenantPrintoutConfig_Should_Support_TaxIdentificationNumber()
+    {
+        var config = new TenantPrintoutConfig
+        {
+            FacilityName = "Metro Health Diagnostic Center",
+            TaxIdentificationNumber = "987-654-321-000",
+            DohLicenseToOperate = "LTO-NCR-2026-091",
+            PhilHealthAccreditationNumber = "PHIC-998877"
+        };
+
+        config.TaxIdentificationNumber.Should().Be("987-654-321-000");
+    }
+
+    [Fact]
+    public async Task ReportsController_Pdf_Endpoints_Should_Stream_Vector_PDF_Files()
+    {
+        var sender = Substitute.For<ISender>();
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(Guid.NewGuid());
+        clinicContext.TenantId.Returns("tenant-1");
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var date = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var eodDto = new DailyEodReportDto(
+            date, "tenant-1", Guid.NewGuid(), 10, 5, 5, 10, 0,
+            10000m, 1000m, 500m, 500m, 2000m, 9000m, 9000m, 5000m, 0m,
+            new List<PaymentModeSummary>(), new List<DoctorWorkloadSummary>(), 0, 0, 0, 0);
+
+        var morbidityDto = new MorbidityReportDto(
+            date.AddDays(-7), date, "tenant-1", Guid.NewGuid(), "St. Jude Clinic", 50, 50,
+            new List<MorbidityDiseaseRowDto>());
+
+        var taxDto = new TaxDiscountAuditReportDto(
+            date.AddDays(-7), date, "tenant-1", Guid.NewGuid(), 5, 5000m, 500m, 500m, 400m, 4500m,
+            new List<TaxDiscountAuditRowDto>());
+
+        var sharesDto = new DoctorSharesReportDto(
+            date.AddDays(-7), date, "tenant-1", Guid.NewGuid(), 20, 25000m, 17500m, 7500m,
+            new List<DoctorWorkloadDetailDto>());
+
+        var analyticsDto = new ClinicAnalyticsDto(
+            date.AddDays(-7), date, "tenant-1", Guid.NewGuid(),
+            new FlowAnalyticsDto(10, 1, 0, 1, 8, 10, 15, 8, 2, 0),
+            50000m, 48000m, 48000m, 0m, 1200m, 1000m, 1000m,
+            new List<DailyTrendPointDto>(), new List<TenderShareDto>(), new List<MorbidityItemDto>(),
+            new List<ServiceUsageDto>(), new List<DoctorStatDto>());
+
+        sender.Send(Arg.Any<GetDailyEodReportQuery>(), Arg.Any<CancellationToken>()).Returns(eodDto);
+        sender.Send(Arg.Any<GetMorbidityReportQuery>(), Arg.Any<CancellationToken>()).Returns(morbidityDto);
+        sender.Send(Arg.Any<GetTaxDiscountAuditReportQuery>(), Arg.Any<CancellationToken>()).Returns(taxDto);
+        sender.Send(Arg.Any<GetDoctorSharesReportQuery>(), Arg.Any<CancellationToken>()).Returns(sharesDto);
+        sender.Send(Arg.Any<GetClinicAnalyticsQuery>(), Arg.Any<CancellationToken>()).Returns(analyticsDto);
+
+        var controller = new ReportsController(sender, _pdfService, settingsRepo);
+
+        // 1. Daily EOD PDF
+        var eodResult = await controller.GetDailyEodReportPdf(date, CancellationToken.None) as FileContentResult;
+        eodResult.Should().NotBeNull();
+        eodResult!.ContentType.Should().Be("application/pdf");
+        eodResult.FileDownloadName.Should().Be($"DailyEodReport-{date:yyyyMMdd}.pdf");
+        eodResult.FileContents.Should().NotBeEmpty();
+        Encoding.ASCII.GetString(eodResult.FileContents).Should().StartWith("%PDF-");
+
+        // 2. Morbidity PDF
+        var morbResult = await controller.GetMorbidityReportPdf(date.AddDays(-7), date, CancellationToken.None) as FileContentResult;
+        morbResult.Should().NotBeNull();
+        morbResult!.ContentType.Should().Be("application/pdf");
+        morbResult.FileDownloadName.Should().Be($"MorbidityReport-{date.AddDays(-7):yyyyMMdd}-{date:yyyyMMdd}.pdf");
+        morbResult.FileContents.Should().NotBeEmpty();
+        Encoding.ASCII.GetString(morbResult.FileContents).Should().StartWith("%PDF-");
+
+        // 3. Tax Discounts PDF
+        var taxResult = await controller.GetTaxDiscountAuditReportPdf(date.AddDays(-7), date, CancellationToken.None) as FileContentResult;
+        taxResult.Should().NotBeNull();
+        taxResult!.ContentType.Should().Be("application/pdf");
+        taxResult.FileDownloadName.Should().Be($"TaxDiscountAuditReport-{date.AddDays(-7):yyyyMMdd}-{date:yyyyMMdd}.pdf");
+        taxResult.FileContents.Should().NotBeEmpty();
+        Encoding.ASCII.GetString(taxResult.FileContents).Should().StartWith("%PDF-");
+
+        // 4. Doctor Shares PDF
+        var sharesResult = await controller.GetDoctorSharesReportPdf(date.AddDays(-7), date, CancellationToken.None) as FileContentResult;
+        sharesResult.Should().NotBeNull();
+        sharesResult!.ContentType.Should().Be("application/pdf");
+        sharesResult.FileDownloadName.Should().Be($"DoctorSharesReport-{date.AddDays(-7):yyyyMMdd}-{date:yyyyMMdd}.pdf");
+        sharesResult.FileContents.Should().NotBeEmpty();
+        Encoding.ASCII.GetString(sharesResult.FileContents).Should().StartWith("%PDF-");
+
+        // 5. Analytics PDF
+        var anlResult = await controller.GetClinicAnalyticsPdf(date.AddDays(-7), date, CancellationToken.None) as FileContentResult;
+        anlResult.Should().NotBeNull();
+        anlResult!.ContentType.Should().Be("application/pdf");
+        anlResult.FileDownloadName.Should().Be($"ClinicAnalyticsReport-{date.AddDays(-7):yyyyMMdd}-{date:yyyyMMdd}.pdf");
+        anlResult.FileContents.Should().NotBeEmpty();
+        Encoding.ASCII.GetString(anlResult.FileContents).Should().StartWith("%PDF-");
     }
 }
