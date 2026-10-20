@@ -6120,7 +6120,7 @@ const styles = StyleSheet.create({
   },
   postEncounterSuccessText: {
     flex: 1,
-    gap: theme.spacing.xxs,
+    gap: theme.spacing.xs,
   },
   postEncounterInvoiceBadge: {
     flexDirection: 'row',
@@ -6154,7 +6154,7 @@ const styles = StyleSheet.create({
   },
   postEncounterNextPatientInfo: {
     flex: 1,
-    gap: theme.spacing.xxs,
+    gap: theme.spacing.xs,
   },
   postEncounterEmptyQueueCard: {
     flexDirection: 'row',

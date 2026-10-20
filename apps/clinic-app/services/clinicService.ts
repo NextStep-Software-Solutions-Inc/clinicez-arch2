@@ -507,6 +507,7 @@ export interface InvoiceRecord {
   amountPaid: number;
   balanceDue: number;
   status: InvoiceStatus;
+  billingRequestedAt?: string;
   notes?: string;
   billedByStaffName?: string;
   lineItems: InvoiceLineItem[];
