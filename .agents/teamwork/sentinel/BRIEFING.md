@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-19T09:05:00Z
+# BRIEFING — 2026-10-20T03:22:00Z
 
 ## Mission
-Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-api`, `apps/clinic-app`, and `apps/portal-web`), strictly governed by `clinicez-ui-ux-expert` and `clinicez-search-provider-expert`, and coordinated with the active Clinic Workspace Global Search implementation.
+Implement first-class Dental Clinic support within the ClinicEZ Service Catalog across `services/clinic-api` and `apps/clinic-app`, providing canonical dental service presets, specialty-aware auto-seeding, and seamless ordering integration with the dental chart.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -28,6 +28,11 @@ Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-
 - Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
 - Victory Auditor (victory_auditor_16): 663db1e1-f744-4c32-92a7-3991c2f398c0
 - Cleaned up: task-30 killed, task-32 killed, all subagents killed
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-dental-services/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_1): 53f797ee-6635-4774-a72d-a1bd5d92579d
+- Active Crons: task-26 (Progress Reporting), task-28 (Liveness Check)
+- Victory Auditor (victory_auditor_1): 0060bb81-0678-402d-bf64-fd45f119873f
+- Cleaned up: task-26 killed, task-28 killed, all subagents killed
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -86,15 +91,22 @@ Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-
 - R2: Dental Chart Backend & Specialty Mode in ClinicSettings and DentalToothRecord CQRS
 - R3: Clean, jargon-free UI in Consultation (InlineDentalChartCard) & Patient Chart (DentalChartTab), Settings UI, design tokens
 - R4: Pluggable search integration
+- Route to General (`teamwork_preview_orchestrator`) for Dental Clinic Service Catalog & Specialty-Aware Seeding
+- R1: Canonical Dental Clinic Service Catalog defaults in DentalCatalogDefaults.cs and specialty-aware auto-seeding in GetClinicServicesQueryHandler
+- R2: Idempotent dental preset seeding command SeedDentalServicesCommand and POST /api/v1/services/seed-dental endpoint
+- R3: First-class Dental category, filter chip, modal selection, and "Add Dental Services" button in ServicesCatalogTab.tsx
+- R4: Consultation Odontogram & Order Catalog Modal integration (OrderCatalogSearchModal Dental tab & instructions, Consultations.screen.tsx procedure catalog & quick order initial category)
+- R5: Directory publishing & regression integrity, @clinicez/design-tokens compliance
+- All automated backend and frontend tests must pass
 - Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
 
 ## User Context
-- **Last user request**: Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-api`, `apps/clinic-app`, and `apps/portal-web`), strictly governed by project skills `clinicez-ui-ux-expert` and `clinicez-search-provider-expert`, and coordinated with the active Clinic Workspace Global Search implementation.
+- **Last user request**: Implement first-class Dental Clinic support within the ClinicEZ Service Catalog across `services/clinic-api` and `apps/clinic-app`, providing canonical dental service presets, specialty-aware auto-seeding, and seamless ordering integration with the dental chart.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded request verbatim to `ORIGINAL_REQUEST.md` (`## 2026-10-19T05:00:54Z`).
-  - Executed Milestones MA, MB, MC, MD under `orchestrator_16`.
-  - Independent 3-phase victory audit conducted by `victory_auditor_16` resulting in `VICTORY CONFIRMED`.
+  - Recorded request verbatim to `ORIGINAL_REQUEST.md` (`## 2026-10-20T02:05:39Z`).
+  - Executed Milestones 1 and 2 under `orchestrator_1`.
+  - Independent 3-phase victory audit conducted by `victory_auditor_1` resulting in `VICTORY CONFIRMED`.
   - Cleaned up background crons and swarm agents.
 
 ## Project Status
@@ -106,13 +118,12 @@ Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-
 ## Victory Audit Status
 - **Triggered**: yes
 - **Verdict**: VICTORY CONFIRMED
-- **Auditor Conv ID**: 663db1e1-f744-4c32-92a7-3991c2f398c0
+- **Auditor Conv ID**: 0060bb81-0678-402d-bf64-fd45f119873f
 - **Retry count**: 0
 
 ## Artifact Index
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel briefing memory
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel briefing archive
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/handoff.md — Sentinel handoff report
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_16/handoff.md — Orchestrator 16 final handoff report
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_16/handoff.md — Victory Auditor 16 report (VICTORY CONFIRMED)
+- /Users/macuser/projects/github/nextstep/clinicez-dental-services/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
+- /Users/macuser/projects/github/nextstep/clinicez-dental-services/.agents/teamwork/sentinel/BRIEFING.md — Sentinel briefing memory
+- /Users/macuser/projects/github/nextstep/clinicez-dental-services/.agents/teamwork/sentinel/handoff.md — Sentinel handoff report
+- /Users/macuser/projects/github/nextstep/clinicez-dental-services/.agents/teamwork/orchestrator_1/handoff.md — Orchestrator 1 final handoff report
+- /Users/macuser/projects/github/nextstep/clinicez-dental-services/.agents/teamwork/victory_auditor_1/handoff.md — Victory Auditor 1 report (VICTORY CONFIRMED)

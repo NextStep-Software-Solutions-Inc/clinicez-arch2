@@ -183,4 +183,94 @@ public class PublishClinicToDirectoryTests
 
         interopPublisher.DidNotReceiveWithAnyArgs().Enqueue<FacilityCreatedEvent>(default!, default!, default!, default, default!);
     }
+
+    [Fact]
+    public async Task PublishClinic_WithActiveDentalServices_IncludesThemInDirectoryPayload()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var interopPublisher = Substitute.For<IInteropPublisher>();
+
+        await staffRepo.AddAsync(new StaffMember
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            FirstName = "Juan",
+            LastName = "Dela Cruz",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-DENT-12345",
+            IsActive = true
+        }, CancellationToken.None);
+
+        await servicesRepo.AddAsync(new ClinicServiceItem
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            Code = "DENT-CONS",
+            Name = "Dental Consultation & Oral Examination",
+            Category = "Dental",
+            StandardPrice = 500m,
+            IsActive = true
+        }, CancellationToken.None);
+
+        await servicesRepo.AddAsync(new ClinicServiceItem
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            Code = "DENT-CLEAN",
+            Name = "Oral Prophylaxis / Dental Cleaning",
+            Category = "Dental",
+            StandardPrice = 850m,
+            IsActive = true
+        }, CancellationToken.None);
+
+        // Inactive service should be excluded from published active services
+        await servicesRepo.AddAsync(new ClinicServiceItem
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            Code = "DENT-INACTIVE",
+            Name = "Discontinued Dental Service",
+            Category = "Dental",
+            StandardPrice = 200m,
+            IsActive = false
+        }, CancellationToken.None);
+
+        var settings = new ClinicSettings
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            ClinicName = "Apex Dental Studio",
+            OperatingHours = "Mon-Fri 9:00 AM - 5:00 PM",
+            SpecialtyMode = "Dental",
+            IsDirectoryPublished = false
+        };
+        await settingsRepo.AddAsync(settings, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new PublishClinicToDirectoryCommandHandler(
+            settingsRepo, staffRepo, servicesRepo, _clinicContext, uow, interopPublisher);
+
+        // Act
+        var result = await handler.Handle(new PublishClinicToDirectoryCommand(true), CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.IsPublished.Should().BeTrue();
+
+        interopPublisher.Received(1).Enqueue(
+            InteropTypes.FacilityDirectoryUpdated,
+            Arg.Is<Party>(p => p.FacilityId == _testClinicId.ToString() && p.FacilityType == FacilityType.Clinic),
+            Arg.Is<Party>(p => p.Kind == PartyKind.ControlPlane && p.Service == InteropServices.Patient),
+            _testClinicId,
+            Arg.Is<FacilityCreatedEvent>(e =>
+                e.Classification == "Dental Clinic" &&
+                e.IsPublic == true &&
+                e.Services != null &&
+                e.Services.Count == 2 &&
+                e.Services.All(s => s.Category == "Dental" && s.IsActive)));
+    }
 }
