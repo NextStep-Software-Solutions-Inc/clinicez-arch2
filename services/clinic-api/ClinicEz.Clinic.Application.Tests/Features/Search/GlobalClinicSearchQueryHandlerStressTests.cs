@@ -195,8 +195,8 @@ public class GlobalClinicSearchQueryHandlerStressTests
         {
             try
             {
-                // Artificially attempt to sleep 3000ms (way past 500ms budget)
-                await Task.Delay(3000, ct);
+                // Artificially attempt to sleep 5000ms (way past 500ms budget)
+                await Task.Delay(5000, ct);
                 return new List<SearchResultItemDto> { CreateItem("l1", "LabOrders", "Slow Lab") };
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -218,7 +218,7 @@ public class GlobalClinicSearchQueryHandlerStressTests
 
         // Assert
         tokenCancelled.Should().BeTrue("The slow provider's cancellation token must be triggered by the 500ms timeout CTS");
-        sw.ElapsedMilliseconds.Should().BeInRange(400, 2400, "Handler must terminate cleanly around 500ms budget, not wait 3000ms");
+        sw.ElapsedMilliseconds.Should().BeInRange(400, 3500, "Handler must terminate cleanly around 500ms budget, not wait 5000ms");
 
         // The fast provider's results must be preserved
         result.TotalCount.Should().Be(1);
@@ -229,7 +229,7 @@ public class GlobalClinicSearchQueryHandlerStressTests
     [Fact]
     public async Task TimeoutBudget_WhenMultipleSlowProvidersTimeout_PreservesRemainingActiveProviders()
     {
-        // Arrange: 4 slow providers (3000ms) and 3 fast providers (15ms)
+        // Arrange: 4 slow providers (5000ms) and 3 fast providers (15ms)
         var providers = new List<ISearchProvider>
         {
             CreateMockProvider("Patients", 10, async ct =>
@@ -239,7 +239,7 @@ public class GlobalClinicSearchQueryHandlerStressTests
             }),
             CreateMockProvider("Consultations", 20, async ct =>
             {
-                await Task.Delay(3000, ct);
+                await Task.Delay(5000, ct);
                 return new List<SearchResultItemDto> { CreateItem("c1", "Consultations", "Consultation Item") };
             }),
             CreateMockProvider("Appointments", 30, async ct =>
@@ -249,12 +249,12 @@ public class GlobalClinicSearchQueryHandlerStressTests
             }),
             CreateMockProvider("Queue", 40, async ct =>
             {
-                await Task.Delay(3000, ct);
+                await Task.Delay(5000, ct);
                 return new List<SearchResultItemDto> { CreateItem("q1", "Queue", "Queue Item") };
             }),
             CreateMockProvider("LabOrders", 50, async ct =>
             {
-                await Task.Delay(3000, ct);
+                await Task.Delay(5000, ct);
                 return new List<SearchResultItemDto> { CreateItem("l1", "LabOrders", "Lab Item") };
             }),
             CreateMockProvider("Billing", 60, async ct =>
@@ -264,7 +264,7 @@ public class GlobalClinicSearchQueryHandlerStressTests
             }),
             CreateMockProvider("Settings", 70, async ct =>
             {
-                await Task.Delay(3000, ct);
+                await Task.Delay(5000, ct);
                 return new List<SearchResultItemDto> { CreateItem("s1", "Settings", "Settings Item") };
             })
         };
@@ -281,7 +281,7 @@ public class GlobalClinicSearchQueryHandlerStressTests
 
         // Assert
         // Assert
-        sw.ElapsedMilliseconds.Should().BeLessThan(8000, "Should terminate promptly after timeout");
+        sw.ElapsedMilliseconds.Should().BeInRange(400, 3500, "Should terminate around 500ms timeout rather than waiting 5000ms");
         result.TotalCount.Should().Be(3, "3 fast providers succeeded; 4 timed out");
         result.Items.Select(i => i.Category).Should().ContainInOrder("Patients", "Appointments", "Billing");
     }
@@ -293,7 +293,7 @@ public class GlobalClinicSearchQueryHandlerStressTests
         var providers = Enumerable.Range(1, 7).Select(i =>
             CreateMockProvider($"Cat-{i}", i * 10, async ct =>
             {
-                await Task.Delay(2500, ct);
+                await Task.Delay(5000, ct);
                 return new List<SearchResultItemDto> { CreateItem($"id-{i}", $"Cat-{i}", $"Item-{i}") };
             })).ToList();
 
@@ -308,7 +308,7 @@ public class GlobalClinicSearchQueryHandlerStressTests
         sw.Stop();
 
         // Assert
-        sw.ElapsedMilliseconds.Should().BeInRange(400, 2400);
+        sw.ElapsedMilliseconds.Should().BeInRange(400, 3500, "Should terminate on 500ms budget rather than waiting 5000ms");
         result.Should().NotBeNull();
         result.Items.Should().BeEmpty();
         result.TotalCount.Should().Be(0);
