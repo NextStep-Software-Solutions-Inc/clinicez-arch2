@@ -163,34 +163,24 @@ mock.module('../constants/fonts', () => ({
   fontAssets: {},
 }));
 
-// Feedback mocks
+// Feedback spies
 let lastSuccessNotification: string | null = null;
 let lastErrorNotification: string | null = null;
 
-const actualFeedback = require('../utils/feedback');
-const origSuccess = actualFeedback.notify.success;
-const origError = actualFeedback.notify.error;
+const { notify, Alert } = require('../utils/feedback');
+const origSuccess = notify.success;
+const origError = notify.error;
+const origAlert = Alert.alert;
 
-mock.module('../utils/feedback', () => {
-  return {
-    ...actualFeedback,
-    notify: {
-      ...actualFeedback.notify,
-      success: (msg: string, opts?: any) => {
-        lastSuccessNotification = msg;
-        return origSuccess(msg, opts);
-      },
-      error: (msg: string, opts?: any) => {
-        lastErrorNotification = msg;
-        return origError(msg, opts);
-      },
-    },
-    Alert: {
-      ...actualFeedback.Alert,
-      alert: (title: string, msg?: string) => {},
-    },
-  };
-});
+notify.success = (msg: string, opts?: any) => {
+  lastSuccessNotification = msg;
+  return origSuccess(msg, opts);
+};
+
+notify.error = (msg: string, opts?: any) => {
+  lastErrorNotification = msg;
+  return origError(msg, opts);
+};
 
 // Navigation mock
 let lastNavigatedRoute: { name: string; params?: any } | null = null;
@@ -210,25 +200,19 @@ let mockReminderThrows: boolean = false;
 let sendReminderCallCount = 0;
 let lastRemindedAppointmentId: string | null = null;
 
-const actualClinicService = require('../services/clinicService');
+const { clinicService } = require('../services/clinicService');
+const origUpdateSettings = clinicService.updateSettings;
+const origSendAppointmentReminder = clinicService.sendAppointmentReminder;
 
-mock.module('../services/clinicService', () => {
-  return {
-    ...actualClinicService,
-    clinicService: {
-      ...actualClinicService.clinicService,
-      updateSettings: async (payload: any) => [{ id: 'settings-1', ...payload }, null],
-      sendAppointmentReminder: async (id: string) => {
-        sendReminderCallCount++;
-        lastRemindedAppointmentId = id;
-        if (mockReminderThrows) {
-          throw new Error('Fatal socket network timeout');
-        }
-        return mockReminderResult;
-      },
-    },
-  };
-});
+clinicService.updateSettings = async (payload: any) => [{ id: 'settings-1', ...payload }, null];
+clinicService.sendAppointmentReminder = async (id: string) => {
+  sendReminderCallCount++;
+  lastRemindedAppointmentId = id;
+  if (mockReminderThrows) {
+    throw new Error('Fatal socket network timeout');
+  }
+  return mockReminderResult;
+};
 
 // Import components under test
 const { AppointmentInspectionModal } = require('../components/calendar/AppointmentInspectionModal');
@@ -698,7 +682,9 @@ describe('Empirical Challenger: Milestone 5 Stress Tests', () => {
   });
 
   afterAll(() => {
-    mock.module('../utils/feedback', () => actualFeedback);
-    mock.module('../services/clinicService', () => actualClinicService);
+    notify.success = origSuccess;
+    notify.error = origError;
+    clinicService.updateSettings = origUpdateSettings;
+    clinicService.sendAppointmentReminder = origSendAppointmentReminder;
   });
 });

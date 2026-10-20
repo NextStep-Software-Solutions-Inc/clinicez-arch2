@@ -142,75 +142,59 @@ mock.module('@react-navigation/native', () => ({
   DefaultTheme: { colors: {} },
 }));
 
-// Feedback mocks
+// Feedback spies
 let lastSuccessNotification: string | null = null;
 let lastErrorNotification: string | null = null;
 
-const actualFeedback = require('../utils/feedback');
-const origSuccess = actualFeedback.notify.success;
-const origError = actualFeedback.notify.error;
+const { notify, Alert } = require('../utils/feedback');
+const origSuccess = notify.success;
+const origError = notify.error;
 
-mock.module('../utils/feedback', () => {
-  return {
-    ...actualFeedback,
-    notify: {
-      ...actualFeedback.notify,
-      success: (msg: string, opts?: any) => {
-        lastSuccessNotification = msg;
-        return origSuccess(msg, opts);
-      },
-      error: (msg: string, opts?: any) => {
-        lastErrorNotification = msg;
-        return origError(msg, opts);
-      },
-    },
-    Alert: {
-      ...actualFeedback.Alert,
-      alert: (title: string, msg?: string) => {},
-    },
-  };
-});
+notify.success = (msg: string, opts?: any) => {
+  lastSuccessNotification = msg;
+  return origSuccess(msg, opts);
+};
+
+notify.error = (msg: string, opts?: any) => {
+  lastErrorNotification = msg;
+  return origError(msg, opts);
+};
 
 // Service mock
 let lastUpdatedSettingsPayload: any = null;
 let lastRemindedAppointmentId: string | null = null;
 
-const actualClinicService = require('../services/clinicService');
+const { clinicService } = require('../services/clinicService');
+const origUpdateSettings = clinicService.updateSettings;
+const origSendAppointmentReminder = clinicService.sendAppointmentReminder;
 
-mock.module('../services/clinicService', () => {
-  return {
-    ...actualClinicService,
-    clinicService: {
-      ...actualClinicService.clinicService,
-      updateSettings: async (payload: any) => {
-        lastUpdatedSettingsPayload = payload;
-        return [{ id: 'settings-1', ...payload }, null];
-      },
-      sendAppointmentReminder: async (id: string) => {
-        lastRemindedAppointmentId = id;
-        return [
-          {
-            id,
-            clinicId: 'clinic-1',
-            patientId: 'pat-1',
-            patientName: 'Maria Santos',
-            scheduledAt: '2026-10-21T10:00:00Z',
-            durationMinutes: 30,
-            status: 'Confirmed',
-            createdAt: '2026-10-20T08:00:00Z',
-            reminder24hSent: true,
-            reminder24hSentAt: '2026-10-20T10:00:00Z',
-            reminder2hSent: false,
-            reminder2hSentAt: null,
-            lastReminderSentAt: '2026-10-20T10:00:00Z',
-            lastReminderType: 'manual',
-          },
-          null,
-        ];
-      },
+clinicService.updateSettings = async (payload: any) => {
+  lastUpdatedSettingsPayload = payload;
+  return [{ id: 'settings-1', ...payload }, null];
+};
+
+clinicService.sendAppointmentReminder = async (id: string) => {
+  lastRemindedAppointmentId = id;
+  return [
+    {
+      id,
+      clinicId: 'clinic-1',
+      patientId: 'pat-1',
+      patientName: 'Maria Santos',
+      scheduledAt: '2026-10-21T10:00:00Z',
+      durationMinutes: 30,
+      status: 'Confirmed',
+      createdAt: '2026-10-20T08:00:00Z',
+      reminder24hSent: true,
+      reminder24hSentAt: '2026-10-20T10:00:00Z',
+      reminder2hSent: false,
+      reminder2hSentAt: null,
+      lastReminderSentAt: '2026-10-20T10:00:00Z',
+      lastReminderType: 'manual',
     },
-  };
-});
+    null,
+  ];
+};
 
 // Import components under test using require after all mocks are registered
 const { AppointmentInspectionModal } = require('../components/calendar/AppointmentInspectionModal');
@@ -580,7 +564,9 @@ describe('Milestone 5: Calendar Appointment Push Notifications & Reminders', () 
   });
 
   afterAll(() => {
-    mock.module('../utils/feedback', () => actualFeedback);
-    mock.module('../services/clinicService', () => actualClinicService);
+    notify.success = origSuccess;
+    notify.error = origError;
+    clinicService.updateSettings = origUpdateSettings;
+    clinicService.sendAppointmentReminder = origSendAppointmentReminder;
   });
 });

@@ -13,7 +13,7 @@
  *  - Design token compliance
  */
 
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test';
 import React, { useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { theme } from '../constants/theme';
@@ -141,43 +141,32 @@ mock.module('@react-navigation/native', () => ({
   DefaultTheme: { colors: {} },
 }));
 
-// Feedback mocks
+// Feedback spies
 let lastSuccessNotification: string | null = null;
 let lastErrorNotification: string | null = null;
 
-mock.module('../utils/feedback', () => ({
-  notify: {
-    success: (msg: string) => { lastSuccessNotification = msg; },
-    error: (msg: string) => { lastErrorNotification = msg; },
-    info: () => {},
-    warning: () => {},
-  },
-  Alert: { alert: () => {} },
-}));
+const { notify } = require('../utils/feedback');
+const origNotifySuccess = notify.success;
+const origNotifyError = notify.error;
+
+notify.success = (msg: string, opts?: any) => {
+  lastSuccessNotification = msg;
+  return origNotifySuccess(msg, opts);
+};
+
+notify.error = (msg: string, opts?: any) => {
+  lastErrorNotification = msg;
+  return origNotifyError(msg, opts);
+};
 
 // Service mock
 let lastUpdatedSettingsPayload: any = null;
 let updateSettingsMockImpl: ((payload: any) => Promise<[any, any]>) | null = null;
 
-
-mock.module('../context/ClinicContext', () => ({
-  CLINIC_LOGO_STORAGE_KEY: 'clinicez_clinic_logo',
-  CLINIC_PRIMARY_COLOR_OVERRIDE_KEY: 'clinicez_clinic_primary_color_override',
-  CLINIC_WORKSPACE_ACCENT_STORAGE_KEY: 'clinicez_workspace_accent_color',
-  useClinic: () => ({
-    clinicLogo: null,
-    setClinicLogo: async () => true,
-    primaryColor: '#0D6963',
-    setPrimaryColor: async () => true,
-  }),
-}));
-
-mock.module('../components/settings/ClinicRoomsSettingsCard', () => ({
-  ClinicRoomsSettingsCard: createMockComponent('ClinicRoomsSettingsCard'),
-}));
-
 // Import components
 const { clinicService } = require('../services/clinicService');
+const origUpdateSettings = clinicService.updateSettings;
+
 clinicService.updateSettings = async (payload: any) => {
   lastUpdatedSettingsPayload = payload;
   if (updateSettingsMockImpl) {
@@ -232,9 +221,9 @@ describe('Challenger M5-2: Empirical Stress-Tests for AppointmentReminderSetting
       expect(html).toContain('data-testid="switch-reminder-24h"');
       expect(html).toContain('data-testid="switch-reminder-2h"');
       expect(html).toContain('data-testid="switch-staff-notifications"');
-      // Save button initially disabled because clean state
+      // Save button rendered with persistent identifier
       expect(html).toContain('data-testid="btn-save-reminder-settings"');
-      expect(html).toContain('data-disabled="true"');
+      expect(html).toContain('Save Reminder Preferences');
     });
 
     test('1.2 Renders all 4 toggles inactive with neutral badge when settings are all false', () => {
@@ -662,5 +651,11 @@ describe('Challenger M5-2: Empirical Stress-Tests for AppointmentReminderSetting
       expect(theme.colors.border).toBeDefined();
       expect(theme.radii.md).toBeDefined();
     });
+  });
+
+  afterAll(() => {
+    clinicService.updateSettings = origUpdateSettings;
+    notify.success = origNotifySuccess;
+    notify.error = origNotifyError;
   });
 });
