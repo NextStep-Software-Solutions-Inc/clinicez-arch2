@@ -89,81 +89,12 @@ mock.module('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }: any) => children,
 }));
 
-mock.module('expo-print', () => ({
-  printAsync: () => Promise.resolve(),
-}));
-
-mock.module('expo-sharing', () => ({
-  isAvailableAsync: () => Promise.resolve(false),
-  shareAsync: () => Promise.resolve(),
-}));
-
-mock.module('../../context/ClinicContext', () => ({
-  useClinic: () => ({
-    clinicLogo: null,
-    setClinicLogo: () => Promise.resolve(true),
-    clinicBranding: null,
-    refreshClinic: () => Promise.resolve(),
-    facilityName: 'Test Facility',
-    accreditationNumber: 'ACC-123',
-    taxIdentificationNumber: 'TIN-456',
-    letterhead: null,
-  }),
-}));
-
-mock.module('../../context/StaffContext', () => ({
-  useStaff: () => ({
-    current: { id: 'staff-1', name: 'Dr. Test' },
-    currentName: 'Dr. Test',
-  }),
-}));
-
-mock.module('../../services/clinicService', () => ({
-  clinicService: {
-    getServices: () => Promise.resolve([[], null]),
-    getQueue: () => Promise.resolve([[], null]),
-    getDailyEodReport: () => Promise.resolve([null, null]),
-    getInvoices: () => Promise.resolve([[], null]),
-    getSettings: () => Promise.resolve([{ cashierMode: 'ClinicDesk' }, null]),
-    updateSettings: (payload: any) => Promise.resolve([{ ...payload }, null]),
-    createInvoice: () => Promise.resolve([{ id: 'inv-1', invoiceNumber: 'INV-1' }, null]),
-    updateInvoice: () => Promise.resolve([{ id: 'inv-1', invoiceNumber: 'INV-1' }, null]),
-    recordPayment: () => Promise.resolve([{ id: 'inv-1', invoiceNumber: 'INV-1', payments: [] }, null]),
-  },
-}));
-
-mock.module('../../utils/feedback', () => ({
-  Alert: { alert: () => {} },
-  notify: {
-    success: () => {},
-    error: () => {},
-    info: () => {},
-    warning: () => {},
-  },
-}));
-
-mock.module('../../utils/logoUploader', () => ({
-  pickClinicLogo: () => Promise.resolve(null),
-}));
-
-mock.module('../components/settings/JoinLinkSettingsCard', () => ({
-  default: () => React.createElement('div', { 'data-mock': 'JoinLinkSettingsCard' }),
-}));
-
-mock.module('../components/settings/ColorBrandingSection', () => ({
-  default: () => React.createElement('div', { 'data-mock': 'ColorBrandingSection' }),
-}));
-
-mock.module('../components/settings/LogoCropModal', () => ({
-  default: () => null,
-}));
-
-const { default: GeneralSettingsTab, CASHIER_MODE_OPTIONS } = await import(
-  '../components/settings/GeneralSettingsTab'
+const { default: CashierStationSettingsCard, CASHIER_MODE_OPTIONS } = await import(
+  '../components/settings/CashierStationSettingsCard'
 );
 
 describe('Billing & Cashier Station Feature Suite', () => {
-  describe('Suite 1: GeneralSettingsTab Billing & Cashier Configuration', () => {
+  describe('Suite 1: CashierStationSettingsCard Billing & Cashier Configuration', () => {
     test('1.1 CASHIER_MODE_OPTIONS exports ClinicDesk and CashierCounter options', () => {
       expect(CASHIER_MODE_OPTIONS).toBeDefined();
       expect(CASHIER_MODE_OPTIONS.length).toBe(2);
@@ -172,46 +103,12 @@ describe('Billing & Cashier Station Feature Suite', () => {
 
     test('1.2 Renders "Billing & Cashier Station" card with mode selection radios', () => {
       const html = renderToStaticMarkup(
-        React.createElement(GeneralSettingsTab, {
-          clinicName: 'Test Clinic',
-          setClinicName: () => {},
-          accreditationNumber: 'ACC-123',
-          setAccreditationNumber: () => {},
-          operatingHours: '8am-5pm',
-          setOperatingHours: () => {},
-          slotDuration: '30',
-          setSlotDuration: () => {},
-          consultationFee: '500',
-          setConsultationFee: () => {},
-          letterheadHeader: '',
-          setLetterheadHeader: () => {},
-          letterheadAddress: '',
-          setLetterheadAddress: () => {},
-          letterheadContact: '',
-          setLetterheadContact: () => {},
-          savingSettings: false,
-          onSavePreferences: async () => {},
-          showSkeletons: false,
-          settingsLoadError: null,
-          settings: {
-            id: 'settings-1',
-            tenantId: 'tenant-1',
-            clinicId: 'clinic-1',
-            clinicName: 'Test Clinic',
-            operatingHours: '8am-5pm',
-            defaultSlotDurationMinutes: 30,
-            queuePrefix: 'Q',
-            invoicePrefix: 'INV',
-            defaultConsultationFee: 500,
-            vatRate: 0.12,
-            cashierMode: 'ClinicDesk',
-          },
+        React.createElement(CashierStationSettingsCard, {
           cashierMode: 'ClinicDesk',
-          setCashierMode: () => {},
-          eodReport: null,
-          eodLoadError: null,
-          onRefreshEod: async () => {},
-          formatPeso: (v) => `₱${v}`,
+          onChangeCashierMode: () => {},
+          onSave: async () => {},
+          saving: false,
+          showSkeletons: false,
         })
       );
 
@@ -225,46 +122,12 @@ describe('Billing & Cashier Station Feature Suite', () => {
 
     test('1.3 Highlights CashierCounter when configured', () => {
       const html = renderToStaticMarkup(
-        React.createElement(GeneralSettingsTab, {
-          clinicName: 'Hospital OPD',
-          setClinicName: () => {},
-          accreditationNumber: '',
-          setAccreditationNumber: () => {},
-          operatingHours: '',
-          setOperatingHours: () => {},
-          slotDuration: '15',
-          setSlotDuration: () => {},
-          consultationFee: '600',
-          setConsultationFee: () => {},
-          letterheadHeader: '',
-          setLetterheadHeader: () => {},
-          letterheadAddress: '',
-          setLetterheadAddress: () => {},
-          letterheadContact: '',
-          setLetterheadContact: () => {},
-          savingSettings: false,
-          onSavePreferences: async () => {},
-          showSkeletons: false,
-          settingsLoadError: null,
-          settings: {
-            id: 'settings-2',
-            tenantId: 'tenant-1',
-            clinicId: 'clinic-1',
-            clinicName: 'Hospital OPD',
-            operatingHours: '',
-            defaultSlotDurationMinutes: 15,
-            queuePrefix: 'Q',
-            invoicePrefix: 'INV',
-            defaultConsultationFee: 600,
-            vatRate: 0.12,
-            cashierMode: 'CashierCounter',
-          },
+        React.createElement(CashierStationSettingsCard, {
           cashierMode: 'CashierCounter',
-          setCashierMode: () => {},
-          eodReport: null,
-          eodLoadError: null,
-          onRefreshEod: async () => {},
-          formatPeso: (v) => `₱${v}`,
+          onChangeCashierMode: () => {},
+          onSave: async () => {},
+          saving: false,
+          showSkeletons: false,
         })
       );
 

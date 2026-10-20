@@ -31,6 +31,12 @@ import { Alert, notify } from '../../utils/feedback';
 import LogoCropModal from './LogoCropModal';
 import ColorBrandingSection from './ColorBrandingSection';
 import DevDataSeederCard from './DevDataSeederCard';
+import CashierStationSettingsCard, {
+  CASHIER_MODE_OPTIONS,
+  type CashierModeOption,
+} from './CashierStationSettingsCard';
+
+export { CASHIER_MODE_OPTIONS, type CashierModeOption };
 
 export type ClinicSpecialtyMode = 'Medical' | 'Dental' | 'Multi-Specialty';
 
@@ -69,32 +75,6 @@ export const CLINIC_SPECIALTY_OPTIONS: SpecialtyOption[] = [
   },
 ];
 
-export interface CashierModeOption {
-  id: 'ClinicDesk' | 'CashierCounter';
-  label: string;
-  badge: string;
-  icon: 'billing' | 'clinic';
-  description: string;
-}
-
-export const CASHIER_MODE_OPTIONS: CashierModeOption[] = [
-  {
-    id: 'ClinicDesk',
-    label: 'Clinic Desk Collection',
-    badge: 'Standalone / In-Clinic',
-    icon: 'billing',
-    description:
-      'Official receipts, PhilHealth discounts, and payments are collected directly at the clinic desk. Invoices remain local to the clinic workstation.',
-  },
-  {
-    id: 'CashierCounter',
-    label: 'Centralized Cashier Counter',
-    badge: 'Hospital / Multi-Department',
-    icon: 'clinic',
-    description:
-      'Invoices are forwarded to the centralized cashier counter (Cashier App). Payments and official receipts are processed at the central cashier station.',
-  },
-];
 
 interface GeneralSettingsTabProps {
   onSettingsUpdated?: (updated: ClinicSettingsRecord) => void;
@@ -500,84 +480,13 @@ export default function GeneralSettingsTab({
       />
 
       {/* Billing & Cashier Station */}
-      <Card>
-        <CardHeader
-          title="Billing & Cashier Station"
-          subtitle="Configure whether payments and official receipts are handled directly at the Clinic Desk or routed to a Centralized Cashier Counter"
-        />
-        <CardContent>
-          {showSkeletons ? (
-            <SkeletonList rows={2} />
-          ) : (
-            <View style={styles.specialtyContainer}>
-              <View style={styles.layoutSelectorGrid}>
-                {CASHIER_MODE_OPTIONS.map((opt) => {
-                  const isSelected = effectiveCashierMode === opt.id;
-                  return (
-                    <Pressable
-                      key={opt.id}
-                      onPress={() => handleSelectCashierMode(opt.id)}
-                      style={({ pressed }) => [
-                        styles.layoutCard,
-                        isSelected && styles.layoutCardSelected,
-                        pressed && styles.layoutCardPressed,
-                      ]}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected: isSelected }}
-                      accessibilityLabel={`${opt.label} (${opt.badge})`}
-                    >
-                      <View style={styles.layoutCardHeader}>
-                        <View style={styles.layoutCardIconTitle}>
-                          <View style={[styles.layoutIconWrap, isSelected && styles.layoutIconWrapSelected]}>
-                            <Icon
-                              name={opt.icon}
-                              size={theme.sizes.iconLg}
-                              color={isSelected ? theme.colors.onPrimary : theme.colors.primaryDark}
-                            />
-                          </View>
-                          <View style={styles.layoutTitleGroup}>
-                            <ThemedText
-                              variant="bodyBold"
-                              color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                            >
-                              {opt.label}
-                            </ThemedText>
-                            <Badge
-                              label={opt.badge}
-                              variant={isSelected ? 'info' : 'neutral'}
-                              size="sm"
-                            />
-                          </View>
-                        </View>
-
-                        <View style={[styles.radioOuter, isSelected && styles.radioOuterSelected]}>
-                          {isSelected && <View style={styles.radioInner} />}
-                        </View>
-                      </View>
-
-                      <ThemedText
-                        variant="caption"
-                        color={theme.colors.textSecondary}
-                        style={styles.layoutDescription}
-                      >
-                        {opt.description}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <View style={styles.actionsEnd}>
-                <Button
-                  title="Save billing station preferences"
-                  onPress={handleSaveCashierMode}
-                  loading={savingCashierMode || savingSettings}
-                />
-              </View>
-            </View>
-          )}
-        </CardContent>
-      </Card>
+      <CashierStationSettingsCard
+        cashierMode={effectiveCashierMode}
+        onChangeCashierMode={handleSelectCashierMode}
+        onSave={handleSaveCashierMode}
+        saving={savingCashierMode || savingSettings}
+        showSkeletons={showSkeletons}
+      />
 
       {/* Clinic Specialty Mode & Dental Module */}
       <Card>
