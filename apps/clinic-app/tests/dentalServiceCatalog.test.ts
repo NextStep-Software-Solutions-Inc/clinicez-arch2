@@ -282,6 +282,15 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
       expect(tabSource).toContain('loading={seedingDental}');
       expect(tabSource).toContain('onPress={handleSeedDentalServices}');
     });
+
+    test('1.6 ServicesCatalogTab source code binds Seed Dental Services to empty state for dental category', async () => {
+      const tabSource = await Bun.file(
+        new URL('../components/settings/ServicesCatalogTab.tsx', import.meta.url).pathname
+      ).text();
+
+      expect(tabSource).toContain("selectedCategory === 'Dental' ? 'Seed Dental Services'");
+      expect(tabSource).toContain('handleSeedDentalServices');
+    });
   });
 
   // -------------------------------------------------------------------------

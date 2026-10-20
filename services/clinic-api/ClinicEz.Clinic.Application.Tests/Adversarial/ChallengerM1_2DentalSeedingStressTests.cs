@@ -423,4 +423,40 @@ public class ChallengerM1_2DentalSeedingStressTests
         var sealantAfter = inDb.First(x => x.Code == "DENT-SEALANT");
         sealantAfter.IsActive.Should().BeFalse("Seeding must not force-reactivate an item deactivated by clinic admin");
     }
+
+    [Fact]
+    public async Task SeedDentalServices_WhenItemWasSoftDeleted_RestoresSoftDeletedRecordWithoutViolatingUniqueIndex()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContextA);
+        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var handler = new SeedDentalServicesCommandHandler(repo, uow, _clinicContextA);
+
+        // Pre-insert a soft-deleted DENT-RCT row
+        await repo.AddAsync(new ClinicServiceItem
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantIdA,
+            ClinicId = _clinicIdA,
+            Code = "DENT-RCT",
+            Name = "Previously Deleted Root Canal",
+            Category = "Dental",
+            StandardPrice = 4000m,
+            IsActive = false,
+            IsDeleted = true,
+            DeletedAt = DateTime.UtcNow
+        });
+        await uow.SaveChangesAsync();
+
+        // Act: Run idempotent seed command
+        var result = await handler.Handle(new SeedDentalServicesCommand(), CancellationToken.None);
+
+        // Assert: All 10 presets seeded, DENT-RCT was restored without unique constraint collision
+        result.Should().HaveCount(10);
+        var inDb = await repo.Query().ToListAsync();
+        inDb.Should().HaveCount(10);
+        var rct = inDb.First(x => x.Code == "DENT-RCT");
+        rct.IsDeleted.Should().BeFalse();
+        rct.IsActive.Should().BeTrue();
+    }
 }

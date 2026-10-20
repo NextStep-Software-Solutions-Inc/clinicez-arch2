@@ -151,7 +151,7 @@ describe('Milestone MC Empirical Stress Testing & Adversarial Challenge', () => 
         })
       );
       expect(html).toContain('inline-dental-chart-card-order-proc-btn');
-      expect(html).toContain('+ Order Procedure for Tooth #16');
+      expect(html).toContain('Order Procedure for Tooth #16');
     });
 
     test('FAIL-CHECK: renders + Order Procedure button when onQuickOrderProcedure is provided (Consultations.screen usage)', () => {
@@ -380,9 +380,9 @@ describe('Milestone MC Empirical Stress Testing & Adversarial Challenge', () => 
         })
       );
 
-      // Button should be "+ Order Procedure for Tooth #11" without empty parens "()"
-      expect(html).toContain('+ Order Procedure for Tooth #11');
-      expect(html).not.toContain('+ Order Procedure for Tooth #11 ()');
+      // Button should be "Order Procedure for Tooth #11" without empty parens "()"
+      expect(html).toContain('Order Procedure for Tooth #11');
+      expect(html).not.toContain('Order Procedure for Tooth #11 ()');
 
       // Simulated button execution:
       // In InlineDentalChartCard.tsx:
@@ -417,7 +417,7 @@ describe('Milestone MC Empirical Stress Testing & Adversarial Challenge', () => 
         })
       );
 
-      expect(html).toContain('+ Order Procedure for Tooth #26 (MOD)');
+      expect(html).toContain('Order Procedure for Tooth #26 (MOD)');
 
       const state = multiSurfaceChart[26];
       const canonicalSurface = state.surface ? sortToothSurfaces(state.surface) : undefined;

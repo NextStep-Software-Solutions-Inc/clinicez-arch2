@@ -73,7 +73,7 @@ export default function SlideOverDrawerChartLayout(props: ChartLayoutProps) {
             </Pressable>
 
             <View style={styles.titleBlock}>
-              <ThemedText variant="title">Medical chart</ThemedText>
+              <ThemedText variant="title">Patient Chart</ThemedText>
               {patient?.fullName ? (
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
                   {patient.fullName} {patient.patientCode ? `• ${patient.patientCode}` : ''}

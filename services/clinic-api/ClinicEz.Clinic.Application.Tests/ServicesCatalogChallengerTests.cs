@@ -156,7 +156,41 @@ public class ServicesCatalogChallengerTests
         await uow.SaveChangesAsync();
 
         var multiResult = await queryHandler.Handle(new GetClinicServicesQuery(), CancellationToken.None);
-        multiResult.Should().HaveCount(10); // Still 10, existing items are preserved without clobbering
+        multiResult.Should().HaveCount(19); // 10 dental + 9 medical presets seeded idempotently without duplicates
+        multiResult.Count(x => x.Category == "Dental").Should().Be(10);
+        multiResult.Count(x => x.Category != "Dental").Should().Be(9);
+
+        // Step 5: Transition from Medical (existing medical items) to Dental idempotently adds all 10 dental presets
+        var clinicId2 = Guid.NewGuid();
+        var clinicContext2 = Substitute.For<IClinicContext>();
+        clinicContext2.TenantId.Returns(TenantId);
+        clinicContext2.ClinicId.Returns(clinicId2);
+
+        var (context2, uow2, sieve2) = TestDbHelper.CreateTestContext(clinicContext2);
+        var repo2 = TestDbHelper.CreateRepository<ClinicServiceItem>(context2, sieve2);
+        var settingsRepo2 = TestDbHelper.CreateRepository<ClinicSettings>(context2, sieve2);
+
+        var settings2 = new ClinicSettings
+        {
+            TenantId = TenantId,
+            ClinicId = clinicId2,
+            ClinicName = "Medical to Dental Clinic",
+            SpecialtyMode = "Medical"
+        };
+        await settingsRepo2.AddAsync(settings2);
+        await uow2.SaveChangesAsync();
+
+        var handler2 = new GetClinicServicesQueryHandler(repo2, uow2, clinicContext2, settingsRepo2);
+        var medResult = await handler2.Handle(new GetClinicServicesQuery(), CancellationToken.None);
+        medResult.Should().HaveCount(9);
+
+        settings2.SpecialtyMode = "Dental";
+        await uow2.SaveChangesAsync();
+
+        var dentalResult = await handler2.Handle(new GetClinicServicesQuery(), CancellationToken.None);
+        dentalResult.Should().HaveCount(19);
+        dentalResult.Count(x => x.Category == "Dental").Should().Be(10);
+        dentalResult.Count(x => x.Category != "Dental").Should().Be(9);
     }
 
     [Theory]

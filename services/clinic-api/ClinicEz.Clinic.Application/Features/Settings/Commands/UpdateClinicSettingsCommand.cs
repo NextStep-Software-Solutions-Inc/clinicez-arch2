@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -26,6 +29,8 @@ public sealed record UpdateClinicSettingsCommand(
     string? LetterheadContact = null,
     string? LetterheadDohLto = null,
     string? LetterheadFooter = null,
+    string? LetterheadAccentColorHex = null,
+    string? DocumentAccentColorHex = null,
     string? PrimaryColorHex = null,
     string? PrimaryLogoUrl = null,
     string? PaperSize = null,
@@ -58,15 +63,18 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
     private readonly IRepository<ClinicSettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IRepository<ClinicServiceItem>? _serviceRepo;
 
     public UpdateClinicSettingsCommandHandler(
         IRepository<ClinicSettings> settingsRepo,
         IClinicContext clinicContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IRepository<ClinicServiceItem>? serviceRepo = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
+        _serviceRepo = serviceRepo;
     }
 
     public async Task<ClinicSettingsDto> Handle(UpdateClinicSettingsCommand request, CancellationToken ct)
@@ -132,6 +140,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
 
         if (request.LetterheadFooter != null)
             settings.LetterheadFooter = string.IsNullOrWhiteSpace(request.LetterheadFooter) ? null : request.LetterheadFooter.Trim();
+
+        var docAccent = request.LetterheadAccentColorHex ?? request.DocumentAccentColorHex;
+        if (docAccent != null)
+            settings.LetterheadAccentColorHex = string.IsNullOrWhiteSpace(docAccent) ? null : docAccent.Trim();
 
         if (request.PrimaryColorHex != null)
             settings.PrimaryColorHex = request.PrimaryColorHex.Trim();
@@ -199,6 +211,14 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             if (string.Equals(mode, "Dental", StringComparison.OrdinalIgnoreCase))
             {
                 settings.EnableDentalModule = true;
+            }
+
+            if (_serviceRepo != null &&
+                (string.Equals(mode, "Dental", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(mode, "MultiSpecialty", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(mode, "Multi-Specialty", StringComparison.OrdinalIgnoreCase)))
+            {
+                await EnsureDentalPresetsSeededAsync(ct);
             }
         }
 
@@ -283,10 +303,59 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.DefaultDoctorSharePercentage,
             settings.CashierMode,
             LetterheadDohLto: settings.LetterheadDohLto,
+            LetterheadAccentColorHex: settings.LetterheadAccentColorHex,
             EnableAppointmentReminders: settings.EnableAppointmentReminders,
             AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
             AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
             EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications);
+    }
+
+    private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)
+    {
+        if (_serviceRepo == null) return;
+
+        var allServices = await _serviceRepo.Query()
+            .IgnoreQueryFilters()
+            .Where(s => s.ClinicId == _clinicContext.ClinicId)
+            .ToListAsync(ct);
+
+        var existingMap = allServices
+            .Where(s => !string.IsNullOrWhiteSpace(s.Code))
+            .GroupBy(s => s.Code.Trim().ToUpperInvariant())
+            .ToDictionary(g => g.Key, g => g.First());
+
+        foreach (var def in DentalCatalogDefaults.Defaults)
+        {
+            var codeUpper = def.Code.Trim().ToUpperInvariant();
+            if (existingMap.TryGetValue(codeUpper, out var existing))
+            {
+                if (existing.IsDeleted)
+                {
+                    existing.IsDeleted = false;
+                    existing.DeletedAt = null;
+                    existing.DeletedBy = null;
+                    existing.IsActive = true;
+                }
+            }
+            else
+            {
+                var newItem = new ClinicServiceItem
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    Code = def.Code,
+                    Name = def.Name,
+                    Category = def.Category,
+                    StandardPrice = def.StandardPrice,
+                    Description = def.Description,
+                    IsActive = true
+                };
+
+                await _serviceRepo.AddAsync(newItem, ct);
+                existingMap[codeUpper] = newItem;
+            }
+        }
     }
 }
 

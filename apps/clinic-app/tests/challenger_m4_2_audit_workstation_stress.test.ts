@@ -781,7 +781,8 @@ describe('Milestone 4 Challenger 2: Adversarial Audit Workstation Stress Suite',
       const scriptPath = path.resolve(import.meta.dir, '../scripts/check-tokens.mjs');
       expect(fs.existsSync(scriptPath)).toBe(true);
 
-      const proc = Bun.spawnSync(['node', scriptPath, '--strict'], {
+      const runtime = process.execPath || 'node';
+      const proc = Bun.spawnSync([runtime, scriptPath, '--strict'], {
         cwd: path.resolve(import.meta.dir, '..'),
       });
 

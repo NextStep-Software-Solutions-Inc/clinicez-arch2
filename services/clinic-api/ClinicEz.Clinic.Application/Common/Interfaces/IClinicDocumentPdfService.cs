@@ -1,3 +1,4 @@
+using ClinicEz.Clinic.Application.Features.Billing.DTOs;
 using ClinicEz.Clinic.Application.Features.LabOrders.Queries;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Application.Features.Reports.DTOs;
@@ -8,6 +9,18 @@ namespace ClinicEz.Clinic.Application.Common.Interfaces;
 
 public interface IClinicDocumentPdfService
 {
+    byte[] GenerateInvoicePdf(
+        Invoice invoice,
+        ClinicSettings settings,
+        StaffMember? doctor = null,
+        ClinicPatient? patient = null,
+        string? queueNumber = null);
+
+    byte[] GenerateInvoicePreviewPdf(
+        InvoicePreviewRequest preview,
+        ClinicSettings settings,
+        StaffMember? doctor = null,
+        ClinicPatient? patient = null);
     byte[] GenerateMedicalCertificatePdf(
         MedicalCertificate cert,
         ClinicSettings settings,

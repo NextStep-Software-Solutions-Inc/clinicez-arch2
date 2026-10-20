@@ -364,6 +364,136 @@ public class Milestone2And3QuestPdfStressTests
         ValidatePdfStream(sharesBytes);
     }
 
+    [Fact]
+    public void QuestPdf_Should_Generate_Valid_Invoice_And_Soa_Pdfs()
+    {
+        var settings = CreateStandardSettings();
+        var patient = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = settings.TenantId,
+            PatientCode = "PAT-001",
+            FirstName = "Maria",
+            LastName = "Santos",
+            ContactNumber = "09171234567",
+            DateOfBirth = new DateOnly(1955, 3, 15),
+            Gender = "Female",
+            SeniorCitizenId = "OSCA-987654",
+            PwdId = "PWD-123456"
+        };
+        var doctor = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = settings.TenantId,
+            FirstName = "Jose",
+            LastName = "Rizal",
+            Title = "Dr.",
+            PrcLicenseNumber = "0123456"
+        };
+
+        var draftInvoice = new Invoice
+        {
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            InvoiceNumber = "SOA-20261020-001",
+            InvoiceDate = DateTime.UtcNow,
+            PatientId = patient.Id,
+            PatientName = $"{patient.FirstName} {patient.LastName}",
+            AttendingDoctorId = doctor.Id,
+            AttendingDoctorName = $"Dr. {doctor.FirstName} {doctor.LastName}",
+            DiscountType = Domain.Enums.DiscountType.SeniorCitizen,
+            DiscountIdNumber = "OSCA-987654",
+            DiscountPercentage = 20m,
+            GrossAmount = 1500m,
+            DiscountAmount = 300m,
+            NetAmount = 1200m,
+            BalanceDue = 1200m,
+            Status = Domain.Enums.InvoiceStatus.Draft,
+            LineItems = new List<InvoiceLineItem>
+            {
+                new()
+                {
+                    Description = "General Consultation",
+                    Category = "Consultation",
+                    UnitPrice = 500m,
+                    Quantity = 1,
+                    TotalPrice = 500m
+                },
+                new()
+                {
+                    Description = "Complete Blood Count (CBC)",
+                    Category = "Laboratory",
+                    UnitPrice = 1000m,
+                    Quantity = 1,
+                    TotalPrice = 1000m
+                }
+            }
+        };
+
+        var soaBytes = _pdfService.GenerateInvoicePdf(draftInvoice, settings, doctor, patient, "Q-001");
+        ValidatePdfStream(soaBytes);
+
+        var paidInvoice = new Invoice
+        {
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            InvoiceNumber = "INV-20261020-001",
+            InvoiceDate = DateTime.UtcNow,
+            PatientId = patient.Id,
+            PatientName = $"{patient.FirstName} {patient.LastName}",
+            AttendingDoctorId = doctor.Id,
+            AttendingDoctorName = $"Dr. {doctor.FirstName} {doctor.LastName}",
+            GrossAmount = 1000m,
+            NetAmount = 1000m,
+            AmountPaid = 1000m,
+            BalanceDue = 0m,
+            Status = Domain.Enums.InvoiceStatus.Paid,
+            BilledByStaffName = "Jane Cashier",
+            Payments = new List<PaymentRecord>
+            {
+                new()
+                {
+                    PaymentNumber = "OR-20261020-001",
+                    Amount = 1000m,
+                    Method = Domain.Enums.PaymentMethod.Cash,
+                    PaymentDate = DateTime.UtcNow
+                }
+            },
+            LineItems = new List<InvoiceLineItem>
+            {
+                new()
+                {
+                    Description = "Follow-up Consultation",
+                    Category = "Consultation",
+                    UnitPrice = 1000m,
+                    Quantity = 1,
+                    TotalPrice = 1000m
+                }
+            }
+        };
+
+        var paidBytes = _pdfService.GenerateInvoicePdf(paidInvoice, settings, doctor, patient);
+        ValidatePdfStream(paidBytes);
+
+        var previewRequest = new Application.Features.Billing.DTOs.InvoicePreviewRequest(
+            patient.Id,
+            $"{patient.FirstName} {patient.LastName}",
+            "Q-002",
+            $"Dr. {doctor.FirstName} {doctor.LastName}",
+            doctor.PrcLicenseNumber,
+            Domain.Enums.DiscountType.Pwd,
+            "PWD-123456",
+            new List<Application.Features.Billing.DTOs.CreateInvoiceLineItemRequest>
+            {
+                new(Guid.NewGuid(), "SRV-01", "Wound Dressing", "Procedure", 750m, 1)
+            },
+            "Post-op dressing"
+        );
+
+        var previewBytes = _pdfService.GenerateInvoicePreviewPdf(previewRequest, settings, doctor, patient);
+        ValidatePdfStream(previewBytes);
+    }
+
     // =========================================================================
     // 6. Cryptographic Digest, QR Code Authenticity & Tamper Resistance
     // =========================================================================

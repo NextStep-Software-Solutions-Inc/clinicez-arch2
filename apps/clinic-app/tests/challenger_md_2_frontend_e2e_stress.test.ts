@@ -559,7 +559,7 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
         })
       );
 
-      expect(html).toContain('+ Order Procedure for Tooth #14 (MOD)');
+      expect(html).toContain('Order Procedure for Tooth #14 (MOD)');
 
       // Execute simulated click
       handleOrder(14, 'MOD');

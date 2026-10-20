@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -23,11 +23,13 @@ import {
   Skeleton,
   SkeletonList,
   SkeletonStat,
+  Modal,
 } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff } from '../../context/StaffContext';
+import { openDocument, openDocumentBlob } from '../../services/documentOpener';
 import {
   clinicService,
   DiscountType,
@@ -36,8 +38,17 @@ import {
   PatientQueueItem,
   InvoiceRecord,
   ClinicSettingsRecord,
+  ClinicPatient,
 } from '../../services/clinicService';
-import { printReceiptDialog } from '../../utils/printHelper';
+import {
+  printReceiptDialog,
+  printThermalReceipt,
+  printProfessionalReceipt,
+  type PrintLetterhead,
+  type ReceiptData,
+  type InvoicePdfData,
+  type ReceiptItem,
+} from '../../utils/printHelper';
 
 interface LineItemForm {
   id: string;
@@ -70,7 +81,8 @@ interface Remittance {
   discountsGiven: number;
 }
 
-interface ReceiptSummary {
+interface ReceiptSummary extends ReceiptData {
+  invoiceId?: string;
   orNumber: string;
   netAmount: number;
   change: number;
@@ -162,6 +174,9 @@ export default function BillingScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<ReceiptSummary | null>(null);
+  const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+  const [currentPatientProfile, setCurrentPatientProfile] = useState<ClinicPatient | null>(null);
+  const handledParamPatientRef = useRef<string | null>(null);
 
   const loadInitialData = useCallback(async () => {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -196,11 +211,12 @@ export default function BillingScreen() {
 
     for (const inv of allInvoices) {
       if (inv.status === 'Voided') continue;
-      const key = inv.queueItemId || inv.patientId;
       if (inv.status === 'Draft' || inv.status === 'PartiallyPaid') {
-        openSoaMap.set(key, inv);
+        if (inv.queueItemId) openSoaMap.set(inv.queueItemId, inv);
+        if (inv.patientId) openSoaMap.set(inv.patientId, inv);
       } else if (inv.status === 'Paid') {
-        billedMap.set(key, inv.invoiceNumber);
+        if (inv.queueItemId) billedMap.set(inv.queueItemId, inv.invoiceNumber);
+        if (inv.patientId) billedMap.set(inv.patientId, inv.invoiceNumber);
       }
     }
 
@@ -230,23 +246,24 @@ export default function BillingScreen() {
     loadInitialData();
   }, [loadInitialData]);
 
-  const handleSelectPatient = useCallback((p: BillingPatient) => {
+  const handleSelectPatient = useCallback(async (p: BillingPatient) => {
     setSelectedPatient(p);
     setLastReceipt(null);
     setAllowDuplicate(false);
 
-    if (p.activeInvoice) {
+    let initialItems: LineItemForm[] = [];
+
+    if (p.activeInvoice && p.activeInvoice.lineItems && p.activeInvoice.lineItems.length > 0) {
       setActiveInvoice(p.activeInvoice);
-      setLineItems(
-        p.activeInvoice.lineItems.map(l => ({
-          id: l.id || `li-${Date.now()}-${Math.random()}`,
-          code: l.itemCode || '',
-          name: l.description,
-          category: l.category,
-          price: l.unitPrice,
-          qty: l.quantity,
-        }))
-      );
+      initialItems = p.activeInvoice.lineItems.map(l => ({
+        id: l.id || `li-${Date.now()}-${Math.random()}`,
+        code: l.itemCode || '',
+        name: l.description,
+        category: l.category,
+        price: l.unitPrice,
+        qty: l.quantity,
+      }));
+      setLineItems(initialItems);
       setDiscountType(p.activeInvoice.discountType || 'None');
       setDiscountId(p.activeInvoice.discountIdNumber || '');
     } else {
@@ -255,26 +272,138 @@ export default function BillingScreen() {
       setDiscountType('None');
       setDiscountId('');
     }
-  }, []);
+
+    // Auto-detect and prefill Senior Citizen or PWD ID from patient profile
+    try {
+      const [patientData] = await clinicService.getPatientById(p.patientId);
+      if (patientData) {
+        setCurrentPatientProfile(patientData);
+        if (!p.activeInvoice) {
+          if (patientData.seniorCitizenId) {
+            setDiscountType('SeniorCitizen');
+            setDiscountId(patientData.seniorCitizenId);
+          } else if (patientData.pwdId) {
+            setDiscountType('Pwd');
+            setDiscountId(patientData.pwdId);
+          }
+        }
+      }
+    } catch {
+      // Non-fatal if demographic lookup fails
+    }
+
+    // Do NOT auto-rehydrate procedures if the patient has already been billed and settled today
+    if (p.isAlreadyBilled && !p.hasOpenSoa) {
+      return;
+    }
+
+    // Collect all items already billed and paid today for this patient to prevent double-billing
+    const paidInvoicesTodayForPatient = invoices.filter(
+      (inv) => inv.patientId === p.patientId && inv.status === 'Paid'
+    );
+    const alreadyPaidItemCodes = new Set<string>();
+    const alreadyPaidItemNames = new Set<string>();
+    for (const paidInv of paidInvoicesTodayForPatient) {
+      for (const item of paidInv.lineItems || []) {
+        if (item.itemCode) alreadyPaidItemCodes.add(item.itemCode.toLowerCase());
+        if (item.description) alreadyPaidItemNames.add(item.description.toLowerCase());
+      }
+    }
+
+    // Auto-rehydrate any unbilled in-clinic procedures or consultations for today
+    try {
+      const [[procsData], [consultsData]] = await Promise.all([
+        clinicService.getProcedures(p.patientId),
+        clinicService.getConsultations(p.patientId),
+      ]);
+
+      const updatedItems = [...initialItems];
+      let addedCount = 0;
+
+      // Ensure consultation service fee is present if not already billed
+      const hasConsultationItem = updatedItems.some(
+        (i) => i.category?.toLowerCase() === 'consultation' || i.name.toLowerCase().includes('consultation')
+      );
+      const isConsultationPaid = Array.from(alreadyPaidItemNames).some(name => name.includes('consultation'));
+
+      if (!hasConsultationItem && !isConsultationPaid && (p.doctorId || (consultsData && consultsData.length > 0))) {
+        const consultSvc = services.find(
+          (s) => s.category?.toLowerCase() === 'consultation' || s.name.toLowerCase().includes('consultation')
+        );
+        const consultPrice = consultSvc?.standardPrice ?? clinicSettings?.defaultConsultationFee ?? 500;
+        updatedItems.unshift({
+          id: `consult-${Date.now()}`,
+          code: consultSvc?.code || 'CONSULT',
+          name: consultSvc?.name || 'General Medical Consultation',
+          category: 'Consultation',
+          price: consultPrice,
+          qty: 1,
+        });
+        addedCount++;
+      }
+
+      // Check for ordered in-clinic procedures not yet in line items and not already paid
+      if (procsData && procsData.length > 0) {
+        for (const proc of procsData) {
+          if (proc.status === 'Cancelled') continue;
+          const alreadyBilled = updatedItems.some(
+            (i) => i.name.toLowerCase() === proc.procedureName.toLowerCase() ||
+                   (proc.procedureCode && i.code === proc.procedureCode)
+          );
+          const isProcPaid =
+            alreadyPaidItemNames.has(proc.procedureName.toLowerCase()) ||
+            (proc.procedureCode && alreadyPaidItemCodes.has(proc.procedureCode.toLowerCase()));
+
+          if (!alreadyBilled && !isProcPaid) {
+            const matchedSvc = services.find(
+              (s) => s.name.toLowerCase() === proc.procedureName.toLowerCase() ||
+                     (proc.procedureCode && s.code === proc.procedureCode)
+            );
+            updatedItems.push({
+              id: `proc-${proc.id || Date.now()}-${Math.random()}`,
+              code: proc.procedureCode || matchedSvc?.code || '',
+              name: proc.procedureName,
+              category: proc.category || matchedSvc?.category || 'Procedure',
+              price: matchedSvc?.standardPrice ?? 0,
+              qty: 1,
+            });
+            addedCount++;
+          }
+        }
+      }
+
+      if (addedCount > 0) {
+        setLineItems(updatedItems);
+        notify.info(`Auto-populated ${addedCount} consultation & procedure service(s) for ${p.patientName}.`);
+      }
+    } catch {
+      // Non-fatal if procedure lookup fails
+    }
+  }, [services, clinicSettings, invoices]);
 
   useEffect(() => {
     if (loading) return;
     const params = route.params as { patientId?: string; patientName?: string } | undefined;
-    if (params?.patientId) {
+    if (params?.patientId && handledParamPatientRef.current !== params.patientId) {
+      handledParamPatientRef.current = params.patientId;
       const p = patients.find((x) => x.patientId === params.patientId);
       if (p) {
         handleSelectPatient(p);
       } else if (params.patientName) {
-        const matchingInv = invoices.find(
-          inv => inv.patientId === params.patientId && (inv.status === 'Draft' || inv.status === 'PartiallyPaid')
+        const matchingDraft = invoices.find(
+          (inv) => inv.patientId === params.patientId && (inv.status === 'Draft' || inv.status === 'PartiallyPaid')
+        );
+        const matchingPaid = invoices.find(
+          (inv) => inv.patientId === params.patientId && inv.status === 'Paid'
         );
         const newP: BillingPatient = {
           key: `patient-${params.patientId}`,
           patientId: params.patientId,
           patientName: params.patientName,
-          hasOpenSoa: Boolean(matchingInv),
-          activeInvoice: matchingInv,
-          existingInvoiceNumber: matchingInv?.invoiceNumber,
+          hasOpenSoa: Boolean(matchingDraft),
+          activeInvoice: matchingDraft,
+          isAlreadyBilled: !matchingDraft && Boolean(matchingPaid),
+          existingInvoiceNumber: matchingDraft ? matchingDraft.invoiceNumber : matchingPaid?.invoiceNumber,
         };
         handleSelectPatient(newP);
       }
@@ -329,24 +458,113 @@ export default function BillingScreen() {
     setLineItems(prev => prev.filter(i => i.id !== id));
   };
 
-  const handlePrintReceipt = () => {
+  const printLetterhead: PrintLetterhead = {
+    header: letterhead?.header || facilityName || clinicSettings?.clinicName || 'Clinic EZ Healthcare',
+    subHeader: letterhead?.subHeader,
+    address: letterhead?.address,
+    contact: letterhead?.contact,
+    tin: taxIdentificationNumber || clinicSettings?.taxIdentificationNumber,
+    accreditationNumber: accreditationNumber || clinicSettings?.accreditationNumber,
+    dohLto: clinicSettings?.letterheadDohLto,
+  };
+
+  const handleDiscountTypeChange = (type: DiscountType) => {
+    setDiscountType(type);
+    if (type === 'SeniorCitizen') {
+      setDiscountId(currentPatientProfile?.seniorCitizenId || '');
+    } else if (type === 'Pwd') {
+      setDiscountId(currentPatientProfile?.pwdId || '');
+    } else if (type === 'PhilHealthKonsulta') {
+      setDiscountId(currentPatientProfile?.philHealthNumber || '');
+    } else {
+      setDiscountId('');
+    }
+  };
+
+  const handlePrintThermalReceipt = () => {
     if (!lastReceipt) return;
-    const receiptDetails = [
-      `OFFICIAL RECEIPT: OR #${lastReceipt.orNumber}`,
-      `DATE: ${lastReceipt.paidAt}`,
-      facilityName ? `FACILITY: ${facilityName}` : '',
-      taxIdentificationNumber ? `TIN: ${taxIdentificationNumber}` : '',
-      accreditationNumber ? `ACCREDITATION NO.: ${accreditationNumber}` : '',
-      `PATIENT: ${lastReceipt.patientName}`,
-      `CASHIER: ${lastReceipt.cashierName}`,
-      `----------------------------------------`,
-      `NET AMOUNT PAID: ${formatPeso(lastReceipt.netAmount)}`,
-      `CHANGE RETURNED: ${formatPeso(lastReceipt.change)}`,
-      `STATUS: Settled & Validated`,
-    ]
-      .filter(Boolean)
-      .join('\n');
-    printReceiptDialog(`Official Receipt #${lastReceipt.orNumber}`, receiptDetails, letterhead);
+    printThermalReceipt(lastReceipt, printLetterhead);
+  };
+
+  const handlePrintProfessionalReceipt = (receipt?: ReceiptSummary | InvoiceRecord) => {
+    const invId = (receipt as any)?.invoiceId || (receipt as any)?.id || activeInvoice?.id;
+    if (invId) {
+      openDocument(clinicService.getInvoicePdfUrl(invId));
+    } else if (lastReceipt) {
+      printProfessionalReceipt(lastReceipt, printLetterhead);
+    }
+  };
+
+  const handleReprintPaidThermal = (inv: InvoiceRecord) => {
+    const payment = inv.payments?.[0];
+    const receiptData: ReceiptData = {
+      orNumber: payment?.paymentNumber || inv.invoiceNumber,
+      invoiceNumber: inv.invoiceNumber,
+      patientName: inv.patientName,
+      patientId: inv.patientId,
+      cashierName: payment?.receivedByStaffName || inv.billedByStaffName || currentName,
+      paidAt: payment?.paymentDate
+        ? new Date(payment.paymentDate).toLocaleString('en-PH')
+        : new Date(inv.invoiceDate).toLocaleString('en-PH'),
+      paymentMethod: payment?.method || 'Cash',
+      referenceNumber: payment?.referenceNumber,
+      grossAmount: inv.grossAmount,
+      discountType: inv.discountType,
+      discountIdNumber: inv.discountIdNumber,
+      discountAmount: inv.discountAmount,
+      netAmount: inv.netAmount,
+      cashTendered: payment?.method === 'Cash' ? payment.amount : undefined,
+      change: 0,
+      items: (inv.lineItems || []).map((li) => ({
+        code: li.itemCode,
+        description: li.description,
+        category: li.category,
+        unitPrice: li.unitPrice,
+        quantity: li.quantity,
+        totalPrice: li.totalPrice,
+      })),
+    };
+    printThermalReceipt(receiptData, printLetterhead);
+  };
+
+  const handlePrintReceipt = () => {
+    handlePrintThermalReceipt();
+  };
+
+  const handlePrintInvoicePdf = async () => {
+    if (activeInvoice?.id) {
+      openDocument(clinicService.getInvoicePdfUrl(activeInvoice.id));
+      return;
+    }
+
+    if (selectedPatient) {
+      try {
+        const [blob, err] = await clinicService.downloadInvoicePreviewPdf({
+          patientId: selectedPatient.patientId,
+          patientName: selectedPatient.patientName,
+          queueNumber: selectedPatient.queueNumber,
+          attendingDoctorName: selectedPatient.doctorName,
+          discountType,
+          discountIdNumber: discountId.trim() || undefined,
+          lineItems: lineItems.map((li) => ({
+            serviceItemId: undefined,
+            itemCode: li.code,
+            description: li.name,
+            category: li.category,
+            unitPrice: li.price,
+            quantity: li.qty,
+          })),
+          notes: 'Statement of Account Preview',
+        });
+        if (blob && !err) {
+          openDocumentBlob(blob);
+        } else {
+          notify.error('Unable to generate backend SOA PDF.');
+        }
+      } catch {
+        notify.error('Failed to stream SOA PDF.');
+      }
+    }
   };
 
   const handleSettlePayment = async () => {
@@ -476,14 +694,61 @@ export default function BillingScreen() {
 
     setIsProcessing(false);
 
+    const receiptItems: ReceiptItem[] = lineItems.map((li) => ({
+      code: li.code,
+      description: li.name,
+      category: li.category,
+      unitPrice: li.price,
+      quantity: li.qty,
+      totalPrice: li.price * li.qty,
+    }));
+
     setLastReceipt({
+      invoiceId: invoiceToPayId,
       orNumber,
-      netAmount,
-      change: changeDue,
-      cashierName: currentName,
+      invoiceNumber: activeInvoice?.invoiceNumber,
       patientName: selectedPatient.patientName,
+      patientId: selectedPatient.patientId,
+      cashierName: currentName,
       paidAt: new Date().toLocaleString('en-PH'),
+      paymentMethod,
+      referenceNumber: referenceNumber || undefined,
+      grossAmount,
+      discountType,
+      discountIdNumber: discountId,
+      discountAmount,
+      netAmount,
+      cashTendered: paymentMethod === 'Cash' ? tenderedVal : undefined,
+      change: changeDue,
+      items: receiptItems,
     });
+    setReceiptModalVisible(true);
+
+    // Persist Senior Citizen / PWD ID to patient profile in background if updated
+    if (currentPatientProfile && selectedPatient) {
+      const seniorIdChanged =
+        discountType === 'SeniorCitizen' &&
+        discountId.trim() &&
+        currentPatientProfile.seniorCitizenId !== discountId.trim();
+      const pwdIdChanged =
+        discountType === 'Pwd' &&
+        discountId.trim() &&
+        currentPatientProfile.pwdId !== discountId.trim();
+
+      if (seniorIdChanged || pwdIdChanged) {
+        clinicService
+          .updatePatient(selectedPatient.patientId, {
+            ...currentPatientProfile,
+            seniorCitizenId:
+              discountType === 'SeniorCitizen'
+                ? discountId.trim()
+                : currentPatientProfile.seniorCitizenId,
+            pwdId:
+              discountType === 'Pwd' ? discountId.trim() : currentPatientProfile.pwdId,
+          })
+          .catch(() => {});
+      }
+    }
 
     setRemittance(prev =>
       prev
@@ -501,12 +766,21 @@ export default function BillingScreen() {
     // Reset billing form to prevent accidental duplicate submission
     setSelectedPatient(null);
     setActiveInvoice(null);
+    setCurrentPatientProfile(null);
     setLineItems([]);
     setCashTendered('');
     setReferenceNumber('');
     setDiscountId('');
     setDiscountType('None');
     setAllowDuplicate(false);
+
+    // Clear route param so subsequent loadInitialData does NOT re-select this patient!
+    handledParamPatientRef.current = null;
+    const currentRouteParams = route.params as { patientId?: string; patientName?: string } | undefined;
+    if (currentRouteParams?.patientId) {
+      navigation.setParams({ patientId: undefined, patientName: undefined });
+    }
+
     await loadInitialData();
   };
 
@@ -553,6 +827,9 @@ export default function BillingScreen() {
     </View>
   );
 
+  const patientsToBill = patientChoices.filter((p) => !p.isAlreadyBilled || p.hasOpenSoa);
+  const paidInvoicesToday = invoices.filter((i) => i.status === 'Paid');
+
   const renderPatientSelector = () => (
     <Card>
       <CardHeader title="Patient to bill" icon="patient" />
@@ -560,27 +837,22 @@ export default function BillingScreen() {
         <SkeletonList rows={2} rowHeight={theme.sizes.controlMd} />
       ) : loadErrors.queue ? (
         <ErrorState compact title="Queue unavailable" message={loadErrors.queue} onRetry={retryLoad} />
-      ) : patientChoices.length === 0 ? (
+      ) : patientsToBill.length === 0 ? (
         <EmptyState
           icon="patients"
-          title="No patients in today's queue"
-          description="Patients appear here once they are checked in."
+          title="No patients waiting to be billed"
+          description="Checked-in patients and completed encounters awaiting payment appear here."
         />
       ) : (
         <View style={styles.chipRow}>
-          {patientChoices.map(p => {
+          {patientsToBill.map(p => {
             const isSelected = selectedPatient?.key === p.key;
-            let statusTag = '';
-            if (p.hasOpenSoa) {
-              statusTag = ' (SOA Ready)';
-            } else if (p.isAlreadyBilled) {
-              statusTag = ' (Paid)';
-            }
+            const statusTag = p.hasOpenSoa ? ' (SOA Ready)' : '';
             return (
               <Button
                 key={p.key}
                 size="sm"
-                variant={isSelected ? 'primary' : p.hasOpenSoa ? 'secondary' : p.isAlreadyBilled ? 'outline' : 'secondary'}
+                variant={isSelected ? 'primary' : p.hasOpenSoa ? 'secondary' : 'outline'}
                 title={
                   (p.queueNumber ? `${p.queueNumber} · ${p.patientName}` : p.patientName) + statusTag
                 }
@@ -593,39 +865,188 @@ export default function BillingScreen() {
     </Card>
   );
 
-  const renderReceipt = () =>
-    lastReceipt ? (
-      <Card style={styles.receiptCard}>
-        <View style={styles.receiptHeader}>
-          <Icon name="checkCircle" size={theme.sizes.iconLg} color={theme.colors.successText} />
-          <View style={styles.flexFill}>
-            <ThemedText variant="h3" color={theme.colors.successText}>
-              Payment received
+  const renderBilledAndPaidToday = () => (
+    <Card style={styles.billedCard}>
+      <CardHeader
+        title="Billed & Paid Today"
+        icon="checkCircle"
+        rightAction={<Badge label={`${paidInvoicesToday.length}`} variant="success" size="sm" />}
+      />
+      {paidInvoicesToday.length === 0 ? (
+        <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.emptyBilledText}>
+          No invoices have been settled today yet. Paid receipts will appear here for fast reprinting.
+        </ThemedText>
+      ) : (
+        <View style={styles.billedList}>
+          {paidInvoicesToday.map((inv) => {
+            const payment = inv.payments?.[0];
+            const receiptOr = payment?.paymentNumber || inv.invoiceNumber;
+            const payTime = payment?.paymentDate
+              ? new Date(payment.paymentDate).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
+              : new Date(inv.invoiceDate).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+            return (
+              <View key={inv.id} style={styles.billedRow}>
+                <View style={styles.flexFill}>
+                  <View style={styles.billedTitleRow}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      {inv.patientName}
+                    </ThemedText>
+                    <Badge label={`OR #${receiptOr}`} variant="success" size="sm" />
+                  </View>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    {payTime} • {payment?.method || 'Cash'} • Net: {formatPeso(inv.netAmount)}
+                    {inv.attendingDoctorName ? ` • Dr. ${inv.attendingDoctorName}` : ''}
+                  </ThemedText>
+                </View>
+                <View style={styles.billedActionsRow}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    icon="print"
+                    title="Thermal POS"
+                    onPress={() => handleReprintPaidThermal(inv)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon="fileText"
+                    title="Professional PDF"
+                    onPress={() => openDocument(clinicService.getInvoicePdfUrl(inv.id))}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon="fileText"
+                    title="SOA"
+                    onPress={() => openDocument(clinicService.getInvoicePdfUrl(inv.id))}
+                  />
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </Card>
+  );
+
+  const renderReceiptModal = () => (
+    <Modal
+      visible={receiptModalVisible}
+      onClose={() => setReceiptModalVisible(false)}
+      title="Payment Received"
+    >
+      {lastReceipt && (
+        <View style={styles.receiptModalBody}>
+          <View style={styles.receiptModalHeader}>
+            <View style={styles.receiptModalIconWrap}>
+              <Icon name="checkCircle" size={theme.sizes.iconLg} color={theme.colors.successText} />
+            </View>
+            <ThemedText variant="h3" color={theme.colors.text}>
+              Payment Received
             </ThemedText>
-            <ThemedText variant="bodyBold" color={theme.colors.successText}>
+            <ThemedText variant="title" color={theme.colors.primary}>
               OR #{lastReceipt.orNumber}
             </ThemedText>
+            <ThemedText variant="caption" color={theme.colors.textMuted}>
+              {facilityName ? `${facilityName} • ` : ''}{lastReceipt.paidAt}
+            </ThemedText>
+          </View>
+
+          <View style={styles.receiptModalInfoCard}>
+            <View style={styles.summaryRow}>
+              <ThemedText variant="body" color={theme.colors.textSecondary}>
+                Patient Name
+              </ThemedText>
+              <ThemedText variant="bodyBold" color={theme.colors.text}>
+                {lastReceipt.patientName}
+              </ThemedText>
+            </View>
+            <View style={styles.summaryRow}>
+              <ThemedText variant="body" color={theme.colors.textSecondary}>
+                Payment Method
+              </ThemedText>
+              <ThemedText variant="bodyBold" color={theme.colors.text}>
+                {lastReceipt.paymentMethod} {lastReceipt.referenceNumber ? `(${lastReceipt.referenceNumber})` : ''}
+              </ThemedText>
+            </View>
+            <View style={styles.summaryRow}>
+              <ThemedText variant="body" color={theme.colors.textSecondary}>
+                Cashier Officer
+              </ThemedText>
+              <ThemedText variant="bodyBold" color={theme.colors.text}>
+                {lastReceipt.cashierName}
+              </ThemedText>
+            </View>
+            {lastReceipt.discountAmount > 0 && (
+              <View style={styles.summaryRow}>
+                <ThemedText variant="body" color={theme.colors.emergencyText}>
+                  Statutory Discount ({lastReceipt.discountType})
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
+                  -{formatPeso(lastReceipt.discountAmount)}
+                </ThemedText>
+              </View>
+            )}
+            <View style={[styles.summaryRow, styles.receiptNetRow]}>
+              <ThemedText variant="bodyBold" color={theme.colors.text}>
+                Amount Settled
+              </ThemedText>
+              <ThemedText variant="h3" color={theme.colors.successText}>
+                {formatPeso(lastReceipt.netAmount)}
+              </ThemedText>
+            </View>
+            {lastReceipt.change > 0 && (
+              <View style={styles.summaryRow}>
+                <ThemedText variant="body" color={theme.colors.textSecondary}>
+                  Change Returned
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  {formatPeso(lastReceipt.change)}
+                </ThemedText>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.receiptModalActions}>
+            <Button
+              size="md"
+              icon="print"
+              variant="primary"
+              title="Thermal Paper (POS)"
+              onPress={handlePrintThermalReceipt}
+            />
+            <Button
+              size="md"
+              variant="secondary"
+              icon="fileText"
+              title="Professional PDF"
+              onPress={() => handlePrintProfessionalReceipt(lastReceipt)}
+            />
+            <Button
+              size="md"
+              variant="outline"
+              icon="fileText"
+              title="View SOA (PDF)"
+              onPress={() => {
+                if (lastReceipt.invoiceId) {
+                  openDocument(clinicService.getInvoicePdfUrl(lastReceipt.invoiceId));
+                }
+              }}
+            />
+          </View>
+
+          <View style={styles.receiptModalDoneRow}>
+            <Button
+              size="md"
+              variant="ghost"
+              title="Done (Call Next Patient)"
+              onPress={() => setReceiptModalVisible(false)}
+            />
           </View>
         </View>
-        <ThemedText variant="body">
-          Amount paid {formatPeso(lastReceipt.netAmount)}
-          {lastReceipt.change > 0 ? ` · Change returned ${formatPeso(lastReceipt.change)}` : ''}
-        </ThemedText>
-        <ThemedText variant="caption" color={theme.colors.textMuted}>
-          Collected by {lastReceipt.cashierName}
-          {facilityName ? ` · ${facilityName}` : ''}
-        </ThemedText>
-        <View style={styles.chipRow}>
-          <Button size="sm" icon="print" title="Print receipt" onPress={handlePrintReceipt} />
-          <Button
-            size="sm"
-            variant="secondary"
-            title="Back to dashboard"
-            onPress={() => navigation.navigate('Dashboard')}
-          />
-        </View>
-      </Card>
-    ) : null;
+      )}
+    </Modal>
+  );
 
   const renderInvoiceItems = () => (
     <Card>
@@ -647,10 +1068,41 @@ export default function BillingScreen() {
               Status: {activeInvoice.status}
             </ThemedText>
           </View>
-          <Badge
-            label={activeInvoice.status === 'Draft' ? 'Draft SOA' : activeInvoice.status}
-            variant={activeInvoice.status === 'Draft' ? 'warning' : 'info'}
+          <View style={styles.chipRow}>
+            <Button
+              size="sm"
+              variant="outline"
+              icon="fileText"
+              title="Print SOA (PDF)"
+              onPress={handlePrintInvoicePdf}
+            />
+            <Badge
+              label={activeInvoice.status === 'Draft' ? 'Draft SOA' : activeInvoice.status}
+              variant={activeInvoice.status === 'Draft' ? 'warning' : 'info'}
+              size="sm"
+            />
+          </View>
+        </View>
+      )}
+
+      {!activeInvoice && lineItems.length > 0 && (
+        <View style={styles.soaHeaderBanner}>
+          <Icon name="receipt" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+          <View style={styles.flexFill}>
+            <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+              Draft Statement of Account
+            </ThemedText>
+            <ThemedText variant="caption" color={theme.colors.primaryDark}>
+              {selectedPatient?.doctorName ? `Attending: Dr. ${selectedPatient.doctorName} • ` : ''}
+              Auto-populated from today's encounter &amp; procedures
+            </ThemedText>
+          </View>
+          <Button
             size="sm"
+            variant="outline"
+            icon="fileText"
+            title="Print SOA (PDF)"
+            onPress={handlePrintInvoicePdf}
           />
         </View>
       )}
@@ -743,7 +1195,7 @@ export default function BillingScreen() {
             size="sm"
             variant={discountType === d.key ? 'primary' : 'secondary'}
             title={d.label}
-            onPress={() => setDiscountType(d.key)}
+            onPress={() => handleDiscountTypeChange(d.key)}
           />
         ))}
       </View>
@@ -879,13 +1331,13 @@ export default function BillingScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
         {renderTotals()}
-        {renderReceipt()}
 
         <View style={[styles.columns, isWide && styles.columnsWide]}>
           <View style={[styles.column, isWide && styles.mainColumn]}>
             {renderPatientSelector()}
             {renderInvoiceItems()}
             {renderDiscounts()}
+            {renderBilledAndPaidToday()}
           </View>
           <View style={[styles.column, isWide && styles.sideColumn]}>
             {renderPayment()}
@@ -893,6 +1345,7 @@ export default function BillingScreen() {
           </View>
         </View>
       </ScrollView>
+      {renderReceiptModal()}
     </ResponsiveLayout>
   );
 }
@@ -1012,5 +1465,75 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     padding: theme.spacing.md,
     marginBottom: theme.spacing.md,
+  },
+  billedCard: {
+    marginTop: theme.spacing.sm,
+  },
+  emptyBilledText: {
+    paddingVertical: theme.spacing.sm,
+  },
+  billedList: {
+    gap: theme.spacing.sm,
+  },
+  billedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  billedTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: 2,
+  },
+  billedActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  receiptModalBody: {
+    gap: theme.spacing.md,
+  },
+  receiptModalHeader: {
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: theme.spacing.sm,
+  },
+  receiptModalIconWrap: {
+    marginBottom: theme.spacing.xs,
+  },
+  receiptModalInfoCard: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  receiptNetRow: {
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.border,
+    paddingTop: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  receiptModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+    marginTop: theme.spacing.xs,
+  },
+  receiptModalDoneRow: {
+    alignItems: 'center',
+    marginTop: theme.spacing.xs,
   },
 });

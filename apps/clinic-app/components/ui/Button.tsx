@@ -62,6 +62,11 @@ export default function Button({
   const sizeStyles = getButtonSizeStyles(size, multiplier);
   const showLeftIcon = !loading && !!resolveIconName(icon);
   const showRightIcon = !loading && !!resolveIconName(rightIcon);
+  const isPlusIcon = icon === 'plus' || resolveIconName(icon) === 'plus';
+  const normalizedTitle =
+    title && isPlusIcon
+      ? title.replace(/^\s*\+\s*/, '')
+      : title;
   const densityBaseStyle =
     multiplier !== 1
       ? {
@@ -81,7 +86,7 @@ export default function Button({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel || title}
+      accessibilityLabel={accessibilityLabel || normalizedTitle || (isPlusIcon ? 'Add' : undefined)}
       accessibilityState={{ disabled: disabled || loading, busy: loading }}
       hitSlop={iconOnly || size !== 'lg' ? theme.spacing.xs : undefined}
       style={(state: InteractionState) => [
@@ -105,12 +110,12 @@ export default function Button({
         <IconSlot value={icon} size={sizeStyles.iconSize} color={variantStyles.text.color} />
       ) : null}
 
-      {!iconOnly && title ? (
+      {!iconOnly && normalizedTitle ? (
         <ThemedText
           numberOfLines={numberOfLines}
           style={[styles.textBase, sizeStyles.text, variantStyles.text, textStyle]}
         >
-          {title}
+          {normalizedTitle}
         </ThemedText>
       ) : null}
 

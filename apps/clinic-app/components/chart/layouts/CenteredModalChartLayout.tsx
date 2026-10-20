@@ -45,7 +45,7 @@ export default function CenteredModalChartLayout(props: ChartLayoutProps) {
         <View style={styles.header}>
           <View style={styles.headerTitleContainer}>
             <View style={styles.titleRow}>
-              <ThemedText variant="title">Medical chart</ThemedText>
+              <ThemedText variant="title">Patient Chart</ThemedText>
               {patient?.fullName ? (
                 <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
                   {patient.fullName}

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Platform,
+  TextInput,
 } from 'react-native';
 import { Alert, notify } from '@utils/feedback';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -42,7 +43,9 @@ import {
   HealthProfilesTab,
   ExternalDocumentVaultTab,
   AttachExternalDocumentModal,
+  DentalChartTab,
 } from '../../components/chart';
+import type { DentalToothRecord } from '../../services/clinicService';
 import EditPatientModal from '../../components/patient/EditPatientModal';
 import { extractPhilHealthProfileData } from '../../components/patient/memberType';
 import { formatLongAge } from '../../utils/age';
@@ -59,11 +62,12 @@ import {
   InlineDentalChartCard,
   DentalToothState,
 } from '../../components/consultation';
+import { normalizeTeethToMultiRecord } from '../../components/dental';
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
-import { openDocument } from '../../services/documentOpener';
+import { openDocument, openDocumentBlob } from '../../services/documentOpener';
 import {
   clinicService,
   computeScopedStations,
@@ -86,7 +90,11 @@ import {
   CdsAlertSeverity,
   ClinicServiceItem,
   CreateInvoiceRequest,
+  DiscountType,
 } from '../../services/clinicService';
+import {
+  type PrintLetterhead,
+} from '../../utils/printHelper';
 
 interface LocalPrescription {
   id: string;
@@ -124,8 +132,14 @@ export interface LocalProcedureOrder {
   category: string;
   standardPrice: number;
   instructions?: string;
+  roomId?: string;
+  roomName?: string;
   targetRoomId?: string;
   targetRoomName?: string;
+  status?: 'draft' | 'sent_to_room' | string;
+  sentToRoomId?: string;
+  sentToRoomName?: string;
+  sentAt?: string;
   isHandedOff?: boolean;
   handedOffAt?: string;
   toothNumber?: number;
@@ -296,7 +310,7 @@ function CheckRow({ checked, onPress, label, disabled }: CheckRowProps) {
 export default function ConsultationsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { facilityName, accreditationNumber, letterhead, rooms = [], settings } = useClinic();
+  const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead, rooms = [], settings } = useClinic();
   const allowChipLevelCalling = Boolean(settings?.enableChipLevelQueueCalling);
   const { current, staff, reload: reloadStaff } = useStaff();
 
@@ -343,7 +357,15 @@ export default function ConsultationsScreen() {
   const desktopPaneHeight = Math.max(480, windowHeight - 160);
 
   // Split-Screen & Longitudinal Chart Review States (Feature 21)
-  type ChartReviewTab = 'summary' | 'encounters' | 'diagnostics' | 'procedures' | 'immunizations' | 'profiles' | 'vault';
+  type ChartReviewTab =
+    | 'summary'
+    | 'encounters'
+    | 'diagnostics'
+    | 'procedures'
+    | 'immunizations'
+    | 'profiles'
+    | 'vault'
+    | 'dental';
   const CHART_TAB_DESCRIPTIONS: Record<ChartReviewTab, string> = {
     summary: 'Executive clinical summary, problems, and vital trends',
     encounters: 'Timeline of historical clinical visits and SOAP documentation',
@@ -352,10 +374,11 @@ export default function ConsultationsScreen() {
     immunizations: 'Statutory immunizations, schedules, and adverse events (AEFI)',
     profiles: 'Past medical history, surgical, social, and NCD risk profiles',
     vault: 'External document vault, outside imaging films, and clearances',
+    dental: 'Odontogram findings, tooth condition, surfaces, and dental procedures',
   };
   const [activeChartTab, setActiveChartTab] = useState<ChartReviewTab>(() => {
     const saved = getSessionItem('clinicez_consultations_active_chart_tab') as ChartReviewTab | null;
-    if (saved && ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault'].includes(saved)) {
+    if (saved && ['summary', 'encounters', 'diagnostics', 'procedures', 'immunizations', 'profiles', 'vault', 'dental'].includes(saved)) {
       return saved;
     }
     return 'summary';
@@ -368,8 +391,13 @@ export default function ConsultationsScreen() {
   const [mobileWorkstationView, setMobileWorkstationView] = useState<'soap' | 'chart'>('soap');
   const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
   const [postEncounterModalVisible, setPostEncounterModalVisible] = useState(false);
+  const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
   const [createdInvoiceNumber, setCreatedInvoiceNumber] = useState<string | null>(null);
   const [createdInvoiceTotal, setCreatedInvoiceTotal] = useState<number | null>(null);
+  const [reviewSoaModalVisible, setReviewSoaModalVisible] = useState(false);
+  const [soaReviewItems, setSoaReviewItems] = useState<CreateInvoiceRequest['lineItems']>([]);
+  const [soaDiscountType, setSoaDiscountType] = useState<DiscountType>('None');
+  const [soaDiscountId, setSoaDiscountId] = useState('');
 
   // Multi-Provider Queue Room / Station & Status Filter States (Persistent per staff)
   const staffKey = current?.id ? `clinicez:consultations:${current.id}` : 'clinicez:consultations:default';
@@ -520,13 +548,51 @@ export default function ConsultationsScreen() {
   // Diagnostic Lab Orders & In-Clinic Procedures
   const [orderedLabs, setOrderedLabs] = useState<LocalLabOrder[]>([]);
   const [orderedProcedures, setOrderedProcedures] = useState<LocalProcedureOrder[]>([]);
-  const [dentalChart, setDentalChart] = useState<Record<number, DentalToothState>>({});
+  const [dentalChart, setDentalChart] = useState<Record<number, any>>({});
   const [orderInitialToothNumber, setOrderInitialToothNumber] = useState<number | undefined>(undefined);
   const [orderInitialToothSurface, setOrderInitialToothSurface] = useState<string | undefined>(undefined);
   const isDentalEnabled = useMemo(
-    () => Boolean(settings?.enableDentalModule || settings?.specialtyMode === 'Dental'),
-    [settings?.enableDentalModule, settings?.specialtyMode]
+    () => Boolean(
+      settings?.enableDentalModule ||
+      settings?.specialtyMode === 'Dental' ||
+      settings?.specialtyMode === 'Multi-Specialty' ||
+      settings?.specialtyMode === 'MultiSpecialty' ||
+      (settings as any)?.specialties?.includes?.('Dental') ||
+      (settings as any)?.hasDentalServices ||
+      (patientChart?.dentalTeeth && patientChart.dentalTeeth.length > 0) ||
+      (patientChart?.dentalChart?.teeth && patientChart.dentalChart.teeth.length > 0)
+    ),
+    [
+      settings?.enableDentalModule,
+      settings?.specialtyMode,
+      (settings as any)?.specialties,
+      (settings as any)?.hasDentalServices,
+      patientChart?.dentalTeeth,
+      patientChart?.dentalChart,
+    ]
   );
+
+  const handleDentalChartChange = useCallback((nextChart: Record<number, any>) => {
+    setDentalChart(nextChart as any);
+    // Immediately synchronize left-pane patientChart.dentalTeeth
+    setPatientChart((prev) => {
+      if (!prev) return prev;
+      const targetPatientId = selectedPatient?.patientId || patientRecord?.id || '';
+      const multiMap = normalizeTeethToMultiRecord(nextChart as any);
+      const syncedTeeth: DentalToothRecord[] = Object.values(multiMap).flat().map((rec) => ({
+        ...rec,
+        tenantId: rec.tenantId || settings?.tenantId || (patientRecord as any)?.tenantId || '',
+        clinicId: rec.clinicId || settings?.clinicId || (patientRecord as any)?.clinicId || '',
+        patientId: targetPatientId,
+        notes: rec.notes || null,
+        surface: rec.surface || null,
+      }));
+      return {
+        ...prev,
+        dentalTeeth: syncedTeeth,
+      };
+    });
+  }, [selectedPatient?.patientId, patientRecord?.id, settings?.tenantId, settings?.clinicId]);
   const [editingOrderItem, setEditingOrderItem] = useState<EditingOrderItemState | null>(null);
   const [editingInstructionText, setEditingInstructionText] = useState<string>('');
   const [isHandoffSending, setIsHandoffSending] = useState<boolean>(false);
@@ -955,16 +1021,7 @@ export default function ConsultationsScreen() {
 
     const [dentalData] = dentalRes;
     if (dentalData?.teeth && dentalData.teeth.length > 0) {
-      const toothMap: Record<number, DentalToothState> = {};
-      for (const t of dentalData.teeth) {
-        toothMap[t.toothNumber] = {
-          toothNumber: t.toothNumber,
-          status: t.status,
-          surface: t.surface || '',
-          notes: t.notes || '',
-        };
-      }
-      setDentalChart(toothMap);
+      setDentalChart(normalizeTeethToMultiRecord(dentalData.teeth));
     } else {
       setDentalChart({});
     }
@@ -1734,8 +1791,9 @@ export default function ConsultationsScreen() {
         return [...prev, newLab];
       });
     } else {
+      const availableRooms = treatmentRooms.length > 0 ? treatmentRooms : activeRooms;
       const targetTreatmentRoom =
-        treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
+        treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? availableRooms[0];
       setOrderedProcedures((prev) => {
         const index = prev.findIndex(
           (p) =>
@@ -1743,6 +1801,25 @@ export default function ConsultationsScreen() {
             (order.toothNumber !== undefined ? p.toothNumber === order.toothNumber : p.toothNumber === undefined)
         );
         const existing = index >= 0 ? prev[index] : null;
+        const designatedRoomId = order.roomId || order.targetRoomId;
+        const designatedRoom = designatedRoomId
+          ? availableRooms.find((r) => r.id === designatedRoomId)
+          : undefined;
+
+        const resolvedRoomId =
+          designatedRoomId ||
+          existing?.roomId ||
+          existing?.targetRoomId ||
+          targetTreatmentRoom?.id;
+
+        const resolvedRoomName =
+          designatedRoom?.name ||
+          order.roomName ||
+          order.targetRoomName ||
+          existing?.roomName ||
+          existing?.targetRoomName ||
+          targetTreatmentRoom?.name;
+
         const newProc: LocalProcedureOrder = {
           serviceItemId: order.serviceItemId,
           code: order.code,
@@ -1750,8 +1827,14 @@ export default function ConsultationsScreen() {
           category: order.category || 'Procedure',
           standardPrice: order.standardPrice,
           instructions: order.instructions,
-          targetRoomId: existing?.targetRoomId || targetTreatmentRoom?.id,
-          targetRoomName: existing?.targetRoomName || targetTreatmentRoom?.name,
+          roomId: resolvedRoomId,
+          roomName: resolvedRoomName,
+          targetRoomId: resolvedRoomId,
+          targetRoomName: resolvedRoomName,
+          status: existing?.status || (existing?.isHandedOff ? 'sent_to_room' : 'draft'),
+          sentToRoomId: existing?.sentToRoomId,
+          sentToRoomName: existing?.sentToRoomName,
+          sentAt: existing?.sentAt,
           isHandedOff: existing?.isHandedOff ?? false,
           handedOffAt: existing?.handedOffAt,
           toothNumber: order.toothNumber,
@@ -1782,16 +1865,20 @@ export default function ConsultationsScreen() {
       if (exists) {
         return prev.filter((p) => p.name.toLowerCase() !== procName.toLowerCase());
       }
+      const availableRooms = treatmentRooms.length > 0 ? treatmentRooms : activeRooms;
       const targetTreatmentRoom =
-        treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
+        treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? availableRooms[0];
       const newProc: LocalProcedureOrder = {
         serviceItemId: item?.id,
         code: item?.code,
         name: procName,
         category: item?.category || 'Procedure',
         standardPrice: item?.standardPrice ?? 0,
+        roomId: targetTreatmentRoom?.id,
+        roomName: targetTreatmentRoom?.name,
         targetRoomId: targetTreatmentRoom?.id,
         targetRoomName: targetTreatmentRoom?.name,
+        status: 'draft',
         isHandedOff: false,
       };
       return [...prev, newProc];
@@ -2096,11 +2183,12 @@ export default function ConsultationsScreen() {
 
     // Atomic batch save dental chart on encounter signing when dental is enabled and teeth have been marked
     if (isDentalEnabled && Object.keys(dentalChart).length > 0) {
-      const teethPayload = Object.entries(dentalChart).map(([toothStr, state]) => ({
-        toothNumber: parseInt(toothStr, 10),
-        status: state.status,
-        surface: state.surface || undefined,
-        notes: state.notes || undefined,
+      const multiMap = normalizeTeethToMultiRecord(dentalChart as any);
+      const teethPayload = Object.values(multiMap).flat().map((rec) => ({
+        toothNumber: rec.toothNumber,
+        status: rec.status,
+        surface: rec.surface || undefined,
+        notes: rec.notes || undefined,
       }));
       const [, dentalErr] = await clinicService.batchSaveDentalChart(selectedPatient.patientId, {
         consultationId,
@@ -2152,7 +2240,8 @@ export default function ConsultationsScreen() {
         quantity: 1,
       });
     }
-    if (billItems.length > 0) {
+    const effectiveBillItems = soaReviewItems.length > 0 ? soaReviewItems : billItems;
+    if (effectiveBillItems.length > 0) {
       const [invoiceResult, invoiceErr] = await clinicService.createInvoice({
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
@@ -2160,13 +2249,15 @@ export default function ConsultationsScreen() {
         consultationId,
         attendingDoctorId: doctor.id,
         attendingDoctorName: doctor.name,
-        discountType: 'None',
+        discountType: soaDiscountType || 'None',
+        discountIdNumber: soaDiscountId.trim() || undefined,
         notes: 'Consultation & procedures bill forwarded to Cashier',
-        lineItems: billItems,
+        lineItems: effectiveBillItems,
       });
       if (invoiceErr) {
         followUpIssues.push('billing invoice');
       } else if (invoiceResult) {
+        setCreatedInvoiceId(invoiceResult.id);
         setCreatedInvoiceNumber(invoiceResult.invoiceNumber);
         setCreatedInvoiceTotal(invoiceResult.netAmount);
       }
@@ -2205,6 +2296,184 @@ export default function ConsultationsScreen() {
       notify.success(successMsg);
     }
     setPostEncounterModalVisible(true);
+  };
+
+  const buildBillableItems = (): CreateInvoiceRequest['lineItems'] => {
+    const items: CreateInvoiceRequest['lineItems'] = [];
+    if (consultationFee) {
+      items.push({
+        serviceItemId: consultationFee.id,
+        itemCode: consultationFee.code,
+        description: consultationFee.name,
+        category: consultationFee.category,
+        unitPrice: consultationFee.standardPrice,
+        quantity: 1,
+      });
+    }
+    for (const proc of orderedProcedures) {
+      const procInfo = procedureCatalog.find(
+        (p) => p.name.toLowerCase() === proc.name.toLowerCase() || (p.code && p.code === proc.code)
+      );
+      items.push({
+        serviceItemId: proc.serviceItemId || procInfo?.id,
+        itemCode: proc.code || procInfo?.code,
+        description: proc.name,
+        category: proc.category || procInfo?.category || 'Procedure',
+        unitPrice: proc.standardPrice || procInfo?.standardPrice || 0,
+        quantity: 1,
+      });
+    }
+    const inHouseLabs = orderedLabs.filter((l) => l.fulfillmentMode === 'in_house');
+    for (const inHouseLab of inHouseLabs) {
+      const matchedDiag = diagnosticCatalog.find((d) => d.name.toLowerCase() === inHouseLab.name.toLowerCase());
+      const philHealthCode = inHouseLab.philHealthCode || matchedDiag?.philHealthCode;
+      const isCoveredByYakap = Boolean(isYakapEligible && philHealthCode);
+      const unitPrice = isCoveredByYakap ? 0 : (inHouseLab.standardPrice ?? matchedDiag?.standardPrice ?? 0);
+      const description = isCoveredByYakap
+        ? `${inHouseLab.name} (PhilHealth Yakap - ₱0 Co-pay)`
+        : inHouseLab.name;
+
+      items.push({
+        serviceItemId: inHouseLab.serviceItemId || matchedDiag?.id,
+        itemCode: inHouseLab.code || matchedDiag?.code,
+        description,
+        category: inHouseLab.category || matchedDiag?.category || 'Diagnostic',
+        unitPrice,
+        quantity: 1,
+      });
+    }
+    return items;
+  };
+
+  const soaGrossAmount = useMemo(
+    () => soaReviewItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
+    [soaReviewItems]
+  );
+
+  const soaDiscountPercentage = useMemo(() => {
+    if (soaDiscountType === 'SeniorCitizen' || soaDiscountType === 'Pwd') return 20;
+    if (soaDiscountType === 'PhilHealthKonsulta') return 100;
+    return 0;
+  }, [soaDiscountType]);
+
+  const soaDiscountAmount = useMemo(
+    () => Math.round(soaGrossAmount * (soaDiscountPercentage / 100)),
+    [soaGrossAmount, soaDiscountPercentage]
+  );
+
+  const soaNetAmount = useMemo(
+    () => Math.max(0, soaGrossAmount - soaDiscountAmount),
+    [soaGrossAmount, soaDiscountAmount]
+  );
+
+  const handleInitiateSignAndReviewSoa = () => {
+    if (!selectedPatient) return;
+    setBanner(null);
+
+    const doctor = requireSigner();
+    if (!doctor) return;
+
+    // Clinical Decision Support (CDS) Critical Override Gate
+    const criticalAlerts = cdsAlerts.filter((a) => a.requiresOverrideReason);
+    if (criticalAlerts.length > 0 && (!cdsOverrideReason.trim() || !overrideConfirmed)) {
+      const msg = `Safety check: ${criticalAlerts.length} critical drug allergy or severe interaction alert(s) need a documented clinical override before the encounter can be signed.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg);
+      setShowOverrideInput(true);
+      return;
+    }
+
+    // PDEA Dangerous Drug validation (Philippine Comprehensive Dangerous Drugs Act RA 9165)
+    const hasDangerousDrugs = prescriptions.some((p) => p.isDangerousDrug);
+    if (hasDangerousDrugs) {
+      const finalS2 = (doctorS2.trim() || signerStaff?.s2LicenseNumber?.trim()) || '';
+      if (!finalS2) {
+        const msg = 'PDEA dangerous drug prescribed: Doctor S2 license number is required before signing.';
+        setBanner({
+          text: msg,
+          isError: true,
+        });
+        notify.error(msg);
+        return;
+      }
+    }
+
+    // PhilHealth Yakap statutory signing gate
+    if (isYakapEligible && !isYakapReady) {
+      const missing = (serverReadiness || localEvaluation).missingFields;
+      const msg = `PhilHealth Yakap encounter cannot be signed: ${missing.length} required field(s) missing (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '...' : ''}). Complete these fields or switch off the Yakap toggle.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg);
+      return;
+    }
+
+    // Auto-populate billable items
+    const items = buildBillableItems();
+    setSoaReviewItems(items);
+    setSoaDiscountType('None');
+    setSoaDiscountId('');
+    setReviewSoaModalVisible(true);
+  };
+
+  const updateSoaItemQty = (index: number, newQty: number) => {
+    setSoaReviewItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, quantity: Math.max(1, newQty) } : item))
+    );
+  };
+
+  const updateSoaItemPrice = (index: number, newPrice: number) => {
+    setSoaReviewItems((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, unitPrice: Math.max(0, newPrice) } : item))
+    );
+  };
+
+  const handlePrintSoaPreview = async () => {
+    if (!selectedPatient) return;
+    try {
+      const [blob, err] = await clinicService.downloadInvoicePreviewPdf({
+        patientId: selectedPatient.patientId,
+        patientName: selectedPatient.patientName,
+        queueNumber: selectedPatient.queueNumber,
+        attendingDoctorName: signerName,
+        doctorPrcLicense: doctorPrc.trim() || signerPrc,
+        discountType: 'None',
+        lineItems: soaReviewItems.map((item) => ({
+          serviceItemId: item.serviceItemId,
+          itemCode: item.itemCode,
+          description: item.description,
+          category: item.category,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+        })),
+        notes: 'Statement of Account Preview',
+      });
+      if (blob && !err) {
+        openDocumentBlob(blob);
+      } else {
+        notify.error('Unable to generate backend SOA PDF.');
+      }
+    } catch {
+      notify.error('Failed to stream SOA PDF.');
+    }
+  };
+
+  const handlePrintApprovedSoa = () => {
+    if (createdInvoiceId) {
+      openDocument(clinicService.getInvoicePdfUrl(createdInvoiceId));
+    } else {
+      handlePrintSoaPreview();
+    }
+  };
+
+  const handleConfirmAndSignEncounter = async () => {
+    setReviewSoaModalVisible(false);
+    await handleSignAndSync();
   };
 
   const vitalItems = (
@@ -2420,11 +2689,12 @@ export default function ConsultationsScreen() {
     const doctor = requireSigner();
     if (!doctor) return;
 
-    const targetTreatmentRoom =
-      treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
-    const resolvedTargetName = targetTreatmentRoom?.name || 'Treatment Room';
+    const availableRooms = treatmentRooms.length > 0 ? treatmentRooms : activeRooms;
+    const defaultTargetRoom =
+      treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? availableRooms[0];
+    const defaultResolvedName = defaultTargetRoom?.name || 'Treatment Room';
 
-    const unhandedOff = orderedProcedures.filter((p) => !p.isHandedOff);
+    const unhandedOff = orderedProcedures.filter((p) => !p.isHandedOff && p.status !== 'sent_to_room');
     if (unhandedOff.length === 0) {
       notify.info('All selected procedures have already been handed off to the nurse station.');
       return;
@@ -2438,6 +2708,12 @@ export default function ConsultationsScreen() {
       const procInfo = procedureCatalog.find(
         (p) => p.name.toLowerCase() === proc.name.toLowerCase() || (p.code && p.code === proc.code)
       );
+      const procTargetRoom =
+        availableRooms.find((r) => r.id === (proc.targetRoomId || proc.roomId)) ??
+        defaultTargetRoom;
+      const procTargetId = proc.targetRoomId || proc.roomId || procTargetRoom?.id;
+      const procTargetName = proc.targetRoomName || proc.roomName || procTargetRoom?.name || defaultResolvedName;
+
       const [orderedProc, procErr] = await clinicService.orderProcedure({
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
@@ -2448,8 +2724,8 @@ export default function ConsultationsScreen() {
         category: proc.category || procInfo?.category || 'Procedure',
         orderedByDoctorId: doctor.id,
         orderedByDoctorName: doctor.name,
-        targetRoomId: proc.targetRoomId || targetTreatmentRoom?.id,
-        targetRoomName: proc.targetRoomName || resolvedTargetName,
+        targetRoomId: procTargetId,
+        targetRoomName: procTargetName,
         toothNumber: proc.toothNumber,
         toothSurface: proc.toothSurface,
         clinicalNotes: proc.instructions
@@ -2460,11 +2736,24 @@ export default function ConsultationsScreen() {
       if (procErr) {
         errors.push(`${proc.name}: ${procErr.message || 'failed'}`);
       } else {
-        const finalRoom = orderedProc?.targetRoomName || proc.targetRoomName || resolvedTargetName;
+        const finalRoomId = orderedProc?.targetRoomId || procTargetId;
+        const finalRoom = orderedProc?.targetRoomName || procTargetName;
         setOrderedProcedures((prev) =>
           prev.map((item) =>
             item.name.toLowerCase() === proc.name.toLowerCase() && item.toothNumber === proc.toothNumber
-              ? { ...item, isHandedOff: true, handedOffAt: nowStr, targetRoomName: finalRoom }
+              ? {
+                  ...item,
+                  status: 'sent_to_room',
+                  sentToRoomId: finalRoomId,
+                  sentToRoomName: finalRoom,
+                  sentAt: nowStr,
+                  isHandedOff: true,
+                  handedOffAt: nowStr,
+                  targetRoomId: finalRoomId,
+                  targetRoomName: finalRoom,
+                  roomId: finalRoomId,
+                  roomName: finalRoom,
+                }
               : item
           )
         );
@@ -2481,13 +2770,13 @@ export default function ConsultationsScreen() {
           ? {
               ...prev,
               status: 'PendingProcedure',
-              roomId: targetTreatmentRoom?.id,
-              roomOrStation: resolvedTargetName,
+              roomId: defaultTargetRoom?.id,
+              roomOrStation: defaultResolvedName,
             }
           : null
       );
       notify.success(
-        `${unhandedOff.length} in-clinic procedure${unhandedOff.length > 1 ? 's' : ''} handed off to ${resolvedTargetName}.`
+        `${unhandedOff.length} in-clinic procedure${unhandedOff.length > 1 ? 's' : ''} handed off to ${defaultResolvedName}.`
       );
       loadQueue();
     }
@@ -2501,9 +2790,13 @@ export default function ConsultationsScreen() {
       (p) => p.name.toLowerCase() === procedureName.toLowerCase() && (toothNumber === undefined || p.toothNumber === toothNumber)
     );
     const procInfo = procedureCatalog.find((p) => p.name.toLowerCase() === procedureName.toLowerCase());
-    const targetTreatmentRoom =
-      treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
-    const resolvedTargetName = targetTreatmentRoom?.name || 'Treatment Room';
+    const availableRooms = treatmentRooms.length > 0 ? treatmentRooms : activeRooms;
+    const targetRoom =
+      availableRooms.find((r) => r.id === (target?.targetRoomId || target?.roomId)) ??
+      treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ??
+      availableRooms[0];
+    const resolvedTargetName = target?.targetRoomName || target?.roomName || targetRoom?.name || 'Treatment Room';
+    const targetRoomId = target?.targetRoomId || target?.roomId || targetRoom?.id;
 
     const [proc, procErr] = await clinicService.orderProcedure({
       patientId: selectedPatient.patientId,
@@ -2515,8 +2808,8 @@ export default function ConsultationsScreen() {
       category: target?.category || procInfo?.category || 'Procedure',
       orderedByDoctorId: doctor.id,
       orderedByDoctorName: doctor.name,
-      targetRoomId: target?.targetRoomId || targetTreatmentRoom?.id,
-      targetRoomName: target?.targetRoomName || resolvedTargetName,
+      targetRoomId: targetRoomId,
+      targetRoomName: resolvedTargetName,
       toothNumber: target?.toothNumber,
       toothSurface: target?.toothSurface,
       clinicalNotes: target?.instructions
@@ -2530,11 +2823,24 @@ export default function ConsultationsScreen() {
     }
 
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const finalRoomId = proc?.targetRoomId ?? targetRoomId;
     const finalRoomName = proc?.targetRoomName || resolvedTargetName;
     setOrderedProcedures((prev) =>
       prev.map((item) =>
-        item.name.toLowerCase() === procedureName.toLowerCase()
-          ? { ...item, isHandedOff: true, handedOffAt: nowStr, targetRoomName: finalRoomName }
+        item.name.toLowerCase() === procedureName.toLowerCase() && (toothNumber === undefined || item.toothNumber === toothNumber)
+          ? {
+              ...item,
+              status: 'sent_to_room',
+              sentToRoomId: finalRoomId,
+              sentToRoomName: finalRoomName,
+              sentAt: nowStr,
+              isHandedOff: true,
+              handedOffAt: nowStr,
+              targetRoomId: finalRoomId,
+              targetRoomName: finalRoomName,
+              roomId: finalRoomId,
+              roomName: finalRoomName,
+            }
           : item
       )
     );
@@ -2543,7 +2849,7 @@ export default function ConsultationsScreen() {
         ? {
             ...prev,
             status: 'PendingProcedure',
-            roomId: proc?.targetRoomId ?? targetTreatmentRoom?.id,
+            roomId: finalRoomId,
             roomOrStation: finalRoomName,
           }
         : null,
@@ -2743,9 +3049,20 @@ export default function ConsultationsScreen() {
     if (!patientId) return;
     const [chartData, chartErr] = await clinicService.getPatientChart(patientId);
     if (!chartErr && chartData) {
+      if (!chartData.dentalTeeth || chartData.dentalTeeth.length === 0) {
+        const [dentalData] = await clinicService.getPatientDentalChart(patientId);
+        if (dentalData?.teeth && dentalData.teeth.length > 0) {
+          chartData.dentalTeeth = dentalData.teeth;
+          chartData.dentalChart = dentalData;
+        }
+      }
       setPatientChart(chartData);
+      if (chartData.dentalTeeth && chartData.dentalTeeth.length > 0 && Object.keys(dentalChart).length === 0) {
+        const multiMap = normalizeTeethToMultiRecord(chartData.dentalTeeth);
+        setDentalChart(multiMap);
+      }
     }
-  }, [selectedPatient?.patientId, patientRecord?.id]);
+  }, [selectedPatient?.patientId, patientRecord?.id, dentalChart]);
 
   // Specialized refresh for Diagnostics tab that reloads chart + lab orders without touching encounter SOAP
   const refreshDiagnosticsTab = useCallback(async () => {
@@ -2765,7 +3082,7 @@ export default function ConsultationsScreen() {
     <View style={styles.longitudinalChartContainer}>
       <Card>
         <CardHeader
-          title="Patient Medical Chart"
+          title="Patient Chart"
           subtitle={CHART_TAB_DESCRIPTIONS[activeChartTab] || 'Historical clinical chart & records'}
           icon="folder"
           truncateTitle
@@ -2780,6 +3097,7 @@ export default function ConsultationsScreen() {
             { id: 'immunizations', label: 'Immunizations', icon: 'shield' },
             { id: 'profiles', label: 'Profiles', icon: 'user' },
             { id: 'vault', label: 'Vault', icon: 'folder' },
+            ...(isDentalEnabled ? [{ id: 'dental', label: 'Dental', icon: 'medical' }] : []),
           ].map((tab) => {
             const isActive = activeChartTab === tab.id;
             return (
@@ -2913,6 +3231,17 @@ export default function ConsultationsScreen() {
           onUploadDocument={() => setUploadDocModalVisible(true)}
           onVerifyAttachment={handleVerifyAttachment}
           onDownloadAttachment={handleDownloadAttachment}
+          onRefreshChart={refreshPatientChart}
+        />
+      )}
+      {activeChartTab === 'dental' && (
+        <DentalChartTab
+          patient={patientRecord}
+          patientId={selectedPatient?.patientId || patientRecord?.id}
+          chart={patientChart}
+          onOrderProcedure={(toothNumber, surface) => {
+            handleQuickOrderDentalProcedure(toothNumber, surface);
+          }}
           onRefreshChart={refreshPatientChart}
         />
       )}
@@ -3280,7 +3609,7 @@ export default function ConsultationsScreen() {
               <View onLayout={(e) => { sectionOffsets.current['dental-chart'] = e.nativeEvent.layout.y; }}>
                 <InlineDentalChartCard
                   chart={dentalChart}
-                  onChange={setDentalChart}
+                  onChange={handleDentalChartChange}
                   disabled={isSigned}
                   onQuickOrderProcedure={handleQuickOrderDentalProcedure}
                 />
@@ -3387,7 +3716,7 @@ export default function ConsultationsScreen() {
                 rightAction={
                   !isSigned ? (
                     <Button
-                      title="+ Add test"
+                      title="Add test"
                       icon="plus"
                       variant="secondary"
                       size="sm"
@@ -3528,7 +3857,7 @@ export default function ConsultationsScreen() {
                 rightAction={
                   !isSigned ? (
                     <Button
-                      title="+ Add procedure"
+                      title="Add procedure"
                       icon="plus"
                       variant="secondary"
                       size="sm"
@@ -3589,11 +3918,15 @@ export default function ConsultationsScreen() {
                     ACTIVE PROCEDURES ({orderedProcedures.length})
                   </ThemedText>
                   {orderedProcedures.map((proc) => {
+                    const isSent = proc.status === 'sent_to_room' || Boolean(proc.isHandedOff);
+                    const availableRooms = treatmentRooms.length > 0 ? treatmentRooms : activeRooms;
                     const resolvedRoom =
-                      proc.targetRoomName ||
-                      (treatmentRooms.find((r) => r.id === proc.targetRoomId) ??
-                        treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ??
-                        treatmentRooms[0])?.name ||
+                      (isSent
+                        ? proc.sentToRoomName || proc.targetRoomName || proc.roomName
+                        : proc.targetRoomName || proc.roomName) ||
+                      (availableRooms.find((r) => r.id === (isSent ? (proc.sentToRoomId || proc.targetRoomId) : proc.targetRoomId)) ??
+                        availableRooms.find((r) => r.id === selectedTreatmentRoomId) ??
+                        availableRooms[0])?.name ||
                       'Treatment Room';
                     const procKey = proc.serviceItemId
                       ? `${proc.serviceItemId}-${proc.toothNumber ?? '0'}`
@@ -3618,42 +3951,113 @@ export default function ConsultationsScreen() {
                                   size="sm"
                                 />
                               ) : null}
-                              <Badge label={resolvedRoom} variant="purple" size="sm" />
-                              {proc.isHandedOff ? (
+                              {isSent ? (
                                 <Badge
-                                  label={`Handed Off${proc.handedOffAt ? ` (${proc.handedOffAt})` : ''}`}
+                                  label={`Sent to ${resolvedRoom} • ${proc.sentAt || proc.handedOffAt || 'Sent'}`}
                                   variant="success"
+                                  icon="checkCircle"
                                   size="sm"
                                 />
                               ) : (
-                                <Badge label="Draft" variant="warning" size="sm" />
+                                <Badge
+                                  label={`Draft • Room: ${resolvedRoom}`}
+                                  variant="warning"
+                                  size="sm"
+                                />
                               )}
                               {(proc.standardPrice ?? 0) > 0 ? (
                                 <Badge label={`₱${(proc.standardPrice ?? 0).toLocaleString()}`} variant="neutral" size="sm" />
                               ) : null}
                             </View>
                           </View>
-                          {/* Instructions callout */}
-                          <View style={styles.instructionCalloutRow}>
-                            <View style={styles.instructionCalloutLeft}>
-                              <Icon name="file" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
-                              <ThemedText variant="caption" color={proc.instructions ? theme.colors.textSecondary : theme.colors.textMuted} style={styles.flexOne}>
-                                {proc.instructions ? `Instructions: ${proc.instructions}` : 'No procedure instructions or site details entered.'}
+
+                          {/* Inline Room Switcher (Draft State when multiple rooms exist) */}
+                          {!isSigned && !isSent && availableRooms.length > 1 ? (
+                            <View style={styles.inlineRoomSwitcherRow}>
+                              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                Target Room:
                               </ThemedText>
-                            </View>
-                            {!isSigned ? (
-                              <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel={`Edit instructions for ${proc.name}`}
-                                onPress={() => handleOpenEditInstructions(proc, 'procedure')}
-                                hitSlop={theme.spacing.xs}
-                                style={styles.editNotesInlineBtn}
+                              <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.roomChipsRow}
                               >
-                                <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                                <ThemedText variant="captionBold" color={theme.colors.primary}>
-                                  {proc.instructions ? 'Edit Notes' : '+ Add Notes'}
+                                {availableRooms.map((tr) => {
+                                  const isCurrentRoom = (proc.targetRoomId ? proc.targetRoomId === tr.id : tr.id === selectedTreatmentRoomId);
+                                  return (
+                                    <Pressable
+                                      key={tr.id}
+                                      style={[
+                                        styles.roomPill,
+                                        isCurrentRoom && styles.roomPillActive,
+                                      ]}
+                                      onPress={() => {
+                                        setOrderedProcedures((prev) =>
+                                          prev.map((item) =>
+                                            item === proc
+                                              ? {
+                                                  ...item,
+                                                  targetRoomId: tr.id,
+                                                  targetRoomName: tr.name,
+                                                  roomId: tr.id,
+                                                  roomName: tr.name,
+                                                }
+                                              : item
+                                          )
+                                        );
+                                      }}
+                                      accessibilityRole="button"
+                                      accessibilityLabel={`Assign ${proc.name} to ${tr.name}`}
+                                      accessibilityState={{ selected: isCurrentRoom }}
+                                      testID={`procedure-room-option-${tr.id}-${procKey}`}
+                                    >
+                                      <ThemedText
+                                        variant="captionBold"
+                                        color={isCurrentRoom ? theme.colors.primaryDark : theme.colors.textSecondary}
+                                      >
+                                        {tr.name}
+                                      </ThemedText>
+                                    </Pressable>
+                                  );
+                                })}
+                              </ScrollView>
+                            </View>
+                          ) : null}
+
+                          {/* Instructions callout and per-procedure send */}
+                          <View style={styles.procedureCardActionsRow}>
+                            <View style={styles.instructionCalloutRow}>
+                              <View style={styles.instructionCalloutLeft}>
+                                <Icon name="file" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                                <ThemedText variant="caption" color={proc.instructions ? theme.colors.textSecondary : theme.colors.textMuted} style={styles.flexOne}>
+                                  {proc.instructions ? `Instructions: ${proc.instructions}` : 'No procedure instructions or site details entered.'}
                                 </ThemedText>
-                              </Pressable>
+                              </View>
+                              {!isSigned ? (
+                                <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Edit instructions for ${proc.name}`}
+                                  onPress={() => handleOpenEditInstructions(proc, 'procedure')}
+                                  hitSlop={theme.spacing.xs}
+                                  style={styles.editNotesInlineBtn}
+                                >
+                                  <Icon name="edit" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                                  <ThemedText variant="captionBold" color={theme.colors.primary}>
+                                    {proc.instructions ? 'Edit Notes' : 'Add Notes'}
+                                  </ThemedText>
+                                </Pressable>
+                              ) : null}
+                            </View>
+                            {!isSigned && !isSent ? (
+                              <Button
+                                title={`Send to ${resolvedRoom}`}
+                                icon="syringe"
+                                variant="primary"
+                                size="sm"
+                                disabled={isHandoffSending}
+                                onPress={() => handleHandoffToTreatmentRoom(proc.name, proc.toothNumber)}
+                                testID={`send-procedure-${procKey}`}
+                              />
                             ) : null}
                           </View>
                         </View>
@@ -3695,7 +4099,7 @@ export default function ConsultationsScreen() {
                     ) : null}
                   </View>
                   {(() => {
-                    const unhandedOff = orderedProcedures.filter((p) => !p.isHandedOff);
+                    const unhandedOff = orderedProcedures.filter((p) => !p.isHandedOff && p.status !== 'sent_to_room');
                     const targetRoomName =
                       (treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0])?.name ||
                       'Treatment Room';
@@ -3707,7 +4111,7 @@ export default function ConsultationsScreen() {
                           title={
                             allHandedOff
                               ? 'All Procedures Handed Off'
-                              : `Send ${unhandedOff.length} Procedure${unhandedOff.length > 1 ? 's' : ''} to ${targetRoomName} (Nurse Handoff)`
+                              : `Send Draft Procedures to Room (${unhandedOff.length})`
                           }
                           variant={allHandedOff ? 'secondary' : 'primary'}
                           icon={allHandedOff ? 'check' : 'syringe'}
@@ -4308,7 +4712,7 @@ export default function ConsultationsScreen() {
                 variant={isYakapEligible && !isYakapReady ? 'outline' : 'primary'}
                 loading={isSigning}
                 disabled={isSigning || (isYakapEligible && !isYakapReady)}
-                onPress={handleSignAndSync}
+                onPress={handleInitiateSignAndReviewSoa}
               />
             )}
     </View>
@@ -4678,7 +5082,7 @@ export default function ConsultationsScreen() {
                     onChange={(v) => setMobileWorkstationView(v as 'soap' | 'chart')}
                     options={[
                       { value: 'soap', label: 'Documentation (SOAP)' },
-                      { value: 'chart', label: 'Patient Medical Chart (7 Tabs)' },
+                      { value: 'chart', label: 'Patient Chart' },
                     ]}
                   />
                 </View>
@@ -5258,6 +5662,8 @@ export default function ConsultationsScreen() {
             setOrderInitialToothSurface(undefined);
           }}
           catalog={activeCatalog}
+          rooms={treatmentRooms.length > 0 ? treatmentRooms : activeRooms}
+          initialRoomId={selectedTreatmentRoomId}
           initialCategory={orderSearchInitialCategory}
           initialToothNumber={orderInitialToothNumber}
           initialToothSurface={orderInitialToothSurface}
@@ -5282,6 +5688,10 @@ export default function ConsultationsScreen() {
               instructions: p.instructions,
               toothNumber: p.toothNumber,
               toothSurface: p.toothSurface,
+              roomId: p.roomId || p.targetRoomId,
+              roomName: p.roomName || p.targetRoomName,
+              targetRoomId: p.targetRoomId || p.roomId,
+              targetRoomName: p.targetRoomName || p.roomName,
             })),
           ]}
         />
@@ -5371,6 +5781,168 @@ export default function ConsultationsScreen() {
           </Modal>
         ) : null}
 
+        {/* Review Statement of Account (SOA) Modal */}
+        <Modal
+          visible={reviewSoaModalVisible}
+          onClose={() => setReviewSoaModalVisible(false)}
+          title="Review Statement of Account (SOA)"
+          subtitle={selectedPatient ? `Patient: ${selectedPatient.patientName} (${selectedPatient.queueNumber})` : undefined}
+          maxWidth={620}
+        >
+          <View style={styles.soaModalContent}>
+            <View style={styles.soaHeaderNotice}>
+              <Icon name="billing" size={theme.sizes.iconMd} color={theme.colors.primary} />
+              <View style={styles.soaHeaderNoticeText}>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  Review Services & Statutory Discounts
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Verify billable items and statutory discounts before signing and forwarding the invoice to the Cashier.
+                </ThemedText>
+              </View>
+            </View>
+
+            {/* Billable Items List */}
+            <ThemedText variant="smallBold" color={theme.colors.textSecondary} style={styles.soaSectionTitle}>
+              BILLABLE SERVICES & PROCEDURES ({soaReviewItems.length})
+            </ThemedText>
+
+            {soaReviewItems.length === 0 ? (
+              <View style={styles.soaEmptyItemsBox}>
+                <Icon name="info" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
+                <ThemedText variant="small" color={theme.colors.textMuted}>
+                  No billable consultation fee or procedures detected. If this is a free follow-up, you may proceed with signing.
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={styles.soaItemsTable}>
+                <View style={styles.soaTableHeaderRow}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 3 }}>
+                    Service / Description
+                  </ThemedText>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 1.5, textAlign: 'center' }}>
+                    Qty
+                  </ThemedText>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 2, textAlign: 'right' }}>
+                    Unit Price
+                  </ThemedText>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 2, textAlign: 'right' }}>
+                    Amount
+                  </ThemedText>
+                  <View style={{ width: 32 }} />
+                </View>
+
+                {soaReviewItems.map((item, index) => (
+                  <View key={`${item.description}-${index}`} style={styles.soaTableRow}>
+                    <View style={{ flex: 3 }}>
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
+                        {item.description}
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        {item.category} {item.itemCode ? `• ${item.itemCode}` : ''}
+                      </ThemedText>
+                    </View>
+
+                    {/* Quantity Stepper */}
+                    <View style={styles.soaQtyStepper}>
+                      <Pressable
+                        onPress={() => updateSoaItemQty(index, item.quantity - 1)}
+                        style={styles.soaStepperBtn}
+                        accessibilityLabel="Decrease quantity"
+                      >
+                        <Icon name="minus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                      </Pressable>
+                      <ThemedText variant="bodyBold" color={theme.colors.text} style={styles.soaQtyText}>
+                        {item.quantity}
+                      </ThemedText>
+                      <Pressable
+                        onPress={() => updateSoaItemQty(index, item.quantity + 1)}
+                        style={styles.soaStepperBtn}
+                        accessibilityLabel="Increase quantity"
+                      >
+                        <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                      </Pressable>
+                    </View>
+
+                    {/* Unit Price Input */}
+                    <View style={styles.soaPriceInputWrap}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>₱</ThemedText>
+                      <TextInput
+                        style={styles.soaPriceInput}
+                        keyboardType="numeric"
+                        value={String(item.unitPrice)}
+                        onChangeText={(val) => {
+                          const clean = val.replace(/[^0-9.]/g, '');
+                          const num = clean ? parseFloat(clean) : 0;
+                          updateSoaItemPrice(index, isNaN(num) ? 0 : num);
+                        }}
+                      />
+                    </View>
+
+                    {/* Total Amount */}
+                    <ThemedText variant="bodyBold" color={theme.colors.text} style={styles.soaRowTotal}>
+                      ₱{(item.unitPrice * item.quantity).toFixed(2)}
+                    </ThemedText>
+
+                    <Pressable
+                      onPress={() => {
+                        setSoaReviewItems((prev) => prev.filter((_, i) => i !== index));
+                      }}
+                      style={styles.soaDeleteButton}
+                      accessibilityLabel="Remove item"
+                    >
+                      <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Financial Summary Totals Card */}
+            <View style={styles.soaTotalsCard}>
+              <View style={styles.soaTotalRow}>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  Total Billable Clinical Services
+                </ThemedText>
+                <ThemedText variant="title" color={theme.colors.primary}>
+                  ₱{soaGrossAmount.toFixed(2)}
+                </ThemedText>
+              </View>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Review clinical items, quantities, and procedure fees above. Statutory discounts (Senior Citizen / PWD / PhilHealth Konsulta) and official collection will be applied by the Cashier.
+              </ThemedText>
+            </View>
+
+            {/* Modal Actions */}
+            <View style={styles.soaActionsRow}>
+              <Button
+                title="Print SOA (PDF)"
+                icon="print"
+                variant="outline"
+                size="md"
+                onPress={handlePrintSoaPreview}
+              />
+              <View style={styles.soaActionsRight}>
+                <Button
+                  title="Back to SOAP"
+                  variant="ghost"
+                  size="md"
+                  onPress={() => setReviewSoaModalVisible(false)}
+                />
+                <Button
+                  title="Confirm & Sign Encounter"
+                  icon="check"
+                  variant="primary"
+                  size="md"
+                  loading={isSigning}
+                  disabled={isSigning}
+                  onPress={handleConfirmAndSignEncounter}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         {/* Post-Encounter Action Dialog */}
         <Modal
           visible={postEncounterModalVisible}
@@ -5459,6 +6031,15 @@ export default function ConsultationsScreen() {
                     setPostEncounterModalVisible(false);
                     handleOpenPrescriptionSlip();
                   }}
+                />
+              )}
+              {createdInvoiceNumber && (
+                <Button
+                  title="Print SOA (PDF)"
+                  icon="print"
+                  variant="outline"
+                  size="sm"
+                  onPress={handlePrintApprovedSoa}
                 />
               )}
               <Button
@@ -5564,6 +6145,36 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     paddingHorizontal: theme.spacing.xs,
   },
+  procedureCardActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  inlineRoomSwitcherRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  roomChipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  roomPill: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.full,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.surface,
+  },
+  roomPillActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
   orderedDeleteBtn: {
     padding: theme.spacing.xs,
   },
@@ -5653,8 +6264,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.xl,
     gap: theme.spacing.lg,
     width: '100%',
-    maxWidth: theme.sizes.contentMaxWidth,
-    alignSelf: 'center',
   },
   flex: {
     flex: 1,
@@ -6326,5 +6935,144 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  soaModalContent: {
+    gap: theme.spacing.md,
+  },
+  soaHeaderNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+  },
+  soaHeaderNoticeText: {
+    flex: 1,
+    gap: 2,
+  },
+  soaSectionTitle: {
+    marginTop: theme.spacing.xs,
+  },
+  soaEmptyItemsBox: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  soaItemsTable: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    overflow: 'hidden',
+  },
+  soaTableHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  soaTableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  soaDeleteButton: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: theme.sizes.touchTarget,
+  },
+  soaQtyStepper: {
+    flex: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  soaStepperBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  soaQtyText: {
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  soaPriceInputWrap: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.sm,
+    paddingHorizontal: theme.spacing.xs,
+    height: 32,
+    justifyContent: 'flex-end',
+  },
+  soaPriceInput: {
+    flex: 1,
+    textAlign: 'right',
+    fontSize: theme.typography.body.fontSize,
+    color: theme.colors.text,
+    paddingVertical: 0,
+  },
+  soaRowTotal: {
+    flex: 2,
+    textAlign: 'right',
+  },
+  soaTotalsCard: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.xs,
+  },
+  soaTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  soaNetTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: theme.spacing.xs,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.border,
+  },
+  soaActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+  },
+  soaActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
 });

@@ -29,11 +29,19 @@ import { pickClinicLogo } from '../../utils/logoUploader';
 import { openPrintableUrl } from '../../utils/printHelper';
 import { Alert, notify } from '../../utils/feedback';
 
+export type StudioCategory = 'Clinical' | 'Placard' | 'Reports';
+
 export type StudioDocumentType =
   | 'Medical Certificate'
   | 'Electronic Prescription'
   | 'Lab Requisition Slip'
-  | 'Clinical Referral Letter';
+  | 'Clinical Referral Letter'
+  | 'Reception QR Placard'
+  | 'Daily End-of-Day Report'
+  | 'DOH Outpatient Morbidity Report'
+  | 'BIR Tax & Discount Audit Report'
+  | 'Doctor Shares Settlement'
+  | 'Executive Analytics Summary';
 
 export type StudioSignatureMode = 'ESignatureSpecimen' | 'DigitalSealOnly' | 'WetSignature';
 
@@ -47,11 +55,38 @@ export interface DocumentTemplatesSettingsTabProps {
   onRefreshSettings?: () => Promise<void>;
 }
 
-const DOC_TYPE_OPTIONS: SegmentedOption<StudioDocumentType>[] = [
+const CATEGORY_OPTIONS: SegmentedOption<StudioCategory>[] = [
+  { value: 'Clinical', label: 'Clinical (4)' },
+  { value: 'Placard', label: 'Placard (1)' },
+  { value: 'Reports', label: 'Reports (5)' },
+];
+
+const CLINICAL_DOC_OPTIONS: SegmentedOption<StudioDocumentType>[] = [
   { value: 'Medical Certificate', label: 'Medical Certificate' },
   { value: 'Electronic Prescription', label: 'Electronic Prescription' },
   { value: 'Lab Requisition Slip', label: 'Lab Requisition Slip' },
   { value: 'Clinical Referral Letter', label: 'Clinical Referral Letter' },
+];
+
+const PLACARD_DOC_OPTIONS: SegmentedOption<StudioDocumentType>[] = [
+  { value: 'Reception QR Placard', label: 'Reception QR Placard' },
+];
+
+const REPORTS_DOC_OPTIONS: SegmentedOption<StudioDocumentType>[] = [
+  { value: 'Daily End-of-Day Report', label: 'Daily EOD' },
+  { value: 'DOH Outpatient Morbidity Report', label: 'DOH Morbidity' },
+  { value: 'BIR Tax & Discount Audit Report', label: 'BIR Tax Audit' },
+  { value: 'Doctor Shares Settlement', label: 'Doctor Shares' },
+  { value: 'Executive Analytics Summary', label: 'Analytics' },
+];
+
+// Preserved for backwards compatibility
+export const DOC_TYPE_OPTIONS: SegmentedOption<StudioDocumentType>[] = CLINICAL_DOC_OPTIONS;
+
+export const ALL_DOC_TYPE_OPTIONS: SegmentedOption<StudioDocumentType>[] = [
+  ...CLINICAL_DOC_OPTIONS,
+  ...PLACARD_DOC_OPTIONS,
+  ...REPORTS_DOC_OPTIONS,
 ];
 
 const SIGNATURE_MODE_OPTIONS: SegmentedOption<StudioSignatureMode>[] = [
@@ -88,17 +123,60 @@ export default function DocumentTemplatesSettingsTab({
   const [dohLicenseToOperate, setDohLicenseToOperate] = useState('');
   const [accreditationNumber, setAccreditationNumber] = useState('');
   const [primaryLogoUrl, setPrimaryLogoUrl] = useState<string | null>(null);
-  const [primaryColorHex, setPrimaryColorHex] = useState<string>(DEFAULT_CLINIC_BRAND_COLOR);
-  const [customHexInput, setCustomHexInput] = useState<string>(DEFAULT_CLINIC_BRAND_COLOR);
+  const [letterheadAccentColorHex, setLetterheadAccentColorHex] = useState<string>(
+    initialSettings?.letterheadAccentColorHex ||
+      initialSettings?.documentAccentColorHex ||
+      initialSettings?.primaryColorHex ||
+      DEFAULT_CLINIC_BRAND_COLOR
+  );
+  const [customHexInput, setCustomHexInput] = useState<string>(
+    initialSettings?.letterheadAccentColorHex ||
+      initialSettings?.documentAccentColorHex ||
+      initialSettings?.primaryColorHex ||
+      DEFAULT_CLINIC_BRAND_COLOR
+  );
   const [paperSize, setPaperSize] = useState<PaperSize>('Letter');
   const [letterheadFooter, setLetterheadFooter] = useState('');
 
   // Right column live studio state
+  const [docCategory, setDocCategory] = useState<StudioCategory>('Clinical');
   const [selectedDocType, setSelectedDocType] = useState<StudioDocumentType>('Medical Certificate');
   const [signatureMode, setSignatureMode] = useState<StudioSignatureMode>('ESignatureSpecimen');
   const [saving, setSaving] = useState(false);
   const [printingSample, setPrintingSample] = useState(false);
   const [accentColorError, setAccentColorError] = useState<string | null>(null);
+
+  const getPaperDimensionStyle = (size: PaperSize) => {
+    switch (size) {
+      case 'A5':
+        return {
+          maxWidth: 480,
+          minHeight: 620,
+        };
+      case 'A4':
+        return {
+          maxWidth: 620,
+          minHeight: 840,
+        };
+      case 'Letter':
+      default:
+        return {
+          maxWidth: 640,
+          minHeight: 780,
+        };
+    }
+  };
+
+  const getPaperSizeLabel = (size: PaperSize) => {
+    switch (size) {
+      case 'Letter':
+        return 'Letter (8.5 × 11 in)';
+      case 'A4':
+        return 'A4 (210 × 297 mm)';
+      case 'A5':
+        return 'A5 (148 × 210 mm • Notepad)';
+    }
+  };
 
   const populateForm = useCallback((record: ClinicSettingsRecord) => {
     setLetterheadHeader(record.letterheadHeader || record.clinicName || '');
@@ -108,13 +186,19 @@ export default function DocumentTemplatesSettingsTab({
     setDohLicenseToOperate(record.dohLicenseToOperate || record.letterheadDohLto || '');
     setAccreditationNumber(record.accreditationNumber || '');
     setPrimaryLogoUrl(record.primaryLogoUrl ?? null);
-    const brandColor = record.primaryColorHex || DEFAULT_CLINIC_BRAND_COLOR;
-    setPrimaryColorHex(brandColor);
-    setCustomHexInput(brandColor);
+    // Document Accent Color is completely independent of Workstation Color Branding (primaryColorHex).
+    // Falls back to record.primaryColorHex only if not explicitly set.
+    const docAccent =
+      record.letterheadAccentColorHex ||
+      record.documentAccentColorHex ||
+      record.primaryColorHex ||
+      DEFAULT_CLINIC_BRAND_COLOR;
+    setLetterheadAccentColorHex(docAccent);
+    setCustomHexInput(docAccent);
     setPaperSize((record.paperSize as PaperSize) || 'Letter');
     setLetterheadFooter(
       record.letterheadFooter ||
-        'Valid Philippine Medical Certificate. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'
+        'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'
     );
   }, []);
 
@@ -161,7 +245,7 @@ export default function DocumentTemplatesSettingsTab({
 
   // Color picker handlers
   const handleSelectPreset = (color: string) => {
-    setPrimaryColorHex(color);
+    setLetterheadAccentColorHex(color);
     setCustomHexInput(color);
     setAccentColorError(null);
   };
@@ -181,7 +265,7 @@ export default function DocumentTemplatesSettingsTab({
         setAccentColorError('Insufficient contrast. Please choose a darker or more vibrant shade.');
       } else {
         setAccentColorError(null);
-        setPrimaryColorHex(clean);
+        setLetterheadAccentColorHex(clean);
       }
     } else if (clean.length > 7) {
       setAccentColorError('Hex color must be exactly 7 characters including #.');
@@ -222,7 +306,8 @@ export default function DocumentTemplatesSettingsTab({
         letterheadDohLto: dohLicenseToOperate.trim(),
         accreditationNumber: accreditationNumber.trim(),
         primaryLogoUrl,
-        primaryColorHex,
+        letterheadAccentColorHex,
+        documentAccentColorHex: letterheadAccentColorHex,
         paperSize,
         letterheadFooter: letterheadFooter.trim(),
       };
@@ -324,7 +409,7 @@ export default function DocumentTemplatesSettingsTab({
               letterheadContact: 'Tel: (02) 8000-0000',
               paperSize: 'Letter',
               letterheadFooter:
-                'Valid Philippine Medical Certificate. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.',
+                'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.',
             };
             setInternalSettings(defaults);
             populateForm(defaults);
@@ -440,7 +525,7 @@ export default function DocumentTemplatesSettingsTab({
             <View style={styles.colorPaletteWrapper}>
               <View style={styles.presetsRow}>
                 {BRAND_COLOR_PRESETS.map((preset) => {
-                  const isSelected = primaryColorHex.toUpperCase() === preset.color.toUpperCase();
+                  const isSelected = letterheadAccentColorHex.toUpperCase() === preset.color.toUpperCase();
                   return (
                     <Pressable
                       key={preset.color}
@@ -502,7 +587,7 @@ export default function DocumentTemplatesSettingsTab({
                 onChangeText={setLetterheadFooter}
                 multiline
                 numberOfLines={3}
-                placeholder="Valid Philippine Medical Certificate. Digitally certified via Clinic EZ..."
+                placeholder="Valid Philippine Clinical Document. Digitally certified via Clinic EZ..."
                 helperText="Enforces Philippine RA 8792 (E-Commerce Act) and RA 10173 (Data Privacy Act) compliance."
                 testID="input-statutory-footer"
               />
@@ -529,33 +614,62 @@ export default function DocumentTemplatesSettingsTab({
             <View style={styles.canvasControlBar}>
               <View style={styles.controlBarRow}>
                 <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
-                  Document Type:
+                  Document Category:
                 </ThemedText>
                 <SegmentedControl
-                  options={DOC_TYPE_OPTIONS}
-                  value={selectedDocType}
-                  onChange={setSelectedDocType}
+                  options={CATEGORY_OPTIONS}
+                  value={docCategory}
+                  onChange={cat => {
+                    const nextCat = cat as StudioCategory;
+                    setDocCategory(nextCat);
+                    if (nextCat === 'Clinical') setSelectedDocType('Medical Certificate');
+                    else if (nextCat === 'Placard') setSelectedDocType('Reception QR Placard');
+                    else setSelectedDocType('Daily End-of-Day Report');
+                  }}
                 />
               </View>
 
               <View style={styles.controlBarRow}>
                 <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
-                  Signature Mode:
+                  Document Type:
                 </ThemedText>
                 <SegmentedControl
-                  options={SIGNATURE_MODE_OPTIONS}
-                  value={signatureMode}
-                  onChange={setSignatureMode}
+                  options={
+                    docCategory === 'Clinical'
+                      ? CLINICAL_DOC_OPTIONS
+                      : docCategory === 'Placard'
+                      ? PLACARD_DOC_OPTIONS
+                      : REPORTS_DOC_OPTIONS
+                  }
+                  value={selectedDocType}
+                  onChange={setSelectedDocType}
                 />
               </View>
 
+              {docCategory === 'Clinical' && (
+                <View style={styles.controlBarRow}>
+                  <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+                    Signature Mode:
+                  </ThemedText>
+                  <SegmentedControl
+                    options={SIGNATURE_MODE_OPTIONS}
+                    value={signatureMode}
+                    onChange={setSignatureMode}
+                  />
+                </View>
+              )}
+
               <View style={styles.controlBarActions}>
                 <View style={styles.badgeRow}>
-                  <Badge label={`${paperSize} Size`} variant="routine" />
-                  <Badge
-                    label={signatureMode === 'WetSignature' ? 'Wet Signature' : 'Digitally Certified'}
-                    variant={signatureMode === 'WetSignature' ? 'warning' : 'routine'}
-                  />
+                  <Badge label={getPaperSizeLabel(paperSize)} variant="routine" />
+                  {docCategory === 'Clinical' ? (
+                    <Badge
+                      label={signatureMode === 'WetSignature' ? 'Wet Signature' : 'Digitally Certified'}
+                      variant={signatureMode === 'WetSignature' ? 'warning' : 'routine'}
+                    />
+                  ) : (
+                    <Badge label="Administrative Statutory" variant="routine" />
+                  )}
                 </View>
                 <Button
                   title="Print Sample Test PDF"
@@ -570,19 +684,22 @@ export default function DocumentTemplatesSettingsTab({
             </View>
 
             {/* Document Canvas */}
-            <ScrollView style={styles.canvasScroll} contentContainerStyle={styles.canvasPaper}>
+            <ScrollView
+              style={styles.canvasScroll}
+              contentContainerStyle={[styles.canvasPaper, getPaperDimensionStyle(paperSize)]}
+            >
               {/* Canvas Header */}
               <View style={styles.canvasHeader}>
                 <View style={styles.canvasHeaderTop}>
                   {primaryLogoUrl ? (
                     <Image source={{ uri: primaryLogoUrl }} style={styles.canvasLogo} resizeMode="contain" />
                   ) : (
-                    <View style={[styles.canvasLogoPlaceholder, { borderColor: primaryColorHex }]}>
-                      <Icon name="clinic" size={theme.sizes.iconLg} color={primaryColorHex} />
+                    <View style={[styles.canvasLogoPlaceholder, { borderColor: letterheadAccentColorHex }]}>
+                      <Icon name="clinic" size={theme.sizes.iconLg} color={letterheadAccentColorHex} />
                     </View>
                   )}
                   <View style={styles.canvasHeaderTitleBlock}>
-                    <ThemedText variant="h2" style={[styles.canvasFacilityTitle, { color: primaryColorHex }]}>
+                    <ThemedText variant="h2" style={[styles.canvasFacilityTitle, { color: letterheadAccentColorHex }]}>
                       {letterheadHeader.trim() || 'ST. JUDE FAMILY MEDICAL CLINIC'}
                     </ThemedText>
                     {letterheadSubHeader.trim() ? (
@@ -601,7 +718,7 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                   </View>
                 </View>
-                <View style={[styles.canvasDividerBar, { backgroundColor: primaryColorHex }]} />
+                <View style={[styles.canvasDividerBar, { backgroundColor: letterheadAccentColorHex }]} />
               </View>
 
               {/* Canvas Body by Document Type */}
@@ -623,8 +740,8 @@ export default function DocumentTemplatesSettingsTab({
                       TO WHOM IT MAY CONCERN:
                     </ThemedText>
                     <ThemedText variant="body" style={styles.docParagraph}>
-                      This is to certify that <ThemedText variant="bodyBold">Juan Dela Cruz</ThemedText>, 34 years
-                      old, Male, Filipino, residing at City of San Pedro, Laguna, was examined and treated at this
+                      This is to certify that <ThemedText variant="bodyBold">Juan Dela Cruz</ThemedText>, 34 yrs, 5 mos, 2 wks, 3 days of
+                      age, Male, Filipino, residing at City of San Pedro, Laguna, was examined and treated at this
                       facility on October 20, 2026.
                     </ThemedText>
                     <View style={styles.calloutBox}>
@@ -650,14 +767,14 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                     <View style={styles.docMetadataRow}>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Patient: Maria Santos (28/F)
+                        Patient: Maria Santos (28 yrs, 6 mos, 1 wk, 2 days • Female)
                       </ThemedText>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
                         Rx No: RX-2026-00891
                       </ThemedText>
                     </View>
                     <View style={styles.rxSymbolBox}>
-                      <ThemedText variant="display" color={primaryColorHex}>
+                      <ThemedText variant="display" color={letterheadAccentColorHex}>
                         Rx
                       </ThemedText>
                     </View>
@@ -694,7 +811,7 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                     <View style={styles.docMetadataRow}>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Patient: Pedro Penduko (45/M)
+                        Patient: Pedro Penduko (45 yrs, 2 mos, 3 days • Male)
                       </ThemedText>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
                         Req No: LAB-2026-00318
@@ -705,19 +822,19 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                     <View style={styles.labChecklist}>
                       <View style={styles.checkItem}>
-                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={primaryColorHex} />
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={letterheadAccentColorHex} />
                         <ThemedText variant="body">Complete Blood Count (CBC) with Platelet Count</ThemedText>
                       </View>
                       <View style={styles.checkItem}>
-                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={primaryColorHex} />
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={letterheadAccentColorHex} />
                         <ThemedText variant="body">Fasting Blood Sugar (FBS) - 10 to 12 hours fast</ThemedText>
                       </View>
                       <View style={styles.checkItem}>
-                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={primaryColorHex} />
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={letterheadAccentColorHex} />
                         <ThemedText variant="body">Lipid Profile (Total Cholesterol, HDL, LDL, Triglycerides)</ThemedText>
                       </View>
                       <View style={styles.checkItem}>
-                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={primaryColorHex} />
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={letterheadAccentColorHex} />
                         <ThemedText variant="body">12-Lead Electrocardiogram (ECG)</ThemedText>
                       </View>
                     </View>
@@ -747,81 +864,304 @@ export default function DocumentTemplatesSettingsTab({
                       Dear Colleague,
                     </ThemedText>
                     <ThemedText variant="body" style={styles.docParagraph}>
-                      Respectfully referring Juan Dela Cruz, 58-year-old male with persistent Grade 2 Essential
-                      Hypertension and exertional dyspnea, for 2D-Echocardiogram and comprehensive cardiac risk
-                      stratification.
+                      Respectfully referring Juan Dela Cruz, 58 yrs, 8 mos, 2 wks, 1 day of age, Male, with persistent
+                      Grade 2 Essential Hypertension and exertional dyspnea, for 2D-Echocardiogram and comprehensive
+                      cardiac risk stratification.
                     </ThemedText>
                   </View>
                 )}
-              </View>
 
-              {/* Doctor Signature Block */}
-              <View style={styles.signatureBlock}>
-                {signatureMode === 'ESignatureSpecimen' ? (
-                  <View style={styles.eSignatureWrapper}>
-                    <View style={styles.signatureSpecimenBox}>
+                {selectedDocType === 'Reception QR Placard' && (
+                  <View style={styles.docTypeContent}>
+                    <ThemedText variant="h2" style={[styles.docTypeTitle, { color: letterheadAccentColorHex }]}>
+                      CLINIC RECEPTION &amp; PATIENT CHECK-IN
+                    </ThemedText>
+                    <ThemedText variant="body" color={theme.colors.textSecondary} style={{ textAlign: 'center' }}>
+                      Scan this QR code with your smartphone camera to check-in or join the waiting queue
+                    </ThemedText>
+                    <View style={styles.placardQrBox}>
+                      <View style={[styles.placardQrPlaceholder, { borderColor: letterheadAccentColorHex }]}>
+                        <Icon name="scan" size={theme.sizes.iconLg} color={letterheadAccentColorHex} />
+                        <ThemedText variant="captionBold" color={letterheadAccentColorHex}>
+                          SCAN TO QUEUE
+                        </ThemedText>
+                      </View>
+                      <View style={styles.placardCodeBadge}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          Or enter manual clinic join code:
+                        </ThemedText>
+                        <ThemedText variant="h2" color={theme.colors.primary}>
+                          CEZ-2026
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <View style={styles.placardInstructions}>
+                      <ThemedText variant="smallBold" color={theme.colors.text}>
+                        Patient Mobile Instructions:
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        1. Point your mobile device camera at the QR code above.
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        2. Tap the link to open the ClinicEZ Patient Portal.
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        3. Review triage queue position and receive instant SMS/vibration alerts when called.
+                      </ThemedText>
+                    </View>
+                  </View>
+                )}
+
+                {selectedDocType === 'Daily End-of-Day Report' && (
+                  <View style={styles.docTypeContent}>
+                    <ThemedText variant="h3" style={styles.docTypeTitle}>
+                      DAILY END-OF-DAY RECONCILIATION SUMMARY
+                    </ThemedText>
+                    <View style={styles.docMetadataRow}>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        [Clinician E-Signature Specimen Applied]
+                        Report Date: October 20, 2026
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Audit Status: Reconciled &amp; Balanced
                       </ThemedText>
                     </View>
-                    <View style={styles.signatureRule} />
-                    <ThemedText variant="bodyBold">DR. ROBERTO V. SANTOS, MD, FPCP</ThemedText>
-                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      PRC Lic. No. 0098451 • PTR No. 8472910 • S2 No. S2-2026-9912
-                    </ThemedText>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      PhilHealth Accredited Physician No. PAN-04-192837
-                    </ThemedText>
-                    <View style={styles.digitalSealBadge}>
-                      <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.routine} />
-                      <ThemedText variant="captionBold" color={theme.colors.routine}>
-                        Digitally Certified &amp; Locked
-                      </ThemedText>
+                    <View style={styles.reportSummaryGrid}>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>TOTAL CHECKED IN</ThemedText>
+                        <ThemedText variant="bodyBold">28 Patients</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>GROSS REVENUE</ThemedText>
+                        <ThemedText variant="bodyBold">₱24,500.00</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>DISCOUNTS GIVEN</ThemedText>
+                        <ThemedText variant="bodyBold">₱2,940.00</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>NET COLLECTIONS</ThemedText>
+                        <ThemedText variant="bodyBold" color={theme.colors.primary}>₱21,560.00</ThemedText>
+                      </View>
                     </View>
-                  </View>
-                ) : signatureMode === 'DigitalSealOnly' ? (
-                  <View style={styles.eSignatureWrapper}>
-                    <View style={styles.signatureRule} />
-                    <ThemedText variant="bodyBold">DR. ROBERTO V. SANTOS, MD, FPCP</ThemedText>
-                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      PRC Lic. No. 0098451 • PTR No. 8472910 • S2 No. S2-2026-9912
-                    </ThemedText>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      PhilHealth Accredited Physician No. PAN-04-192837
-                    </ThemedText>
-                    <View style={styles.digitalSealBadge}>
-                      <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.routine} />
-                      <ThemedText variant="captionBold" color={theme.colors.routine}>
-                        Digitally Certified &amp; Locked
-                      </ThemedText>
+                    <View style={styles.tableBlock}>
+                      <ThemedText variant="smallBold">Collections by Payment Tender</ThemedText>
+                      <View style={styles.tableRow}><ThemedText variant="body">Cash in Drawer</ThemedText><ThemedText variant="bodyBold">₱14,200.00 (18 trans)</ThemedText></View>
+                      <View style={styles.tableRow}><ThemedText variant="body">GCash / QRPh</ThemedText><ThemedText variant="bodyBold">₱5,360.00 (7 trans)</ThemedText></View>
+                      <View style={styles.tableRow}><ThemedText variant="body">Credit / Debit Card</ThemedText><ThemedText variant="bodyBold">₱2,000.00 (1 trans)</ThemedText></View>
                     </View>
-                  </View>
-                ) : (
-                  <View style={styles.wetSignatureWrapper}>
-                    <View style={styles.wetSignatureBlankLine} />
-                    <ThemedText variant="bodyBold">DR. ROBERTO V. SANTOS, MD, FPCP</ThemedText>
-                    <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                      PRC Lic. No. 0098451 • PTR No. 8472910 • S2 No. S2-2026-9912
-                    </ThemedText>
-                    <ThemedText variant="caption" color={theme.colors.textMuted}>
-                      (Affix physical pen signature above line)
-                    </ThemedText>
                   </View>
                 )}
 
-                <View style={styles.securityDigestRow}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Digest: HMAC-SHA256:7f3a9e...2026 • Scan QR code to verify validity
-                  </ThemedText>
-                </View>
+                {selectedDocType === 'DOH Outpatient Morbidity Report' && (
+                  <View style={styles.docTypeContent}>
+                    <ThemedText variant="h3" style={styles.docTypeTitle}>
+                      DOH OUTPATIENT MORBIDITY REPORT (FHSIS)
+                    </ThemedText>
+                    <View style={styles.docMetadataRow}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Period: September 20 – October 20, 2026
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Encounters Audited: 184
+                      </ThemedText>
+                    </View>
+                    <View style={styles.tableBlock}>
+                      <ThemedText variant="smallBold">Leading Causes of Morbidity (ICD-10)</ThemedText>
+                      <View style={styles.tableRow}><ThemedText variant="bodyBold">1. J06.9 Acute Upper Respiratory Infection</ThemedText><ThemedText variant="body">64 cases (33.3%)</ThemedText></View>
+                      <View style={styles.tableRow}><ThemedText variant="bodyBold">2. I10 Essential (Primary) Hypertension</ThemedText><ThemedText variant="body">48 cases (25.0%)</ThemedText></View>
+                      <View style={styles.tableRow}><ThemedText variant="bodyBold">3. E11.9 Type 2 Diabetes Mellitus</ThemedText><ThemedText variant="body">32 cases (16.7%)</ThemedText></View>
+                      <View style={styles.tableRow}><ThemedText variant="bodyBold">4. K21.9 Gastro-Esophageal Reflux Disease</ThemedText><ThemedText variant="body">24 cases (12.5%)</ThemedText></View>
+                      <View style={styles.tableRow}><ThemedText variant="bodyBold">5. M54.5 Low Back Pain</ThemedText><ThemedText variant="body">16 cases (8.3%)</ThemedText></View>
+                    </View>
+                  </View>
+                )}
+
+                {selectedDocType === 'BIR Tax & Discount Audit Report' && (
+                  <View style={styles.docTypeContent}>
+                    <ThemedText variant="h3" style={styles.docTypeTitle}>
+                      BIR STATUTORY TAX &amp; DISCOUNT AUDIT REPORT
+                    </ThemedText>
+                    <View style={styles.docMetadataRow}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Compliance: RA 9994 (Senior) &amp; RA 10754 (PWD)
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Invoices Audited: 45
+                      </ThemedText>
+                    </View>
+                    <View style={styles.reportSummaryGrid}>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>GROSS SALES</ThemedText>
+                        <ThemedText variant="bodyBold">₱54,000.00</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>SENIOR DISCOUNTS</ThemedText>
+                        <ThemedText variant="bodyBold">₱6,800.00</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>PWD DISCOUNTS</ThemedText>
+                        <ThemedText variant="bodyBold">₱4,000.00</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>VAT EXEMPT BASE</ThemedText>
+                        <ThemedText variant="bodyBold" color={theme.colors.primary}>₱6,480.00</ThemedText>
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {selectedDocType === 'Doctor Shares Settlement' && (
+                  <View style={styles.docTypeContent}>
+                    <ThemedText variant="h3" style={styles.docTypeTitle}>
+                      PHYSICIAN SHARE &amp; COMMISSION SETTLEMENT
+                    </ThemedText>
+                    <View style={styles.docMetadataRow}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Physician: Dr. Roberto V. Santos, MD (PRC 0098451)
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Default Retention: 30% Clinic / 70% Doctor
+                      </ThemedText>
+                    </View>
+                    <View style={styles.reportSummaryGrid}>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>CONSULTATIONS GROSS</ThemedText>
+                        <ThemedText variant="bodyBold">₱84,000.00</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>PROCEDURES GROSS</ThemedText>
+                        <ThemedText variant="bodyBold">₱14,000.00</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>CLINIC SHARE (30%)</ThemedText>
+                        <ThemedText variant="bodyBold">₱29,400.00</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>NET PAYABLE (70%)</ThemedText>
+                        <ThemedText variant="bodyBold" color={theme.colors.primary}>₱68,600.00</ThemedText>
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {selectedDocType === 'Executive Analytics Summary' && (
+                  <View style={styles.docTypeContent}>
+                    <ThemedText variant="h3" style={styles.docTypeTitle}>
+                      EXECUTIVE CLINICAL &amp; OPERATIONAL ANALYTICS
+                    </ThemedText>
+                    <View style={styles.docMetadataRow}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Executive Period: Last 30 Days
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Collection Efficiency: 96.3%
+                      </ThemedText>
+                    </View>
+                    <View style={styles.reportSummaryGrid}>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>TOTAL ENCOUNTERS</ThemedText>
+                        <ThemedText variant="bodyBold">184 Visits</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>AVERAGE WAIT</ThemedText>
+                        <ThemedText variant="bodyBold">12.5 min</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>GROSS REVENUE</ThemedText>
+                        <ThemedText variant="bodyBold">₱185,000.00</ThemedText>
+                      </View>
+                      <View style={styles.reportMetricCell}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>COLLECTIONS</ThemedText>
+                        <ThemedText variant="bodyBold" color={theme.colors.primary}>₱158,000.00</ThemedText>
+                      </View>
+                    </View>
+                  </View>
+                )}
               </View>
+
+              {/* Signature Block (Suppressed on Placards, tailored for Reports vs Clinical) */}
+              {selectedDocType !== 'Reception QR Placard' && (
+                <View style={styles.signatureBlock}>
+                  {docCategory === 'Reports' ? (
+                    <View style={styles.eSignatureWrapper}>
+                      <View style={styles.signatureRule} />
+                      <ThemedText variant="bodyBold">CLINIC ADMINISTRATION &amp; AUDIT</ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        Official Statutory Report • Generated via ClinicEZ
+                      </ThemedText>
+                      <View style={styles.digitalSealBadge}>
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.routine} />
+                        <ThemedText variant="captionBold" color={theme.colors.routine}>
+                          Audit Verified &amp; Cryptographically Sealed
+                        </ThemedText>
+                      </View>
+                    </View>
+                  ) : signatureMode === 'ESignatureSpecimen' ? (
+                    <View style={styles.eSignatureWrapper}>
+                      <View style={styles.signatureSpecimenBox}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          [Clinician E-Signature Specimen Applied]
+                        </ThemedText>
+                      </View>
+                      <View style={styles.signatureRule} />
+                      <ThemedText variant="bodyBold">DR. ROBERTO V. SANTOS, MD, FPCP</ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        PRC Lic. No. 0098451 • PTR No. 8472910 • S2 No. S2-2026-9912
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        PhilHealth Accredited Physician No. PAN-04-192837
+                      </ThemedText>
+                      <View style={styles.digitalSealBadge}>
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.routine} />
+                        <ThemedText variant="captionBold" color={theme.colors.routine}>
+                          Digitally Certified &amp; Locked
+                        </ThemedText>
+                      </View>
+                    </View>
+                  ) : signatureMode === 'DigitalSealOnly' ? (
+                    <View style={styles.eSignatureWrapper}>
+                      <View style={styles.signatureRule} />
+                      <ThemedText variant="bodyBold">DR. ROBERTO V. SANTOS, MD, FPCP</ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        PRC Lic. No. 0098451 • PTR No. 8472910 • S2 No. S2-2026-9912
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        PhilHealth Accredited Physician No. PAN-04-192837
+                      </ThemedText>
+                      <View style={styles.digitalSealBadge}>
+                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.routine} />
+                        <ThemedText variant="captionBold" color={theme.colors.routine}>
+                          Digitally Certified &amp; Locked
+                        </ThemedText>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.wetSignatureWrapper}>
+                      <View style={styles.wetSignatureBlankLine} />
+                      <ThemedText variant="bodyBold">DR. ROBERTO V. SANTOS, MD, FPCP</ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        PRC Lic. No. 0098451 • PTR No. 8472910 • S2 No. S2-2026-9912
+                      </ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        (Affix physical pen signature above line)
+                      </ThemedText>
+                    </View>
+                  )}
+
+                  <View style={styles.securityDigestRow}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Digest: HMAC-SHA256:7f3a9e...2026 • Scan QR code to verify validity
+                    </ThemedText>
+                  </View>
+                </View>
+              )}
 
               {/* Canvas Footer */}
               <View style={styles.canvasFooter}>
                 <View style={styles.canvasFooterDivider} />
                 <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.footerDisclaimerText}>
                   {letterheadFooter.trim() ||
-                    'Valid Philippine Medical Certificate. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'}
+                    'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textLight}>
                   Verify online: portal.clinicez.ph/verify/DOC-SEC-2026
@@ -962,6 +1302,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+    minHeight: 720,
+    justifyContent: 'space-between',
     gap: theme.spacing.lg,
     ...theme.shadows.md,
   },
@@ -1063,8 +1405,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   signatureBlock: {
-    marginTop: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    marginTop: 'auto',
+    paddingTop: theme.spacing.lg,
     alignItems: 'flex-end',
     gap: theme.spacing.xs,
   },
@@ -1123,5 +1465,59 @@ const styles = StyleSheet.create({
   footerDisclaimerText: {
     textAlign: 'center',
     maxWidth: 520,
+  },
+  placardQrBox: {
+    alignItems: 'center',
+    marginVertical: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  placardQrPlaceholder: {
+    width: 140,
+    height: 140,
+    borderRadius: theme.radii.md,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.surfaceSubtle,
+  },
+  placardCodeBadge: {
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 4,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+  },
+  placardInstructions: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.sm,
+    gap: 4,
+  },
+  reportSummaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginVertical: theme.spacing.xs,
+  },
+  reportMetricCell: {
+    flex: 1,
+    minWidth: 120,
+    backgroundColor: theme.colors.surfaceSubtle,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    gap: 2,
+  },
+  tableBlock: {
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
   },
 });

@@ -200,9 +200,13 @@ export default function ServicesCatalogTab({
 
     if (onRefreshServices) {
       await onRefreshServices();
-    } else {
-      setServices(seeded);
     }
+    // Also merge seeded items into state to guarantee immediate UI responsiveness
+    setServices((prev) => {
+      const existingCodes = new Set(prev.map((s) => s.code.toUpperCase()));
+      const toAdd = seeded.filter((s) => !existingCodes.has(s.code.toUpperCase()));
+      return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+    });
     notify.success('Dental services added to catalog successfully.');
   };
 
@@ -257,14 +261,16 @@ export default function ServicesCatalogTab({
           ) : visibleServices.length === 0 ? (
             <EmptyState
               icon="clipboard"
-              title="No catalog items found"
+              title={selectedCategory === 'Dental' ? 'No dental services in catalog' : 'No catalog items found'}
               description={
-                selectedCategory === 'All'
+                selectedCategory === 'Dental'
+                  ? 'Add Philippine primary care dental presets (oral prophylaxis, restorative fillings, exodontia, sealants, etc.) to your clinic fee schedule.'
+                  : selectedCategory === 'All'
                   ? 'Add consultation fees and medical procedures to your clinic price list.'
                   : `No items in ${selectedCategory} category yet.`
               }
-              actionTitle="Add first service"
-              onAction={handleOpenAdd}
+              actionTitle={selectedCategory === 'Dental' ? 'Seed Dental Services' : 'Add first service'}
+              onAction={selectedCategory === 'Dental' ? handleSeedDentalServices : handleOpenAdd}
             />
           ) : (
             <View style={styles.serviceList}>

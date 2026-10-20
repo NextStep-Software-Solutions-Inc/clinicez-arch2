@@ -228,37 +228,45 @@ export class DentalCatalogEngine {
       (s) => s.tenantId === clinicContext.tenantId && s.clinicId === clinicContext.clinicId
     );
 
-    // Auto-seed default fee schedule if empty for this clinic and no specific category was requested
-    if (items.length === 0 && (!query.category || query.category.trim() === '')) {
-      const mode = (settings?.specialtyMode || 'Medical').trim().toLowerCase();
-      let defaultsToSeed: Array<{ code: string; name: string; category: string; standardPrice: number; description?: string; philHealthCode?: string; philHealthDescription?: string; isPhilHealthFormulary?: boolean }> = [];
+    // Idempotent specialty auto-seeding based on SpecialtyMode
+    const mode = (settings?.specialtyMode || 'Medical').trim().toLowerCase();
+    const existingMap = new Map<string, ClinicServiceItem>();
+    for (const item of items) {
+      if (item.code) existingMap.set(item.code.toUpperCase(), item);
+    }
 
-      if (mode === 'dental') {
-        defaultsToSeed = [...CANONICAL_DENTAL_DEFAULTS];
-      } else if (mode === 'multispecialty') {
-        defaultsToSeed = [...CANONICAL_MEDICAL_DEFAULTS, ...CANONICAL_DENTAL_DEFAULTS];
-      } else {
-        // "medical" or fallback
-        defaultsToSeed = [...CANONICAL_MEDICAL_DEFAULTS];
+    let defaultsToEnsure: Array<{ code: string; name: string; category: string; standardPrice: number; description?: string; philHealthCode?: string; philHealthDescription?: string; isPhilHealthFormulary?: boolean }> = [];
+
+    if (mode === 'dental') {
+      defaultsToEnsure = [...CANONICAL_DENTAL_DEFAULTS];
+    } else if (mode === 'multispecialty') {
+      defaultsToEnsure = [...CANONICAL_MEDICAL_DEFAULTS, ...CANONICAL_DENTAL_DEFAULTS];
+    } else if (items.length === 0) {
+      defaultsToEnsure = [...CANONICAL_MEDICAL_DEFAULTS];
+    }
+
+    for (let idx = 0; idx < defaultsToEnsure.length; idx++) {
+      const d = defaultsToEnsure[idx];
+      const codeUpper = d.code.toUpperCase();
+      if (!existingMap.has(codeUpper)) {
+        const newItem: ClinicServiceItem = {
+          id: `svc-${clinicContext.clinicId}-${d.code}-${idx}`,
+          tenantId: clinicContext.tenantId,
+          clinicId: clinicContext.clinicId,
+          code: d.code,
+          name: d.name,
+          category: d.category,
+          standardPrice: d.standardPrice,
+          description: d.description,
+          isActive: true,
+          philHealthCode: d.philHealthCode,
+          philHealthDescription: d.philHealthDescription,
+          isPhilHealthFormulary: d.isPhilHealthFormulary,
+        };
+        this.catalog.push(newItem);
+        items.push(newItem);
+        existingMap.set(codeUpper, newItem);
       }
-
-      const createdItems: ClinicServiceItem[] = defaultsToSeed.map((d, idx) => ({
-        id: `svc-${clinicContext.clinicId}-${d.code}-${idx}`,
-        tenantId: clinicContext.tenantId,
-        clinicId: clinicContext.clinicId,
-        code: d.code,
-        name: d.name,
-        category: d.category,
-        standardPrice: d.standardPrice,
-        description: d.description,
-        isActive: true,
-        philHealthCode: d.philHealthCode,
-        philHealthDescription: d.philHealthDescription,
-        isPhilHealthFormulary: d.isPhilHealthFormulary,
-      }));
-
-      this.catalog.push(...createdItems);
-      items = createdItems;
     }
 
     // Apply category filter
@@ -623,7 +631,7 @@ describe('Dental Clinic Service Catalog — Comprehensive E2E Test Suite', () =>
         expect(items.some((it) => it.code === 'CONS-GEN')).toBe(true);
       });
 
-      test('F2.5: Non-empty catalog bypasses auto-seeding preserving existing custom items', () => {
+      test('F2.5: Non-empty catalog auto-seeds missing dental presets while preserving existing custom items', () => {
         const customItem: ClinicServiceItem = {
           id: 'custom-1',
           tenantId: TENANT_A,
@@ -638,8 +646,9 @@ describe('Dental Clinic Service Catalog — Comprehensive E2E Test Suite', () =>
 
         const settings: ClinicSettings = { id: 's1', clinicId: CLINIC_A, tenantId: TENANT_A, specialtyMode: 'Dental' };
         const items = engine.queryServices({ tenantId: TENANT_A, clinicId: CLINIC_A }, settings);
-        expect(items.length).toBe(1);
-        expect(items[0].code).toBe('CUSTOM-SVC');
+        expect(items.length).toBe(11);
+        expect(items.find((i) => i.code === 'CUSTOM-SVC')?.standardPrice).toBe(777);
+        expect(items.filter((i) => i.category === 'Dental').length).toBe(10);
       });
     });
 
@@ -1631,7 +1640,7 @@ describe('Dental Clinic Service Catalog — Comprehensive E2E Test Suite', () =>
         expect(items.length).toBe(9);
       });
 
-      test('B3.5: Changing specialtyMode on clinic with existing services does not re-seed or wipe data', () => {
+      test('B3.5: Changing specialtyMode on clinic with existing services idempotently adds dental presets without wiping existing data', () => {
         const eng = new DentalCatalogEngine();
         // Step 1: Initialized as Medical
         eng.queryServices({ tenantId: TENANT_A, clinicId: CLINIC_A }, { id: 's', clinicId: CLINIC_A, tenantId: TENANT_A, specialtyMode: 'Medical' });
@@ -1642,8 +1651,10 @@ describe('Dental Clinic Service Catalog — Comprehensive E2E Test Suite', () =>
           { tenantId: TENANT_A, clinicId: CLINIC_A },
           { id: 's', clinicId: CLINIC_A, tenantId: TENANT_A, specialtyMode: 'Dental' }
         );
-        // Does NOT overwrite existing 9 medical services automatically; stays 9 until explicit seed
-        expect(afterChange.length).toBe(9);
+        // Idempotently adds 10 dental presets; preserves all 9 original medical services (9 + 10 = 19)
+        expect(afterChange.length).toBe(19);
+        expect(afterChange.filter(x => x.category === 'Dental').length).toBe(10);
+        expect(afterChange.filter(x => x.category !== 'Dental').length).toBe(9);
       });
     });
 
@@ -1800,7 +1811,7 @@ describe('Dental Clinic Service Catalog — Comprehensive E2E Test Suite', () =>
         { mode: 'Dental', initialCount: 0, expectedFinal: 10, expectedDental: 10 },
         { mode: 'MultiSpecialty', initialCount: 0, expectedFinal: 19, expectedDental: 10 },
         { mode: 'Medical', initialCount: 0, expectedFinal: 9, expectedDental: 0 },
-        { mode: 'Dental', initialCount: 3, expectedFinal: 3, expectedDental: 0 }, // non-empty skips auto-seed
+        { mode: 'Dental', initialCount: 3, expectedFinal: 13, expectedDental: 10 }, // idempotent auto-seed adds 10 dental presets alongside 3 existing items
       ];
 
       scenarios.forEach((sc) => {

@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.Billing.DTOs;
 using ClinicEz.Clinic.Application.Features.LabOrders.Queries;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Application.Features.Reports.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Infrastructure.Common;
 using ClinicEz.Shared.Documents;
+using ClinicEz.Shared.Documents.Common;
 using ClinicEz.Shared.Documents.Components;
 using ClinicEz.Shared.Documents.Configuration;
 using ClinicEz.Shared.Documents.Security;
@@ -68,7 +70,10 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(verifyUrl, 4);
 
-        var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35;
+        var patientAge = ChronologicalAgeCalculator.FormatLongAge(
+            patient?.DateOfBirth,
+            cert.IssueDate,
+            patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35);
         var patientGender = patient?.Gender.ToString() ?? "Patient";
 
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
@@ -96,7 +101,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 });
 
                 page.Margin(config.PageMarginMm, Unit.Millimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(9.5f).FontColor("#1F2937"));
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(9.5f).FontColor("#1F2937"));
 
                 page.Header().Component(new TenantLetterheadComponent(config));
 
@@ -120,7 +125,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         t.DefaultTextStyle(x => x.LineHeight(1.4f));
                         t.Span("This is to certify that ");
                         t.Span(cert.PatientName).Bold().FontColor("#111827");
-                        t.Span($", {patientAge} years of age, {patientGender}, was physically examined and clinically evaluated at this medical facility on ");
+                        t.Span($", {patientAge} of age, {patientGender}, was physically examined and clinically evaluated at this medical facility on ");
                         t.Span(cert.IssueDate.ToString("MMMM dd, yyyy")).SemiBold();
                         t.Span(" with the following medical findings:");
                     });
@@ -226,6 +231,11 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(slip.QrPayload, 4);
 
+        var patientAge = ChronologicalAgeCalculator.FormatLongAge(
+            slip.PatientDateOfBirth,
+            DateOnly.FromDateTime(slip.OrderDate),
+            slip.PatientAge);
+
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
         var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
             ? (ImageDecoderHelper.TryDecode(doctor?.SignatureSpecimen) ?? config.DoctorSignatureBytes)
@@ -251,7 +261,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 });
 
                 page.Margin(config.PageMarginMm, Unit.Millimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(9).FontColor("#1F2937"));
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(9).FontColor("#1F2937"));
 
                 page.Header().Component(new TenantLetterheadComponent(config));
 
@@ -279,7 +289,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             c.Item().Text(t =>
                             {
                                 t.Span("Age / Sex: ").SemiBold().FontColor("#64748B");
-                                t.Span($"{slip.PatientAge} y • {slip.PatientGender}").FontColor("#1E293B");
+                                t.Span($"{patientAge} • {slip.PatientGender}").FontColor("#1E293B");
                             });
                             if (!string.IsNullOrWhiteSpace(slip.PhilHealthNumber))
                             {
@@ -327,8 +337,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     {
                         col.Item().PaddingTop(8).Border(1).BorderColor("#FDE68A").Background("#FEFCE8").Padding(6).Row(row =>
                         {
-                            row.ConstantItem(18).Text("⚠️").FontSize(10);
-                            row.RelativeItem().Text(t =>
+                            row.ConstantItem(16).Height(16).Svg(DocumentSvgIcons.WarningTriangle("#92400E"));
+                            row.RelativeItem().PaddingLeft(6).Text(t =>
                             {
                                 t.Span("Preparation / Fasting Instructions: ").Bold().FontColor("#92400E");
                                 t.Span(slip.FastingInstructions).FontColor("#78350F");
@@ -425,6 +435,11 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(slip.QrPayload ?? verifyUrl, 4);
 
+        var patientAge = ChronologicalAgeCalculator.FormatLongAge(
+            slip.PatientDateOfBirth,
+            DateOnly.FromDateTime(slip.IssuedAt),
+            slip.PatientAge);
+
         bool hasDangerousDrug = slip.Items.Any(i => i.IsDangerousDrug);
         var preferredMode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
         var mode = hasDangerousDrug ? SignatureMode.WetSignature : preferredMode;
@@ -453,155 +468,99 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 });
 
                 page.Margin(config.PageMarginMm, Unit.Millimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(9).FontColor("#1F2937"));
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(9).FontColor("#1F2937"));
 
                 page.Header().Component(new TenantLetterheadComponent(config));
 
                 page.Content().PaddingTop(4).Column(col =>
                 {
-                    // Prominent Rx Symbol & Header Row
-                    col.Item().Row(row =>
+                    // Centered Document Title matching Studio Preview
+                    col.Item().AlignCenter().Text("ELECTRONIC PRESCRIPTION (e-Rx)")
+                        .FontSize(14).Bold().FontColor("#0F172A");
+
+                    // Metadata Row (Patient + Rx No)
+                    col.Item().PaddingTop(4).Row(row =>
                     {
-                        row.ConstantItem(40).Text("℞").FontSize(28).Bold().FontColor(primaryColor);
-                        row.RelativeItem().PaddingLeft(6).Column(c =>
-                        {
-                            c.Item().Text("PHILIPPINE ELECTRONIC PRESCRIPTION SLIP")
-                                .FontSize(13).Bold().FontColor(primaryColor);
-                            c.Item().Text($"Rx No: {slip.PrescriptionNumber} • Date Issued: {slip.IssuedAt:MMMM dd, yyyy}")
-                                .FontSize(8.5f).SemiBold().FontColor("#64748B");
-                        });
+                        var patientGenderAbbr = slip.PatientGender?.StartsWith("F", StringComparison.OrdinalIgnoreCase) == true ? "F" : "M";
+                        var genderDisplay = !string.IsNullOrWhiteSpace(slip.PatientGender)
+                            ? slip.PatientGender
+                            : (patientGenderAbbr == "F" ? "Female" : "Male");
+                        row.RelativeItem().Text($"Patient: {slip.PatientName} ({patientAge} • {genderDisplay})")
+                            .FontSize(8.5f).FontColor("#64748B");
+                        row.ConstantItem(180).AlignRight().Text($"Rx No: {slip.PrescriptionNumber}")
+                            .FontSize(8.5f).FontColor("#64748B");
                     });
 
-                    // Patient & Physician Details Box
-                    col.Item().PaddingTop(8).Border(1).BorderColor("#CBD5E1").Background("#F8FAFC").Padding(8).Row(row =>
-                    {
-                        row.RelativeItem().Column(c =>
-                        {
-                            c.Item().Text(t =>
-                            {
-                                t.Span("Patient: ").SemiBold().FontColor("#64748B");
-                                t.Span(slip.PatientName).Bold().FontColor("#0F172A");
-                            });
-                            c.Item().Text(t =>
-                            {
-                                t.Span("Age / Sex: ").SemiBold().FontColor("#64748B");
-                                t.Span($"{slip.PatientAge} y • {slip.PatientGender}").FontColor("#1E293B");
-                            });
-                            if (!string.IsNullOrWhiteSpace(slip.PhilHealthNumber))
-                            {
-                                c.Item().Text(t =>
-                                {
-                                    t.Span("PhilHealth PIN: ").SemiBold().FontColor("#64748B");
-                                    t.Span(slip.PhilHealthNumber).FontColor("#1E293B");
-                                });
-                            }
-                            if (!string.IsNullOrWhiteSpace(slip.ClinicalDiagnosis))
-                            {
-                                c.Item().Text(t =>
-                                {
-                                    t.Span("Diagnosis: ").SemiBold().FontColor("#64748B");
-                                    t.Span(slip.ClinicalDiagnosis).Bold().FontColor(primaryColor);
-                                });
-                            }
-                        });
+                    // Rx Emblem matching Studio Preview (Geist Bold display)
+                    col.Item().PaddingTop(4).Text("Rx")
+                        .FontSize(28).Bold().FontColor(primaryColor);
 
-                        row.RelativeItem().Column(c =>
-                        {
-                            c.Item().Text(t =>
-                            {
-                                t.Span("Physician: ").SemiBold().FontColor("#64748B");
-                                t.Span(slip.DoctorName).Bold().FontColor("#0F172A");
-                            });
-                            c.Item().Text($"Specialty: {slip.DoctorSpecialization ?? "General Practice"}").FontSize(8).FontColor("#475569");
-                            c.Item().Text($"PRC License: {slip.DoctorPrcLicense} • PTR: {slip.DoctorPtr ?? "N/A"}").FontSize(8).FontColor("#475569");
-                            if (!string.IsNullOrWhiteSpace(slip.DoctorS2License))
-                            {
-                                c.Item().Text($"PDEA S2 License: {slip.DoctorS2License}").FontSize(8).Bold().FontColor("#DC2626");
-                            }
-                        });
-                    });
-
-                    // Allergies Alert Box
-                    if (!string.IsNullOrWhiteSpace(slip.PatientAllergies))
-                    {
-                        col.Item().PaddingTop(6).Border(1).BorderColor("#FECACA").Background("#FEF2F2").Padding(6)
-                            .Text($"⚠️ PATIENT ALLERGIES: {slip.PatientAllergies}").FontSize(8.5f).Bold().FontColor("#DC2626");
-                    }
-
-                    // PDEA S2 Statutory Warning Badge
+                    // Statutory PDEA S2 Regulatory Warning Badge
                     if (hasDangerousDrug)
                     {
                         col.Item().PaddingTop(6).Border(1.5f).BorderColor("#DC2626").Background("#FEF2F2").Padding(6).Row(r =>
                         {
-                            r.ConstantItem(18).Text("⚠️").FontSize(10);
-                            r.RelativeItem().Text("⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations.")
-                                .FontSize(8.5f).Bold().FontColor("#991B1B");
+                            r.ConstantItem(16).Height(16).Svg(DocumentSvgIcons.WarningTriangle("#DC2626"));
+                            r.RelativeItem().PaddingLeft(6).Text("PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations.")
+                                .FontSize(8f).Bold().FontColor("#991B1B");
                         });
                     }
 
-                    // Prescribed Medications Title (RA 6675 Generics Act)
-                    col.Item().PaddingTop(10).Row(row =>
+                    // Patient Allergies Alert Box if present
+                    if (!string.IsNullOrWhiteSpace(slip.PatientAllergies) && !slip.PatientAllergies.Trim().Equals("None", StringComparison.OrdinalIgnoreCase))
                     {
-                        row.RelativeItem().Text("MEDICATIONS PRESCRIBED").FontSize(10).Bold().FontColor("#0F172A");
-                        row.ConstantItem(180).AlignRight()
-                            .Text("RA 6675 Generics Act Compliant").FontSize(7.5f).Bold().FontColor("#166534");
-                    });
+                        col.Item().PaddingTop(4).Border(1).BorderColor("#FECACA").Background("#FEF2F2").Padding(5).Row(r =>
+                        {
+                            r.ConstantItem(14).Height(14).Svg(DocumentSvgIcons.WarningTriangle("#DC2626"));
+                            r.RelativeItem().PaddingLeft(6).Text($"PATIENT ALLERGIES: {slip.PatientAllergies}")
+                                .FontSize(8f).Bold().FontColor("#DC2626");
+                        });
+                    }
 
-                    // Medication Items List
-                    col.Item().PaddingTop(4).Column(itemsCol =>
+                    // Prescribed Medications List
+                    col.Item().PaddingTop(6).Column(itemsCol =>
                     {
                         int medIdx = 1;
                         foreach (var item in slip.Items)
                         {
-                            itemsCol.Item().PaddingBottom(6).Border(1).BorderColor("#E2E8F0").Background("#FFFFFF").Padding(8).Column(medCard =>
+                            itemsCol.Item().PaddingBottom(8).Column(medItem =>
                             {
-                                medCard.Item().Row(r =>
-                                {
-                                    r.RelativeItem().Text(t =>
-                                    {
-                                        t.Span($"{medIdx++}. ").Bold();
-                                        t.Span(item.GenericName.ToUpperInvariant()).FontSize(11).Bold().FontColor("#0F172A");
-                                        if (!string.IsNullOrWhiteSpace(item.BrandName))
-                                        {
-                                            t.Span($" ({item.BrandName})").FontSize(9.5f).SemiBold().FontColor("#475569");
-                                        }
-                                    });
+                                var titleText = $"{medIdx++}. {item.GenericName}";
+                                if (!string.IsNullOrWhiteSpace(item.Dosage)) titleText += $" {item.Dosage}";
+                                if (!string.IsNullOrWhiteSpace(item.Form)) titleText += $" {item.Form}";
+                                if (!string.IsNullOrWhiteSpace(item.BrandName)) titleText += $" ({item.BrandName})";
 
-                                    r.ConstantItem(75).AlignRight()
-                                        .Text($"Qty: {item.Quantity}").FontSize(9.5f).Bold().FontColor(primaryColor);
+                                medItem.Item().Text(titleText).FontSize(10.5f).Bold().FontColor("#0F172A");
+
+                                medItem.Item().PaddingTop(2).PaddingLeft(12).Text(t =>
+                                {
+                                    t.Span("Sig: ").SemiBold().FontColor("#4B5563").FontSize(9f);
+                                    t.Span(item.Sig).FontColor("#1F2937").FontSize(9f);
                                 });
 
-                                medCard.Item().PaddingTop(2).Text($"{item.Dosage} • {item.Form}").FontSize(8.5f).SemiBold().FontColor("#334155");
-
-                                medCard.Item().PaddingTop(4).BorderLeft(2).BorderColor(primaryColor).PaddingLeft(6).Text(t =>
-                                {
-                                    t.Span("Sig: ").Bold().FontColor("#64748B");
-                                    t.Span(item.Sig).SemiBold().FontColor("#0F172A");
-                                });
-
-                                var refillText = $"Refills allowed: {item.Refills}" + (item.DurationDays > 0 ? $" • Duration: {item.DurationDays} days" : "");
-                                medCard.Item().PaddingTop(3).Row(r =>
-                                {
-                                    r.RelativeItem().Text(refillText).FontSize(7.5f).FontColor("#64748B");
-                                    if (item.IsDangerousDrug)
-                                    {
-                                        r.ConstantItem(130).AlignRight().Text("⚠️ Dangerous Drug (PDEA S2)").FontSize(7.5f).Bold().FontColor("#DC2626");
-                                    }
-                                });
+                                var qtyText = $"Quantity: #{item.Quantity}";
+                                medItem.Item().PaddingTop(1).PaddingLeft(12).Text(qtyText).FontSize(8.5f).SemiBold().FontColor("#64748B");
 
                                 if (!string.IsNullOrWhiteSpace(item.Remarks))
                                 {
-                                    medCard.Item().PaddingTop(2).Text($"Instructions: {item.Remarks}").FontSize(7.5f).Italic().FontColor("#475569");
+                                    medItem.Item().PaddingTop(1).PaddingLeft(12).Text($"Instructions: {item.Remarks}").FontSize(8f).Italic().FontColor("#64748B");
+                                }
+                                if (item.IsDangerousDrug)
+                                {
+                                    medItem.Item().PaddingTop(1).PaddingLeft(12).Row(r =>
+                                    {
+                                        r.ConstantItem(12).Height(12).Svg(DocumentSvgIcons.WarningTriangle("#DC2626"));
+                                        r.RelativeItem().PaddingLeft(4).Text("Dangerous Drug (PDEA S2)").FontSize(7.5f).Bold().FontColor("#DC2626");
+                                    });
                                 }
                             });
                         }
                     });
 
-                    // Senior Citizen / PWD 20% Discount ID Box
-                    col.Item().PaddingTop(6).Border(1).BorderColor("#CBD5E1").Padding(6).Row(row =>
-                    {
-                        row.RelativeItem().Text("Senior Citizen / PWD ID No: ______________________  OSCA/PWD Booklet Ref: ______________________").FontSize(7.5f).FontColor("#64748B");
-                    });
+                    // Refills Authorized Footnote
+                    var refillCount = slip.Items.FirstOrDefault()?.Refills ?? 0;
+                    col.Item().PaddingTop(4).Text($"Refills Authorized: {refillCount} (Zero) • Non-transferable prescription")
+                        .FontSize(8f).FontColor("#64748B");
 
                     // Physician Signature Stamp
                     RenderDoctorSignatureStamp(
@@ -613,7 +572,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         s2,
                         docSignatureBytes,
                         mode,
-                        "✓ Officially Signed e-Prescription (FDA Circular 2020-004)");
+                        "Digitally Certified & Locked");
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -661,7 +620,10 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(verifyUrl, 4);
 
-        var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35;
+        var patientAge = ChronologicalAgeCalculator.FormatLongAge(
+            patient?.DateOfBirth,
+            referral.ReferralDate,
+            patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35);
         var patientGender = patient?.Gender.ToString() ?? "Patient";
 
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
@@ -689,7 +651,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 });
 
                 page.Margin(config.PageMarginMm, Unit.Millimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(9f).FontColor("#1F2937"));
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(9f).FontColor("#1F2937"));
 
                 page.Header().Component(new TenantLetterheadComponent(config));
 
@@ -729,12 +691,12 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             c.Item().Text("PATIENT NAME").FontSize(7.5f).Bold().FontColor("#6B7280");
                             c.Item().Text(referral.PatientName).FontSize(10f).Bold().FontColor("#111827");
                         });
-                        row.RelativeItem(1).Column(c =>
+                        row.RelativeItem(2.2f).Column(c =>
                         {
                             c.Item().Text("AGE / SEX").FontSize(7.5f).Bold().FontColor("#6B7280");
-                            c.Item().Text($"{patientAge}y • {patientGender}").FontSize(9.5f).SemiBold().FontColor("#111827");
+                            c.Item().Text($"{patientAge} • {patientGender}").FontSize(9.5f).SemiBold().FontColor("#111827");
                         });
-                        row.RelativeItem(1.5f).Column(c =>
+                        row.RelativeItem(1.4f).Column(c =>
                         {
                             c.Item().Text("PHILHEALTH PIN").FontSize(7.5f).Bold().FontColor("#6B7280");
                             c.Item().Text(patient?.PhilHealthNumber ?? "N/A").FontSize(9.5f).FontColor("#111827");
@@ -833,7 +795,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 });
 
                 page.Margin(config.PageMarginMm, Unit.Millimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(10f).FontColor("#1F2937"));
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(10f).FontColor("#1F2937"));
 
                 page.Header().Component(new TenantLetterheadComponent(config));
 
@@ -903,6 +865,296 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     }
 
     // ==========================================
+    // INVOICE & STATEMENT OF ACCOUNT (SOA) PDF BUILDERS
+    // ==========================================
+
+    public byte[] GenerateInvoicePdf(
+        Invoice invoice,
+        ClinicSettings settings,
+        StaffMember? doctor = null,
+        ClinicPatient? patient = null,
+        string? queueNumber = null)
+    {
+        var config = MapToTenantConfig(settings);
+        var primaryColor = config.GetSafePrimaryColorHex();
+
+        var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : (int?)null;
+        var patientGender = patient?.Gender.ToString();
+        var patientIdStr = patient?.PatientCode ?? (invoice.PatientId != Guid.Empty ? invoice.PatientId.ToString().Substring(0, 8) : "N/A");
+        var docName = doctor != null
+            ? (!string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} {doctor.FirstName} {doctor.LastName}" : $"Dr. {doctor.FirstName} {doctor.LastName}")
+            : invoice.AttendingDoctorName ?? "Attending Clinician";
+        var doctorPrc = doctor?.PrcLicenseNumber ?? "Registered Clinician";
+
+        var statusLabel = invoice.Status == Domain.Enums.InvoiceStatus.Paid ? "PAID OFFICIAL INVOICE" : "STATEMENT OF ACCOUNT";
+        var statusBadgeColor = invoice.Status == Domain.Enums.InvoiceStatus.Paid ? "#16A34A" : primaryColor;
+
+        var issuedDateTime = invoice.CreatedAt != default ? invoice.CreatedAt : invoice.InvoiceDate;
+        var digest = _securityService.ComputeDocumentDigest(
+            invoice.TenantId ?? settings.TenantId,
+            "INVOICE-SOA",
+            invoice.InvoiceNumber,
+            invoice.PatientId,
+            doctorPrc,
+            issuedDateTime);
+
+        var verifyUrl = _securityService.GenerateVerificationUrl(
+            _verificationBaseUrl,
+            "invoice",
+            invoice.InvoiceNumber,
+            digest);
+
+        var qrBytes = _qrCodeService.GenerateQrCodePng(verifyUrl, 4);
+
+        var doc = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(config.PaperSize switch
+                {
+                    DocumentPaperSize.A4 => PageSizes.A4,
+                    DocumentPaperSize.A5 => PageSizes.A5,
+                    _ => PageSizes.Letter
+                });
+
+                page.Margin(config.PageMarginMm, Unit.Millimetre);
+                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(9f).FontColor("#1F2937"));
+
+                page.Header().Component(new TenantLetterheadComponent(config));
+
+                page.Content().PaddingTop(6).Column(col =>
+                {
+                    // Document Title Banner
+                    col.Item().Row(r =>
+                    {
+                        r.RelativeItem().Column(titleCol =>
+                        {
+                            titleCol.Item().Text(statusLabel).FontSize(14).Bold().FontColor(statusBadgeColor);
+                            titleCol.Item().Text($"Document Ref: #{invoice.InvoiceNumber} • Issued: {invoice.InvoiceDate:MMMM dd, yyyy}").FontSize(8.5f).SemiBold().FontColor("#6B7280");
+                        });
+
+                        r.ConstantItem(120).AlignRight().Column(badgeCol =>
+                        {
+                            badgeCol.Item().Border(1).BorderColor(statusBadgeColor).Background(invoice.Status == Domain.Enums.InvoiceStatus.Paid ? "#F0FDF4" : "#F0FDFA").PaddingVertical(3).PaddingHorizontal(8).AlignCenter().Text(invoice.Status.ToString().ToUpperInvariant()).FontSize(9).Bold().FontColor(statusBadgeColor);
+                        });
+                    });
+
+                    // Patient & Attending Clinician Summary Box
+                    col.Item().PaddingTop(8).Border(1).BorderColor("#E2E8F0").Background("#F8FAFC").Padding(10).Column(demog =>
+                    {
+                        demog.Item().Row(r =>
+                        {
+                            r.RelativeItem().Column(c =>
+                            {
+                                c.Item().Text(t =>
+                                {
+                                    t.Span("Patient: ").Bold().FontColor("#0F172A");
+                                    t.Span(invoice.PatientName).FontSize(10.5f).Bold().FontColor("#0F172A");
+                                });
+                                var demogText = $"ID: {patientIdStr}";
+                                if (patientAge.HasValue) demogText += $" • Age: {patientAge} yrs";
+                                if (!string.IsNullOrWhiteSpace(patientGender)) demogText += $" • Gender: {patientGender}";
+                                if (!string.IsNullOrWhiteSpace(queueNumber)) demogText += $" • Queue: {queueNumber}";
+                                c.Item().PaddingTop(2).Text(demogText).FontSize(8.5f).FontColor("#475569");
+
+                                if (!string.IsNullOrWhiteSpace(invoice.DiscountIdNumber))
+                                {
+                                    c.Item().PaddingTop(2).Text($"Statutory ID: {invoice.DiscountIdNumber} ({invoice.DiscountType})").FontSize(8.5f).Bold().FontColor(primaryColor);
+                                }
+                            });
+
+                            r.RelativeItem().AlignRight().Column(c =>
+                            {
+                                c.Item().Text(t =>
+                                {
+                                    t.Span("Attending: ").SemiBold().FontColor("#475569");
+                                    t.Span(docName).Bold().FontColor("#0F172A");
+                                });
+                                c.Item().PaddingTop(2).Text($"PRC License: {doctorPrc}").FontSize(8.5f).FontColor("#475569");
+                                if (!string.IsNullOrWhiteSpace(invoice.BilledByStaffName))
+                                {
+                                    c.Item().PaddingTop(2).Text($"Cashier: {invoice.BilledByStaffName}").FontSize(8.5f).FontColor("#64748B");
+                                }
+                            });
+                        });
+                    });
+
+                    // Itemized Charges Table
+                    col.Item().PaddingTop(10).Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(24);
+                            columns.RelativeColumn(5);
+                            columns.RelativeColumn(2);
+                            columns.RelativeColumn(2);
+                            columns.ConstantColumn(40);
+                            columns.RelativeColumn(2);
+                        });
+
+                        // Table Header
+                        table.Header(header =>
+                        {
+                            header.Cell().Background("#F1F5F9").PaddingVertical(4).PaddingHorizontal(4).AlignCenter().Text("#").FontSize(8f).Bold().FontColor("#475569");
+                            header.Cell().Background("#F1F5F9").PaddingVertical(4).PaddingHorizontal(6).Text("Service / Procedure").FontSize(8f).Bold().FontColor("#475569");
+                            header.Cell().Background("#F1F5F9").PaddingVertical(4).PaddingHorizontal(6).Text("Category").FontSize(8f).Bold().FontColor("#475569");
+                            header.Cell().Background("#F1F5F9").PaddingVertical(4).PaddingHorizontal(6).AlignRight().Text("Unit Price").FontSize(8f).Bold().FontColor("#475569");
+                            header.Cell().Background("#F1F5F9").PaddingVertical(4).PaddingHorizontal(4).AlignCenter().Text("Qty").FontSize(8f).Bold().FontColor("#475569");
+                            header.Cell().Background("#F1F5F9").PaddingVertical(4).PaddingHorizontal(6).AlignRight().Text("Total").FontSize(8f).Bold().FontColor("#475569");
+                        });
+
+                        int rowIdx = 1;
+                        foreach (var item in invoice.LineItems)
+                        {
+                            var isAlt = rowIdx % 2 == 0;
+                            var rowBg = isAlt ? "#F8FAFC" : "#FFFFFF";
+
+                            table.Cell().Background(rowBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(5).PaddingHorizontal(4).AlignCenter().Text(rowIdx.ToString()).FontSize(8.5f).FontColor("#64748B");
+                            table.Cell().Background(rowBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(5).PaddingHorizontal(6).Column(itemCol =>
+                            {
+                                itemCol.Item().Text(item.Description).FontSize(9f).Bold().FontColor("#0F172A");
+                                if (!string.IsNullOrWhiteSpace(item.ItemCode))
+                                {
+                                    itemCol.Item().Text($"Code: {item.ItemCode}").FontSize(7.5f).FontColor("#94A3B8");
+                                }
+                            });
+                            table.Cell().Background(rowBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(5).PaddingHorizontal(6).Text(item.Category).FontSize(8.5f).FontColor("#475569");
+                            table.Cell().Background(rowBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(5).PaddingHorizontal(6).AlignRight().Text($"₱{item.UnitPrice:N2}").FontSize(8.5f).FontColor("#475569");
+                            table.Cell().Background(rowBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(5).PaddingHorizontal(4).AlignCenter().Text(item.Quantity.ToString()).FontSize(8.5f).FontColor("#0F172A");
+                            table.Cell().Background(rowBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(5).PaddingHorizontal(6).AlignRight().Text($"₱{item.TotalPrice:N2}").FontSize(9f).Bold().FontColor("#0F172A");
+
+                            rowIdx++;
+                        }
+                    });
+
+                    // Totals & Financial Breakdown
+                    col.Item().PaddingTop(8).AlignRight().Width(240).Column(totals =>
+                    {
+                        totals.Item().Row(r =>
+                        {
+                            r.RelativeItem().Text("Subtotal (Gross):").FontSize(9f).FontColor("#475569");
+                            r.RelativeItem().AlignRight().Text($"₱{invoice.GrossAmount:N2}").FontSize(9f).Bold().FontColor("#0F172A");
+                        });
+
+                        if (invoice.DiscountAmount > 0)
+                        {
+                            totals.Item().PaddingTop(2).Row(r =>
+                            {
+                                r.RelativeItem().Text($"Discount ({invoice.DiscountType}):").FontSize(8.5f).FontColor("#16A34A");
+                                r.RelativeItem().AlignRight().Text($"-₱{invoice.DiscountAmount:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                            });
+                        }
+
+                        totals.Item().PaddingTop(4).LineHorizontal(1).LineColor("#CBD5E1");
+
+                        totals.Item().PaddingTop(4).Row(r =>
+                        {
+                            r.RelativeItem().Text("Net Amount Due:").FontSize(10.5f).Bold().FontColor("#0F172A");
+                            r.RelativeItem().AlignRight().Text($"₱{invoice.NetAmount:N2}").FontSize(11.5f).Bold().FontColor(primaryColor);
+                        });
+
+                        if (invoice.AmountPaid > 0)
+                        {
+                            totals.Item().PaddingTop(2).Row(r =>
+                            {
+                                var payRecord = invoice.Payments.FirstOrDefault();
+                                var payDesc = payRecord != null ? $"Paid ({payRecord.Method} - OR #{payRecord.PaymentNumber}):" : "Amount Paid:";
+                                r.RelativeItem().Text(payDesc).FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                r.RelativeItem().AlignRight().Text($"₱{invoice.AmountPaid:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                            });
+
+                            if (invoice.BalanceDue > 0)
+                            {
+                                totals.Item().PaddingTop(2).Row(r =>
+                                {
+                                    r.RelativeItem().Text("Balance Due:").FontSize(8.5f).Bold().FontColor("#DC2626");
+                                    r.RelativeItem().AlignRight().Text($"₱{invoice.BalanceDue:N2}").FontSize(8.5f).Bold().FontColor("#DC2626");
+                                });
+                            }
+                        }
+                    });
+
+                    // Verification Stamps
+                    col.Item().PaddingTop(24).Row(stamps =>
+                    {
+                        stamps.RelativeItem().Column(att =>
+                        {
+                            att.Item().Height(30);
+                            att.Item().LineHorizontal(1).LineColor("#94A3B8");
+                            att.Item().PaddingTop(2).AlignCenter().Text(docName).FontSize(9f).Bold().FontColor("#0F172A");
+                            att.Item().AlignCenter().Text("Attending Clinician / Physician").FontSize(7.5f).FontColor("#64748B");
+                        });
+
+                        stamps.ConstantItem(40);
+
+                        stamps.RelativeItem().Column(cash =>
+                        {
+                            cash.Item().Height(30);
+                            cash.Item().LineHorizontal(1).LineColor("#94A3B8");
+                            cash.Item().PaddingTop(2).AlignCenter().Text(invoice.BilledByStaffName ?? "Authorized Billing Officer").FontSize(9f).Bold().FontColor("#0F172A");
+                            cash.Item().AlignCenter().Text("Billing Officer / Cashier").FontSize(7.5f).FontColor("#64748B");
+                        });
+                    });
+
+                    // Compliance notice
+                    col.Item().PaddingTop(16).AlignCenter().Text("Official Clinic EZ Statement of Account & Billing Invoice • Valid for healthcare accounting under RA 8792 & RA 10173")
+                        .FontSize(7.5f).FontColor("#94A3B8");
+                });
+
+                page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
+            });
+        });
+
+        return doc.GeneratePdf();
+    }
+
+    public byte[] GenerateInvoicePreviewPdf(
+        InvoicePreviewRequest preview,
+        ClinicSettings settings,
+        StaffMember? doctor = null,
+        ClinicPatient? patient = null)
+    {
+        var tempInvoice = new Invoice
+        {
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            InvoiceNumber = $"SOA-PREVIEW-{(string.IsNullOrWhiteSpace(preview.QueueNumber) ? "001" : preview.QueueNumber)}",
+            InvoiceDate = DateTime.UtcNow,
+            PatientId = preview.PatientId ?? Guid.Empty,
+            PatientName = preview.PatientName,
+            AttendingDoctorName = preview.AttendingDoctorName,
+            DiscountType = preview.DiscountType,
+            DiscountIdNumber = preview.DiscountIdNumber,
+            Status = Domain.Enums.InvoiceStatus.Draft,
+            Notes = preview.Notes,
+            LineItems = preview.LineItems.Select(item => new InvoiceLineItem
+            {
+                ServiceItemId = item.ServiceItemId,
+                ItemCode = item.ItemCode,
+                Description = item.Description,
+                Category = item.Category,
+                UnitPrice = item.UnitPrice,
+                Quantity = item.Quantity,
+                TotalPrice = item.UnitPrice * item.Quantity
+            }).ToList()
+        };
+
+        tempInvoice.GrossAmount = tempInvoice.LineItems.Sum(li => li.TotalPrice);
+        tempInvoice.DiscountPercentage = preview.DiscountType switch
+        {
+            Domain.Enums.DiscountType.SeniorCitizen => 20,
+            Domain.Enums.DiscountType.Pwd => 20,
+            Domain.Enums.DiscountType.PhilHealthKonsulta => 100,
+            _ => 0
+        };
+        tempInvoice.DiscountAmount = Math.Round(tempInvoice.GrossAmount * (tempInvoice.DiscountPercentage / 100), 2);
+        tempInvoice.NetAmount = Math.Max(0, tempInvoice.GrossAmount - tempInvoice.DiscountAmount);
+        tempInvoice.BalanceDue = tempInvoice.NetAmount;
+
+        return GenerateInvoicePdf(tempInvoice, settings, doctor, patient, preview.QueueNumber);
+    }
+
+    // ==========================================
     // STATUTORY & OPERATIONAL REPORT PDF BUILDERS
     // ==========================================
 
@@ -942,7 +1194,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 });
 
                 page.Margin(config.PageMarginMm, Unit.Millimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(9f).FontColor("#1F2937"));
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(9f).FontColor("#1F2937"));
 
                 page.Header().Component(new TenantLetterheadComponent(config));
 
@@ -1108,7 +1360,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 });
 
                 page.Margin(config.PageMarginMm, Unit.Millimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(8.5f).FontColor("#1F2937"));
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(8.5f).FontColor("#1F2937"));
 
                 page.Header().Component(new TenantLetterheadComponent(config));
 
@@ -1238,7 +1490,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 });
 
                 page.Margin(config.PageMarginMm, Unit.Millimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(8f).FontColor("#1F2937"));
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(8f).FontColor("#1F2937"));
 
                 page.Header().Component(new TenantLetterheadComponent(config));
 
@@ -1378,7 +1630,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 });
 
                 page.Margin(config.PageMarginMm, Unit.Millimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(8.5f).FontColor("#1F2937"));
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(8.5f).FontColor("#1F2937"));
 
                 page.Header().Component(new TenantLetterheadComponent(config));
 
@@ -1520,7 +1772,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 });
 
                 page.Margin(config.PageMarginMm, Unit.Millimetre);
-                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(8.5f).FontColor("#1F2937"));
+                page.DefaultTextStyle(x => x.FontFamily("Geist").FontSize(8.5f).FontColor("#1F2937"));
 
                 page.Header().Component(new TenantLetterheadComponent(config));
 
@@ -1564,12 +1816,56 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         ComposeKpiCell(row, "AVG TICKET SIZE", $"₱{analytics.AverageTicketSize:N2}");
                     });
 
+                    if (analytics.FinancialEfficiency != null)
+                    {
+                        col.Item().PaddingTop(3).Row(row =>
+                        {
+                            ComposeKpiCell(row, "COLLECTION EFFICIENCY", $"{analytics.FinancialEfficiency.CollectionEfficiencyRate:F1}%");
+                            ComposeKpiCell(row, "DISCOUNT PENETRATION", $"{analytics.FinancialEfficiency.DiscountImpactRate:F1}%");
+                            ComposeKpiCell(row, "AVG REVENUE / PATIENT", $"₱{analytics.FinancialEfficiency.AverageRevenuePerPatient:N2}");
+                        });
+                    }
+
                     if (analytics.SeniorDiscountsGiven > 0 || analytics.PwdDiscountsGiven > 0)
                     {
                         col.Item().PaddingTop(3).Row(row =>
                         {
                             ComposeKpiCell(row, "SENIOR CITIZEN DISCOUNTS (RA 9994)", $"₱{analytics.SeniorDiscountsGiven:N2}");
                             ComposeKpiCell(row, "PWD DISCOUNTS (RA 10754)", $"₱{analytics.PwdDiscountsGiven:N2}");
+                        });
+                    }
+
+                    // Visit Type & Clinical Acuity Breakdown
+                    if (analytics.VisitTypeSplit != null || analytics.AcuitySplit != null)
+                    {
+                        ComposeSectionTitle(col, "VISIT FLOW & CLINICAL TRIAGE ACUITY PROFILE", primaryColor);
+                        col.Item().Row(row =>
+                        {
+                            if (analytics.VisitTypeSplit != null)
+                            {
+                                ComposeKpiCell(row, "WALK-IN PATIENTS", $"{analytics.VisitTypeSplit.WalkInCount} ({analytics.VisitTypeSplit.WalkInPercentage:F1}%)");
+                                ComposeKpiCell(row, "APPOINTMENTS", $"{analytics.VisitTypeSplit.AppointmentCount} ({analytics.VisitTypeSplit.AppointmentPercentage:F1}%)");
+                            }
+                            if (analytics.AcuitySplit != null)
+                            {
+                                ComposeKpiCell(row, "ROUTINE TRIAGE", $"{analytics.AcuitySplit.RoutineCount} ({analytics.AcuitySplit.RoutinePercentage:F1}%)");
+                                ComposeKpiCell(row, "URGENT TRIAGE", $"{analytics.AcuitySplit.UrgentCount} ({analytics.AcuitySplit.UrgentPercentage:F1}%)");
+                                ComposeKpiCell(row, "EMERGENCY TRIAGE", $"{analytics.AcuitySplit.EmergencyCount} ({analytics.AcuitySplit.EmergencyPercentage:F1}%)");
+                            }
+                        });
+                    }
+
+                    // Patient Demographic Profile
+                    if (analytics.Demographics != null && (analytics.Demographics.PediatricCount > 0 || analytics.Demographics.AdultCount > 0 || analytics.Demographics.SeniorCount > 0))
+                    {
+                        ComposeSectionTitle(col, "PATIENT DEMOGRAPHIC PROFILE (AGE COHORTS & GENDER)", primaryColor);
+                        col.Item().Row(row =>
+                        {
+                            ComposeKpiCell(row, "PEDIATRIC (<18 Y)", $"{analytics.Demographics.PediatricCount} ({analytics.Demographics.PediatricPercentage:F1}%)");
+                            ComposeKpiCell(row, "ADULT (18-59 Y)", $"{analytics.Demographics.AdultCount} ({analytics.Demographics.AdultPercentage:F1}%)");
+                            ComposeKpiCell(row, "SENIOR (60+ Y)", $"{analytics.Demographics.SeniorCount} ({analytics.Demographics.SeniorPercentage:F1}%)");
+                            ComposeKpiCell(row, "MALE", $"{analytics.Demographics.MaleCount} ({analytics.Demographics.MalePercentage:F1}%)");
+                            ComposeKpiCell(row, "FEMALE", $"{analytics.Demographics.FemaleCount} ({analytics.Demographics.FemalePercentage:F1}%)");
                         });
                     }
 
@@ -1848,11 +2144,18 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     private const string LegacyDefaultAccent = "#0284C7";
 
     /// <summary>
-    /// Accent precedence: the clinic's own choice, then the workspace brand accent, then the product default.
+    /// Accent precedence: the clinic's dedicated Document Accent Color (LetterheadAccentColorHex),
+    /// then the clinic's workstation brand color (PrimaryColorHex), then the workspace brand accent,
+    /// then the product default.
     /// Reads the cached workspace profile only (no network), so printing never waits on the portal.
     /// </summary>
     private string ResolveAccent(ClinicSettings settings)
     {
+        if (!string.IsNullOrWhiteSpace(settings.LetterheadAccentColorHex))
+        {
+            return settings.LetterheadAccentColorHex;
+        }
+
         var workspaceAccent = _workspaceProfiles?.TryGetCached(settings.TenantId.ToString())?.AccentColorHex;
         return WorkspaceBrand.ResolveAccent(settings.PrimaryColorHex, workspaceAccent, LegacyDefaultAccent);
     }
@@ -1886,7 +2189,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 "a5" => DocumentPaperSize.A5,
                 _ => DocumentPaperSize.Letter
             },
-            CustomDisclaimerText = settings.LetterheadFooter ?? "Valid Philippine Medical Certificate & Prescription. Digitally issued via Clinic EZ in compliance with RA 8792 & RA 10173."
+            CustomDisclaimerText = settings.LetterheadFooter ?? "Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173."
         };
     }
 
@@ -1901,15 +2204,20 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         SignatureMode mode,
         string digitalSealBadgeText)
     {
-        col.Item().PaddingTop(16).AlignRight().Width(230).Column(stamp =>
+        col.Item().ExtendVertical().AlignBottom().PaddingTop(14).AlignRight().Width(230).Column(stamp =>
         {
             if (mode == SignatureMode.ESignatureSpecimen && signatureBytes != null && signatureBytes.Length > 0)
             {
                 stamp.Item().Height(38).AlignCenter().Image(signatureBytes).FitArea();
             }
+            else if (mode == SignatureMode.ESignatureSpecimen)
+            {
+                stamp.Item().Height(36).AlignCenter().PaddingTop(12).Text("[Clinician E-Signature Specimen Applied]")
+                    .FontSize(7f).Italic().FontColor("#64748B");
+            }
             else
             {
-                stamp.Item().Height(mode == SignatureMode.WetSignature ? 42 : 30);
+                stamp.Item().Height(mode == SignatureMode.WetSignature ? 42 : 24);
             }
 
             stamp.Item().LineHorizontal(1).LineColor("#111827");
@@ -1922,27 +2230,34 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             {
                 var prcText = prcLicense.StartsWith("PRC", StringComparison.OrdinalIgnoreCase)
                     ? prcLicense
-                    : $"PRC Lic. No.: {prcLicense}";
+                    : $"PRC Lic. No. {prcLicense}";
                 stamp.Item().AlignCenter().Text(prcText).FontSize(7.5f).FontColor("#4B5563");
             }
             if (!string.IsNullOrWhiteSpace(ptrNumber))
             {
                 var ptrText = ptrNumber.StartsWith("PTR", StringComparison.OrdinalIgnoreCase)
                     ? ptrNumber
-                    : $"PTR No.: {ptrNumber}";
+                    : $"PTR No. {ptrNumber}";
                 stamp.Item().AlignCenter().Text(ptrText).FontSize(7.5f).FontColor("#4B5563");
             }
             if (!string.IsNullOrWhiteSpace(s2License))
             {
-                var s2Text = s2License.StartsWith("PDEA", StringComparison.OrdinalIgnoreCase)
+                var s2Text = s2License.StartsWith("PDEA", StringComparison.OrdinalIgnoreCase) || s2License.StartsWith("S2", StringComparison.OrdinalIgnoreCase)
                     ? s2License
-                    : $"PDEA S2: {s2License}";
+                    : $"S2 No. {s2License}";
                 stamp.Item().AlignCenter().Text(s2Text).FontSize(7.5f).Bold().FontColor("#DC2626");
             }
 
             if (mode != SignatureMode.WetSignature && !string.IsNullOrWhiteSpace(digitalSealBadgeText))
             {
-                stamp.Item().PaddingTop(2).AlignCenter().Text(digitalSealBadgeText).FontSize(7f).Bold().FontColor("#16A34A");
+                var cleanBadgeText = digitalSealBadgeText.TrimStart('✓', ' ', '\t');
+                stamp.Item().PaddingTop(4).AlignCenter()
+                    .Border(1).BorderColor("#86EFAC").Background("#F0FDF4").PaddingVertical(2).PaddingHorizontal(6)
+                    .Row(badge =>
+                    {
+                        badge.ConstantItem(10).Height(10).Svg(DocumentSvgIcons.CheckmarkCircle("#16A34A"));
+                        badge.RelativeItem().PaddingLeft(3).Text(cleanBadgeText).FontSize(7f).Bold().FontColor("#15803D");
+                    });
             }
         });
     }

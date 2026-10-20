@@ -362,6 +362,9 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
           {/* Workstation Top Bar */}
           <View style={styles.canvasHeader}>
             <View style={styles.canvasHeaderTitle}>
+              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                Patient Chart
+              </ThemedText>
               <ThemedText variant="title" color={theme.colors.text}>
                 {activeNavItem?.label || 'Clinical View'}
               </ThemedText>
@@ -403,7 +406,7 @@ export default function SplitPaneChartLayout(props: ChartLayoutProps) {
                 hitSlop={8}
                 style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
                 accessibilityRole="button"
-                accessibilityLabel="Close Medical Workstation"
+                accessibilityLabel="Close Patient Chart"
               >
                 <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
               </Pressable>

@@ -255,7 +255,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     );
 
     // Header title and patient name
-    expect(markup).toContain('Medical chart');
+    expect(markup).toContain('Patient Chart');
     expect(markup).toContain('Maria DB');
     expect(markup).toContain('PAT-2026-00001');
     expect(markup).toContain('26 yrs');
@@ -372,7 +372,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       })
     );
 
-    expect(markup).toContain('Medical chart');
+    expect(markup).toContain('Patient Chart');
     // Tab body skeleton indicators
     expect(markup).not.toContain('Total Visits');
   });
@@ -406,7 +406,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       })
     );
 
-    expect(markup).toContain('Medical chart');
+    expect(markup).toContain('Patient Chart');
   });
 
   test('11. Removes Edit Demographics button from summary spine and preserves header pencil button', () => {
