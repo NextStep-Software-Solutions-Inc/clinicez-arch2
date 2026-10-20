@@ -7,8 +7,7 @@ export type SettingsTabKey =
   | 'services'
   | 'fields'
   | 'philhealth'
-  | 'license'
-  | 'audit';
+  | 'license';
 
 export interface SettingsTabItem {
   key: SettingsTabKey;

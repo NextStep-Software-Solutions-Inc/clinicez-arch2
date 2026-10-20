@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-20T02:26:31Z
+# BRIEFING — 2026-10-20T02:28:31Z
 
 ## Mission
-Implement a production-ready, interactive, multi-provider Clinic Calendar feature in apps/clinic-app rooted in @clinicez/design-tokens, featuring Month, Week, Day, and Agenda views, 1-click slot booking, arrival check-in routing, appointment rescheduling, doctor shift overlays, and date-range filtering in services/clinic-api.
+Conduct a rigorous multi-perspective code, architecture, and security review of the ClinicEZ Billing System hardening across `services/clinic-api`, `apps/clinic-app`, `services/billing-api`, and `apps/cashier-app`.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -28,12 +28,19 @@ Implement a production-ready, interactive, multi-provider Clinic Calendar featur
 - Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
 - Victory Auditor (victory_auditor_16): 663db1e1-f744-4c32-92a7-3991c2f398c0
 - Cleaned up: task-30 killed, task-32 killed, all subagents killed
-- Working directory: /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/sentinel
-- Active Project Orchestrator (orchestrator_1): 7535da92-2247-4cf9-b2de-2da99510b734
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-dental-fix/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_17): 5cc4a844-dcce-47fb-b084-d9a7fe5f1618
 - Active Crons: task-42 (Progress Reporting), task-44 (Liveness Check)
 - Victory Auditor: to be spawned on victory claim
-- Victory Auditor (sentinel_victory_auditor_1): 37257064-2a05-4f54-866e-23bb0cc9afe4
-- Cleaned up: task-42 killed, task-44 killed, all subagents killed
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_18): f5795226-f404-4e8d-8697-7ddd8b968279
+- Active Crons: task-36 (Progress Reporting), task-38 (Liveness Check)
+- Victory Auditor: to be spawned on victory claim
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-billing/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_billing_review): 862e57ca-e9c9-4748-a69c-1f9fb51464ca
+- Active Crons: task-38 (Progress Reporting), task-40 (Liveness Check)
+- Victory Auditor (victory_auditor_billing_review): c511277c-9dd2-437b-abc0-bf9c70edd8a2
+- Cleaned up: task-38 killed, task-40 killed, all subagents killed
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -92,45 +99,57 @@ Implement a production-ready, interactive, multi-provider Clinic Calendar featur
 - R2: Dental Chart Backend & Specialty Mode in ClinicSettings and DentalToothRecord CQRS
 - R3: Clean, jargon-free UI in Consultation (InlineDentalChartCard) & Patient Chart (DentalChartTab), Settings UI, design tokens
 - R4: Pluggable search integration
+- Route to General (`teamwork_preview_orchestrator`) for Dental Module & Clinical Workstation Live-Testing Bug Fixes and UX Enhancements
+- Dedicated isolated git worktree: /Users/macuser/projects/github/nextstep/clinicez-dental-fix (branch fix/dental-chart-and-workstation-ux)
+- R1: Patient Chart Dental Sync & Longitudinal Encounter Dental Summary
+- R2: 5-Surface Odontogram Visualization & Structured Multi-Condition Tooth Records (per-condition timestamp, doctor, surface, notes; distinct DMFT counts)
+- R3: Procedure Room Selection, Per-Procedure Sent Indicator & Button '+' Normalization
+- R4: Full-Width Responsive Workstation Layout (remove maxWidth from Consultations, Patients, Dashboard)
+- Zero raw hex color literals or direct palette.ts imports (@clinicez/design-tokens)
+- Route to General (`teamwork_preview_orchestrator`) for Clinic Analytics and Statutory Reports overhaul
+- Eliminate hardcoded mock fallbacks across reports queries; return genuine 0 counts and empty lists (R1)
+- High-performance server-side EF Core aggregations (SumAsync, CountAsync, GroupBy) & composite temporal indexes on (TenantId, ClinicId, Date/Time) (R2)
+- Interactive SVG chart components (TrendLineChart, WorkloadBarChart, TenderDonutChart, MorbidityDistributionChart) in apps/clinic-app/components/analytics/ rooted in @clinicez/design-tokens with 4-state completion (R3)
+- Enterprise-grade print-ready vector PDF generation with QuestPDF in ClinicDocumentPdfService and streaming endpoints in ReportsController.cs with QR cryptographic verification (R4)
+- Automated test verification: dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests and cd apps/clinic-app && bun test tests pass with 0 failures
+- Passes design tokens audit (bun run lint:tokens) and network isolation audit (bun run lint:hosts) with 0 violations
 - Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
-- Route to General (`teamwork_preview_orchestrator`) for multi-provider Clinic Calendar feature across apps/clinic-app & services/clinic-api
-- Multi-Mode Clinic Calendar Component Suite strictly consuming semantic tokens from @clinicez/design-tokens (zero raw hex, zero direct palette.ts imports)
-- Explicit implementation of 4 core UI/UX states in every view: Skeleton loader, Empty state with CTA, Error state with retry, Active data state
-- Visual clinical urgency encoding via semantic badges and borders: STAT/Emergency (red), Urgent (orange), Routine (teal), Checked-In (green), Completed (muted), Cancelled (strikethrough)
-- Interactive slot booking (pre-filled modal on empty slot click in Week/Day), card inspection drawer, rescheduling modal (AppointmentRescheduleModal with conflict detection), and 1-click arrival check-in via QueueRoutingSelector
-- Multi-provider Day timeline on workstation (>=1024px) with doctor shift overlays (working hours vs break times vs on-leave blackout intervals)
-- Mobile (<768px) responsive adaptation: agenda timeline + compact 7-day carousel
-- Backend GetAppointmentsQuery.cs & AppointmentsController.cs support startDate, endDate, doctorId without breaking backward compatibility
-- Full backward compatibility in Appointments.screen.tsx (route params, workstation shortcut 4, search contributor routes)
-- Automated verification: typecheck passes, bun test passes with 0 failures, existing regression tests pass
+- Route to General (`teamwork_preview_orchestrator`) for ClinicEZ Billing System Hardening Review
+- Dual-mode cashier routing (`ClinicDesk` vs `CashierCounter`) & concurrency audit in `services/clinic-api` (R1)
+- Clinic station settings & UI/UX audit against `@clinicez/design-tokens` (zero raw hex values) in `apps/clinic-app` (R2)
+- Clinical workstation non-disruptive queue flow & post-encounter dialog audit in `apps/clinic-app` (R3)
+- Statement of Account (SOA) review & settlement audit in `apps/clinic-app` (R4)
+- Architecture documentation & interop integrity in `docs/architecture/billing.md` (R5)
+- Automated execution of all 7 test suites & static token audit with 100% pass rate
 - Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
 
 ## User Context
-- **Last user request**: Implement a production-ready, interactive, multi-provider Clinic Calendar feature in apps/clinic-app rooted in @clinicez/design-tokens, featuring Month, Week, Day, and Agenda views, 1-click slot booking, arrival check-in routing, appointment rescheduling, doctor shift overlays, and date-range filtering in services/clinic-api.
+- **Last user request**: Overhaul and harden the Clinic Analytics and Statutory Reports module in ClinicEZ to production-grade quality (eliminate mock fallbacks, server-side aggregations, interactive SVG charts, QuestPDF reports).
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Appended request verbatim to `ORIGINAL_REQUEST.md` (`## 2026-10-20T02:26:31Z`).
-  - Clinic Calendar feature fully implemented across `services/clinic-api` and `apps/clinic-app`.
-  - All milestones passed gates unanimously (Track-E2E, M1, M2, M3, M4).
-  - Independent Victory Audit completed: **VICTORY CONFIRMED**.
-  - All monitoring crons and subagents cleaned up.
+  - Appended request verbatim to `ORIGINAL_REQUEST.md` under `## 2026-10-20T02:23:38Z`.
+  - Routed to General path (`teamwork_preview_orchestrator`).
+  - Dispatched `orchestrator_18` (`f5795226-f404-4e8d-8697-7ddd8b968279`).
+  - Phase 0 survey completed by 3 parallel survey subagents.
+  - Global `PROJECT.md` synthesized covering 37 features across M1, M2, M3, and E2E testing track.
+  - Sub-orchestrators dispatched: `sub_orch_m1` (backend aggregations & mock elimination), `sub_orch_m3` (frontend SVG charts), and `sub_orch_e2e` (E2E testing suite).
 
 ## Project Status
-- **Phase**: complete
+- **Phase**: complete (VICTORY CONFIRMED by independent auditor victory_auditor_19)
 - **Route**: General -> teamwork_preview_orchestrator
 - **Active Subagents**: none (cleaned up)
 - **Active Tasks**: none (cleaned up)
 
 ## Victory Audit Status
 - **Triggered**: yes
+- **Auditor Conv ID**: 5373dbc2-8ceb-4bd8-b004-ce5eaa9e29fc (victory_auditor_19)
 - **Verdict**: VICTORY CONFIRMED
-- **Retry count**: 0
+- **Retry count**: 1
 
 ## Artifact Index
-- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
-- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/sentinel/BRIEFING.md — Sentinel briefing memory
-- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel briefing archive
-- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/sentinel/handoff.md — Sentinel handoff report
-- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/orchestrator_1/progress.md — Orchestrator progress tracking
-- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/orchestrator_1/handoff.md — Orchestrator hard handoff
-- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/sentinel_victory_auditor_1/handoff.md — Independent post-victory audit report (VICTORY CONFIRMED)
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel working memory
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel briefing archive
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_18/ — Orchestrator 18 working directory
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/PROJECT.md — Global architecture, feature inventory, and milestones
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/TEST_READY.md — E2E test suite sign-off (445 tests passing)

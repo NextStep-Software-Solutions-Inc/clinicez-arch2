@@ -2446,6 +2446,15 @@ export const clinicService = {
     return clinicApiClient.get<DailyEodReport>(`/reports/daily-eod${qs}`);
   },
 
+  getDailyEodPdfUrl(date?: string): string {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return clinicApiUrl(`/reports/daily-eod/pdf${qs}`);
+  },
+
+  getDailyEodReportPdfUrl(date?: string): string {
+    return this.getDailyEodPdfUrl(date);
+  },
+
   // Advanced Reports & Executive Analytics
   async getClinicAnalytics(startDate?: string, endDate?: string) {
     const params = new URLSearchParams();
@@ -2453,6 +2462,18 @@ export const clinicService = {
     if (endDate) params.append('endDate', endDate);
     const qs = params.toString();
     return clinicApiClient.get<ClinicAnalytics>(`/reports/analytics${qs ? `?${qs}` : ''}`);
+  },
+
+  getAnalyticsPdfUrl(startDate?: string, endDate?: string): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/analytics/pdf${qs ? `?${qs}` : ''}`);
+  },
+
+  getClinicAnalyticsPdfUrl(startDate?: string, endDate?: string): string {
+    return this.getAnalyticsPdfUrl(startDate, endDate);
   },
 
   async getMorbidityReport(startDate?: string, endDate?: string) {
@@ -2463,6 +2484,18 @@ export const clinicService = {
     return clinicApiClient.get<MorbidityReport>(`/reports/morbidity${qs ? `?${qs}` : ''}`);
   },
 
+  getMorbidityPdfUrl(startDate?: string, endDate?: string): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/morbidity/pdf${qs ? `?${qs}` : ''}`);
+  },
+
+  getMorbidityReportPdfUrl(startDate?: string, endDate?: string): string {
+    return this.getMorbidityPdfUrl(startDate, endDate);
+  },
+
   async getTaxDiscountAuditReport(startDate?: string, endDate?: string) {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
@@ -2471,12 +2504,40 @@ export const clinicService = {
     return clinicApiClient.get<TaxDiscountAuditReport>(`/reports/tax-discounts${qs ? `?${qs}` : ''}`);
   },
 
+  getTaxDiscountsPdfUrl(startDate?: string, endDate?: string): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/tax-discounts/pdf${qs ? `?${qs}` : ''}`);
+  },
+
+  getTaxDiscountAuditReportPdfUrl(startDate?: string, endDate?: string): string {
+    return this.getTaxDiscountsPdfUrl(startDate, endDate);
+  },
+
+  getTaxDiscountAuditPdfUrl(startDate?: string, endDate?: string): string {
+    return this.getTaxDiscountsPdfUrl(startDate, endDate);
+  },
+
   async getDoctorSharesReport(startDate?: string, endDate?: string) {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
     const qs = params.toString();
     return clinicApiClient.get<DoctorSharesReport>(`/reports/doctor-shares${qs ? `?${qs}` : ''}`);
+  },
+
+  getDoctorSharesPdfUrl(startDate?: string, endDate?: string): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/doctor-shares/pdf${qs ? `?${qs}` : ''}`);
+  },
+
+  getDoctorSharesReportPdfUrl(startDate?: string, endDate?: string): string {
+    return this.getDoctorSharesPdfUrl(startDate, endDate);
   },
 
   // Patient Chart

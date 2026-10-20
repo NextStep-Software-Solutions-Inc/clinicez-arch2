@@ -11,6 +11,7 @@ import { ClinicProvider } from './context/ClinicContext';
 import { StaffProvider } from './context/StaffContext';
 import { SidebarProvider } from './context/SidebarContext';
 import { FeedbackHost, initModalStackObserver } from './components/ui';
+import { VercelInsights } from './components/analytics/VercelInsights';
 import { OfflineSyncRunner } from './components/OfflineSyncRunner';
 import { GlobalSearchProvider } from './components/search/GlobalSearchProvider';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -76,6 +77,7 @@ export default function App() {
         </TextScaleProvider>
       </ErrorBoundary>
       <FeedbackHost />
+      <VercelInsights />
     </SafeAreaProvider>
   );
 }

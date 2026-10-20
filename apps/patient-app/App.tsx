@@ -32,6 +32,7 @@ import UnlockScreen from './navigation/screens/Unlock.screen';
 import * as ExpoNotifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { ErrorBoundary } from 'components/ui/ErrorBoundary';
+import { VercelInsights } from 'components/analytics/VercelInsights';
 import { scheduleLocalNotification } from 'services/notifications/notificationService';
 
 // ─── Background notification task ─────────────────────────────────────────────
@@ -186,6 +187,7 @@ export default function App() {
           </AppearanceProvider>
         </ClerkProvider>
       </GestureHandlerRootView>
+      <VercelInsights />
     </SafeAreaProvider>
   );
 }

@@ -43,6 +43,7 @@ public sealed class ClinicSettings : BaseEntity
 
     public decimal DefaultConsultationFee { get; set; } = 400.00m;
     public decimal VatRate { get; set; } = 0.12m;
+    public decimal DefaultDoctorSharePercentage { get; set; } = 0.70m;
 
     /// <summary>
     /// Cashier station operational mode:

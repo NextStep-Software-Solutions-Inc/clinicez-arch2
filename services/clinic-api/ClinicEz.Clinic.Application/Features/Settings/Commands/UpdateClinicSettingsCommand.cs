@@ -46,6 +46,7 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableStatVibrationAlert = null,
     string? SpecialtyMode = null,
     bool? EnableDentalModule = null,
+    decimal? DefaultDoctorSharePercentage = null,
     string? CashierMode = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
@@ -200,6 +201,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.EnableDentalModule.HasValue)
             settings.EnableDentalModule = request.EnableDentalModule.Value;
 
+        if (request.DefaultDoctorSharePercentage.HasValue && request.DefaultDoctorSharePercentage.Value >= 0)
+            settings.DefaultDoctorSharePercentage = request.DefaultDoctorSharePercentage.Value;
+
         if (!string.IsNullOrWhiteSpace(request.CashierMode))
         {
             var normalizedMode = request.CashierMode.Trim();
@@ -260,6 +264,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.IsOnlineBookingPaused,
             settings.SpecialtyMode,
             settings.EnableDentalModule,
+            settings.DefaultDoctorSharePercentage,
             settings.CashierMode,
             LetterheadDohLto: settings.LetterheadDohLto);
     }

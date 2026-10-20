@@ -155,6 +155,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<ClinicStaffNotification>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ClinicAuditEntry>().HasQueryFilter(e => e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<DentalToothRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PaymentRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         modelBuilder.Entity<ClinicStaffNotification>(b =>
         {
@@ -337,6 +338,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.QueueDate });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.CheckInTime });
         });
 
         modelBuilder.Entity<TriageVitals>(entity =>
@@ -394,6 +396,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
             entity.HasIndex(e => new { e.TenantId, e.BranchId });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.EncounterDate });
         });
 
         modelBuilder.Entity<EncounterDiagnosis>(entity =>
@@ -468,6 +471,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.PaymentNumber).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Amount).HasPrecision(18, 2);
             entity.Property(e => e.ReferenceNumber).HasMaxLength(100);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PaymentDate });
         });
 
         modelBuilder.Entity<ClinicalProcedure>(entity =>
@@ -483,6 +487,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                 .HasForeignKey(e => e.TargetRoomId)
                 .OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.ScheduledAt });
         });
 
         modelBuilder.Entity<ClinicLabOrder>(entity =>
@@ -505,6 +510,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.OrderNumber }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.OrderDate });
         });
 
         modelBuilder.Entity<ClinicLabOrderItem>(entity =>

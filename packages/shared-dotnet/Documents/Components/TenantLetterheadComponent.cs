@@ -52,6 +52,7 @@ public class TenantLetterheadComponent : IComponent
 
                     var licenseParts = new[]
                     {
+                        !string.IsNullOrWhiteSpace(_config.TaxIdentificationNumber) ? $"TIN: {_config.TaxIdentificationNumber}" : null,
                         !string.IsNullOrWhiteSpace(_config.DohLicenseToOperate) ? $"DOH LTO: {_config.DohLicenseToOperate}" : null,
                         !string.IsNullOrWhiteSpace(_config.PhilHealthAccreditationNumber) ? $"PhilHealth Provider: {_config.PhilHealthAccreditationNumber}" : null
                     }.Where(s => !string.IsNullOrWhiteSpace(s));
