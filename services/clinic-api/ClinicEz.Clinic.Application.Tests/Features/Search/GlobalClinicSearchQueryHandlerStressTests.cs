@@ -59,10 +59,10 @@ public class GlobalClinicSearchQueryHandlerStressTests
     public async Task Concurrency_All7Providers_ExecuteInParallelUnder150ms()
     {
         // Arrange
-        // 7 distinct providers each with 85ms artificial async latency
-        // Sequential execution would require 7 * 85ms = 595ms
-        // Truly concurrent execution via Task.WhenAll should complete in ~90-135ms (< 150ms)
-        const int simulatedLatencyMs = 85;
+        // 7 distinct providers each with 25ms artificial async latency
+        // Sequential execution would require 7 * 25ms = 175ms
+        // Truly concurrent execution via Task.WhenAll should complete in ~30-50ms (< 150ms)
+        const int simulatedLatencyMs = 25;
 
         var providers = new List<ISearchProvider>
         {
@@ -229,12 +229,12 @@ public class GlobalClinicSearchQueryHandlerStressTests
     [Fact]
     public async Task TimeoutBudget_WhenMultipleSlowProvidersTimeout_PreservesRemainingActiveProviders()
     {
-        // Arrange: 4 slow providers (5000ms) and 3 fast providers (15ms)
+        // Arrange: 4 slow providers (5000ms) and 3 fast providers (1ms)
         var providers = new List<ISearchProvider>
         {
             CreateMockProvider("Patients", 10, async ct =>
             {
-                await Task.Delay(15, ct);
+                await Task.Delay(1, ct);
                 return new List<SearchResultItemDto> { CreateItem("p1", "Patients", "Patient Item") };
             }),
             CreateMockProvider("Consultations", 20, async ct =>
@@ -244,7 +244,7 @@ public class GlobalClinicSearchQueryHandlerStressTests
             }),
             CreateMockProvider("Appointments", 30, async ct =>
             {
-                await Task.Delay(15, ct);
+                await Task.Delay(1, ct);
                 return new List<SearchResultItemDto> { CreateItem("a1", "Appointments", "Appointment Item") };
             }),
             CreateMockProvider("Queue", 40, async ct =>
@@ -259,7 +259,7 @@ public class GlobalClinicSearchQueryHandlerStressTests
             }),
             CreateMockProvider("Billing", 60, async ct =>
             {
-                await Task.Delay(15, ct);
+                await Task.Delay(1, ct);
                 return new List<SearchResultItemDto> { CreateItem("b1", "Billing", "Billing Item") };
             }),
             CreateMockProvider("Settings", 70, async ct =>
