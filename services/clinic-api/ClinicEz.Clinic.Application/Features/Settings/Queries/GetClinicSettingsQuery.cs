@@ -110,7 +110,10 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.EnableDentalModule,
             settings.DefaultDoctorSharePercentage,
             settings.CashierMode,
-            LetterheadDohLto: settings.LetterheadDohLto);
+            LetterheadDohLto: settings.LetterheadDohLto,
+            DefaultApproverName: settings.DefaultApproverName,
+            DefaultApproverTitle: settings.DefaultApproverTitle,
+            DocumentSignatoriesJson: settings.DocumentSignatoriesJson);
     }
 }
 

@@ -901,6 +901,9 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.EnableChipLevelQueueCalling).HasDefaultValue(false);
             entity.Property(e => e.IsDirectoryPublished).HasDefaultValue(false);
             entity.Property(e => e.IsOnlineBookingPaused).HasDefaultValue(false);
+            entity.Property(e => e.DefaultApproverName).HasMaxLength(200);
+            entity.Property(e => e.DefaultApproverTitle).HasMaxLength(200);
+            entity.Property(e => e.DocumentSignatoriesJson).HasColumnType("text");
             entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
         });
 

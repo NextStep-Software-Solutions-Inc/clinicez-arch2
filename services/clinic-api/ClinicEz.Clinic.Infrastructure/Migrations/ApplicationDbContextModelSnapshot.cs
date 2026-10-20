@@ -1326,6 +1326,14 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("DefaultApproverName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("DefaultApproverTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<decimal>("DefaultConsultationFee")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -1340,6 +1348,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DocumentSignatoriesJson")
                         .HasColumnType("text");
 
                     b.Property<bool>("EnableChipLevelQueueCalling")

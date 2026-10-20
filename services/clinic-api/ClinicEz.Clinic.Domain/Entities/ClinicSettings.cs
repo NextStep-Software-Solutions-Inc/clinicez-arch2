@@ -142,5 +142,33 @@ public sealed class ClinicSettings : BaseEntity
     /// Defaults to false.
     /// </summary>
     public bool EnableDentalModule { get; set; } = false;
+
+    /// <summary>
+    /// Default signatory / approver name for operational and statutory reports (e.g. "Dr. Roberto Santos, MD").
+    /// If null or empty, defaults to "Authorized Signatory".
+    /// </summary>
+    public string? DefaultApproverName { get; set; }
+
+    /// <summary>
+    /// Default signatory / approver role or title for reports (e.g. "Medical Director", "Clinic Administrator").
+    /// If null or empty, defaults to the specific report standard title.
+    /// </summary>
+    public string? DefaultApproverTitle { get; set; }
+
+    /// <summary>
+    /// Optional JSON-serialized dictionary of per-document/report signatory configuration.
+    /// Key: document identifier (e.g. "DailyEod", "Morbidity", "TaxDiscounts", "DoctorShares", "Analytics").
+    /// Value: <see cref="DocumentSignatoryConfig"/> JSON.
+    /// </summary>
+    public string? DocumentSignatoriesJson { get; set; }
 }
+
+/// <summary>
+/// Configurable signatory and titles for a specific report or clinical document.
+/// </summary>
+public sealed record DocumentSignatoryConfig(
+    string? PreparedByTitle = null,
+    string? ApproverName = null,
+    string? ApproverTitle = null
+);
 

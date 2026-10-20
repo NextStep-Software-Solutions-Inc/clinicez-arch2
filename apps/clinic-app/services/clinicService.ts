@@ -1883,6 +1883,16 @@ export interface ClinicSettingsRecord {
   primaryColorHex?: string;
   specialtyMode?: 'Medical' | 'Dental' | 'Multi-Specialty' | 'MultiSpecialty';
   enableDentalModule?: boolean;
+
+  defaultApproverName?: string | null;
+  defaultApproverTitle?: string | null;
+  documentSignatoriesJson?: string | null;
+}
+
+export interface DocumentSignatoryItemConfig {
+  preparedByTitle?: string | null;
+  approverName?: string | null;
+  approverTitle?: string | null;
 }
 
 export type NotificationUrgency = 'Routine' | 'Urgent' | 'Stat';

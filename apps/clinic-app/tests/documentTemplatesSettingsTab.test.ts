@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 // Mock React Native modules for Bun environment
 const createMockComponent = (name: string) => {
-  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress, testID, ...props }: any) =>
+  const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress, testID, value, ...props }: any) =>
     React.createElement(
       'div',
       {
@@ -16,6 +16,7 @@ const createMockComponent = (name: string) => {
         ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
         ...(accessibilityRole ? { role: accessibilityRole } : {}),
         ...(placeholder ? { 'data-placeholder': placeholder } : {}),
+        ...(value !== undefined ? { 'data-value': value } : {}),
       },
       placeholder,
       children
@@ -349,5 +350,35 @@ describe('DocumentTemplatesSettingsTab — Clinical Document Customization Studi
       expect(url).toContain(`/api/v1/settings/sample-document-pdf?docType=${encodeURIComponent(dt)}`);
       expect(url).toContain('paperSize=A4');
     }
+  });
+
+  test('17. Signatory Controls: supports defaultApproverName and defaultApproverTitle', async () => {
+    const { default: DocumentTemplatesSettingsTab } = await import('../components/settings/DocumentTemplatesSettingsTab');
+    const mockSignatorySettings = {
+      id: 'settings-1',
+      tenantId: 'tenant-1',
+      clinicId: 'clinic-1',
+      clinicName: 'St. Jude Clinic',
+      operatingHours: '8AM-5PM',
+      defaultSlotDurationMinutes: 15,
+      queuePrefix: 'Q',
+      invoicePrefix: 'INV',
+      defaultConsultationFee: 500,
+      vatRate: 0.12,
+      defaultApproverName: 'Dr. Maria Santos, MD',
+      defaultApproverTitle: 'Medical Director',
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(DocumentTemplatesSettingsTab, {
+        settings: mockSignatorySettings as any,
+        showSkeletons: false,
+      })
+    );
+
+    expect(markup).toContain('data-testid="input-default-approver-name"');
+    expect(markup).toContain('data-value="Dr. Maria Santos, MD"');
+    expect(markup).toContain('data-testid="input-default-approver-title"');
+    expect(markup).toContain('data-value="Medical Director"');
   });
 });

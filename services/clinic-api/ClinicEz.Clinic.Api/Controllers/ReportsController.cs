@@ -22,15 +22,49 @@ public sealed class ReportsController : ControllerBase
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService _pdfService;
     private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<StaffMember>? _staffRepo;
+    private readonly IClinicContext? _clinicContext;
 
     public ReportsController(
         ISender sender,
         IClinicDocumentPdfService pdfService,
-        IRepository<ClinicSettings> settingsRepo)
+        IRepository<ClinicSettings> settingsRepo,
+        IRepository<StaffMember>? staffRepo = null,
+        IClinicContext? clinicContext = null)
     {
         _sender = sender;
         _pdfService = pdfService;
         _settingsRepo = settingsRepo;
+        _staffRepo = staffRepo;
+        _clinicContext = clinicContext;
+    }
+
+    private async Task<string> ResolvePreparedByNameAsync(CancellationToken ct)
+    {
+        // 1. Resolve human staff name from repository if staff context exists
+        if (_clinicContext?.StaffId is { } staffId && staffId != Guid.Empty && _staffRepo != null)
+        {
+            var staff = await _staffRepo.Query()
+                .Where(s => s.Id == staffId)
+                .Select(s => new { s.Title, s.FirstName, s.LastName })
+                .FirstOrDefaultAsync(ct);
+
+            if (staff != null)
+            {
+                var full = $"{staff.Title} {staff.FirstName} {staff.LastName}".Trim();
+                if (!string.IsNullOrWhiteSpace(full)) return full;
+            }
+        }
+
+        // 2. Fall back to claims name if present and not a raw GUID
+        var claimName = User?.FindFirst("name")?.Value ?? _clinicContext?.StaffName ?? User?.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(claimName) && !Guid.TryParse(claimName, out _))
+        {
+            return claimName;
+        }
+
+        // 3. Institutional fallback
+        return "Clinic Staff";
     }
 
     [HttpGet("daily-eod")]
@@ -100,7 +134,8 @@ public sealed class ReportsController : ControllerBase
             ClinicId = report.ClinicId,
             ClinicName = "Clinic"
         };
-        var pdfBytes = _pdfService.GenerateDailyEodReportPdf(report, settings, User?.Identity?.Name);
+        var preparedBy = await ResolvePreparedByNameAsync(ct);
+        var pdfBytes = _pdfService.GenerateDailyEodReportPdf(report, settings, preparedBy);
         return File(pdfBytes, "application/pdf", $"DailyEodReport-{report.ReportDate:yyyyMMdd}.pdf");
     }
 
@@ -118,7 +153,8 @@ public sealed class ReportsController : ControllerBase
             ClinicId = report.ClinicId,
             ClinicName = report.ClinicName ?? "Clinic"
         };
-        var pdfBytes = _pdfService.GenerateMorbidityReportPdf(report, settings, User?.Identity?.Name);
+        var preparedBy = await ResolvePreparedByNameAsync(ct);
+        var pdfBytes = _pdfService.GenerateMorbidityReportPdf(report, settings, preparedBy);
         return File(pdfBytes, "application/pdf", $"MorbidityReport-{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}.pdf");
     }
 
@@ -136,7 +172,8 @@ public sealed class ReportsController : ControllerBase
             ClinicId = report.ClinicId,
             ClinicName = "Clinic"
         };
-        var pdfBytes = _pdfService.GenerateTaxDiscountAuditReportPdf(report, settings, User?.Identity?.Name);
+        var preparedBy = await ResolvePreparedByNameAsync(ct);
+        var pdfBytes = _pdfService.GenerateTaxDiscountAuditReportPdf(report, settings, preparedBy);
         return File(pdfBytes, "application/pdf", $"TaxDiscountAuditReport-{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}.pdf");
     }
 
@@ -154,7 +191,8 @@ public sealed class ReportsController : ControllerBase
             ClinicId = report.ClinicId,
             ClinicName = "Clinic"
         };
-        var pdfBytes = _pdfService.GenerateDoctorSharesReportPdf(report, settings, User?.Identity?.Name);
+        var preparedBy = await ResolvePreparedByNameAsync(ct);
+        var pdfBytes = _pdfService.GenerateDoctorSharesReportPdf(report, settings, preparedBy);
         return File(pdfBytes, "application/pdf", $"DoctorSharesReport-{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}.pdf");
     }
 
@@ -172,7 +210,8 @@ public sealed class ReportsController : ControllerBase
             ClinicId = analytics.ClinicId,
             ClinicName = "Clinic"
         };
-        var pdfBytes = _pdfService.GenerateClinicAnalyticsPdf(analytics, settings, User?.Identity?.Name);
+        var preparedBy = await ResolvePreparedByNameAsync(ct);
+        var pdfBytes = _pdfService.GenerateClinicAnalyticsPdf(analytics, settings, preparedBy);
         return File(pdfBytes, "application/pdf", $"ClinicAnalyticsReport-{analytics.StartDate:yyyyMMdd}-{analytics.EndDate:yyyyMMdd}.pdf");
     }
 }

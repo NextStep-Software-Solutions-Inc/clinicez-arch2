@@ -904,6 +904,93 @@ public class HardenedDocumentGenerationTests
         Encoding.ASCII.GetString(anlResult.FileContents).Should().StartWith("%PDF-");
     }
 
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Honor_Configured_Signatories_And_Defaults()
+    {
+        var settings = CreateReportTestSettings();
+        settings.DefaultApproverName = "Dr. Hermogenes Santos, FPCP";
+        settings.DefaultApproverTitle = "Medical Director & Head of Clinics";
+        settings.DocumentSignatoriesJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, ClinicEz.Clinic.Domain.Entities.DocumentSignatoryConfig>
+        {
+            ["TaxDiscounts"] = new()
+            {
+                PreparedByTitle = "Senior Revenue Auditor",
+                ApproverName = "Atty. Juanita Gomez, CPA",
+                ApproverTitle = "Chief Legal & Compliance Officer"
+            }
+        });
+
+        var date = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var eodDto = new DailyEodReportDto(
+            date, settings.TenantId, settings.ClinicId, 10, 5, 5, 10, 0,
+            10000m, 1000m, 500m, 500m, 2000m, 9000m, 9000m, 5000m, 0m,
+            new List<PaymentModeSummary>(), new List<DoctorWorkloadSummary>(), 0, 0, 0, 0);
+
+        var taxDto = new TaxDiscountAuditReportDto(
+            date.AddDays(-7), date, settings.TenantId, settings.ClinicId, 5, 5000m, 500m, 500m, 400m, 4500m,
+            new List<TaxDiscountAuditRowDto>());
+
+        // 1. Daily EOD uses global default approver
+        var eodPdf = _pdfService.GenerateDailyEodReportPdf(eodDto, settings, "Wave Ambray");
+        var eodText = ExtractTextFromPdf(eodPdf);
+        eodText.Should().Contain("Wave Ambray");
+        eodText.Should().Contain("Dr. Hermogenes Santos");
+
+        // 2. Tax Discounts uses document-specific override
+        var taxPdf = _pdfService.GenerateTaxDiscountAuditReportPdf(taxDto, settings, "Wave Ambray");
+        var taxText = ExtractTextFromPdf(taxPdf);
+        taxText.Should().Contain("Wave Ambray");
+        taxText.Should().Contain("Senior Revenue Auditor");
+        taxText.Should().Contain("Atty. Juanita Gomez");
+    }
+
+    [Fact]
+    public async Task ReportsController_Should_Resolve_Human_Staff_Name_And_Never_Output_Raw_Guid()
+    {
+        var sender = Substitute.For<ISender>();
+        var clinicContext = Substitute.For<IClinicContext>();
+        var clinicId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns("tenant-1");
+        clinicContext.StaffId.Returns(staffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        // Add real staff member to database
+        var staff = new StaffMember
+        {
+            Id = staffId,
+            TenantId = "tenant-1",
+            ClinicId = clinicId,
+            FirstName = "Wave",
+            LastName = "Ambray",
+            Title = "RN",
+            Role = StaffRole.Nurse
+        };
+        await context.Set<StaffMember>().AddAsync(staff);
+        await context.SaveChangesAsync();
+
+        var date = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var eodDto = new DailyEodReportDto(
+            date, "tenant-1", clinicId, 10, 5, 5, 10, 0,
+            10000m, 1000m, 500m, 500m, 2000m, 9000m, 9000m, 5000m, 0m,
+            new List<PaymentModeSummary>(), new List<DoctorWorkloadSummary>(), 0, 0, 0, 0);
+
+        sender.Send(Arg.Any<GetDailyEodReportQuery>(), Arg.Any<CancellationToken>()).Returns(eodDto);
+
+        var controller = new ReportsController(sender, _pdfService, settingsRepo, staffRepo, clinicContext);
+
+        var result = await controller.GetDailyEodReportPdf(date, CancellationToken.None) as FileContentResult;
+        result.Should().NotBeNull();
+
+        var text = ExtractTextFromPdf(result!.FileContents);
+        text.Should().Contain("Wave Ambray");
+        text.Should().NotContain(staffId.ToString());
+    }
+
     // =========================================================================
     // PARAMETERIZED 36-COMBINATION THEORY MATRIX
     // 4 Document Types × 3 Signature Modes × 3 Paper Sizes = 36 Combinations

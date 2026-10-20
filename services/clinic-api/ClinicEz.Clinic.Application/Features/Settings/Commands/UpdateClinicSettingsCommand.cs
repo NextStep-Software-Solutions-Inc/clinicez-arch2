@@ -50,7 +50,10 @@ public sealed record UpdateClinicSettingsCommand(
     string? SpecialtyMode = null,
     bool? EnableDentalModule = null,
     decimal? DefaultDoctorSharePercentage = null,
-    string? CashierMode = null) : IRequest<ClinicSettingsDto>;
+    string? CashierMode = null,
+    string? DefaultApproverName = null,
+    string? DefaultApproverTitle = null,
+    string? DocumentSignatoriesJson = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -226,6 +229,15 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
                 : "ClinicDesk";
         }
 
+        if (request.DefaultApproverName != null)
+            settings.DefaultApproverName = string.IsNullOrWhiteSpace(request.DefaultApproverName) ? null : request.DefaultApproverName.Trim();
+
+        if (request.DefaultApproverTitle != null)
+            settings.DefaultApproverTitle = string.IsNullOrWhiteSpace(request.DefaultApproverTitle) ? null : request.DefaultApproverTitle.Trim();
+
+        if (request.DocumentSignatoriesJson != null)
+            settings.DocumentSignatoriesJson = string.IsNullOrWhiteSpace(request.DocumentSignatoriesJson) ? null : request.DocumentSignatoriesJson.Trim();
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -280,7 +292,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.EnableDentalModule,
             settings.DefaultDoctorSharePercentage,
             settings.CashierMode,
-            LetterheadDohLto: settings.LetterheadDohLto);
+            LetterheadDohLto: settings.LetterheadDohLto,
+            DefaultApproverName: settings.DefaultApproverName,
+            DefaultApproverTitle: settings.DefaultApproverTitle,
+            DocumentSignatoriesJson: settings.DocumentSignatoriesJson);
     }
 
     private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)
