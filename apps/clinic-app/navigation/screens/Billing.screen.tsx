@@ -908,16 +908,9 @@ export default function BillingScreen() {
                   />
                   <Button
                     size="sm"
-                    variant="secondary"
-                    icon="fileText"
-                    title="Professional PDF"
-                    onPress={() => openDocument(clinicService.getInvoicePdfUrl(inv.id))}
-                  />
-                  <Button
-                    size="sm"
                     variant="ghost"
                     icon="fileText"
-                    title="SOA"
+                    title="View SOA (PDF)"
                     onPress={() => openDocument(clinicService.getInvoicePdfUrl(inv.id))}
                   />
                 </View>
@@ -1017,13 +1010,6 @@ export default function BillingScreen() {
             />
             <Button
               size="md"
-              variant="secondary"
-              icon="fileText"
-              title="Professional PDF"
-              onPress={() => handlePrintProfessionalReceipt(lastReceipt)}
-            />
-            <Button
-              size="md"
               variant="outline"
               icon="fileText"
               title="View SOA (PDF)"
@@ -1039,7 +1025,7 @@ export default function BillingScreen() {
             <Button
               size="md"
               variant="ghost"
-              title="Done (Call Next Patient)"
+              title="Close"
               onPress={() => setReceiptModalVisible(false)}
             />
           </View>

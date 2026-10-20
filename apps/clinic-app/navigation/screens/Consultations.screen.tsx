@@ -394,6 +394,7 @@ export default function ConsultationsScreen() {
   const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
   const [createdInvoiceNumber, setCreatedInvoiceNumber] = useState<string | null>(null);
   const [createdInvoiceTotal, setCreatedInvoiceTotal] = useState<number | null>(null);
+  const [isRetryingInvoice, setIsRetryingInvoice] = useState(false);
   const [reviewSoaModalVisible, setReviewSoaModalVisible] = useState(false);
   const [soaReviewItems, setSoaReviewItems] = useState<CreateInvoiceRequest['lineItems']>([]);
   const [soaDiscountType, setSoaDiscountType] = useState<DiscountType>('None');
@@ -1325,6 +1326,7 @@ export default function ConsultationsScreen() {
     setIsYakapEligible(false);
     setPhilHealthAtc('WALKEDIN');
     setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
+    setCreatedInvoiceId(null);
     setCreatedInvoiceNumber(null);
     setCreatedInvoiceTotal(null);
     setPostEncounterModalVisible(false);
@@ -1335,6 +1337,9 @@ export default function ConsultationsScreen() {
     setIsSigned(false);
     setSignedAt(null);
     setSignedConsultationId(null);
+    setCreatedInvoiceId(null);
+    setCreatedInvoiceNumber(null);
+    setCreatedInvoiceTotal(null);
     setIsFollowUpEncounter(true);
     setBanner(null);
     setSubjective(selectedPatient.chiefComplaint ? `Follow-up: ${selectedPatient.chiefComplaint}.` : '');
@@ -2102,6 +2107,32 @@ export default function ConsultationsScreen() {
       }
     }
 
+    // Atomic batch save dental chart BEFORE signing when dental is enabled and teeth have been marked
+    if (isDentalEnabled && Object.keys(dentalChart).length > 0) {
+      const multiMap = normalizeTeethToMultiRecord(dentalChart as any);
+      const teethPayload = Object.values(multiMap).flat().map((rec) => ({
+        toothNumber: rec.toothNumber,
+        status: rec.status,
+        surface: rec.surface || undefined,
+        notes: rec.notes || undefined,
+      }));
+      const [, dentalErr] = await clinicService.batchSaveDentalChart(selectedPatient.patientId, {
+        consultationId,
+        teeth: teethPayload,
+      });
+      if (dentalErr) {
+        setIsSigning(false);
+        const errDetail = dentalErr.message || 'Server rejected dental tooth records';
+        const msg = `Dental chart records could not be saved: ${errDetail}. Encounter signing and cashier billing were halted to protect your clinical records. Please retry.`;
+        setBanner({
+          text: msg,
+          isError: true,
+        });
+        notify.error(msg, { traceId: dentalErr.traceId });
+        return;
+      }
+    }
+
     const [, signErr] = await clinicService.signConsultation(consultationId, {
       prcLicenseNumber: finalPrc,
       ptrNumber: doctorPtr.trim() || signerStaff?.ptrNumber,
@@ -2179,22 +2210,6 @@ export default function ConsultationsScreen() {
         });
         if (procErr) followUpIssues.push(`procedure order (${proc.name})`);
       }
-    }
-
-    // Atomic batch save dental chart on encounter signing when dental is enabled and teeth have been marked
-    if (isDentalEnabled && Object.keys(dentalChart).length > 0) {
-      const multiMap = normalizeTeethToMultiRecord(dentalChart as any);
-      const teethPayload = Object.values(multiMap).flat().map((rec) => ({
-        toothNumber: rec.toothNumber,
-        status: rec.status,
-        surface: rec.surface || undefined,
-        notes: rec.notes || undefined,
-      }));
-      const [, dentalErr] = await clinicService.batchSaveDentalChart(selectedPatient.patientId, {
-        consultationId,
-        teeth: teethPayload,
-      });
-      if (dentalErr) followUpIssues.push('dental chart records');
     }
 
     // Auto-create draft billing invoice for the Cashier, priced from the clinic's fee schedule
@@ -2343,6 +2358,42 @@ export default function ConsultationsScreen() {
       });
     }
     return items;
+  };
+
+  const handleRetryForwardToCashier = async () => {
+    if (!selectedPatient) return;
+    const doctor = requireSigner();
+    if (!doctor) return;
+    setIsRetryingInvoice(true);
+    const billItems = buildBillableItems();
+    const effectiveBillItems = soaReviewItems.length > 0 ? soaReviewItems : billItems;
+    if (effectiveBillItems.length === 0) {
+      notify.error('No billable consultation fee or procedures found to forward.');
+      setIsRetryingInvoice(false);
+      return;
+    }
+    const [invoiceResult, invoiceErr] = await clinicService.createInvoice({
+      patientId: selectedPatient.patientId,
+      patientName: selectedPatient.patientName,
+      queueItemId: selectedPatient.id,
+      consultationId: signedConsultationId || undefined,
+      attendingDoctorId: doctor.id,
+      attendingDoctorName: doctor.name,
+      discountType: soaDiscountType || 'None',
+      discountIdNumber: soaDiscountId.trim() || undefined,
+      notes: 'Consultation & procedures bill forwarded to Cashier',
+      lineItems: effectiveBillItems,
+    });
+    setIsRetryingInvoice(false);
+    if (invoiceErr) {
+      notify.error(`Failed to forward invoice to cashier: ${invoiceErr.message || 'unknown error'}`);
+    } else if (invoiceResult) {
+      setCreatedInvoiceId(invoiceResult.id);
+      setCreatedInvoiceNumber(invoiceResult.invoiceNumber);
+      setCreatedInvoiceTotal(invoiceResult.netAmount);
+      notify.success(`Draft invoice #${invoiceResult.invoiceNumber} successfully queued to Cashier.`);
+      setPostEncounterModalVisible(true);
+    }
   };
 
   const soaGrossAmount = useMemo(
@@ -4692,12 +4743,15 @@ export default function ConsultationsScreen() {
                     variant="outline"
                     onPress={handleStartFollowUpEncounter}
                   />
-                  <Button
-                    title="Forward / Checkout options"
-                    icon="billing"
-                    variant="success"
-                    onPress={() => setPostEncounterModalVisible(true)}
-                  />
+                  {!createdInvoiceNumber && !createdInvoiceId ? (
+                    <Button
+                      title="Retry forward to cashier"
+                      icon="billing"
+                      variant="secondary"
+                      loading={isRetryingInvoice}
+                      onPress={handleRetryForwardToCashier}
+                    />
+                  ) : null}
                 </View>
               </Card>
             ) : (
