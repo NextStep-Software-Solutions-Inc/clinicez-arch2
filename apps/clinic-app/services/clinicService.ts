@@ -521,6 +521,7 @@ export interface InvoiceRecord {
   amountPaid: number;
   balanceDue: number;
   status: InvoiceStatus;
+  billingRequestedAt?: string;
   notes?: string;
   billedByStaffName?: string;
   lineItems: InvoiceLineItem[];
@@ -1796,6 +1797,8 @@ export interface ClinicSettingsRecord {
   joinCodeExpiresAt?: string | null;
   clearJoinCode?: boolean;
 
+  cashierMode?: 'ClinicDesk' | 'CashierCounter';
+
   // Milestone 2 Directory Publishing & Dynamic Booking Capacity
   isDirectoryPublished?: boolean;
   isOnlineBookingPaused?: boolean;
@@ -1986,6 +1989,21 @@ export interface RecordPaymentRequest {
   method: PaymentMethod;
   referenceNumber?: string;
   notes?: string;
+}
+
+export interface UpdateInvoiceRequest {
+  discountType?: DiscountType;
+  discountIdNumber?: string;
+  customDiscountPercentage?: number;
+  notes?: string;
+  lineItems?: Array<{
+    serviceItemId?: string;
+    itemCode?: string;
+    description: string;
+    category: string;
+    unitPrice: number;
+    quantity: number;
+  }>;
 }
 
 export interface PatientSeedResult {
@@ -2216,6 +2234,10 @@ export const clinicService = {
 
   async createInvoice(payload: CreateInvoiceRequest) {
     return clinicApiClient.post<InvoiceRecord>('/billing/invoices', payload);
+  },
+
+  async updateInvoice(invoiceId: string, payload: UpdateInvoiceRequest) {
+    return clinicApiClient.put<InvoiceRecord>(`/billing/invoices/${invoiceId}`, payload);
   },
 
   async recordPayment(invoiceId: string, payload: RecordPaymentRequest) {

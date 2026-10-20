@@ -44,7 +44,8 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableStatAudioAlert = null,
     bool? EnableStatVibrationAlert = null,
     string? SpecialtyMode = null,
-    bool? EnableDentalModule = null) : IRequest<ClinicSettingsDto>;
+    bool? EnableDentalModule = null,
+    string? CashierMode = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -195,6 +196,14 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.EnableDentalModule.HasValue)
             settings.EnableDentalModule = request.EnableDentalModule.Value;
 
+        if (!string.IsNullOrWhiteSpace(request.CashierMode))
+        {
+            var normalizedMode = request.CashierMode.Trim();
+            settings.CashierMode = string.Equals(normalizedMode, "CashierCounter", StringComparison.OrdinalIgnoreCase)
+                ? "CashierCounter"
+                : "ClinicDesk";
+        }
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -246,7 +255,8 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.IsDirectoryPublished,
             settings.IsOnlineBookingPaused,
             settings.SpecialtyMode,
-            settings.EnableDentalModule);
+            settings.EnableDentalModule,
+            settings.CashierMode);
     }
 }
 

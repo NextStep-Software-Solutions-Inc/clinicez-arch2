@@ -1311,6 +1311,71 @@ Integrity mode: development
 - [ ] Design token check passes: `cd apps/clinic-app && bun run check-tokens.mjs --strict` or no raw hex colors in modified files.
 - [ ] TypeScript check passes: `cd apps/clinic-app && /Users/macuser/.bun/bin/bun run typecheck:clinic` with 0 errors.
 
+## 2026-10-20T02:28:31Z
+
+Conduct a rigorous multi-perspective code, architecture, and security review of the ClinicEZ Billing System hardening across `services/clinic-api`, `apps/clinic-app`, `services/billing-api`, and `apps/cashier-app`.
+
+Working directory: /Users/macuser/projects/github/nextstep/clinicez-billing
+Integrity mode: development
+
+## Requirements
+
+### R1. Dual-Mode Cashier Routing & Concurrency Audit (`services/clinic-api`)
+Review the implementation of `ClinicSettings.CashierMode` (`ClinicDesk` vs `CashierCounter`):
+- Audit `CreateInvoiceCommandHandler` and `UpdateInvoiceCommandHandler`: ensure `billing.invoice.requested` is only enqueued to `billing-api` in `CashierCounter` mode, and that `ClinicDesk` mode leaves `BillingRequestedAt` null so local payments never encounter HTTP 409 `PaidAtBillingCounterException`.
+- Audit `RecordPaymentCommandHandler`: verify payment allocation, receipt numbering (`OR-YYYYMMDD-XXX`), and idempotency.
+- Verify `UpdateInvoiceCommand` (`PUT api/v1/billing/invoices/{id}`) properly recalculates gross, net, and statutory discounts (Senior/PWD 20%, PhilHealth Konsulta 100%) and re-publishes to `billing-api` when counter-owned.
+
+### R2. Clinic Station Settings & UI/UX Audit (`apps/clinic-app`)
+Review `GeneralSettingsTab.tsx` and `Settings.screen.tsx` against `@clinicez/design-tokens`:
+- Verify strict adherence to design tokens: zero raw hex color values, use of semantic tokens (`theme.colors.primary` Teal `#0D6963`, `surface`, `border`, `textSecondary`), and standard typography scales.
+- Verify 4-state lifecycle (Skeleton loading, Error with retry, Empty, Active saved state) and seamless persistence of `cashierMode`.
+
+### R3. Clinical Workstation Non-Disruptive Queue Flow Audit (`apps/clinic-app`)
+Review `Consultations.screen.tsx`:
+- Confirm that encounter signing does NOT forcefully redirect the doctor to `Billing.screen.tsx`.
+- Review the **Post-Encounter Action Dialog**: ensure the primary action is **"Call Next Patient"** (using `nextEligiblePatient`) to maintain clinical momentum, while providing secondary options for printing Rx slips, opening billing, or closing.
+
+### R4. Statement of Account (SOA) Review & Settlement Audit (`apps/clinic-app`)
+Review `Billing.screen.tsx`:
+- Verify that patients with existing open draft invoices load their Statement of Account (SOA) directly instead of triggering a duplicate invoice error.
+- Verify rehydration of consultation fees, ordered procedures, and point-of-care lab tests.
+- Verify statutory discount computation (Senior OSCA ID, PWD ID, PhilHealth Konsulta) and seamless settlement via `updateInvoice` + `recordPayment`.
+- Confirm advisory banner display when an SOA has been dispatched to the central cashier station.
+
+### R5. Architecture Documentation & Interop Integrity
+Review `docs/architecture/billing.md`:
+- Verify that documentation accurately reflects the `CashierMode` topology, `UpdateInvoiceCommand`, and post-encounter workstation flows.
+- Ensure cross-service interop message schemas (`BillingInvoiceRequestedPayload`, `BillingPaymentConfirmedPayload`) match the shared library contracts.
+
+## Verification Resources & Test Suites
+
+The review team should execute and verify the following test suites in `/Users/macuser/projects/github/nextstep/clinicez-billing`:
+1. Clinic API Billing & Cashier Tests:
+   `~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ --filter "FullyQualifiedName~Billing|FullyQualifiedName~Cashier"`
+2. Billing API Service Tests:
+   `~/.dotnet/dotnet test services/billing-api/ClinicEz.Billing.Tests/`
+3. Clinic App Billing & Cashier Mode Test Suite:
+   `ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/node_modules node_modules && ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/apps/clinic-app/node_modules apps/clinic-app/node_modules && ~/.bun/bin/bun test apps/clinic-app/tests/billing_and_cashier_mode.test.ts && rm node_modules apps/clinic-app/node_modules`
+4. Clinic App Fulfillment & Billing Stress Tests:
+   `ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/node_modules node_modules && ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/apps/clinic-app/node_modules apps/clinic-app/node_modules && ~/.bun/bin/bun test apps/clinic-app/tests/challenger_m2_1_fulfillment_billing_stress.test.ts && rm node_modules apps/clinic-app/node_modules`
+5. Cashier App Tests:
+   `ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/node_modules node_modules && ln -s /Users/macuser/projects/github/nextstep/clinicez-arch2/apps/cashier-app/node_modules apps/cashier-app/node_modules && ~/.bun/bin/bun test apps/cashier-app/tests/ && rm node_modules apps/cashier-app/node_modules`
+6. Design Tokens Compliance:
+   `~/.bun/bin/bun test packages/design-tokens/src/tokens.test.ts`
+7. Static Token Audit:
+   Verify 0 raw hex color values (`#[0-9a-fA-F]{3,8}`) exist in `Consultations.screen.tsx` and `Billing.screen.tsx`.
+
+## Acceptance Criteria
+
+### Audit Findings & Quality Gates
+- [ ] Concurrency and double-payment risk: Confirm no possibility of a 409 conflict in `ClinicDesk` mode and no duplicate payment risk in `CashierCounter` mode.
+- [ ] UI/UX Design System Compliance: 100% compliance with `@clinicez/design-tokens` (0 raw hex values).
+- [ ] Clinical Momentum: Verified that "Call Next Patient" is the primary autofocused action in the post-encounter flow.
+- [ ] SOA Rehydration: Verified that opening an open visit bill loads all consultation line items and permits discount application and receipt generation without false duplicate blocks.
+- [ ] Test Suite Execution: All automated test suites report 100% pass rate.
+- [ ] Deliver a structured Review & Verification Report detailing findings, risk assessment, and merge readiness.
+
 ## 2026-10-20T02:26:31Z
 
 Implement a production-ready, interactive, multi-provider Clinic Calendar feature in apps/clinic-app rooted in @clinicez/design-tokens, featuring Month, Week, Day, and Agenda views, 1-click slot booking, arrival check-in routing, appointment rescheduling, doctor shift overlays, and date-range filtering in services/clinic-api.
