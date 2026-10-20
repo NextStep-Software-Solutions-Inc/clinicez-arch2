@@ -32,12 +32,17 @@ public sealed class SeedDentalServicesCommandHandler : IRequestHandler<SeedDenta
 
     public async Task<List<ClinicServiceItemDto>> Handle(SeedDentalServicesCommand request, CancellationToken cancellationToken)
     {
-        var existingServices = await _serviceRepo.Query().ToListAsync(cancellationToken);
-        var existingMap = existingServices
+        var allServices = await _serviceRepo.Query()
+            .IgnoreQueryFilters()
+            .Where(s => s.ClinicId == _clinicContext.ClinicId)
+            .ToListAsync(cancellationToken);
+
+        var existingMap = allServices
+            .Where(s => !string.IsNullOrWhiteSpace(s.Code))
             .GroupBy(s => s.Code.Trim().ToUpperInvariant())
             .ToDictionary(g => g.Key, g => g.First());
 
-        bool anyCreated = false;
+        bool anyCreatedOrRestored = false;
         var canonicalCodes = DentalCatalogDefaults.Defaults
             .Select(d => d.Code.Trim().ToUpperInvariant())
             .ToHashSet();
@@ -45,10 +50,22 @@ public sealed class SeedDentalServicesCommandHandler : IRequestHandler<SeedDenta
         foreach (var def in DentalCatalogDefaults.Defaults)
         {
             var codeUpper = def.Code.Trim().ToUpperInvariant();
-            if (!existingMap.ContainsKey(codeUpper))
+            if (existingMap.TryGetValue(codeUpper, out var existingItem))
+            {
+                if (existingItem.IsDeleted)
+                {
+                    existingItem.IsDeleted = false;
+                    existingItem.DeletedAt = null;
+                    existingItem.DeletedBy = null;
+                    existingItem.IsActive = true;
+                    anyCreatedOrRestored = true;
+                }
+            }
+            else
             {
                 var newItem = new ClinicServiceItem
                 {
+                    Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
                     ClinicId = _clinicContext.ClinicId,
                     Code = def.Code,
@@ -61,32 +78,41 @@ public sealed class SeedDentalServicesCommandHandler : IRequestHandler<SeedDenta
 
                 await _serviceRepo.AddAsync(newItem, cancellationToken);
                 existingMap[codeUpper] = newItem;
-                existingServices.Add(newItem);
-                anyCreated = true;
+                allServices.Add(newItem);
+                anyCreatedOrRestored = true;
             }
         }
 
-        if (anyCreated)
+        if (anyCreatedOrRestored)
         {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                // Idempotent recovery for concurrent execution
+            }
         }
 
-        return existingServices
+        var activeDentalItems = await _serviceRepo.Query()
             .Where(s => canonicalCodes.Contains(s.Code.Trim().ToUpperInvariant()))
             .OrderBy(s => s.Code)
-            .Select(s => new ClinicServiceItemDto(
-                s.Id,
-                s.TenantId ?? _clinicContext.TenantId,
-                s.ClinicId,
-                s.Code,
-                s.Name,
-                s.Category,
-                s.StandardPrice,
-                s.Description,
-                s.IsActive,
-                s.PhilHealthCode,
-                s.PhilHealthDescription,
-                s.IsPhilHealthFormulary
-            )).ToList();
+            .ToListAsync(cancellationToken);
+
+        return activeDentalItems.Select(s => new ClinicServiceItemDto(
+            s.Id,
+            s.TenantId ?? _clinicContext.TenantId,
+            s.ClinicId,
+            s.Code,
+            s.Name,
+            s.Category,
+            s.StandardPrice,
+            s.Description,
+            s.IsActive,
+            s.PhilHealthCode,
+            s.PhilHealthDescription,
+            s.IsPhilHealthFormulary
+        )).ToList();
     }
 }
