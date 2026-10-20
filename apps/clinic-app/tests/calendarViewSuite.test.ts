@@ -148,29 +148,6 @@ mock.module('../utils/useBreakpoint', () => ({
   }),
 }));
 
-const mockToasts = {
-  successes: [] as string[],
-  errors: [] as string[],
-  reset() {
-    this.successes = [];
-    this.errors = [];
-  },
-};
-
-mock.module('../utils/feedback', () => ({
-  notify: {
-    success: (msg: string) => mockToasts.successes.push(msg),
-    error: (msg: string) => mockToasts.errors.push(msg),
-    info: () => {},
-  },
-  getFeedbackState: () => ({ alerts: [], toasts: [] }),
-  subscribeFeedback: () => () => {},
-  dismissAlert: () => {},
-  dismissToast: () => {},
-  resetFeedbackState: () => {},
-  Alert: { alert: () => {} },
-}));
-
 mock.module('expo-crypto', () => ({
   randomUUID: () => 'mock-uuid-' + Math.random().toString(36).substring(2, 9),
 }));
@@ -293,7 +270,6 @@ describe('Clinic Calendar Component Suite & 4 UX States Tests', () => {
   beforeEach(() => {
     mockWindowWidth = 1280;
     mockWindowHeight = 800;
-    mockToasts.reset();
   });
 
   // ===========================================================================

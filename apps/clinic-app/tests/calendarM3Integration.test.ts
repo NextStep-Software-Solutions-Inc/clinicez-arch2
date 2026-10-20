@@ -12,7 +12,7 @@
  * 6. Full backward compatibility with preselected patient route params and DoctorRoster modal.
  */
 
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { theme } from '../constants/theme';
@@ -130,43 +130,6 @@ mock.module('../utils/useBreakpoint', () => ({
     isDesktop: mockWindowWidth >= 1024,
     isWide: mockWindowWidth >= 1280,
   }),
-}));
-
-const mockToasts = {
-  successes: [] as string[],
-  errors: [] as string[],
-  reset() {
-    this.successes = [];
-    this.errors = [];
-  },
-};
-
-mock.module('../utils/feedback', () => ({
-  notify: {
-    success: (msg: string) => mockToasts.successes.push(msg),
-    error: (msg: string) => mockToasts.errors.push(msg),
-    info: () => {},
-  },
-  getFeedbackState: () => ({ alerts: [], toasts: [] }),
-  subscribeFeedback: () => () => {},
-  dismissAlert: () => {},
-  dismissToast: () => {},
-  resetFeedbackState: () => {},
-  Alert: { alert: () => {} },
-}));
-
-mock.module('@utils/feedback', () => ({
-  notify: {
-    success: (msg: string) => mockToasts.successes.push(msg),
-    error: (msg: string) => mockToasts.errors.push(msg),
-    info: () => {},
-  },
-  getFeedbackState: () => ({ alerts: [], toasts: [] }),
-  subscribeFeedback: () => () => {},
-  dismissAlert: () => {},
-  dismissToast: () => {},
-  resetFeedbackState: () => {},
-  Alert: { alert: () => {} },
 }));
 
 mock.module('expo-crypto', () => ({
@@ -308,58 +271,65 @@ const sampleAppointments: ExtendedAppointmentItem[] = [
 let mockQueryOptions: any = null;
 let mockRescheduleConflict = false;
 
-mock.module('../services/clinicService', () => ({
-  clinicService: {
-    getAppointments: async (options?: any) => {
-      mockQueryOptions = options;
-      return [sampleAppointments, null];
+const { clinicService } = await import('../services/clinicService');
+
+const origGetAppointments = clinicService.getAppointments;
+const origGetCustomFields = clinicService.getCustomFields;
+const origGetPatients = clinicService.getPatients;
+const origGetPatientById = clinicService.getPatientById;
+const origRescheduleAppointment = clinicService.rescheduleAppointment;
+const origCancelAppointment = clinicService.cancelAppointment;
+const origCheckInPatient = clinicService.checkInPatient;
+const origGetDoctorAvailableSlots = clinicService.getDoctorAvailableSlots;
+
+clinicService.getAppointments = (async (options?: any) => {
+  mockQueryOptions = options;
+  return [sampleAppointments, null];
+}) as any;
+clinicService.getCustomFields = (async () => [[], null]) as any;
+clinicService.getPatients = (async (q: string) => [
+  [
+    {
+      id: 'pat-cassandra',
+      fullName: 'Ambray, Cassandra',
+      patientCode: 'PAT-20261013-3EFFEA',
+      age: 26,
+      gender: 'Female',
+      contactNumber: '09357506035',
     },
-    getCustomFields: async () => [[], null],
-    getPatients: async (q: string) => [
-      [
-        {
-          id: 'pat-cassandra',
-          fullName: 'Ambray, Cassandra',
-          patientCode: 'PAT-20261013-3EFFEA',
-          age: 26,
-          gender: 'Female',
-          contactNumber: '09357506035',
-        },
-      ],
-      null,
-    ],
-    getPatientById: async (id: string) => [
-      {
-        id,
-        fullName: 'Ambray, Cassandra',
-        patientCode: 'PAT-20261013-3EFFEA',
-      },
-      null,
-    ],
-    rescheduleAppointment: async (id: string, payload: any) => {
-      if (mockRescheduleConflict) {
-        return [
-          null,
-          {
-            status: 409,
-            errorCode: 'APPOINTMENT_COLLISION',
-            message: 'Appointment collision detected',
-          },
-        ];
-      }
-      return [{ id, ...payload }, null];
-    },
-    cancelAppointment: async (id: string, reason?: string) => [
-      { id, status: 'Cancelled' },
-      null,
-    ],
-    checkInPatient: async (payload: any) => [
-      { id: 'queue-1', queueNumber: 'Q-042', ...payload },
-      null,
-    ],
-    getDoctorAvailableSlots: async () => [['09:00', '09:30', '10:00'], null],
+  ],
+  null,
+]) as any;
+clinicService.getPatientById = (async (id: string) => [
+  {
+    id,
+    fullName: 'Ambray, Cassandra',
+    patientCode: 'PAT-20261013-3EFFEA',
   },
-}));
+  null,
+]) as any;
+clinicService.rescheduleAppointment = (async (id: string, payload: any) => {
+  if (mockRescheduleConflict) {
+    return [
+      null,
+      {
+        status: 409,
+        errorCode: 'APPOINTMENT_COLLISION',
+        message: 'Appointment collision detected',
+      },
+    ];
+  }
+  return [{ id, ...payload }, null];
+}) as any;
+clinicService.cancelAppointment = (async (id: string, reason?: string) => [
+  { id, status: 'Cancelled' },
+  null,
+]) as any;
+clinicService.checkInPatient = (async (payload: any) => [
+  { id: 'queue-1', queueNumber: 'Q-042', ...payload },
+  null,
+]) as any;
+clinicService.getDoctorAvailableSlots = (async () => [['09:00', '09:30', '10:00'], null]) as any;
 
 // Load screen and exports
 const {
@@ -370,8 +340,18 @@ const {
 } = await import('../navigation/screens/Appointments.screen');
 
 describe('Milestone 3: Screen Integration & Interactive Workflows', () => {
+  afterAll(() => {
+    clinicService.getAppointments = origGetAppointments;
+    clinicService.getCustomFields = origGetCustomFields;
+    clinicService.getPatients = origGetPatients;
+    clinicService.getPatientById = origGetPatientById;
+    clinicService.rescheduleAppointment = origRescheduleAppointment;
+    clinicService.cancelAppointment = origCancelAppointment;
+    clinicService.checkInPatient = origCheckInPatient;
+    clinicService.getDoctorAvailableSlots = origGetDoctorAvailableSlots;
+  });
+
   beforeEach(() => {
-    mockToasts.reset();
     mockQueryOptions = null;
     mockRescheduleConflict = false;
     lastNavigatedRoute = null;

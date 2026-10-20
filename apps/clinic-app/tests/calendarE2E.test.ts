@@ -165,20 +165,6 @@ export const mockNotifications = {
   },
 };
 
-mock.module('@utils/feedback', () => ({
-  notify: {
-    success: (msg: string) => mockNotifications.success(msg),
-    error: (msg: string) => mockNotifications.error(msg),
-    info: (msg: string) => mockNotifications.info(msg),
-  },
-  getFeedbackState: () => ({ alerts: [], toasts: [] }),
-  subscribeFeedback: () => () => {},
-  dismissAlert: () => {},
-  dismissToast: () => {},
-  resetFeedbackState: () => {},
-  Alert: { alert: () => {} },
-}));
-
 // =============================================================================
 // 2. Authoritative Domain Types, Contracts & Calculation Engines
 //    (Derived strictly from ORIGINAL_REQUEST.md and PROJECT.md)
