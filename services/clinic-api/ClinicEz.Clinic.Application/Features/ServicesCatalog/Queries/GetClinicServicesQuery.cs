@@ -35,40 +35,85 @@ public class GetClinicServicesQueryHandler : IRequestHandler<GetClinicServicesQu
 
     public async Task<List<ClinicServiceItemDto>> Handle(GetClinicServicesQuery request, CancellationToken cancellationToken)
     {
-        var hasAnyServices = await _serviceRepo.Query().AnyAsync(cancellationToken);
-
-        // Auto-seed default fee schedule if catalog is empty for this clinic
-        if (!hasAnyServices)
+        ClinicSettings? settings = null;
+        if (_settingsRepo != null)
         {
-            ClinicSettings? settings = null;
-            if (_settingsRepo != null)
-            {
-                settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
-            }
+            settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
+        }
 
-            var specialtyMode = settings?.SpecialtyMode?.Trim();
-            var defaultServices = new List<ClinicServiceItem>();
+        var specialtyMode = settings?.SpecialtyMode?.Trim();
+        bool isDental = string.Equals(specialtyMode, "Dental", StringComparison.OrdinalIgnoreCase);
+        bool isMultiSpecialty = string.Equals(specialtyMode, "MultiSpecialty", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(specialtyMode, "Multi-Specialty", StringComparison.OrdinalIgnoreCase);
 
-            if (string.Equals(specialtyMode, "Dental", StringComparison.OrdinalIgnoreCase))
+        // Fetch all existing services for this clinic, including soft-deleted items to prevent duplicate key violations
+        var allServices = await _serviceRepo.Query()
+            .IgnoreQueryFilters()
+            .Where(s => s.ClinicId == _clinicContext.ClinicId)
+            .ToListAsync(cancellationToken);
+
+        var existingMap = allServices
+            .Where(s => !string.IsNullOrWhiteSpace(s.Code))
+            .GroupBy(s => s.Code.Trim().ToUpperInvariant())
+            .ToDictionary(g => g.Key, g => g.First());
+
+        bool anyCreatedOrRestored = false;
+        var targetDefaults = new List<ClinicServiceItem>();
+
+        if (isDental)
+        {
+            // Dental clinic: ensure all canonical dental presets exist
+            targetDefaults.AddRange(DentalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
+        }
+        else if (isMultiSpecialty)
+        {
+            // Multi-specialty clinic: ensure both general medical and dental presets exist
+            targetDefaults.AddRange(GeneralMedicalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
+            targetDefaults.AddRange(DentalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
+        }
+        else
+        {
+            // Medical or default clinic: if no active services exist at all, seed general medical presets
+            if (!allServices.Any(s => !s.IsDeleted))
             {
-                defaultServices.AddRange(DentalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
+                targetDefaults.AddRange(GeneralMedicalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
             }
-            else if (string.Equals(specialtyMode, "MultiSpecialty", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(specialtyMode, "Multi-Specialty", StringComparison.OrdinalIgnoreCase))
+        }
+
+        foreach (var def in targetDefaults)
+        {
+            var codeUpper = def.Code.Trim().ToUpperInvariant();
+            if (existingMap.TryGetValue(codeUpper, out var existingItem))
             {
-                defaultServices.AddRange(GeneralMedicalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
-                defaultServices.AddRange(DentalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
+                if (existingItem.IsDeleted)
+                {
+                    existingItem.IsDeleted = false;
+                    existingItem.DeletedAt = null;
+                    existingItem.DeletedBy = null;
+                    existingItem.IsActive = true;
+                    anyCreatedOrRestored = true;
+                }
             }
             else
             {
-                defaultServices.AddRange(GeneralMedicalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
+                def.Id = def.Id == Guid.Empty ? Guid.NewGuid() : def.Id;
+                await _serviceRepo.AddAsync(def, cancellationToken);
+                existingMap[codeUpper] = def;
+                allServices.Add(def);
+                anyCreatedOrRestored = true;
             }
+        }
 
-            foreach (var svc in defaultServices)
+        if (anyCreatedOrRestored)
+        {
+            try
             {
-                await _serviceRepo.AddAsync(svc, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
             }
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            catch (DbUpdateException)
+            {
+                // Idempotent concurrency safety: another thread/request committed concurrently
+            }
         }
 
         var query = _serviceRepo.Query();
