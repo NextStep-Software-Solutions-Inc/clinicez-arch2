@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-19T09:05:00Z
+# BRIEFING — 2026-10-20T02:26:31Z
 
 ## Mission
-Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-api`, `apps/clinic-app`, and `apps/portal-web`), strictly governed by `clinicez-ui-ux-expert` and `clinicez-search-provider-expert`, and coordinated with the active Clinic Workspace Global Search implementation.
+Implement a production-ready, interactive, multi-provider Clinic Calendar feature in apps/clinic-app rooted in @clinicez/design-tokens, featuring Month, Week, Day, and Agenda views, 1-click slot booking, arrival check-in routing, appointment rescheduling, doctor shift overlays, and date-range filtering in services/clinic-api.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -28,6 +28,12 @@ Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-
 - Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
 - Victory Auditor (victory_auditor_16): 663db1e1-f744-4c32-92a7-3991c2f398c0
 - Cleaned up: task-30 killed, task-32 killed, all subagents killed
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_1): 7535da92-2247-4cf9-b2de-2da99510b734
+- Active Crons: task-42 (Progress Reporting), task-44 (Liveness Check)
+- Victory Auditor: to be spawned on victory claim
+- Victory Auditor (sentinel_victory_auditor_1): 37257064-2a05-4f54-866e-23bb0cc9afe4
+- Cleaned up: task-42 killed, task-44 killed, all subagents killed
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -87,32 +93,44 @@ Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-
 - R3: Clean, jargon-free UI in Consultation (InlineDentalChartCard) & Patient Chart (DentalChartTab), Settings UI, design tokens
 - R4: Pluggable search integration
 - Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
+- Route to General (`teamwork_preview_orchestrator`) for multi-provider Clinic Calendar feature across apps/clinic-app & services/clinic-api
+- Multi-Mode Clinic Calendar Component Suite strictly consuming semantic tokens from @clinicez/design-tokens (zero raw hex, zero direct palette.ts imports)
+- Explicit implementation of 4 core UI/UX states in every view: Skeleton loader, Empty state with CTA, Error state with retry, Active data state
+- Visual clinical urgency encoding via semantic badges and borders: STAT/Emergency (red), Urgent (orange), Routine (teal), Checked-In (green), Completed (muted), Cancelled (strikethrough)
+- Interactive slot booking (pre-filled modal on empty slot click in Week/Day), card inspection drawer, rescheduling modal (AppointmentRescheduleModal with conflict detection), and 1-click arrival check-in via QueueRoutingSelector
+- Multi-provider Day timeline on workstation (>=1024px) with doctor shift overlays (working hours vs break times vs on-leave blackout intervals)
+- Mobile (<768px) responsive adaptation: agenda timeline + compact 7-day carousel
+- Backend GetAppointmentsQuery.cs & AppointmentsController.cs support startDate, endDate, doctorId without breaking backward compatibility
+- Full backward compatibility in Appointments.screen.tsx (route params, workstation shortcut 4, search contributor routes)
+- Automated verification: typecheck passes, bun test passes with 0 failures, existing regression tests pass
+- Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
 
 ## User Context
-- **Last user request**: Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-api`, `apps/clinic-app`, and `apps/portal-web`), strictly governed by project skills `clinicez-ui-ux-expert` and `clinicez-search-provider-expert`, and coordinated with the active Clinic Workspace Global Search implementation.
+- **Last user request**: Implement a production-ready, interactive, multi-provider Clinic Calendar feature in apps/clinic-app rooted in @clinicez/design-tokens, featuring Month, Week, Day, and Agenda views, 1-click slot booking, arrival check-in routing, appointment rescheduling, doctor shift overlays, and date-range filtering in services/clinic-api.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded request verbatim to `ORIGINAL_REQUEST.md` (`## 2026-10-19T05:00:54Z`).
-  - Executed Milestones MA, MB, MC, MD under `orchestrator_16`.
-  - Independent 3-phase victory audit conducted by `victory_auditor_16` resulting in `VICTORY CONFIRMED`.
-  - Cleaned up background crons and swarm agents.
+  - Appended request verbatim to `ORIGINAL_REQUEST.md` (`## 2026-10-20T02:26:31Z`).
+  - Clinic Calendar feature fully implemented across `services/clinic-api` and `apps/clinic-app`.
+  - All milestones passed gates unanimously (Track-E2E, M1, M2, M3, M4).
+  - Independent Victory Audit completed: **VICTORY CONFIRMED**.
+  - All monitoring crons and subagents cleaned up.
 
 ## Project Status
 - **Phase**: complete
 - **Route**: General -> teamwork_preview_orchestrator
-- **Active Subagents**: none (all killed)
-- **Active Tasks**: none (all killed)
+- **Active Subagents**: none (cleaned up)
+- **Active Tasks**: none (cleaned up)
 
 ## Victory Audit Status
 - **Triggered**: yes
 - **Verdict**: VICTORY CONFIRMED
-- **Auditor Conv ID**: 663db1e1-f744-4c32-92a7-3991c2f398c0
 - **Retry count**: 0
 
 ## Artifact Index
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel briefing memory
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel briefing archive
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/handoff.md — Sentinel handoff report
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_16/handoff.md — Orchestrator 16 final handoff report
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_16/handoff.md — Victory Auditor 16 report (VICTORY CONFIRMED)
+- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
+- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/sentinel/BRIEFING.md — Sentinel briefing memory
+- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel briefing archive
+- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/sentinel/handoff.md — Sentinel handoff report
+- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/orchestrator_1/progress.md — Orchestrator progress tracking
+- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/orchestrator_1/handoff.md — Orchestrator hard handoff
+- /Users/macuser/projects/github/nextstep/clinicez-calendar/.agents/teamwork/sentinel_victory_auditor_1/handoff.md — Independent post-victory audit report (VICTORY CONFIRMED)

@@ -1231,3 +1231,64 @@ Reference skills:
 - [ ] Zero raw hex color literals or direct `palette.ts` imports exist in any new or modified `.tsx`/`.ts` files.
 - [ ] `bun test` passes for `packages/design-tokens`, `packages/shared-ts`, and `apps/clinic-app`.
 - [ ] UI labels are concise and free of technical jargon; existing Room assignment, Prescriptions, Certificates, and Lab Orders work seamlessly for dental encounters.
+
+
+## 2026-10-20T02:26:31Z
+
+Implement a production-ready, interactive, multi-provider Clinic Calendar feature in apps/clinic-app rooted in @clinicez/design-tokens, featuring Month, Week, Day, and Agenda views, 1-click slot booking, arrival check-in routing, appointment rescheduling, doctor shift overlays, and date-range filtering in services/clinic-api.
+
+Working directory: /Users/macuser/projects/github/nextstep/clinicez-calendar
+Integrity mode: development
+
+## Requirements
+
+### R1. Multi-Mode Clinic Calendar Component Suite (@clinicez/design-tokens)
+Build an interactive calendar component suite in apps/clinic-app/components/calendar/ supporting Month, Week, Day, and Agenda/List views.
+The calendar must strictly consume semantic tokens from @clinicez/design-tokens (via theme.colors), with zero raw hex codes or direct palette.ts imports.
+Every view must explicitly implement the 4 core UI/UX states:
+- Skeleton loading state with shimmering cells (skeletonBase / skeletonHighlight) matching the calendar grid layout.
+- Contextual empty state (EmptyState with calendar icon, explanatory text, and primary Book appointment CTA).
+- Actionable error state (ErrorState with retry button).
+- Active state with immediate visual confirmation toasts (notify.success).
+All appointment chips and cards must visually encode clinical urgency using semantic badges and borders: STAT/Emergency (red), Urgent (orange), Routine (teal), Checked-In (green), Completed (muted), and Cancelled (strikethrough).
+
+### R2. Interactive Slot Booking, Rescheduling & Workstation Quick Actions
+Enable clinical desk staff and doctors to:
+- Click any empty time slot in Week or Day views to launch the appointment booking modal with the selected Date, Time, and Provider pre-filled.
+- Click any scheduled appointment card to open an inspection drawer/modal displaying patient demographics, attending physician, room assignment, reason for visit, and notes.
+- Reschedule an appointment via a dedicated modal (AppointmentRescheduleModal) with date/time pickers and reason input, calling clinicService.rescheduleAppointment(id, payload) with conflict detection.
+- Fast-track patient arrival with a 1-click Check In action directly into the clinic queue, confirming doctor and room assignment via QueueRoutingSelector.
+
+### R3. Multi-Provider Workstation Day Timeline & Doctor Schedule Overlays
+On desktop workstation screens (>=1024px), Day View must support a multi-provider layout where active clinic physicians appear in side-by-side columns against a unified time axis (07:00 to 19:00 with 30-minute intervals).
+Display doctor shift schedule templates (working hours vs break times vs on-leave blackout intervals) so staff immediately see when each physician is available or off-duty.
+On mobile screens (<768px), seamlessly adapt to an agenda timeline paired with a compact 7-day date selector carousel to prevent horizontal crowding.
+
+### R4. Optimized Server-Side Date-Range & Provider Filtering in services/clinic-api
+Enhance GetAppointmentsQuery.cs and AppointmentsController.cs in services/clinic-api to accept optional startDate, endDate, and doctorId query parameters alongside existing date and status, filtering efficiently in PostgreSQL via EF Core without breaking backward compatibility.
+Update apps/clinic-app/services/clinicService.ts to support passing date ranges and doctor IDs to getAppointments().
+
+### R5. Integration into Appointments.screen.tsx & Workstation Navigation
+Unify the new Calendar views with the existing Appointment List in apps/clinic-app/navigation/screens/Appointments.screen.tsx using a clean SegmentedControl view switcher (Month, Week, Day, Agenda).
+Ensure full backward compatibility with all existing route parameters (patientId, patientName, patientCode, date), workstation shortcuts (key 4), search contributor routes, and existing test suites.
+
+## Acceptance Criteria
+
+### Token Compliance & UI/UX Standards
+- [ ] Zero hardcoded hex values (#...) or direct palette.ts imports exist in any newly added or modified .ts / .tsx files.
+- [ ] cd apps/clinic-app && bun apps/clinic-app/scripts/check-tokens.mjs reports 0 violations and passes cleanly.
+- [ ] Urgency levels are visually encoded using semantic tokens: emergency for STAT, urgent for Urgent, and routine/primary for Routine.
+- [ ] All 4 interaction states (Skeleton loader, Empty state with CTA, Error state with retry, Active data) are explicitly implemented and verified.
+- [ ] Responsive parity verified: Desktop Workstation (>=1024px), Tablet (768-1023px), and Mobile (<768px).
+
+### Calendar Functionality & Desk Workflows
+- [ ] Month View calculates correct 7-column Gregorian calendar grids across month transitions, short months, and leap years adhering to Asia/Manila time.
+- [ ] Week View renders a 7-day time matrix (07:00 - 19:00) with appointment blocks correctly positioned by scheduled time.
+- [ ] Day View renders side-by-side multi-provider columns on workstation widths and overlays doctor shift templates.
+- [ ] Clicking an empty slot opens the booking modal pre-populated with that date, time, and doctor.
+- [ ] Appointment cards support 1-click inspection, arrival check-in, and rescheduling via clinicService.rescheduleAppointment.
+
+### Automated Verification
+- [ ] cd apps/clinic-app && bun run typecheck passes with 0 TypeScript errors.
+- [ ] cd apps/clinic-app && bun test tests passes with 0 failures, including new comprehensive calendar view tests.
+- [ ] Existing appointment regression tests pass: bun test apps/clinic-app/tests/appointmentsPreselectBooking.test.ts and rosterEdgeStates.test.ts.

@@ -365,6 +365,20 @@ export interface AppointmentItem {
   createdAt: string;
 }
 
+export interface GetAppointmentsOptions {
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+  doctorId?: string;
+  status?: AppointmentStatus;
+}
+
+export interface RescheduleAppointmentRequest {
+  newScheduledAt: string;
+  durationMinutes?: number;
+  reason?: string;
+}
+
 export interface DoctorBreakTimeItem {
   id?: string;
   description: string;
@@ -2088,10 +2102,24 @@ export const clinicService = {
   },
 
   // Appointments
-  async getAppointments(date?: string, status?: AppointmentStatus) {
+  async getAppointments(
+    paramsOrDate?: string | GetAppointmentsOptions,
+    status?: AppointmentStatus
+  ) {
     const params = new URLSearchParams();
-    if (date) params.append('date', date);
-    if (status) params.append('status', status);
+    if (typeof paramsOrDate === 'string') {
+      if (paramsOrDate) params.append('date', paramsOrDate);
+      if (status) params.append('status', status);
+    } else if (paramsOrDate && typeof paramsOrDate === 'object') {
+      if (paramsOrDate.date) params.append('date', paramsOrDate.date);
+      if (paramsOrDate.startDate) params.append('startDate', paramsOrDate.startDate);
+      if (paramsOrDate.endDate) params.append('endDate', paramsOrDate.endDate);
+      if (paramsOrDate.doctorId) params.append('doctorId', paramsOrDate.doctorId);
+      const effectiveStatus = paramsOrDate.status || status;
+      if (effectiveStatus) params.append('status', effectiveStatus);
+    } else if (status) {
+      params.append('status', status);
+    }
     const qs = params.toString();
     return clinicApiClient.get<AppointmentItem[]>(`/appointments${qs ? `?${qs}` : ''}`);
   },
@@ -2732,11 +2760,7 @@ export const clinicService = {
     return clinicApiClient.post<AppointmentItem>('/appointments', payload);
   },
 
-  async rescheduleAppointment(id: string, payload: {
-    newScheduledAt: string;
-    durationMinutes?: number;
-    reason?: string;
-  }) {
+  async rescheduleAppointment(id: string, payload: RescheduleAppointmentRequest) {
     return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/reschedule`, payload);
   },
 
