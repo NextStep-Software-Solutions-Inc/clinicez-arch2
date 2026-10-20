@@ -357,6 +357,60 @@ export default function EncountersTimelineTab({
                         </View>
                       ) : null}
 
+                      {/* Dental Findings & Procedures Summary Section */}
+                      {Boolean(
+                        ((enc as any).dentalFindings && (enc as any).dentalFindings.length > 0) ||
+                        ((enc as any).procedures && (enc as any).procedures.some((p: any) => p.toothNumber != null))
+                      ) && (
+                        <View style={styles.dentalSummaryBlock} testID={`encounter-dental-summary-${enc.id}`}>
+                          <View style={styles.dentalSummaryHeader}>
+                            <Icon name="medical" size={14} color={theme.colors.primaryDark} />
+                            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                              DENTAL FINDINGS & PROCEDURES
+                            </ThemedText>
+                          </View>
+                          <View style={styles.dentalSummaryContent}>
+                            {(enc as any).dentalFindings?.map((tooth: any, idx: number) => {
+                              const toothLabel = `Tooth #${tooth.toothNumber}${tooth.surface ? ` (${tooth.surface})` : ''} - ${tooth.status}`;
+                              return (
+                                <View key={`dental-finding-${enc.id}-${idx}`} style={styles.dentalFindingRow}>
+                                  <Badge
+                                    label={toothLabel}
+                                    variant={tooth.status === 'Healthy' ? 'success' : 'warning'}
+                                    size="sm"
+                                  />
+                                  {tooth.notes ? (
+                                    <ThemedText variant="caption" color={theme.colors.textSecondary} numberOfLines={1}>
+                                      {tooth.notes}
+                                    </ThemedText>
+                                  ) : null}
+                                  {tooth.recordedBy ? (
+                                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                      • Dr. {String(tooth.recordedBy).replace(/^Dr\.\s*/, '')}
+                                    </ThemedText>
+                                  ) : null}
+                                </View>
+                              );
+                            })}
+                            {(enc as any).procedures
+                              ?.filter((p: any) => p.toothNumber != null)
+                              .map((proc: any, idx: number) => (
+                                <View key={`dental-proc-${enc.id}-${idx}`} style={styles.dentalProcRow}>
+                                  <Badge
+                                    label={`Tooth #${proc.toothNumber}${proc.toothSurface ? ` (${proc.toothSurface})` : ''}`}
+                                    variant="purple"
+                                    size="sm"
+                                  />
+                                  <ThemedText variant="captionBold" color={theme.colors.text}>
+                                    {proc.procedureName || proc.name}
+                                  </ThemedText>
+                                  {proc.status ? <Badge label={proc.status} variant="neutral" size="sm" /> : null}
+                                </View>
+                              ))}
+                          </View>
+                        </View>
+                      )}
+
                       {/* Action Bar */}
                       <View style={styles.actionBar}>
                         {onViewPrescriptionSlip ? (
@@ -626,5 +680,34 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.borderLight,
     gap: 2,
+  },
+  dentalSummaryBlock: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.sm,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  dentalSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  dentalSummaryContent: {
+    gap: theme.spacing.xs,
+  },
+  dentalFindingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  dentalProcRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
   },
 });

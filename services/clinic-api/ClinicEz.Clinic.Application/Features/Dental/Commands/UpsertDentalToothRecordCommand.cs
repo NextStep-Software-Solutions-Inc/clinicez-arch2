@@ -19,7 +19,8 @@ public sealed record UpsertDentalToothRecordCommand(
     ToothStatus Status,
     string? Surface = null,
     string? Notes = null,
-    Guid? ConsultationId = null
+    Guid? ConsultationId = null,
+    bool RemoveCondition = false
 ) : IRequest<DentalToothRecordDto>;
 
 public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<UpsertDentalToothRecordCommand, DentalToothRecordDto>
@@ -61,14 +62,146 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
         }
 
         var patientName = $"{patient.LastName}, {patient.FirstName}".Trim();
+        var staffName = _clinicContext.StaffName ?? "Staff";
 
+        // Case 1: Explicit removal of a condition on this tooth
+        if (request.RemoveCondition)
+        {
+            var conditionRecords = await _toothRepo
+                .Query(t => t.ClinicId == _clinicContext.ClinicId
+                         && t.PatientId == request.PatientId
+                         && t.ToothNumber == request.ToothNumber
+                         && t.Status == request.Status
+                         && !t.IsDeleted)
+                .ToListAsync(ct);
+
+            foreach (var record in conditionRecords)
+            {
+                record.IsDeleted = true;
+                record.DeletedAt = DateTime.UtcNow;
+                record.DeletedBy = staffName;
+                _toothRepo.Update(record);
+            }
+
+            await _unitOfWork.SaveChangesAsync(ct);
+
+            var deletedRecord = conditionRecords.FirstOrDefault();
+            return new DentalToothRecordDto(
+                deletedRecord?.Id ?? Guid.NewGuid(),
+                _clinicContext.TenantId,
+                _clinicContext.ClinicId,
+                request.PatientId,
+                request.ConsultationId,
+                request.ToothNumber,
+                request.Status,
+                normalizedSurface,
+                request.Notes,
+                deletedRecord?.CreatedAt ?? DateTime.UtcNow,
+                DateTime.UtcNow,
+                patientName,
+                staffName
+            );
+        }
+
+        // Case 2: Marking tooth as Healthy (clears all active non-healthy conditions on this tooth)
+        if (request.Status == ToothStatus.Healthy)
+        {
+            var activeConditions = await _toothRepo
+                .Query(t => t.ClinicId == _clinicContext.ClinicId
+                         && t.PatientId == request.PatientId
+                         && t.ToothNumber == request.ToothNumber
+                         && !t.IsDeleted)
+                .ToListAsync(ct);
+
+            foreach (var cond in activeConditions.Where(c => c.Status != ToothStatus.Healthy))
+            {
+                cond.IsDeleted = true;
+                cond.DeletedAt = DateTime.UtcNow;
+                cond.DeletedBy = staffName;
+                _toothRepo.Update(cond);
+            }
+
+            var healthyRecord = activeConditions.FirstOrDefault(c => c.Status == ToothStatus.Healthy);
+            if (healthyRecord != null)
+            {
+                healthyRecord.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+                if (request.ConsultationId.HasValue)
+                {
+                    healthyRecord.ConsultationId = request.ConsultationId.Value;
+                }
+                healthyRecord.PatientName = patientName;
+                healthyRecord.UpdatedAt = DateTime.UtcNow;
+                healthyRecord.UpdatedBy = staffName;
+                _toothRepo.Update(healthyRecord);
+            }
+            else
+            {
+                healthyRecord = new DentalToothRecord
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    PatientId = request.PatientId,
+                    PatientName = patientName,
+                    ConsultationId = request.ConsultationId,
+                    ToothNumber = request.ToothNumber,
+                    Status = ToothStatus.Healthy,
+                    Surface = null,
+                    Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = staffName
+                };
+                await _toothRepo.AddAsync(healthyRecord, ct);
+            }
+
+            await _unitOfWork.SaveChangesAsync(ct);
+
+            return new DentalToothRecordDto(
+                healthyRecord.Id,
+                healthyRecord.TenantId,
+                healthyRecord.ClinicId,
+                healthyRecord.PatientId,
+                healthyRecord.ConsultationId,
+                healthyRecord.ToothNumber,
+                healthyRecord.Status,
+                healthyRecord.Surface,
+                healthyRecord.Notes,
+                healthyRecord.CreatedAt,
+                healthyRecord.UpdatedAt,
+                healthyRecord.PatientName,
+                healthyRecord.UpdatedBy ?? healthyRecord.CreatedBy
+            );
+        }
+
+        // Case 3: Saving non-healthy condition (Decay, Filled, Crown, Extraction, Missing)
+        // Step A: Soft-delete any active Healthy placeholder records on this tooth
+        var healthyPlaceholders = await _toothRepo
+            .Query(t => t.ClinicId == _clinicContext.ClinicId
+                     && t.PatientId == request.PatientId
+                     && t.ToothNumber == request.ToothNumber
+                     && t.Status == ToothStatus.Healthy
+                     && !t.IsDeleted)
+            .ToListAsync(ct);
+
+        foreach (var h in healthyPlaceholders)
+        {
+            h.IsDeleted = true;
+            h.DeletedAt = DateTime.UtcNow;
+            h.DeletedBy = staffName;
+            _toothRepo.Update(h);
+        }
+
+        // Step B: Match active record for this specific condition: (ClinicId, PatientId, ToothNumber, Status)
         var existing = await _toothRepo
-            .Query(t => t.ClinicId == _clinicContext.ClinicId && t.PatientId == request.PatientId && t.ToothNumber == request.ToothNumber && !t.IsDeleted)
+            .Query(t => t.ClinicId == _clinicContext.ClinicId
+                     && t.PatientId == request.PatientId
+                     && t.ToothNumber == request.ToothNumber
+                     && t.Status == request.Status
+                     && !t.IsDeleted)
             .FirstOrDefaultAsync(ct);
 
         if (existing != null)
         {
-            existing.Status = request.Status;
             existing.Surface = normalizedSurface;
             existing.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
             if (request.ConsultationId.HasValue)
@@ -77,7 +210,7 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
             }
             existing.PatientName = patientName;
             existing.UpdatedAt = DateTime.UtcNow;
-            existing.UpdatedBy = _clinicContext.StaffName ?? "Staff";
+            existing.UpdatedBy = staffName;
             _toothRepo.Update(existing);
         }
         else
@@ -95,7 +228,7 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
                 Surface = normalizedSurface,
                 Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
                 CreatedAt = DateTime.UtcNow,
-                CreatedBy = _clinicContext.StaffName ?? "Staff"
+                CreatedBy = staffName
             };
             await _toothRepo.AddAsync(existing, ct);
         }
@@ -114,7 +247,8 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
             existing.Notes,
             existing.CreatedAt,
             existing.UpdatedAt,
-            existing.PatientName
+            existing.PatientName,
+            existing.UpdatedBy ?? existing.CreatedBy
         );
     }
 

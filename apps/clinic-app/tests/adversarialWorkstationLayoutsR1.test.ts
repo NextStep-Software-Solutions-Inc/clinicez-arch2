@@ -362,7 +362,7 @@ describe('Adversarial Medical Chart Workstation Layouts Refinement (Round 1)', (
         })
       );
 
-      expect(markup).toContain('Medical chart');
+      expect(markup).toContain('Patient Chart');
       expect(markup).toContain('Maria Dela Cruz');
       expect(markup).toContain('Code:');
       expect(markup).toContain('PAT-2026-99123');

@@ -20,7 +20,8 @@ public sealed record DentalToothRecordDto(
     string? Notes,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    string? PatientName = null
+    string? PatientName = null,
+    string? RecordedBy = null
 );
 
 /// <summary>
@@ -33,7 +34,8 @@ public sealed record DentalSummaryDto(
     int FilledCount,
     int MissingCount,
     int CrownCount,
-    int ExtractionCount
+    int ExtractionCount,
+    int? DmftIndex = null
 );
 
 /// <summary>
@@ -43,7 +45,8 @@ public sealed record ToothRecordInput(
     int ToothNumber,
     ToothStatus Status,
     string? Surface = null,
-    string? Notes = null
+    string? Notes = null,
+    bool RemoveCondition = false
 );
 
 /// <summary>

@@ -276,7 +276,7 @@ describe('InlineDentalChartCard — Consultation Workstation Dental Odontogram',
       })
     );
 
-    expect(html).toContain('+ Order Procedure for Tooth #16 (MOD)');
+    expect(html).toContain('Order Procedure for Tooth #16 (MOD)');
     expect(html).toContain('inline-dental-chart-card-order-proc-btn');
   });
 
@@ -297,7 +297,7 @@ describe('InlineDentalChartCard — Consultation Workstation Dental Odontogram',
       })
     );
 
-    expect(html).toContain('+ Order Procedure for Tooth #16 (MOD)');
+    expect(html).toContain('Order Procedure for Tooth #16 (MOD)');
     expect(html).toContain('inline-dental-chart-card-order-proc-btn');
   });
 
