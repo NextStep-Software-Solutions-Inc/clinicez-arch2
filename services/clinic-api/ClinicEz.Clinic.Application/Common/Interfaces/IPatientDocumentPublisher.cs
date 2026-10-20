@@ -35,14 +35,3 @@ public interface IPatientDocumentPublisher
     Task<bool> PublishAsync(PatientDocumentDraft draft, CancellationToken ct);
 }
 
-/// <summary>
-/// Creates the hub claim for a requisition or prescription the patient carries to a laboratory/pharmacy. The claim token
-/// printed on the slip lets any ClinicEZ facility of that type take the order; the issuer is the clinic, the patient
-/// is the consent broker.
-/// </summary>
-public interface IClaimSlipService
-{
-    Task<ClaimSlipResult> CreateLabClaimAsync(LabRequisitionIssuedEvent requisition, CancellationToken ct);
-
-    Task<ClaimSlipResult> CreateRxClaimAsync(PrescriptionIssuedEvent prescription, CancellationToken ct);
-}
