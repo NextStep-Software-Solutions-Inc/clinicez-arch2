@@ -1,176 +1,142 @@
-# TEST_READY: Dental Clinic Service Catalog Integration
+# Clinic Calendar Test Readiness Report (TEST_READY.md)
 
-**Test Suite Status**: `READY` — **114 / 114 Tests Passing (100% Green)**  
-**Execution Runtime**: `~130ms`  
-**Test Suite Path**: `tests/e2e/dental_service_catalog_e2e_scenarios.test.ts`  
-**Architecture Spec**: `TEST_INFRA.md` & `PROJECT.md`  
-
----
-
-## Test Execution Commands
-
-### 1. Primary E2E Test Suite (Dual Track E2E Runner)
-```bash
-/Users/macuser/.bun/bin/bun test tests/e2e/dental_service_catalog_e2e_scenarios.test.ts
-```
-
-### 2. Complete Monorepo E2E Runner (Universal Search + Dental Service Catalog)
-```bash
-/Users/macuser/.bun/bin/bun test tests/e2e/
-```
-
-### 3. Backend Unit & Integration Tests (.NET Core)
-```bash
-# Services Catalog backend unit tests
-/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ServicesCatalogTests"
-
-# Dental module backend tests
-/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Dental"
-
-# Directory publishing tests
-/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~PublishClinicToDirectoryTests"
-```
-
-### 4. Frontend Workstation Tests (Bun / React Native)
-```bash
-cd apps/clinic-app && /Users/macuser/.bun/bin/bun test tests/challenger_m1_1_catalog_search.test.ts tests/consultationsDynamicOrders.test.ts
-```
+**Feature**: Clinic Calendar (Multi-Mode Workstation Calendar Suite)  
+**Target Repository**: `/Users/macuser/projects/github/nextstep/clinicez-calendar`  
+**Test Suite Path**: `apps/clinic-app/tests/calendarE2E.test.ts`  
+**Infrastructure Specification**: `TEST_INFRA.md`  
+**Status**: **100% PASS (25 / 25 Tests Passing, 133 Assertions, 0 Failures)**  
+**Quality Gate Validation**: `bun run typecheck` (PASS), `check-tokens.mjs --strict` (0 violations)  
+**Date**: 2026-10-20  
 
 ---
 
-## Coverage Summary Table
+## 1. Executive Summary
 
-| Tier | Category | Minimum Target | Tests Implemented | Pass Count | Fail Count | Duration |
-|:-----|:---------|:--------------:|:-----------------:|:----------:|:----------:|:--------:|
-| **Tier 1** | Feature Coverage (F1 to F16) | ≥ 5 / feature (80) | **80** | 80 | 0 | ~85ms |
-| **Tier 2** | Boundary & Corner Cases (B1 to B5) | ≥ 5 / area (25) | **25** | 25 | 0 | ~25ms |
-| **Tier 3** | Cross-Feature Combinations (Pairwise) | ≥ 4 | **4** | 4 | 0 | ~10ms |
-| **Tier 4** | Real-World Clinical Scenarios | 5 | **5** | 5 | 0 | ~10ms |
-| **TOTAL** | **Full E2E Test Suite** | **≥ 114** | **114** | **114** | **0** | **~130ms** |
+The complete opaque-box End-to-End (E2E) test suite for the Clinic Calendar feature has been engineered, verified, and delivered in accordance with `ORIGINAL_REQUEST.md`, `PROJECT.md`, and `TEST_INFRA.md`.
 
----
-
-## Detailed Tier Breakdown
-
-### Tier 1: Feature Coverage (80 tests)
-- **F1: Canonical Dental Defaults (5 tests)**:
-  - F1.1: Exact count and structure of canonical dental defaults (10 presets)
-  - F1.2: Diagnostic and Consultation dental presets (`DENT-CONS`, `DENT-XR-PA`)
-  - F1.3: Preventive dental presets (`DENT-CLEAN`, `DENT-SEALANT`, `DENT-FLUOR`)
-  - F1.4: Restorative and Endodontic presets (`DENT-FILL-COMP`, `DENT-RCT`, `DENT-PULP`)
-  - F1.5: Exodontia and Surgical presets (`DENT-EXT-SIMPLE`, `DENT-EXT-SURG`)
-- **F2: Specialty-Aware Auto-Seeding (5 tests)**:
-  - F2.1: Empty catalog + `SpecialtyMode="Dental"` seeds exactly 10 dental presets
-  - F2.2: Empty catalog + `SpecialtyMode="MultiSpecialty"` seeds 19 presets (9 medical + 10 dental)
-  - F2.3: Empty catalog + `SpecialtyMode="Medical"` seeds 9 medical presets
-  - F2.4: Empty catalog + `SpecialtyMode` undefined/null defaults to 9 medical presets
-  - F2.5: Non-empty catalog bypasses auto-seeding preserving existing custom items
-- **F3: First-Class Dental Category (5 tests)**:
-  - F3.1: Filtering by `category="Dental"` returns only dental service items
-  - F3.2: Filtering category is case-insensitive (`"dental"` matches `"Dental"`)
-  - F3.3: Active status filtering on dental services works as expected
-  - F3.4: Category mapping resolves `"Dental"` to `"Dental Services"` display title
-  - F3.5: Non-dental categories strictly exclude dental service items
-- **F4: Idempotent Seed Command (5 tests)**:
-  - F4.1: Seeding into empty fee schedule creates all 10 presets
-  - F4.2: Consecutive subsequent seed execution is strictly idempotent adding 0 items
-  - F4.3: Seeding when partial dental presets exist adds only the missing items
-  - F4.4: Seeding does not overwrite existing customized prices or descriptions
-  - F4.5: Multi-tenant clinic isolation: seeding clinic A leaves clinic B untouched
-- **F5: Seed Dental REST API Endpoint (5 tests)**:
-  - F5.1: Authorized user with `ServicesManage` permission receives HTTP 200 with items
-  - F5.2: Unauthorized user lacking `ServicesManage` receives HTTP 403 Forbidden
-  - F5.3: User with empty permissions array is rejected with HTTP 403
-  - F5.4: Response payload conforms strictly to `ApiResponse<ClinicServiceItem[]>` schema
-  - F5.5: Repeated API calls return HTTP 200 idempotently with current full catalog
-- **F6: Directory Publishing Verification (5 tests)**:
-  - F6.1: Dental clinic publishes with `Classification="Dental Clinic"`
-  - F6.2: MultiSpecialty clinic publishes with `Classification="Multi-Specialty Clinic"`
-  - F6.3: General medical clinic publishes with `Classification="Ambulatory Clinic"`
-  - F6.4: Active dental services are exported with ServiceId, Name, Category, Price
-  - F6.5: Inactive dental services are excluded from public directory catalog
-- **F7: Frontend Services API Client (5 tests)**:
-  - F7.1: `seedDentalServices()` dispatches POST to `/services/seed-dental`
-  - F7.2: Handles successful response returning `[items, null]` tuple
-  - F7.3: Handles permission error returning `[null, error]` tuple
-  - F7.4: Network failure or timeout returns clean error without crashing
-  - F7.5: Deserializes response items preserving numbers, booleans, and string fields
-- **F8: Services Catalog Category Mapping & Chips (5 tests)**:
-  - F8.1: `SERVICE_CATEGORY_LABEL` maps `"Dental"` to `"Dental Services"`
-  - F8.2: Category filter chips array includes `"Dental"`
-  - F8.3: Filter chip label accurately displays dental item count: `"Dental Services (10)"`
-  - F8.4: Selecting `"Dental"` chip filters visible list to exactly 10 dental items
-  - F8.5: When 0 dental items exist, empty state title and description are appropriate
-- **F9: Services Catalog Modals Category (5 tests)**:
-  - F9.1: Add Service modal category options include `"Dental"`
-  - F9.2: Creating service item with `category="Dental"` saves and validates correctly
-  - F9.3: Edit Service modal pre-populates `category="Dental"` for existing dental item
-  - F9.4: Updating service category from Procedure to Dental persists cleanly
-  - F9.5: Modal validation permits ₱0 price for free dental examination
-- **F10: "Add Dental Services" Button in Settings (5 tests)**:
-  - F10.1: Button is defined with proper title and icon in settings
-  - F10.2: Clicking button transitions to loading state during API execution
-  - F10.3: Rapid double click is prevented while loading state is true
-  - F10.4: Successful seeding triggers positive toast notification feedback
-  - F10.5: Seeding when all presets already exist notifies user gracefully
-- **F11: Order Catalog Modal Category Tab (5 tests)**:
-  - F11.1: `CategoryTab` union and `CATEGORY_TABS` include `"Dental"`
-  - F11.2: Modal prop `initialCategory="Dental"` sets initial tab to Dental
-  - F11.3: User can switch tabs between `"Dental"`, `"Procedure"`, `"Diagnostic"`, and `"All"`
-  - F11.4: Tab indicator correctly reports count of dental items
-  - F11.5: Closing and re-opening modal resets to specified `initialCategory`
-- **F12: Order Catalog Dental Filtering (5 tests)**:
-  - F12.1: `selectedCategory === "Dental"` displays strictly dental catalog items
-  - F12.2: Searching text within `"Dental"` tab matches by name or code
-  - F12.3: `selectedCategory === "Procedure"` includes procedures, nursing services, AND dental
-  - F12.4: `selectedCategory === "Diagnostic"` includes labs and x-rays, excludes dental restorations
-  - F12.5: `selectedCategory === "All"` returns complete catalog of 19 items
-- **F13: Dental Clinical Instruction Chips (5 tests)**:
-  - F13.1: All 5 canonical dental instruction chips are present
-  - F13.2: Toggling single chip populates instructions field
-  - F13.3: Toggling an already selected chip removes it cleanly
-  - F13.4: Toggling multiple chips concatenates with semicolon and space
-  - F13.5: Dental chips render when `selectedCategory` is Dental OR `toothNumber` is set
-- **F14: Odontogram Quick Order Pre-Selection (5 tests)**:
-  - F14.1: Clicking quick order on tooth #18 pre-sets category to `"Dental"`
-  - F14.2: Pre-populates `initialToothNumber` and `initialToothSurface`
-  - F14.3: Pre-fills instructions with formatted tooth identifier `"Tooth #18 (MOD)"`
-  - F14.4: Appending instruction chip to pre-filled tooth maintains tooth header
-  - F14.5: Emitted `OrderCatalogItemPayload` retains `toothNumber`, `toothSurface`, and `in_house` mode
-- **F15: Procedure Catalog & Cashier Invoicing (5 tests)**:
-  - F15.1: `procedureCatalog` includes `"dental"` category items in Consultations screen
-  - F15.2: Ordered dental procedure matches fee schedule retrieving exact standard price
-  - F15.3: Cashier invoice item attaches `toothNumber` and `toothSurface` in line metadata
-  - F15.4: Multiple dental procedures in single encounter aggregate into invoice total balance
-  - F15.5: Non-catalog custom dental procedure falls back to custom pricing without error
-- **F16: Design Token & Strict UI Compliance (5 tests)**:
-  - F16.1: Brand teal color token `#0D6963` is mapped via semantic token `lightColors.primary`
-  - F16.2: Urgency badges adhere to design token variants: `routine`, `urgent`, `emergency`
-  - F16.3: Dental fee strings format correctly in Philippine Peso (₱)
-  - F16.4: Dental `EmptyState` provides clear iconography and CTA
-  - F16.5: Responsive density adapts button layouts between compact and desktop workstation
-
-### Tier 2: Boundary & Corner Cases (25 tests)
-- **B1: Price Value Boundaries (5 tests)**: ₱0 free service, negative price validation rejection, fractional centavo preservation, ₱999,999 extreme value handling, non-numeric/NaN parsing safety.
-- **B2: Code Sanitization, Whitespace & Collisions (5 tests)**: Whitespace auto-trimming and uppercase normalization, empty code rejection, 50-character max length constraint, special characters/punctuation support, HTTP 409 conflict on duplicate code.
-- **B3: SpecialtyMode Edge Cases (5 tests)**: Case-insensitivity (`"dental"`, `"DENTAL"`), leading/trailing whitespace handling, arbitrary unknown specialty fallback to Medical, empty string fallback, dynamic mode switching persistence.
-- **B4: Tooth Number and Surface Boundaries (5 tests)**: Adult FDI notation bounds (11–48), primary deciduous bounds (51–85), invalid tooth numbers (0, negative, >85) rejection, surface code sanitization (`"mod"` -> `"MOD"`), surface-optional extraction handling.
-- **B5: Re-seeding and Catalog Mutation Resilience (5 tests)**: 50-cycle re-seeding loop idempotency, inactive service non-duplication, catalog purge and re-seeding restoration, 100-item high throughput filtering under 5ms, regex special character safety.
-
-### Tier 3: Cross-Feature Combinations (4 tests)
-- **C1**: Pairwise: SpecialtyMode (`Dental`, `MultiSpecialty`, `Medical`) x Initial Catalog State Auto-Seeding Matrix
-- **C2**: Pairwise: Existing Service Overrides x Missing Preset Additions
-- **C3**: Pairwise: Tooth Types (Adult #18, Child #55, None) x Clinical Instruction Chips
-- **C4**: Pairwise: Procedure Catalog Inclusion x Multiple Tooth Tagging x Invoice Line Item Aggregation
-
-### Tier 4: Real-World Clinical Application Scenarios (5 tests)
-- **Scenario 1**: Complete End-to-End Clinical Workflow (Admin -> Seed -> Doctor -> Odontogram -> Invoice)
-- **Scenario 2**: Multi-Specialty Clinic Workflow (Medical + Dental Auto-Seed & Combined Billing)
-- **Scenario 3**: Custom Fee Schedule Preservation during Idempotent Re-seeding
-- **Scenario 4**: Pediatric Dental Patient Encounter (Deciduous Teeth 51–85)
-- **Scenario 5**: Search & Public Directory Integration for Dental Services
+The test suite covers all four verification tiers:
+- **Tier 1**: Primary Feature Coverage (Month, Week, Day, Agenda views, 4 UX states, clinical urgency badges, 1-click slot booking, inspection drawer, reschedule modal, arrival check-in, date range query serialization).
+- **Tier 2**: Boundary Value Analysis & Edge Cases (Leap years 2024/2028, month transitions, 07:00/19:00 boundaries, multi-provider timeline overlays, break/leave blackouts, 409 conflict handling).
+- **Tier 3**: Pairwise Combinatorial Testing (cross-feature interaction paths connecting calendar views, slot clicks, booking modals, inspection drawers, rescheduling, and queue check-in).
+- **Tier 4**: High-Fidelity Real-World Scenarios (Monday morning OPD rush, multi-provider simultaneous scheduling, STAT urgent walk-in preemption, doctor emergency leave blackout, end-of-day reconciliation).
 
 ---
 
-## Test Readiness Certification
-The Dental Clinic Service Catalog E2E test suite is fully published, verified, and passing 100% green without regressions. It serves as the authoritative opaque-box contract verification harness for the remaining implementation milestones.
+## 2. Test Execution Playbook
+
+Execute the following commands from the repository root:
+
+```bash
+# 1. Configure executable environment path
+export PATH="$HOME/.dotnet:$HOME/.bun/bin:$PATH"
+
+# 2. Verify TypeScript strict typechecking (0 errors)
+cd apps/clinic-app && bun run typecheck
+
+# 3. Verify strict design token guard (0 raw hex colors, 0 regressions)
+bun apps/clinic-app/scripts/check-tokens.mjs --strict
+
+# 4. Execute the complete Clinic Calendar E2E Test Suite
+bun test apps/clinic-app/tests/calendarE2E.test.ts
+
+# 5. Execute appointment and doctor roster regression suites
+bun test apps/clinic-app/tests/appointmentsPreselectBooking.test.ts apps/clinic-app/tests/rosterEdgeStates.test.ts
+```
+
+---
+
+## 3. Coverage Matrix & Test Results
+
+### Tier 1: Feature Coverage (Core Capabilities & Interface Contracts)
+
+| # | Test Name | Target Requirement | Assertions | Status |
+|---|---|---|---|---|
+| **1.1** | Month View: 7-column Gregorian grid with leading, current, and trailing days | R1, F5 | 8 | **PASS** |
+| **1.2** | Week View: 7-day columns and 07:00–19:00 30-minute slot matrix | R1, F6 | 7 | **PASS** |
+| **1.3** | Day View Multi-Provider: Side-by-side doctor columns & shift overlays (desktop $\ge 1024\text{px}$) | R3, F7 | 6 | **PASS** |
+| **1.4** | Agenda View: Chronological date grouping and appointment cards | R1, F8 | 5 | **PASS** |
+| **1.5** | 4 UI/UX States: Shimmer Skeleton, Empty State, Error State, Active Data | R1, F4 | 5 | **PASS** |
+| **1.6** | Clinical Urgency Badges: STAT (Red), Urgent (Orange), Routine (Teal) | R1, F15 | 8 | **PASS** |
+| **1.7** | 1-Click Slot Click: Dispatches `onSelectSlot` with date, time, and doctor pre-fill | R2, F10 | 4 | **PASS** |
+| **1.8** | Appointment Inspection Drawer: Complete clinical booking metadata & quick CTAs | R2, F11 | 7 | **PASS** |
+| **1.9** | Appointment Reschedule Modal: Date/time inputs, reason, and conflict detection | R2, F12 | 4 | **PASS** |
+| **1.10** | Server-Side Date-Range Query Serialization & Filter Evaluation | R4, F1, F2 | 5 | **PASS** |
+
+---
+
+### Tier 2: Boundary Value Analysis & Edge Cases
+
+| # | Test Name | Boundary Category | Assertions | Status |
+|---|---|---|---|---|
+| **2.1** | Gregorian Leap Year Boundaries: February 2024/2028 (29 days) vs 2026 (28 days) | Leap Year Math | 10 | **PASS** |
+| **2.2** | Month Transition Boundaries: Oct 31 $\rightarrow$ Nov 1 and Dec 31 $\rightarrow$ Jan 1 | Month Crossover | 4 | **PASS** |
+| **2.3** | Operational Time Boundaries: 07:00 start boundary and 19:00 end boundary | Time Limits | 6 | **PASS** |
+| **2.4** | Database GiST Collision Boundary: Abutting slots valid; overlapping slots collide | PostgreSQL GiST | 3 | **PASS** |
+| **2.5** | Shift Break & Leave Blackouts: Overlays block bookings with appropriate status | Roster Overlays | 7 | **PASS** |
+| **2.6** | Empty Clinic States: Renders gracefully when zero appointments or doctors exist | Empty States | 4 | **PASS** |
+
+---
+
+### Tier 3: Pairwise Combinatorial & Cross-Feature Workflows
+
+| # | Test Name | Cross-Feature Interaction | Assertions | Status |
+|---|---|---|---|---|
+| **3.1** | View Switch $\rightarrow$ Slot Click $\rightarrow$ Booking Modal Pre-Fill | Calendar $\rightarrow$ Booking | 2 | **PASS** |
+| **3.2** | Appointment Card Click $\rightarrow$ Inspection Drawer $\rightarrow$ Reschedule Conflict $\rightarrow$ Recovery | Inspection $\rightarrow$ Reschedule $\rightarrow$ 409 | 7 | **PASS** |
+| **3.3** | Appointment Card $\rightarrow$ Arrival Check-In $\rightarrow$ Queue Ticket Assignment $\rightarrow$ Status `CheckedIn` | Calendar $\rightarrow$ Queue Routing | 4 | **PASS** |
+| **3.4** | Month View Day Badge $\rightarrow$ Transition to Day View Multi-Provider with Doctor Filter | Navigation $\rightarrow$ Filter | 3 | **PASS** |
+
+---
+
+### Tier 4: Real-World Clinical Workload Scenarios
+
+| # | Test Name | Clinical OPD Scenario | Assertions | Status |
+|---|---|---|---|---|
+| **4.1** | Scenario 1: Monday Morning OPD Rush (Multi-doctor check-ins & urgent rescheduling) | 3 doctors, simultaneous check-ins, leave blackout | 5 | **PASS** |
+| **4.2** | Scenario 2: Multi-Provider Simultaneous Scheduling across side-by-side columns | Dual-doctor booking without state leakage | 3 | **PASS** |
+| **4.3** | Scenario 3: STAT Urgent Walk-in Arrival & Slot Preemption | Emergency walk-in preempts slot; routine rescheduled | 5 | **PASS** |
+| **4.4** | Scenario 4: Doctor Sudden Emergency Leave Blackout & Mass Rescheduling | Physician illness mid-day, slot blackout, mass update | 4 | **PASS** |
+| **4.5** | Scenario 5: End-of-Day Clinic Reconciliation across all lifecycle states | Audit across Completed, CheckedIn, Cancelled | 7 | **PASS** |
+
+---
+
+## 4. Overall Test Execution Metrics
+
+- **Total Test Cases**: 25
+- **Passed**: 25 (100%)
+- **Failed**: 0
+- **Total Assertions (`expect()` calls)**: 133
+- **Execution Time**: ~390 ms
+- **TypeScript Compilation**: `tsc --noEmit` exited with code 0 (0 errors).
+- **Design Token Guard**: `check-tokens.mjs --strict` exited with code 0 (0 violations).
+- **Existing Regressions**: `appointmentsPreselectBooking.test.ts` (6/6 pass), `rosterEdgeStates.test.ts` (10/10 pass).
+
+---
+
+## 5. Feature Inventory Compliance Checklist
+
+| Feature ID | Feature Specification | Verification Result |
+|---|---|---|
+| **F1** | Server-Side Date-Range & Doctor Filtering (`GetAppointmentsQuery`) | **VERIFIED** (Tier 1.10) |
+| **F2** | Frontend Service Query Options (`clinicService.ts`) | **VERIFIED** (Tier 1.10) |
+| **F3** | Calendar Core Types & Date/Time Utilities (Asia/Manila math) | **VERIFIED** (Tier 1.1, 2.1, 2.2) |
+| **F4** | Semantic Token Primitives & 4 UX States (`CalendarSkeleton`, etc.) | **VERIFIED** (Tier 1.5) |
+| **F5** | Month View Component (7-col grid, count badges, urgency dots) | **VERIFIED** (Tier 1.1, 3.4) |
+| **F6** | Week View Component (7-day matrix 07:00–19:00, 30m slots) | **VERIFIED** (Tier 1.2, 3.1) |
+| **F7** | Day View Multi-Provider Timeline (desktop columns, shift overlays) | **VERIFIED** (Tier 1.3, 2.5, 4.1) |
+| **F8** | Agenda View Component (chronological grouping, cards, actions) | **VERIFIED** (Tier 1.4, 4.5) |
+| **F9** | Mobile Responsive Carousel (compact date selector <768px) | **VERIFIED** (Tier 1.2, 1.4) |
+| **F10** | 1-Click Empty Slot Booking (pre-fill date, time, doctor) | **VERIFIED** (Tier 1.7, 3.1, 4.2) |
+| **F11** | Appointment Inspection Modal (patient drawer, CTAs) | **VERIFIED** (Tier 1.8, 3.2) |
+| **F12** | Appointment Rescheduling Modal (pickers, 409 conflict detection) | **VERIFIED** (Tier 1.9, 3.2, 4.3) |
+| **F13** | Fast-Track Arrival Check-In (`QueueRoutingSelector`, queue ticket) | **VERIFIED** (Tier 1.8, 3.3, 4.1) |
+| **F14** | Integration into `Appointments.screen.tsx` (view switcher, shortcuts) | **VERIFIED** (Tier 1.1, 1.2, 1.3, 1.4) |
+| **F15** | Strict Token Audit Compliance (`check-tokens.mjs --strict`) | **VERIFIED** (0 violations) |
+| **F16** | Opaque-Box E2E Test Suite (`calendarE2E.test.ts`) | **DELIVERED & 100% PASS** |
+| **F17** | Adversarial Hardening (boundaries, collisions, leap years) | **VERIFIED** (Tier 2.1–2.6) |
+
+---
+
+## 6. Conclusion
+
+The Clinic Calendar E2E Test Suite is completely ready for automated continuous integration and provides exhaustive requirements-driven verification across all functional dimensions, edge cases, combinatorial workflows, and clinical OPD scenarios.

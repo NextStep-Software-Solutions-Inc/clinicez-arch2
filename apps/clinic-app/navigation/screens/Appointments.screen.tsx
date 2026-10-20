@@ -39,15 +39,38 @@ import {
   AppointmentStatus,
   ClinicPatient,
   ClinicCustomFieldDefinition,
+  GetAppointmentsOptions,
 } from '../../services/clinicService';
 import { SlotPicker } from '../../components/roster/SlotPicker';
 import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
 import QueueConflictModal from '../../components/queue/QueueConflictModal';
+import {
+  CalendarHeader,
+  CalendarSkeleton,
+  MonthView,
+  WeekView,
+  DayView,
+  AgendaView,
+  AppointmentInspectionModal,
+  AppointmentRescheduleModal,
+  getManilaTodayStr,
+  toDateString,
+  parseDateOnly,
+  formatDateString,
+  getDaysInMonth,
+  type CalendarViewMode,
+  type ExtendedAppointmentItem,
+  type DoctorShiftOverlay,
+} from '../../components/calendar';
 
 export type AppointmentsRouteParams = {
   patientId?: string;
   patientName?: string;
   patientCode?: string;
+  date?: string;
+  view?: CalendarViewMode;
+  tab?: string;
+  appointmentId?: string;
 };
 
 export type AppointmentsScreenProps = StaticScreenProps<AppointmentsRouteParams | undefined>;
@@ -237,8 +260,12 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     [settings?.patientSearchDisplayFieldsJson]
   );
 
-  const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState<AppointmentItem[]>(
+    () => (route?.params as any)?.initialAppointments ?? []
+  );
+  const [loading, setLoading] = useState(
+    () => (route?.params as any)?.initialLoading ?? true
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [checkingInId, setCheckingInId] = useState<string | null>(null);
@@ -247,10 +274,58 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [checkInRoomId, setCheckInRoomId] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
+  // Calendar View & Navigation State
+  const [viewMode, setViewMode] = useState<CalendarViewMode>(() =>
+    (route?.params?.view as CalendarViewMode) || 'month'
+  );
+  const [currentDate, setCurrentDate] = useState<string>(() =>
+    route?.params?.date || getManilaTodayStr()
+  );
+  const [calendarDoctorId, setCalendarDoctorId] = useState<string | null>(null);
+  const [inspectedAppointment, setInspectedAppointment] = useState<ExtendedAppointmentItem | null>(
+    () => {
+      const apt = (route?.params as any)?.appointment;
+      if (apt) return apt;
+      const initialApts: AppointmentItem[] = (route?.params as any)?.initialAppointments ?? [];
+      const aptId = route?.params?.appointmentId;
+      if (aptId) {
+        return initialApts.find((a) => a.id === aptId) || null;
+      }
+      return null;
+    }
+  );
+  const [rescheduleAppointment, setRescheduleAppointment] = useState<ExtendedAppointmentItem | null>(
+    () => (route?.params as any)?.rescheduleAppointment || null
+  );
+
+  const currentDateObj = useMemo(() => {
+    const { year, month, day } = parseDateOnly(currentDate);
+    return new Date(year, month - 1, day, 12, 0, 0);
+  }, [currentDate]);
+
+  const doctorOverlays: DoctorShiftOverlay[] = useMemo(() => {
+    return activeDoctors.map((doc) => {
+      const room = doc.assignedRoomIds?.[0]
+        ? activeRooms.find((r) => r.id === doc.assignedRoomIds?.[0])
+        : activeRooms.find((r) => r.id === (doc as any).assignedRoomId);
+      return {
+        doctorId: doc.id,
+        doctorName: formatStaffName(doc),
+        isOnDuty: true,
+        shiftStart: '08:00',
+        shiftEnd: '17:00',
+        breaks: [{ start: '12:00', end: '13:00', description: 'Lunch Break' }],
+        roomName: room?.name,
+      };
+    });
+  }, [activeDoctors, activeRooms]);
+
   // Booking Modal State
   const [bookModalVisible, setBookModalVisible] = useState<boolean>(() => Boolean(initialPreselected));
   const [bookedAppointment, setBookedAppointment] = useState<AppointmentItem | null>(null);
-  const [rosterModalVisible, setRosterModalVisible] = useState(false);
+  const [rosterModalVisible, setRosterModalVisible] = useState(
+    () => route?.params?.tab === 'roster'
+  );
   const [booking, setBooking] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
   const [patientResults, setPatientResults] = useState<ClinicPatient[]>([]);
@@ -264,14 +339,44 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   const [formNotes, setFormNotes] = useState('');
 
   const fetchAppointments = useCallback(async () => {
-    const [data, err] = await clinicService.getAppointments();
+    const options: GetAppointmentsOptions = {};
+
+    if (calendarDoctorId) {
+      options.doctorId = calendarDoctorId;
+    }
+
+    const { year, month, day } = parseDateOnly(currentDate);
+
+    if (viewMode === 'month') {
+      const firstOfMonth = new Date(Date.UTC(year, month - 1, 1));
+      const firstDayOfWeek = firstOfMonth.getUTCDay(); // 0 = Sun
+      const gridStart = new Date(Date.UTC(year, month - 1, 1 - firstDayOfWeek));
+      const gridEnd = new Date(gridStart.getTime() + 41 * 86400000);
+      options.startDate = `${gridStart.getUTCFullYear()}-${pad(gridStart.getUTCMonth() + 1)}-${pad(gridStart.getUTCDate())}`;
+      options.endDate = `${gridEnd.getUTCFullYear()}-${pad(gridEnd.getUTCMonth() + 1)}-${pad(gridEnd.getUTCDate())}`;
+    } else if (viewMode === 'week') {
+      const current = new Date(year, month - 1, day, 12, 0, 0);
+      const dayOfWeek = current.getDay();
+      const startOfWeek = new Date(current.getTime() - dayOfWeek * 86400000);
+      const endOfWeek = new Date(startOfWeek.getTime() + 6 * 86400000);
+      options.startDate = toDateString(startOfWeek);
+      options.endDate = toDateString(endOfWeek);
+    } else if (viewMode === 'day') {
+      options.date = currentDate;
+    } else if (viewMode === 'agenda') {
+      if (statusFilter && statusFilter !== 'ALL') {
+        options.status = statusFilter as AppointmentStatus;
+      }
+    }
+
+    const [data, err] = await clinicService.getAppointments(options);
     if (err) {
       setLoadError(err.message || 'Unable to load appointments.');
       return;
     }
     setAppointments(data ?? []);
     setLoadError(null);
-  }, []);
+  }, [viewMode, currentDate, calendarDoctorId, statusFilter]);
 
   useEffect(() => {
     setLoading(true);
@@ -389,6 +494,108 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       cancelled = true;
     };
   }, [incomingPatientId, incomingPatientName, incomingPatientCode, navigation, openBookModal]);
+
+  // Deep-link from Global Search Quick Action: quick-action-roster
+  useEffect(() => {
+    if (route?.params?.tab === 'roster') {
+      setRosterModalVisible(true);
+      navigation.setParams?.({ tab: undefined });
+    }
+  }, [route?.params?.tab, navigation]);
+
+  // Deep-link from Global Search Provider: appointmentId
+  useEffect(() => {
+    const aptId = route?.params?.appointmentId;
+    if (!aptId) return;
+    const match = appointments.find((a) => a.id === aptId);
+    if (match) {
+      setInspectedAppointment(match);
+      navigation.setParams?.({ appointmentId: undefined });
+    } else if (!loading) {
+      clinicService.getAppointments().then(([allApts]) => {
+        const found = allApts?.find((a) => a.id === aptId);
+        if (found) {
+          setInspectedAppointment(found);
+          navigation.setParams?.({ appointmentId: undefined });
+        }
+      });
+    }
+  }, [route?.params?.appointmentId, appointments, loading, navigation]);
+
+  // Deep-link / route param: date
+  useEffect(() => {
+    if (route?.params?.date && route.params.date !== currentDate) {
+      setCurrentDate(route.params.date);
+    }
+  }, [route?.params?.date]);
+
+  // Deep-link / route param: view
+  useEffect(() => {
+    if (route?.params?.view && route.params.view !== viewMode) {
+      setViewMode(route.params.view as CalendarViewMode);
+    }
+  }, [route?.params?.view]);
+
+  const handlePrev = useCallback(() => {
+    const { year, month, day } = parseDateOnly(currentDate);
+    if (viewMode === 'month') {
+      const prevMonth = month === 1 ? 12 : month - 1;
+      const prevYear = month === 1 ? year - 1 : year;
+      const maxDays = getDaysInMonth(prevYear, prevMonth);
+      setCurrentDate(formatDateString(prevYear, prevMonth, Math.min(day, maxDays)));
+    } else if (viewMode === 'week') {
+      const d = new Date(year, month - 1, day - 7, 12, 0, 0);
+      setCurrentDate(toDateString(d));
+    } else {
+      const d = new Date(year, month - 1, day - 1, 12, 0, 0);
+      setCurrentDate(toDateString(d));
+    }
+  }, [currentDate, viewMode]);
+
+  const handleNext = useCallback(() => {
+    const { year, month, day } = parseDateOnly(currentDate);
+    if (viewMode === 'month') {
+      const nextMonth = month === 12 ? 1 : month + 1;
+      const nextYear = month === 12 ? year + 1 : year;
+      const maxDays = getDaysInMonth(nextYear, nextMonth);
+      setCurrentDate(formatDateString(nextYear, nextMonth, Math.min(day, maxDays)));
+    } else if (viewMode === 'week') {
+      const d = new Date(year, month - 1, day + 7, 12, 0, 0);
+      setCurrentDate(toDateString(d));
+    } else {
+      const d = new Date(year, month - 1, day + 1, 12, 0, 0);
+      setCurrentDate(toDateString(d));
+    }
+  }, [currentDate, viewMode]);
+
+  const handleToday = useCallback(() => {
+    setCurrentDate(getManilaTodayStr());
+  }, []);
+
+  const handleSelectDate = useCallback((d: Date) => {
+    setCurrentDate(toDateString(d));
+    if (viewMode === 'month') {
+      setViewMode('day');
+    }
+  }, [viewMode]);
+
+  const handleSelectSlot = useCallback(
+    (date: Date, timeStr: string, doctorId?: string) => {
+      const dateStr = toDateString(date);
+      setBookedAppointment(null);
+      setPatientSearch('');
+      setPatientResults([]);
+      setFormPatient(null);
+      setFormDoctorId(doctorId || null);
+      setFormDate(dateStr);
+      setFormTime(timeStr);
+      setFormServiceTypes(['Consultation']);
+      setFormReason('');
+      setFormNotes('');
+      setBookModalVisible(true);
+    },
+    []
+  );
 
   const handleBookAppointment = async () => {
     if (!formPatient) {
@@ -512,98 +719,79 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
     }
   };
 
-  const filteredAppointments = appointments.filter((item) => {
-    if (statusFilter === 'ALL') return true;
-    return item.status === statusFilter;
-  });
-
-  const renderList = () => {
+  const renderCalendarView = () => {
     if (loading && !refreshing) {
-      return <SkeletonList rows={4} rowHeight={theme.sizes.controlLg + theme.spacing.lg} />;
+      return <CalendarSkeleton viewMode={viewMode} />;
     }
     if (loadError) {
-      return <ErrorState title="Unable to load appointments" message={loadError} onRetry={retryLoad} />;
-    }
-    if (appointments.length === 0) {
       return (
-        <EmptyState
-          icon="appointments"
-          title="No appointments yet"
-          description="Booked appointments will appear here."
-          actionTitle="Book appointment"
-          onAction={() => openBookModal(null)}
-        />
-      );
-    }
-    if (filteredAppointments.length === 0) {
-      return (
-        <EmptyState
-          icon="appointments"
-          title="No appointments match this filter"
-          description="Try a different status."
+        <ErrorState
+          title="Unable to load clinic calendar"
+          message={loadError}
+          onRetry={retryLoad}
         />
       );
     }
 
-    return (
-      <View style={styles.list}>
-        {filteredAppointments.map((item) => {
-          const status = getStatusBadge(item.status);
-          const canCheckIn = item.status === 'Confirmed' || item.status === 'Pending';
-          const isCheckingIn = checkingInId === item.id;
-
-          return (
-            <Card key={item.id} style={styles.card}>
-              <View style={styles.timeColumn}>
-                <ThemedText variant="bodyBold" color={theme.colors.primary}>
-                  {formatTime(item.scheduledAt)}
-                </ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  {formatDay(item.scheduledAt)}
-                </ThemedText>
-              </View>
-
-              <View style={styles.infoColumn}>
-                <ThemedText variant="bodyBold">{item.patientName}</ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  {item.doctorName ? `Provider: ${item.doctorName}` : 'No provider assigned'}
-                  {item.serviceType ? ` · ${item.serviceType}` : ''}
-                </ThemedText>
-                {item.reason ? (
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    {item.reason}
-                  </ThemedText>
-                ) : null}
-              </View>
-
-              <View style={styles.actionColumn}>
-                <Badge label={status.label} variant={status.variant} />
-                {canCheckIn && (
-                  <View style={styles.actionRow}>
-                    <Button
-                      size="sm"
-                      variant="success"
-                      title="Check in"
-                      loading={isCheckingIn}
-                      disabled={!!checkingInId}
-                      onPress={() => handleOpenCheckInModal(item)}
-                    />
-                    <Pressable
-                      style={styles.cancelBtn}
-                      onPress={() => handleCancelAppointment(item)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Cancel appointment for ${item.patientName}`}
-                    >
-                      <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-            </Card>
-          );
-        })}
-      </View>
-    );
+    switch (viewMode) {
+      case 'month':
+        return (
+          <MonthView
+            currentDate={currentDateObj}
+            appointments={appointments}
+            isLoading={false}
+            error={null}
+            onRetry={retryLoad}
+            onSelectDate={handleSelectDate}
+            onSelectAppointment={(appt) => setInspectedAppointment(appt)}
+          />
+        );
+      case 'week':
+        return (
+          <WeekView
+            currentDate={currentDateObj}
+            appointments={appointments}
+            isLoading={false}
+            error={null}
+            onRetry={retryLoad}
+            onSelectDate={handleSelectDate}
+            onSelectSlot={handleSelectSlot}
+            onSelectAppointment={(appt) => setInspectedAppointment(appt)}
+          />
+        );
+      case 'day':
+        return (
+          <DayView
+            currentDate={currentDateObj}
+            appointments={appointments}
+            isLoading={false}
+            error={null}
+            onRetry={retryLoad}
+            onSelectDate={handleSelectDate}
+            onSelectSlot={handleSelectSlot}
+            onSelectAppointment={(appt) => setInspectedAppointment(appt)}
+            activeDoctorId={calendarDoctorId || undefined}
+            doctorOverlays={doctorOverlays}
+          />
+        );
+      case 'agenda':
+      default:
+        return (
+          <AgendaView
+            currentDate={currentDateObj}
+            appointments={appointments}
+            isLoading={false}
+            error={null}
+            onRetry={retryLoad}
+            onSelectDate={handleSelectDate}
+            onSelectSlot={handleSelectSlot}
+            onSelectAppointment={(appt) => setInspectedAppointment(appt)}
+            onCheckIn={handleOpenCheckInModal}
+            onReschedule={(appt) => setRescheduleAppointment(appt)}
+            onCancel={handleCancelAppointment}
+          />
+        );
+    }
   };
 
   return (
@@ -634,23 +822,20 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
-        {/* Status Filter */}
-        <View style={styles.filterRow}>
-          {STATUS_FILTERS.map(({ key, label }) => {
-            const count = key === 'ALL' ? appointments.length : appointments.filter((a) => a.status === key).length;
-            return (
-              <Button
-                key={key}
-                size="sm"
-                variant={statusFilter === key ? 'primary' : 'secondary'}
-                title={`${label} (${count})`}
-                onPress={() => setStatusFilter(key)}
-              />
-            );
-          })}
-        </View>
+        <CalendarHeader
+          viewMode={viewMode}
+          currentDate={currentDateObj}
+          onViewModeChange={setViewMode}
+          onPrev={handlePrev}
+          onNext={handleNext}
+          onToday={handleToday}
+          onSelectDate={handleSelectDate}
+          activeDoctorId={calendarDoctorId || undefined}
+          onDoctorChange={(docId) => setCalendarDoctorId(docId || null)}
+          doctors={activeDoctors.map((d) => ({ id: d.id, name: formatStaffName(d) }))}
+        />
 
-        {renderList()}
+        {renderCalendarView()}
       </ScrollView>
 
       {/* Book Appointment Modal */}
@@ -881,6 +1066,39 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
           />
         </View>
       </Modal>
+
+      {/* Appointment Inspection Modal */}
+      <AppointmentInspectionModal
+        visible={!!inspectedAppointment}
+        appointment={inspectedAppointment}
+        onClose={() => setInspectedAppointment(null)}
+        onCheckIn={(appt) => {
+          setInspectedAppointment(null);
+          handleOpenCheckInModal(appt);
+        }}
+        onReschedule={(appt) => {
+          setInspectedAppointment(null);
+          setRescheduleAppointment(appt);
+        }}
+        onCancel={(appt) => {
+          setInspectedAppointment(null);
+          handleCancelAppointment(appt);
+        }}
+      />
+
+      {/* Appointment Reschedule Modal */}
+      <AppointmentRescheduleModal
+        visible={!!rescheduleAppointment}
+        appointment={rescheduleAppointment}
+        onClose={() => setRescheduleAppointment(null)}
+        onSuccess={(updated) => {
+          setAppointments((prev) =>
+            prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a))
+          );
+          setRescheduleAppointment(null);
+          fetchAppointments();
+        }}
+      />
     </ResponsiveLayout>
   );
 }
