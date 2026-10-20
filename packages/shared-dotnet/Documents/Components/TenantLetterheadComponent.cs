@@ -17,19 +17,28 @@ public class TenantLetterheadComponent : IComponent
 
     public void Compose(IContainer container)
     {
+        var primaryColor = _config.GetSafePrimaryColorHex();
+
         container.Column(col =>
         {
             col.Item().Row(row =>
             {
                 if (_config.PrimaryLogoBytes != null && _config.PrimaryLogoBytes.Length > 0)
                 {
-                    row.ConstantItem(55).Height(50).Image(_config.PrimaryLogoBytes);
+                    row.ConstantItem(52).Height(50).Image(_config.PrimaryLogoBytes).FitArea();
+                }
+                else
+                {
+                    // Clean institutional clinic placeholder icon matching Studio Preview
+                    row.ConstantItem(50).Height(50)
+                        .Border(1.5f).BorderColor(primaryColor).Background("#F0FDFA").Padding(8)
+                        .Svg(DocumentSvgIcons.ClinicBuilding(primaryColor));
                 }
 
-                row.RelativeItem().PaddingLeft(_config.PrimaryLogoBytes != null ? 8 : 0).Column(c =>
+                row.RelativeItem().PaddingLeft(10).Column(c =>
                 {
                     c.Item().Text(_config.FacilityName)
-                        .FontSize(15).Bold().FontColor(_config.GetSafePrimaryColorHex());
+                        .FontSize(15).Bold().FontColor(primaryColor);
 
                     if (!string.IsNullOrWhiteSpace(_config.FacilitySubHeader))
                     {
@@ -52,9 +61,8 @@ public class TenantLetterheadComponent : IComponent
 
                     var licenseParts = new[]
                     {
-                        !string.IsNullOrWhiteSpace(_config.TaxIdentificationNumber) ? $"TIN: {_config.TaxIdentificationNumber}" : null,
                         !string.IsNullOrWhiteSpace(_config.DohLicenseToOperate) ? $"DOH LTO: {_config.DohLicenseToOperate}" : null,
-                        !string.IsNullOrWhiteSpace(_config.PhilHealthAccreditationNumber) ? $"PhilHealth Provider: {_config.PhilHealthAccreditationNumber}" : null
+                        !string.IsNullOrWhiteSpace(_config.PhilHealthAccreditationNumber) ? $"PhilHealth: {_config.PhilHealthAccreditationNumber}" : null
                     }.Where(s => !string.IsNullOrWhiteSpace(s));
 
                     var licenseLine = string.Join(" • ", licenseParts);
@@ -67,14 +75,14 @@ public class TenantLetterheadComponent : IComponent
 
                 if (_config.SecondaryLogoBytes != null && _config.SecondaryLogoBytes.Length > 0)
                 {
-                    row.ConstantItem(48).Height(45).Image(_config.SecondaryLogoBytes);
+                    row.ConstantItem(48).Height(45).Image(_config.SecondaryLogoBytes).FitArea();
                 }
             });
 
-            // Clean Accent Divider Bar
+            // Clean Accent Divider Bar matching Studio Preview
             col.Item().PaddingTop(6).PaddingBottom(8)
-                .LineHorizontal(1.5f)
-                .LineColor(_config.GetSafePrimaryColorHex());
+                .LineHorizontal(2.5f)
+                .LineColor(primaryColor);
         });
     }
 }
