@@ -2001,7 +2001,7 @@ export default function ConsultationsScreen() {
 
     let consultationId = signedConsultationId;
     if (!consultationId) {
-      const [consultation, createErr] = await clinicService.createConsultation({
+      const createPayload = {
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
         doctorId: doctor.id,
@@ -2036,7 +2036,18 @@ export default function ConsultationsScreen() {
           isDangerousDrug: p.isDangerousDrug,
           philHealthDrugCode: p.philHealthDrugCode,
         })),
-      });
+      };
+      let [consultation, createErr] = await clinicService.createConsultation(createPayload);
+      if (
+        createErr &&
+        (createErr.status === 409 ||
+          (createErr.message || '').toLowerCase().includes('already been signed'))
+      ) {
+        [consultation, createErr] = await clinicService.createConsultation({
+          ...createPayload,
+          queueItemId: undefined,
+        });
+      }
       if (createErr || !consultation?.id) {
         setIsSigning(false);
         const reason = createErr?.message || 'Unable to save consultation record';

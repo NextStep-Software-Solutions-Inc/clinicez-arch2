@@ -212,7 +212,15 @@ export function normalizeTeethToMultiRecord(
     const num = item.toothNumber;
     if (!map[num]) map[num] = [];
 
-    const status: ToothStatus = item.status || 'Healthy';
+    const rawStatus = item.status || 'Healthy';
+    const status: ToothStatus =
+      rawStatus === 'Decay'
+        ? 'Decayed'
+        : rawStatus === 'Crown'
+          ? 'Crowned'
+          : rawStatus === 'Extraction'
+            ? 'ForExtraction'
+            : rawStatus;
     const sortedSurface = isWholeToothStatus(status)
       ? ''
       : item.surface
@@ -441,25 +449,20 @@ export function getCurrentEncounterLockedState(
         : rec.activeSurface !== undefined && rec.activeSurface !== null
           ? rec.activeSurface
           : rec.surface || '';
-    if (
-      isWholeToothStatus(rec.status) ||
-      (rec.status === 'Crowned' && (!effSurf || sortToothSurfaces(effSurf) === 'MODBL'))
-    ) {
+    if (isWholeToothStatus(rec.status)) {
       isWholeToothLocked = true;
       for (const s of CANONICAL_SURFACES) {
         lockedSurfaces.add(s);
       }
     } else {
-      for (const ch of sortToothSurfaces(effSurf).split('')) {
+      const surfaceToLock =
+        rec.status === 'Crowned' && !effSurf ? 'MODBL' : sortToothSurfaces(effSurf);
+      for (const ch of surfaceToLock.split('')) {
         if ((CANONICAL_SURFACES as readonly string[]).includes(ch)) {
           lockedSurfaces.add(ch as ToothSurfaceCode);
         }
       }
     }
-  }
-
-  if (lockedSurfaces.size === CANONICAL_SURFACES.length) {
-    isWholeToothLocked = true;
   }
 
   return {
@@ -494,7 +497,7 @@ export function canApplyConditionToTooth(
     return {
       allowed: false,
       reason:
-        'A condition is already recorded for this tooth in the current encounter. Remove it first to modify, or record a new status in a subsequent encounter.',
+        'A whole-tooth condition is already recorded for this tooth in the current encounter. Remove it first to modify, or record a new status in a subsequent encounter.',
     };
   }
 
@@ -507,13 +510,14 @@ export function canApplyConditionToTooth(
   }
 
   if (!isWholeToothStatus(targetStatus) && targetSurfaces !== undefined) {
-    const effectiveSurfaces =
-      targetSurfaces && targetSurfaces.trim().length > 0
-        ? sortToothSurfaces(targetSurfaces)
-        : targetStatus === 'Crowned'
-          ? 'MODBL'
-          : 'O';
-    const requested = effectiveSurfaces.split('') as ToothSurfaceCode[];
+    const trimmedSurfaces = targetSurfaces ? sortToothSurfaces(targetSurfaces) : '';
+    if (trimmedSurfaces.length === 0) {
+      if (lockState.lockedSurfaces.size > 0) {
+        return { allowed: false };
+      }
+      return { allowed: true };
+    }
+    const requested = trimmedSurfaces.split('') as ToothSurfaceCode[];
     const conflicting = requested.filter((s) => lockState.lockedSurfaces.has(s));
     if (conflicting.length > 0) {
       return {

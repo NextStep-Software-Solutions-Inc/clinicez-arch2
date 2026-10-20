@@ -748,5 +748,61 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(currentFilled.isCurrent).toBe(true);
       expect(currentFilled.activeSurface).toBe('O');
     });
+
+    test('5.5 Multiple surface statuses on the same tooth in the same encounter (Sealant on MOB + Fractured on DL) do not trigger false whole-tooth lock alert', () => {
+      // Step 1: Record Sealant on MOB of Tooth #21 in enc-1
+      let tooth21Records = applyStagedConditionToTooth([], {
+        id: 'rec-21-sealant',
+        toothNumber: 21,
+        status: 'Sealant',
+        surface: 'MOB',
+        consultationId: 'enc-1',
+        isCurrentEncounter: true,
+      });
+
+      const lockAfterFirst = getCurrentEncounterLockedState(tooth21Records, 'enc-1');
+      expect(lockAfterFirst.isWholeToothLocked).toBe(false);
+      expect(Array.from(lockAfterFirst.lockedSurfaces).sort()).toEqual(['B', 'M', 'O']);
+
+      // Empty staged surface after saving does not emit a false conflict alert
+      const emptySurfaceCheckAfterFirst = canApplyConditionToTooth(
+        tooth21Records,
+        'Fractured',
+        '',
+        'enc-1'
+      );
+      expect(emptySurfaceCheckAfterFirst.allowed).toBe(false);
+      expect(emptySurfaceCheckAfterFirst.reason).toBeUndefined();
+
+      // Selecting Fractured on remaining surfaces DL is allowed
+      expect(canApplyConditionToTooth(tooth21Records, 'Fractured', undefined, 'enc-1').allowed).toBe(true);
+      expect(canApplyConditionToTooth(tooth21Records, 'Fractured', 'DL', 'enc-1').allowed).toBe(true);
+
+      // Step 2: Record Fractured on DL of Tooth #21 in the same encounter (enc-1)
+      tooth21Records = applyStagedConditionToTooth(tooth21Records, {
+        id: 'rec-21-fractured',
+        toothNumber: 21,
+        status: 'Fractured',
+        surface: 'DL',
+        consultationId: 'enc-1',
+        isCurrentEncounter: true,
+      });
+
+      expect(tooth21Records.filter((r) => r.isCurrent !== false).length).toBe(2);
+      const lockAfterSecond = getCurrentEncounterLockedState(tooth21Records, 'enc-1');
+      // Even though all 5 surfaces (M, O, B, D, L) now have surface conditions, isWholeToothLocked must remain false
+      expect(lockAfterSecond.isWholeToothLocked).toBe(false);
+      expect(lockAfterSecond.lockedSurfaces.size).toBe(5);
+
+      // Empty staged surface after saving second condition must NOT show a false warning reason
+      const emptySurfaceCheckAfterSecond = canApplyConditionToTooth(
+        tooth21Records,
+        'Fractured',
+        '',
+        'enc-1'
+      );
+      expect(emptySurfaceCheckAfterSecond.allowed).toBe(false);
+      expect(emptySurfaceCheckAfterSecond.reason).toBeUndefined();
+    });
   });
 });

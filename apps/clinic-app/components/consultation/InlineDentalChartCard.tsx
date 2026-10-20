@@ -248,21 +248,26 @@ export function InlineDentalChartCard({
     return null;
   }, [selectedToothRecords]);
 
-  // Default staged status to 'Decayed' when tooth is Healthy so clinician can immediately pick surfaces and save
-  const stagedStatus: ToothStatus = stagedStatusState ?? activeRecord?.status ?? 'Decayed';
-  const isWholeToothStaged = isWholeToothStatus(stagedStatus);
-  const stagedSurfaces: string = isWholeToothStaged
-    ? ''
-    : stagedSurfacesState ??
-      (activeRecord && !isWholeToothStatus(activeRecord.status)
-        ? sortToothSurfaces(activeRecord.activeSurface ?? activeRecord.surface ?? '')
-        : '');
-  const stagedNotes: string = stagedNotesState ?? activeRecord?.notes ?? '';
-
   const lockState = useMemo(
     () => getCurrentEncounterLockedState(selectedToothRecords, consultationId),
     [selectedToothRecords, consultationId]
   );
+
+  // Default staged status to 'Decayed' when tooth is Healthy so clinician can immediately pick surfaces and save
+  const stagedStatus: ToothStatus =
+    stagedStatusState ??
+    (lockState.hasAnyCurrentEncounterRecord ? 'Decayed' : activeRecord?.status ?? 'Decayed');
+  const isWholeToothStaged = isWholeToothStatus(stagedStatus);
+  const stagedSurfaces: string = isWholeToothStaged
+    ? ''
+    : stagedSurfacesState ??
+      (!lockState.hasAnyCurrentEncounterRecord &&
+      activeRecord &&
+      !isWholeToothStatus(activeRecord.status)
+        ? sortToothSurfaces(activeRecord.activeSurface ?? activeRecord.surface ?? '')
+        : '');
+  const stagedNotes: string =
+    stagedNotesState ?? (!lockState.hasAnyCurrentEncounterRecord ? activeRecord?.notes ?? '' : '');
 
   const saveCheck = useMemo(
     () =>
@@ -856,7 +861,7 @@ export function InlineDentalChartCard({
                       );
                     })}
                   </View>
-                  {!disabled && !saveCheck.allowed && saveCheck.reason ? (
+                  {!disabled && !lockState.isWholeToothLocked && !saveCheck.allowed && saveCheck.reason ? (
                     <ThemedText
                       variant="caption"
                       color={theme.colors.warningText}
