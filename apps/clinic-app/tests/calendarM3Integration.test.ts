@@ -158,7 +158,7 @@ mock.module('@react-navigation/native', () => ({
   createStaticNavigation: () => () => null,
 }));
 
-mock.module('../components/layout', () => ({
+const layoutMockFactory = () => ({
   ResponsiveLayout: ({ headerTitle, rightAction, actions, children }: any) =>
     React.createElement(
       'div',
@@ -173,7 +173,18 @@ mock.module('../components/layout', () => ({
       ),
       children
     ),
-}));
+  ClinicHeaderBar: () => null,
+  WorkstationSidebar: ({ currentRoute }: any) =>
+    React.createElement('div', { 'data-component': 'WorkstationSidebar', 'data-route': currentRoute }),
+  UserMenu: () => null,
+  MobileBottomTabBar: () => null,
+  SidebarProvider: ({ children }: any) => children,
+  useSidebar: () => ({ mode: 'expanded', cycleMode: () => {} }),
+  WORKSTATION_NAV_ITEMS: [],
+});
+
+mock.module('../components/layout', layoutMockFactory);
+mock.module('@layout', layoutMockFactory);
 
 const mockDoctors = [
   {
@@ -194,26 +205,40 @@ const mockDoctors = [
   },
 ];
 
-mock.module('../context/StaffContext', () => ({
-  useStaff: () => ({
-    staff: mockDoctors,
-    currentName: 'Nurse Joy',
-  }),
-  formatStaffName: (s: any) => `Dr. ${s.name}`,
-}));
+const calendarStaffContextFactory = () => ({
+  useStaff: () => {
+    const custom = (globalThis as any).__mockStaffContext;
+    return {
+      staff: mockDoctors,
+      currentName: 'Nurse Joy',
+      current: null,
+      ...custom,
+      ...(custom?.staff?.length ? {} : { staff: mockDoctors }),
+    };
+  },
+  formatStaffName: (s: any) => s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim(),
+  staffInitials: (s: any) => `${s?.firstName?.[0] ?? ''}${s?.lastName?.[0] ?? ''}`.toUpperCase() || '?',
+  StaffProvider: ({ children }: any) => children,
+});
 
-mock.module('../context/ClinicContext', () => ({
-  useClinic: () => ({
-    settings: {
-      patientSearchDisplayFieldsJson: JSON.stringify(['patientCode', 'age']),
-    },
-    letterhead: null,
-    rooms: [
-      { id: 'room-101', name: 'Room 101 - Consultation A', isActive: true },
-      { id: 'room-102', name: 'Room 102 - Consultation B', isActive: true },
-    ],
-  }),
-}));
+mock.module('../context/StaffContext', calendarStaffContextFactory);
+mock.module('@context/StaffContext', calendarStaffContextFactory);
+
+(globalThis as any).__mockClinicContext = {
+  facilityName: 'NextStep OPD',
+  planTier: 'pro',
+  accreditationNumber: 'ACC-12345',
+  clinicLogo: null,
+  settings: {
+    preferredChartLayout: 'centered',
+    patientSearchDisplayFieldsJson: JSON.stringify(['patientCode', 'age']),
+  },
+  letterhead: null,
+  rooms: [
+    { id: 'room-101', name: 'Room 101 - Consultation A', isActive: true },
+    { id: 'room-102', name: 'Room 102 - Consultation B', isActive: true },
+  ],
+};
 
 const sampleAppointments: ExtendedAppointmentItem[] = [
   {
@@ -349,6 +374,7 @@ describe('Milestone 3: Screen Integration & Interactive Workflows', () => {
     clinicService.cancelAppointment = origCancelAppointment;
     clinicService.checkInPatient = origCheckInPatient;
     clinicService.getDoctorAvailableSlots = origGetDoctorAvailableSlots;
+    delete (globalThis as any).__mockClinicContext;
   });
 
   beforeEach(() => {
