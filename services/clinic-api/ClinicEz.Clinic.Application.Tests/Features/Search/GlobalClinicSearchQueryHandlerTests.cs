@@ -252,7 +252,7 @@ public class GlobalClinicSearchQueryHandlerTests
             .Returns<Task<IReadOnlyList<SearchResultItemDto>>>(async callInfo =>
             {
                 var ct = callInfo.Arg<CancellationToken>();
-                await Task.Delay(1500, ct); // Will exceed 500ms timeout
+                await Task.Delay(10000, ct); // Will exceed 500ms timeout
                 return (IReadOnlyList<SearchResultItemDto>)new List<SearchResultItemDto> { CreateItem("c1", "Consultations", "Slow Consult") };
             });
 
