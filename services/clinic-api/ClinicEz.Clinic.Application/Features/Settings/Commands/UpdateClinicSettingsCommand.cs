@@ -53,6 +53,9 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableDentalModule = null,
     decimal? DefaultDoctorSharePercentage = null,
     string? CashierMode = null,
+    string? DefaultApproverName = null,
+    string? DefaultApproverTitle = null,
+    string? DocumentSignatoriesJson = null,
     bool? EnableAppointmentReminders = null,
     bool? AppointmentReminder24hEnabled = null,
     bool? AppointmentReminder2hEnabled = null,
@@ -236,6 +239,15 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
                 : "ClinicDesk";
         }
 
+        if (request.DefaultApproverName != null)
+            settings.DefaultApproverName = string.IsNullOrWhiteSpace(request.DefaultApproverName) ? null : request.DefaultApproverName.Trim();
+
+        if (request.DefaultApproverTitle != null)
+            settings.DefaultApproverTitle = string.IsNullOrWhiteSpace(request.DefaultApproverTitle) ? null : request.DefaultApproverTitle.Trim();
+
+        if (request.DocumentSignatoriesJson != null)
+            settings.DocumentSignatoriesJson = string.IsNullOrWhiteSpace(request.DocumentSignatoriesJson) ? null : request.DocumentSignatoriesJson.Trim();
+
         if (request.EnableAppointmentReminders.HasValue)
             settings.EnableAppointmentReminders = request.EnableAppointmentReminders.Value;
 
@@ -304,6 +316,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.CashierMode,
             LetterheadDohLto: settings.LetterheadDohLto,
             LetterheadAccentColorHex: settings.LetterheadAccentColorHex,
+            DefaultApproverName: settings.DefaultApproverName,
+            DefaultApproverTitle: settings.DefaultApproverTitle,
+            DocumentSignatoriesJson: settings.DocumentSignatoriesJson,
             EnableAppointmentReminders: settings.EnableAppointmentReminders,
             AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
             AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,

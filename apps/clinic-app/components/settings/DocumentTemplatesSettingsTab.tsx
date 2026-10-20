@@ -116,13 +116,13 @@ export default function DocumentTemplatesSettingsTab({
   const [loadError, setLoadError] = useState<string | null>(settingsLoadError);
 
   // Form Fields
-  const [letterheadHeader, setLetterheadHeader] = useState('');
-  const [letterheadSubHeader, setLetterheadSubHeader] = useState('');
-  const [letterheadAddress, setLetterheadAddress] = useState('');
-  const [letterheadContact, setLetterheadContact] = useState('');
-  const [dohLicenseToOperate, setDohLicenseToOperate] = useState('');
-  const [accreditationNumber, setAccreditationNumber] = useState('');
-  const [primaryLogoUrl, setPrimaryLogoUrl] = useState<string | null>(null);
+  const [letterheadHeader, setLetterheadHeader] = useState(initialSettings?.letterheadHeader || initialSettings?.clinicName || '');
+  const [letterheadSubHeader, setLetterheadSubHeader] = useState(initialSettings?.letterheadSubHeader || '');
+  const [letterheadAddress, setLetterheadAddress] = useState(initialSettings?.letterheadAddress || '');
+  const [letterheadContact, setLetterheadContact] = useState(initialSettings?.letterheadContact || '');
+  const [dohLicenseToOperate, setDohLicenseToOperate] = useState(initialSettings?.dohLicenseToOperate || initialSettings?.letterheadDohLto || '');
+  const [accreditationNumber, setAccreditationNumber] = useState(initialSettings?.accreditationNumber || '');
+  const [primaryLogoUrl, setPrimaryLogoUrl] = useState<string | null>(initialSettings?.primaryLogoUrl ?? null);
   const [letterheadAccentColorHex, setLetterheadAccentColorHex] = useState<string>(
     initialSettings?.letterheadAccentColorHex ||
       initialSettings?.documentAccentColorHex ||
@@ -135,8 +135,10 @@ export default function DocumentTemplatesSettingsTab({
       initialSettings?.primaryColorHex ||
       DEFAULT_CLINIC_BRAND_COLOR
   );
-  const [paperSize, setPaperSize] = useState<PaperSize>('Letter');
-  const [letterheadFooter, setLetterheadFooter] = useState('');
+  const [paperSize, setPaperSize] = useState<PaperSize>((initialSettings?.paperSize as PaperSize) || 'Letter');
+  const [letterheadFooter, setLetterheadFooter] = useState(initialSettings?.letterheadFooter || '');
+  const [defaultApproverName, setDefaultApproverName] = useState(initialSettings?.defaultApproverName || '');
+  const [defaultApproverTitle, setDefaultApproverTitle] = useState(initialSettings?.defaultApproverTitle || '');
 
   // Right column live studio state
   const [docCategory, setDocCategory] = useState<StudioCategory>('Clinical');
@@ -200,6 +202,8 @@ export default function DocumentTemplatesSettingsTab({
       record.letterheadFooter ||
         'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'
     );
+    setDefaultApproverName(record.defaultApproverName || '');
+    setDefaultApproverTitle(record.defaultApproverTitle || '');
   }, []);
 
   // Sync when initialSettings or settingsLoadError changes
@@ -310,6 +314,8 @@ export default function DocumentTemplatesSettingsTab({
         documentAccentColorHex: letterheadAccentColorHex,
         paperSize,
         letterheadFooter: letterheadFooter.trim(),
+        defaultApproverName: defaultApproverName.trim() || null,
+        defaultApproverTitle: defaultApproverTitle.trim() || null,
       };
 
       const [updated, err] = await clinicService.updateSettings(payload);
@@ -590,6 +596,33 @@ export default function DocumentTemplatesSettingsTab({
                 placeholder="Valid Philippine Clinical Document. Digitally certified via Clinic EZ..."
                 helperText="Enforces Philippine RA 8792 (E-Commerce Act) and RA 10173 (Data Privacy Act) compliance."
                 testID="input-statutory-footer"
+              />
+            </View>
+          </Card>
+
+          {/* Statutory Reports Signatory Authority Card */}
+          <Card variant="outlined" style={styles.sectionCard}>
+            <CardHeader
+              icon="userCheck"
+              title="Report Signatory & Attestation Authority"
+              subtitle="Designated institutional approver for statutory and operational reports (Daily EOD, Morbidity, BIR Tax, Doctor Shares, Analytics)"
+            />
+            <View style={styles.formFields}>
+              <Input
+                label="Default Approver / Authority Name"
+                value={defaultApproverName}
+                onChangeText={setDefaultApproverName}
+                placeholder="e.g. Dr. Maria Santos, MD / Juan Dela Cruz, CPA"
+                helperText="Printed under 'APPROVED / ATTESTED BY' on all official statutory PDF reports."
+                testID="input-default-approver-name"
+              />
+              <Input
+                label="Default Approver Title / Designation"
+                value={defaultApproverTitle}
+                onChangeText={setDefaultApproverTitle}
+                placeholder="e.g. Medical Director / Clinic Administrator"
+                helperText="Official title or regulatory designation of the approving authority."
+                testID="input-default-approver-title"
               />
             </View>
           </Card>
@@ -1081,19 +1114,34 @@ export default function DocumentTemplatesSettingsTab({
 
               {/* Signature Block (Suppressed on Placards, tailored for Reports vs Clinical) */}
               {selectedDocType !== 'Reception QR Placard' && (
-                <View style={styles.signatureBlock}>
+                <View style={[styles.signatureBlock, docCategory === 'Reports' && styles.signatureBlockReports]}>
                   {docCategory === 'Reports' ? (
-                    <View style={styles.eSignatureWrapper}>
-                      <View style={styles.signatureRule} />
-                      <ThemedText variant="bodyBold">CLINIC ADMINISTRATION &amp; AUDIT</ThemedText>
-                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                        Official Statutory Report • Generated via ClinicEZ
-                      </ThemedText>
-                      <View style={styles.digitalSealBadge}>
-                        <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.routine} />
-                        <ThemedText variant="captionBold" color={theme.colors.routine}>
-                          Audit Verified &amp; Cryptographically Sealed
+                    <View style={styles.reportSignatoriesRow}>
+                      <View style={styles.reportSignatoryCol}>
+                        <ThemedText variant="captionBold" color={theme.colors.textMuted}>PREPARED BY:</ThemedText>
+                        <View style={styles.reportSignatorySpacer} />
+                        <View style={styles.signatureRule} />
+                        <ThemedText variant="bodyBold">Clinic Staff</ThemedText>
+                        <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                          Authorized Healthcare Professional
                         </ThemedText>
+                      </View>
+                      <View style={[styles.reportSignatoryCol, styles.reportSignatoryColRight]}>
+                        <ThemedText variant="captionBold" color={theme.colors.textMuted}>APPROVED / ATTESTED BY:</ThemedText>
+                        <View style={styles.reportSignatorySpacer} />
+                        <View style={styles.signatureRule} />
+                        <ThemedText variant="bodyBold">
+                          {defaultApproverName.trim() || 'Authorized Signatory'}
+                        </ThemedText>
+                        <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                          {defaultApproverTitle.trim() || 'Medical Director / Clinic Administrator'}
+                        </ThemedText>
+                        <View style={styles.digitalSealBadge}>
+                          <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.routine} />
+                          <ThemedText variant="captionBold" color={theme.colors.routine}>
+                            Audit Verified &amp; Cryptographically Sealed
+                          </ThemedText>
+                        </View>
                       </View>
                     </View>
                   ) : signatureMode === 'ESignatureSpecimen' ? (
@@ -1409,6 +1457,28 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.lg,
     alignItems: 'flex-end',
     gap: theme.spacing.xs,
+  },
+  signatureBlockReports: {
+    width: '100%',
+    alignItems: 'stretch',
+  },
+  reportSignatoriesRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+  },
+  reportSignatoryCol: {
+    flex: 1,
+    alignItems: 'flex-start',
+    gap: 2,
+  },
+  reportSignatoryColRight: {
+    alignItems: 'flex-end',
+  },
+  reportSignatorySpacer: {
+    height: 36,
   },
   eSignatureWrapper: {
     alignItems: 'flex-end',

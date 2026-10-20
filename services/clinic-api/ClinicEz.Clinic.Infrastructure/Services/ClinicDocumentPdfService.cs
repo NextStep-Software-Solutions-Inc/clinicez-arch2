@@ -1165,7 +1165,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var issuedAt = DateTime.UtcNow;
         var docNumber = $"EOD-{report.ReportDate:yyyyMMdd}";
-        var staffPrc = !string.IsNullOrWhiteSpace(preparedByName) ? preparedByName : "SYSTEM-AUDIT";
+        var (preparedBy, preparedTitle, approverName, approverTitle) = ResolveReportSignatories(
+            settings, "DailyEod", "Cashier / Clinic Staff", "Clinic Administrator / Medical Director", preparedByName);
+        var staffPrc = preparedBy;
         var digest = _securityService.ComputeDocumentDigest(
             report.TenantId,
             "DAILY-EOD",
@@ -1202,7 +1204,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 {
                     // Banner
                     ComposeReportBanner(col, "OFFICIAL DAILY END-OF-DAY RECONCILIATION REPORT", primaryColor,
-                        $"Report Date: {report.ReportDate:MMMM dd, yyyy} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC} • Prepared By: {staffPrc}");
+                        $"Report Date: {report.ReportDate:MMMM dd, yyyy} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC} • Prepared By: {preparedBy}");
 
                     // Patient Census
                     ComposeSectionTitle(col, "PATIENT CENSUS & OPERATIONAL FLOW", primaryColor);
@@ -1314,7 +1316,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     });
 
                     // Sign-off
-                    ComposeSignOffBlock(col, staffPrc, "Cashier / Clinic Staff", "Clinic Administrator / Medical Director");
+                    ComposeSignOffBlock(col, preparedBy, preparedTitle, approverName, approverTitle);
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -1331,7 +1333,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var issuedAt = DateTime.UtcNow;
         var docNumber = $"MORB-{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}";
-        var staffPrc = !string.IsNullOrWhiteSpace(preparedByName) ? preparedByName : "SYSTEM-AUDIT";
+        var (preparedBy, preparedTitle, approverName, approverTitle) = ResolveReportSignatories(
+            settings, "Morbidity", "Medical Director / MHO / Attending Physician", "PRC License & Professional Credentials", preparedByName);
+        var staffPrc = preparedBy;
         var digest = _securityService.ComputeDocumentDigest(
             report.TenantId,
             "DOH-MORBIDITY",
@@ -1368,7 +1372,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 {
                     // Banner
                     ComposeReportBanner(col, "DEPARTMENT OF HEALTH (DOH) OUTPATIENT MORBIDITY REPORT", primaryColor,
-                        $"Reporting Period: {report.StartDate:MMMM dd, yyyy} to {report.EndDate:MMMM dd, yyyy} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC}");
+                        $"Reporting Period: {report.StartDate:MMMM dd, yyyy} to {report.EndDate:MMMM dd, yyyy} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC} • Prepared By: {preparedBy}");
 
                     // Stats KPI Cards
                     col.Item().PaddingTop(2).Row(row =>
@@ -1444,7 +1448,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     });
 
                     // Sign-off
-                    ComposeSignOffBlock(col, staffPrc, "Medical Director / MHO / Attending Physician", "PRC License & Professional Credentials");
+                    ComposeSignOffBlock(col, preparedBy, preparedTitle, approverName, approverTitle);
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -1461,7 +1465,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var issuedAt = DateTime.UtcNow;
         var docNumber = $"TAX-{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}";
-        var staffPrc = !string.IsNullOrWhiteSpace(preparedByName) ? preparedByName : "SYSTEM-AUDIT";
+        var (preparedBy, preparedTitle, approverName, approverTitle) = ResolveReportSignatories(
+            settings, "TaxDiscounts", "Chief Accountant / Clinic Cashier", "Authorized BIR Representative / Clinic Admin", preparedByName);
+        var staffPrc = preparedBy;
         var digest = _securityService.ComputeDocumentDigest(
             report.TenantId,
             "BIR-TAX-AUDIT",
@@ -1498,7 +1504,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 {
                     // Banner
                     ComposeReportBanner(col, "BIR STATUTORY TAX & SENIOR/PWD DISCOUNT AUDIT REPORT", primaryColor,
-                        $"Audit Period: {report.StartDate:MMMM dd, yyyy} to {report.EndDate:MMMM dd, yyyy} • TIN: {settings.TaxIdentificationNumber ?? "N/A"} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC}");
+                        $"Audit Period: {report.StartDate:MMMM dd, yyyy} to {report.EndDate:MMMM dd, yyyy} • TIN: {settings.TaxIdentificationNumber ?? "N/A"} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC} • Prepared By: {preparedBy}");
 
                     // Financial Summary KPI Cards
                     col.Item().PaddingTop(2).Row(row =>
@@ -1584,7 +1590,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     });
 
                     // Sign-off
-                    ComposeSignOffBlock(col, staffPrc, "Chief Accountant / Clinic Cashier", "Authorized BIR Representative / Clinic Admin");
+                    ComposeSignOffBlock(col, preparedBy, preparedTitle, approverName, approverTitle);
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -1601,7 +1607,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var issuedAt = DateTime.UtcNow;
         var docNumber = $"SHARE-{report.StartDate:yyyyMMdd}-{report.EndDate:yyyyMMdd}";
-        var staffPrc = !string.IsNullOrWhiteSpace(preparedByName) ? preparedByName : "SYSTEM-AUDIT";
+        var (preparedBy, preparedTitle, approverName, approverTitle) = ResolveReportSignatories(
+            settings, "DoctorShares", "Clinic Accountant / Finance", "Medical Director / Clinic Administrator", preparedByName);
+        var staffPrc = preparedBy;
         var digest = _securityService.ComputeDocumentDigest(
             report.TenantId,
             "DOCTOR-SHARES",
@@ -1638,7 +1646,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 {
                     // Banner
                     ComposeReportBanner(col, "PHYSICIAN PROFESSIONAL FEES & FACILITY SHARES SETTLEMENT REPORT", primaryColor,
-                        $"Settlement Period: {report.StartDate:MMMM dd, yyyy} to {report.EndDate:MMMM dd, yyyy} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC}");
+                        $"Settlement Period: {report.StartDate:MMMM dd, yyyy} to {report.EndDate:MMMM dd, yyyy} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC} • Prepared By: {preparedBy}");
 
                     // Financial Totals KPI Cards
                     col.Item().PaddingTop(2).Row(row =>
@@ -1726,7 +1734,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     });
 
                     // Settlement Sign-off
-                    ComposeSignOffBlock(col, staffPrc, "Clinic Accountant / Finance", "Medical Director / Clinic Administrator");
+                    ComposeSignOffBlock(col, preparedBy, preparedTitle, approverName, approverTitle);
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -1743,7 +1751,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var issuedAt = DateTime.UtcNow;
         var docNumber = $"ANL-{analytics.StartDate:yyyyMMdd}-{analytics.EndDate:yyyyMMdd}";
-        var staffPrc = !string.IsNullOrWhiteSpace(preparedByName) ? preparedByName : "SYSTEM-AUDIT";
+        var (preparedBy, preparedTitle, approverName, approverTitle) = ResolveReportSignatories(
+            settings, "Analytics", "Operations / Executive Analyst", "Medical Director / Chief Operating Officer", preparedByName);
+        var staffPrc = preparedBy;
         var digest = _securityService.ComputeDocumentDigest(
             analytics.TenantId,
             "CLINIC-ANALYTICS",
@@ -1780,7 +1790,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 {
                     // Banner
                     ComposeReportBanner(col, "EXECUTIVE CLINIC ANALYTICS & OPERATIONAL PERFORMANCE REPORT", primaryColor,
-                        $"Reporting Period: {analytics.StartDate:MMMM dd, yyyy} to {analytics.EndDate:MMMM dd, yyyy} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC}");
+                        $"Reporting Period: {analytics.StartDate:MMMM dd, yyyy} to {analytics.EndDate:MMMM dd, yyyy} • Generated: {issuedAt:yyyy-MM-dd HH:mm UTC} • Prepared By: {preparedBy}");
 
                     // Operational Flow & Telemetry
                     if (analytics.Flow != null)
@@ -2047,7 +2057,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     });
 
                     // Sign-off
-                    ComposeSignOffBlock(col, staffPrc, "Operations / Executive Analyst", "Medical Director / Chief Operating Officer");
+                    ComposeSignOffBlock(col, preparedBy, preparedTitle, approverName, approverTitle);
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -2092,7 +2102,51 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         });
     }
 
-    private static void ComposeSignOffBlock(ColumnDescriptor col, string preparedBy, string preparedTitle, string verifiedTitle)
+    private static (string PreparedBy, string PreparedTitle, string ApproverName, string ApproverTitle) ResolveReportSignatories(
+        ClinicSettings settings,
+        string reportKey,
+        string defaultPreparedTitle,
+        string defaultApproverTitle,
+        string? preparedByName)
+    {
+        var preparedBy = !string.IsNullOrWhiteSpace(preparedByName) ? preparedByName : "SYSTEM-AUDIT";
+        var preparedTitle = defaultPreparedTitle;
+        var approverName = !string.IsNullOrWhiteSpace(settings.DefaultApproverName) ? settings.DefaultApproverName : "Authorized Signatory";
+        var approverTitle = !string.IsNullOrWhiteSpace(settings.DefaultApproverTitle) ? settings.DefaultApproverTitle : defaultApproverTitle;
+
+        if (!string.IsNullOrWhiteSpace(settings.DocumentSignatoriesJson))
+        {
+            try
+            {
+                var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, DocumentSignatoryConfig>>(
+                    settings.DocumentSignatoriesJson,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (dict != null && dict.TryGetValue(reportKey, out var overrideConfig) && overrideConfig != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(overrideConfig.PreparedByTitle))
+                        preparedTitle = overrideConfig.PreparedByTitle;
+                    if (!string.IsNullOrWhiteSpace(overrideConfig.ApproverName))
+                        approverName = overrideConfig.ApproverName;
+                    if (!string.IsNullOrWhiteSpace(overrideConfig.ApproverTitle))
+                        approverTitle = overrideConfig.ApproverTitle;
+                }
+            }
+            catch
+            {
+                // Fallback gracefully on parsing errors
+            }
+        }
+
+        return (preparedBy, preparedTitle, approverName, approverTitle);
+    }
+
+    private static void ComposeSignOffBlock(
+        ColumnDescriptor col,
+        string preparedBy,
+        string preparedTitle,
+        string approverName,
+        string approverTitle)
     {
         col.Item().PaddingTop(14).Row(row =>
         {
@@ -2110,8 +2164,8 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             {
                 c.Item().Text("NOTED / APPROVED BY:").FontSize(7f).SemiBold().FontColor("#64748B");
                 c.Item().PaddingTop(18).LineHorizontal(0.5f).LineColor("#9CA3AF");
-                c.Item().PaddingTop(2).Text("Authorized Signatory").FontSize(8.5f).Bold().FontColor("#111827");
-                c.Item().Text(verifiedTitle).FontSize(7f).FontColor("#6B7280");
+                c.Item().PaddingTop(2).Text(approverName).FontSize(8.5f).Bold().FontColor("#111827");
+                c.Item().Text(approverTitle).FontSize(7f).FontColor("#6B7280");
             });
         });
     }

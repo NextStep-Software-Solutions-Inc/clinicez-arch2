@@ -1903,11 +1903,21 @@ export interface ClinicSettingsRecord {
   specialtyMode?: 'Medical' | 'Dental' | 'Multi-Specialty' | 'MultiSpecialty';
   enableDentalModule?: boolean;
 
+  defaultApproverName?: string | null;
+  defaultApproverTitle?: string | null;
+  documentSignatoriesJson?: string | null;
+
   // Milestone 5 Calendar Appointment Reminders & Push Notification Settings
   enableAppointmentReminders?: boolean;
   appointmentReminder24hEnabled?: boolean;
   appointmentReminder2hEnabled?: boolean;
   enableStaffAppointmentNotifications?: boolean;
+}
+
+export interface DocumentSignatoryItemConfig {
+  preparedByTitle?: string | null;
+  approverName?: string | null;
+  approverTitle?: string | null;
 }
 
 export type NotificationUrgency = 'Routine' | 'Urgent' | 'Stat';
