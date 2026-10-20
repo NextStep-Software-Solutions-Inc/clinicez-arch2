@@ -282,11 +282,12 @@ describe('Billing Receipt & SOA Review Feature Tests', () => {
       expect(billingSource).toContain('procsData');
     });
 
-    test('5.3 Billing screen offers dual receipt actions: Thermal Paper (POS) and Professional PDF', () => {
+    test('5.3 Billing screen offers Thermal Paper (POS) and View SOA (PDF) actions with Close button', () => {
       expect(billingSource).toContain('title="Thermal Paper (POS)"');
-      expect(billingSource).toContain('title="Professional PDF"');
-      expect(billingSource).toContain('printThermalReceipt(lastReceipt, printLetterhead)');
-      expect(billingSource).toContain('printProfessionalReceipt(lastReceipt, printLetterhead)');
+      expect(billingSource).toContain('title="View SOA (PDF)"');
+      expect(billingSource).toContain('title="Close"');
+      expect(billingSource).not.toContain('Done (Call Next Patient)');
+      expect(billingSource).not.toContain('title="Professional PDF"');
     });
   });
 });

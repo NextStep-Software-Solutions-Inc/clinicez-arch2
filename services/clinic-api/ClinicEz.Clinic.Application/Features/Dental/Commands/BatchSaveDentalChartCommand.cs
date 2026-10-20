@@ -50,7 +50,7 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
         }
 
         var patient = await _patientRepo
-            .Query(p => p.ClinicId == _clinicContext.ClinicId && p.Id == request.PatientId && !p.IsDeleted)
+            .Query(p => p.Id == request.PatientId && !p.IsDeleted)
             .FirstOrDefaultAsync(ct);
 
         if (patient == null)
@@ -187,8 +187,8 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                     var newHealthy = new DentalToothRecord
                     {
                         Id = Guid.NewGuid(),
-                        TenantId = _clinicContext.TenantId,
-                        ClinicId = _clinicContext.ClinicId,
+                        TenantId = !string.IsNullOrWhiteSpace(_clinicContext.TenantId) ? _clinicContext.TenantId : patient.TenantId,
+                        ClinicId = _clinicContext.ClinicId != Guid.Empty ? _clinicContext.ClinicId : patient.ClinicId,
                         PatientId = request.PatientId,
                         PatientName = patientName,
                         ConsultationId = request.ConsultationId,
@@ -240,8 +240,8 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                 var newTooth = new DentalToothRecord
                 {
                     Id = Guid.NewGuid(),
-                    TenantId = _clinicContext.TenantId,
-                    ClinicId = _clinicContext.ClinicId,
+                    TenantId = !string.IsNullOrWhiteSpace(_clinicContext.TenantId) ? _clinicContext.TenantId : patient.TenantId,
+                    ClinicId = _clinicContext.ClinicId != Guid.Empty ? _clinicContext.ClinicId : patient.ClinicId,
                     PatientId = request.PatientId,
                     PatientName = patientName,
                     ConsultationId = request.ConsultationId,
