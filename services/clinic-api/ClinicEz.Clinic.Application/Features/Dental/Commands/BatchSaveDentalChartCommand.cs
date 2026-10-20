@@ -81,7 +81,7 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
         // 3. Deduplicate batch inputs per tooth while preserving distinct conditions:
         // Group by (ToothNumber, Status) so distinct statuses on the same tooth are preserved.
         // If an item has Healthy, it clears previous conditions on that tooth.
-        // If multiple items on the same tooth have the exact same surface (e.g. Decay on "m" then Filled on "m"), the last one wins.
+        // If multiple items on the same tooth have the exact same surface (e.g. Decayed on "m" then Filled on "m"), the last one wins.
         var processedInputs = new List<ToothRecordInput>();
         var toothGroups = request.Teeth.GroupBy(t => t.ToothNumber);
 
@@ -111,9 +111,9 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                     {
                         var later = nonHealthyList[j];
                         var laterSurface = UpsertDentalToothRecordCommandHandler.NormalizeAndSortSurfaces(later.Surface);
-                        if (later.Status == item.Status 
-                            || normSurface == null 
-                            || laterSurface == null 
+                        if (later.Status == item.Status
+                            || normSurface == null
+                            || laterSurface == null
                             || normSurface.All(c => laterSurface.Contains(c)))
                         {
                             superseded = true;
@@ -234,11 +234,29 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                 continue;
             }
 
-            // Guard: If tooth is currently Missing, block Decay/Filled/Crown/Extraction unless tooth is first reset to Healthy or Missing is removed
+            // Guard: If tooth is currently Missing, block new conditions unless tooth is first reset to Healthy or Missing is removed.
+            // If the non-missing record already existed in the database alongside Missing (legacy duplicate whole-tooth state),
+            // automatically supersede the older record instead of failing batch save.
             var activeMissing = existingTeeth
                 .FirstOrDefault(t => t.ToothNumber == tooth.ToothNumber && t.Status == ToothStatus.Missing && !t.IsDeleted && t.IsCurrent);
             if (activeMissing != null && tooth.Status != ToothStatus.Missing)
             {
+                var legacyExistingWithSameStatus = existingTeeth
+                    .Where(t => t.ToothNumber == tooth.ToothNumber && t.Status == tooth.Status && !t.IsDeleted && t.IsCurrent)
+                    .ToList();
+                if (legacyExistingWithSameStatus.Count > 0)
+                {
+                    foreach (var leg in legacyExistingWithSameStatus)
+                    {
+                        leg.IsCurrent = false;
+                        leg.ActiveSurface = null;
+                        leg.SupersededAt = now;
+                        leg.SupersededByRecordId = activeMissing.Id;
+                        UpdateIfExisting(leg);
+                    }
+                    continue;
+                }
+
                 throw new BadRequestException(
                     $"Tooth '{tooth.ToothNumber}' is currently marked as Missing. Mark the tooth as Healthy or remove the Missing condition before recording '{tooth.Status}'.");
             }
@@ -313,30 +331,30 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                 continue;
             }
 
-            // Case D: Extraction (whole-tooth status; supersedes prior conditions on this tooth)
-            if (tooth.Status == ToothStatus.Extraction)
+            // Case D: Whole-tooth non-missing status (ForExtraction, Impacted, RootCanal, Implant; supersedes prior conditions on this tooth)
+            if (UpsertDentalToothRecordCommandHandler.IsWholeToothNonMissingStatus(tooth.Status))
             {
-                var extractionRecord = existingTeeth
-                    .FirstOrDefault(t => t.ToothNumber == tooth.ToothNumber && t.Status == ToothStatus.Extraction && !t.IsDeleted && t.IsCurrent);
-                if (extractionRecord != null)
+                var wholeToothRecord = existingTeeth
+                    .FirstOrDefault(t => t.ToothNumber == tooth.ToothNumber && t.Status == tooth.Status && !t.IsDeleted && t.IsCurrent);
+                if (wholeToothRecord != null)
                 {
-                    extractionRecord.Surface = null;
-                    extractionRecord.ActiveSurface = null;
-                    extractionRecord.IsCurrent = true;
-                    extractionRecord.Notes = string.IsNullOrWhiteSpace(tooth.Notes) ? null : tooth.Notes.Trim();
-                    if (request.ConsultationId.HasValue)
+                    wholeToothRecord.Surface = null;
+                    wholeToothRecord.ActiveSurface = null;
+                    wholeToothRecord.IsCurrent = true;
+                    wholeToothRecord.Notes = string.IsNullOrWhiteSpace(tooth.Notes) ? null : tooth.Notes.Trim();
+                    if (request.ConsultationId.HasValue && !wholeToothRecord.ConsultationId.HasValue)
                     {
-                        extractionRecord.ConsultationId = request.ConsultationId.Value;
+                        wholeToothRecord.ConsultationId = request.ConsultationId.Value;
                     }
-                    extractionRecord.PatientName = patientName;
-                    extractionRecord.RecordedBy = staffName;
-                    extractionRecord.UpdatedAt = now;
-                    extractionRecord.UpdatedBy = staffName;
-                    UpdateIfExisting(extractionRecord);
+                    wholeToothRecord.PatientName = patientName;
+                    wholeToothRecord.RecordedBy = staffName;
+                    wholeToothRecord.UpdatedAt = now;
+                    wholeToothRecord.UpdatedBy = staffName;
+                    UpdateIfExisting(wholeToothRecord);
                 }
                 else
                 {
-                    extractionRecord = new DentalToothRecord
+                    wholeToothRecord = new DentalToothRecord
                     {
                         Id = Guid.NewGuid(),
                         TenantId = _clinicContext.TenantId,
@@ -345,7 +363,7 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                         PatientName = patientName,
                         ConsultationId = request.ConsultationId,
                         ToothNumber = tooth.ToothNumber,
-                        Status = ToothStatus.Extraction,
+                        Status = tooth.Status,
                         Surface = null,
                         ActiveSurface = null,
                         IsCurrent = true,
@@ -354,23 +372,23 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                         CreatedAt = now,
                         CreatedBy = staffName
                     };
-                    await _toothRepo.AddAsync(extractionRecord, ct);
-                    newlyAddedIds.Add(extractionRecord.Id);
-                    existingTeeth.Add(extractionRecord);
+                    await _toothRepo.AddAsync(wholeToothRecord, ct);
+                    newlyAddedIds.Add(wholeToothRecord.Id);
+                    existingTeeth.Add(wholeToothRecord);
                 }
 
-                foreach (var prior in existingTeeth.Where(t => t.ToothNumber == tooth.ToothNumber && t.Status != ToothStatus.Healthy && t.Status != ToothStatus.Extraction && !t.IsDeleted && t.IsCurrent))
+                foreach (var prior in existingTeeth.Where(t => t.ToothNumber == tooth.ToothNumber && t.Status != ToothStatus.Healthy && t.Status != tooth.Status && !t.IsDeleted && t.IsCurrent))
                 {
                     prior.IsCurrent = false;
                     prior.ActiveSurface = null;
                     prior.SupersededAt = now;
-                    prior.SupersededByRecordId = extractionRecord.Id;
+                    prior.SupersededByRecordId = wholeToothRecord.Id;
                     UpdateIfExisting(prior);
                 }
                 continue;
             }
 
-            // Case E: Surface-scoped condition (Decay, Filled, Crown)
+            // Case E: Surface-scoped condition (Decayed, Filled, Crowned, Sealant, Fractured)
             var existing = existingTeeth
                 .FirstOrDefault(t => t.ToothNumber == tooth.ToothNumber
                                   && t.Status == tooth.Status
@@ -424,7 +442,7 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                 existingTeeth.Add(existing);
             }
 
-            foreach (var ext in existingTeeth.Where(t => t.ToothNumber == tooth.ToothNumber && t.Status == ToothStatus.Extraction && !t.IsDeleted && t.IsCurrent))
+            foreach (var ext in existingTeeth.Where(t => t.ToothNumber == tooth.ToothNumber && UpsertDentalToothRecordCommandHandler.IsWholeToothNonMissingStatus(t.Status) && !t.IsDeleted && t.IsCurrent))
             {
                 ext.IsCurrent = false;
                 ext.ActiveSurface = null;
@@ -439,9 +457,9 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                                                             && t.Id != existing.Id
                                                             && !t.IsDeleted
                                                             && t.IsCurrent
-                                                            && (t.Status == ToothStatus.Decay || t.Status == ToothStatus.Filled || t.Status == ToothStatus.Crown)))
+                                                            && UpsertDentalToothRecordCommandHandler.IsSurfaceScopedStatus(t.Status)))
                 {
-                    var priorActive = other.ActiveSurface ?? (other.Status == ToothStatus.Crown && string.IsNullOrWhiteSpace(other.Surface) ? "MODBL" : other.Surface);
+                    var priorActive = other.ActiveSurface ?? (other.Status == ToothStatus.Crowned && string.IsNullOrWhiteSpace(other.Surface) ? "MODBL" : other.Surface);
                     var remaining = UpsertDentalToothRecordCommandHandler.SubtractSurfaces(priorActive, effectiveActiveSurface);
                     other.ActiveSurface = remaining;
                     if (string.IsNullOrWhiteSpace(remaining))

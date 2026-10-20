@@ -1506,7 +1506,18 @@ export interface PatientChart {
   dentalProcedures?: ClinicalProcedureRecord[];
 }
 
-export type ToothStatus = 'Healthy' | 'Decay' | 'Filled' | 'Missing' | 'Crown' | 'Extraction';
+export type ToothStatus =
+  | 'Healthy'
+  | 'Decayed'
+  | 'Filled'
+  | 'Missing'
+  | 'Crowned'
+  | 'ForExtraction'
+  | 'Sealant'
+  | 'Fractured'
+  | 'Impacted'
+  | 'RootCanal'
+  | 'Implant';
 
 export interface DentalToothRecord {
   id: string;

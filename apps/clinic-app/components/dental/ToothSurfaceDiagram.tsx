@@ -109,8 +109,8 @@ export function ToothSurfaceDiagram({
     stagedStatus === 'Missing' ||
     effectiveConditions.some((c) => c.status === 'Missing' && c.isCurrent !== false);
   const hasExtraction =
-    stagedStatus === 'Extraction' ||
-    effectiveConditions.some((c) => c.status === 'Extraction' && c.isCurrent !== false);
+    stagedStatus === 'ForExtraction' ||
+    effectiveConditions.some((c) => c.status === 'ForExtraction' && c.isCurrent !== false);
 
   const renderSurfaceZone = (surface: ToothSurfaceCode, style: any) => {
     const isSelected = selectedSet.has(surface);

@@ -85,7 +85,7 @@ public class ChallengerM1MultiConditionStressTests
         var decayResult = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: "MD",
             Notes: "Recurrent mesio-distal caries",
             ConsultationId: consult2Id
@@ -97,7 +97,7 @@ public class ChallengerM1MultiConditionStressTests
         var crownResult = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Crown,
+            Status: ToothStatus.Crowned,
             Surface: "B",
             Notes: "Buccal porcelain veneer/crown",
             ConsultationId: consult2Id
@@ -120,12 +120,12 @@ public class ChallengerM1MultiConditionStressTests
         dbFilled.Notes.Should().Be("Existing composite on occlusal");
         dbFilled.ConsultationId.Should().Be(consult1Id);
 
-        var dbDecay = dbRecords.First(r => r.Status == ToothStatus.Decay);
+        var dbDecay = dbRecords.First(r => r.Status == ToothStatus.Decayed);
         dbDecay.Surface.Should().Be("MD");
         dbDecay.Notes.Should().Be("Recurrent mesio-distal caries");
         dbDecay.ConsultationId.Should().Be(consult2Id);
 
-        var dbCrown = dbRecords.First(r => r.Status == ToothStatus.Crown);
+        var dbCrown = dbRecords.First(r => r.Status == ToothStatus.Crowned);
         dbCrown.Surface.Should().Be("B");
         dbCrown.Notes.Should().Be("Buccal porcelain veneer/crown");
         dbCrown.ConsultationId.Should().Be(consult2Id);
@@ -211,8 +211,8 @@ public class ChallengerM1MultiConditionStressTests
             Teeth: new List<ToothRecordInput>
             {
                 new(ToothNumber: 16, Status: ToothStatus.Filled, Surface: "O", Notes: "Initial filling"),
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "MD", Notes: "Caries on edges"),
-                new(ToothNumber: 16, Status: ToothStatus.Crown, Surface: "B", Notes: "Veneer on buccal")
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "MD", Notes: "Caries on edges"),
+                new(ToothNumber: 16, Status: ToothStatus.Crowned, Surface: "B", Notes: "Veneer on buccal")
             }
         );
 
@@ -222,8 +222,8 @@ public class ChallengerM1MultiConditionStressTests
         // Assert
         result.Teeth.Should().HaveCount(3);
         result.Teeth.Should().Contain(t => t.ToothNumber == 16 && t.Status == ToothStatus.Filled && t.Surface == "O");
-        result.Teeth.Should().Contain(t => t.ToothNumber == 16 && t.Status == ToothStatus.Decay && t.Surface == "MD");
-        result.Teeth.Should().Contain(t => t.ToothNumber == 16 && t.Status == ToothStatus.Crown && t.Surface == "B");
+        result.Teeth.Should().Contain(t => t.ToothNumber == 16 && t.Status == ToothStatus.Decayed && t.Surface == "MD");
+        result.Teeth.Should().Contain(t => t.ToothNumber == 16 && t.Status == ToothStatus.Crowned && t.Surface == "B");
 
         var dbRecords = await toothRepo.Query(t => t.PatientId == patientId && t.ToothNumber == 16 && !t.IsDeleted).ToListAsync();
         dbRecords.Should().HaveCount(3);
@@ -260,27 +260,27 @@ public class ChallengerM1MultiConditionStressTests
 
         // Setup tooth 16 with Filled(O), Decay(MD), Crown(B)
         await upsertHandler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Filled, "O", "Filling"), CancellationToken.None);
-        await upsertHandler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Decay, "MD", "Caries"), CancellationToken.None);
-        await upsertHandler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Crown, "B", "Crown"), CancellationToken.None);
+        await upsertHandler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Decayed, "MD", "Caries"), CancellationToken.None);
+        await upsertHandler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Crowned, "B", "Crown"), CancellationToken.None);
 
         // Act: Remove Decay condition via RemoveCondition = true
         var removeResult = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             RemoveCondition: true
         ), CancellationToken.None);
 
         // Assert Step A: RemoveResult reflects the removed condition
         removeResult.Should().NotBeNull();
         removeResult.ToothNumber.Should().Be(16);
-        removeResult.Status.Should().Be(ToothStatus.Decay);
+        removeResult.Status.Should().Be(ToothStatus.Decayed);
 
         // Assert Step B: In DB, the Decay record is marked IsDeleted = true, with DeletedAt and DeletedBy populated
         var allDbRecords = await toothRepo.Query(t => t.PatientId == patientId && t.ToothNumber == 16, ignoreQueryFilters: true).ToListAsync();
         allDbRecords.Should().HaveCount(3);
 
-        var deletedDecay = allDbRecords.First(r => r.Status == ToothStatus.Decay);
+        var deletedDecay = allDbRecords.First(r => r.Status == ToothStatus.Decayed);
         deletedDecay.IsDeleted.Should().BeTrue();
         deletedDecay.DeletedAt.Should().NotBeNull();
         deletedDecay.DeletedBy.Should().Be("Dr. Challenger Stress Tester");
@@ -288,15 +288,15 @@ public class ChallengerM1MultiConditionStressTests
         var activeFilled = allDbRecords.First(r => r.Status == ToothStatus.Filled);
         activeFilled.IsDeleted.Should().BeFalse();
 
-        var activeCrown = allDbRecords.First(r => r.Status == ToothStatus.Crown);
+        var activeCrown = allDbRecords.First(r => r.Status == ToothStatus.Crowned);
         activeCrown.IsDeleted.Should().BeFalse();
 
         // Assert Step C: Future queries completely exclude the soft-deleted Decay condition
         var chart = await chartQueryHandler.Handle(new GetPatientDentalChartQuery(patientId), CancellationToken.None);
         chart.Teeth.Should().HaveCount(2);
-        chart.Teeth.Should().NotContain(t => t.Status == ToothStatus.Decay);
+        chart.Teeth.Should().NotContain(t => t.Status == ToothStatus.Decayed);
         chart.Teeth.Should().Contain(t => t.Status == ToothStatus.Filled);
-        chart.Teeth.Should().Contain(t => t.Status == ToothStatus.Crown);
+        chart.Teeth.Should().Contain(t => t.Status == ToothStatus.Crowned);
 
         chart.Summary.Should().NotBeNull();
         chart.Summary!.DecayCount.Should().Be(0);
@@ -308,7 +308,7 @@ public class ChallengerM1MultiConditionStressTests
         var idempotentAct = async () => await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             RemoveCondition: true
         ), CancellationToken.None);
 
@@ -342,7 +342,7 @@ public class ChallengerM1MultiConditionStressTests
 
         // Setup tooth 16 with Filled and Decay
         await upsertHandler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Filled, "O", "Old filling"), CancellationToken.None);
-        await upsertHandler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Decay, "MD", "Caries"), CancellationToken.None);
+        await upsertHandler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Decayed, "MD", "Caries"), CancellationToken.None);
 
         // Act 1: Mark tooth 16 as Healthy
         var healthyResult = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
@@ -375,13 +375,13 @@ public class ChallengerM1MultiConditionStressTests
         var newDecayResult = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: "O",
             Notes: "New occlusal pit decay"
         ), CancellationToken.None);
 
         // Assert 2: The Healthy placeholder is now soft-deleted, and only the Decay record is active
-        newDecayResult.Status.Should().Be(ToothStatus.Decay);
+        newDecayResult.Status.Should().Be(ToothStatus.Decayed);
 
         var allRecordsAfterNewDecay = await toothRepo.Query(t => t.PatientId == patientId && t.ToothNumber == 16, ignoreQueryFilters: true).ToListAsync();
         allRecordsAfterNewDecay.Should().HaveCount(4);
@@ -389,13 +389,13 @@ public class ChallengerM1MultiConditionStressTests
 
         var currentActive = allRecordsAfterNewDecay.Where(r => !r.IsDeleted).ToList();
         currentActive.Should().HaveCount(1);
-        currentActive[0].Status.Should().Be(ToothStatus.Decay);
+        currentActive[0].Status.Should().Be(ToothStatus.Decayed);
         currentActive[0].Surface.Should().Be("O");
         currentActive[0].Notes.Should().Be("New occlusal pit decay");
 
         var chartAfterNewDecay = await chartQueryHandler.Handle(new GetPatientDentalChartQuery(patientId), CancellationToken.None);
         chartAfterNewDecay.Teeth.Should().HaveCount(1);
-        chartAfterNewDecay.Teeth[0].Status.Should().Be(ToothStatus.Decay);
+        chartAfterNewDecay.Teeth[0].Status.Should().Be(ToothStatus.Decayed);
         chartAfterNewDecay.Summary!.HealthyCount.Should().Be(0);
         chartAfterNewDecay.Summary.DecayCount.Should().Be(1);
         chartAfterNewDecay.Summary.DmftIndex.Should().Be(1);
@@ -423,14 +423,14 @@ public class ChallengerM1MultiConditionStressTests
         await toothRepo.AddAsync(new DentalToothRecord
         {
             TenantId = _tenantId, ClinicId = _clinicId, PatientId = patientId,
-            ToothNumber = 16, Status = ToothStatus.Decay, Surface = "MD"
+            ToothNumber = 16, Status = ToothStatus.Decayed, Surface = "MD"
         }, CancellationToken.None);
 
         // Tooth 26: Multi-condition (Decay on MOD + Filled on B + Missing) -> 3 rows
         await toothRepo.AddAsync(new DentalToothRecord
         {
             TenantId = _tenantId, ClinicId = _clinicId, PatientId = patientId,
-            ToothNumber = 26, Status = ToothStatus.Decay, Surface = "MOD"
+            ToothNumber = 26, Status = ToothStatus.Decayed, Surface = "MOD"
         }, CancellationToken.None);
         await toothRepo.AddAsync(new DentalToothRecord
         {
@@ -447,7 +447,7 @@ public class ChallengerM1MultiConditionStressTests
         await toothRepo.AddAsync(new DentalToothRecord
         {
             TenantId = _tenantId, ClinicId = _clinicId, PatientId = patientId,
-            ToothNumber = 36, Status = ToothStatus.Crown, Surface = "B"
+            ToothNumber = 36, Status = ToothStatus.Crowned, Surface = "B"
         }, CancellationToken.None);
 
         // Tooth 46: Single condition (Healthy) -> 1 row
@@ -461,7 +461,7 @@ public class ChallengerM1MultiConditionStressTests
         await toothRepo.AddAsync(new DentalToothRecord
         {
             TenantId = _tenantId, ClinicId = _clinicId, PatientId = patientId,
-            ToothNumber = 11, Status = ToothStatus.Decay, IsDeleted = true
+            ToothNumber = 11, Status = ToothStatus.Decayed, IsDeleted = true
         }, CancellationToken.None);
 
         await uow.SaveChangesAsync(CancellationToken.None);
@@ -599,7 +599,7 @@ public class ChallengerM1MultiConditionStressTests
             PatientId = patientId,
             ConsultationId = consult1Id,
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "MD",
             Notes = "Recurrent caries",
             CreatedAt = consult1Date,
@@ -641,7 +641,7 @@ public class ChallengerM1MultiConditionStressTests
             PatientId = patientId,
             ConsultationId = consult1Id,
             ToothNumber = 46,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             IsDeleted = true,
             CreatedAt = consult1Date
         }, CancellationToken.None);
@@ -709,7 +709,7 @@ public class ChallengerM1MultiConditionStressTests
         tooth16Filled.Surface.Should().Be("O");
         tooth16Filled.RecordedBy.Should().Be("Dr. Beta"); // UpdatedBy ?? CreatedBy
 
-        var tooth16Decay = patientChart.DentalTeeth.First(t => t.ToothNumber == 16 && t.Status == ToothStatus.Decay);
+        var tooth16Decay = patientChart.DentalTeeth.First(t => t.ToothNumber == 16 && t.Status == ToothStatus.Decayed);
         tooth16Decay.Surface.Should().Be("MD");
         tooth16Decay.RecordedBy.Should().Be("Dr. Alpha"); // CreatedBy fallback
 
@@ -729,7 +729,7 @@ public class ChallengerM1MultiConditionStressTests
         enc1.DentalFindings.Should().NotBeNull();
         enc1.DentalFindings!.Should().HaveCount(2);
         enc1.DentalFindings.Should().Contain(d => d.ToothNumber == 16 && d.Status == ToothStatus.Filled);
-        enc1.DentalFindings.Should().Contain(d => d.ToothNumber == 16 && d.Status == ToothStatus.Decay);
+        enc1.DentalFindings.Should().Contain(d => d.ToothNumber == 16 && d.Status == ToothStatus.Decayed);
         enc1.DentalFindings.Should().NotContain(d => d.ToothNumber == 46); // Deleted record excluded
 
         // Encounter 2 (1 linked via ConsultationId, 1 linked via EncounterDate fallback)
@@ -774,7 +774,7 @@ public class ChallengerM1MultiConditionStressTests
         await toothRepo.AddAsync(new DentalToothRecord
         {
             TenantId = _tenantId, ClinicId = _clinicId, PatientId = patientId,
-            ToothNumber = 16, Status = ToothStatus.Decay, Surface = "MD"
+            ToothNumber = 16, Status = ToothStatus.Decayed, Surface = "MD"
         }, CancellationToken.None);
 
         await uow.SaveChangesAsync(CancellationToken.None);
@@ -792,7 +792,7 @@ public class ChallengerM1MultiConditionStressTests
             ConsultationId: null,
             Teeth: new List<ToothRecordInput>
             {
-                new(ToothNumber: 16, Status: ToothStatus.Decay, RemoveCondition: true)
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, RemoveCondition: true)
             }
         );
 
@@ -804,7 +804,7 @@ public class ChallengerM1MultiConditionStressTests
 
         var allDb = await toothRepo.Query(t => t.PatientId == patientId && t.ToothNumber == 16, ignoreQueryFilters: true).ToListAsync();
         allDb.Should().HaveCount(2);
-        allDb.First(t => t.Status == ToothStatus.Decay).IsDeleted.Should().BeTrue();
+        allDb.First(t => t.Status == ToothStatus.Decayed).IsDeleted.Should().BeTrue();
         allDb.First(t => t.Status == ToothStatus.Filled).IsDeleted.Should().BeFalse();
     }
 

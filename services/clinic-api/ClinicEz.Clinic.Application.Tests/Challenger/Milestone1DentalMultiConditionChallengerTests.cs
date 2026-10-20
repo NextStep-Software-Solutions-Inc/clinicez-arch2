@@ -97,15 +97,15 @@ public class Milestone1DentalMultiConditionChallengerTests
             Teeth: new List<ToothRecordInput>
             {
                 new(ToothNumber: 16, Status: ToothStatus.Filled, Surface: "O", Notes: "Adult occlusal composite"),
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "MD", Notes: "Adult recurrent caries"),
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "MD", Notes: "Adult recurrent caries"),
                 new(ToothNumber: 21, Status: ToothStatus.Healthy, Surface: null, Notes: "Adult central incisor normal"),
                 new(ToothNumber: 36, Status: ToothStatus.Missing, Surface: null, Notes: "Adult first molar missing"),
-                new(ToothNumber: 47, Status: ToothStatus.Crown, Surface: null, Notes: "Adult gold crown"),
+                new(ToothNumber: 47, Status: ToothStatus.Crowned, Surface: null, Notes: "Adult gold crown"),
                 new(ToothNumber: 55, Status: ToothStatus.Filled, Surface: "O", Notes: "Child molar filled"),
-                new(ToothNumber: 55, Status: ToothStatus.Decay, Surface: "B", Notes: "Child buccal decay"),
+                new(ToothNumber: 55, Status: ToothStatus.Decayed, Surface: "B", Notes: "Child buccal decay"),
                 new(ToothNumber: 61, Status: ToothStatus.Healthy, Surface: null, Notes: "Child incisor healthy"),
-                new(ToothNumber: 75, Status: ToothStatus.Extraction, Surface: null, Notes: "Child molar indicated for extraction"),
-                new(ToothNumber: 84, Status: ToothStatus.Decay, Surface: "MOD", Notes: "Child molar extensive caries")
+                new(ToothNumber: 75, Status: ToothStatus.ForExtraction, Surface: null, Notes: "Child molar indicated for extraction"),
+                new(ToothNumber: 84, Status: ToothStatus.Decayed, Surface: "MOD", Notes: "Child molar extensive caries")
             }
         );
 
@@ -124,21 +124,21 @@ public class Milestone1DentalMultiConditionChallengerTests
         var tooth16Records = result.Teeth.Where(t => t.ToothNumber == 16).ToList();
         tooth16Records.Should().HaveCount(2);
         tooth16Records.Should().ContainSingle(t => t.Status == ToothStatus.Filled && t.Surface == "O");
-        tooth16Records.Should().ContainSingle(t => t.Status == ToothStatus.Decay && t.Surface == "MD");
+        tooth16Records.Should().ContainSingle(t => t.Status == ToothStatus.Decayed && t.Surface == "MD");
 
         // Verify Child Tooth 55 has 2 distinct conditions
         var tooth55Records = result.Teeth.Where(t => t.ToothNumber == 55).ToList();
         tooth55Records.Should().HaveCount(2);
         tooth55Records.Should().ContainSingle(t => t.Status == ToothStatus.Filled && t.Surface == "O");
-        tooth55Records.Should().ContainSingle(t => t.Status == ToothStatus.Decay && t.Surface == "B");
+        tooth55Records.Should().ContainSingle(t => t.Status == ToothStatus.Decayed && t.Surface == "B");
 
         // Verify child teeth 61, 75, 84 and adult teeth 21, 36, 47 are present
         result.Teeth.Should().ContainSingle(t => t.ToothNumber == 21 && t.Status == ToothStatus.Healthy);
         result.Teeth.Should().ContainSingle(t => t.ToothNumber == 36 && t.Status == ToothStatus.Missing);
-        result.Teeth.Should().ContainSingle(t => t.ToothNumber == 47 && t.Status == ToothStatus.Crown);
+        result.Teeth.Should().ContainSingle(t => t.ToothNumber == 47 && t.Status == ToothStatus.Crowned);
         result.Teeth.Should().ContainSingle(t => t.ToothNumber == 61 && t.Status == ToothStatus.Healthy);
-        result.Teeth.Should().ContainSingle(t => t.ToothNumber == 75 && t.Status == ToothStatus.Extraction);
-        result.Teeth.Should().ContainSingle(t => t.ToothNumber == 84 && t.Status == ToothStatus.Decay && t.Surface == "MOD");
+        result.Teeth.Should().ContainSingle(t => t.ToothNumber == 75 && t.Status == ToothStatus.ForExtraction);
+        result.Teeth.Should().ContainSingle(t => t.ToothNumber == 84 && t.Status == ToothStatus.Decayed && t.Surface == "MOD");
 
         // Verify Summary metrics
         result.Summary.Should().NotBeNull();
@@ -192,8 +192,8 @@ public class Milestone1DentalMultiConditionChallengerTests
             ConsultationId: null,
             Teeth: new List<ToothRecordInput>
             {
-                new(ToothNumber: 26, Status: ToothStatus.Decay, Surface: "O", Notes: "Initial caries on O"),
-                new(ToothNumber: 26, Status: ToothStatus.Decay, Surface: "MOD", Notes: "Expanded caries finding to MOD"),
+                new(ToothNumber: 26, Status: ToothStatus.Decayed, Surface: "O", Notes: "Initial caries on O"),
+                new(ToothNumber: 26, Status: ToothStatus.Decayed, Surface: "MOD", Notes: "Expanded caries finding to MOD"),
                 new(ToothNumber: 35, Status: ToothStatus.Filled, Surface: "O", Notes: "Amalgam filling"),
                 new(ToothNumber: 35, Status: ToothStatus.Filled, Surface: "O", Notes: "Composite filling revision")
             }
@@ -206,7 +206,7 @@ public class Milestone1DentalMultiConditionChallengerTests
         result.Teeth.Should().HaveCount(2);
 
         var tooth26 = result.Teeth.First(t => t.ToothNumber == 26);
-        tooth26.Status.Should().Be(ToothStatus.Decay);
+        tooth26.Status.Should().Be(ToothStatus.Decayed);
         tooth26.Surface.Should().Be("MOD", "Later surface MOD supersedes earlier O");
         tooth26.Notes.Should().Be("Expanded caries finding to MOD");
 
@@ -255,7 +255,7 @@ public class Milestone1DentalMultiConditionChallengerTests
             ClinicId = _clinicId,
             PatientId = patientId,
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "MD",
             Notes = "Existing decay"
         }, CancellationToken.None);
@@ -267,7 +267,7 @@ public class Milestone1DentalMultiConditionChallengerTests
             ClinicId = _clinicId,
             PatientId = patientId,
             ToothNumber = 26,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "O",
             Notes = "Tooth 26 caries"
         }, CancellationToken.None);
@@ -308,11 +308,11 @@ public class Milestone1DentalMultiConditionChallengerTests
         var dbTooth16Deleted = await toothRepo.Query(t => t.PatientId == patientId && t.ToothNumber == 16 && t.IsDeleted, ignoreQueryFilters: true).ToListAsync();
         dbTooth16Deleted.Should().HaveCount(2, "Both Filled and Decay records must be marked IsDeleted = true");
         dbTooth16Deleted.Should().Contain(t => t.Status == ToothStatus.Filled && t.IsDeleted);
-        dbTooth16Deleted.Should().Contain(t => t.Status == ToothStatus.Decay && t.IsDeleted);
+        dbTooth16Deleted.Should().Contain(t => t.Status == ToothStatus.Decayed && t.IsDeleted);
 
         // Tooth 26 remains intact
         var tooth26 = result.Teeth.First(t => t.ToothNumber == 26);
-        tooth26.Status.Should().Be(ToothStatus.Decay);
+        tooth26.Status.Should().Be(ToothStatus.Decayed);
     }
 
     [Fact]
@@ -354,7 +354,7 @@ public class Milestone1DentalMultiConditionChallengerTests
             ClinicId = _clinicId,
             PatientId = patientId,
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "MD",
             Notes = "Caries on MD"
         }, CancellationToken.None);
@@ -374,7 +374,7 @@ public class Milestone1DentalMultiConditionChallengerTests
             ConsultationId: null,
             Teeth: new List<ToothRecordInput>
             {
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "MD", Notes: null, RemoveCondition: true)
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "MD", Notes: null, RemoveCondition: true)
             }
         );
 
@@ -392,7 +392,7 @@ public class Milestone1DentalMultiConditionChallengerTests
         var filledDb = dbRecords.First(t => t.Status == ToothStatus.Filled);
         filledDb.IsDeleted.Should().BeFalse();
 
-        var decayDb = dbRecords.First(t => t.Status == ToothStatus.Decay);
+        var decayDb = dbRecords.First(t => t.Status == ToothStatus.Decayed);
         decayDb.IsDeleted.Should().BeTrue();
     }
 
@@ -498,7 +498,7 @@ public class Milestone1DentalMultiConditionChallengerTests
         var upsertResult = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 11,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: "M",
             Notes: "New decay noted"
         ), CancellationToken.None);
@@ -591,7 +591,7 @@ public class Milestone1DentalMultiConditionChallengerTests
             PatientId = patientId,
             ConsultationId = consultationIdA,
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "MOD",
             CreatedAt = dateA.AddMinutes(15),
             CreatedBy = "Dr. Santos"
@@ -663,7 +663,7 @@ public class Milestone1DentalMultiConditionChallengerTests
         // Encounter 1 (Oct 10): Should carry Finding 1 (Tooth 16 Decay via ConsultationId) AND Finding 2 (Tooth 21 Healthy via Date matching)
         enc1.DentalFindings.Should().NotBeNull();
         enc1.DentalFindings!.Should().HaveCount(2);
-        enc1.DentalFindings.Should().ContainSingle(f => f.ToothNumber == 16 && f.Status == ToothStatus.Decay);
+        enc1.DentalFindings.Should().ContainSingle(f => f.ToothNumber == 16 && f.Status == ToothStatus.Decayed);
         enc1.DentalFindings.Should().ContainSingle(f => f.ToothNumber == 21 && f.Status == ToothStatus.Healthy);
 
         // Encounter 2 (Oct 15): Should carry Finding 3 (Tooth 16 Filled via ConsultationId)

@@ -84,7 +84,7 @@ describe('Dental Search Contributor - Framework Integration & Contracts', () => 
       category: 'Dental',
       title: 'Tooth #16 — Decay (MOD)',
       subtitle: 'Patient: Juan Dela Cruz • Deep caries',
-      badgeText: 'Decay',
+      badgeText: 'Decayed',
       badgeVariant: 'urgent' as const,
       targetRoute: 'Patients',
       routeParams: {
@@ -109,7 +109,7 @@ describe('Dental Search Contributor - Framework Integration & Contracts', () => 
     expect(results[0].category).toBe('Dental');
     expect(results[0].title).toBe('Tooth #16 — Decay (MOD)');
     expect(results[0].subtitle).toBe('Patient: Juan Dela Cruz • Deep caries');
-    expect(results[0].badgeText).toBe('Decay');
+    expect(results[0].badgeText).toBe('Decayed');
     expect(results[0].badgeVariant).toBe('urgent');
     expect(results[0].targetRoute).toBe('Patients');
     expect(results[0].routeParams).toEqual({
@@ -124,14 +124,14 @@ describe('Dental Search Contributor - Framework Integration & Contracts', () => 
   // 4. Urgency Badge Styling Verification
   // =========================================================================
   it('verifies all status badge variants conform to @clinicez/design-tokens standards', () => {
-    expect(mapToothStatusBadgeVariant('Decay')).toBe('urgent');
-    expect(mapToothStatusBadgeVariant('decay')).toBe('urgent');
-    expect(mapToothStatusBadgeVariant('Extraction')).toBe('emergency');
-    expect(mapToothStatusBadgeVariant('extraction')).toBe('emergency');
+    expect(mapToothStatusBadgeVariant('Decayed')).toBe('urgent');
+    expect(mapToothStatusBadgeVariant('decayed')).toBe('urgent');
+    expect(mapToothStatusBadgeVariant('ForExtraction')).toBe('emergency');
+    expect(mapToothStatusBadgeVariant('forextraction')).toBe('emergency');
     expect(mapToothStatusBadgeVariant('Filled')).toBe('routine');
     expect(mapToothStatusBadgeVariant('filled')).toBe('routine');
-    expect(mapToothStatusBadgeVariant('Crown')).toBe('neutral');
-    expect(mapToothStatusBadgeVariant('crown')).toBe('neutral');
+    expect(mapToothStatusBadgeVariant('Crowned')).toBe('neutral');
+    expect(mapToothStatusBadgeVariant('crowned')).toBe('neutral');
     expect(mapToothStatusBadgeVariant('Healthy')).toBe('neutral');
     expect(mapToothStatusBadgeVariant('healthy')).toBe('neutral');
     expect(mapToothStatusBadgeVariant('Missing')).toBe('neutral');
@@ -145,7 +145,7 @@ describe('Dental Search Contributor - Framework Integration & Contracts', () => 
       category: 'Dental',
       title: 'Tooth #14',
       subtitle: '',
-      badgeText: 'Decay',
+      badgeText: 'Decayed',
       targetRoute: 'Patients',
       routeParams: { patientId: 'p-1', toothNumber: '14' },
     });
@@ -206,7 +206,7 @@ describe('Dental Search Contributor - Framework Integration & Contracts', () => 
           id: 'tooth-36',
           category: 'Dental',
           title: 'Tooth #36',
-          subtitle: 'Extraction',
+          subtitle: 'ForExtraction',
           targetRoute: 'Patients',
           routeParams: { patientId: 'pat-99', toothNumber: '36' },
         },

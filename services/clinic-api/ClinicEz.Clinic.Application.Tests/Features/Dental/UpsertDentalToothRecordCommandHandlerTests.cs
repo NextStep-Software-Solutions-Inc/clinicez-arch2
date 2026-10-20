@@ -176,7 +176,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var command = new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: invalidToothNumber,
-            Status: ToothStatus.Decay
+            Status: ToothStatus.Decayed
         );
 
         // Act
@@ -223,7 +223,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var command = new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: inputSurface
         );
 
@@ -268,7 +268,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var command = new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: invalidSurface
         );
 
@@ -307,7 +307,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var insertCmd = new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: "MOD",
             Notes: "Deep caries"
         );
@@ -317,7 +317,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var updateCmd = new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: "MOD",
             Notes: "Deep caries reaching dentin"
         );
@@ -325,13 +325,13 @@ public class UpsertDentalToothRecordCommandHandlerTests
 
         // Assert in-place update for the same condition
         updateResult.Id.Should().Be(insertResult.Id);
-        updateResult.Status.Should().Be(ToothStatus.Decay);
+        updateResult.Status.Should().Be(ToothStatus.Decayed);
         updateResult.Notes.Should().Be("Deep caries reaching dentin");
         updateResult.RecordedBy.Should().Be("Dr. Test Dentist");
 
         var allRecords = await toothRepo.Query(t => t.PatientId == patientId && t.ToothNumber == 16 && !t.IsDeleted).ToListAsync();
         allRecords.Should().HaveCount(1);
-        allRecords[0].Status.Should().Be(ToothStatus.Decay);
+        allRecords[0].Status.Should().Be(ToothStatus.Decayed);
         allRecords[0].UpdatedAt.Should().NotBeNull();
         allRecords[0].UpdatedBy.Should().Be("Dr. Test Dentist");
     }
@@ -373,7 +373,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var decayCmd = new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: "MD",
             Notes: "Mesial-distal caries observed"
         );
@@ -381,7 +381,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
 
         // Assert: Distinct rows created with their own IDs, surfaces, and notes
         decayResult.Id.Should().NotBe(filledResult.Id);
-        decayResult.Status.Should().Be(ToothStatus.Decay);
+        decayResult.Status.Should().Be(ToothStatus.Decayed);
         decayResult.Surface.Should().Be("MD");
         decayResult.Notes.Should().Be("Mesial-distal caries observed");
         decayResult.RecordedBy.Should().Be("Dr. Test Dentist");
@@ -393,7 +393,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
 
         activeRecords.Should().HaveCount(2);
 
-        var decayDb = activeRecords.First(r => r.Status == ToothStatus.Decay);
+        var decayDb = activeRecords.First(r => r.Status == ToothStatus.Decayed);
         decayDb.Surface.Should().Be("MD");
         decayDb.Notes.Should().Be("Mesial-distal caries observed");
 
@@ -426,7 +426,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var handler = new UpsertDentalToothRecordCommandHandler(toothRepo, patientRepo, uow, _clinicContext);
 
         // Add Decay on 16
-        await handler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Decay, "MD", "Caries"), CancellationToken.None);
+        await handler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Decayed, "MD", "Caries"), CancellationToken.None);
         // Add Filled on 16
         await handler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Filled, "O", "Filling"), CancellationToken.None);
 
@@ -434,7 +434,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var removeResult = await handler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             RemoveCondition: true
         ), CancellationToken.None);
 
@@ -445,7 +445,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
 
         var allRecords = await toothRepo.Query(t => t.PatientId == patientId && t.ToothNumber == 16, ignoreQueryFilters: true).ToListAsync();
         allRecords.Should().HaveCount(2);
-        var deletedDecay = allRecords.First(r => r.Status == ToothStatus.Decay);
+        var deletedDecay = allRecords.First(r => r.Status == ToothStatus.Decayed);
         deletedDecay.IsDeleted.Should().BeTrue();
         deletedDecay.DeletedAt.Should().NotBeNull();
         deletedDecay.DeletedBy.Should().Be("Dr. Test Dentist");
@@ -475,7 +475,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var handler = new UpsertDentalToothRecordCommandHandler(toothRepo, patientRepo, uow, _clinicContext);
 
         // Add multiple conditions
-        await handler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Decay, "MD", "Caries"), CancellationToken.None);
+        await handler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Decayed, "MD", "Caries"), CancellationToken.None);
         await handler.Handle(new UpsertDentalToothRecordCommand(patientId, 16, ToothStatus.Filled, "O", "Filling"), CancellationToken.None);
 
         // Act: Mark tooth Healthy
@@ -593,7 +593,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var visit1Decay = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: "MO",
             Notes: "Mesio-occlusal caries",
             ConsultationId: visit1Id
@@ -672,7 +672,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var actInvalidOnMissing = async () => await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Crown,
+            Status: ToothStatus.Crowned,
             Surface: "MODBL"
         ), CancellationToken.None);
 
@@ -709,7 +709,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var decayO = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 26,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: "O",
             Notes: "Occlusal caries",
             ConsultationId: enc1Id
@@ -747,7 +747,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         var extractionEnc2 = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 26,
-            Status: ToothStatus.Extraction,
+            Status: ToothStatus.ForExtraction,
             Surface: "MOD", // Must be ignored/cleared because Extraction applies to whole tooth
             Notes: "Severe mobility, indicated for extraction",
             ConsultationId: enc2Id
@@ -758,7 +758,7 @@ public class UpsertDentalToothRecordCommandHandlerTests
         extractionEnc2.IsCurrent.Should().BeTrue();
 
         var allTooth26 = await toothRepo.Query(t => t.PatientId == patientId && t.ToothNumber == 26 && !t.IsDeleted).ToListAsync();
-        allTooth26.Where(t => t.IsCurrent).Should().ContainSingle(t => t.Id == extractionEnc2.Id && t.Status == ToothStatus.Extraction);
+        allTooth26.Where(t => t.IsCurrent).Should().ContainSingle(t => t.Id == extractionEnc2.Id && t.Status == ToothStatus.ForExtraction);
         allTooth26.Where(t => !t.IsCurrent).Should().HaveCount(2, "Prior encounter Decay(O) and Filled(M) are now historical");
     }
 }

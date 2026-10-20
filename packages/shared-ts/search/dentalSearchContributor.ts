@@ -21,14 +21,20 @@ export const DENTAL_SEARCH_REQUIRED_PERMISSION = 'Clinic.ConsultationsRead';
 export function mapToothStatusBadgeVariant(status: string): SearchBadgeVariant {
   const normalized = (status || '').trim().toLowerCase();
   switch (normalized) {
-    case 'decay':
+    case 'decayed':
+    case 'fractured':
+    case 'impacted':
       return 'urgent';
-    case 'extraction':
+    case 'forextraction':
+    case 'for extraction':
       return 'emergency';
     case 'filled':
+    case 'sealant':
+    case 'implant':
       return 'routine';
-    case 'crown':
-      return 'neutral';
+    case 'crowned':
+    case 'rootcanal':
+    case 'root canal':
     case 'healthy':
     case 'missing':
     default:

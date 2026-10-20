@@ -138,8 +138,8 @@ type DentalToothState = import('../components/consultation/InlineDentalChartCard
 
 describe('InlineDentalChartCard — Consultation Workstation Dental Odontogram', () => {
   const sampleTeeth: Record<number, DentalToothState> = {
-    16: { toothNumber: 16, status: 'Decay', surface: 'MOD', notes: 'Mesial-occlusal-distal decay' },
-    21: { toothNumber: 21, status: 'Crown', surface: '', notes: 'Ceramic crown' },
+    16: { toothNumber: 16, status: 'Decayed', surface: 'MOD', notes: 'Mesial-occlusal-distal decay' },
+    21: { toothNumber: 21, status: 'Crowned', surface: '', notes: 'Ceramic crown' },
     36: { toothNumber: 36, status: 'Filled', surface: 'O', notes: 'Composite restoration' },
     48: { toothNumber: 48, status: 'Missing', surface: '', notes: 'Impacted or extracted' },
   };
@@ -213,7 +213,7 @@ describe('InlineDentalChartCard — Consultation Workstation Dental Odontogram',
     expect(html).toContain('Mesial-occlusal-distal decay');
   });
 
-  test('4. Plain-English status taxonomy contains all 6 statuses and updates status', () => {
+  test('4. Plain-English status taxonomy contains all 10 selectable condition statuses and treats Healthy as implicit default', () => {
     let updatedTooth: DentalToothState | null = null;
     const handleChangeTooth = (t: DentalToothState) => {
       updatedTooth = t;
@@ -226,12 +226,17 @@ describe('InlineDentalChartCard — Consultation Workstation Dental Odontogram',
     });
 
     const html = renderToStaticMarkup(card);
-    expect(html).toContain('status-pill-healthy');
-    expect(html).toContain('status-pill-decay');
+    expect(html).not.toContain('status-pill-healthy');
+    expect(html).toContain('status-pill-decayed');
     expect(html).toContain('status-pill-filled');
+    expect(html).toContain('status-pill-crowned');
+    expect(html).toContain('status-pill-sealant');
+    expect(html).toContain('status-pill-fractured');
+    expect(html).toContain('status-pill-forextraction');
     expect(html).toContain('status-pill-missing');
-    expect(html).toContain('status-pill-crown');
-    expect(html).toContain('status-pill-extraction');
+    expect(html).toContain('status-pill-impacted');
+    expect(html).toContain('status-pill-rootcanal');
+    expect(html).toContain('status-pill-implant');
   });
 
   test('5. Tooth surface multi-select enforces canonical MODBL sorting', () => {

@@ -296,7 +296,7 @@ describe('Challenger 2 Empirical Verification: Dental Search Contributor & Regis
         category: 'Dental',
         title: 'Tooth #48 — Extraction',
         subtitle: 'Wisdom tooth impacted',
-        badgeText: 'Extraction',
+        badgeText: 'ForExtraction',
         targetRoute: 'Patients',
         routeParams: {
           patientId: 'pat-uuid-48',

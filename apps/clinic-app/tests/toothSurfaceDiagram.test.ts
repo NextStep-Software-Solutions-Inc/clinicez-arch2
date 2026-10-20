@@ -206,7 +206,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
   // =========================================================================
   describe('2. Multi-Condition Semantic Zone Coloring', () => {
     test('Decay maps to emergencyBg fill, emergencyBorder stroke, and emergencyText', () => {
-      const colors = getSurfaceZoneColor('O', [{ status: 'Decay', surface: 'O' }]);
+      const colors = getSurfaceZoneColor('O', [{ status: 'Decayed', surface: 'O' }]);
       expect(colors.bg).toBe(theme.colors.emergencyBg);
       expect(colors.border).toBe(theme.colors.emergencyBorder);
       expect(colors.text).toBe(theme.colors.emergencyText);
@@ -220,7 +220,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
     });
 
     test('Crown maps to purpleBg fill, purpleBorder stroke, and purpleText', () => {
-      const colors = getSurfaceZoneColor('L', [{ status: 'Crown', surface: 'L' }]);
+      const colors = getSurfaceZoneColor('L', [{ status: 'Crowned', surface: 'L' }]);
       expect(colors.bg).toBe(theme.colors.purpleBg);
       expect(colors.border).toBe(theme.colors.purpleBorder);
       expect(colors.text).toBe(theme.colors.purpleText);
@@ -234,14 +234,14 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
     });
 
     test('Selected in interactive mode maps to primaryLight fill and focusRing stroke', () => {
-      const colors = getSurfaceZoneColor('O', [{ status: 'Decay', surface: 'O' }], true);
+      const colors = getSurfaceZoneColor('O', [{ status: 'Decayed', surface: 'O' }], true);
       expect(colors.bg).toBe(theme.colors.primaryLight);
       expect(colors.border).toBe(theme.colors.focusRing);
       expect(colors.text).toBe(theme.colors.primaryDark);
     });
 
     test('Unaffected/Intact surface maps to neutral surface fill and border stroke', () => {
-      const colors = getSurfaceZoneColor('B', [{ status: 'Decay', surface: 'O' }]);
+      const colors = getSurfaceZoneColor('B', [{ status: 'Decayed', surface: 'O' }]);
       expect(colors.bg).toBe(theme.colors.surface);
       expect(colors.border).toBe(theme.colors.border);
       expect(colors.text).toBe(theme.colors.textSecondary);
@@ -250,7 +250,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
     test('Co-existing conditions: Filled on O and Decay on MD colors O blue and M/D red', () => {
       const conditions = [
         { status: 'Filled' as const, surface: 'O' },
-        { status: 'Decay' as const, surface: 'MD' },
+        { status: 'Decayed' as const, surface: 'MD' },
       ];
 
       const html = renderToStaticMarkup(
@@ -338,7 +338,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
         {
           id: 'cond-16-decay',
           toothNumber: 16,
-          status: 'Decay' as const,
+          status: 'Decayed' as const,
           surface: 'MD',
           notes: 'Recurrent marginal caries',
           createdAt: '2026-10-20T10:30:00Z',
@@ -374,7 +374,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
       );
 
       expect(html).toContain('data-testid="multi-dots-16"');
-      expect(html).toContain('data-testid="dot-decay-16"');
+      expect(html).toContain('data-testid="dot-decayed-16"');
       expect(html).toContain('data-testid="dot-filled-16"');
     });
 
@@ -416,7 +416,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
         {
           id: 'rec-2',
           toothNumber: 16,
-          status: 'Decay' as const,
+          status: 'Decayed' as const,
           surface: 'MD',
           createdAt: '2026-10-20T00:00:00Z',
         },
@@ -453,7 +453,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
       const records = [
         { id: '1', toothNumber: 11, status: 'Healthy' as const, createdAt: '2026-01-01T00:00:00Z' },
         { id: '2', toothNumber: 12, status: 'Healthy' as const, createdAt: '2026-01-01T00:00:00Z' },
-        { id: '3', toothNumber: 16, status: 'Decay' as const, surface: 'O', createdAt: '2026-01-01T00:00:00Z' },
+        { id: '3', toothNumber: 16, status: 'Decayed' as const, surface: 'O', createdAt: '2026-01-01T00:00:00Z' },
       ];
 
       const metrics = calculateDmftMetrics(records);
@@ -465,8 +465,8 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
 
     test('Crown teeth count under crownCount without inflating D or M', () => {
       const records = [
-        { id: '1', toothNumber: 21, status: 'Crown' as const, createdAt: '2026-01-01T00:00:00Z' },
-        { id: '2', toothNumber: 16, status: 'Decay' as const, surface: 'MOD', createdAt: '2026-01-01T00:00:00Z' },
+        { id: '1', toothNumber: 21, status: 'Crowned' as const, createdAt: '2026-01-01T00:00:00Z' },
+        { id: '2', toothNumber: 16, status: 'Decayed' as const, surface: 'MOD', createdAt: '2026-01-01T00:00:00Z' },
       ];
 
       const metrics = calculateDmftMetrics(records);
@@ -629,7 +629,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
       test('Filled(O) + Decay(M,D) accurately renders Blue on O and Red on M and D', () => {
         const conditions = [
           { status: 'Filled' as const, surface: 'O' },
-          { status: 'Decay' as const, surface: 'MD' },
+          { status: 'Decayed' as const, surface: 'MD' },
         ];
 
         // 1. Center zone O: Blue
@@ -641,14 +641,14 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
 
         // 2. Mesial zone M: Red
         const mColors = getSurfaceZoneColor('M', conditions);
-        expect(mColors.status).toBe('Decay');
+        expect(mColors.status).toBe('Decayed');
         expect(mColors.bg).toBe(theme.colors.emergencyBg);
         expect(mColors.border).toBe(theme.colors.emergencyBorder);
         expect(mColors.text).toBe(theme.colors.emergencyText);
 
         // 3. Distal zone D: Red
         const dColors = getSurfaceZoneColor('D', conditions);
-        expect(dColors.status).toBe('Decay');
+        expect(dColors.status).toBe('Decayed');
         expect(dColors.bg).toBe(theme.colors.emergencyBg);
         expect(dColors.border).toBe(theme.colors.emergencyBorder);
         expect(dColors.text).toBe(theme.colors.emergencyText);
@@ -682,13 +682,13 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
 
       test('Triple-condition tooth: Decay(M), Filled(O), Crown(B) produces 3 distinct semantic colors', () => {
         const conditions = [
-          { status: 'Decay' as const, surface: 'M' },
+          { status: 'Decayed' as const, surface: 'M' },
           { status: 'Filled' as const, surface: 'O' },
-          { status: 'Crown' as const, surface: 'B' },
+          { status: 'Crowned' as const, surface: 'B' },
         ];
 
         const mColors = getSurfaceZoneColor('M', conditions);
-        expect(mColors.status).toBe('Decay');
+        expect(mColors.status).toBe('Decayed');
         expect(mColors.bg).toBe(theme.colors.emergencyBg);
 
         const oColors = getSurfaceZoneColor('O', conditions);
@@ -696,7 +696,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
         expect(oColors.bg).toBe(theme.colors.infoBg);
 
         const bColors = getSurfaceZoneColor('B', conditions);
-        expect(bColors.status).toBe('Crown');
+        expect(bColors.status).toBe('Crowned');
         expect(bColors.bg).toBe(theme.colors.purpleBg);
 
         const dColors = getSurfaceZoneColor('D', conditions);
@@ -709,8 +709,8 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
       test('Whole-tooth conditions without surface specified color all 5 zones', () => {
         // Crown with empty surface
         for (const surf of ['M', 'O', 'D', 'B', 'L'] as const) {
-          const c = getSurfaceZoneColor(surf, [{ status: 'Crown', surface: '' }]);
-          expect(c.status).toBe('Crown');
+          const c = getSurfaceZoneColor(surf, [{ status: 'Crowned', surface: '' }]);
+          expect(c.status).toBe('Crowned');
           expect(c.bg).toBe(theme.colors.purpleBg);
         }
 
@@ -723,8 +723,8 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
 
         // Extraction with empty surface
         for (const surf of ['M', 'O', 'D', 'B', 'L'] as const) {
-          const c = getSurfaceZoneColor(surf, [{ status: 'Extraction', surface: '' }]);
-          expect(c.status).toBe('Extraction');
+          const c = getSurfaceZoneColor(surf, [{ status: 'ForExtraction', surface: '' }]);
+          expect(c.status).toBe('ForExtraction');
           expect(c.bg).toBe(theme.colors.emergencySubtle);
         }
       });

@@ -244,7 +244,7 @@ public class ChallengerMaDentalCoreStressTests
             ClinicId = _clinicIdB,
             PatientId = patientId,
             ToothNumber = 26,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "O",
             Notes = "Clinic B decay"
         }, CancellationToken.None);
@@ -304,7 +304,7 @@ public class ChallengerMaDentalCoreStressTests
         var commandA = new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: "dom",
             Notes: "Clinic A Caries"
         );
@@ -312,7 +312,7 @@ public class ChallengerMaDentalCoreStressTests
 
         // Assert: Clinic A created its own tooth record without touching Clinic B's record
         resultA.ClinicId.Should().Be(_clinicIdA);
-        resultA.Status.Should().Be(ToothStatus.Decay);
+        resultA.Status.Should().Be(ToothStatus.Decayed);
         resultA.Surface.Should().Be("MOD");
 
         // Verify Clinic B record still exists intact in DB
@@ -360,7 +360,7 @@ public class ChallengerMaDentalCoreStressTests
             Teeth: new List<ToothRecordInput>
             {
                 new(ToothNumber: 11, Status: ToothStatus.Healthy, Surface: null, Notes: "First pass - Healthy"),
-                new(ToothNumber: 11, Status: ToothStatus.Decay, Surface: "m", Notes: "Second pass - Found Decay"),
+                new(ToothNumber: 11, Status: ToothStatus.Decayed, Surface: "m", Notes: "Second pass - Found Decay"),
                 new(ToothNumber: 11, Status: ToothStatus.Filled, Surface: "m", Notes: "Final pass - Restored")
             }
         );
@@ -415,7 +415,7 @@ public class ChallengerMaDentalCoreStressTests
             {
                 new(ToothNumber: 16, Status: ToothStatus.Healthy, Surface: null, Notes: "Adult permanent first molar"),
                 new(ToothNumber: 11, Status: ToothStatus.Healthy, Surface: null, Notes: "Adult permanent central incisor"),
-                new(ToothNumber: 53, Status: ToothStatus.Decay, Surface: "b", Notes: "Deciduous canine caries"),
+                new(ToothNumber: 53, Status: ToothStatus.Decayed, Surface: "b", Notes: "Deciduous canine caries"),
                 new(ToothNumber: 55, Status: ToothStatus.Filled, Surface: "O", Notes: "Deciduous molar filled")
             }
         );
@@ -495,11 +495,11 @@ public class ChallengerMaDentalCoreStressTests
 
         // 6 teeth with distinct statuses (1 of each status)
         await toothRepo.AddAsync(new DentalToothRecord { TenantId = _tenantIdA, ClinicId = _clinicIdA, PatientId = patientId, ToothNumber = 11, Status = ToothStatus.Healthy }, CancellationToken.None);
-        await toothRepo.AddAsync(new DentalToothRecord { TenantId = _tenantIdA, ClinicId = _clinicIdA, PatientId = patientId, ToothNumber = 12, Status = ToothStatus.Decay, Surface = "M" }, CancellationToken.None);
+        await toothRepo.AddAsync(new DentalToothRecord { TenantId = _tenantIdA, ClinicId = _clinicIdA, PatientId = patientId, ToothNumber = 12, Status = ToothStatus.Decayed, Surface = "M" }, CancellationToken.None);
         await toothRepo.AddAsync(new DentalToothRecord { TenantId = _tenantIdA, ClinicId = _clinicIdA, PatientId = patientId, ToothNumber = 13, Status = ToothStatus.Filled, Surface = "MOD" }, CancellationToken.None);
         await toothRepo.AddAsync(new DentalToothRecord { TenantId = _tenantIdA, ClinicId = _clinicIdA, PatientId = patientId, ToothNumber = 14, Status = ToothStatus.Missing }, CancellationToken.None);
-        await toothRepo.AddAsync(new DentalToothRecord { TenantId = _tenantIdA, ClinicId = _clinicIdA, PatientId = patientId, ToothNumber = 15, Status = ToothStatus.Crown }, CancellationToken.None);
-        await toothRepo.AddAsync(new DentalToothRecord { TenantId = _tenantIdA, ClinicId = _clinicIdA, PatientId = patientId, ToothNumber = 16, Status = ToothStatus.Extraction }, CancellationToken.None);
+        await toothRepo.AddAsync(new DentalToothRecord { TenantId = _tenantIdA, ClinicId = _clinicIdA, PatientId = patientId, ToothNumber = 15, Status = ToothStatus.Crowned }, CancellationToken.None);
+        await toothRepo.AddAsync(new DentalToothRecord { TenantId = _tenantIdA, ClinicId = _clinicIdA, PatientId = patientId, ToothNumber = 16, Status = ToothStatus.ForExtraction }, CancellationToken.None);
 
         // Procedure 1: Explicit Dental Category with ToothNumber & ToothSurface
         await procRepo.AddAsync(new ClinicalProcedure

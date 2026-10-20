@@ -86,16 +86,16 @@ public class MilestoneMBAdversarialDentalSearchStressTests
         var patientId4 = Guid.NewGuid();
 
         // Each clinic has Tooth 16, same patient name "Maria Clara", same note "Caries"
-        var toothC1 = BuildTooth(_clinic1, "tenant-1", patientId1, "Maria Clara", 16, ToothStatus.Decay, "MOD", "Severe occlusal caries");
+        var toothC1 = BuildTooth(_clinic1, "tenant-1", patientId1, "Maria Clara", 16, ToothStatus.Decayed, "MOD", "Severe occlusal caries");
         var toothC2 = BuildTooth(_clinic2, "tenant-2", patientId2, "Maria Clara", 16, ToothStatus.Filled, "MOD", "Severe occlusal caries");
-        var toothC3 = BuildTooth(_clinic3, "tenant-3", patientId3, "Maria Clara", 16, ToothStatus.Crown, "MOD", "Severe occlusal caries");
-        var toothC4 = BuildTooth(_clinic4, "tenant-4", patientId4, "Maria Clara", 16, ToothStatus.Extraction, "MOD", "Severe occlusal caries");
+        var toothC3 = BuildTooth(_clinic3, "tenant-3", patientId3, "Maria Clara", 16, ToothStatus.Crowned, "MOD", "Severe occlusal caries");
+        var toothC4 = BuildTooth(_clinic4, "tenant-4", patientId4, "Maria Clara", 16, ToothStatus.ForExtraction, "MOD", "Severe occlusal caries");
 
         // Clinic 1 only has tooth 21
         var toothC1Extra = BuildTooth(_clinic1, "tenant-1", patientId1, "Unique C1 Patient", 21, ToothStatus.Healthy, notes: "Unique to C1");
 
         // Clinic 2 only has tooth 36 with soft-delete
-        var toothC2Deleted = BuildTooth(_clinic2, "tenant-2", patientId2, "Deleted in C2", 36, ToothStatus.Decay, isDeleted: true);
+        var toothC2Deleted = BuildTooth(_clinic2, "tenant-2", patientId2, "Deleted in C2", 36, ToothStatus.Decayed, isDeleted: true);
 
         context.DentalToothRecords.AddRange(toothC1, toothC2, toothC3, toothC4, toothC1Extra, toothC2Deleted);
         await context.SaveChangesAsync();
@@ -104,7 +104,7 @@ public class MilestoneMBAdversarialDentalSearchStressTests
         var resC1 = await provider.SearchAsync("Maria Clara", _clinic1, 50, CancellationToken.None);
         resC1.Should().HaveCount(1);
         resC1[0].Id.Should().Be($"dental-{toothC1.Id}");
-        resC1[0].BadgeText.Should().Be("Decay");
+        resC1[0].BadgeText.Should().Be("Decayed");
 
         // Search Clinic 2 for "Maria Clara"
         var resC2 = await provider.SearchAsync("Maria Clara", _clinic2, 50, CancellationToken.None);
@@ -116,13 +116,13 @@ public class MilestoneMBAdversarialDentalSearchStressTests
         var resC3 = await provider.SearchAsync("Maria Clara", _clinic3, 50, CancellationToken.None);
         resC3.Should().HaveCount(1);
         resC3[0].Id.Should().Be($"dental-{toothC3.Id}");
-        resC3[0].BadgeText.Should().Be("Crown");
+        resC3[0].BadgeText.Should().Be("Crowned");
 
         // Search Clinic 4 for "Maria Clara"
         var resC4 = await provider.SearchAsync("Maria Clara", _clinic4, 50, CancellationToken.None);
         resC4.Should().HaveCount(1);
         resC4[0].Id.Should().Be($"dental-{toothC4.Id}");
-        resC4[0].BadgeText.Should().Be("Extraction");
+        resC4[0].BadgeText.Should().Be("ForExtraction");
 
         // Search Clinic 2 for Clinic 1's unique tooth 21
         var resC2Extra = await provider.SearchAsync("21", _clinic2, 50, CancellationToken.None);
@@ -179,7 +179,7 @@ public class MilestoneMBAdversarialDentalSearchStressTests
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
         var provider = new DentalChartSearchProvider(toothRepo);
 
-        var tooth16 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient Adult", 16, ToothStatus.Decay, "MOD");
+        var tooth16 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient Adult", 16, ToothStatus.Decayed, "MOD");
         var tooth55 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient Child A", 55, ToothStatus.Filled, "O");
         var tooth85 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient Child B", 85, ToothStatus.Missing);
         var otherTooth = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient Other", 26, ToothStatus.Healthy);
@@ -272,10 +272,10 @@ public class MilestoneMBAdversarialDentalSearchStressTests
 
         var teeth = new[]
         {
-            BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient A", 14, ToothStatus.Decay, "B"),
+            BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient A", 14, ToothStatus.Decayed, "B"),
             BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient B", 16, ToothStatus.Filled, "MOD"),
-            BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient C", 25, ToothStatus.Decay, "DO"),
-            BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient D", 35, ToothStatus.Decay, "L")
+            BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient C", 25, ToothStatus.Decayed, "DO"),
+            BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Patient D", 35, ToothStatus.Decayed, "L")
         };
 
         context.DentalToothRecords.AddRange(teeth);
@@ -313,9 +313,9 @@ public class MilestoneMBAdversarialDentalSearchStressTests
         var note4 = "Patient complained of 'sharp pain' upon biting, test='positive'";
 
         var tooth1 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Special P1", 16, ToothStatus.Filled, notes: note1);
-        var tooth2 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Special P2", 21, ToothStatus.Decay, notes: note2);
-        var tooth3 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Special P3", 31, ToothStatus.Decay, notes: note3);
-        var tooth4 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Special P4", 46, ToothStatus.Decay, notes: note4);
+        var tooth2 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Special P2", 21, ToothStatus.Decayed, notes: note2);
+        var tooth3 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Special P3", 31, ToothStatus.Decayed, notes: note3);
+        var tooth4 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Special P4", 46, ToothStatus.Decayed, notes: note4);
 
         context.DentalToothRecords.AddRange(tooth1, tooth2, tooth3, tooth4);
         await context.SaveChangesAsync();
@@ -360,7 +360,7 @@ public class MilestoneMBAdversarialDentalSearchStressTests
         var filler = string.Join(" ", Enumerable.Repeat("Patient examined under local anesthesia with continuous monitoring of vital signs.", 50));
         var massiveNote = filler + " Acute severe pericoronitis detected under distal operculum. " + filler;
 
-        var tooth = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Narrative Patient", 38, ToothStatus.Decay, notes: massiveNote);
+        var tooth = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Narrative Patient", 38, ToothStatus.Decayed, notes: massiveNote);
         context.DentalToothRecords.Add(tooth);
         await context.SaveChangesAsync();
 
@@ -400,9 +400,9 @@ public class MilestoneMBAdversarialDentalSearchStressTests
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
         var provider = new DentalChartSearchProvider(toothRepo);
 
-        var tooth1 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Jose Rizal", 16, ToothStatus.Decay, notes: "May nana at pamamaga sa gilagid");
+        var tooth1 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Jose Rizal", 16, ToothStatus.Decayed, notes: "May nana at pamamaga sa gilagid");
         var tooth2 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Andres Bonifacio", 21, ToothStatus.Filled, notes: "Sumasakit kapag umiinom ng malamig");
-        var tooth3 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Doktora Peña", 31, ToothStatus.Crown, notes: "Konsultasyon kay Dr. Peña");
+        var tooth3 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "Doktora Peña", 31, ToothStatus.Crowned, notes: "Konsultasyon kay Dr. Peña");
 
         context.DentalToothRecords.AddRange(tooth1, tooth2, tooth3);
         await context.SaveChangesAsync();
@@ -462,8 +462,8 @@ public class MilestoneMBAdversarialDentalSearchStressTests
 
         // Seed 3 teeth in Clinic 1
         var tooth1 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "P1", 11, ToothStatus.Healthy);
-        var tooth2 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "P2", 21, ToothStatus.Decay);
-        var tooth3 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "P3", 31, ToothStatus.Crown);
+        var tooth2 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "P2", 21, ToothStatus.Decayed);
+        var tooth3 = BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), "P3", 31, ToothStatus.Crowned);
 
         // Seed 2 teeth in Clinic 2 (must not be returned!)
         var toothC2 = BuildTooth(_clinic2, "tenant-2", Guid.NewGuid(), "P4", 41, ToothStatus.Missing);
@@ -492,7 +492,7 @@ public class MilestoneMBAdversarialDentalSearchStressTests
         // Seed 20 teeth across Clinic 1 and Clinic 2
         for (int i = 11; i <= 28; i++)
         {
-            context.DentalToothRecords.Add(BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), $"C1-Patient-{i}", i, ToothStatus.Decay, "MOD", $"Note {i}"));
+            context.DentalToothRecords.Add(BuildTooth(_clinic1, "tenant-1", Guid.NewGuid(), $"C1-Patient-{i}", i, ToothStatus.Decayed, "MOD", $"Note {i}"));
             context.DentalToothRecords.Add(BuildTooth(_clinic2, "tenant-2", Guid.NewGuid(), $"C2-Patient-{i}", i, ToothStatus.Filled, "O", $"Note {i}"));
         }
         await context.SaveChangesAsync();

@@ -277,29 +277,29 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
             return MapToDto(missingRecord);
         }
 
-        // Case 4: Saving Extraction (whole-tooth status; supersedes prior-encounter conditions on this tooth)
-        if (request.Status == ToothStatus.Extraction)
+        // Case 4: Saving whole-tooth non-missing status (ForExtraction, Impacted, RootCanal, Implant; supersedes prior-encounter conditions on this tooth)
+        if (IsWholeToothNonMissingStatus(request.Status))
         {
-            var extractionRecord = activeConditions.FirstOrDefault(c => c.Status == ToothStatus.Extraction && c.IsCurrent);
-            if (extractionRecord != null)
+            var wholeToothRecord = activeConditions.FirstOrDefault(c => c.Status == request.Status && c.IsCurrent);
+            if (wholeToothRecord != null)
             {
-                extractionRecord.Surface = null;
-                extractionRecord.ActiveSurface = null;
-                extractionRecord.IsCurrent = true;
-                extractionRecord.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+                wholeToothRecord.Surface = null;
+                wholeToothRecord.ActiveSurface = null;
+                wholeToothRecord.IsCurrent = true;
+                wholeToothRecord.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
                 if (request.ConsultationId.HasValue)
                 {
-                    extractionRecord.ConsultationId = request.ConsultationId.Value;
+                    wholeToothRecord.ConsultationId = request.ConsultationId.Value;
                 }
-                extractionRecord.PatientName = patientName;
-                extractionRecord.RecordedBy = staffName;
-                extractionRecord.UpdatedAt = now;
-                extractionRecord.UpdatedBy = staffName;
-                _toothRepo.Update(extractionRecord);
+                wholeToothRecord.PatientName = patientName;
+                wholeToothRecord.RecordedBy = staffName;
+                wholeToothRecord.UpdatedAt = now;
+                wholeToothRecord.UpdatedBy = staffName;
+                _toothRepo.Update(wholeToothRecord);
             }
             else
             {
-                extractionRecord = new DentalToothRecord
+                wholeToothRecord = new DentalToothRecord
                 {
                     Id = Guid.NewGuid(),
                     TenantId = _clinicContext.TenantId,
@@ -308,7 +308,7 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
                     PatientName = patientName,
                     ConsultationId = request.ConsultationId,
                     ToothNumber = request.ToothNumber,
-                    Status = ToothStatus.Extraction,
+                    Status = request.Status,
                     Surface = null,
                     ActiveSurface = null,
                     IsCurrent = true,
@@ -317,23 +317,23 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
                     CreatedAt = now,
                     CreatedBy = staffName
                 };
-                await _toothRepo.AddAsync(extractionRecord, ct);
+                await _toothRepo.AddAsync(wholeToothRecord, ct);
             }
 
-            foreach (var prior in activeConditions.Where(c => c.Status != ToothStatus.Healthy && c.Status != ToothStatus.Extraction && c.IsCurrent))
+            foreach (var prior in activeConditions.Where(c => c.Status != ToothStatus.Healthy && c.Status != request.Status && c.IsCurrent))
             {
                 prior.IsCurrent = false;
                 prior.ActiveSurface = null;
                 prior.SupersededAt = now;
-                prior.SupersededByRecordId = extractionRecord.Id;
+                prior.SupersededByRecordId = wholeToothRecord.Id;
                 _toothRepo.Update(prior);
             }
 
             await _unitOfWork.SaveChangesAsync(ct);
-            return MapToDto(extractionRecord);
+            return MapToDto(wholeToothRecord);
         }
 
-        // Case 5: Saving surface-scoped condition (Decay, Filled, Crown)
+        // Case 5: Saving surface-scoped condition (Decayed, Filled, Crowned, Sealant, Fractured)
         // Match existing active record with the same Status when in the same consultation (or unlinked)
         var existing = activeConditions
             .FirstOrDefault(t => t.Status == request.Status
@@ -381,8 +381,8 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
             await _toothRepo.AddAsync(existing, ct);
         }
 
-        // If a surface-scoped condition (Decay, Filled, Crown) is recorded, supersede any prior Extraction record on this tooth
-        foreach (var ext in activeConditions.Where(c => c.Status == ToothStatus.Extraction && c.IsCurrent))
+        // If a surface-scoped condition is recorded, supersede any prior whole-tooth non-missing record on this tooth
+        foreach (var ext in activeConditions.Where(c => IsWholeToothNonMissingStatus(c.Status) && c.IsCurrent))
         {
             ext.IsCurrent = false;
             ext.ActiveSurface = null;
@@ -396,9 +396,9 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
         {
             foreach (var other in activeConditions.Where(c => c.Id != existing.Id
                                                            && c.IsCurrent
-                                                           && (c.Status == ToothStatus.Decay || c.Status == ToothStatus.Filled || c.Status == ToothStatus.Crown)))
+                                                           && IsSurfaceScopedStatus(c.Status)))
             {
-                var priorActive = other.ActiveSurface ?? (other.Status == ToothStatus.Crown && string.IsNullOrWhiteSpace(other.Surface) ? "MODBL" : other.Surface);
+                var priorActive = other.ActiveSurface ?? (other.Status == ToothStatus.Crowned && string.IsNullOrWhiteSpace(other.Surface) ? "MODBL" : other.Surface);
                 var remaining = SubtractSurfaces(priorActive, effectiveActiveSurface);
                 other.ActiveSurface = remaining;
                 if (string.IsNullOrWhiteSpace(remaining))
@@ -478,11 +478,24 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
         );
     }
 
+    public static bool IsWholeToothNonMissingStatus(ToothStatus status) =>
+        status is ToothStatus.ForExtraction
+               or ToothStatus.Impacted
+               or ToothStatus.RootCanal
+               or ToothStatus.Implant;
+
+    public static bool IsSurfaceScopedStatus(ToothStatus status) =>
+        status is ToothStatus.Decayed
+               or ToothStatus.Filled
+               or ToothStatus.Crowned
+               or ToothStatus.Sealant
+               or ToothStatus.Fractured;
+
     public static bool IsWholeToothCondition(ToothStatus status, string? normalizedSurface)
     {
-        if (status == ToothStatus.Healthy || status == ToothStatus.Missing || status == ToothStatus.Extraction)
+        if (status == ToothStatus.Healthy || status == ToothStatus.Missing || IsWholeToothNonMissingStatus(status))
             return true;
-        if (status == ToothStatus.Crown && (string.IsNullOrWhiteSpace(normalizedSurface) || normalizedSurface == "MODBL"))
+        if (status == ToothStatus.Crowned && (string.IsNullOrWhiteSpace(normalizedSurface) || normalizedSurface == "MODBL"))
             return true;
         return false;
     }
@@ -500,9 +513,9 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
     {
         return status switch
         {
-            ToothStatus.Healthy or ToothStatus.Missing or ToothStatus.Extraction => (null, null),
-            ToothStatus.Crown => (normalizedSurface, normalizedSurface ?? "MODBL"),
-            ToothStatus.Decay or ToothStatus.Filled => (normalizedSurface, normalizedSurface ?? "O"),
+            ToothStatus.Healthy or ToothStatus.Missing or ToothStatus.ForExtraction or ToothStatus.Impacted or ToothStatus.RootCanal or ToothStatus.Implant => (null, null),
+            ToothStatus.Crowned => (normalizedSurface, normalizedSurface ?? "MODBL"),
+            ToothStatus.Decayed or ToothStatus.Filled or ToothStatus.Sealant or ToothStatus.Fractured => (normalizedSurface, normalizedSurface ?? "O"),
             _ => (normalizedSurface, normalizedSurface)
         };
     }

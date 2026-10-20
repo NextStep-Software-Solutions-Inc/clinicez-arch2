@@ -108,7 +108,7 @@ public sealed class GetPatientDentalChartQueryHandler : IRequestHandler<GetPatie
         var currentRecords = records.Where(r => r.IsCurrent).ToList();
 
         var dmftCount = currentRecords
-            .Where(r => r.Status == ToothStatus.Decay || r.Status == ToothStatus.Missing || r.Status == ToothStatus.Filled)
+            .Where(r => r.Status == ToothStatus.Decayed || r.Status == ToothStatus.Missing || r.Status == ToothStatus.Filled)
             .Select(r => r.ToothNumber)
             .Distinct()
             .Count();
@@ -116,11 +116,11 @@ public sealed class GetPatientDentalChartQueryHandler : IRequestHandler<GetPatie
         var summary = new DentalSummaryDto(
             TotalTeethRecorded: currentRecords.Select(r => r.ToothNumber).Distinct().Count(),
             HealthyCount: currentRecords.Where(r => r.Status == ToothStatus.Healthy).Select(r => r.ToothNumber).Distinct().Count(),
-            DecayCount: currentRecords.Where(r => r.Status == ToothStatus.Decay).Select(r => r.ToothNumber).Distinct().Count(),
+            DecayCount: currentRecords.Where(r => r.Status == ToothStatus.Decayed).Select(r => r.ToothNumber).Distinct().Count(),
             FilledCount: currentRecords.Where(r => r.Status == ToothStatus.Filled).Select(r => r.ToothNumber).Distinct().Count(),
             MissingCount: currentRecords.Where(r => r.Status == ToothStatus.Missing).Select(r => r.ToothNumber).Distinct().Count(),
-            CrownCount: currentRecords.Where(r => r.Status == ToothStatus.Crown).Select(r => r.ToothNumber).Distinct().Count(),
-            ExtractionCount: currentRecords.Where(r => r.Status == ToothStatus.Extraction).Select(r => r.ToothNumber).Distinct().Count(),
+            CrownCount: currentRecords.Where(r => r.Status == ToothStatus.Crowned).Select(r => r.ToothNumber).Distinct().Count(),
+            ExtractionCount: currentRecords.Where(r => r.Status == ToothStatus.ForExtraction).Select(r => r.ToothNumber).Distinct().Count(),
             DmftIndex: dmftCount
         );
 

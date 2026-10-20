@@ -99,7 +99,7 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
         var actUpsert = async () => await upsertHandlerA.Handle(new UpsertDentalToothRecordCommand(
             PatientId: tenantBPatientId,
             ToothNumber: 16,
-            Status: ToothStatus.Decay
+            Status: ToothStatus.Decayed
         ), CancellationToken.None);
         await actUpsert.Should().ThrowAsync<NotFoundException>()
             .WithMessage($"*Patient '{tenantBPatientId}' not found*");
@@ -110,7 +110,7 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
         var actBatch = async () => await batchHandlerA.Handle(new BatchSaveDentalChartCommand(
             PatientId: tenantBPatientId,
             ConsultationId: null,
-            Teeth: new List<ToothRecordInput> { new(16, ToothStatus.Decay) }
+            Teeth: new List<ToothRecordInput> { new(16, ToothStatus.Decayed) }
         ), CancellationToken.None);
         await actBatch.Should().ThrowAsync<NotFoundException>()
             .WithMessage($"*Patient '{tenantBPatientId}' not found*");
@@ -164,7 +164,7 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
             ClinicId = TenantBClinicId,
             PatientId = patientBId,
             ToothNumber = 26,
-            Status = ToothStatus.Crown,
+            Status = ToothStatus.Crowned,
             Surface = "MOD",
             Notes = "Tenant B Permanent Crown"
         }, CancellationToken.None);
@@ -177,19 +177,19 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
         var commandA = new UpsertDentalToothRecordCommand(
             PatientId: patientAId,
             ToothNumber: 26,
-            Status: ToothStatus.Decay,
+            Status: ToothStatus.Decayed,
             Surface: "O",
             Notes: "Tenant A Active Decay"
         );
         var resultA = await upsertHandlerA.Handle(commandA, CancellationToken.None);
 
         resultA.ClinicId.Should().Be(TenantAClinicId);
-        resultA.Status.Should().Be(ToothStatus.Decay);
+        resultA.Status.Should().Be(ToothStatus.Decayed);
         resultA.Surface.Should().Be("O");
 
         // Verify Tenant B's tooth 26 was untouched in DB
         var toothB = await toothRepoB.Query(t => t.ClinicId == TenantBClinicId && t.ToothNumber == 26, ignoreQueryFilters: true).FirstAsync();
-        toothB.Status.Should().Be(ToothStatus.Crown);
+        toothB.Status.Should().Be(ToothStatus.Crowned);
         toothB.Surface.Should().Be("MOD");
         toothB.Notes.Should().Be("Tenant B Permanent Crown");
     }
@@ -228,7 +228,7 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
             Teeth: new List<ToothRecordInput>
             {
                 new(ToothNumber: 11, Status: ToothStatus.Healthy),
-                new(ToothNumber: 12, Status: ToothStatus.Decay),
+                new(ToothNumber: 12, Status: ToothStatus.Decayed),
                 new(ToothNumber: 13, Status: ToothStatus.Filled),
                 new(ToothNumber: 99, Status: ToothStatus.Missing), // Invalid!
                 new(ToothNumber: 14, Status: ToothStatus.Healthy)
@@ -275,7 +275,7 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
             Teeth: new List<ToothRecordInput>
             {
                 new(ToothNumber: 11, Status: ToothStatus.Healthy, Surface: "MOD"),
-                new(ToothNumber: 12, Status: ToothStatus.Decay, Surface: "XYZ"), // Invalid surface
+                new(ToothNumber: 12, Status: ToothStatus.Decayed, Surface: "XYZ"), // Invalid surface
                 new(ToothNumber: 13, Status: ToothStatus.Filled, Surface: "B")
             }
         );
@@ -325,7 +325,7 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
             Teeth: new List<ToothRecordInput>
             {
                 new(ToothNumber: 46, Status: ToothStatus.Healthy, Notes: "Pass 1"),
-                new(ToothNumber: 46, Status: ToothStatus.Decay, Surface: "O", Notes: "Pass 2"),
+                new(ToothNumber: 46, Status: ToothStatus.Decayed, Surface: "O", Notes: "Pass 2"),
                 new(ToothNumber: 46, Status: ToothStatus.Filled, Surface: "MOD", Notes: "Final Pass")
             }
         );
@@ -486,7 +486,7 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
             PatientId = Guid.NewGuid(),
             PatientName = "Santos, Maria",
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "MOD",
             Notes = "Caries on occlusal surface"
         });
@@ -512,7 +512,7 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
         var validResults = await provider.SearchAsync("16", TenantAClinicId, 10, CancellationToken.None);
         validResults.Should().HaveCount(1);
         validResults[0].RouteParams!["toothNumber"].Should().Be("16");
-        validResults[0].BadgeText.Should().Be("Decay");
+        validResults[0].BadgeText.Should().Be("Decayed");
         validResults[0].BadgeVariant.Should().Be(SearchBadgeVariant.Urgent);
     }
 
@@ -543,7 +543,7 @@ public class MilestoneMDDentalBackendEndToEndChallengerTests
             PatientId = Guid.NewGuid(),
             PatientName = "Santos, Maria",
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "MOD"
         });
         await context.SaveChangesAsync();

@@ -255,7 +255,7 @@ describe('Adversarial Reviewer Stress Suite — Milestone 4 (Layout & Dental Syn
         {
           id: 'df-decay-no-title',
           toothNumber: 12,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'MOD',
           notes: 'Cavity detected',
           recordedBy: 'Jane Smith', // lacks Dr. prefix

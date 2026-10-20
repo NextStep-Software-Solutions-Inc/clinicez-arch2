@@ -1,6 +1,17 @@
 import { theme } from '../../constants/theme';
 
-export type ToothStatus = 'Healthy' | 'Decay' | 'Filled' | 'Missing' | 'Crown' | 'Extraction';
+export type ToothStatus =
+  | 'Healthy'
+  | 'Decayed'
+  | 'Filled'
+  | 'Missing'
+  | 'Crowned'
+  | 'ForExtraction'
+  | 'Sealant'
+  | 'Fractured'
+  | 'Impacted'
+  | 'RootCanal'
+  | 'Implant';
 
 export const ADULT_UPPER_RIGHT = [18, 17, 16, 15, 14, 13, 12, 11] as const;
 export const ADULT_UPPER_LEFT = [21, 22, 23, 24, 25, 26, 27, 28] as const;
@@ -15,14 +26,41 @@ export const CHILD_LOWER_LEFT = [71, 72, 73, 74, 75] as const;
 export const CANONICAL_SURFACES = ['M', 'O', 'D', 'B', 'L'] as const;
 export type ToothSurfaceCode = (typeof CANONICAL_SURFACES)[number];
 
+/**
+ * Selectable condition statuses in the tooth inspector.
+ * 'Healthy' is intentionally excluded from selectable condition pills because a tooth with
+ * 0 active conditions is implicitly Healthy by default.
+ */
+export const SELECTABLE_TOOTH_STATUS_OPTIONS: readonly Exclude<ToothStatus, 'Healthy'>[] = [
+  'Decayed',
+  'Filled',
+  'Crowned',
+  'Sealant',
+  'Fractured',
+  'ForExtraction',
+  'Missing',
+  'Impacted',
+  'RootCanal',
+  'Implant',
+] as const;
+
 export const TOOTH_STATUS_OPTIONS: readonly ToothStatus[] = [
   'Healthy',
-  'Decay',
-  'Filled',
-  'Missing',
-  'Crown',
-  'Extraction',
+  ...SELECTABLE_TOOTH_STATUS_OPTIONS,
 ] as const;
+
+export function getToothStatusLabel(status: ToothStatus): string {
+  switch (status) {
+    case 'ForExtraction':
+      return 'For Extraction';
+    case 'RootCanal':
+      return 'Root Canal';
+    case 'Implant':
+      return 'Pontic / Implant';
+    default:
+      return status;
+  }
+}
 
 export interface DentalToothRecord {
   id: string;
@@ -46,7 +84,18 @@ export interface DentalToothRecord {
 }
 
 export function isWholeToothStatus(status: ToothStatus): boolean {
-  return status === 'Healthy' || status === 'Missing' || status === 'Extraction';
+  return (
+    status === 'Healthy' ||
+    status === 'Missing' ||
+    status === 'ForExtraction' ||
+    status === 'Impacted' ||
+    status === 'RootCanal' ||
+    status === 'Implant'
+  );
+}
+
+export function isSurfaceScopedStatus(status: ToothStatus): boolean {
+  return !isWholeToothStatus(status);
 }
 
 export function hasSurfaceOverlap(
@@ -279,8 +328,8 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
       continue;
     }
 
-    if (current.status === 'Missing' || current.status === 'Extraction') {
-      // Whole-tooth Missing or Extraction supersedes all prior active records on this tooth
+    if (isWholeToothStatus(current.status) && current.status !== 'Healthy') {
+      // Whole-tooth status (Missing, ForExtraction, Impacted, RootCanal, Implant) supersedes prior active records
       for (const prior of resolved) {
         if (prior.isCurrent !== false) {
           prior.isCurrent = false;
@@ -297,20 +346,17 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
     }
 
     const incomingSurfaces = current.activeSurface || current.surface || '';
-    if (
-      incomingSurfaces.length > 0 &&
-      (current.status === 'Filled' || current.status === 'Decay' || current.status === 'Crown')
-    ) {
+    if (incomingSurfaces.length > 0 && isSurfaceScopedStatus(current.status)) {
       for (const prior of resolved) {
         if (prior.isCurrent === false) continue;
-        if (prior.status === 'Extraction') {
+        if (isWholeToothStatus(prior.status) && prior.status !== 'Missing') {
           prior.isCurrent = false;
           prior.activeSurface = '';
           prior.supersededAt = prior.supersededAt || current.createdAt;
           prior.supersededByRecordId = prior.supersededByRecordId || current.id;
           continue;
         }
-        if (prior.status !== 'Decay' && prior.status !== 'Filled' && prior.status !== 'Crown') {
+        if (!isSurfaceScopedStatus(prior.status)) {
           continue;
         }
         const priorSurf = prior.activeSurface ?? prior.surface ?? '';
@@ -340,7 +386,7 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
   const historicalRecords = allRecords.filter((r) => r.isCurrent === false && r.status !== 'Healthy');
 
   const isMissing = currentRecords.some((r) => r.status === 'Missing');
-  const hasExtraction = currentRecords.some((r) => r.status === 'Extraction');
+  const hasExtraction = currentRecords.some((r) => r.status === 'ForExtraction');
 
   if (isMissing) {
     for (const s of CANONICAL_SURFACES) {
@@ -397,7 +443,7 @@ export function getCurrentEncounterLockedState(
           : rec.surface || '';
     if (
       isWholeToothStatus(rec.status) ||
-      (rec.status === 'Crown' && (!effSurf || sortToothSurfaces(effSurf) === 'MODBL'))
+      (rec.status === 'Crowned' && (!effSurf || sortToothSurfaces(effSurf) === 'MODBL'))
     ) {
       isWholeToothLocked = true;
       for (const s of CANONICAL_SURFACES) {
@@ -439,6 +485,10 @@ export function canApplyConditionToTooth(
     };
   }
 
+  if (targetStatus === 'Healthy') {
+    return { allowed: true };
+  }
+
   const lockState = getCurrentEncounterLockedState(existingRecords, currentConsultationId);
   if (lockState.isWholeToothLocked) {
     return {
@@ -460,7 +510,7 @@ export function canApplyConditionToTooth(
     const effectiveSurfaces =
       targetSurfaces && targetSurfaces.trim().length > 0
         ? sortToothSurfaces(targetSurfaces)
-        : targetStatus === 'Crown'
+        : targetStatus === 'Crowned'
           ? 'MODBL'
           : 'O';
     const requested = effectiveSurfaces.split('') as ToothSurfaceCode[];
@@ -539,11 +589,11 @@ export function applyStagedConditionToTooth(
 
   const normalizedSurface = isWholeToothStatus(staged.status)
     ? ''
-    : staged.status === 'Crown'
+    : staged.status === 'Crowned'
       ? sortToothSurfaces(staged.surface || 'MODBL')
       : sortToothSurfaces(staged.surface || 'O');
 
-  if (staged.status === 'Missing' || staged.status === 'Extraction') {
+  if (isWholeToothStatus(staged.status)) {
     for (const prior of working) {
       if (prior.isCurrent !== false) {
         prior.isCurrent = false;
@@ -570,10 +620,10 @@ export function applyStagedConditionToTooth(
     return working;
   }
 
-  // Surface-bearing statuses: Decay, Filled, Crown
+  // Surface-bearing statuses: Decayed, Filled, Crowned, Sealant, Fractured
   for (const prior of working) {
     if (prior.isCurrent === false) continue;
-    if (prior.status === 'Extraction') {
+    if (isWholeToothStatus(prior.status)) {
       prior.isCurrent = false;
       prior.activeSurface = '';
       prior.supersededAt = nowIso;
@@ -581,13 +631,13 @@ export function applyStagedConditionToTooth(
       continue;
     }
     if (prior.status === staged.status) continue;
-    if (prior.status !== 'Decay' && prior.status !== 'Filled' && prior.status !== 'Crown') {
+    if (!isSurfaceScopedStatus(prior.status)) {
       continue;
     }
     const priorActive =
       prior.activeSurface !== undefined && prior.activeSurface !== null
         ? prior.activeSurface
-        : prior.surface || (prior.status === 'Crown' ? 'MODBL' : '');
+        : prior.surface || (prior.status === 'Crowned' ? 'MODBL' : '');
     const remaining = subtractToothSurfaces(priorActive, normalizedSurface);
     if (remaining !== priorActive) {
       prior.activeSurface = remaining;
@@ -650,28 +700,131 @@ export function getDominantToothStatus(records: DentalToothRecord[]): ToothStatu
   const target = active.length > 0 ? active : records;
   const statuses = new Set(target.map((r) => r.status));
   if (statuses.has('Missing')) return 'Missing';
-  if (statuses.has('Decay')) return 'Decay';
-  if (statuses.has('Extraction')) return 'Extraction';
-  if (statuses.has('Crown')) return 'Crown';
+  if (statuses.has('Decayed')) return 'Decayed';
+  if (statuses.has('Fractured')) return 'Fractured';
+  if (statuses.has('ForExtraction')) return 'ForExtraction';
+  if (statuses.has('Impacted')) return 'Impacted';
+  if (statuses.has('RootCanal')) return 'RootCanal';
+  if (statuses.has('Crowned')) return 'Crowned';
+  if (statuses.has('Implant')) return 'Implant';
   if (statuses.has('Filled')) return 'Filled';
+  if (statuses.has('Sealant')) return 'Sealant';
   return 'Healthy';
 }
 
 export function getConditionDotColor(status: ToothStatus): string {
   switch (status) {
-    case 'Decay':
+    case 'Decayed':
       return theme.colors.emergency;
+    case 'Fractured':
+      return theme.colors.urgent;
     case 'Filled':
       return theme.colors.info;
-    case 'Crown':
+    case 'Sealant':
+      return theme.colors.routine;
+    case 'Crowned':
       return theme.colors.purple;
+    case 'RootCanal':
+      return theme.colors.purpleText;
+    case 'Implant':
+      return theme.colors.primary;
+    case 'Impacted':
+      return theme.colors.warning;
     case 'Missing':
       return theme.colors.textMuted;
-    case 'Extraction':
+    case 'ForExtraction':
       return theme.colors.emergencyText;
     case 'Healthy':
     default:
       return theme.colors.success;
+  }
+}
+
+function getStatusColorTokens(status: ToothStatus): {
+  bg: string;
+  border: string;
+  text: string;
+  status: ToothStatus;
+} {
+  switch (status) {
+    case 'Decayed':
+      return {
+        bg: theme.colors.emergencyBg,
+        border: theme.colors.emergencyBorder,
+        text: theme.colors.emergencyText,
+        status: 'Decayed',
+      };
+    case 'Fractured':
+      return {
+        bg: theme.colors.urgentBg,
+        border: theme.colors.urgentBorder,
+        text: theme.colors.urgentText,
+        status: 'Fractured',
+      };
+    case 'Filled':
+      return {
+        bg: theme.colors.infoBg,
+        border: theme.colors.infoBorder,
+        text: theme.colors.infoText,
+        status: 'Filled',
+      };
+    case 'Sealant':
+      return {
+        bg: theme.colors.routineBg,
+        border: theme.colors.routineBorder,
+        text: theme.colors.routineText,
+        status: 'Sealant',
+      };
+    case 'Crowned':
+      return {
+        bg: theme.colors.purpleBg,
+        border: theme.colors.purpleBorder,
+        text: theme.colors.purpleText,
+        status: 'Crowned',
+      };
+    case 'RootCanal':
+      return {
+        bg: theme.colors.purpleBg,
+        border: theme.colors.purpleBorder,
+        text: theme.colors.purpleText,
+        status: 'RootCanal',
+      };
+    case 'Implant':
+      return {
+        bg: theme.colors.primaryLight,
+        border: theme.colors.primaryBorder,
+        text: theme.colors.primaryDark,
+        status: 'Implant',
+      };
+    case 'Impacted':
+      return {
+        bg: theme.colors.warningBg,
+        border: theme.colors.warningBorder,
+        text: theme.colors.warningText,
+        status: 'Impacted',
+      };
+    case 'Missing':
+      return {
+        bg: theme.colors.surfaceSubtle,
+        border: theme.colors.borderDark,
+        text: theme.colors.textMuted,
+        status: 'Missing',
+      };
+    case 'ForExtraction':
+      return {
+        bg: theme.colors.emergencySubtle,
+        border: theme.colors.emergencyBorder,
+        text: theme.colors.emergencyText,
+        status: 'ForExtraction',
+      };
+    case 'Healthy':
+    default:
+      return {
+        bg: theme.colors.surface,
+        border: theme.colors.border,
+        text: theme.colors.textSecondary,
+        status: 'Healthy',
+      };
   }
 }
 
@@ -687,29 +840,8 @@ export function getSurfaceZoneColor(
   stagedStatus?: ToothStatus
 ): { bg: string; border: string; text: string; status?: ToothStatus } {
   if (isSelected) {
-    if (stagedStatus === 'Decay') {
-      return {
-        bg: theme.colors.emergencyBg,
-        border: theme.colors.emergencyBorder,
-        text: theme.colors.emergencyText,
-        status: 'Decay',
-      };
-    }
-    if (stagedStatus === 'Filled') {
-      return {
-        bg: theme.colors.infoBg,
-        border: theme.colors.infoBorder,
-        text: theme.colors.infoText,
-        status: 'Filled',
-      };
-    }
-    if (stagedStatus === 'Crown') {
-      return {
-        bg: theme.colors.purpleBg,
-        border: theme.colors.purpleBorder,
-        text: theme.colors.purpleText,
-        status: 'Crown',
-      };
+    if (stagedStatus && stagedStatus !== 'Healthy') {
+      return getStatusColorTokens(stagedStatus);
     }
     return {
       bg: theme.colors.primaryLight,
@@ -752,51 +884,7 @@ export function getSurfaceZoneColor(
     };
   }
 
-  switch (condition.status) {
-    case 'Decay':
-      return {
-        bg: theme.colors.emergencyBg,
-        border: theme.colors.emergencyBorder,
-        text: theme.colors.emergencyText,
-        status: 'Decay',
-      };
-    case 'Filled':
-      return {
-        bg: theme.colors.infoBg,
-        border: theme.colors.infoBorder,
-        text: theme.colors.infoText,
-        status: 'Filled',
-      };
-    case 'Crown':
-      return {
-        bg: theme.colors.purpleBg,
-        border: theme.colors.purpleBorder,
-        text: theme.colors.purpleText,
-        status: 'Crown',
-      };
-    case 'Missing':
-      return {
-        bg: theme.colors.surfaceSubtle,
-        border: theme.colors.borderDark,
-        text: theme.colors.textMuted,
-        status: 'Missing',
-      };
-    case 'Extraction':
-      return {
-        bg: theme.colors.emergencySubtle,
-        border: theme.colors.emergencyBorder,
-        text: theme.colors.emergencyText,
-        status: 'Extraction',
-      };
-    case 'Healthy':
-    default:
-      return {
-        bg: theme.colors.surface,
-        border: theme.colors.border,
-        text: theme.colors.textSecondary,
-        status: 'Healthy',
-      };
-  }
+  return getStatusColorTokens(condition.status);
 }
 
 export interface DmftCalculationResult {
@@ -831,14 +919,14 @@ export function calculateDmftMetrics(
     if (activeRecords.length === 0) continue;
     const statuses = new Set(activeRecords.map((r) => r.status));
 
-    if (statuses.has('Decay')) decayedTeeth.add(num);
+    if (statuses.has('Decayed')) decayedTeeth.add(num);
     if (statuses.has('Missing')) missingTeeth.add(num);
     if (statuses.has('Filled')) filledTeeth.add(num);
-    if (statuses.has('Crown')) crownTeeth.add(num);
-    if (statuses.has('Extraction')) extractionTeeth.add(num);
+    if (statuses.has('Crowned')) crownTeeth.add(num);
+    if (statuses.has('ForExtraction')) extractionTeeth.add(num);
 
-    // DMFT standard: distinct teeth with Decay, Missing, or Filled
-    if (statuses.has('Decay') || statuses.has('Missing') || statuses.has('Filled')) {
+    // DMFT standard: distinct teeth with Decayed, Missing, or Filled
+    if (statuses.has('Decayed') || statuses.has('Missing') || statuses.has('Filled')) {
       dmftTeeth.add(num);
     }
 

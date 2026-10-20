@@ -192,7 +192,7 @@ const adversaryChart: PatientChart = {
       clinicId: 'clinic-adv',
       patientId: 'pat-adversary-99',
       toothNumber: 36,
-      status: 'Crown' as any,
+      status: 'Crowned' as any,
       surface: 'MOD',
       notes: 'Porcelain fused to metal crown',
       createdAt: '2026-09-10T08:00:00Z',

@@ -160,7 +160,7 @@ describe('DentalChartTab — Patient Chart Odontogram & Layout Integration', () 
       clinicId: 'cl-001',
       patientId: 'pt-juan-001',
       toothNumber: 16,
-      status: 'Decay',
+      status: 'Decayed',
       surface: 'MOD',
       notes: 'Deep occlusal and mesial-distal decay',
       createdAt: '2026-03-01T00:00:00Z',
@@ -172,7 +172,7 @@ describe('DentalChartTab — Patient Chart Odontogram & Layout Integration', () 
       clinicId: 'cl-001',
       patientId: 'pt-juan-001',
       toothNumber: 21,
-      status: 'Crown',
+      status: 'Crowned',
       surface: 'L',
       notes: 'Porcelain fused to metal crown placed',
       createdAt: '2026-02-15T00:00:00Z',
@@ -324,7 +324,7 @@ describe('DentalChartTab — Patient Chart Odontogram & Layout Integration', () 
 
     expect(html).toContain('Tooth #16');
     expect(html).toContain('Upper Right First Molar');
-    expect(html).toContain('Decay');
+    expect(html).toContain('Decayed');
     expect(html).toContain('AFFECTED SURFACES');
     expect(html).toContain('MOD');
     expect(html).toContain('CLINICAL NOTES');

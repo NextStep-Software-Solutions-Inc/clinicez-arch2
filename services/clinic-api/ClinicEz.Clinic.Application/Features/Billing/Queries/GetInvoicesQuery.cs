@@ -20,6 +20,7 @@ public record GetInvoicesQuery(
 
 public class GetInvoicesQueryHandler : IRequestHandler<GetInvoicesQuery, List<InvoiceDto>>
 {
+    private static readonly TimeSpan ManilaOffset = TimeSpan.FromHours(8);
     private readonly IRepository<Invoice> _invoiceRepo;
     private readonly IClinicContext _clinicContext;
 
@@ -40,9 +41,12 @@ public class GetInvoicesQueryHandler : IRequestHandler<GetInvoicesQuery, List<In
 
         if (request.Date.HasValue)
         {
-            var dayStart = request.Date.Value.Date;
-            var dayEnd = dayStart.AddDays(1);
-            query = query.Where(i => i.InvoiceDate >= dayStart && i.InvoiceDate < dayEnd);
+            var date = DateOnly.FromDateTime(request.Date.Value);
+            var dayStartUtc = new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), ManilaOffset).UtcDateTime;
+            var dayEndUtc = new DateTimeOffset(date.AddDays(1).ToDateTime(TimeOnly.MinValue), ManilaOffset).UtcDateTime;
+            query = query.Where(i =>
+                (i.InvoiceDate >= dayStartUtc && i.InvoiceDate < dayEndUtc) ||
+                i.Payments.Any(p => p.PaymentDate >= dayStartUtc && p.PaymentDate < dayEndUtc));
         }
 
         if (request.PatientId.HasValue)

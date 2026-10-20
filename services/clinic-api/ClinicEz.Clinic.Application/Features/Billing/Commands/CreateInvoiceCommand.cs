@@ -116,13 +116,31 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
 
         var today = DateTime.UtcNow.Date;
         var tomorrow = today.AddDays(1);
+        var dateTag = today.ToString("yyyyMMdd");
+        var invoicePrefix = $"INV-{dateTag}-";
 
         // Daily sequential invoice numbering: INV-YYYYMMDD-001
-        var todayCount = await _invoiceRepo.Query(i => i.InvoiceDate >= today && i.InvoiceDate < tomorrow)
-            .CountAsync(cancellationToken);
+        var existingTodayNumbers = await _invoiceRepo
+            .Query(i => (i.InvoiceDate >= today && i.InvoiceDate < tomorrow) || i.InvoiceNumber.StartsWith(invoicePrefix))
+            .IgnoreQueryFilters()
+            .Where(i => i.ClinicId == _clinicContext.ClinicId)
+            .Select(i => i.InvoiceNumber)
+            .ToListAsync(cancellationToken);
 
-        var dateTag = today.ToString("yyyyMMdd");
-        var invoiceNumber = $"INV-{dateTag}-{(todayCount + 1):D3}";
+        var maxSeq = existingTodayNumbers.Count;
+        foreach (var num in existingTodayNumbers)
+        {
+            if (num != null && num.StartsWith(invoicePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var suffix = num.Substring(invoicePrefix.Length);
+                if (int.TryParse(suffix, out var parsed) && parsed > maxSeq)
+                {
+                    maxSeq = parsed;
+                }
+            }
+        }
+
+        var invoiceNumber = $"{invoicePrefix}{(maxSeq + 1):D3}";
 
         var lineItems = new List<InvoiceLineItem>();
         decimal grossAmount = 0m;

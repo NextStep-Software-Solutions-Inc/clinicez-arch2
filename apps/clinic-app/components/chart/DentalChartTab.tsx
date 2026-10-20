@@ -21,6 +21,7 @@ import {
   DentalToothRecord,
   ToothStatus,
   ToothSurfaceCode,
+  getToothStatusLabel,
   sortToothSurfaces,
   getToothDescription,
   normalizeTeethToMultiRecord,
@@ -64,17 +65,22 @@ export function getStatusBadgeVariant(
 ): 'success' | 'emergency' | 'info' | 'neutral' | 'warning' | 'purple' {
   switch (status) {
     case 'Healthy':
+    case 'Sealant':
       return 'success';
-    case 'Decay':
+    case 'Decayed':
+    case 'ForExtraction':
       return 'emergency';
+    case 'Fractured':
+    case 'Impacted':
+      return 'warning';
     case 'Filled':
+    case 'Implant':
       return 'info';
     case 'Missing':
       return 'neutral';
-    case 'Crown':
+    case 'Crowned':
+    case 'RootCanal':
       return 'purple';
-    case 'Extraction':
-      return 'emergency';
     default:
       return 'neutral';
   }
@@ -86,11 +92,17 @@ export function getToothStatusColor(status?: ToothStatus | string): {
   text: string;
 } {
   switch (status) {
-    case 'Decay':
+    case 'Decayed':
       return {
         bg: theme.colors.emergencyBg,
         border: theme.colors.emergencyBorder,
         text: theme.colors.emergencyText,
+      };
+    case 'Fractured':
+      return {
+        bg: theme.colors.urgentBg,
+        border: theme.colors.urgentBorder,
+        text: theme.colors.urgentText,
       };
     case 'Filled':
       return {
@@ -98,19 +110,38 @@ export function getToothStatusColor(status?: ToothStatus | string): {
         border: theme.colors.infoBorder,
         text: theme.colors.infoText,
       };
+    case 'Sealant':
+      return {
+        bg: theme.colors.routineBg,
+        border: theme.colors.routineBorder,
+        text: theme.colors.routineText,
+      };
+    case 'Implant':
+      return {
+        bg: theme.colors.primaryLight,
+        border: theme.colors.primaryBorder,
+        text: theme.colors.primaryDark,
+      };
+    case 'Impacted':
+      return {
+        bg: theme.colors.warningBg,
+        border: theme.colors.warningBorder,
+        text: theme.colors.warningText,
+      };
     case 'Missing':
       return {
         bg: theme.colors.surfaceSubtle,
         border: theme.colors.borderDark,
         text: theme.colors.textMuted,
       };
-    case 'Crown':
+    case 'Crowned':
+    case 'RootCanal':
       return {
         bg: theme.colors.purpleBg,
         border: theme.colors.purpleBorder,
         text: theme.colors.purpleText,
       };
-    case 'Extraction':
+    case 'ForExtraction':
       return {
         bg: theme.colors.emergencySubtle,
         border: theme.colors.emergencyBorder,
@@ -489,7 +520,7 @@ export default function DentalChartTab({
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: theme.colors.emergencyBg, borderColor: theme.colors.emergencyBorder }]} />
-            <ThemedText variant="caption" color={theme.colors.emergencyText}>Decay</ThemedText>
+            <ThemedText variant="caption" color={theme.colors.emergencyText}>Decayed</ThemedText>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: theme.colors.infoBg, borderColor: theme.colors.infoBorder }]} />
@@ -501,11 +532,11 @@ export default function DentalChartTab({
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: theme.colors.purpleBg, borderColor: theme.colors.purpleBorder }]} />
-            <ThemedText variant="caption" color={theme.colors.purpleText}>Crown</ThemedText>
+            <ThemedText variant="caption" color={theme.colors.purpleText}>Crowned</ThemedText>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: theme.colors.emergencySubtle, borderColor: theme.colors.emergency }]} />
-            <ThemedText variant="caption" color={theme.colors.emergencyText}>Extraction</ThemedText>
+            <ThemedText variant="caption" color={theme.colors.emergencyText}>For Extraction</ThemedText>
           </View>
         </View>
       </Card>
@@ -521,7 +552,7 @@ export default function DentalChartTab({
             rightAction={
               <View style={styles.inspectorHeaderActions}>
                 <Badge
-                  label={selectedToothRecord?.status || 'Healthy'}
+                  label={getToothStatusLabel(selectedToothRecord?.status || 'Healthy')}
                   variant={getStatusBadgeVariant(selectedToothRecord?.status)}
                 />
                 {onOrderProcedure ? (
@@ -584,7 +615,7 @@ export default function DentalChartTab({
                         <View style={styles.conditionHeader}>
                           <View style={styles.conditionBadgeRow}>
                             <Badge
-                              label={cond.status}
+                              label={getToothStatusLabel(cond.status)}
                               variant={getStatusBadgeVariant(cond.status)}
                               size="sm"
                             />
@@ -658,7 +689,7 @@ export default function DentalChartTab({
                         <View style={styles.conditionHeader}>
                           <View style={styles.conditionBadgeRow}>
                             <Badge
-                              label={cond.status}
+                              label={getToothStatusLabel(cond.status)}
                               variant={getStatusBadgeVariant(cond.status)}
                               size="sm"
                             />

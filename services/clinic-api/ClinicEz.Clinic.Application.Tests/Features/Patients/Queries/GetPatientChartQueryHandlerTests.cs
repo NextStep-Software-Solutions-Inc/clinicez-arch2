@@ -335,7 +335,7 @@ public class GetPatientChartQueryHandlerTests
             PatientId = patientId,
             ConsultationId = consult1Id,
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "MD",
             Notes = "Recurrent caries on mesial-distal",
             CreatedBy = "Dr. Santos"
@@ -419,7 +419,7 @@ public class GetPatientChartQueryHandlerTests
         tooth16Filled.Surface.Should().Be("O");
         tooth16Filled.RecordedBy.Should().Be("Dr. Santos"); // UpdatedBy ?? CreatedBy
 
-        var tooth16Decay = chart.DentalTeeth.First(t => t.ToothNumber == 16 && t.Status == ToothStatus.Decay);
+        var tooth16Decay = chart.DentalTeeth.First(t => t.ToothNumber == 16 && t.Status == ToothStatus.Decayed);
         tooth16Decay.Surface.Should().Be("MD");
         tooth16Decay.RecordedBy.Should().Be("Dr. Santos"); // CreatedBy fallback
 
@@ -440,7 +440,7 @@ public class GetPatientChartQueryHandlerTests
         encounter1.DentalFindings.Should().NotBeNull();
         encounter1.DentalFindings!.Should().HaveCount(2);
         encounter1.DentalFindings.Should().Contain(d => d.ToothNumber == 16 && d.Status == ToothStatus.Filled);
-        encounter1.DentalFindings.Should().Contain(d => d.ToothNumber == 16 && d.Status == ToothStatus.Decay);
+        encounter1.DentalFindings.Should().Contain(d => d.ToothNumber == 16 && d.Status == ToothStatus.Decayed);
 
         // Consult 2 matches tooth 21 by ConsultationId, and tooth 36 by date fallback
         var encounter2 = chart.Consultations.First(c => c.Id == consult2Id);

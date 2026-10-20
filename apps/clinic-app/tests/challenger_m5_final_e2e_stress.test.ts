@@ -129,7 +129,7 @@ describe('Milestone 5 Adversarial Verification: Cross-Cutting Hardening Suite', 
           {
             id: 'rec-16-decay',
             toothNumber: 16,
-            status: 'Decay',
+            status: 'Decayed',
             surface: 'MD',
             notes: 'Mesial-distal recurrent caries',
             createdAt: '2026-10-20T09:30:00Z',
@@ -140,7 +140,7 @@ describe('Milestone 5 Adversarial Verification: Cross-Cutting Hardening Suite', 
           {
             id: 'rec-21-crown',
             toothNumber: 21,
-            status: 'Crown',
+            status: 'Crowned',
             surface: 'MODBL',
             notes: 'Zirconia crown',
             createdAt: '2026-10-15T10:00:00Z',
@@ -151,7 +151,7 @@ describe('Milestone 5 Adversarial Verification: Cross-Cutting Hardening Suite', 
           {
             id: 'rec-36-extract',
             toothNumber: 36,
-            status: 'Extraction',
+            status: 'ForExtraction',
             surface: '',
             notes: 'Indicated for surgical extraction',
             createdAt: '2026-10-20T10:15:00Z',
@@ -184,8 +184,8 @@ describe('Milestone 5 Adversarial Verification: Cross-Cutting Hardening Suite', 
       expect(tooth16.length).toBe(2);
       expect(tooth16.find((t) => t.status === 'Filled')?.surface).toBe('O');
       expect(tooth16.find((t) => t.status === 'Filled')?.recordedBy).toBe('Dr. Santos');
-      expect(tooth16.find((t) => t.status === 'Decay')?.surface).toBe('MD');
-      expect(tooth16.find((t) => t.status === 'Decay')?.recordedBy).toBe('Dr. Cruz');
+      expect(tooth16.find((t) => t.status === 'Decayed')?.surface).toBe('MD');
+      expect(tooth16.find((t) => t.status === 'Decayed')?.recordedBy).toBe('Dr. Cruz');
 
       // DMFT calculation consistency
       const dmft = calculateDmftMetrics(syncedTeeth);
@@ -247,7 +247,7 @@ describe('Milestone 5 Adversarial Verification: Cross-Cutting Hardening Suite', 
           toothNumber: 16,
           conditions: [
             { status: 'Filled', surface: 'O' },
-            { status: 'Decay', surface: 'MD' },
+            { status: 'Decayed', surface: 'MD' },
           ],
           size: 48,
           showLabels: true,
@@ -264,25 +264,25 @@ describe('Milestone 5 Adversarial Verification: Cross-Cutting Hardening Suite', 
       // Surface O should have Filled colors, M and D should have Decay colors
       const zoneOColor = getSurfaceZoneColor('O', [
         { status: 'Filled', surface: 'O' },
-        { status: 'Decay', surface: 'MD' },
+        { status: 'Decayed', surface: 'MD' },
       ]);
       expect(zoneOColor.status).toBe('Filled');
 
       const zoneMColor = getSurfaceZoneColor('M', [
         { status: 'Filled', surface: 'O' },
-        { status: 'Decay', surface: 'MD' },
+        { status: 'Decayed', surface: 'MD' },
       ]);
-      expect(zoneMColor.status).toBe('Decay');
+      expect(zoneMColor.status).toBe('Decayed');
 
       const zoneDColor = getSurfaceZoneColor('D', [
         { status: 'Filled', surface: 'O' },
-        { status: 'Decay', surface: 'MD' },
+        { status: 'Decayed', surface: 'MD' },
       ]);
-      expect(zoneDColor.status).toBe('Decay');
+      expect(zoneDColor.status).toBe('Decayed');
 
       const zoneBColor = getSurfaceZoneColor('B', [
         { status: 'Filled', surface: 'O' },
-        { status: 'Decay', surface: 'MD' },
+        { status: 'Decayed', surface: 'MD' },
       ]);
       // B has no condition, defaults to Healthy/surface
       expect(zoneBColor.status).toBeUndefined();
