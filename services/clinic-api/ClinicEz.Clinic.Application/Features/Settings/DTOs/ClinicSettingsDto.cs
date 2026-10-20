@@ -55,5 +55,9 @@ public sealed record ClinicSettingsDto(
     string? LetterheadAccentColorHex = null,
     string? DefaultApproverName = null,
     string? DefaultApproverTitle = null,
-    string? DocumentSignatoriesJson = null);
+    string? DocumentSignatoriesJson = null,
+    bool EnableAppointmentReminders = true,
+    bool AppointmentReminder24hEnabled = true,
+    bool AppointmentReminder2hEnabled = true,
+    bool EnableStaffAppointmentNotifications = true);
 

@@ -264,6 +264,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasIndex(e => new { e.TenantId, e.ClinicId });
             entity.HasIndex(e => e.ScheduledAt);
             entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.ScheduledAt, e.EndTimeUtc });
+            entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.Reminder24hSent });
+            entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.Reminder2hSent });
         });
 
         modelBuilder.Entity<DoctorScheduleTemplate>(entity =>
@@ -905,6 +907,10 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.DefaultApproverName).HasMaxLength(200);
             entity.Property(e => e.DefaultApproverTitle).HasMaxLength(200);
             entity.Property(e => e.DocumentSignatoriesJson).HasColumnType("text");
+            entity.Property(e => e.EnableAppointmentReminders).HasDefaultValue(true);
+            entity.Property(e => e.AppointmentReminder24hEnabled).HasDefaultValue(true);
+            entity.Property(e => e.AppointmentReminder2hEnabled).HasDefaultValue(true);
+            entity.Property(e => e.EnableStaffAppointmentNotifications).HasDefaultValue(true);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
         });
 

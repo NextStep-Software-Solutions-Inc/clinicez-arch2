@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-20T02:28:31Z
+# BRIEFING — 2026-10-20T08:02:47Z
 
 ## Mission
-Conduct a rigorous multi-perspective code, architecture, and security review of the ClinicEZ Billing System hardening across `services/clinic-api`, `apps/clinic-app`, `services/billing-api`, and `apps/cashier-app`.
+Orchestrate and monitor the end-to-end implementation of the Calendar Appointment Push Notification and Reminder System in ClinicEZ across packages/shared-dotnet, services/clinic-api, services/patient-api, and apps/clinic-app.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -41,6 +41,12 @@ Conduct a rigorous multi-perspective code, architecture, and security review of 
 - Active Crons: task-38 (Progress Reporting), task-40 (Liveness Check)
 - Victory Auditor (victory_auditor_billing_review): c511277c-9dd2-437b-abc0-bf9c70edd8a2
 - Cleaned up: task-38 killed, task-40 killed, all subagents killed
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_2): 03338571-a68e-4b29-91d0-1c6ef4eb0062
+- Active Crons: task-26 (Progress Reporting), task-28 (Liveness Check)
+- Victory Auditor: to be spawned on victory claim
+- Victory Auditor (victory_auditor_2): 53251c79-b82b-4af9-b30e-e693aeecb7be
+- Cleaned up: task-26 killed, task-28 killed, all subagents killed
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -113,7 +119,6 @@ Conduct a rigorous multi-perspective code, architecture, and security review of 
 - Enterprise-grade print-ready vector PDF generation with QuestPDF in ClinicDocumentPdfService and streaming endpoints in ReportsController.cs with QR cryptographic verification (R4)
 - Automated test verification: dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests and cd apps/clinic-app && bun test tests pass with 0 failures
 - Passes design tokens audit (bun run lint:tokens) and network isolation audit (bun run lint:hosts) with 0 violations
-- Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
 - Route to General (`teamwork_preview_orchestrator`) for ClinicEZ Billing System Hardening Review
 - Dual-mode cashier routing (`ClinicDesk` vs `CashierCounter`) & concurrency audit in `services/clinic-api` (R1)
 - Clinic station settings & UI/UX audit against `@clinicez/design-tokens` (zero raw hex values) in `apps/clinic-app` (R2)
@@ -121,35 +126,38 @@ Conduct a rigorous multi-perspective code, architecture, and security review of 
 - Statement of Account (SOA) review & settlement audit in `apps/clinic-app` (R4)
 - Architecture documentation & interop integrity in `docs/architecture/billing.md` (R5)
 - Automated execution of all 7 test suites & static token audit with 100% pass rate
+- Route to General (`teamwork_preview_orchestrator`) for Calendar Appointment Push Notification and Reminder System
+- Multi-service scope: packages/shared-dotnet, services/clinic-api, services/patient-api, apps/clinic-app
+- Background reminder service with 24h & 2h advance window evaluations
+- Instant event push notifications via interop hub & transactional outbox
+- Doctor staff notifications in clinic workstation notification center
+- On-demand manual reminder dispatch from inspection modal
+- Strict design token compliance (@clinicez/design-tokens) and full test verification
 - Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
 
 ## User Context
-- **Last user request**: Overhaul and harden the Clinic Analytics and Statutory Reports module in ClinicEZ to production-grade quality (eliminate mock fallbacks, server-side aggregations, interactive SVG charts, QuestPDF reports).
+- **Last user request**: Implement a production-grade, end-to-end Calendar Appointment Push Notification and Reminder System in ClinicEZ across packages/shared-dotnet, services/clinic-api, services/patient-api, and apps/clinic-app.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Appended request verbatim to `ORIGINAL_REQUEST.md` under `## 2026-10-20T02:23:38Z`.
+  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` under timestamp `## 2026-10-20T08:02:47Z`.
   - Routed to General path (`teamwork_preview_orchestrator`).
-  - Dispatched `orchestrator_18` (`f5795226-f404-4e8d-8697-7ddd8b968279`).
-  - Phase 0 survey completed by 3 parallel survey subagents.
-  - Global `PROJECT.md` synthesized covering 37 features across M1, M2, M3, and E2E testing track.
-  - Sub-orchestrators dispatched: `sub_orch_m1` (backend aggregations & mock elimination), `sub_orch_m3` (frontend SVG charts), and `sub_orch_e2e` (E2E testing suite).
+  - Dispatched `orchestrator_2` (`03338571-a68e-4b29-91d0-1c6ef4eb0062`) targeting `/Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/orchestrator_2`.
+  - Scheduled Cron 1 (Progress Reporting, `task-26`) and Cron 2 (Liveness Check, `task-28`).
 
 ## Project Status
-- **Phase**: complete (VICTORY CONFIRMED by independent auditor victory_auditor_19)
+- **Phase**: complete (VICTORY CONFIRMED by independent auditor victory_auditor_2)
 - **Route**: General -> teamwork_preview_orchestrator
 - **Active Subagents**: none (cleaned up)
 - **Active Tasks**: none (cleaned up)
 
 ## Victory Audit Status
 - **Triggered**: yes
-- **Auditor Conv ID**: 5373dbc2-8ceb-4bd8-b004-ce5eaa9e29fc (victory_auditor_19)
+- **Auditor Conv ID**: 53251c79-b82b-4af9-b30e-e693aeecb7be (victory_auditor_2)
 - **Verdict**: VICTORY CONFIRMED
-- **Retry count**: 1
+- **Retry count**: 0
 
 ## Artifact Index
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel working memory
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel briefing archive
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_18/ — Orchestrator 18 working directory
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/PROJECT.md — Global architecture, feature inventory, and milestones
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/TEST_READY.md — E2E test suite sign-off (445 tests passing)
+- /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
+- /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent working memory
+- /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel archived content
+- /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/orchestrator_2/ — Project Orchestrator 2 working directory

@@ -23,6 +23,7 @@ import PatientSearchConfigSection from './PatientSearchConfigSection';
 import EodReconciliationSettingsCard from './EodReconciliationSettingsCard';
 import WaitingAreaTvSettingsCard from './WaitingAreaTvSettingsCard';
 import NotificationSettingsCard from './NotificationSettingsCard';
+import AppointmentReminderSettingsCard from './AppointmentReminderSettingsCard';
 import QueueCallingSettingsCard from './QueueCallingSettingsCard';
 import { ClinicRoomsSettingsCard } from './ClinicRoomsSettingsCard';
 import { useClinic } from '../../context/ClinicContext';
@@ -785,6 +786,13 @@ export default function GeneralSettingsTab({
 
       {/* Notification System & Alert Preferences */}
       <NotificationSettingsCard
+        settings={settings}
+        onSettingsUpdated={onSettingsUpdated}
+        showSkeletons={showSkeletons}
+      />
+
+      {/* Calendar Appointment Push Reminders & Alerts */}
+      <AppointmentReminderSettingsCard
         settings={settings}
         onSettingsUpdated={onSettingsUpdated}
         showSkeletons={showSkeletons}

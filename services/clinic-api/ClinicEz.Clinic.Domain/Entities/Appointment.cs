@@ -46,4 +46,11 @@ public sealed class Appointment : BaseEntity
 
     /// <summary>The record items the patient shared with the booking, as a JSON array of <c>ShareItemDto</c>.</summary>
     public string SharedItemsJson { get; set; } = "[]";
+
+    public bool Reminder24hSent { get; set; } = false;
+    public bool Reminder2hSent { get; set; } = false;
+    public DateTime? Reminder24hSentAt { get; set; }
+    public DateTime? Reminder2hSentAt { get; set; }
+    public DateTime? LastReminderSentAt { get; set; }
+    public string? LastReminderType { get; set; }
 }

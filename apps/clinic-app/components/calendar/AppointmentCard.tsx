@@ -61,19 +61,26 @@ export function AppointmentCard({
           style,
         ]}
       >
-        <ThemedText
-          data-testid="card-patient-name"
-          variant="caption"
-          style={[
-            styles.compactText,
-            { color: urgencyTokens.badgeText },
-            statusTokens.isStrikethrough && styles.strikethrough,
-          ]}
-          numberOfLines={1}
-        >
-          {formattedTime ? `${formattedTime} ` : ''}
-          {appointment.patientName}
-        </ThemedText>
+        <View style={styles.compactRow}>
+          <ThemedText
+            data-testid="card-patient-name"
+            variant="caption"
+            style={[
+              styles.compactText,
+              { color: urgencyTokens.badgeText, flex: 1 },
+              statusTokens.isStrikethrough && styles.strikethrough,
+            ]}
+            numberOfLines={1}
+          >
+            {formattedTime ? `${formattedTime} ` : ''}
+            {appointment.patientName}
+          </ThemedText>
+          {appointment.lastReminderSentAt ? (
+            <View data-testid="card-reminder-badge" testID="card-reminder-badge">
+              <Icon name="bell" size={10} color={urgencyTokens.badgeText} />
+            </View>
+          ) : null}
+        </View>
       </Pressable>
     );
   }
@@ -147,6 +154,15 @@ export function AppointmentCard({
               {statusTokens.label}
             </ThemedText>
           </View>
+          {appointment.lastReminderSentAt ? (
+            <View
+              data-testid="card-reminder-badge"
+              testID="card-reminder-badge"
+              style={styles.timelineReminderBadge}
+            >
+              <Icon name="bell" size={12} color={theme.colors.primaryDark} />
+            </View>
+          ) : null}
           {appointment.doctorName ? (
             <ThemedText
               data-testid="card-doctor-name"
@@ -237,6 +253,23 @@ export function AppointmentCard({
             {statusTokens.label}
           </ThemedText>
         </View>
+
+        {appointment.lastReminderSentAt ? (
+          <View
+            data-testid="card-reminder-badge"
+            testID="card-reminder-badge"
+            style={styles.reminderBadge}
+          >
+            <Icon name="bell" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
+            <ThemedText
+              variant="caption"
+              color={theme.colors.primaryDark}
+              style={{ fontWeight: '600' }}
+            >
+              Reminder Sent
+            </ThemedText>
+          </View>
+        ) : null}
 
         {appointment.doctorName ? (
           <ThemedText
@@ -451,6 +484,28 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.75,
+  },
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  reminderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.primaryLight,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    borderRadius: theme.radii.sm,
+  },
+  timelineReminderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.primaryLight,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: theme.radii.xs,
   },
 });
 

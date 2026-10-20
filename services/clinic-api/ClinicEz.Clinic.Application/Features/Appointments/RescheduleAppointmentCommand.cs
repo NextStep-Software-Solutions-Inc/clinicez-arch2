@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.Appointments.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interop.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,13 +24,16 @@ public sealed class RescheduleAppointmentCommandHandler : IRequestHandler<Resche
 {
     private readonly IRepository<Appointment> _appointmentRepo;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAppointmentNotificationDispatcher? _dispatcher;
 
     public RescheduleAppointmentCommandHandler(
         IRepository<Appointment> appointmentRepo,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAppointmentNotificationDispatcher? dispatcher = null)
     {
         _appointmentRepo = appointmentRepo;
         _unitOfWork = unitOfWork;
+        _dispatcher = dispatcher;
     }
 
     public async Task<AppointmentDto> Handle(RescheduleAppointmentCommand request, CancellationToken ct)
@@ -69,6 +74,12 @@ public sealed class RescheduleAppointmentCommandHandler : IRequestHandler<Resche
         appointment.DurationMinutes = duration;
         appointment.EndTimeUtc = newEndUtc;
 
+        // Reset reminder flags so the new slot receives advance reminders
+        appointment.Reminder24hSent = false;
+        appointment.Reminder2hSent = false;
+        appointment.Reminder24hSentAt = null;
+        appointment.Reminder2hSentAt = null;
+
         if (!string.IsNullOrWhiteSpace(request.Reason))
         {
             appointment.Notes = string.IsNullOrWhiteSpace(appointment.Notes)
@@ -78,6 +89,12 @@ public sealed class RescheduleAppointmentCommandHandler : IRequestHandler<Resche
 
         appointment.UpdatedAt = DateTime.UtcNow;
         appointment.UpdatedBy = "ClinicStaff";
+
+        if (_dispatcher != null)
+        {
+            await _dispatcher.DispatchAlertAsync(appointment, AppointmentAlertKinds.Rescheduled, ct);
+            await _dispatcher.DispatchStaffNotificationAsync(appointment, "rescheduled", ct);
+        }
 
         try
         {

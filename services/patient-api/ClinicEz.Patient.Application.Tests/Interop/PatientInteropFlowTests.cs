@@ -1,3 +1,4 @@
+using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Application.Features.BookingDrafts.Commands.SubmitBookingDraft;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Enums;
@@ -10,6 +11,7 @@ using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace ClinicEz.Patient.Application.Tests.Interop;
 
@@ -790,6 +792,154 @@ public sealed class PatientInteropFlowTests
     }
 
     [Fact]
+    public async Task Patient_appointment_alert_creates_in_app_notification_and_dispatches_fcm_push()
+    {
+        using var h = new PatientInteropHarness();
+        var patientId = Guid.NewGuid();
+        var clinicId = Guid.NewGuid();
+        var appointmentId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
+        const string pushToken = "fcm_test_device_token_xyz_123";
+
+        await h.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Patient
+            {
+                Id = patientId,
+                ClerkUserId = "clerk_appt_user",
+                FirstName = "Maria",
+                LastName = "Santos",
+                Mobile = "+639171234569",
+                Email = "maria.santos@example.test",
+                DateOfBirth = new DateOnly(1992, 5, 10)
+            });
+            db.DeviceSessions.Add(new DeviceSession
+            {
+                Id = Guid.NewGuid(),
+                PatientId = patientId,
+                DeviceId = "device_001",
+                DeviceLabel = "iPhone 15",
+                ClerkSessionId = "sess_001",
+                PushToken = pushToken,
+                LastActiveAt = DateTime.UtcNow,
+                IsRevoked = false
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var payload = new PatientAppointmentAlertPayload(
+            AppointmentId: appointmentId,
+            ClinicId: clinicId,
+            ClinicName: "Metro Health Clinic",
+            DoctorId: doctorId,
+            DoctorName: "Dr. Maria Santos",
+            ServiceType: "General Consultation",
+            ScheduledAtUtc: DateTime.UtcNow.AddDays(1),
+            DurationMinutes: 30,
+            AlertKind: AppointmentAlertKinds.Reminder24h,
+            Message: "Reminder: You have an appointment tomorrow at 10:00 AM with Dr. Maria Santos at Metro Health Clinic.",
+            TimestampUtc: DateTime.UtcNow);
+
+        var envelope = InteropEnvelope.Create(
+            InteropTypes.PatientAppointmentAlert,
+            PatientInteropHarness.Clinic(clinicId),
+            PatientInteropHarness.Patient(patientId),
+            appointmentId,
+            payload);
+
+        await h.Dispatcher.DispatchAsync(envelope, default);
+
+        var notifications = await h.WithDbAsync(db => db.Notifications.AsNoTracking().Where(n => n.PatientId == patientId).ToListAsync());
+        notifications.Should().ContainSingle();
+        var notif = notifications[0];
+        notif.Title.Should().Contain("Appointment Reminder (Tomorrow)");
+        notif.Body.Should().Be(payload.Message);
+        notif.Type.Should().Be(NotificationType.AppointmentReminder);
+        notif.Category.Should().Be(NotificationCategory.Appointments);
+        notif.SourceId.Should().Be($"appointment:{appointmentId}:{AppointmentAlertKinds.Reminder24h}");
+
+        var pushService = h.Provider.GetRequiredService<IPushNotificationService>();
+        await pushService.Received(1).SendPushNotificationAsync(
+            pushToken,
+            Arg.Is<string>(t => t.Contains("Appointment Reminder (Tomorrow)")),
+            payload.Message,
+            "appointment",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Patient_appointment_alert_is_idempotent_on_redelivery()
+    {
+        using var h = new PatientInteropHarness();
+        var patientId = Guid.NewGuid();
+        var clinicId = Guid.NewGuid();
+        var appointmentId = Guid.NewGuid();
+        const string pushToken = "fcm_test_token_dup";
+
+        await h.WithDbAsync(async db =>
+        {
+            db.Patients.Add(new Patient
+            {
+                Id = patientId,
+                ClerkUserId = "clerk_dup_user",
+                FirstName = "Jose",
+                LastName = "Rizal",
+                Mobile = "+639171234570",
+                Email = "jose@example.test",
+                DateOfBirth = new DateOnly(1861, 6, 19)
+            });
+            db.DeviceSessions.Add(new DeviceSession
+            {
+                Id = Guid.NewGuid(),
+                PatientId = patientId,
+                DeviceId = "device_dup",
+                DeviceLabel = "Android",
+                ClerkSessionId = "sess_dup",
+                PushToken = pushToken,
+                LastActiveAt = DateTime.UtcNow,
+                IsRevoked = false
+            });
+            await db.SaveChangesAsync();
+        });
+
+        var payload = new PatientAppointmentAlertPayload(
+            AppointmentId: appointmentId,
+            ClinicId: clinicId,
+            ClinicName: "City Clinic",
+            DoctorId: null,
+            DoctorName: null,
+            ServiceType: "Checkup",
+            ScheduledAtUtc: DateTime.UtcNow.AddHours(2),
+            DurationMinutes: 15,
+            AlertKind: AppointmentAlertKinds.Reminder2h,
+            Message: "Reminder: You have an appointment in 2 hours.",
+            TimestampUtc: DateTime.UtcNow);
+
+        var envelope = InteropEnvelope.Create(
+            InteropTypes.PatientAppointmentAlert,
+            PatientInteropHarness.Clinic(clinicId),
+            PatientInteropHarness.Patient(patientId),
+            appointmentId,
+            payload);
+
+        // First delivery
+        await h.Dispatcher.DispatchAsync(envelope, default);
+        // Duplicate delivery with same or new MessageId
+        await h.Dispatcher.DispatchAsync(envelope with { MessageId = Guid.NewGuid() }, default);
+
+        var notifications = await h.WithDbAsync(db => db.Notifications.AsNoTracking().Where(n => n.PatientId == patientId).ToListAsync());
+        notifications.Should().ContainSingle();
+
+        var pushService = h.Provider.GetRequiredService<IPushNotificationService>();
+        await pushService.Received(1).SendPushNotificationAsync(
+            pushToken,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public void Every_message_type_patient_api_receives_has_a_handler()
     {
         using var h = new PatientInteropHarness();
@@ -798,6 +948,6 @@ public sealed class PatientInteropFlowTests
             InteropTypes.FacilityDirectoryUpdated, InteropTypes.ClinicRecordVerified, InteropTypes.ClinicAppointmentUpdated,
             InteropTypes.PatientShareRedeem, InteropTypes.PatientDocumentIssued, InteropTypes.LabOrderStatusChanged,
             InteropTypes.RxStatusChanged, InteropTypes.LabResultReviewed, InteropTypes.ClinicalImmunizationAdministered,
-            InteropTypes.PatientQueueAlert);
+            InteropTypes.PatientQueueAlert, InteropTypes.PatientAppointmentAlert);
     }
 }

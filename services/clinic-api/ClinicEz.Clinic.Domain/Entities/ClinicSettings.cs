@@ -167,6 +167,11 @@ public sealed class ClinicSettings : BaseEntity
     /// Value: <see cref="DocumentSignatoryConfig"/> JSON.
     /// </summary>
     public string? DocumentSignatoriesJson { get; set; }
+
+    public bool EnableAppointmentReminders { get; set; } = true;
+    public bool AppointmentReminder24hEnabled { get; set; } = true;
+    public bool AppointmentReminder2hEnabled { get; set; } = true;
+    public bool EnableStaffAppointmentNotifications { get; set; } = true;
 }
 
 /// <summary>

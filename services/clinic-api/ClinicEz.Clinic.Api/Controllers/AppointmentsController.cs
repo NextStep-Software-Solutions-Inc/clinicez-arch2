@@ -75,6 +75,17 @@ public sealed class AppointmentsController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<AppointmentDto>.Success(result, "Appointment cancelled successfully."));
     }
+
+    [HttpPost("{id:guid}/remind")]
+    [HasPermission(ClinicPermissions.AppointmentsManage)]
+    public async Task<ActionResult<ApiResponse<AppointmentDto>>> SendAppointmentReminder(
+        Guid id,
+        CancellationToken ct)
+    {
+        var command = new SendAppointmentReminderCommand(id);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<AppointmentDto>.Success(result, "Appointment reminder sent successfully."));
+    }
 }
 
 public sealed record RescheduleAppointmentRequest(
