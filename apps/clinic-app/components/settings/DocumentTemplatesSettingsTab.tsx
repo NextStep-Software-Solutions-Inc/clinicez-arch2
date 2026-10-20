@@ -114,7 +114,7 @@ export default function DocumentTemplatesSettingsTab({
     setPaperSize((record.paperSize as PaperSize) || 'Letter');
     setLetterheadFooter(
       record.letterheadFooter ||
-        'Valid Philippine Medical Certificate. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'
+        'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'
     );
   }, []);
 
@@ -324,7 +324,7 @@ export default function DocumentTemplatesSettingsTab({
               letterheadContact: 'Tel: (02) 8000-0000',
               paperSize: 'Letter',
               letterheadFooter:
-                'Valid Philippine Medical Certificate. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.',
+                'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.',
             };
             setInternalSettings(defaults);
             populateForm(defaults);
@@ -502,7 +502,7 @@ export default function DocumentTemplatesSettingsTab({
                 onChangeText={setLetterheadFooter}
                 multiline
                 numberOfLines={3}
-                placeholder="Valid Philippine Medical Certificate. Digitally certified via Clinic EZ..."
+                placeholder="Valid Philippine Clinical Document. Digitally certified via Clinic EZ..."
                 helperText="Enforces Philippine RA 8792 (E-Commerce Act) and RA 10173 (Data Privacy Act) compliance."
                 testID="input-statutory-footer"
               />
@@ -623,8 +623,8 @@ export default function DocumentTemplatesSettingsTab({
                       TO WHOM IT MAY CONCERN:
                     </ThemedText>
                     <ThemedText variant="body" style={styles.docParagraph}>
-                      This is to certify that <ThemedText variant="bodyBold">Juan Dela Cruz</ThemedText>, 34 years
-                      old, Male, Filipino, residing at City of San Pedro, Laguna, was examined and treated at this
+                      This is to certify that <ThemedText variant="bodyBold">Juan Dela Cruz</ThemedText>, 34 yrs, 5 mos, 2 wks, 3 days of
+                      age, Male, Filipino, residing at City of San Pedro, Laguna, was examined and treated at this
                       facility on October 20, 2026.
                     </ThemedText>
                     <View style={styles.calloutBox}>
@@ -650,7 +650,7 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                     <View style={styles.docMetadataRow}>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Patient: Maria Santos (28/F)
+                        Patient: Maria Santos (28 yrs, 6 mos, 1 wk, 2 days • Female)
                       </ThemedText>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
                         Rx No: RX-2026-00891
@@ -694,7 +694,7 @@ export default function DocumentTemplatesSettingsTab({
                     </ThemedText>
                     <View style={styles.docMetadataRow}>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        Patient: Pedro Penduko (45/M)
+                        Patient: Pedro Penduko (45 yrs, 2 mos, 3 days • Male)
                       </ThemedText>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
                         Req No: LAB-2026-00318
@@ -747,9 +747,9 @@ export default function DocumentTemplatesSettingsTab({
                       Dear Colleague,
                     </ThemedText>
                     <ThemedText variant="body" style={styles.docParagraph}>
-                      Respectfully referring Juan Dela Cruz, 58-year-old male with persistent Grade 2 Essential
-                      Hypertension and exertional dyspnea, for 2D-Echocardiogram and comprehensive cardiac risk
-                      stratification.
+                      Respectfully referring Juan Dela Cruz, 58 yrs, 8 mos, 2 wks, 1 day of age, Male, with persistent
+                      Grade 2 Essential Hypertension and exertional dyspnea, for 2D-Echocardiogram and comprehensive
+                      cardiac risk stratification.
                     </ThemedText>
                   </View>
                 )}
@@ -821,7 +821,7 @@ export default function DocumentTemplatesSettingsTab({
                 <View style={styles.canvasFooterDivider} />
                 <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.footerDisclaimerText}>
                   {letterheadFooter.trim() ||
-                    'Valid Philippine Medical Certificate. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'}
+                    'Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173.'}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textLight}>
                   Verify online: portal.clinicez.ph/verify/DOC-SEC-2026
@@ -962,6 +962,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+    minHeight: 720,
+    justifyContent: 'space-between',
     gap: theme.spacing.lg,
     ...theme.shadows.md,
   },
@@ -1063,8 +1065,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   signatureBlock: {
-    marginTop: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    marginTop: 'auto',
+    paddingTop: theme.spacing.lg,
     alignItems: 'flex-end',
     gap: theme.spacing.xs,
   },

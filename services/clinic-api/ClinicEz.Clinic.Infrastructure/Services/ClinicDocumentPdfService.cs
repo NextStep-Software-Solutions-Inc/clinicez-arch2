@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Features.Reports.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Infrastructure.Common;
 using ClinicEz.Shared.Documents;
+using ClinicEz.Shared.Documents.Common;
 using ClinicEz.Shared.Documents.Components;
 using ClinicEz.Shared.Documents.Configuration;
 using ClinicEz.Shared.Documents.Security;
@@ -68,7 +69,10 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(verifyUrl, 4);
 
-        var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35;
+        var patientAge = ChronologicalAgeCalculator.FormatLongAge(
+            patient?.DateOfBirth,
+            cert.IssueDate,
+            patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35);
         var patientGender = patient?.Gender.ToString() ?? "Patient";
 
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
@@ -120,7 +124,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         t.DefaultTextStyle(x => x.LineHeight(1.4f));
                         t.Span("This is to certify that ");
                         t.Span(cert.PatientName).Bold().FontColor("#111827");
-                        t.Span($", {patientAge} years of age, {patientGender}, was physically examined and clinically evaluated at this medical facility on ");
+                        t.Span($", {patientAge} of age, {patientGender}, was physically examined and clinically evaluated at this medical facility on ");
                         t.Span(cert.IssueDate.ToString("MMMM dd, yyyy")).SemiBold();
                         t.Span(" with the following medical findings:");
                     });
@@ -226,6 +230,11 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(slip.QrPayload, 4);
 
+        var patientAge = ChronologicalAgeCalculator.FormatLongAge(
+            slip.PatientDateOfBirth,
+            DateOnly.FromDateTime(slip.OrderDate),
+            slip.PatientAge);
+
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
         var docSignatureBytes = (mode == SignatureMode.ESignatureSpecimen)
             ? (ImageDecoderHelper.TryDecode(doctor?.SignatureSpecimen) ?? config.DoctorSignatureBytes)
@@ -279,7 +288,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             c.Item().Text(t =>
                             {
                                 t.Span("Age / Sex: ").SemiBold().FontColor("#64748B");
-                                t.Span($"{slip.PatientAge} y • {slip.PatientGender}").FontColor("#1E293B");
+                                t.Span($"{patientAge} • {slip.PatientGender}").FontColor("#1E293B");
                             });
                             if (!string.IsNullOrWhiteSpace(slip.PhilHealthNumber))
                             {
@@ -425,6 +434,11 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(slip.QrPayload ?? verifyUrl, 4);
 
+        var patientAge = ChronologicalAgeCalculator.FormatLongAge(
+            slip.PatientDateOfBirth,
+            DateOnly.FromDateTime(slip.IssuedAt),
+            slip.PatientAge);
+
         bool hasDangerousDrug = slip.Items.Any(i => i.IsDangerousDrug);
         var preferredMode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
         var mode = hasDangerousDrug ? SignatureMode.WetSignature : preferredMode;
@@ -467,7 +481,10 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     col.Item().PaddingTop(4).Row(row =>
                     {
                         var patientGenderAbbr = slip.PatientGender?.StartsWith("F", StringComparison.OrdinalIgnoreCase) == true ? "F" : "M";
-                        row.RelativeItem().Text($"Patient: {slip.PatientName} ({slip.PatientAge}/{patientGenderAbbr})")
+                        var genderDisplay = !string.IsNullOrWhiteSpace(slip.PatientGender)
+                            ? slip.PatientGender
+                            : (patientGenderAbbr == "F" ? "Female" : "Male");
+                        row.RelativeItem().Text($"Patient: {slip.PatientName} ({patientAge} • {genderDisplay})")
                             .FontSize(8.5f).FontColor("#64748B");
                         row.ConstantItem(180).AlignRight().Text($"Rx No: {slip.PrescriptionNumber}")
                             .FontSize(8.5f).FontColor("#64748B");
@@ -602,7 +619,10 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var qrBytes = _qrCodeService.GenerateQrCodePng(verifyUrl, 4);
 
-        var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35;
+        var patientAge = ChronologicalAgeCalculator.FormatLongAge(
+            patient?.DateOfBirth,
+            referral.ReferralDate,
+            patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35);
         var patientGender = patient?.Gender.ToString() ?? "Patient";
 
         var mode = signatureMode ?? doctor?.DefaultSignatureMode ?? config.DefaultSignatureMode;
@@ -670,12 +690,12 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             c.Item().Text("PATIENT NAME").FontSize(7.5f).Bold().FontColor("#6B7280");
                             c.Item().Text(referral.PatientName).FontSize(10f).Bold().FontColor("#111827");
                         });
-                        row.RelativeItem(1).Column(c =>
+                        row.RelativeItem(2.2f).Column(c =>
                         {
                             c.Item().Text("AGE / SEX").FontSize(7.5f).Bold().FontColor("#6B7280");
-                            c.Item().Text($"{patientAge}y • {patientGender}").FontSize(9.5f).SemiBold().FontColor("#111827");
+                            c.Item().Text($"{patientAge} • {patientGender}").FontSize(9.5f).SemiBold().FontColor("#111827");
                         });
-                        row.RelativeItem(1.5f).Column(c =>
+                        row.RelativeItem(1.4f).Column(c =>
                         {
                             c.Item().Text("PHILHEALTH PIN").FontSize(7.5f).Bold().FontColor("#6B7280");
                             c.Item().Text(patient?.PhilHealthNumber ?? "N/A").FontSize(9.5f).FontColor("#111827");
@@ -1827,7 +1847,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 "a5" => DocumentPaperSize.A5,
                 _ => DocumentPaperSize.Letter
             },
-            CustomDisclaimerText = settings.LetterheadFooter ?? "Valid Philippine Medical Certificate & Prescription. Digitally issued via Clinic EZ in compliance with RA 8792 & RA 10173."
+            CustomDisclaimerText = settings.LetterheadFooter ?? "Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173."
         };
     }
 
@@ -1842,7 +1862,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         SignatureMode mode,
         string digitalSealBadgeText)
     {
-        col.Item().PaddingTop(14).AlignRight().Width(230).Column(stamp =>
+        col.Item().ExtendVertical().AlignBottom().PaddingTop(14).AlignRight().Width(230).Column(stamp =>
         {
             if (mode == SignatureMode.ESignatureSpecimen && signatureBytes != null && signatureBytes.Length > 0)
             {

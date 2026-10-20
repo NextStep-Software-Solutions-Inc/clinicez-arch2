@@ -176,7 +176,8 @@ public sealed class SettingsController : ControllerBase
                 DispensedReceiptNumber: null,
                 DispensedReceiptUrl: null,
                 DispensedAt: null,
-                DispenseNotes: null
+                DispenseNotes: null,
+                PatientDateOfBirth: samplePatient.DateOfBirth
             );
             pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings, sampleDoctor, signatureMode);
             fileName = "Sample-ElectronicPrescription.pdf";
@@ -208,7 +209,9 @@ public sealed class SettingsController : ControllerBase
                     new("12-Lead Electrocardiogram (ECG)", "Cardiology", "Standard resting 12-lead protocol")
                 },
                 PublicUploadUrl: "https://clinicez.ph/upload/sample-lab-tok",
-                QrPayload: "CLINICEZ:REQ:LAB-2026-00318"
+                QrPayload: "CLINICEZ:REQ:LAB-2026-00318",
+                ClaimToken: null,
+                PatientDateOfBirth: new DateOnly(1981, 8, 17)
             );
             pdfBytes = _pdfService.GenerateLabRequisitionSlipPdf(slip, settings, sampleDoctor, signatureMode);
             fileName = "Sample-LabRequisitionSlip.pdf";
