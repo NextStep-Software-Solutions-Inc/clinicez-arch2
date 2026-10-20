@@ -12,6 +12,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
+using ClinicEz.Shared.Documents.Configuration;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
@@ -32,7 +33,9 @@ public sealed record UpdateStaffMemberCommand(
     bool IsActive,
     string? PhilHealthPan = null,
     IReadOnlyList<Guid>? AssignedRoomIds = null,
-    bool ClearAssignedRoom = false) : IRequest<StaffMemberDto>;
+    bool ClearAssignedRoom = false,
+    string? SignatureSpecimen = null,
+    SignatureMode? DefaultSignatureMode = null) : IRequest<StaffMemberDto>;
 
 public sealed class UpdateStaffMemberCommandValidator : AbstractValidator<UpdateStaffMemberCommand>
 {
@@ -222,6 +225,14 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         staff.S2LicenseNumber = request.S2LicenseNumber?.Trim();
         staff.Specialty = request.Specialty?.Trim();
         staff.PhilHealthPan = request.PhilHealthPan?.Trim();
+        if (request.SignatureSpecimen != null)
+        {
+            staff.SignatureSpecimen = string.IsNullOrWhiteSpace(request.SignatureSpecimen) ? null : request.SignatureSpecimen;
+        }
+        if (request.DefaultSignatureMode.HasValue)
+        {
+            staff.DefaultSignatureMode = request.DefaultSignatureMode.Value;
+        }
         staff.IsActive = request.IsActive;
         staff.UpdatedAt = DateTime.UtcNow;
         staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
@@ -254,6 +265,8 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             MustChangePassword: staff.MustChangePassword,
             PhilHealthPan: staff.PhilHealthPan,
             AssignedRoomIds: staff.GetAssignedRoomIds(),
-            AssignedRoomNames: assignedRoomNames);
+            AssignedRoomNames: assignedRoomNames,
+            SignatureSpecimen: staff.SignatureSpecimen,
+            DefaultSignatureMode: staff.DefaultSignatureMode);
     }
 }

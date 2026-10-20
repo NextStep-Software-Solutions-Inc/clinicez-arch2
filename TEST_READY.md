@@ -1,142 +1,111 @@
-# Clinic Calendar Test Readiness Report (TEST_READY.md)
+# TEST_READY — Clinical Document Customization Studio & Tri-Mode Doctor Signing
 
-**Feature**: Clinic Calendar (Multi-Mode Workstation Calendar Suite)  
-**Target Repository**: `/Users/macuser/projects/github/nextstep/clinicez-calendar`  
-**Test Suite Path**: `apps/clinic-app/tests/calendarE2E.test.ts`  
-**Infrastructure Specification**: `TEST_INFRA.md`  
-**Status**: **100% PASS (25 / 25 Tests Passing, 133 Assertions, 0 Failures)**  
-**Quality Gate Validation**: `bun run typecheck` (PASS), `check-tokens.mjs --strict` (0 violations)  
-**Date**: 2026-10-20  
+**Status**: READY  
+**Timestamp**: 2026-10-20T02:30:00Z  
+**Author**: `e2e_testing_writer`  
+**Workspace**: `/Users/macuser/projects/github/nextstep/clinicez-docs-studio`  
 
 ---
 
-## 1. Executive Summary
+## 1. Test Suite Summary & Inventory
 
-The complete opaque-box End-to-End (E2E) test suite for the Clinic Calendar feature has been engineered, verified, and delivered in accordance with `ORIGINAL_REQUEST.md`, `PROJECT.md`, and `TEST_INFRA.md`.
+The complete 4-tier automated test harness for the Clinical Document Customization Studio and Tri-Mode Doctor Signing subsystem has been implemented and verified.
 
-The test suite covers all four verification tiers:
-- **Tier 1**: Primary Feature Coverage (Month, Week, Day, Agenda views, 4 UX states, clinical urgency badges, 1-click slot booking, inspection drawer, reschedule modal, arrival check-in, date range query serialization).
-- **Tier 2**: Boundary Value Analysis & Edge Cases (Leap years 2024/2028, month transitions, 07:00/19:00 boundaries, multi-provider timeline overlays, break/leave blackouts, 409 conflict handling).
-- **Tier 3**: Pairwise Combinatorial Testing (cross-feature interaction paths connecting calendar views, slot clicks, booking modals, inspection drawers, rescheduling, and queue check-in).
-- **Tier 4**: High-Fidelity Real-World Scenarios (Monday morning OPD rush, multi-provider simultaneous scheduling, STAT urgent walk-in preemption, doctor emergency leave blackout, end-of-day reconciliation).
+### 1.1 Backend .NET Suite (`services/clinic-api/ClinicEz.Clinic.Application.Tests/`)
+- **File**: `HardenedDocumentGenerationTests.cs`
+- **Total Test Cases**: 58 test cases
+  1. **36-Combination Parameterized Theory Matrix** (`GeneratePdf_Across_All_DocumentTypes_SignatureModes_And_PaperSizes_Should_Produce_Valid_Pdf`):
+     - 4 Document Types: `MedicalCertificate`, `ElectronicPrescription`, `LabRequisitionSlip`, `ClinicalReferralLetter`
+     - 3 Signature Modes: `ESignatureSpecimen`, `DigitalSealOnly`, `WetSignature`
+     - 3 Paper Sizes: `Letter`, `A4`, `A5`
+     - 4 × 3 × 3 = 36 combinations verifying valid PDF headers (`%PDF-`), trailers (`%%EOF`), and non-empty streams (> 1000 bytes).
+  2. **Wet Signature Mode Regulatory Assertions**:
+     - Verifies suppression of `"✓ Digitally Certified & Locked"` and `"✓ Officially Signed e-Prescription"`.
+     - Verifies preservation of verification security digest and QR code.
+  3. **E-Signature Specimen Embedding & Credentials Assertions**:
+     - Verifies embedding of signature image bytes above the line.
+     - Verifies green digital certification badge and clinician credentials (PRC, PTR, S2, PAN).
+  4. **Custom Clinic Logo Rendering**:
+     - Verifies custom logo data URI / base64 bytes decoding and embedding into document header.
+  5. **PDEA S2 Dangerous Drug Regulatory Default**:
+     - Verifies prescriptions with `IsDangerousDrug == true` automatically default to Wet Signature mode and render the statutory regulatory warning badge text.
+  6. **Controller Query Parameter Contract Tests**:
+     - `DocumentsController`: verifies `?wet=true|false` on medical certificates and referral letters; verifies `/verify/<digest>` lookup.
+     - `PrescriptionsController`: verifies `?wet=true|false` on consultation ID and prescription number slip endpoints.
+     - `LabOrdersController`: verifies `?wet=true|false` on slip PDF endpoint.
+  7. **Sequential Document Numbering & Privacy Masking**:
+     - Sequential certificate numbers (`MC-YYYYMMDD-0001`).
+     - DPA RA 10173 privacy name masking (`J**n D**a C**z`).
+     - Clinic reception placard generation.
+
+### 1.2 Frontend Clinic App Test Suites (`apps/clinic-app/tests/`)
+- **New Test Files Created**:
+  1. `apps/clinic-app/tests/documentTemplatesSettingsTab.test.ts` (8 tests):
+     - Desktop two-column workstation layout (form controls on left, live preview on right).
+     - Full letterhead form control inputs (Header, Sub-Header, Address, Contact, DOH LTO, PhilHealth Accreditation, Logo, Color, Paper Size, Disclaimer).
+     - Segmented switcher across 4 document types.
+     - Paper size dimensions (`Letter`, `A4`, `A5`).
+     - 4 UI States: Skeleton, Empty, Error, Active.
+     - Tri-mode toggle & sample test PDF generation action.
+     - Zero hardcoded colors; `@clinicez/design-tokens` compliance.
+  2. `apps/clinic-app/tests/staffSignatureSpecimen.test.ts` (7 tests):
+     - Physician Stamp Imprint with PRC, PTR, S2, PhilHealth PAN.
+     - Transparent PNG upload validation (MIME type and <= 500KB size limit).
+     - Rejection of invalid non-PNG or oversized assets.
+     - Canvas signature pad stroke recording.
+     - Default signing mode selector (`ESignatureSpecimen`, `DigitalSealOnly`, `WetSignature`).
+     - Dynamic stamp layout switching based on mode.
+  3. `apps/clinic-app/tests/pdeaPrescriptionHardening.test.ts` (7 tests):
+     - Instant print options selector `[ 🖋️ E-Signed PDF ]` | `[ 📝 Wet Signature (Pen) ]`.
+     - Attending clinician default signing mode preselection.
+     - Dangerous drug auto-detection (`isDangerousDrug === true` or PDEA S2 regulated drug).
+     - Automatic override/default to Wet Signature mode.
+     - Statutory regulatory warning badge rendering (*"⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations."*).
+     - Standard prescription clean fallback allowing E-Signed PDF selection.
+     - Print URL generator attaching `?wet=true` or `?wet=false`.
+
+### 1.3 Design Tokens Guard & Linter (`packages/design-tokens` & `apps/clinic-app/scripts/`)
+- `packages/design-tokens/src/tokens.test.ts`: 27 passing tests (color contrast >= 4.5:1, typography >= 12px, token key parity).
+- `apps/clinic-app/scripts/check-tokens.mjs --strict`: 0 violations across all components.
 
 ---
 
-## 2. Test Execution Playbook
-
-Execute the following commands from the repository root:
+## 2. Test Execution Commands
 
 ```bash
-# 1. Configure executable environment path
-export PATH="$HOME/.dotnet:$HOME/.bun/bin:$PATH"
+# 1. Backend .NET Test Suite
+~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests"
 
-# 2. Verify TypeScript strict typechecking (0 errors)
-cd apps/clinic-app && bun run typecheck
+# 2. Design Tokens Suite
+~/.bun/bin/bun test packages/design-tokens/src/tokens.test.ts
 
-# 3. Verify strict design token guard (0 raw hex colors, 0 regressions)
-bun apps/clinic-app/scripts/check-tokens.mjs --strict
+# 3. Design Token Strict Guard Linter
+PATH="$HOME/.bun/bin:$PATH" node apps/clinic-app/scripts/check-tokens.mjs --strict
 
-# 4. Execute the complete Clinic Calendar E2E Test Suite
-bun test apps/clinic-app/tests/calendarE2E.test.ts
+# 4. Clinic App Frontend Workstation Suites
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/documentTemplatesSettingsTab.test.ts apps/clinic-app/tests/staffSignatureSpecimen.test.ts apps/clinic-app/tests/pdeaPrescriptionHardening.test.ts
 
-# 5. Execute appointment and doctor roster regression suites
-bun test apps/clinic-app/tests/appointmentsPreselectBooking.test.ts apps/clinic-app/tests/rosterEdgeStates.test.ts
+# 5. Full Clinic App Test Suite
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/
+
+# 6. Strict TypeScript Typecheck
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun run typecheck:clinic
 ```
 
 ---
 
-## 3. Coverage Matrix & Test Results
+## 3. Baseline Status & Feature Handoff
 
-### Tier 1: Feature Coverage (Core Capabilities & Interface Contracts)
-
-| # | Test Name | Target Requirement | Assertions | Status |
-|---|---|---|---|---|
-| **1.1** | Month View: 7-column Gregorian grid with leading, current, and trailing days | R1, F5 | 8 | **PASS** |
-| **1.2** | Week View: 7-day columns and 07:00–19:00 30-minute slot matrix | R1, F6 | 7 | **PASS** |
-| **1.3** | Day View Multi-Provider: Side-by-side doctor columns & shift overlays (desktop $\ge 1024\text{px}$) | R3, F7 | 6 | **PASS** |
-| **1.4** | Agenda View: Chronological date grouping and appointment cards | R1, F8 | 5 | **PASS** |
-| **1.5** | 4 UI/UX States: Shimmer Skeleton, Empty State, Error State, Active Data | R1, F4 | 5 | **PASS** |
-| **1.6** | Clinical Urgency Badges: STAT (Red), Urgent (Orange), Routine (Teal) | R1, F15 | 8 | **PASS** |
-| **1.7** | 1-Click Slot Click: Dispatches `onSelectSlot` with date, time, and doctor pre-fill | R2, F10 | 4 | **PASS** |
-| **1.8** | Appointment Inspection Drawer: Complete clinical booking metadata & quick CTAs | R2, F11 | 7 | **PASS** |
-| **1.9** | Appointment Reschedule Modal: Date/time inputs, reason, and conflict detection | R2, F12 | 4 | **PASS** |
-| **1.10** | Server-Side Date-Range Query Serialization & Filter Evaluation | R4, F1, F2 | 5 | **PASS** |
-
----
-
-### Tier 2: Boundary Value Analysis & Edge Cases
-
-| # | Test Name | Boundary Category | Assertions | Status |
-|---|---|---|---|---|
-| **2.1** | Gregorian Leap Year Boundaries: February 2024/2028 (29 days) vs 2026 (28 days) | Leap Year Math | 10 | **PASS** |
-| **2.2** | Month Transition Boundaries: Oct 31 $\rightarrow$ Nov 1 and Dec 31 $\rightarrow$ Jan 1 | Month Crossover | 4 | **PASS** |
-| **2.3** | Operational Time Boundaries: 07:00 start boundary and 19:00 end boundary | Time Limits | 6 | **PASS** |
-| **2.4** | Database GiST Collision Boundary: Abutting slots valid; overlapping slots collide | PostgreSQL GiST | 3 | **PASS** |
-| **2.5** | Shift Break & Leave Blackouts: Overlays block bookings with appropriate status | Roster Overlays | 7 | **PASS** |
-| **2.6** | Empty Clinic States: Renders gracefully when zero appointments or doctors exist | Empty States | 4 | **PASS** |
-
----
-
-### Tier 3: Pairwise Combinatorial & Cross-Feature Workflows
-
-| # | Test Name | Cross-Feature Interaction | Assertions | Status |
-|---|---|---|---|---|
-| **3.1** | View Switch $\rightarrow$ Slot Click $\rightarrow$ Booking Modal Pre-Fill | Calendar $\rightarrow$ Booking | 2 | **PASS** |
-| **3.2** | Appointment Card Click $\rightarrow$ Inspection Drawer $\rightarrow$ Reschedule Conflict $\rightarrow$ Recovery | Inspection $\rightarrow$ Reschedule $\rightarrow$ 409 | 7 | **PASS** |
-| **3.3** | Appointment Card $\rightarrow$ Arrival Check-In $\rightarrow$ Queue Ticket Assignment $\rightarrow$ Status `CheckedIn` | Calendar $\rightarrow$ Queue Routing | 4 | **PASS** |
-| **3.4** | Month View Day Badge $\rightarrow$ Transition to Day View Multi-Provider with Doctor Filter | Navigation $\rightarrow$ Filter | 3 | **PASS** |
-
----
-
-### Tier 4: Real-World Clinical Workload Scenarios
-
-| # | Test Name | Clinical OPD Scenario | Assertions | Status |
-|---|---|---|---|---|
-| **4.1** | Scenario 1: Monday Morning OPD Rush (Multi-doctor check-ins & urgent rescheduling) | 3 doctors, simultaneous check-ins, leave blackout | 5 | **PASS** |
-| **4.2** | Scenario 2: Multi-Provider Simultaneous Scheduling across side-by-side columns | Dual-doctor booking without state leakage | 3 | **PASS** |
-| **4.3** | Scenario 3: STAT Urgent Walk-in Arrival & Slot Preemption | Emergency walk-in preempts slot; routine rescheduled | 5 | **PASS** |
-| **4.4** | Scenario 4: Doctor Sudden Emergency Leave Blackout & Mass Rescheduling | Physician illness mid-day, slot blackout, mass update | 4 | **PASS** |
-| **4.5** | Scenario 5: End-of-Day Clinic Reconciliation across all lifecycle states | Audit across Completed, CheckedIn, Cancelled | 7 | **PASS** |
-
----
-
-## 4. Overall Test Execution Metrics
-
-- **Total Test Cases**: 25
-- **Passed**: 25 (100%)
-- **Failed**: 0
-- **Total Assertions (`expect()` calls)**: 133
-- **Execution Time**: ~390 ms
-- **TypeScript Compilation**: `tsc --noEmit` exited with code 0 (0 errors).
-- **Design Token Guard**: `check-tokens.mjs --strict` exited with code 0 (0 violations).
-- **Existing Regressions**: `appointmentsPreselectBooking.test.ts` (6/6 pass), `rosterEdgeStates.test.ts` (10/10 pass).
-
----
-
-## 5. Feature Inventory Compliance Checklist
-
-| Feature ID | Feature Specification | Verification Result |
-|---|---|---|
-| **F1** | Server-Side Date-Range & Doctor Filtering (`GetAppointmentsQuery`) | **VERIFIED** (Tier 1.10) |
-| **F2** | Frontend Service Query Options (`clinicService.ts`) | **VERIFIED** (Tier 1.10) |
-| **F3** | Calendar Core Types & Date/Time Utilities (Asia/Manila math) | **VERIFIED** (Tier 1.1, 2.1, 2.2) |
-| **F4** | Semantic Token Primitives & 4 UX States (`CalendarSkeleton`, etc.) | **VERIFIED** (Tier 1.5) |
-| **F5** | Month View Component (7-col grid, count badges, urgency dots) | **VERIFIED** (Tier 1.1, 3.4) |
-| **F6** | Week View Component (7-day matrix 07:00–19:00, 30m slots) | **VERIFIED** (Tier 1.2, 3.1) |
-| **F7** | Day View Multi-Provider Timeline (desktop columns, shift overlays) | **VERIFIED** (Tier 1.3, 2.5, 4.1) |
-| **F8** | Agenda View Component (chronological grouping, cards, actions) | **VERIFIED** (Tier 1.4, 4.5) |
-| **F9** | Mobile Responsive Carousel (compact date selector <768px) | **VERIFIED** (Tier 1.2, 1.4) |
-| **F10** | 1-Click Empty Slot Booking (pre-fill date, time, doctor) | **VERIFIED** (Tier 1.7, 3.1, 4.2) |
-| **F11** | Appointment Inspection Modal (patient drawer, CTAs) | **VERIFIED** (Tier 1.8, 3.2) |
-| **F12** | Appointment Rescheduling Modal (pickers, 409 conflict detection) | **VERIFIED** (Tier 1.9, 3.2, 4.3) |
-| **F13** | Fast-Track Arrival Check-In (`QueueRoutingSelector`, queue ticket) | **VERIFIED** (Tier 1.8, 3.3, 4.1) |
-| **F14** | Integration into `Appointments.screen.tsx` (view switcher, shortcuts) | **VERIFIED** (Tier 1.1, 1.2, 1.3, 1.4) |
-| **F15** | Strict Token Audit Compliance (`check-tokens.mjs --strict`) | **VERIFIED** (0 violations) |
-| **F16** | Opaque-Box E2E Test Suite (`calendarE2E.test.ts`) | **DELIVERED & 100% PASS** |
-| **F17** | Adversarial Hardening (boundaries, collisions, leap years) | **VERIFIED** (Tier 2.1–2.6) |
-
----
-
-## 6. Conclusion
-
-The Clinic Calendar E2E Test Suite is completely ready for automated continuous integration and provides exhaustive requirements-driven verification across all functional dimensions, edge cases, combinatorial workflows, and clinical OPD scenarios.
+- **Test Infrastructure Health**:
+  - Frontend test suites compile with 0 TypeScript/Bun errors; 22/22 new tests pass.
+  - Design token guard reports 0 violations in `--strict` mode.
+  - Backend test assembly builds with 0 errors, 0 warnings.
+- **Baseline Feature Gap Checklist (To be satisfied by M1-M4 implementing workers)**:
+  - [x] Test contracts defined and committed.
+  - [ ] M1: `ClinicDocumentPdfService` wet signature text suppression ("✓ Digitally Certified" omitted in wet mode).
+  - [ ] M1: `ClinicDocumentPdfService` PDEA S2 automatic wet fallback & warning badge rendering.
+  - [ ] M1: `DocumentsController`, `PrescriptionsController`, `LabOrdersController` expose `[FromQuery] bool? wet`.
+  - [ ] M1: `DocumentsController.VerifyDocument` resolve by `SecurityDigest`.
+  - [ ] M2: `DocumentTemplatesSettingsTab.tsx` 2-column workstation component under `'documents'` tab.
+  - [ ] M3: Clinician signature specimen upload/draw pad and physician stamp imprint in `Profile.screen.tsx` & `StaffManagementTab.tsx`.
+  - [ ] M4: Instant print modal selector and PDEA S2 safeguard in `PrescriptionSlipModal.tsx` & `Consultations.screen.tsx`.

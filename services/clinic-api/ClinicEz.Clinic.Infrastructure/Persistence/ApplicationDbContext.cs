@@ -224,6 +224,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.S2LicenseNumber).HasMaxLength(50);
             entity.Property(e => e.Specialty).HasMaxLength(100);
             entity.Property(e => e.PhilHealthPan).HasMaxLength(50);
+            entity.Property(e => e.SignatureSpecimen).HasColumnType("text");
+            entity.Property(e => e.DefaultSignatureMode).HasConversion<string>().HasMaxLength(50);
 
             entity.HasOne(e => e.ClinicRole)
                 .WithMany(r => r.StaffMembers)
@@ -808,8 +810,10 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.PrcLicenseNumber).IsRequired().HasMaxLength(50);
             entity.Property(e => e.FitnessStatus).HasMaxLength(50);
             entity.Property(e => e.Purpose).HasMaxLength(50);
+            entity.Property(e => e.SecurityDigest).HasMaxLength(100);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.CertificateNumber }).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.SecurityDigest });
         });
 
         modelBuilder.Entity<ReferralLetter>(entity =>
@@ -822,8 +826,10 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.ReferredToFacility).IsRequired().HasMaxLength(150);
             entity.Property(e => e.ReferredDepartment).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Urgency).HasMaxLength(50);
+            entity.Property(e => e.SecurityDigest).HasMaxLength(100);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.ReferralNumber }).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.SecurityDigest });
         });
 
         modelBuilder.Entity<ClinicRecordAttachment>(entity =>
@@ -869,6 +875,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.FacilitySlug).HasMaxLength(100);
             entity.Property(e => e.ClinicName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.AccreditationNumber).HasMaxLength(100);
+            entity.Property(e => e.LetterheadDohLto).HasMaxLength(100);
             entity.Property(e => e.PmccNumber).HasMaxLength(100);
             entity.Property(e => e.SoftwareCertificateId).HasMaxLength(100);
             entity.Property(e => e.KonsultaEndpoint).HasMaxLength(255);

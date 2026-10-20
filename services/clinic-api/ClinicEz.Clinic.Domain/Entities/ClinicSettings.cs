@@ -56,6 +56,7 @@ public sealed class ClinicSettings : BaseEntity
     public string? LetterheadSubHeader { get; set; }
     public string? LetterheadAddress { get; set; }
     public string? LetterheadContact { get; set; }
+    public string? LetterheadDohLto { get; set; }
     public string? LetterheadFooter { get; set; }
     public string PrimaryColorHex { get; set; } = "#0284C7";
     public string? PrimaryLogoUrl { get; set; }

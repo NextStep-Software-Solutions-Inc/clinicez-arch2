@@ -10,9 +10,11 @@ using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
+using System.Linq;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Documents.Configuration;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Api.Controllers;
@@ -49,6 +51,7 @@ public sealed class PrescriptionsController : ControllerBase
     [HasPermission(ClinicPermissions.ConsultationsRead)]
     public async Task<IActionResult> DownloadPrescriptionPdfByConsultationId(
         [FromRoute] Guid consultationId,
+        [FromQuery] bool? wet = null,
         CancellationToken ct = default)
     {
         var slip = await _sender.Send(new GetPrescriptionSlipQuery(ConsultationId: consultationId), ct);
@@ -59,7 +62,12 @@ public sealed class PrescriptionsController : ControllerBase
             ClinicName = slip.ClinicName
         };
 
-        var pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings);
+        var isDangerous = slip.Items.Any(i => i.IsDangerousDrug);
+        var signatureMode = isDangerous || wet == true
+            ? SignatureMode.WetSignature
+            : (wet == false ? SignatureMode.ESignatureSpecimen : SignatureMode.ESignatureSpecimen);
+
+        var pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings, doctor: null, signatureMode: signatureMode);
         return File(pdfBytes, "application/pdf", $"Prescription-{slip.PrescriptionNumber}.pdf");
     }
 
@@ -77,6 +85,7 @@ public sealed class PrescriptionsController : ControllerBase
     [HasPermission(ClinicPermissions.ConsultationsRead)]
     public async Task<IActionResult> DownloadPrescriptionPdfByNumber(
         [FromRoute] string prescriptionNumber,
+        [FromQuery] bool? wet = null,
         CancellationToken ct = default)
     {
         var slip = await _sender.Send(new GetPrescriptionSlipQuery(PrescriptionNumber: prescriptionNumber), ct);
@@ -87,7 +96,12 @@ public sealed class PrescriptionsController : ControllerBase
             ClinicName = slip.ClinicName
         };
 
-        var pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings);
+        var isDangerous = slip.Items.Any(i => i.IsDangerousDrug);
+        var signatureMode = isDangerous || wet == true
+            ? SignatureMode.WetSignature
+            : (wet == false ? SignatureMode.ESignatureSpecimen : SignatureMode.ESignatureSpecimen);
+
+        var pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings, doctor: null, signatureMode: signatureMode);
         return File(pdfBytes, "application/pdf", $"Prescription-{slip.PrescriptionNumber}.pdf");
     }
 

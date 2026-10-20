@@ -1,212 +1,139 @@
-# Clinic Calendar Test Infrastructure & Quality Gate Specification (TEST_INFRA.md)
+# Test Infrastructure & 4-Tier Verification Architecture
 
-**Feature**: Clinic Calendar (Multi-Mode Workstation Calendar Suite)  
-**Target Applications**: `apps/clinic-app`, `services/clinic-api`  
-**Repository Root**: `/Users/macuser/projects/github/nextstep/clinicez-calendar`  
-**Authoritative Documents**:
-- `ORIGINAL_REQUEST.md` (## 2026-10-20T02:26:31Z R1–R5)
-- `PROJECT.md` (Milestones M1–M4, Track-E2E, Features F1–F17, Interface Contracts)
-- `clinicez-ui-ux-expert` (Design Tokens, 4 UX States, Clinical Urgency Badges)
-**Version**: 1.0.0  
-**Status**: APPROVED & ACTIVE  
+This document defines the automated test methodology, toolchain execution commands, and comprehensive 4-tier test inventory for the **Clinical Document Customization Studio & Tri-Mode Doctor Signing** subsystem in ClinicEZ (`clinicez-docs-studio`).
 
 ---
 
-## 1. Testing Methodology
+## 1. 4-Tier Testing Methodology
 
-The Clinic Calendar verification framework utilizes a rigorous four-pillar testing methodology designed for mission-critical clinical software. Every test case in the suite is derived directly from authoritative requirements and interface specifications, operating as genuine opaque-box tests without depending on internal implementation details.
+The testing architecture follows a 4-tier verification model guaranteeing regulatory compliance, rendering precision, UI fidelity, and transactional security across Philippine healthcare standards (RA 8792 E-Commerce Act, RA 10173 Data Privacy Act, RA 9165 Comprehensive Dangerous Drugs Act, and FDA Circular 2020-004 e-Prescription Guidelines).
 
 ```
-+---------------------------------------------------------------------------------------+
-|                                4-Pillar Testing Methodology                           |
-+---------------------------+-----------------------------+-----------------------------+
-| 1. Category-Partition     | 2. Boundary Value Analysis  | 3. Pairwise Combinatorial   |
-| (Equivalence Classes)     | (Gregorian, Slots, Offsets) | (Orthogonal Factor Testing) |
-+---------------------------+-----------------------------+-----------------------------+
-                            | 4. Real-World Workloads     |
-                            | (High-Pressure OPD Clincs)  |
-                            +-----------------------------+
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │ TIER 1: DOMAIN & ENTITY VALIDATION                                     │
+ │ - StaffMember.DefaultSignatureMode enum parse & string conversion      │
+ │ - Transparent PNG SignatureSpecimen base64 & data URI validation       │
+ │ - DocumentPaperSize ("Letter", "A4", "A5") mapping                     │
+ │ - Patient privacy name masking (RA 10173 DPA compliance)               │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+ ┌───────────────────────────────────▼────────────────────────────────────┐
+ │ TIER 2: BACKEND QUESTPDF ENGINE & CONTROLLER APIS                      │
+ │ - 36-combination parameterized matrix (4 types × 3 modes × 3 sizes)    │
+ │ - WetSignature text suppression ("✓ Digitally Certified" omitted)      │
+ │ - Blank pen line spacing & verification hash/QR preservation           │
+ │ - E-Signature transparent PNG specimen embedding above line            │
+ │ - Custom clinic logo bytes decoding & letterhead rendering             │
+ │ - Controller ?wet=true|false query parameter binding & routing         │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+ ┌───────────────────────────────────▼────────────────────────────────────┐
+ │ TIER 3: FRONTEND WORKSTATION & STUDIO COMPONENTS                       │
+ │ - DocumentTemplatesSettingsTab 2-column workstation layout             │
+ │ - Live canvas preview with 4-document segmented switcher               │
+ │ - Paper size selector (Letter, A4, A5) & color overrides               │
+ │ - 4 core UI states: Skeleton, Empty, Error, Active                     │
+ │ - Doctor Physician Stamp Imprint with PRC, PTR, S2, PAN                │
+ │ - Zero-violation @clinicez/design-tokens compliance                    │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+ ┌───────────────────────────────────▼────────────────────────────────────┐
+ │ TIER 4: REGULATORY & CLINICAL ISSUANCE FLOW (PDEA S2 SAFEGUARD)        │
+ │ - Dangerous drug detection (isDangerousDrug == true)                   │
+ │ - Automatic default/enforcement of Wet Signature Mode                  │
+ │ - Prominent statutory amber regulatory warning badge                   │
+ │ - Tamper-evident QR code resolution to /verify/<digest>                │
+ └────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.1 Category-Partition Method (Ostrand & Balcer)
-Functional inputs and environment states are decomposed into orthogonal categories and partitioned into formal equivalence classes:
-
-1. **View Mode Category ($V$)**:
-   - $V_1$: Month View (7-column Gregorian monthly matrix, 35 or 42 cells)
-   - $V_2$: Week View (7-day matrix, 07:00–19:00 vertical time axis, 30-minute intervals)
-   - $V_3$: Day View (multi-provider side-by-side columns on $\ge 1024\text{px}$ desktop; adaptive single-column agenda on $<768\text{px}$)
-   - $V_4$: Agenda / List View (chronological list grouped by date with search and status filters)
-
-2. **UI/UX Interaction State Category ($S$)**:
-   - $S_1$: Skeleton Loading (`CalendarSkeleton` consuming `skeletonBase` and `skeletonHighlight`, `aria-busy="true"`)
-   - $S_2$: Contextual Empty State (`EmptyState` with calendar icon, clear message, and primary "Book appointment" CTA)
-   - $S_3$: Actionable Error State (`ErrorState` with user-friendly message and retry button triggering API refetch)
-   - $S_4$: Active Data State (interactive appointment blocks, chips, and cards with immediate feedback toasts)
-
-3. **Clinical Urgency & Lifecycle Status Category ($U \times L$)**:
-   - $U_1$: STAT / Emergency (`emergencyBg`, `emergencyText`, `emergencyBorder` - Red)
-   - $U_2$: Urgent (`urgentBg`, `urgentText`, `urgentBorder` - Orange)
-   - $U_3$: Routine (`routineBg`, `routineText`, `routineBorder` - Teal)
-   - $L_1$: Pending (Warning yellow pill)
-   - $L_2$: Confirmed (Primary teal pill)
-   - $L_3$: Checked-In (Success green pill)
-   - $L_4$: In Consultation (Purple pill)
-   - $L_5$: Completed (Neutral surface muted pill)
-   - $L_6$: Cancelled (Strikethrough text decoration with muted text)
-
-4. **Physician Availability & Roster State Category ($R$)**:
-   - $R_1$: On-Duty Working Hours (unrestricted open booking slot)
-   - $R_2$: Shift Break Interval (shaded overlay with break label, e.g. "Lunch Break" 12:00–13:00)
-   - $R_3$: Approved Leave Interval (blackout overlay with leave type: Vacation, Sick Leave, CME)
-   - $R_4$: Unconfigured / Off-Duty Hours (muted slots outside doctor template)
-
-5. **Desk Action Category ($A$)**:
-   - $A_1$: 1-Click Empty Slot Booking (pre-populates Date, Time, and Doctor into booking modal)
-   - $A_2$: Appointment Inspection Drawer (glanceable patient demographics, provider, room, notes, quick CTAs)
-   - $A_3$: Appointment Rescheduling (date/time pickers, conflict handling, reasons)
-   - $A_4$: Fast-Track Arrival Check-In (opens `QueueRoutingSelector`, confirms room/doctor, assigns queue ticket)
-
 ---
 
-### 1.2 Boundary Value Analysis (BVA)
-Boundary Value Analysis targets critical edge cases and transitional values where software historically experiences high defect density:
+## 2. Test Execution Commands & Toolchain Setup
 
-1. **Gregorian Calendar & Date Math Boundaries**:
-   - **Month Transition**: Month boundary crossover (e.g. October 31 23:59:59 to November 1 00:00:00).
-   - **February Leap Year vs Non-Leap Year**:
-     - Leap years (2024, 2028): February has 29 days (2024-02-29, 2028-02-29 are valid, 2024-02-30 invalid).
-     - Non-leap years (2025, 2026, 2027): February has 28 days (2026-02-28 valid, 2026-02-29 invalid, transitions directly to 2026-03-01).
-   - **Leading & Trailing Days**: Verifying month grids calculate correct leading days from previous month and trailing days into next month to maintain uniform 35-cell or 42-cell layouts.
-   - **Timezone Offset & Asia/Manila (UTC+8)**: Boundary between UTC midnight and Manila local morning (00:00 UTC = 08:00 PHT). Ensures date queries filter on the Manila calendar day rather than the server's local UTC date.
+### Environment Prerequisites
+- **.NET SDK**: `10.0.402` located at `~/.dotnet/dotnet`.
+- **Bun Runtime**: `1.4.3` located at `~/.bun/bin/bun`.
+- **Subshell PATH Requirement**: Non-interactive subshells must prepend `PATH="$HOME/.bun/bin:$PATH"` to enable child Node processes invoked by test runners and token guard scripts.
 
-2. **Operational Time Axis Boundaries**:
-   - **Clinic Opening Boundary**: First operational slot at 07:00 (07:00–07:30).
-   - **Clinic Closing Boundary**: Last operational slot ending at 19:00 (18:30–19:00).
-   - **Out-of-Bounds Timeslots**: Bookings before 07:00 or starting at/after 19:00 are rejected or visually flagged.
-   - **Slot Intervals**: Discrete 15-minute, 30-minute, and 60-minute duration boundaries without fractional minute drift.
-
-3. **Concurrency & Database GiST Exclusion Boundaries**:
-   - **Exact Slot Overlap**: Two appointments for the same physician at identical start and end times ($[t_1, t_2] \cap [t_1, t_2] \neq \emptyset$) $\rightarrow$ PostgreSQL `23P01` GiST exclusion violation $\rightarrow$ HTTP 409 Conflict.
-   - **Partial / Abutting Overlap**: Appointment starting at 09:15 overlapping a 09:00–09:30 slot $\rightarrow$ Conflict.
-   - **Zero-Overlap Boundary (Abutting)**: Appointment A ending at 09:30 and Appointment B starting at exactly 09:30 $\rightarrow$ Valid, non-overlapping ($[09:00, 09:30) \cap [09:30, 10:00) = \emptyset$).
-   - **Shift Break Collision**: Booking scheduled to start or overlap during a scheduled shift break (e.g. 12:30 in 12:00–13:00 lunch) $\rightarrow$ Rejected with break notice.
-
----
-
-### 1.3 Pairwise Combinatorial Testing (All-Pairs)
-Pairwise testing systematically tests combinations of orthogonal variables to achieve complete interaction coverage with optimal test suite execution time:
-
-$$\text{Test Factors} = \{ \text{View Mode (4)}, \text{Action (4)}, \text{Urgency (3)}, \text{Provider State (4)}, \text{Viewport Width (2)} \}$$
-
-The combinatorial matrix exercises:
-- View Mode Switching $\leftrightarrow$ Slot Selection $\leftrightarrow$ Pre-Filled Booking Modal $\leftrightarrow$ Creation $\leftrightarrow$ Active View Refresh.
-- Appointment Card Click $\leftrightarrow$ Inspection Drawer $\leftrightarrow$ Reschedule Modal $\leftrightarrow$ Conflict Error $\leftrightarrow$ Recovery.
-- Appointment Card Click $\leftrightarrow$ Inspection Drawer $\leftrightarrow$ Arrival Check-In $\leftrightarrow$ Room Selection $\leftrightarrow$ Queue Ticket Assignment.
-- Month Grid Day Badge Selection $\leftrightarrow$ Transition to Day View Multi-Provider $\leftrightarrow$ Doctor Schedule Filter.
-- Server Date-Range Query Serialization $\leftrightarrow$ StartDate + EndDate + DoctorId $\leftrightarrow$ Backward Compatibility with legacy single `Date`.
-
----
-
-### 1.4 Real-World Clinical Workloads & Stress Scenarios
-High-fidelity end-to-end scenarios simulating operational conditions in busy Philippine outpatient departments (OPDs):
-
-1. **Scenario 1: Monday Morning OPD Rush**:
-   - 3 active physicians with differing shift templates (Dr. Santos 08:00–12:00, Dr. Reyes 09:00–17:00 with 12:00–13:00 lunch break, Dr. Tan on approved CME leave).
-   - High-density arrivals: simultaneous check-in of arriving patients, queue ticket generation (`Q-001`, `Q-002`), transition to `CheckedIn`.
-   - On-the-fly rescheduling of delayed patient from 09:00 to 11:30 with documented clinical reason.
-
-2. **Scenario 2: Multi-Provider Simultaneous Scheduling**:
-   - Desktop workstation ($\ge 1024\text{px}$) displaying side-by-side doctor columns.
-   - Desk staff books appointments across multiple doctor columns sequentially using 1-click slot clicks.
-   - Verifies pre-filled date, time, and doctor identity carry over without state contamination between physicians.
-
-3. **Scenario 3: STAT Urgent Walk-In Arrival & Slot Preemption**:
-   - Acute emergency patient (severe chest pain, STAT urgency) arrives without prior booking.
-   - Desk staff inspects calendar, identifies nearest slot occupied by a routine consultation, initiates reschedule of routine patient with courtesy reason, and books the emergency patient into the newly opened slot with `STAT` emergency badge.
-
-4. **Scenario 4: Doctor Sudden Emergency Leave Blackout & Mass Rescheduling**:
-   - Attending physician unexpectedly goes on sick leave for the afternoon.
-   - Doctor's afternoon slots transition to on-leave blackout state.
-   - Desk staff uses inspection drawer to review scheduled patients and reschedules each patient to alternative open slots or next available clinic day.
-
-5. **Scenario 5: End-of-Day Clinic Reconciliation**:
-   - Desk staff reviews agenda and month views at clinic closing (19:00).
-   - Reconciliation across all lifecycle states: confirmed appointments marked completed, no-shows updated, cancelled appointments preserved with audit notes, zero phantom queue tickets.
-
----
-
-## 2. Feature Inventory & Test Architecture
-
-The test suite directly verifies the 17 features defined in `PROJECT.md` across the four tiers of verification:
-
-| Feature ID | Feature Name | Component / Service Scope | E2E Verification Tier |
-|---|---|---|---|
-| **F1** | Server-Side Date-Range & Doctor Filtering | `GetAppointmentsQuery.cs`, `AppointmentsController.cs` | Tier 1, Tier 2 |
-| **F2** | Frontend Service Query Options | `clinicService.ts` (`getAppointments(options)`) | Tier 1, Tier 2 |
-| **F3** | Calendar Core Types & Date/Time Utilities | `calendarUtils.ts`, Asia/Manila Gregorian math | Tier 1, Tier 2 |
-| **F4** | Semantic Token Primitives & 4 UX States | `CalendarSkeleton`, `EmptyState`, `ErrorState`, Active | Tier 1, Tier 2 |
-| **F5** | Month View Component | 7-column Gregorian grid, count badges, urgency dots | Tier 1, Tier 2, Tier 3 |
-| **F6** | Week View Component | 7-day matrix (07:00–19:00, 30m slots), block placement | Tier 1, Tier 2, Tier 3 |
-| **F7** | Day View Multi-Provider Timeline | Side-by-side doctor columns, shift template overlays | Tier 1, Tier 2, Tier 3, Tier 4 |
-| **F8** | Agenda View Component | Chronological date grouping, card action buttons | Tier 1, Tier 2, Tier 3 |
-| **F9** | Mobile Responsive Carousel | `<DateCarousel />` compact 7-day selector (<768px) | Tier 1, Tier 2 |
-| **F10** | 1-Click Empty Slot Booking | Slot click pre-fills date, time, doctor into booking modal | Tier 1, Tier 3, Tier 4 |
-| **F11** | Appointment Inspection Modal | Patient demographics, attending doctor, room, notes, CTAs | Tier 1, Tier 3, Tier 4 |
-| **F12** | Appointment Rescheduling Modal | Date/time pickers, conflict detection, reason capture | Tier 1, Tier 2, Tier 3, Tier 4 |
-| **F13** | Fast-Track Arrival Check-In | 1-click check-in, `QueueRoutingSelector`, queue ticket | Tier 1, Tier 3, Tier 4 |
-| **F14** | Integration into `Appointments.screen.tsx` | View switcher (`SegmentedControl`), route params, key 4 | Tier 1, Tier 3 |
-| **F15** | Strict Token Audit Compliance | Zero raw hex literals, semantic theme tokens, strict guard | Tier 1, Token Guard |
-| **F16** | Opaque-Box E2E Test Suite | `apps/clinic-app/tests/calendarE2E.test.ts` | Tiers 1–4 Complete |
-| **F17** | Adversarial Hardening | Concurrency, timezone bounds, race conditions | Tier 2, Tier 5 |
-
----
-
-## 3. Test Coverage Thresholds & Minimum Targets
-
-To ensure thoroughness and prevent superficial tests, the test suite enforces the following quantitative thresholds:
-
-| Tier | Description | Minimum Requirement | Suite Allocation |
-|---|---|---|---|
-| **Tier 1** | Primary Feature Coverage (Happy Path & Core Functions) | $\ge 5$ test cases per core feature | $\ge 20$ test cases |
-| **Tier 2** | Boundary Values & Error Handling (BVA, Conflicts, Edges) | $\ge 5$ test cases per boundary domain | $\ge 15$ test cases |
-| **Tier 3** | Pairwise Combinatorial & Cross-Feature Workflows | Comprehensive all-pairs interaction paths | $\ge 8$ test cases |
-| **Tier 4** | Real-World Outpatient Clinic Scenarios | $\ge 5$ multi-step clinical scenarios | $\ge 5$ scenarios |
-| **Total** | Full Opaque-Box E2E Test Suite (`calendarE2E.test.ts`) | **$\ge 48$ verifiable assertions / cases** | Comprehensive |
-
----
-
-## 4. Test Suite Execution & Verification Commands
-
-All tests must be executed with standard project tooling:
-
+### 2.1 Backend .NET Test Suite
+Runs the 36-combination document generation matrix, regulatory text suppression assertions, custom logo decoding, and controller query parameter routing:
 ```bash
-# 1. Ensure PATH includes Bun and .NET
-export PATH="$HOME/.dotnet:$HOME/.bun/bin:$PATH"
+~/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~HardenedDocumentGenerationTests"
+```
 
-# 2. Execute TypeScript typecheck
-cd apps/clinic-app && bun run typecheck
+### 2.2 Design Tokens Test Suite
+Validates token parity, contrast ratios, and typography bounds (>= 12px):
+```bash
+~/.bun/bin/bun test packages/design-tokens/src/tokens.test.ts
+```
 
-# 3. Execute strict design token audit (zero raw hex colors)
-bun apps/clinic-app/scripts/check-tokens.mjs --strict
+### 2.3 Strict Design Token Guard Check
+Ensures zero hardcoded hex codes, unapproved font sizes, or inline non-tokenized styling:
+```bash
+PATH="$HOME/.bun/bin:$PATH" node apps/clinic-app/scripts/check-tokens.mjs --strict
+```
 
-# 4. Run the Clinic Calendar E2E Test Suite
-bun test apps/clinic-app/tests/calendarE2E.test.ts
+### 2.4 Clinic App Workstation Suites
+Executes the full suite of clinic workstation component and workflow tests:
+```bash
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/
+```
 
-# 5. Run appointment regression test suites
-bun test apps/clinic-app/tests/appointmentsPreselectBooking.test.ts
-bun test apps/clinic-app/tests/rosterEdgeStates.test.ts
+Individual suite execution:
+```bash
+# Document Templates Studio Tab tests
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/documentTemplatesSettingsTab.test.ts
+
+# Staff Signature Specimen & Physician Stamp tests
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/staffSignatureSpecimen.test.ts
+
+# PDEA S2 Prescription Print Hardening tests
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun test apps/clinic-app/tests/pdeaPrescriptionHardening.test.ts
+```
+
+### 2.5 Strict TypeScript Typecheck
+Verifies type safety across all frontend components and contracts:
+```bash
+PATH="$HOME/.bun/bin:$PATH" ~/.bun/bin/bun run typecheck:clinic
 ```
 
 ---
 
-## 5. Architectural Invariants & Anti-Cheating Protocol
+## 3. Comprehensive 4-Tier Test Inventory
 
-1. **Requirements-Driven Opaque-Box Verification**:
-   - Tests assert observable behavior, UI markup, state machines, and contract payloads.
-   - Tests must NOT depend on private internal component variables or cheat by matching mock signatures.
-2. **Deterministic Timezone Alignment**:
-   - All calendar computations adhere strictly to `Asia/Manila` (UTC+8) standard time.
-3. **Semantic Design Token Consumption**:
-   - Zero hardcoded hex values (`#...`) or direct `palette.ts` imports in any test assertion or component code.
-4. **Self-Contained Isolation**:
-   - Each test sets up its own state, executes deterministically, and cleans up after itself with zero order dependencies.
+| Tier | Test Suite File | Test Scenario / Method | Target Feature | Expected Output Derivation |
+|---|---|---|---|---|
+| **Tier 1** | `HardenedDocumentGenerationTests.cs` | `DocumentVerificationResultDto_MaskName_Should_Protect_Patient_Privacy` | F4 / DPA RA 10173 | Mathematical privacy masking rule: first/last letters visible, middle asterisks |
+| **Tier 1** | `HardenedDocumentGenerationTests.cs` | `IssueMedicalCertificateCommand_Should_Generate_Sequential_Numbers_Safely` | F2 / F3 | Database monotonic sequence generation `MC-YYYYMMDD-0001` |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `GeneratePdf_Across_All_DocumentTypes_SignatureModes_And_PaperSizes_Should_Produce_Valid_Pdf` (36 parameterized matrix cases) | F3 (QuestPDF Tri-Mode Engine) | Valid PDF binary stream (`%PDF-` header, `%%EOF` trailer, size > 1000 bytes) across 4 doc types × 3 modes × 3 sizes |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `ClinicDocumentPdfService_When_WetSignature_Mode_Should_Suppress_Digital_Certification_Badges` | F3 (Wet Mode Hardening) | Absence of `"✓ Digitally Certified & Locked"` and `"✓ Officially Signed"`; presence of blank pen line; preservation of cryptographic security digest and verification QR |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `ClinicDocumentPdfService_When_ESignatureSpecimen_Mode_Should_Embed_Signature_Image` | F3 (E-Signature Embedding) | Binary embedding of signature specimen above signature line; presence of green digital certification badge |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `ClinicDocumentPdfService_When_CustomLogoBytes_Present_Should_Render_In_Header` | F3 (Custom Branding) | Decompression of header stream contains image XObject / logo bytes; fallback to facility text when null |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `ClinicDocumentPdfService_When_Prescription_Contains_Pdea_S2_Dangerous_Drug_Should_Default_To_Wet_Mode` | F3 / F7 (RA 9165 Safeguard) | Automatic fallback to WetSignature; presence of statutory regulatory text warning badge |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `DocumentsController_DownloadMedicalCertificatePdf_Should_Honor_Wet_Query_Param` | F4 (Controller Routing) | Controller passes `wet: true` to service; returns PDF with wet mode attributes |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `DocumentsController_DownloadReferralLetterPdf_Should_Honor_Wet_Query_Param` | F4 (Controller Routing) | Controller honors `?wet=true` query parameter for referral letters |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `PrescriptionsController_DownloadPrescriptionSlipPdf_Should_Honor_Wet_Query_Param` | F4 (Controller Routing) | Controller honors `?wet=true` query parameter for prescription slips |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `LabOrdersController_DownloadLabOrderSlipPdf_Should_Honor_Wet_Query_Param` | F4 (Controller Routing) | Controller honors `?wet=true` query parameter for lab requisitions |
+| **Tier 2** | `HardenedDocumentGenerationTests.cs` | `DocumentsController_VerifyDocument_Should_Resolve_By_Security_Digest` | F4 (Verification Resolution) | `/api/v1/documents/verify/{digest}` resolves with `200 OK` and `isVerified: true` |
+| **Tier 3** | `documentTemplatesSettingsTab.test.ts` | Two-column workstation layout rendering | F5 (Studio Layout) | Left column form controls, right column live preview canvas (responsive breakpoint >= 1024px) |
+| **Tier 3** | `documentTemplatesSettingsTab.test.ts` | 4 Document type switcher reactivity | F5 (Studio Switcher) | Switching between MedCert, e-Rx, Lab Slip, and Referral Letter dynamically swaps canvas preview |
+| **Tier 3** | `documentTemplatesSettingsTab.test.ts` | Paper size selector (`Letter`, `A4`, `A5`) | F5 (Stationery Dimensions) | State update triggers dimension recalculation and canvas aspect ratio adjustment |
+| **Tier 3** | `documentTemplatesSettingsTab.test.ts` | 4 Core UI States (Skeleton, Empty, Error, Active) | F5 (UI Resilience) | Loading displays skeleton; error displays retry banner; empty displays setup guide; active displays full studio |
+| **Tier 3** | `documentTemplatesSettingsTab.test.ts` | Design Token Guard compliance | F5 (Design Standards) | Strict adherence to `@clinicez/design-tokens`; 0 raw hex literals, semantic theme colors |
+| **Tier 3** | `staffSignatureSpecimen.test.ts` | Signature upload & canvas draw pad | F6 (Clinician Specimen) | Transparent PNG file reader & base64 encoding; stroke recording on signature pad |
+| **Tier 3** | `staffSignatureSpecimen.test.ts` | Default signature mode preference selector | F6 (Doctor Preferences) | Radio/picker allowing `ESignatureSpecimen`, `DigitalSealOnly`, `WetSignature` selection |
+| **Tier 3** | `staffSignatureSpecimen.test.ts` | Real-time Physician Stamp Imprint preview | F6 (Physician Stamp) | Renders doctor full name, PRC License, PTR Number, PDEA S2 Number, PhilHealth PAN overlaid with specimen |
+| **Tier 4** | `pdeaPrescriptionHardening.test.ts` | Instant print options selector `[ E-Signed ]` \| `[ Wet Signature ]` | F7 (Issuance Hardening) | Modal displays selectable print format pills defaulting to clinician's configured preference |
+| **Tier 4** | `pdeaPrescriptionHardening.test.ts` | PDEA S2 Dangerous drug auto-detection | F7 (RA 9165 Enforcement) | Items with `isDangerousDrug === true` lock or auto-default mode to Wet Signature |
+| **Tier 4** | `pdeaPrescriptionHardening.test.ts` | Statutory PDEA S2 warning badge rendering | F7 (Regulatory Disclosure) | Renders warning: *"⚠️ PDEA S2 Regulated Substance: Wet signature on physical prescription pad recommended/required under Philippine DOH-PDEA regulations."* |
+| **Tier 4** | `pdeaPrescriptionHardening.test.ts` | Non-dangerous prescription fallback | F7 (Clinical Flexibility) | Standard generic prescriptions without S2 drugs allow free toggle to E-Signed PDF |
+
+---
+
+## 4. Expected Output Derivation & Verification Oracles
+
+All tests in this suite derive expected outputs from authoritative regulatory sources and formal interface specifications:
+1. **Philippine FDA Circular No. 2020-004**: Dictates required components of valid electronic prescriptions (doctor digital signature/seal, PRC number, PTR, patient identifier, generic name precedence).
+2. **Philippine Comprehensive Dangerous Drugs Act (RA 9165)**: Mandates wet ink signatures on physical prescription forms for Yellow Prescription / PDEA S2 regulated substances.
+3. **Data Privacy Act (RA 10173)**: Mandates patient name masking on public document verification endpoints (`DocumentVerificationResultDto.MaskName`).
+4. **ClinicEZ Design Tokens Specification (`@clinicez/design-tokens`)**: Authoritative source of truth for color semantics, typography scales, spacing units, and clinical urgency states.

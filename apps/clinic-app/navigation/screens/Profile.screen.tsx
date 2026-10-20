@@ -4,6 +4,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  Image,
 } from 'react-native';
 import {
   ThemedText,
@@ -14,6 +15,7 @@ import {
   CardContent,
   CardHeader,
   Icon,
+  SegmentedControl,
 } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
@@ -21,7 +23,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
 import { useConnection } from '../../components/connection/ConnectionGate';
-import { clinicService } from '../../services/clinicService';
+import { clinicService, SignatureMode } from '../../services/clinicService';
+import SignatureSpecimenModal from '../../components/settings/SignatureSpecimenModal';
 import { notify } from '@utils/feedback';
 import { validatePasswordPolicy } from '../../services/passwordPolicy';
 import { useTextScale, TEXT_SCALE_OPTIONS } from '../../context/TextScaleContext';
@@ -53,6 +56,11 @@ export default function ProfileScreen() {
   const [s2, setS2] = useState('');
   const [pan, setPan] = useState('');
 
+  // Clinician E-Signature Specimen State
+  const [signatureSpecimen, setSignatureSpecimen] = useState<string | null>(null);
+  const [defaultSignatureMode, setDefaultSignatureMode] = useState<SignatureMode>('ESignatureSpecimen');
+  const [signatureModalVisible, setSignatureModalVisible] = useState(false);
+
   // Status & Feedback States
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -81,6 +89,8 @@ export default function ProfileScreen() {
     setPtr(s?.ptrNumber || '');
     setS2(s?.s2LicenseNumber || '');
     setPan(s?.philHealthPan || '');
+    setSignatureSpecimen(s?.signatureSpecimen || null);
+    setDefaultSignatureMode(s?.defaultSignatureMode || 'ESignatureSpecimen');
   }, [staffCurrent, user]);
 
   if (!user) return null;
@@ -114,6 +124,8 @@ export default function ProfileScreen() {
       s2LicenseNumber: isDoctor ? s2.trim() || undefined : undefined,
       philHealthPan: isDoctor ? pan.trim() || undefined : undefined,
       specialty: specialty.trim() || undefined,
+      signatureSpecimen: isDoctor ? signatureSpecimen : undefined,
+      defaultSignatureMode: isDoctor ? defaultSignatureMode : undefined,
     });
 
     setSavingProfile(false);
@@ -346,19 +358,74 @@ export default function ProfileScreen() {
               />
             </View>
 
-            {/* Official Doctor Stamp Specimen Preview */}
+            {/* Official Doctor Stamp & E-Signature Specimen Preview */}
             <View style={styles.stampCard}>
               <View style={styles.stampHeaderRow}>
-                <ThemedText variant="smallBold" color={theme.colors.primary}>
-                  Official Doctor Stamp Live Specimen
-                </ThemedText>
-                <Badge label="Live Document Preview" variant="primary" size="sm" />
+                <View style={styles.stampTitleGroup}>
+                  <ThemedText variant="smallBold" color={theme.colors.primary}>
+                    Official Physician Stamp & E-Signature Specimen
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    This official stamp specimen is automatically rendered on printed prescriptions, lab referral slips, and clinical summaries.
+                  </ThemedText>
+                </View>
+                {defaultSignatureMode === 'ESignatureSpecimen' ? (
+                  <Badge label="Digitally Certified & Locked" variant="success" icon="check" />
+                ) : defaultSignatureMode === 'DigitalSealOnly' ? (
+                  <Badge label="Digital Verification Seal" variant="primary" icon="shield" />
+                ) : (
+                  <Badge label="Wet Signature (Pen Signing)" variant="neutral" />
+                )}
               </View>
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                This official stamp specimen is automatically rendered on printed prescriptions, lab referral slips, and clinical summaries.
-              </ThemedText>
+
+              <View style={styles.stampControlsRow}>
+                <View style={styles.segmentedWrapper}>
+                  <SegmentedControl<SignatureMode>
+                    value={defaultSignatureMode}
+                    onChange={(mode) => setDefaultSignatureMode(mode)}
+                    options={[
+                      { value: 'ESignatureSpecimen', label: 'E-Signature' },
+                      { value: 'DigitalSealOnly', label: 'Digital Seal' },
+                      { value: 'WetSignature', label: 'Wet Signature' },
+                    ]}
+                  />
+                </View>
+                <Button
+                  title={signatureSpecimen ? 'Manage Signature' : 'Upload / Draw Signature'}
+                  variant="outline"
+                  size="sm"
+                  icon="edit"
+                  onPress={() => setSignatureModalVisible(true)}
+                />
+              </View>
 
               <View style={styles.stampBox}>
+                {/* E-Signature Specimen Overlay */}
+                {defaultSignatureMode === 'ESignatureSpecimen' ? (
+                  signatureSpecimen ? (
+                    <View style={styles.stampSignatureOverlay}>
+                      <Image
+                        source={{ uri: signatureSpecimen }}
+                        style={styles.stampSignatureImage}
+                        resizeMode="contain"
+                      />
+                    </View>
+                  ) : (
+                    <View style={styles.stampSignatureEmpty}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        [No E-Signature specimen configured — Click 'Upload / Draw Signature']
+                      </ThemedText>
+                    </View>
+                  )
+                ) : defaultSignatureMode === 'WetSignature' ? (
+                  <View style={styles.stampWetSignatureBox}>
+                    <View style={styles.stampWetLine} />
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Physician Wet Signature (Pen)
+                    </ThemedText>
+                  </View>
+                ) : null}
+
                 <ThemedText variant="bodyBold" color={theme.colors.primary} style={styles.stampName}>
                   {`${title ? `${title} ` : 'DR. '}${firstName || 'First'} ${lastName || 'Last'}`.toUpperCase()}
                 </ThemedText>
@@ -386,6 +453,25 @@ export default function ProfileScreen() {
                 ) : null}
               </View>
             </View>
+
+            <SignatureSpecimenModal
+              visible={signatureModalVisible}
+              onClose={() => setSignatureModalVisible(false)}
+              initialSignature={signatureSpecimen}
+              initialMode={defaultSignatureMode}
+              doctorName={`${title ? `${title} ` : 'Dr. '}${firstName || 'First'} ${lastName || 'Last'}`}
+              credentials={{
+                specialty,
+                prc,
+                ptr,
+                s2,
+                pan,
+              }}
+              onSave={async (newSig, newMode) => {
+                setSignatureSpecimen(newSig);
+                setDefaultSignatureMode(newMode);
+              }}
+            />
 
             <View style={styles.saveActionsRow}>
               <Button
@@ -781,6 +867,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  stampTitleGroup: {
+    gap: 2,
+    flex: 1,
+    minWidth: 200,
+  },
+  stampControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginVertical: theme.spacing.xs,
+  },
+  segmentedWrapper: {
+    flex: 1,
+    minWidth: 260,
   },
   stampBox: {
     borderWidth: 2,
@@ -791,6 +896,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
     gap: 4,
+  },
+  stampSignatureOverlay: {
+    width: '100%',
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  stampSignatureImage: {
+    width: 220,
+    height: 54,
+  },
+  stampSignatureEmpty: {
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  stampWetSignatureBox: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+    paddingTop: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  stampWetLine: {
+    width: 200,
+    height: theme.sizes.borderWidth,
+    backgroundColor: theme.colors.textMuted,
   },
   stampName: {
     textAlign: 'center',
