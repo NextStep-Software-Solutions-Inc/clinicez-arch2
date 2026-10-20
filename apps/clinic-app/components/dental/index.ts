@@ -14,6 +14,9 @@ export {
   TOOTH_STATUS_OPTIONS,
   sortToothSurfaces,
   subtractToothSurfaces,
+  isWholeToothStatus,
+  hasSurfaceOverlap,
+  getCurrentEncounterLockedState,
   getToothDescription,
   isRightQuadrant,
   getSurfacesForQuadrant,
@@ -32,5 +35,6 @@ export type {
   ToothSurfaceCode,
   DentalToothRecord,
   EffectiveToothState,
+  CurrentEncounterLockState,
   DmftCalculationResult,
 } from './dentalUtils';

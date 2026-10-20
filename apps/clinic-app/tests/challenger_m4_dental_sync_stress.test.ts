@@ -105,8 +105,8 @@ mock.module('@expo/vector-icons', () => ({
 }));
 
 describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stress', () => {
-  // 1. Verify the exact payload shape emitted by InlineDentalChartCard on pressing Decay
-  test('1.1 InlineDentalChartCard emits Record<number, DentalToothRecord[]> to onChange when status is clicked', async () => {
+  // 1. Verify the exact payload shape emitted by InlineDentalChartCard on pressing Decay then Save Condition
+  test('1.1 InlineDentalChartCard stages status locally when clicked and emits Record<number, DentalToothRecord[]> to onChange only when Save Condition is clicked', async () => {
     renderedPressHandlers.clear();
     const { InlineDentalChartCard } = await import('../components/consultation/InlineDentalChartCard');
 
@@ -126,10 +126,19 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
     );
 
     const decayButtonHandler = renderedPressHandlers.get('status-pill-decay');
+    const saveConditionHandler =
+      renderedPressHandlers.get('inline-dental-chart-card-save-condition-btn') ??
+      renderedPressHandlers.get('inline-dental-chart-card-save-condition-trigger');
     expect(decayButtonHandler).toBeDefined();
+    expect(saveConditionHandler).toBeDefined();
 
-    // Trigger status update
+    // Selecting status pill MUST NOT immediately add to Recorded Conditions or emit onChange
     decayButtonHandler!();
+    expect(receivedChart).toBeNull();
+    expect(receivedTooth).toBeNull();
+
+    // Explicitly clicking Save Condition commits the staged condition and emits onChange
+    saveConditionHandler!();
 
     // Verify what onChange received:
     expect(receivedChart).toBeDefined();

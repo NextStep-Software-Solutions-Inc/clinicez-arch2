@@ -313,7 +313,7 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                 continue;
             }
 
-            // Case D: Extraction (planned whole-tooth extraction)
+            // Case D: Extraction (whole-tooth status; supersedes prior conditions on this tooth)
             if (tooth.Status == ToothStatus.Extraction)
             {
                 var extractionRecord = existingTeeth
@@ -357,6 +357,15 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                     await _toothRepo.AddAsync(extractionRecord, ct);
                     newlyAddedIds.Add(extractionRecord.Id);
                     existingTeeth.Add(extractionRecord);
+                }
+
+                foreach (var prior in existingTeeth.Where(t => t.ToothNumber == tooth.ToothNumber && t.Status != ToothStatus.Healthy && t.Status != ToothStatus.Extraction && !t.IsDeleted && t.IsCurrent))
+                {
+                    prior.IsCurrent = false;
+                    prior.ActiveSurface = null;
+                    prior.SupersededAt = now;
+                    prior.SupersededByRecordId = extractionRecord.Id;
+                    UpdateIfExisting(prior);
                 }
                 continue;
             }
@@ -412,16 +421,13 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                 existingTeeth.Add(existing);
             }
 
-            if (tooth.Status == ToothStatus.Filled || tooth.Status == ToothStatus.Crown)
+            foreach (var ext in existingTeeth.Where(t => t.ToothNumber == tooth.ToothNumber && t.Status == ToothStatus.Extraction && !t.IsDeleted && t.IsCurrent))
             {
-                foreach (var ext in existingTeeth.Where(t => t.ToothNumber == tooth.ToothNumber && t.Status == ToothStatus.Extraction && !t.IsDeleted && t.IsCurrent))
-                {
-                    ext.IsCurrent = false;
-                    ext.ActiveSurface = null;
-                    ext.SupersededAt = now;
-                    ext.SupersededByRecordId = existing.Id;
-                    UpdateIfExisting(ext);
-                }
+                ext.IsCurrent = false;
+                ext.ActiveSurface = null;
+                ext.SupersededAt = now;
+                ext.SupersededByRecordId = existing.Id;
+                UpdateIfExisting(ext);
             }
 
             if (!string.IsNullOrWhiteSpace(effectiveActiveSurface))
