@@ -866,7 +866,12 @@ export function InlineDentalChartCard({
                 {/* Action Buttons Row */}
                 <View style={styles.actionButtonsRow}>
                   {!disabled ? (
-                    <View style={styles.addConditionRow}>
+                    <Pressable
+                      style={styles.addConditionRow}
+                      onPress={handleAddCondition}
+                      disabled={!saveCheck.allowed}
+                      testID={`${testID}-save-condition-trigger`}
+                    >
                       <Button
                         title="Save Condition"
                         variant="outline"
@@ -876,7 +881,7 @@ export function InlineDentalChartCard({
                         onPress={handleAddCondition}
                         testID={`${testID}-save-condition-btn`}
                       />
-                    </View>
+                    </Pressable>
                   ) : null}
 
                   {!disabled && effectiveOrderProcedure ? (

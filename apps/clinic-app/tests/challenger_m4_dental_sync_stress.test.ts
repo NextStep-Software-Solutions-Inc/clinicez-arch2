@@ -126,7 +126,9 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
     );
 
     const decayButtonHandler = renderedPressHandlers.get('status-pill-decay');
-    const saveConditionHandler = renderedPressHandlers.get('inline-dental-chart-card-save-condition-btn');
+    const saveConditionHandler =
+      renderedPressHandlers.get('inline-dental-chart-card-save-condition-btn') ??
+      renderedPressHandlers.get('inline-dental-chart-card-save-condition-trigger');
     expect(decayButtonHandler).toBeDefined();
     expect(saveConditionHandler).toBeDefined();
 
