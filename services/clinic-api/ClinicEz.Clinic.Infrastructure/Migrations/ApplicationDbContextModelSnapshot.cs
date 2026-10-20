@@ -68,6 +68,12 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("LastReminderSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastReminderType")
+                        .HasColumnType("text");
+
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
@@ -82,6 +88,18 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("Reason")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
+
+                    b.Property<bool>("Reminder24hSent")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("Reminder24hSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Reminder2hSent")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("Reminder2hSentAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("ScheduledAt")
                         .HasColumnType("timestamp with time zone");
@@ -129,6 +147,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("ScheduledAt");
 
                     b.HasIndex("TenantId", "ClinicId");
+
+                    b.HasIndex("Status", "ScheduledAt", "Reminder24hSent");
+
+                    b.HasIndex("Status", "ScheduledAt", "Reminder2hSent");
 
                     b.HasIndex("ClinicId", "DoctorId", "ScheduledAt", "EndTimeUtc");
 
@@ -1299,6 +1321,16 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<bool>("AppointmentReminder24hEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("AppointmentReminder2hEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("AutoEodEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1342,6 +1374,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
 
+                    b.Property<bool>("EnableAppointmentReminders")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("EnableChipLevelQueueCalling")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1351,6 +1388,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("EnableQueuePushNotifications")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("EnableStaffAppointmentNotifications")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);

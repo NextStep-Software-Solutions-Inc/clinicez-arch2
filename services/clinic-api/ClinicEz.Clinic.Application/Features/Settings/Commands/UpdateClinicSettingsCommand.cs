@@ -47,7 +47,11 @@ public sealed record UpdateClinicSettingsCommand(
     string? SpecialtyMode = null,
     bool? EnableDentalModule = null,
     decimal? DefaultDoctorSharePercentage = null,
-    string? CashierMode = null) : IRequest<ClinicSettingsDto>;
+    string? CashierMode = null,
+    bool? EnableAppointmentReminders = null,
+    bool? AppointmentReminder24hEnabled = null,
+    bool? AppointmentReminder2hEnabled = null,
+    bool? EnableStaffAppointmentNotifications = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -212,6 +216,18 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
                 : "ClinicDesk";
         }
 
+        if (request.EnableAppointmentReminders.HasValue)
+            settings.EnableAppointmentReminders = request.EnableAppointmentReminders.Value;
+
+        if (request.AppointmentReminder24hEnabled.HasValue)
+            settings.AppointmentReminder24hEnabled = request.AppointmentReminder24hEnabled.Value;
+
+        if (request.AppointmentReminder2hEnabled.HasValue)
+            settings.AppointmentReminder2hEnabled = request.AppointmentReminder2hEnabled.Value;
+
+        if (request.EnableStaffAppointmentNotifications.HasValue)
+            settings.EnableStaffAppointmentNotifications = request.EnableStaffAppointmentNotifications.Value;
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -266,7 +282,11 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.EnableDentalModule,
             settings.DefaultDoctorSharePercentage,
             settings.CashierMode,
-            LetterheadDohLto: settings.LetterheadDohLto);
+            LetterheadDohLto: settings.LetterheadDohLto,
+            EnableAppointmentReminders: settings.EnableAppointmentReminders,
+            AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
+            AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
+            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications);
     }
 }
 

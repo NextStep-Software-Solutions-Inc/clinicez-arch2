@@ -180,7 +180,8 @@ public static class DependencyInjection
             .Handle<RxStatusChangedPayload, RxStatusChangedInteropHandler>(InteropTypes.RxStatusChanged)
             .Handle<LabResultReviewedPayload, LabResultReviewedInteropHandler>(InteropTypes.LabResultReviewed)
             .Handle<ClinicalImmunizationAdministeredPayload, ClinicalImmunizationAdministeredInteropHandler>(InteropTypes.ClinicalImmunizationAdministered)
-            .Handle<PatientQueueAlertPayload, PatientQueueAlertInteropHandler>(InteropTypes.PatientQueueAlert));
+            .Handle<PatientQueueAlertPayload, PatientQueueAlertInteropHandler>(InteropTypes.PatientQueueAlert)
+            .Handle<PatientAppointmentAlertPayload, PatientAppointmentAlertInteropHandler>(InteropTypes.PatientAppointmentAlert));
 
     public static IServiceCollection AddClerkAuthentication(
         this IServiceCollection services,

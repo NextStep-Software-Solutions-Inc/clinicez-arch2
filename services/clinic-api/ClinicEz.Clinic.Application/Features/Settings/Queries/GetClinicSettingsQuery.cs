@@ -110,7 +110,11 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.EnableDentalModule,
             settings.DefaultDoctorSharePercentage,
             settings.CashierMode,
-            LetterheadDohLto: settings.LetterheadDohLto);
+            LetterheadDohLto: settings.LetterheadDohLto,
+            EnableAppointmentReminders: settings.EnableAppointmentReminders,
+            AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
+            AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
+            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications);
     }
 }
 

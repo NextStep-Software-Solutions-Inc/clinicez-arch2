@@ -26,7 +26,7 @@ export interface ClinicNotificationCenterModalProps {
   onRefresh?: () => Promise<void>;
 }
 
-type FilterTab = 'all' | 'stat' | 'queue' | 'system';
+type FilterTab = 'all' | 'stat' | 'appointments' | 'queue' | 'system';
 
 function formatRelativeTime(dateString: string): string {
   try {
@@ -63,6 +63,8 @@ function getUrgencyBadgeVariant(urgency: NotificationUrgency): BadgeVariant {
 
 function getCategoryIcon(category: StaffNotificationCategory): IconName {
   switch (category) {
+    case 'Appointment':
+      return 'calendar';
     case 'LabResult':
       return 'lab';
     case 'Queue':
@@ -93,6 +95,8 @@ export default function ClinicNotificationCenterModal({
     switch (activeTab) {
       case 'stat':
         return notifications.filter((n) => n.urgency === 'Stat');
+      case 'appointments':
+        return notifications.filter((n) => n.category === 'Appointment');
       case 'queue':
         return notifications.filter((n) => n.category === 'Queue');
       case 'system':
@@ -185,6 +189,20 @@ export default function ClinicNotificationCenterModal({
             </Pressable>
 
             <Pressable
+              data-testid="tab-appointments"
+              testID="tab-appointments"
+              onPress={() => setActiveTab('appointments')}
+              style={[styles.tabButton, activeTab === 'appointments' && styles.tabButtonActive]}
+            >
+              <ThemedText
+                variant="smallBold"
+                color={activeTab === 'appointments' ? theme.colors.primaryDark : theme.colors.textSecondary}
+              >
+                Appointments
+              </ThemedText>
+            </Pressable>
+
+            <Pressable
               onPress={() => setActiveTab('queue')}
               style={[styles.tabButton, activeTab === 'queue' && styles.tabButtonActive]}
             >
@@ -234,7 +252,7 @@ export default function ClinicNotificationCenterModal({
                   ? 'No notifications found for your workstation.'
                   : `No ${activeTab.toUpperCase()} notifications found.`
               }
-              icon="bell"
+              icon={activeTab === 'appointments' ? 'calendar' : 'bell'}
               style={styles.emptyWrap}
             />
           ) : (
@@ -287,7 +305,13 @@ export default function ClinicNotificationCenterModal({
                   <View style={styles.itemFooter}>
                     {item.actionRoute ? (
                       <Button
-                        title={isStat ? 'Review STAT Result' : 'View Details'}
+                        title={
+                          isStat
+                            ? 'Review STAT Result'
+                            : item.category === 'Appointment'
+                            ? 'View Appointment'
+                            : 'View Details'
+                        }
                         variant={isStat ? 'danger' : 'outline'}
                         size="sm"
                         onPress={() => handleActionClick(item)}

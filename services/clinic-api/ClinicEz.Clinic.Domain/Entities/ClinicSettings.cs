@@ -142,5 +142,10 @@ public sealed class ClinicSettings : BaseEntity
     /// Defaults to false.
     /// </summary>
     public bool EnableDentalModule { get; set; } = false;
+
+    public bool EnableAppointmentReminders { get; set; } = true;
+    public bool AppointmentReminder24hEnabled { get; set; } = true;
+    public bool AppointmentReminder2hEnabled { get; set; } = true;
+    public bool EnableStaffAppointmentNotifications { get; set; } = true;
 }
 

@@ -33,7 +33,13 @@ public sealed record AppointmentDto(
     string AttachedFileIdsJson,
     string ShareFieldsJson,
     IReadOnlyList<string> SharedScopes,
-    IReadOnlyList<ShareItemDto> SharedItems)
+    IReadOnlyList<ShareItemDto> SharedItems,
+    bool Reminder24hSent = false,
+    bool Reminder2hSent = false,
+    DateTime? Reminder24hSentAt = null,
+    DateTime? Reminder2hSentAt = null,
+    DateTime? LastReminderSentAt = null,
+    string? LastReminderType = null)
 {
     public static AppointmentDto From(Appointment a) => new(
         a.Id,
@@ -54,7 +60,13 @@ public sealed record AppointmentDto(
         a.AttachedFileIdsJson ?? "[]",
         a.ShareFieldsJson ?? "[]",
         SharingScopeNames.Of(a.SharedScopes),
-        ParseItems(a.SharedItemsJson));
+        ParseItems(a.SharedItemsJson),
+        a.Reminder24hSent,
+        a.Reminder2hSent,
+        a.Reminder24hSentAt,
+        a.Reminder2hSentAt,
+        a.LastReminderSentAt,
+        a.LastReminderType);
 
     private static IReadOnlyList<ShareItemDto> ParseItems(string? json) =>
         string.IsNullOrWhiteSpace(json)

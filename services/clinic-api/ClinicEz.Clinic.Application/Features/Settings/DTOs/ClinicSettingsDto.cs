@@ -51,5 +51,9 @@ public sealed record ClinicSettingsDto(
     bool EnableDentalModule = false,
     decimal DefaultDoctorSharePercentage = 0.70m,
     string CashierMode = "ClinicDesk",
-    string? LetterheadDohLto = null);
+    string? LetterheadDohLto = null,
+    bool EnableAppointmentReminders = true,
+    bool AppointmentReminder24hEnabled = true,
+    bool AppointmentReminder2hEnabled = true,
+    bool EnableStaffAppointmentNotifications = true);
 
