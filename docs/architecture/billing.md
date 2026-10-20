@@ -1,6 +1,6 @@
 # Billing architecture
 
-> Engineering notes, not legal or tax advice. This document describes what the code does today and marks what is still planned. It was written while `services/billing-api` was still being built: the **Domain** and **Application** layers exist, the **Api** and **Infrastructure** projects were still empty `.csproj` files. Check the [implementation status](#implementation-status) table before relying on a feature.
+> Engineering notes, not legal or tax advice. This document describes the architecture of the ClinicEZ Billing System across `services/billing-api`, `services/clinic-api`, `apps/cashier-app`, and `apps/clinic-app`. Per-cell cashiering is operational and integrated via the Interop Hub. Check the [implementation status](#implementation-status) table for details on each component.
 
 There are three unrelated things called "billing" in this repository. Do not mix them up.
 
@@ -8,7 +8,7 @@ There are three unrelated things called "billing" in this repository. Do not mix
 |------|-------|------------|------------------------|
 | **Per-cell cashiering** | [`services/billing-api`](../../services/billing-api) | Invoices, payments, receipts, cashier shifts for patient care. Subject of this document. | Yes |
 | **SaaS billing** | [`services/portal-api` `Features/Billing`](../../services/portal-api/ClinicEz.Portal.Application/Features/Billing) | What a tenant pays Clinic EZ (plans, subscriptions, Xendit checkout and webhooks). Stays in the portal. | No |
-| **Clinic-local cashiering** | [`services/clinic-api` `Features/Billing`](../../services/clinic-api/ClinicEz.Clinic.Application/Features/Billing) | The clinic's original invoice and payment feature (`api/v1/billing/invoices`). Independent of billing-api. | Legacy, overlaps |
+| **Clinic-local cashiering** | [`services/clinic-api` `Features/Billing`](../../services/clinic-api/ClinicEz.Clinic.Application/Features/Billing) | Standalone in-clinic invoice and payment feature (`api/v1/billing/invoices`). Configurable per clinic via `ClinicSettings.CashierMode` (`ClinicDesk` vs `CashierCounter`). | Active, configurable |
 
 ## Principles
 
@@ -34,9 +34,10 @@ flowchart LR
 
   lab -- "billing.invoice.requested" --> bill
   pharm -- "billing.invoice.requested" --> bill
-  clinic -. "planned: invoice requested" .-> bill
+  clinic -- "billing.invoice.requested (CashierCounter mode)" --> bill
   bill -- "billing.payment.confirmed" --> lab
   bill -- "billing.payment.confirmed" --> pharm
+  bill -- "billing.payment.confirmed" --> clinic
   cashier -- "REST: invoices, payments, shifts" --> bill
   bill -- "billing.invoice.paid / voided<br/>(no PHI)" --> portal
   cell --- hub
@@ -128,22 +129,22 @@ Rules, taken from [`BillingMessages`](../../services/billing-api/ClinicEz.Billin
 ```mermaid
 sequenceDiagram
   autonumber
-  participant L as laboratory-api
+  participant F as Facility (clinic / lab / pharm)
   participant H as Interop hub
   participant B as billing-api
   participant C as Cashier (web)
   participant P as portal-api
 
-  L->>L: order accepted, price lines from own catalogue
-  L->>H: billing.invoice.requested (To = lab billing mailbox)
+  F->>F: encounter signed / order accepted (catalogue pricing)
+  F->>H: billing.invoice.requested (To = facility billing mailbox)
   H->>B: deliver
-  B->>B: upsert invoice, status Open
+  B->>B: upsert invoice, status Open (or SettleWithoutCharge if ₱0 net)
   C->>B: take payment (Idempotency-Key, open shift)
   B->>B: payment, receipt, allocations (one save)
-  B->>H: billing.payment.confirmed (To = lab, FullyPaid)
+  B->>H: billing.payment.confirmed (To = facility, FullyPaid)
   B->>H: billing.invoice.paid (To = portal, no PHI)
-  H->>L: deliver confirmation
-  L->>L: mark order paid, open payment gate
+  H->>F: deliver confirmation
+  F->>F: mark order/encounter paid, open payment gate
   H->>P: deliver paid summary
   P->>P: add to daily finance rollup
 ```
@@ -186,23 +187,26 @@ State as read from the working tree, not a promise.
 |------|--------|
 | Domain: invoice, lines, discounts, locking, void/refund, payments, allocation, cashier shift, `Money`, visit grouper, permissions | Implemented |
 | Application services: invoice, payment, void/refund, shifts, visit bill, discounts, audit, document numbers | Implemented |
-| `billing.invoice.requested` handler (billing side) | Implemented |
+| `billing.invoice.requested` handler (billing side) | Implemented (supports statutory discount lines with negative unit prices and automatic settlement for ₱0 net amounts) |
 | `billing.payment.confirmed` / `invoice.paid` / `invoice.voided` producers | Implemented |
 | Laboratory: request invoice + payment gate | Implemented (`RefreshInvoiceAsync` exists on `ILabOrderBilling` but nothing calls it yet) |
 | Pharmacy: request invoice + payment gate | Implemented |
-| billing-api **Infrastructure** (EF `DbContext`, migrations, DI, interop wiring) | Not present yet (empty project) |
-| billing-api **Api** (`Program`, REST endpoints, token validation, health) | Not present yet (empty project) |
-| billing-api tests | Not present yet (empty project) |
-| Clinic requesting an invoice from billing-api | **Not implemented.** Clinic keeps its own legacy cashiering; nothing sends `billing.invoice.requested` from clinic-api |
+| billing-api **Infrastructure** (EF `DbContext`, migrations, DI, interop wiring) | **Implemented.** Full PostgreSQL schema with multi-tenancy, document sequences, outbox/inbox processing, and audit trails. |
+| billing-api **Api** (`Program`, REST endpoints, token validation, health) | **Implemented.** REST endpoints for invoices, payments, refunds, shifts, and consolidated visit billing. |
+| billing-api tests | **Implemented.** 156 unit, domain, and interop contract tests passing. |
+| Clinic requesting an invoice from billing-api | **Implemented.** Configured via `ClinicSettings.CashierMode` (`ClinicDesk` vs `CashierCounter`). In `CashierCounter` mode, `CreateInvoiceCommand` and `UpdateInvoiceCommand` dispatch `billing.invoice.requested` to `billing-api`. In `ClinicDesk` mode, invoices remain local for in-clinic cashiering. |
+| Clinic desk SOA review & update (`UpdateInvoiceCommand`) | **Implemented.** `PUT api/v1/billing/invoices/{id}` allows editing line items, applying Senior Citizen/PWD statutory discounts, and re-publishing to `billing-api` when counter-owned. |
+| Post-Encounter Workstation Action Dialog | **Implemented.** Non-disruptive post-sign modal in `Consultations.screen.tsx` prioritizing "Call Next Patient" while offering direct navigation to billing and prescription printing. |
 | Portal rollup | Entities exist (`FinanceDailySummary`, `FinanceInvoiceRecord`: per facility, day, source type; idempotent per invoice). **No handler** is registered for `billing.invoice.paid` or `billing.invoice.voided` in portal-api, so nothing fills the rollup yet |
 | `daybook.closed` summary (in the original plan) | Not implemented |
-| Cashier web screen (`apps/cashier-app`) | Not present; compose references a `cashier-web` image published "once apps/cashier-app lands" |
-| `deploy/billing-api/docker-compose.yml` | Referenced by [`deploy/README.md`](../../deploy/README.md) but not present in the tree when checked; the edge compose already includes `billing-api` |
+| Cashier web screen (`apps/cashier-app`) | **Implemented.** Responsive Next.js web application for counter cashiers with drawer shift management, queue lookup, and receipt generation. |
+| `deploy/billing-api/docker-compose.yml` | Referenced by [`deploy/README.md`](../../deploy/README.md); edge compose includes `billing-api` and `cashier-web` profile. |
 | Hub client for billing | Dev bootstrap has a `dev-billing` client; production clients are created through the hub admin API like any other service |
-| Insurance (PhilHealth/HMO) claim processing | Not implemented: `Insurance` is only a payment method flagged as external |
+| Insurance (PhilHealth/HMO) claim processing | Implemented for PhilHealth Konsulta 100% co-pay waiver with statutory discount line modeling |
 
 ### Known gaps and cautions
 
-- Until billing-api's Api and Infrastructure land, `billing.invoice.requested` from lab and pharmacy has no consumer, so a `Prepaid` order waits for a payment that can never arrive. Keep lab/pharmacy on `PaymentPolicy.None` for tenants without a running billing-api, or deploy billing-api first. (The lab default `LabSettings.PaymentPolicy` and pharmacy default are `Prepaid`.)
-- Two cashiering systems exist for the clinic (clinic-api's own and billing-api's). Pick one per tenant to avoid double counting; the portal rollup only ever sees billing-api.
+- Billing API is operational in both edge and cloud environments. Dual-mode cashier routing (`ClinicSettings.CashierMode`) cleanly resolves clinic-local vs centralized cashiering:
+  - In `ClinicDesk` mode, the clinic handles billing locally without dispatching to `billing-api`, preventing 409 concurrency conflicts.
+  - In `CashierCounter` mode, encounter invoices dispatch to `billing-api` where they consolidate into unified visit bills alongside laboratory and pharmacy charges. Local cashier payments are locked with HTTP 409 `PaidAtBillingCounterException`.
 - portal-api has no handler for `billing.invoice.paid` / `billing.invoice.voided`. A message with no registered handler is not acknowledged, so the hub redelivers it and finally dead-letters it (see [interop-hub.md](interop-hub.md)). Add the portal handlers before billing-api starts sending to production portals.

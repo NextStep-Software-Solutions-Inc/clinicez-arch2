@@ -24,6 +24,7 @@ public record RecordPaymentCommand(
 public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand, InvoiceDto>
 {
     private readonly IRepository<Invoice> _invoiceRepo;
+    private readonly IRepository<PaymentRecord>? _paymentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
@@ -31,8 +32,18 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
         IRepository<Invoice> invoiceRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
+        : this(invoiceRepo, null, unitOfWork, clinicContext)
+    {
+    }
+
+    public RecordPaymentCommandHandler(
+        IRepository<Invoice> invoiceRepo,
+        IRepository<PaymentRecord>? paymentRepo,
+        IUnitOfWork unitOfWork,
+        IClinicContext clinicContext)
     {
         _invoiceRepo = invoiceRepo;
+        _paymentRepo = paymentRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
     }
@@ -72,9 +83,24 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
         }
 
         var today = DateTime.UtcNow.Date;
+        var tomorrow = today.AddDays(1);
         var dateTag = today.ToString("yyyyMMdd");
-        var existingCount = invoice.Payments.Count;
-        var receiptNumber = $"OR-{dateTag}-{(existingCount + 1):D3}";
+
+        int dailySequence;
+        if (_paymentRepo != null)
+        {
+            dailySequence = await _paymentRepo.Query(p => p.ClinicId == _clinicContext.ClinicId && p.PaymentDate >= today && p.PaymentDate < tomorrow)
+                .CountAsync(cancellationToken);
+        }
+        else
+        {
+            dailySequence = await _invoiceRepo.Query(i => i.ClinicId == _clinicContext.ClinicId)
+                .SelectMany(i => i.Payments)
+                .Where(p => p.PaymentDate >= today && p.PaymentDate < tomorrow)
+                .CountAsync(cancellationToken);
+        }
+
+        var receiptNumber = $"OR-{dateTag}-{(dailySequence + 1):D3}";
 
         var payment = new PaymentRecord
         {

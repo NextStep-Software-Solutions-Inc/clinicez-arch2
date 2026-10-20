@@ -49,5 +49,6 @@ public sealed record ClinicSettingsDto(
     bool IsOnlineBookingPaused = false,
     string? SpecialtyMode = "Medical",
     bool EnableDentalModule = false,
-    decimal DefaultDoctorSharePercentage = 0.70m);
+    decimal DefaultDoctorSharePercentage = 0.70m,
+    string CashierMode = "ClinicDesk");
 

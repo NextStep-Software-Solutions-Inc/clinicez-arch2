@@ -36,6 +36,7 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
     private readonly IRepository<Invoice> _invoiceRepo;
     private readonly IRepository<ClinicPatient> _patientRepo;
     private readonly IRepository<ConsultationEncounter> _encounterRepo;
+    private readonly IRepository<ClinicSettings>? _settingsRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IBillingRequestPublisher _billingPublisher;
@@ -47,10 +48,23 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IBillingRequestPublisher billingPublisher)
+        : this(invoiceRepo, patientRepo, encounterRepo, null, unitOfWork, clinicContext, billingPublisher)
+    {
+    }
+
+    public CreateInvoiceCommandHandler(
+        IRepository<Invoice> invoiceRepo,
+        IRepository<ClinicPatient> patientRepo,
+        IRepository<ConsultationEncounter> encounterRepo,
+        IRepository<ClinicSettings>? settingsRepo,
+        IUnitOfWork unitOfWork,
+        IClinicContext clinicContext,
+        IBillingRequestPublisher billingPublisher)
     {
         _invoiceRepo = invoiceRepo;
         _patientRepo = patientRepo;
         _encounterRepo = encounterRepo;
+        _settingsRepo = settingsRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _billingPublisher = billingPublisher;
@@ -197,7 +211,28 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
         };
 
         await _invoiceRepo.AddAsync(invoice, cancellationToken);
-        await PublishInvoiceRequestAsync(invoice, cancellationToken);
+
+        var isCashierCounter = _settingsRepo == null;
+        if (_settingsRepo != null)
+        {
+            var mode = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)
+                .Select(s => s.CashierMode)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (!string.IsNullOrEmpty(mode))
+            {
+                isCashierCounter = string.Equals(mode, "CashierCounter", StringComparison.OrdinalIgnoreCase);
+            }
+            else
+            {
+                isCashierCounter = false;
+            }
+        }
+
+        if (isCashierCounter)
+        {
+            await PublishInvoiceRequestAsync(invoice, cancellationToken);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return MapToDto(invoice);

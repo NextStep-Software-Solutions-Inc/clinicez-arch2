@@ -45,6 +45,13 @@ public sealed class ClinicSettings : BaseEntity
     public decimal VatRate { get; set; } = 0.12m;
     public decimal DefaultDoctorSharePercentage { get; set; } = 0.70m;
 
+    /// <summary>
+    /// Cashier station operational mode:
+    /// - "ClinicDesk": Invoices and payments are collected directly at the clinic desk (standalone).
+    /// - "CashierCounter": Invoices are dispatched to the central cashier counter (billing-api / cashier-app).
+    /// </summary>
+    public string CashierMode { get; set; } = "ClinicDesk";
+
     // Letterhead and prescription formatting
     public string? LetterheadHeader { get; set; }
     public string? LetterheadSubHeader { get; set; }

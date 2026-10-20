@@ -282,7 +282,7 @@ export default function ServiceSelect({
 
                       <View style={styles.optionPrice}>
                         <ThemedText variant="captionBold" color={theme.colors.primary}>
-                          ₱{item.standardPrice.toLocaleString()}
+                          ₱{(item.standardPrice ?? 0).toLocaleString()}
                         </ThemedText>
                       </View>
                     </Pressable>

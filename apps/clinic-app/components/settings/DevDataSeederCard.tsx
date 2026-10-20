@@ -195,10 +195,10 @@ export default function DevDataSeederCard({ onNavigatePatients }: DevDataSeederC
                   Total Patients
                 </ThemedText>
                 <ThemedText variant="h3" color={theme.colors.text}>
-                  {status ? status.totalPatients.toLocaleString() : '—'}
+                  {status?.totalPatients != null ? status.totalPatients.toLocaleString() : '—'}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.primary}>
-                  {status ? `${status.seededPatients.toLocaleString()} seeded` : ''}
+                  {status?.seededPatients != null ? `${status.seededPatients.toLocaleString()} seeded` : ''}
                 </ThemedText>
               </View>
 
@@ -207,7 +207,7 @@ export default function DevDataSeederCard({ onNavigatePatients }: DevDataSeederC
                   Consultations (SOAP)
                 </ThemedText>
                 <ThemedText variant="h3" color={theme.colors.text}>
-                  {status ? status.totalEncounters.toLocaleString() : '—'}
+                  {status?.totalEncounters != null ? status.totalEncounters.toLocaleString() : '—'}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
                   Full notes & diagnoses
@@ -219,7 +219,7 @@ export default function DevDataSeederCard({ onNavigatePatients }: DevDataSeederC
                   Prescriptions (Rx)
                 </ThemedText>
                 <ThemedText variant="h3" color={theme.colors.text}>
-                  {status ? status.totalPrescriptions.toLocaleString() : '—'}
+                  {status?.totalPrescriptions != null ? status.totalPrescriptions.toLocaleString() : '—'}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
                   Linked medications
@@ -231,7 +231,7 @@ export default function DevDataSeederCard({ onNavigatePatients }: DevDataSeederC
                   Medical Certificates
                 </ThemedText>
                 <ThemedText variant="h3" color={theme.colors.text}>
-                  {status ? status.totalMedCerts.toLocaleString() : '—'}
+                  {status?.totalMedCerts != null ? status.totalMedCerts.toLocaleString() : '—'}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
                   Official signed certs
@@ -243,7 +243,7 @@ export default function DevDataSeederCard({ onNavigatePatients }: DevDataSeederC
                   Medical Histories
                 </ThemedText>
                 <ThemedText variant="h3" color={theme.colors.text}>
-                  {status ? totalHistories.toLocaleString() : '—'}
+                  {status != null && totalHistories != null ? totalHistories.toLocaleString() : '—'}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
                   Allergies, vaccines & past
