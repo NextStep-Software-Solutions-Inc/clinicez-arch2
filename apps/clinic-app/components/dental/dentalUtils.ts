@@ -35,12 +35,30 @@ export interface DentalToothRecord {
   surface?: string | null;
   activeSurface?: string | null;
   isCurrent?: boolean;
+  isCurrentEncounter?: boolean;
+  currentEncounterSurface?: string | null;
   supersededAt?: string | null;
   supersededByRecordId?: string | null;
   notes?: string | null;
   createdAt: string;
   updatedAt?: string | null;
   recordedBy?: string | null;
+}
+
+export function isWholeToothStatus(status: ToothStatus): boolean {
+  return status === 'Healthy' || status === 'Missing' || status === 'Extraction';
+}
+
+export function hasSurfaceOverlap(
+  surfaceA: string | null | undefined,
+  surfaceB: string | null | undefined
+): boolean {
+  if (!surfaceA || !surfaceB) return false;
+  const setA = new Set(sortToothSurfaces(surfaceA).split(''));
+  for (const ch of sortToothSurfaces(surfaceB).split('')) {
+    if (setA.has(ch)) return true;
+  }
+  return false;
 }
 
 export function sortToothSurfaces(surfaces: string | string[]): string {
@@ -146,8 +164,15 @@ export function normalizeTeethToMultiRecord(
     if (!map[num]) map[num] = [];
 
     const status: ToothStatus = item.status || 'Healthy';
-    const sortedSurface = item.surface ? sortToothSurfaces(item.surface) : '';
+    const sortedSurface = isWholeToothStatus(status)
+      ? ''
+      : item.surface
+        ? sortToothSurfaces(item.surface)
+        : '';
     const hasExplicitActive = item.activeSurface !== undefined && item.activeSurface !== null;
+    const isCurrent = item.isCurrent !== undefined ? Boolean(item.isCurrent) : true;
+    const isCurrentEncounter =
+      item.isCurrentEncounter !== undefined ? Boolean(item.isCurrentEncounter) : false;
     const rec: DentalToothRecord = {
       id: item.id || `temp-${num}-${status}-${map[num].length}`,
       tenantId: item.tenantId,
@@ -157,8 +182,19 @@ export function normalizeTeethToMultiRecord(
       toothNumber: num,
       status,
       surface: sortedSurface,
-      activeSurface: hasExplicitActive ? sortToothSurfaces(item.activeSurface) : sortedSurface,
-      isCurrent: item.isCurrent !== undefined ? Boolean(item.isCurrent) : true,
+      activeSurface:
+        !isCurrent || isWholeToothStatus(status)
+          ? ''
+          : hasExplicitActive
+            ? sortToothSurfaces(item.activeSurface)
+            : sortedSurface,
+      isCurrent,
+      isCurrentEncounter,
+      currentEncounterSurface: item.currentEncounterSurface
+        ? sortToothSurfaces(item.currentEncounterSurface)
+        : isCurrentEncounter
+          ? sortedSurface
+          : '',
       supersededAt: item.supersededAt || null,
       supersededByRecordId: item.supersededByRecordId || null,
       notes: item.notes || '',
@@ -220,11 +256,13 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
       ...r,
       surface: r.surface ? sortToothSurfaces(r.surface) : '',
       activeSurface:
-        r.activeSurface !== undefined && r.activeSurface !== null
-          ? sortToothSurfaces(r.activeSurface)
-          : r.surface
-            ? sortToothSurfaces(r.surface)
-            : '',
+        r.isCurrent === false || isWholeToothStatus(r.status)
+          ? ''
+          : r.activeSurface !== undefined && r.activeSurface !== null
+            ? sortToothSurfaces(r.activeSurface)
+            : r.surface
+              ? sortToothSurfaces(r.surface)
+              : '',
       isCurrent: r.isCurrent !== undefined ? r.isCurrent : true,
     },
     idx,
@@ -241,8 +279,8 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
       continue;
     }
 
-    if (current.status === 'Missing') {
-      // Missing supersedes all prior active records on this tooth
+    if (current.status === 'Missing' || current.status === 'Extraction') {
+      // Whole-tooth Missing or Extraction supersedes all prior active records on this tooth
       for (const prior of resolved) {
         if (prior.isCurrent !== false) {
           prior.isCurrent = false;
@@ -251,6 +289,7 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
           prior.supersededByRecordId = prior.supersededByRecordId || current.id;
         }
       }
+      current.surface = '';
       current.activeSurface = '';
       current.isCurrent = true;
       resolved.push(current);
@@ -264,6 +303,13 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
     ) {
       for (const prior of resolved) {
         if (prior.isCurrent === false) continue;
+        if (prior.status === 'Extraction') {
+          prior.isCurrent = false;
+          prior.activeSurface = '';
+          prior.supersededAt = prior.supersededAt || current.createdAt;
+          prior.supersededByRecordId = prior.supersededByRecordId || current.id;
+          continue;
+        }
         if (prior.status !== 'Decay' && prior.status !== 'Filled' && prior.status !== 'Crown') {
           continue;
         }
@@ -318,9 +364,71 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
   };
 }
 
+export interface CurrentEncounterLockState {
+  isWholeToothLocked: boolean;
+  lockedSurfaces: Set<ToothSurfaceCode>;
+  currentEncounterRecords: DentalToothRecord[];
+  hasAnyCurrentEncounterRecord: boolean;
+}
+
+export function getCurrentEncounterLockedState(
+  records: DentalToothRecord[],
+  currentConsultationId?: string | null
+): CurrentEncounterLockState {
+  const lockedSurfaces = new Set<ToothSurfaceCode>();
+  const activeRecords = (records || []).filter(
+    (r) => r.isCurrent !== false && r.status !== 'Healthy'
+  );
+  const currentEncounterRecords = activeRecords.filter(
+    (r) =>
+      r.isCurrentEncounter === true ||
+      Boolean(currentConsultationId && r.consultationId && r.consultationId === currentConsultationId)
+  );
+
+  let isWholeToothLocked = false;
+  for (const rec of currentEncounterRecords) {
+    const effSurf =
+      rec.currentEncounterSurface !== undefined &&
+      rec.currentEncounterSurface !== null &&
+      rec.currentEncounterSurface !== ''
+        ? rec.currentEncounterSurface
+        : rec.activeSurface !== undefined && rec.activeSurface !== null
+          ? rec.activeSurface
+          : rec.surface || '';
+    if (
+      isWholeToothStatus(rec.status) ||
+      (rec.status === 'Crown' && (!effSurf || sortToothSurfaces(effSurf) === 'MODBL'))
+    ) {
+      isWholeToothLocked = true;
+      for (const s of CANONICAL_SURFACES) {
+        lockedSurfaces.add(s);
+      }
+    } else {
+      for (const ch of sortToothSurfaces(effSurf).split('')) {
+        if ((CANONICAL_SURFACES as readonly string[]).includes(ch)) {
+          lockedSurfaces.add(ch as ToothSurfaceCode);
+        }
+      }
+    }
+  }
+
+  if (lockedSurfaces.size === CANONICAL_SURFACES.length) {
+    isWholeToothLocked = true;
+  }
+
+  return {
+    isWholeToothLocked,
+    lockedSurfaces,
+    currentEncounterRecords,
+    hasAnyCurrentEncounterRecord: currentEncounterRecords.length > 0,
+  };
+}
+
 export function canApplyConditionToTooth(
   existingRecords: DentalToothRecord[],
-  targetStatus: ToothStatus
+  targetStatus: ToothStatus,
+  targetSurfaces?: string | null,
+  currentConsultationId?: string | null
 ): { allowed: boolean; reason?: string } {
   const activeRecords = (existingRecords || []).filter((r) => r.isCurrent !== false);
   const isCurrentlyMissing = activeRecords.some((r) => r.status === 'Missing');
@@ -330,6 +438,41 @@ export function canApplyConditionToTooth(
       reason: 'Cannot record conditions on a missing tooth. Reset to Healthy first.',
     };
   }
+
+  const lockState = getCurrentEncounterLockedState(existingRecords, currentConsultationId);
+  if (lockState.isWholeToothLocked) {
+    return {
+      allowed: false,
+      reason:
+        'A condition is already recorded for this tooth in the current encounter. Remove it first to modify, or record a new status in a subsequent encounter.',
+    };
+  }
+
+  if (lockState.hasAnyCurrentEncounterRecord && isWholeToothStatus(targetStatus)) {
+    return {
+      allowed: false,
+      reason:
+        'A surface condition is already recorded on this tooth in the current encounter. Remove it first before applying a whole-tooth status.',
+    };
+  }
+
+  if (!isWholeToothStatus(targetStatus) && targetSurfaces !== undefined) {
+    const effectiveSurfaces =
+      targetSurfaces && targetSurfaces.trim().length > 0
+        ? sortToothSurfaces(targetSurfaces)
+        : targetStatus === 'Crown'
+          ? 'MODBL'
+          : 'O';
+    const requested = effectiveSurfaces.split('') as ToothSurfaceCode[];
+    const conflicting = requested.filter((s) => lockState.lockedSurfaces.has(s));
+    if (conflicting.length > 0) {
+      return {
+        allowed: false,
+        reason: `Surface(s) ${conflicting.join(', ')} already have a condition recorded in the current encounter.`,
+      };
+    }
+  }
+
   return { allowed: true };
 }
 
@@ -344,43 +487,45 @@ export function applyStagedConditionToTooth(
     recordedBy?: string | null;
     consultationId?: string | null;
     createdAt?: string;
+    isCurrentEncounter?: boolean;
   }
 ): DentalToothRecord[] {
-  if (staged.status === 'Healthy') {
-    return [];
-  }
-
-  const check = canApplyConditionToTooth(existingRecords, staged.status);
+  const check = canApplyConditionToTooth(
+    existingRecords,
+    staged.status,
+    staged.surface,
+    staged.consultationId
+  );
   if (!check.allowed) {
     return existingRecords;
   }
 
   const nowIso = staged.createdAt || new Date().toISOString();
-  const normalizedSurface =
-    staged.status === 'Missing' || staged.status === 'Extraction'
-      ? ''
-      : staged.status === 'Crown'
-        ? sortToothSurfaces(staged.surface || 'MODBL')
-        : sortToothSurfaces(staged.surface || 'O');
+  const isSameEncounterFlag = staged.isCurrentEncounter ?? false;
+  const newRecordId =
+    staged.id || `cond-${staged.toothNumber}-${staged.status.toLowerCase()}-${Date.now()}`;
 
   const working = (existingRecords || [])
     .filter((r) => r.status !== 'Healthy')
     .map((r) => ({
       ...r,
-      surface: r.surface ? sortToothSurfaces(r.surface) : '',
+      surface: isWholeToothStatus(r.status) ? '' : r.surface ? sortToothSurfaces(r.surface) : '',
       activeSurface:
-        r.activeSurface !== undefined && r.activeSurface !== null
-          ? sortToothSurfaces(r.activeSurface)
-          : r.surface
-            ? sortToothSurfaces(r.surface)
-            : '',
+        r.isCurrent === false || isWholeToothStatus(r.status)
+          ? ''
+          : r.activeSurface !== undefined && r.activeSurface !== null
+            ? sortToothSurfaces(r.activeSurface)
+            : r.surface
+              ? sortToothSurfaces(r.surface)
+              : '',
       isCurrent: r.isCurrent !== undefined ? r.isCurrent : true,
+      isCurrentEncounter: r.isCurrentEncounter !== undefined ? r.isCurrentEncounter : false,
+      currentEncounterSurface: r.currentEncounterSurface
+        ? sortToothSurfaces(r.currentEncounterSurface)
+        : '',
     }));
 
-  const newRecordId =
-    staged.id || `cond-${staged.toothNumber}-${staged.status.toLowerCase()}-${Date.now()}`;
-
-  if (staged.status === 'Missing') {
+  if (staged.status === 'Healthy') {
     for (const prior of working) {
       if (prior.isCurrent !== false) {
         prior.isCurrent = false;
@@ -389,44 +534,33 @@ export function applyStagedConditionToTooth(
         prior.supersededByRecordId = newRecordId;
       }
     }
-    const existingMissing = working.find((r) => r.status === 'Missing' && r.id === newRecordId);
-    if (existingMissing) {
-      existingMissing.isCurrent = true;
-      existingMissing.notes = staged.notes ?? existingMissing.notes;
-      existingMissing.updatedAt = nowIso;
-      return working;
-    }
-    working.push({
-      id: newRecordId,
-      toothNumber: staged.toothNumber,
-      status: 'Missing',
-      surface: '',
-      activeSurface: '',
-      isCurrent: true,
-      notes: staged.notes || '',
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      recordedBy: staged.recordedBy || 'Attending Clinician',
-      consultationId: staged.consultationId || null,
-    });
-    return working;
+    return working.filter((r) => !r.isCurrentEncounter);
   }
 
-  if (staged.status === 'Extraction') {
-    const existingExt = working.find((r) => r.status === 'Extraction' && r.isCurrent !== false);
-    if (existingExt) {
-      existingExt.notes = staged.notes ?? existingExt.notes;
-      existingExt.updatedAt = nowIso;
-      existingExt.recordedBy = staged.recordedBy || existingExt.recordedBy;
-      return working;
+  const normalizedSurface = isWholeToothStatus(staged.status)
+    ? ''
+    : staged.status === 'Crown'
+      ? sortToothSurfaces(staged.surface || 'MODBL')
+      : sortToothSurfaces(staged.surface || 'O');
+
+  if (staged.status === 'Missing' || staged.status === 'Extraction') {
+    for (const prior of working) {
+      if (prior.isCurrent !== false) {
+        prior.isCurrent = false;
+        prior.activeSurface = '';
+        prior.supersededAt = nowIso;
+        prior.supersededByRecordId = newRecordId;
+      }
     }
     working.push({
       id: newRecordId,
       toothNumber: staged.toothNumber,
-      status: 'Extraction',
+      status: staged.status,
       surface: '',
       activeSurface: '',
       isCurrent: true,
+      isCurrentEncounter: isSameEncounterFlag,
+      currentEncounterSurface: '',
       notes: staged.notes || '',
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -439,6 +573,13 @@ export function applyStagedConditionToTooth(
   // Surface-bearing statuses: Decay, Filled, Crown
   for (const prior of working) {
     if (prior.isCurrent === false) continue;
+    if (prior.status === 'Extraction') {
+      prior.isCurrent = false;
+      prior.activeSurface = '';
+      prior.supersededAt = nowIso;
+      prior.supersededByRecordId = newRecordId;
+      continue;
+    }
     if (prior.status === staged.status) continue;
     if (prior.status !== 'Decay' && prior.status !== 'Filled' && prior.status !== 'Crown') {
       continue;
@@ -471,6 +612,13 @@ export function applyStagedConditionToTooth(
     );
     sameStatusActive.surface = mergedHistorical;
     sameStatusActive.activeSurface = mergedActive;
+    sameStatusActive.isCurrentEncounter =
+      sameStatusActive.isCurrentEncounter || isSameEncounterFlag;
+    if (isSameEncounterFlag) {
+      sameStatusActive.currentEncounterSurface = sortToothSurfaces(
+        `${sameStatusActive.currentEncounterSurface || ''}${normalizedSurface}`
+      );
+    }
     sameStatusActive.notes = staged.notes ?? sameStatusActive.notes;
     sameStatusActive.updatedAt = nowIso;
     sameStatusActive.recordedBy = staged.recordedBy || sameStatusActive.recordedBy;
@@ -484,6 +632,8 @@ export function applyStagedConditionToTooth(
     surface: normalizedSurface,
     activeSurface: normalizedSurface,
     isCurrent: true,
+    isCurrentEncounter: isSameEncounterFlag,
+    currentEncounterSurface: isSameEncounterFlag ? normalizedSurface : '',
     notes: staged.notes || '',
     createdAt: nowIso,
     updatedAt: nowIso,

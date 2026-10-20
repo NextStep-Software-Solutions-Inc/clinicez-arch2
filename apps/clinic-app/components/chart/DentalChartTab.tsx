@@ -211,18 +211,20 @@ export default function DentalChartTab({
 
   const selectedToothRecord = useMemo<DentalToothRecord | null>(() => {
     if (!selectedToothNumber) return null;
-    const nonHealthy = selectedToothRecords.filter((r) => r.status !== 'Healthy');
-    if (nonHealthy.length > 0) return nonHealthy[0];
-    return (
-      selectedToothRecords[0] || {
-        id: `rec-${selectedToothNumber}`,
-        toothNumber: selectedToothNumber,
-        status: 'Healthy',
-        surface: '',
-        notes: '',
-        createdAt: new Date().toISOString(),
-      }
+    const currentNonHealthy = selectedToothRecords.filter(
+      (r) => r.status !== 'Healthy' && r.isCurrent !== false
     );
+    if (currentNonHealthy.length > 0) return currentNonHealthy[0];
+    const currentAny = selectedToothRecords.filter((r) => r.isCurrent !== false);
+    if (currentAny.length > 0) return currentAny[0];
+    return {
+      id: `rec-${selectedToothNumber}`,
+      toothNumber: selectedToothNumber,
+      status: 'Healthy',
+      surface: '',
+      notes: '',
+      createdAt: new Date().toISOString(),
+    };
   }, [selectedToothRecords, selectedToothNumber]);
 
   // Procedures history for the selected tooth
@@ -309,7 +311,12 @@ export default function DentalChartTab({
     );
   };
 
-  const activeConditions = selectedToothRecords.filter((r) => r.status !== 'Healthy');
+  const activeConditions = selectedToothRecords.filter(
+    (r) => r.status !== 'Healthy' && r.isCurrent !== false
+  );
+  const historicalConditions = selectedToothRecords.filter(
+    (r) => r.status !== 'Healthy' && r.isCurrent === false
+  );
 
   return (
     <ScrollView
@@ -540,14 +547,14 @@ export default function DentalChartTab({
             <View style={styles.inspectorDiagramWrapper}>
               <ToothSurfaceDiagram
                 toothNumber={selectedToothNumber}
-                conditions={selectedToothRecords}
+                conditions={activeConditions}
                 size={80}
                 showLabels={true}
                 testID="tab-inspector-surface-diagram"
               />
             </View>
 
-            {/* Recorded Conditions on Tooth #XX List */}
+            {/* Recorded Conditions on Tooth #XX List (Current Active Status) */}
             <View style={styles.conditionsSection} testID="tab-recorded-conditions-list">
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
                 RECORDED CONDITIONS ON TOOTH #{selectedToothNumber} ({activeConditions.length})
@@ -561,21 +568,17 @@ export default function DentalChartTab({
               ) : (
                 <View style={styles.conditionsList}>
                   {activeConditions.map((cond, idx) => {
-                    const isSuperseded = cond.isCurrent === false;
                     const origSurf = cond.surface ? sortToothSurfaces(cond.surface) : '';
                     const actSurf =
                       cond.activeSurface !== undefined && cond.activeSurface !== null
                         ? sortToothSurfaces(cond.activeSurface)
                         : origSurf;
-                    const hasPartialDiff = !isSuperseded && origSurf && actSurf && origSurf !== actSurf;
+                    const hasPartialDiff = Boolean(origSurf && actSurf && origSurf !== actSurf);
 
                     return (
                       <View
                         key={cond.id || `${cond.status}-${idx}`}
-                        style={[
-                          styles.conditionCard,
-                          isSuperseded && styles.conditionCardHistorical,
-                        ]}
+                        style={styles.conditionCard}
                         testID={`tab-condition-${cond.id || cond.status.toLowerCase()}`}
                       >
                         <View style={styles.conditionHeader}>
@@ -586,16 +589,16 @@ export default function DentalChartTab({
                               size="sm"
                             />
                             <Badge
-                              label={isSuperseded ? 'Historical' : 'Current'}
-                              variant={isSuperseded ? 'neutral' : 'success'}
+                              label="Current"
+                              variant="success"
                               size="sm"
                             />
                             <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                              {origSurf ? `Surfaces: ${origSurf}` : 'Full Tooth / Intact'}
+                              {actSurf ? `Surfaces: ${actSurf}` : 'Full Tooth / Intact'}
                             </ThemedText>
                             {hasPartialDiff ? (
                               <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                                {`• Active: ${actSurf}`}
+                                {`• Originally: ${origSurf}`}
                               </ThemedText>
                             ) : null}
                           </View>
@@ -623,6 +626,62 @@ export default function DentalChartTab({
 
                         <ThemedText variant="caption" color={theme.colors.textMuted}>
                           Recorded: {formatRecordedDate(cond.createdAt)} • By: {cond.recordedBy || 'Attending Clinician'}
+                        </ThemedText>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
+            {/* Historical Conditions (Previous Encounters) — Left Screen Longitudinal Audit */}
+            <View style={styles.conditionsSection} testID="tab-historical-conditions-list">
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                HISTORICAL CONDITIONS (PREVIOUS ENCOUNTERS) ({historicalConditions.length})
+              </ThemedText>
+              {historicalConditions.length === 0 ? (
+                <View style={styles.emptyTimelineBox}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    No previous encounter history for this tooth.
+                  </ThemedText>
+                </View>
+              ) : (
+                <View style={styles.conditionsList}>
+                  {historicalConditions.map((cond, idx) => {
+                    const origSurf = cond.surface ? sortToothSurfaces(cond.surface) : '';
+                    return (
+                      <View
+                        key={cond.id || `hist-${cond.status}-${idx}`}
+                        style={[styles.conditionCard, styles.conditionCardHistorical]}
+                        testID={`tab-historical-condition-${cond.id || cond.status.toLowerCase()}`}
+                      >
+                        <View style={styles.conditionHeader}>
+                          <View style={styles.conditionBadgeRow}>
+                            <Badge
+                              label={cond.status}
+                              variant={getStatusBadgeVariant(cond.status)}
+                              size="sm"
+                            />
+                            <Badge
+                              label="Historical"
+                              variant="neutral"
+                              size="sm"
+                            />
+                            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                              {origSurf ? `Surfaces: ${origSurf}` : 'Full Tooth / Intact'}
+                            </ThemedText>
+                          </View>
+                        </View>
+
+                        {cond.notes ? (
+                          <ThemedText variant="small" color={theme.colors.text} style={styles.conditionNotes}>
+                            {cond.notes}
+                          </ThemedText>
+                        ) : null}
+
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          Recorded: {formatRecordedDate(cond.createdAt)} • By: {cond.recordedBy || 'Attending Clinician'}
+                          {cond.supersededAt ? ` • Superseded: ${formatRecordedDate(cond.supersededAt)}` : ''}
                         </ThemedText>
                       </View>
                     );

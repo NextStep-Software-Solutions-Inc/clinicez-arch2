@@ -184,6 +184,32 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
                 $"Tooth '{request.ToothNumber}' is currently marked as Missing. Mark the tooth as Healthy or remove the Missing condition before recording '{request.Status}'.");
         }
 
+        // Guard: Same-encounter status conflict prevention
+        // When a tooth or surface already has a condition recorded in the current encounter (ConsultationId),
+        // another conflicting status cannot be added to that same tooth or surface in the same encounter.
+        if (request.ConsultationId.HasValue)
+        {
+            var sameEncounterConflicts = activeConditions
+                .Where(c => c.IsCurrent
+                         && c.Status != ToothStatus.Healthy
+                         && c.Status != request.Status
+                         && c.ConsultationId.HasValue
+                         && c.ConsultationId.Value == request.ConsultationId.Value)
+                .ToList();
+
+            foreach (var sameEnc in sameEncounterConflicts)
+            {
+                bool existingIsWholeTooth = IsWholeToothCondition(sameEnc.Status, sameEnc.Surface);
+                bool incomingIsWholeTooth = IsWholeToothCondition(request.Status, normalizedSurface);
+                var existingSurf = sameEnc.ActiveSurface ?? sameEnc.Surface;
+                if (existingIsWholeTooth || incomingIsWholeTooth || HasSurfaceOverlap(existingSurf, effectiveActiveSurface))
+                {
+                    throw new BadRequestException(
+                        $"Tooth '{request.ToothNumber}' already has '{sameEnc.Status}' recorded in the current encounter on overlapping surface(s). Remove the current-encounter condition first, or record the new status in a subsequent encounter.");
+                }
+            }
+        }
+
         // Soft-delete any active Healthy placeholder records on this tooth
         foreach (var h in activeConditions.Where(c => c.Status == ToothStatus.Healthy))
         {
@@ -251,7 +277,7 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
             return MapToDto(missingRecord);
         }
 
-        // Case 4: Saving Extraction (planned whole-tooth extraction coexists with underlying surface states)
+        // Case 4: Saving Extraction (whole-tooth status; supersedes prior-encounter conditions on this tooth)
         if (request.Status == ToothStatus.Extraction)
         {
             var extractionRecord = activeConditions.FirstOrDefault(c => c.Status == ToothStatus.Extraction && c.IsCurrent);
@@ -292,6 +318,15 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
                     CreatedBy = staffName
                 };
                 await _toothRepo.AddAsync(extractionRecord, ct);
+            }
+
+            foreach (var prior in activeConditions.Where(c => c.Status != ToothStatus.Healthy && c.Status != ToothStatus.Extraction && c.IsCurrent))
+            {
+                prior.IsCurrent = false;
+                prior.ActiveSurface = null;
+                prior.SupersededAt = now;
+                prior.SupersededByRecordId = extractionRecord.Id;
+                _toothRepo.Update(prior);
             }
 
             await _unitOfWork.SaveChangesAsync(ct);
@@ -346,17 +381,14 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
             await _toothRepo.AddAsync(existing, ct);
         }
 
-        // If tooth is being restored (Filled or Crown), supersede any planned Extraction flag
-        if (request.Status == ToothStatus.Filled || request.Status == ToothStatus.Crown)
+        // If a surface-scoped condition (Decay, Filled, Crown) is recorded, supersede any prior Extraction record on this tooth
+        foreach (var ext in activeConditions.Where(c => c.Status == ToothStatus.Extraction && c.IsCurrent))
         {
-            foreach (var ext in activeConditions.Where(c => c.Status == ToothStatus.Extraction && c.IsCurrent))
-            {
-                ext.IsCurrent = false;
-                ext.ActiveSurface = null;
-                ext.SupersededAt = now;
-                ext.SupersededByRecordId = existing.Id;
-                _toothRepo.Update(ext);
-            }
+            ext.IsCurrent = false;
+            ext.ActiveSurface = null;
+            ext.SupersededAt = now;
+            ext.SupersededByRecordId = existing.Id;
+            _toothRepo.Update(ext);
         }
 
         // Subtract newly recorded active surfaces from all other active surface-scoped records on this tooth
@@ -444,6 +476,24 @@ public sealed class UpsertDentalToothRecordCommandHandler : IRequestHandler<Upse
             SupersededAt: now,
             SupersededByRecordId: null
         );
+    }
+
+    public static bool IsWholeToothCondition(ToothStatus status, string? normalizedSurface)
+    {
+        if (status == ToothStatus.Healthy || status == ToothStatus.Missing || status == ToothStatus.Extraction)
+            return true;
+        if (status == ToothStatus.Crown && (string.IsNullOrWhiteSpace(normalizedSurface) || normalizedSurface == "MODBL"))
+            return true;
+        return false;
+    }
+
+    public static bool HasSurfaceOverlap(string? surfaceA, string? surfaceB)
+    {
+        var normA = NormalizeAndSortSurfaces(surfaceA);
+        var normB = NormalizeAndSortSurfaces(surfaceB);
+        if (string.IsNullOrWhiteSpace(normA) || string.IsNullOrWhiteSpace(normB))
+            return false;
+        return normA.Any(c => normB.Contains(c));
     }
 
     public static (string? NormalizedSurface, string? EffectiveActiveSurface) ResolveEffectiveSurfaces(ToothStatus status, string? normalizedSurface)

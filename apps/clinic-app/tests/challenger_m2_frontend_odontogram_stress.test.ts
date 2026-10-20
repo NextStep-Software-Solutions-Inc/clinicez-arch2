@@ -123,6 +123,8 @@ const {
   applyStagedConditionToTooth,
   getDominantToothStatus,
   getConditionDotColor,
+  isWholeToothStatus,
+  getCurrentEncounterLockedState,
 } = await import('../components/dental');
 
 const { theme } = await import('../constants/theme');
@@ -131,16 +133,30 @@ const { default: DentalChartTab, getPlainEnglishToothName } = await import('../c
 
 describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Tooth Inspector)', () => {
   // =========================================================================
-  // SUITE 1: Multi-Condition Tooth Inspector Stress Testing
+  // SUITE 1: Multi-Condition Tooth Inspector & Left/Right History Separation
   // =========================================================================
   describe('Suite 1: Multi-Condition Tooth Inspector Verification', () => {
     const quadConditionTooth16 = {
       16: [
         {
+          id: 'cond-16-historical-decay',
+          toothNumber: 16,
+          status: 'Decay' as const,
+          surface: 'O',
+          activeSurface: '',
+          isCurrent: false,
+          notes: 'Initial occlusal caries noted in previous encounter',
+          createdAt: '2024-01-10T09:00:00Z',
+          supersededAt: '2024-03-12T08:30:00Z',
+          recordedBy: 'Dr. Roberto Cruz',
+        },
+        {
           id: 'cond-16-filled',
           toothNumber: 16,
           status: 'Filled' as const,
           surface: 'O',
+          activeSurface: 'O',
+          isCurrent: true,
           notes: 'Occlusal composite restoration placed in 2024',
           createdAt: '2024-03-12T08:30:00Z',
           recordedBy: 'Dr. Maria Santos',
@@ -150,6 +166,8 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
           toothNumber: 16,
           status: 'Decay' as const,
           surface: 'MD',
+          activeSurface: 'MD',
+          isCurrent: true,
           notes: 'Mesial and distal marginal leakage caries',
           createdAt: '2026-02-14T11:15:00Z',
           recordedBy: 'Dr. Juan Reyes',
@@ -158,24 +176,17 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
           id: 'cond-16-crown',
           toothNumber: 16,
           status: 'Crown' as const,
-          surface: '',
-          notes: 'Full porcelain-fused-to-metal crown recommended',
+          surface: 'BL',
+          activeSurface: 'BL',
+          isCurrent: true,
+          notes: 'Buccal-lingual partial onlay restoration',
           createdAt: '2026-06-01T14:00:00Z',
           recordedBy: 'Dr. Ana Lim',
-        },
-        {
-          id: 'cond-16-extraction',
-          toothNumber: 16,
-          status: 'Extraction' as const,
-          surface: '',
-          notes: 'Severe grade 3 mobility, extraction planned',
-          createdAt: '2026-10-20T09:45:00Z',
-          recordedBy: 'Dr. Roberto Cruz',
         },
       ],
     };
 
-    test('1.1 InlineDentalChartCard inspector renders all 4 simultaneous conditions with badges, notes, timestamp, doctor, and remove button', () => {
+    test('1.1 Right Screen (InlineDentalChartCard) renders ONLY current active conditions per surface and excludes historical conditions from previous encounters', () => {
       const html = renderToStaticMarkup(
         React.createElement(InlineDentalChartCard, {
           chart: quadConditionTooth16,
@@ -186,37 +197,37 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       // Section header
       expect(html).toContain('Recorded Conditions on Tooth #16');
 
-      // 4 Condition Badges
+      // 3 Current Active Condition Badges (1 per non-overlapping surface group: O, MD, BL)
       expect(html).toContain('data-testid="condition-item-cond-16-filled"');
       expect(html).toContain('data-testid="condition-item-cond-16-decay"');
       expect(html).toContain('data-testid="condition-item-cond-16-crown"');
-      expect(html).toContain('data-testid="condition-item-cond-16-extraction"');
+
+      // Historical condition from previous encounter MUST NOT appear on Right Screen
+      expect(html).not.toContain('data-testid="condition-item-cond-16-historical-decay"');
+      expect(html).not.toContain('Initial occlusal caries noted in previous encounter');
 
       // Affected Surfaces
       expect(html).toContain('Surfaces: O');
       expect(html).toContain('Surfaces: MD');
-      expect(html).toContain('Full Tooth / Intact');
+      expect(html).toContain('Surfaces: BL');
 
-      // Clinical Notes for each condition
+      // Clinical Notes for each current condition
       expect(html).toContain('Occlusal composite restoration placed in 2024');
       expect(html).toContain('Mesial and distal marginal leakage caries');
-      expect(html).toContain('Full porcelain-fused-to-metal crown recommended');
-      expect(html).toContain('Severe grade 3 mobility, extraction planned');
+      expect(html).toContain('Buccal-lingual partial onlay restoration');
 
-      // Attending Clinicians
+      // Attending Clinicians for current conditions
       expect(html).toContain('Dr. Maria Santos');
       expect(html).toContain('Dr. Juan Reyes');
       expect(html).toContain('Dr. Ana Lim');
-      expect(html).toContain('Dr. Roberto Cruz');
 
-      // Remove buttons for each condition
+      // Remove buttons for each current condition
       expect(html).toContain('data-testid="remove-condition-cond-16-filled"');
       expect(html).toContain('data-testid="remove-condition-cond-16-decay"');
       expect(html).toContain('data-testid="remove-condition-cond-16-crown"');
-      expect(html).toContain('data-testid="remove-condition-cond-16-extraction"');
     });
 
-    test('1.2 DentalChartTab inspector renders all 4 simultaneous conditions with badges, notes, timestamp, doctor, and remove button', () => {
+    test('1.2 Left Screen (DentalChartTab) renders both current active conditions AND Historical Conditions (Previous Encounters)', () => {
       let removedTooth: number | null = null;
       let removedCond: string | null = null;
       const handleRemove = (tooth: number, cond: string) => {
@@ -237,24 +248,25 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       // Inspector pane exists
       expect(html).toContain('data-testid="tooth-inspector-pane"');
       expect(html).toContain('Tooth #16');
-      expect(html).toContain('RECORDED CONDITIONS ON TOOTH #16 (4)');
+      expect(html).toContain('RECORDED CONDITIONS ON TOOTH #16 (3)');
 
-      // All 4 condition items rendered in DentalChartTab
+      // All 3 active condition items rendered in DentalChartTab
       expect(html).toContain('data-testid="tab-condition-cond-16-filled"');
       expect(html).toContain('data-testid="tab-condition-cond-16-decay"');
       expect(html).toContain('data-testid="tab-condition-cond-16-crown"');
-      expect(html).toContain('data-testid="tab-condition-cond-16-extraction"');
 
-      // Doctor names & notes
-      expect(html).toContain('Dr. Maria Santos');
+      // Historical Conditions section rendered on Left Screen!
+      expect(html).toContain('data-testid="tab-historical-conditions-list"');
+      expect(html).toContain('HISTORICAL CONDITIONS (PREVIOUS ENCOUNTERS) (1)');
+      expect(html).toContain('data-testid="tab-historical-condition-cond-16-historical-decay"');
+      expect(html).toContain('Initial occlusal caries noted in previous encounter');
       expect(html).toContain('Dr. Roberto Cruz');
-      expect(html).toContain('Severe grade 3 mobility, extraction planned');
 
-      // Tab remove buttons
+      // Active doctor names & remove buttons
+      expect(html).toContain('Dr. Maria Santos');
       expect(html).toContain('data-testid="tab-remove-condition-cond-16-filled"');
       expect(html).toContain('data-testid="tab-remove-condition-cond-16-decay"');
       expect(html).toContain('data-testid="tab-remove-condition-cond-16-crown"');
-      expect(html).toContain('data-testid="tab-remove-condition-cond-16-extraction"');
     });
 
     test('1.3 Healthy tooth renders healthy condition box with zero remove buttons', () => {
@@ -280,7 +292,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(html).not.toContain('remove-condition');
     });
 
-    test('1.4 Co-existing conditions render colored status dots on odontogram tooth cell', () => {
+    test('1.4 Co-existing active conditions render colored status dots on odontogram tooth cell', () => {
       const html = renderToStaticMarkup(
         React.createElement(DentalChartTab, {
           chart: {
@@ -293,7 +305,6 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(html).toContain('data-testid="dot-decay-16"');
       expect(html).toContain('data-testid="dot-filled-16"');
       expect(html).toContain('data-testid="dot-crown-16"');
-      expect(html).toContain('data-testid="dot-extraction-16"');
     });
   });
 
@@ -656,6 +667,86 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(canApplyConditionToTooth(records, 'Decay').allowed).toBe(false);
       expect(canApplyConditionToTooth(records, 'Filled').allowed).toBe(false);
       expect(canApplyConditionToTooth(records, 'Healthy').allowed).toBe(true);
+    });
+
+    test('5.3 Whole-tooth statuses (Healthy, Missing, Extraction) disable surface selection and apply to whole tooth', () => {
+      expect(isWholeToothStatus('Healthy')).toBe(true);
+      expect(isWholeToothStatus('Missing')).toBe(true);
+      expect(isWholeToothStatus('Extraction')).toBe(true);
+      expect(isWholeToothStatus('Decay')).toBe(false);
+      expect(isWholeToothStatus('Filled')).toBe(false);
+      expect(isWholeToothStatus('Crown')).toBe(false);
+
+      // Extraction clears surfaces and supersedes prior encounter surface conditions
+      const priorDecay = applyStagedConditionToTooth([], {
+        id: 'rec-enc1-decay',
+        toothNumber: 16,
+        status: 'Decay',
+        surface: 'MO',
+        consultationId: 'enc-1',
+        isCurrentEncounter: false,
+      });
+
+      const afterExtraction = applyStagedConditionToTooth(priorDecay, {
+        id: 'rec-enc2-extraction',
+        toothNumber: 16,
+        status: 'Extraction',
+        surface: 'MO', // Even if passed, must be cleared to ''
+        consultationId: 'enc-2',
+        isCurrentEncounter: true,
+      });
+
+      const activeExtraction = afterExtraction.find((r) => r.status === 'Extraction')!;
+      const supersededDecay = afterExtraction.find((r) => r.status === 'Decay')!;
+      expect(activeExtraction.surface).toBe('');
+      expect(activeExtraction.activeSurface).toBe('');
+      expect(activeExtraction.isCurrent).toBe(true);
+      expect(supersededDecay.isCurrent).toBe(false);
+      expect(supersededDecay.activeSurface).toBe('');
+    });
+
+    test('5.4 Same-encounter surface conflict lock blocks overlapping status in current encounter, while new encounter supersedes into history', () => {
+      // Encounter 1: Record Decay on surface O
+      const enc1Records = applyStagedConditionToTooth([], {
+        id: 'rec-enc1-o',
+        toothNumber: 26,
+        status: 'Decay',
+        surface: 'O',
+        consultationId: 'enc-1',
+        isCurrentEncounter: true,
+        createdAt: '2026-01-10T09:00:00Z',
+      });
+
+      // Same encounter (enc-1): Surface O is locked! Cannot add Filled on O or MO in enc-1
+      const lockInEnc1 = getCurrentEncounterLockedState(enc1Records, 'enc-1');
+      expect(lockInEnc1.lockedSurfaces.has('O')).toBe(true);
+      expect(lockInEnc1.lockedSurfaces.has('M')).toBe(false);
+
+      expect(canApplyConditionToTooth(enc1Records, 'Filled', 'O', 'enc-1').allowed).toBe(false);
+      expect(canApplyConditionToTooth(enc1Records, 'Filled', 'MO', 'enc-1').allowed).toBe(false);
+
+      // Same encounter (enc-1): Non-overlapping surface M IS allowed!
+      expect(canApplyConditionToTooth(enc1Records, 'Filled', 'M', 'enc-1').allowed).toBe(true);
+
+      // Next encounter (enc-2): Prior encounter record has isCurrentEncounter = false
+      const priorForEnc2 = enc1Records.map((r) => ({ ...r, isCurrentEncounter: false }));
+      expect(canApplyConditionToTooth(priorForEnc2, 'Filled', 'O', 'enc-2').allowed).toBe(true);
+
+      const enc2Records = applyStagedConditionToTooth(priorForEnc2, {
+        id: 'rec-enc2-o',
+        toothNumber: 26,
+        status: 'Filled',
+        surface: 'O',
+        consultationId: 'enc-2',
+        isCurrentEncounter: true,
+        createdAt: '2026-02-10T09:00:00Z',
+      });
+
+      const historicalDecay = enc2Records.find((r) => r.status === 'Decay')!;
+      const currentFilled = enc2Records.find((r) => r.status === 'Filled')!;
+      expect(historicalDecay.isCurrent).toBe(false);
+      expect(currentFilled.isCurrent).toBe(true);
+      expect(currentFilled.activeSurface).toBe('O');
     });
   });
 });

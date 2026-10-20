@@ -679,4 +679,86 @@ public class UpsertDentalToothRecordCommandHandlerTests
         await actInvalidOnMissing.Should().ThrowAsync<BadRequestException>()
             .WithMessage("*currently marked as Missing*");
     }
+
+    [Fact]
+    public async Task Handle_SameEncounterSurfaceConflictAndWholeToothExtraction_EnforcesEncounterLockAndWholeToothSupersession()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+
+        var patientId = Guid.NewGuid();
+        await patientRepo.AddAsync(new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-LOCK-001",
+            FirstName = "Andres",
+            LastName = "Bonifacio",
+            ContactNumber = "09171234567"
+        }, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var upsertHandler = new UpsertDentalToothRecordCommandHandler(toothRepo, patientRepo, uow, _clinicContext);
+        var enc1Id = Guid.NewGuid();
+        var enc2Id = Guid.NewGuid();
+
+        // 1. Encounter 1: Record Decay on surface O of Tooth 26
+        var decayO = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
+            PatientId: patientId,
+            ToothNumber: 26,
+            Status: ToothStatus.Decay,
+            Surface: "O",
+            Notes: "Occlusal caries",
+            ConsultationId: enc1Id
+        ), CancellationToken.None);
+
+        decayO.IsCurrent.Should().BeTrue();
+        decayO.ActiveSurface.Should().Be("O");
+
+        // 2. Same Encounter (enc1Id): Attempting to add Filled on overlapping surface O or MO must throw BadRequestException
+        var actConflictInSameEncounter = async () => await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
+            PatientId: patientId,
+            ToothNumber: 26,
+            Status: ToothStatus.Filled,
+            Surface: "MO",
+            Notes: "Conflicting same-encounter status on O",
+            ConsultationId: enc1Id
+        ), CancellationToken.None);
+
+        await actConflictInSameEncounter.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*already has*recorded in the current encounter*");
+
+        // 3. Same Encounter (enc1Id): Non-overlapping surface M is allowed
+        var filledM = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
+            PatientId: patientId,
+            ToothNumber: 26,
+            Status: ToothStatus.Filled,
+            Surface: "M",
+            Notes: "Existing mesial filling",
+            ConsultationId: enc1Id
+        ), CancellationToken.None);
+        filledM.IsCurrent.Should().BeTrue();
+        filledM.ActiveSurface.Should().Be("M");
+
+        // 4. Next Encounter (enc2Id): Whole-tooth Extraction disables/clears surfaces and supersedes prior encounter records into History
+        var extractionEnc2 = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
+            PatientId: patientId,
+            ToothNumber: 26,
+            Status: ToothStatus.Extraction,
+            Surface: "MOD", // Must be ignored/cleared because Extraction applies to whole tooth
+            Notes: "Severe mobility, indicated for extraction",
+            ConsultationId: enc2Id
+        ), CancellationToken.None);
+
+        extractionEnc2.Surface.Should().BeNull("Extraction applies to whole tooth and disables surfaces");
+        extractionEnc2.ActiveSurface.Should().BeNull();
+        extractionEnc2.IsCurrent.Should().BeTrue();
+
+        var allTooth26 = await toothRepo.Query(t => t.PatientId == patientId && t.ToothNumber == 26 && !t.IsDeleted).ToListAsync();
+        allTooth26.Where(t => t.IsCurrent).Should().ContainSingle(t => t.Id == extractionEnc2.Id && t.Status == ToothStatus.Extraction);
+        allTooth26.Where(t => !t.IsCurrent).Should().HaveCount(2, "Prior encounter Decay(O) and Filled(M) are now historical");
+    }
 }
