@@ -3,12 +3,12 @@ import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import {
   Modal,
   ThemedText,
-  Button,
   Badge,
   Icon,
   Input,
   SegmentedControl,
 } from '../ui';
+import Button from '../ui/Button';
 import { theme } from '../../constants/theme';
 import type { ClinicServiceItem, ClinicRoom } from '../../services/clinicService';
 import { useClinic } from '../../context/ClinicContext';

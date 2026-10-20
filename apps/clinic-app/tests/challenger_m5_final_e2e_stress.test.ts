@@ -385,7 +385,7 @@ describe('Milestone 5 Adversarial Verification: Cross-Cutting Hardening Suite', 
   // =========================================================================
   describe('3. Button Action Label Normalization', () => {
     test('3.1 Button strips leading "+ " when icon="plus" across diverse strings', async () => {
-      const Button = (await import('../components/ui/Button')).default;
+      const Button = (await import('../components/common/Button')).default;
 
       const testCases = [
         { title: '+ Add Tooth', icon: 'plus', expectedAria: 'Add Tooth' },

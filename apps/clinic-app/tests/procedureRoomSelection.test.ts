@@ -130,7 +130,7 @@ const mockClinicRooms = [
   { id: 'room-consult-1', name: 'Consultation Room 1', type: 'Consultation' as const, isActive: true },
 ];
 
-(globalThis as any).__mockClinicContext = {
+const defaultMockClinicContext = {
   facilityName: 'ClinicEZ Central',
   rooms: mockClinicRooms,
   settings: {
@@ -141,8 +141,20 @@ const mockClinicRooms = [
 };
 
 // Dynamic imports after mocking
-const { OrderCatalogSearchModal } = await import('../components/consultation/OrderCatalogSearchModal');
 const { default: Button } = await import('../components/common/Button');
+const registerButtonMock = () => {
+  mock.module('../components/ui/Button', () => ({
+    default: (props: any) => {
+      if (props?.onPress && !props?.disabled && !props?.loading) {
+        if (props.testID) renderedPressHandlers.set(props.testID, props.onPress);
+        if (props.accessibilityLabel) renderedPressHandlers.set(props.accessibilityLabel, props.onPress);
+      }
+      return React.createElement(Button, props);
+    },
+  }));
+};
+registerButtonMock();
+const { OrderCatalogSearchModal } = await import('../components/consultation/OrderCatalogSearchModal');
 const { default: Badge } = await import('../components/ui/Badge');
 import type { ClinicServiceItem, ClinicRoom } from '../services/clinicService';
 import type { OrderCatalogItemPayload, ExistingOrderItemContext } from '../components/consultation/OrderCatalogSearchModal';
@@ -187,10 +199,15 @@ describe('Milestone 3 — Procedure Room Selection, Badges & Button Polish', () 
 
   beforeEach(() => {
     renderedPressHandlers.clear();
+    (globalThis as any).__mockClinicContext = defaultMockClinicContext;
+    registerButtonMock();
   });
 
   afterAll(() => {
     delete (globalThis as any).__mockClinicContext;
+    mock.module('../components/ui/Button', () => ({
+      default: Button,
+    }));
   });
 
   // =========================================================================

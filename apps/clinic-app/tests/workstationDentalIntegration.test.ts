@@ -1,5 +1,5 @@
 // token-guard:ignore-file
-import { describe, expect, test, mock } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import React from 'react';
@@ -128,32 +128,32 @@ mock.module('../utils/useBreakpoint', () => ({
   }),
 }));
 
-mock.module('../context/ClinicContext', () => ({
-  useClinic: () =>
-    (globalThis as any).__mockClinicContext ?? ({
-      facilityName: 'ClinicEZ Test Center',
-      accreditationNumber: 'ACC-12345',
-      taxIdentificationNumber: '123-456-789',
-      planTier: 'Enterprise',
-      preferredChartLayout: 'modal',
-      settings: {
-        enableDentalModule: true,
-        specialtyMode: 'Dental',
-      },
-      rooms: [
-        { id: 'room-1', name: 'Dental Chair 1', type: 'Treatment', isActive: true },
-        { id: 'room-2', name: 'Dental Chair 2', type: 'Treatment', isActive: true },
-      ],
-    }),
-}));
+const defaultMockClinicContext = {
+  facilityName: 'ClinicEZ Test Center',
+  accreditationNumber: 'ACC-12345',
+  taxIdentificationNumber: '123-456-789',
+  planTier: 'Enterprise',
+  preferredChartLayout: 'modal',
+  settings: {
+    enableDentalModule: true,
+    specialtyMode: 'Dental',
+  },
+  rooms: [
+    { id: 'room-1', name: 'Dental Chair 1', type: 'Treatment', isActive: true },
+    { id: 'room-2', name: 'Dental Chair 2', type: 'Treatment', isActive: true },
+  ],
+};
 
 mock.module('../context/StaffContext', () => ({
-  useStaff: () => ({
-    current: { id: 'staff-1', name: 'Dr. Jane Dela Cruz', role: 'Doctor' },
-    staff: [],
-    reload: () => {},
-  }),
-  formatStaffName: (s: any) => s?.name || 'Staff',
+  useStaff: () =>
+    (globalThis as any).__mockStaffContext ?? {
+      current: { id: 'staff-1', name: 'Dr. Jane Dela Cruz', role: 'Doctor' },
+      staff: [],
+      reload: () => {},
+    },
+  formatStaffName: (s: any) => s?.name || [s?.title, s?.firstName, s?.lastName].filter(Boolean).join(' ').trim() || 'Staff',
+  staffInitials: (s: any) => `${s?.firstName?.[0] ?? ''}${s?.lastName?.[0] ?? ''}`.toUpperCase() || '?',
+  StaffProvider: ({ children }: any) => children,
 }));
 
 const { default: CenteredModalChartLayout } = await import('../components/chart/layouts/CenteredModalChartLayout');
@@ -205,6 +205,13 @@ const mockChart: PatientChart = {
 };
 
 describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration Suite', () => {
+  beforeEach(() => {
+    (globalThis as any).__mockClinicContext = defaultMockClinicContext;
+  });
+
+  afterAll(() => {
+    delete (globalThis as any).__mockClinicContext;
+  });
   // =========================================================================
   // 1. Full-Width Responsive Workstation Layout (R4)
   // =========================================================================
