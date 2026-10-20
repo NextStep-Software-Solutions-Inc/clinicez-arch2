@@ -65,4 +65,12 @@ public sealed class ServicesController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<BulkImportResultDto>.Success(result, $"Bulk import completed: {result.TotalProcessed} processed ({result.TotalCreated} created, {result.TotalUpdated} updated)."));
     }
+
+    [HttpPost("seed-dental")]
+    [HasPermission(ClinicPermissions.ServicesManage)]
+    public async Task<ActionResult<ApiResponse<List<ClinicServiceItemDto>>>> SeedDentalServices(CancellationToken ct)
+    {
+        var result = await _sender.Send(new SeedDentalServicesCommand(), ct);
+        return Ok(ApiResponse<List<ClinicServiceItemDto>>.Success(result, "Dental service presets seeded successfully."));
+    }
 }

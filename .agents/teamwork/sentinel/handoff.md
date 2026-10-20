@@ -1,59 +1,48 @@
-# Sentinel Handoff Report — Clean, Integrated Dental Module
+# Sentinel Handoff Report: Dental Clinic Service Catalog Integration
 
-## Observation
+## 1. Observation
+- **User Request**: Implement first-class Dental Clinic support within the ClinicEZ Service Catalog across `services/clinic-api` and `apps/clinic-app`, providing canonical dental service presets, specialty-aware auto-seeding, and seamless ordering integration with the dental chart.
+- **Request Logged**: Verbatim to `/Users/macuser/projects/github/nextstep/clinicez-dental-services/.agents/teamwork/ORIGINAL_REQUEST.md`.
+- **Execution Path**: Routed to General (`teamwork_preview_orchestrator`) as `orchestrator_1` (`53f797ee-6635-4774-a72d-a1bd5d92579d`).
+- **Monitoring**: Active sentinel crons (Progress Reporting `task-26` and Liveness Check `task-28`) monitored the swarm across Phase 0 Survey, Milestone 1 Backend, and Milestone 2 Frontend.
+- **Victory Audit**: On orchestrator victory claim, `victory_auditor_1` (`0060bb81-0678-402d-bf64-fd45f119873f`) was spawned for independent 3-phase verification (Timeline Analysis, Cheating & Facade Detection, Independent Test Execution).
+- **Verdict**: `VICTORY CONFIRMED` delivered with zero anomalies and 100% test pass.
+- **Teardown**: Background crons cancelled via `manage_task(action="kill")` and all subagents terminated via `manage_subagents(action="kill_all")`.
 
-1. **User Request & Ingestion**:
-   - On `2026-10-19T05:00:54Z`, recorded authoritative user request into `.agents/teamwork/ORIGINAL_REQUEST.md` to implement the Clean, Integrated Dental Module across `services/clinic-api`, `apps/clinic-app`, and `apps/portal-web`.
-   - Primary constraints: strictly follow `clinicez-ui-ux-expert` and `clinicez-search-provider-expert`, and preserve repository search framework files without overwrite or reversion.
-2. **Execution & Swarm Milestones**:
-   - Evaluated route as `General` (`teamwork_preview_orchestrator`) and dispatched `orchestrator_16`.
-   - **Milestone MA (Backend Core & Entity Foundation)**: Implemented `DentalToothRecord.cs`, `ToothStatus.cs`, extended `ClinicSettings` (`SpecialtyMode`, `EnableDentalModule`) and `ClinicalProcedure` (`ToothNumber: int?`, `ToothSurface: string?`), added `DentalController` (`api/v1/dental`), registered `"Dental Clinic"` in `apps/portal-web/src/constants/philippine-addresses.ts`, and updated `PublishClinicToDirectoryCommand.cs` dynamic classification mapping.
-   - **Milestone MB (Search Provider Pluggability)**: Implemented `DentalChartSearchProvider : ISearchProvider` with zero modifications to existing search infrastructure (`packages/shared-dotnet/Search/`, `SearchController.cs`). Registered `dentalSearchContributor` in `universalSearchRegistry`.
-   - **Milestone MC (Frontend Workstations & Design Tokens)**: Implemented `InlineDentalChartCard.tsx` (FDI Adult/Child, 4 quadrants, plain English statuses, canonical `MODBL` surface sorting, quick-order procedure linking), conditional suppression of physical exams when `specialtyMode === 'Dental'`, `DentalChartTab.tsx` across `modal`, `split`, and `drawer` chart layouts, and 3-way specialty selector in `GeneralSettingsTab.tsx`. Verified 0 token guard violations (`check-tokens.mjs --strict`).
-   - **Milestone MD (E2E Integration & Stress Gates)**: Executed backend E2E challenger suites (`MilestoneMDEndToEndBackendChallengerTests.cs`) and frontend challenger suites (`challenger_md_2_frontend_e2e_stress.test.ts`).
-3. **Independent Post-Victory Audit**:
-   - Dispatched independent auditor `victory_auditor_16` (`663db1e1-f744-4c32-92a7-3991c2f398c0`) with zero shared context from the implementation swarm.
-   - `victory_auditor_16` executed Phase A (Timeline), Phase B (Anti-Cheating & Integrity Detection), and Phase C (Independent Test Execution).
-   - Independent test execution confirmed:
-     * `dotnet build`: 0 Warnings, 0 Errors.
-     * `ClinicEz.Shared.Tests`: 298 passed, 0 failed.
-     * `ClinicEz.Clinic.Application.Tests`: 2,807 passed, 0 failed (including 411 Dental-specific passed, 54 Milestone MD challenger passed).
-     * `packages/design-tokens`: 27 passed, 0 failed.
-     * `packages/shared-ts`: 176 passed, 0 failed.
-     * `check-tokens.mjs --strict`: 0 violations in 0 files.
-     * `bun run typecheck:clinic`: 0 TypeScript errors.
-     * `apps/clinic-app` Dental suites: 132 passed, 0 failed.
-     * `apps/portal-web` search suites: 24 passed, 0 failed.
-   - Audit Verdict: **VICTORY CONFIRMED**.
-4. **Mandatory Cleanup**:
-   - Cancelled Cron 1 (`task-30`) and Cron 2 (`task-32`).
-   - Killed all subagents via `manage_subagents(Action="kill_all")`.
+## 2. Logic Chain
+1. **Task Routing**: Multi-part requirement spanning C# backend EF Core / MediatR commands and React Native Expo components. Per Routing Decision Table, routed to `teamwork_preview_orchestrator` on the General path.
+2. **Phase 0 Codebase Survey**: 3 parallel survey explorers mapped backend service catalog architecture, frontend settings tab UI, and consultation odontogram order flow.
+3. **Milestone 1 Implementation & Gate**:
+   - Implemented `DentalCatalogDefaults.cs` with 10 canonical Philippine dental procedures and standard pricing.
+   - Implemented specialty-aware auto-seeding in `GetClinicServicesQueryHandler.cs` (`Dental`, `MultiSpecialty`, `Medical`).
+   - Implemented idempotent `SeedDentalServicesCommand.cs` and `POST /api/v1/services/seed-dental` controller endpoint guarded with `ServicesManage`.
+   - Verified active dental items in `PublishClinicToDirectoryCommand.cs`.
+   - Cleared Milestone 1 Gate unanimously across 5 verification agents (`reviewer_m1_1`, `reviewer_m1_2`, `challenger_m1_1`, `challenger_m1_2`, `auditor_m1_1`).
+4. **Milestone 2 Implementation & Gate**:
+   - Added `seedDentalServices()` in `clinicService.ts`.
+   - Updated `ServicesCatalogTab.tsx` with Dental category chips, modal selector options, and "Add Dental Services" button.
+   - Updated `OrderCatalogSearchModal.tsx` with Dental tab and 5 canonical dental instruction chips.
+   - Updated `Consultations.screen.tsx` procedure catalog and quick-order pre-selection.
+   - Created `dentalServiceCatalog.test.ts`.
+   - Cleared Milestone 2 Gate unanimously across 5 verification agents.
+5. **Independent Victory Audit**:
+   - Conducted full timeline and commit provenance audit: PASS.
+   - Conducted anti-cheating, authorization, and design-token audit: PASS (0 raw hex colors, authentic EF Core & React Native code).
+   - Executed all 8 acceptance test suites independently: PASS (all tests 0 failures).
 
-## Logic Chain
+## 3. Caveats
+- None. All automated test commands pass cleanly with 0 failures, 0 warnings, and 0 design token violations.
 
-1. Requirements R1–R4 were comprehensively implemented and verified across domain, application, controllers, search provider discovery, and frontend workstations.
-2. The core coordination directive was upheld: search framework files in `packages/shared-dotnet/Search/`, `packages/shared-ts/search/`, and `SearchController.cs` remained 100% immutable and unregressed, with Dental search extending the architecture via DI assembly scanning and registry contributor pattern.
-3. Strict UI/UX design token rules were respected without exception: zero raw hex colors, zero un-tokenized radii, and full 4-state lifecycle handling.
-4. Independent 3-phase post-victory audit verified that the timeline was authentic, anti-cheating checks passed cleanly with zero facades or hardcoded values, and all independent test runs matched claimed results with 100% pass rates.
-5. All background tasks and subagents have been terminated per protocol, allowing definitive completion signoff.
+## 4. Conclusion
+The Dental Clinic Service Catalog integration across `services/clinic-api` and `apps/clinic-app` is fully implemented, verified, and audited. The implementation is production-ready and satisfies all user requirements and acceptance criteria.
 
-## Caveats
-
-- As noted by the independent auditor, running blanket `bun test apps/clinic-app` executes legacy unrelated tests requiring native Expo environments (Alert, SQLite mocks). Targeted Dental and Search test suites pass 100% green without errors, and full TypeScript typechecking (`bun run typecheck:clinic`) succeeds with 0 errors.
-
-## Conclusion
-
-The Clean, Integrated Dental Module has been completely implemented, verified through multiple challenger iterations, independently audited, and approved with a `VICTORY CONFIRMED` verdict. All requirements (R1–R4) are satisfied in full.
-
-## Verification Method
-
-To reproduce verification independently:
-1. `dotnet build services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj`
-2. `dotnet test packages/shared-dotnet.Tests/ClinicEz.Shared.Tests.csproj`
-3. `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj`
-4. `bun test packages/design-tokens`
-5. `bun test packages/shared-ts`
-6. `bun apps/clinic-app/scripts/check-tokens.mjs --strict`
-7. `bun run typecheck:clinic`
-8. `bun test apps/clinic-app/tests/inlineDentalChartCard.test.ts apps/clinic-app/tests/dentalChartTab.test.ts apps/clinic-app/tests/dentalOdontogramStress.test.ts apps/clinic-app/tests/generalSettingsTab.test.ts apps/clinic-app/tests/consultationsGating.test.ts apps/clinic-app/tests/challenger_mb_2_dental_search.test.ts apps/clinic-app/tests/challenger_mc_1_empirical_stress.test.ts apps/clinic-app/tests/challenger_mc_2_empirical_stress.test.ts apps/clinic-app/tests/challenger_mc_it2_deep_stress.test.ts apps/clinic-app/tests/challenger_md_2_frontend_e2e_stress.test.ts`
-9. `bun test apps/portal-web/tests/portalSearchIntegration.test.ts`
+## 5. Verification Method
+The independent Victory Auditor (`victory_auditor_1`) ran and verified the following test suites with 100% pass:
+1. `/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~ServicesCatalogTests"` (12 passed, 0 failed)
+2. `/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Dental"` (436 passed, 0 failed)
+3. `/Users/macuser/.dotnet/dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~PublishClinicToDirectoryTests"` (14 passed, 0 failed)
+4. `cd apps/clinic-app && /Users/macuser/.bun/bin/bun test tests/challenger_m1_1_catalog_search.test.ts` (32 passed, 0 failed)
+5. `cd apps/clinic-app && /Users/macuser/.bun/bin/bun test tests/consultationsDynamicOrders.test.ts` (43 passed, 0 failed)
+6. `cd apps/clinic-app && /Users/macuser/.bun/bin/bun test tests/dentalServiceCatalog.test.ts` (18 passed, 0 failed)
+7. `cd apps/clinic-app && bun run check-tokens.mjs --strict` (0 violations in 0 files)
+8. `cd apps/clinic-app && /Users/macuser/.bun/bin/bun run typecheck:clinic` (0 errors)

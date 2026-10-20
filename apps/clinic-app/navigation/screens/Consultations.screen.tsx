@@ -526,7 +526,7 @@ export default function ConsultationsScreen() {
   const [editingInstructionText, setEditingInstructionText] = useState<string>('');
   const [isHandoffSending, setIsHandoffSending] = useState<boolean>(false);
   const [orderSearchModalVisible, setOrderSearchModalVisible] = useState(false);
-  const [orderSearchInitialCategory, setOrderSearchInitialCategory] = useState<'Diagnostic' | 'Procedure' | 'All'>('All');
+  const [orderSearchInitialCategory, setOrderSearchInitialCategory] = useState<'Diagnostic' | 'Procedure' | 'Dental' | 'All'>('All');
   const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
   const [recordVitalsModalVisible, setRecordVitalsModalVisible] = useState(false);
 
@@ -624,7 +624,7 @@ export default function ConsultationsScreen() {
     activeCatalog.filter((s) => categories.includes(s.category.toLowerCase()));
   const medicineCatalog = catalogByCategory('medicine');
   const diagnosticCatalog = catalogByCategory('diagnostic');
-  const procedureCatalog = catalogByCategory('procedure', 'nursingservice');
+  const procedureCatalog = catalogByCategory('procedure', 'nursingservice', 'dental');
   const consultationFee = catalogByCategory('consultation')[0];
 
   const handleSelectCatalogMedicine = (item: ClinicServiceItem) => {
@@ -1777,7 +1777,7 @@ export default function ConsultationsScreen() {
     if (isSigned) return;
     setOrderInitialToothNumber(toothNumber);
     setOrderInitialToothSurface(toothSurface);
-    setOrderSearchInitialCategory('Procedure');
+    setOrderSearchInitialCategory('Dental');
     setOrderSearchModalVisible(true);
   };
 
