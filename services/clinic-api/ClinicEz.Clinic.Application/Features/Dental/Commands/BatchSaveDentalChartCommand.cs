@@ -376,7 +376,10 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                                   && t.Status == tooth.Status
                                   && !t.IsDeleted
                                   && t.IsCurrent
-                                  && (t.ConsultationId == request.ConsultationId || !t.ConsultationId.HasValue || !request.ConsultationId.HasValue));
+                                  && (t.ConsultationId == request.ConsultationId
+                                      || !t.ConsultationId.HasValue
+                                      || !request.ConsultationId.HasValue
+                                      || string.Equals(t.Surface, normalizedSurface, StringComparison.OrdinalIgnoreCase)));
 
             if (existing != null)
             {
@@ -386,7 +389,7 @@ public sealed class BatchSaveDentalChartCommandHandler : IRequestHandler<BatchSa
                 existing.SupersededAt = null;
                 existing.SupersededByRecordId = null;
                 existing.Notes = string.IsNullOrWhiteSpace(tooth.Notes) ? null : tooth.Notes.Trim();
-                if (request.ConsultationId.HasValue)
+                if (request.ConsultationId.HasValue && !existing.ConsultationId.HasValue)
                 {
                     existing.ConsultationId = request.ConsultationId.Value;
                 }

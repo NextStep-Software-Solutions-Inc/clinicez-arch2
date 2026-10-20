@@ -524,17 +524,22 @@ describe('Adversarial Stress Harness: Milestone 4 Workstation & Dental Sync', ()
       expect(code).toContain('patientChart?.dentalChart');
     });
 
-    test('Consultations.screen.tsx binds handleDentalChartChange directly to patientChart.dentalTeeth', () => {
+    test('Consultations.screen.tsx keeps left-pane patientChart.dentalTeeth read-only in handleDentalChartChange and updates on encounter signing', () => {
       const filePath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
       const code = fs.readFileSync(filePath, 'utf8');
 
-      // Verify the immediate mutation/synchronization block
-      const handlerMatch = code.match(/handleDentalChartChange[\s\S]*?\n  \};/);
+      // Verify handleDentalChartChange only stages right-side encounter dentalChart state while unsigned
+      const handlerMatch = code.match(/const handleDentalChartChange = useCallback\([\s\S]*?\n  \}, \[\]\);/);
       expect(handlerMatch).toBeTruthy();
       const handlerCode = handlerMatch![0];
 
-      expect(handlerCode).toContain('setPatientChart');
-      expect(handlerCode).toContain('dentalTeeth: syncedTeeth');
+      expect(handlerCode).toContain('setDentalChart');
+      expect(handlerCode).not.toContain('setPatientChart');
+
+      // Verify encounter signing updates patientChart.dentalTeeth and refreshes longitudinal chart
+      expect(code).toContain('clinicService.batchSaveDentalChart');
+      expect(code).toContain('dentalTeeth: syncedTeeth');
+      expect(code).toContain('refreshPatientChart(selectedPatient.patientId)');
     });
   });
 });

@@ -574,26 +574,11 @@ export default function ConsultationsScreen() {
   );
 
   const handleDentalChartChange = useCallback((nextChart: Record<number, any>) => {
+    // Only stage changes in the right-side active encounter dentalChart state while unsigned.
+    // The left-side Patient Chart (patientChart.dentalTeeth) remains read-only historical status
+    // and is updated only after the doctor signs the encounter.
     setDentalChart(nextChart as any);
-    // Immediately synchronize left-pane patientChart.dentalTeeth
-    setPatientChart((prev) => {
-      if (!prev) return prev;
-      const targetPatientId = selectedPatient?.patientId || patientRecord?.id || '';
-      const multiMap = normalizeTeethToMultiRecord(nextChart as any);
-      const syncedTeeth: DentalToothRecord[] = Object.values(multiMap).flat().map((rec) => ({
-        ...rec,
-        tenantId: rec.tenantId || settings?.tenantId || (patientRecord as any)?.tenantId || '',
-        clinicId: rec.clinicId || settings?.clinicId || (patientRecord as any)?.clinicId || '',
-        patientId: targetPatientId,
-        notes: rec.notes || null,
-        surface: rec.surface || null,
-      }));
-      return {
-        ...prev,
-        dentalTeeth: syncedTeeth,
-      };
-    });
-  }, [selectedPatient?.patientId, patientRecord?.id, settings?.tenantId, settings?.clinicId]);
+  }, []);
   const [editingOrderItem, setEditingOrderItem] = useState<EditingOrderItemState | null>(null);
   const [editingInstructionText, setEditingInstructionText] = useState<string>('');
   const [isHandoffSending, setIsHandoffSending] = useState<boolean>(false);
@@ -2108,6 +2093,7 @@ export default function ConsultationsScreen() {
     }
 
     // Atomic batch save dental chart BEFORE signing when dental is enabled and teeth have been marked
+    let savedDentalChartResponse: any = null;
     if (isDentalEnabled && Object.keys(dentalChart).length > 0) {
       const multiMap = normalizeTeethToMultiRecord(dentalChart as any);
       const teethPayload = Object.values(multiMap).flat().map((rec) => ({
@@ -2116,9 +2102,18 @@ export default function ConsultationsScreen() {
         surface: rec.surface || undefined,
         notes: rec.notes || undefined,
       }));
-      const [, dentalErr] = await clinicService.batchSaveDentalChart(selectedPatient.patientId, {
+      const activeTeethPayload = Object.values(multiMap)
+        .flat()
+        .filter((rec) => rec.isCurrent !== false)
+        .map((rec) => ({
+          toothNumber: rec.toothNumber,
+          status: rec.status,
+          surface: rec.surface || undefined,
+          notes: rec.notes || undefined,
+        }));
+      const [savedDentalChart, dentalErr] = await clinicService.batchSaveDentalChart(selectedPatient.patientId, {
         consultationId,
-        teeth: teethPayload,
+        teeth: activeTeethPayload.length > 0 ? activeTeethPayload : teethPayload,
       });
       if (dentalErr) {
         setIsSigning(false);
@@ -2131,6 +2126,7 @@ export default function ConsultationsScreen() {
         notify.error(msg, { traceId: dentalErr.traceId });
         return;
       }
+      savedDentalChartResponse = savedDentalChart;
     }
 
     const [, signErr] = await clinicService.signConsultation(consultationId, {
@@ -2149,6 +2145,33 @@ export default function ConsultationsScreen() {
       });
       notify.error(msg, { traceId: signErr.traceId });
       return;
+    }
+
+    // Update left-side longitudinal Patient Chart dentalTeeth now that the encounter is signed
+    if (isDentalEnabled && Object.keys(dentalChart).length > 0) {
+      const multiMap = normalizeTeethToMultiRecord(dentalChart as any);
+      const targetPatientId = selectedPatient?.patientId || patientRecord?.id || '';
+      const syncedTeeth: DentalToothRecord[] =
+        savedDentalChartResponse?.teeth && savedDentalChartResponse.teeth.length > 0
+          ? savedDentalChartResponse.teeth
+          : Object.values(multiMap).flat().map((rec) => ({
+              ...rec,
+              tenantId: rec.tenantId || settings?.tenantId || (patientRecord as any)?.tenantId || '',
+              clinicId: rec.clinicId || settings?.clinicId || (patientRecord as any)?.clinicId || '',
+              patientId: targetPatientId,
+              consultationId,
+              notes: rec.notes || null,
+              surface: rec.surface || null,
+            }));
+      setPatientChart((prev) =>
+        prev
+          ? {
+              ...prev,
+              dentalTeeth: syncedTeeth,
+              ...(savedDentalChartResponse ? { dentalChart: savedDentalChartResponse } : {}),
+            }
+          : prev
+      );
     }
 
     if (prescriptions.length > 0) {
@@ -2284,12 +2307,13 @@ export default function ConsultationsScreen() {
     const [, completeErr] = await clinicService.completeQueueItem(selectedPatient.id);
     if (completeErr) followUpIssues.push('queue status update');
 
-    // Update local state immediately and refetch queue in background
+    // Update local state immediately and refetch queue & longitudinal patient chart in background
     setSelectedPatient((prev) => (prev ? { ...prev, status: 'Completed' } : null));
     setPatients((prev) =>
       prev.map((p) => (p.id === selectedPatient.id ? { ...p, status: 'Completed' } : p))
     );
     loadQueue().catch(() => {});
+    refreshPatientChart(selectedPatient.patientId).catch(() => {});
 
     setIsSigning(false);
     setIsSigned(true);
@@ -3290,9 +3314,6 @@ export default function ConsultationsScreen() {
           patient={patientRecord}
           patientId={selectedPatient?.patientId || patientRecord?.id}
           chart={patientChart}
-          onOrderProcedure={(toothNumber, surface) => {
-            handleQuickOrderDentalProcedure(toothNumber, surface);
-          }}
           onRefreshChart={refreshPatientChart}
         />
       )}
@@ -3660,6 +3681,7 @@ export default function ConsultationsScreen() {
               <View onLayout={(e) => { sectionOffsets.current['dental-chart'] = e.nativeEvent.layout.y; }}>
                 <InlineDentalChartCard
                   chart={dentalChart}
+                  consultationId={signedConsultationId || undefined}
                   onChange={handleDentalChartChange}
                   disabled={isSigned}
                   onQuickOrderProcedure={handleQuickOrderDentalProcedure}
