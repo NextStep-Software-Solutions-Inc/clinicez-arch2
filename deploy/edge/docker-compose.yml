@@ -199,8 +199,23 @@ services:
       # Public absolute URL of the lab-result upload page printed on lab slips ({base}/{token}). It is a CLOUD page: the site only
       # needs outbound access, results come back through the hub. Without it lab orders cannot be issued.
       Clinic__PublicUploadBaseUrl: ${CLINIC_PUBLIC_UPLOAD_BASE_URL:-}
-      # Encrypted scanned records / attachments (LocalClinicStorageService). Default would be inside the container.
+      # Storage Provider: Local disk (default for edge), S3 (on-premise MinIO/Ceph/subscriber storage), or R2.
+      Storage__Provider: ${STORAGE_PROVIDER:-Local}
       Storage__BasePath: /app/storage/records
+      Storage__EnableLocalFallback: ${STORAGE_ENABLE_LOCAL_FALLBACK:-true}
+      # Generic S3 adapter settings (for on-premise subscribers with their own MinIO / S3 storage servers)
+      S3__ServiceUrl: ${S3_SERVICE_URL:-}
+      S3__BucketName: ${S3_BUCKET_NAME:-${R2_BUCKET_NAME:-}}
+      S3__AccessKeyId: ${S3_ACCESS_KEY_ID:-${R2_ACCESS_KEY_ID:-}}
+      S3__SecretAccessKey: ${S3_SECRET_ACCESS_KEY:-${R2_SECRET_ACCESS_KEY:-}}
+      S3__Region: ${S3_REGION:-auto}
+      S3__ForcePathStyle: ${S3_FORCE_PATH_STYLE:-true}
+      # Cloudflare R2 specific credentials
+      R2__AccountId: ${R2_ACCOUNT_ID:-}
+      R2__BucketName: ${R2_BUCKET_NAME:-}
+      R2__AccessKeyId: ${R2_ACCESS_KEY_ID:-}
+      R2__SecretAccessKey: ${R2_SECRET_ACCESS_KEY:-}
+      R2__PublicUrl: ${R2_PUBLIC_URL:-}
       # Wraps the per-file keys of those records. Generated once by the installer; never change it.
       ClinicEncryption__MasterSecret: ${CLINIC_ENCRYPTION_MASTER_SECRET:?CLINIC_ENCRYPTION_MASTER_SECRET must be set}
       # Rotation: the previous master secret(s) stay readable (optional, empty = none).

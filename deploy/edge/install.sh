@@ -12,7 +12,8 @@
 #
 # Run ./install.sh --help for all options. See README.md for the runbook.
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")"
+SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+cd "$(dirname "$SCRIPT_PATH")"
 
 ENV_FILE=.env
 HUB_ENV_FILE=hub-bootstrap.env
@@ -34,7 +35,9 @@ CLINIC_HUB_SIGNING_KEY CLINIC_HUB_PUBLIC_KEY BILLING_HUB_SIGNING_KEY BILLING_HUB
 LABORATORY_HUB_SIGNING_KEY LABORATORY_HUB_PUBLIC_KEY PHARMACY_HUB_SIGNING_KEY PHARMACY_HUB_PUBLIC_KEY
 ORGANIZATION_HUB_SIGNING_KEY ORGANIZATION_HUB_PUBLIC_KEY
 CLINIC_WEB_PORT LABORATORY_WEB_PORT PHARMACY_WEB_PORT CASHIER_WEB_PORT
-BACKUP_DIR BACKUP_INTERVAL_HOURS BACKUP_RETENTION_DAYS"
+BACKUP_DIR BACKUP_INTERVAL_HOURS BACKUP_RETENTION_DAYS
+STORAGE_PROVIDER STORAGE_ENABLE_LOCAL_FALLBACK S3_SERVICE_URL S3_BUCKET_NAME S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY
+S3_REGION S3_FORCE_PATH_STYLE R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL"
 
 # Keys that must be a P-256 PEM (checked, normalized to one-line base64): public / private.
 PUB_KEY_VARS="FACILITY_LICENSE_PUBLIC_KEY FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS CLINIC_HUB_PUBLIC_KEY BILLING_HUB_PUBLIC_KEY LABORATORY_HUB_PUBLIC_KEY PHARMACY_HUB_PUBLIC_KEY ORGANIZATION_HUB_PUBLIC_KEY"
@@ -52,7 +55,7 @@ warn() { printf 'WARN: %s\n' "$*" >&2; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 usage() {
-  sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,13p' "$SCRIPT_PATH" | sed 's/^# \{0,1\}//'
   cat <<'EOF'
 
 Install options (all optional: missing values are asked for, or taken from an existing .env):
@@ -85,6 +88,19 @@ Install options (all optional: missing values are asked for, or taken from an ex
                                    of those two clients. With the local hub the installer generates one P-256 key pair per service
                                    (needs openssl) and keeps it like the other generated secrets
   --backup-dir <path>              host folder for backups (default ./backups)
+  --storage-provider <Local|S3|R2> storage provider for clinical records (default Local)
+  --s3-service-url <url>           on-premise S3 / MinIO endpoint URL (e.g. http://minio.local:9000)
+  --s3-bucket <bucket>             S3 / MinIO bucket name
+  --s3-access-key <key>            S3 access key id
+  --s3-secret-key <secret>         S3 secret access key
+  --s3-region <region>             S3 region (default auto)
+  --s3-force-path-style <true|false> path-style addressing for MinIO/custom S3 (default true)
+  --storage-fallback <true|false>  read from local disk if file not found in S3/R2 (default true)
+  --r2-account-id <id>             Cloudflare R2 account id
+  --r2-bucket <bucket>             Cloudflare R2 bucket name
+  --r2-access-key <key>            Cloudflare R2 access key id
+  --r2-secret-key <secret>         Cloudflare R2 secret access key
+  --r2-public-url <url>            Cloudflare R2 public URL
   --force                          rewrite .env (old file saved as .env.bak.<time>; existing secrets are kept)
   --yes                            never prompt; fail when a required value is missing
   --no-pull                        do not pull (images loaded with `docker load`)
@@ -167,6 +183,19 @@ while [ "$#" -gt 0 ]; do
     --pharmacy-license-token) need_arg "$@"; LICENSE_PHARMACY=$2; shift ;;
     --pharmacy-license-file) need_arg "$@"; LICENSE_PHARMACY=$(read_license "$2"); shift ;;
     --backup-dir) need_arg "$@"; BACKUP_DIR=$2; shift ;;
+    --storage-provider) need_arg "$@"; STORAGE_PROVIDER=$2; shift ;;
+    --s3-service-url) need_arg "$@"; S3_SERVICE_URL=$2; shift ;;
+    --s3-bucket) need_arg "$@"; S3_BUCKET_NAME=$2; shift ;;
+    --s3-access-key) need_arg "$@"; S3_ACCESS_KEY_ID=$2; shift ;;
+    --s3-secret-key) need_arg "$@"; S3_SECRET_ACCESS_KEY=$2; shift ;;
+    --s3-region) need_arg "$@"; S3_REGION=$2; shift ;;
+    --s3-force-path-style) need_arg "$@"; S3_FORCE_PATH_STYLE=$2; shift ;;
+    --storage-fallback) need_arg "$@"; STORAGE_ENABLE_LOCAL_FALLBACK=$2; shift ;;
+    --r2-account-id) need_arg "$@"; R2_ACCOUNT_ID=$2; shift ;;
+    --r2-bucket) need_arg "$@"; R2_BUCKET_NAME=$2; shift ;;
+    --r2-access-key) need_arg "$@"; R2_ACCESS_KEY_ID=$2; shift ;;
+    --r2-secret-key) need_arg "$@"; R2_SECRET_ACCESS_KEY=$2; shift ;;
+    --r2-public-url) need_arg "$@"; R2_PUBLIC_URL=$2; shift ;;
     --air-gapped) AIR_GAPPED=1; UPSTREAM_ENABLED=false ;;
     --no-local-hub) NO_LOCAL_HUB=1 ;;
     --force) FORCE=1 ;;
@@ -377,6 +406,7 @@ collect_config() { # <new|reuse>
   local mode=$1 k svc prefix prof ftype hubmode oldmode=none
   local f_cid=$CLINIC_HUB_CLIENT_ID f_csec=$CLINIC_HUB_CLIENT_SECRET f_bid=$BILLING_HUB_CLIENT_ID f_bsec=$BILLING_HUB_CLIENT_SECRET f_url=$UPSTREAM_HUB_URL
   local f_uid=$UPSTREAM_CLIENT_ID f_usec=$UPSTREAM_CLIENT_SECRET f_uks=$EDGE_HUB_SIGNING_KEY f_cks=$CLINIC_HUB_SIGNING_KEY f_bks=$BILLING_HUB_SIGNING_KEY
+  local f_sp=$STORAGE_PROVIDER f_s3url=$S3_SERVICE_URL f_s3b=$S3_BUCKET_NAME f_r2acc=$R2_ACCOUNT_ID f_r2b=$R2_BUCKET_NAME
   if [ -f "$ENV_FILE" ]; then
     case ",$(env_get COMPOSE_PROFILES "$ENV_FILE")," in *,local-hub,*) oldmode=A ;; *) oldmode=B ;; esac
   fi
@@ -402,6 +432,19 @@ collect_config() { # <new|reuse>
   default BACKUP_INTERVAL_HOURS 24
   default BACKUP_RETENTION_DAYS 14
   default HUB_SIGNING_REQUIRED true
+  default STORAGE_PROVIDER Local
+  default STORAGE_ENABLE_LOCAL_FALLBACK true
+  default S3_REGION auto
+  default S3_FORCE_PATH_STYLE true
+
+  # Infer provider if S3 or R2 flags were passed explicitly without --storage-provider
+  if [ -z "$f_sp" ] && [ "$STORAGE_PROVIDER" = Local ]; then
+    if [ -n "$f_s3url" ] || [ -n "$f_s3b" ]; then
+      STORAGE_PROVIDER=S3
+    elif [ -n "$f_r2acc" ] || [ -n "$f_r2b" ]; then
+      STORAGE_PROVIDER=R2
+    fi
+  fi
 
   if [ "$mode" = new ]; then decide_profiles; fi
   hubmode=A
@@ -429,6 +472,28 @@ collect_config() { # <new|reuse>
     if has_profile pharmacy; then ask PHARMACY_FACILITY_ID "Pharmacy facility id (GUID)"; fi
     if has_profile organization; then ask ORGANIZATION_FACILITY_ID "Organization facility id (GUID)"; fi
     ask FACILITY_LICENSE_PUBLIC_KEY "License public key (base64 of PEM, from the portal; or pass --license-public-key-file)"
+
+    if [ "$INTERACTIVE" = 1 ] && [ -z "$f_sp" ] && [ -z "$f_s3url$f_s3b$f_r2acc$f_r2b" ]; then
+      if ask_yn "Configure external S3-compatible storage (e.g. MinIO, Ceph, Cloudflare R2)?" n; then
+        read -r -p "Storage provider (S3/R2) [S3]: " sp_choice
+        sp_choice=${sp_choice:-S3}
+        case "$sp_choice" in
+          [rR]2|[rR]*) STORAGE_PROVIDER=R2 ;;
+          *) STORAGE_PROVIDER=S3 ;;
+        esac
+      fi
+    fi
+    if [ "$STORAGE_PROVIDER" = S3 ]; then
+      ask S3_SERVICE_URL "S3 service URL (e.g. http://minio.local:9000, https://s3.hospital.internal)"
+      ask S3_BUCKET_NAME "S3 bucket name"
+      ask S3_ACCESS_KEY_ID "S3 access key id"
+      ask S3_SECRET_ACCESS_KEY "S3 secret access key" secret
+    elif [ "$STORAGE_PROVIDER" = R2 ]; then
+      ask R2_ACCOUNT_ID "Cloudflare R2 Account ID"
+      ask R2_BUCKET_NAME "Cloudflare R2 Bucket name"
+      ask R2_ACCESS_KEY_ID "Cloudflare R2 Access Key ID"
+      ask R2_SECRET_ACCESS_KEY "Cloudflare R2 Secret Access Key" secret
+    fi
   fi
 
   case "$UPSTREAM_ENABLED" in true|false) ;; *) die "UPSTREAM_ENABLED must be true or false." ;; esac
@@ -490,7 +555,7 @@ EOF
   gen_if_empty GAMOT_UPSC_SECRET_KEY 64
   if [ -z "$HUB_PAYLOAD_ENCRYPTION_KEY" ]; then HUB_PAYLOAD_ENCRYPTION_KEY=$(rand_b64_32); fi
 
-  for k in UPSTREAM_HUB_URL CLINIC_PUBLIC_UPLOAD_BASE_URL MESSAGING_HUB_URL; do trim_url "$k"; done
+  for k in UPSTREAM_HUB_URL CLINIC_PUBLIC_UPLOAD_BASE_URL MESSAGING_HUB_URL S3_SERVICE_URL R2_PUBLIC_URL; do trim_url "$k"; done
   for k in $KEYS; do
     case "$k" in
       EDGE_CELL_NAME|*_FACILITY_NAME) check_safe "$k" spaces ;;
@@ -500,14 +565,32 @@ EOF
   for k in CLINIC_FACILITY_ID LABORATORY_FACILITY_ID PHARMACY_FACILITY_ID ORGANIZATION_FACILITY_ID; do check_guid "$k"; done
   case "$EDGE_CELL_ID" in *:*) die "EDGE_CELL_ID must not contain ':'." ;; esac
   case "$HUB_SIGNING_REQUIRED" in true|false) ;; *) die "HUB_SIGNING_REQUIRED must be true or false." ;; esac
+  case "$STORAGE_PROVIDER" in Local|S3|R2) ;; *) die "STORAGE_PROVIDER must be Local, S3, or R2 (got '$STORAGE_PROVIDER')." ;; esac
+  case "$STORAGE_ENABLE_LOCAL_FALLBACK" in true|false) ;; *) die "STORAGE_ENABLE_LOCAL_FALLBACK must be true or false." ;; esac
+  case "$S3_FORCE_PATH_STYLE" in true|false) ;; *) die "S3_FORCE_PATH_STYLE must be true or false." ;; esac
+  if [ "$STORAGE_PROVIDER" = S3 ]; then
+    if [ -z "$S3_BUCKET_NAME" ]; then die "S3_BUCKET_NAME is required when STORAGE_PROVIDER=S3."; fi
+    if [ -z "$S3_ACCESS_KEY_ID" ]; then die "S3_ACCESS_KEY_ID is required when STORAGE_PROVIDER=S3."; fi
+    if [ -z "$S3_SECRET_ACCESS_KEY" ]; then die "S3_SECRET_ACCESS_KEY is required when STORAGE_PROVIDER=S3."; fi
+  elif [ "$STORAGE_PROVIDER" = R2 ]; then
+    if [ -z "$R2_ACCOUNT_ID" ]; then die "R2_ACCOUNT_ID is required when STORAGE_PROVIDER=R2."; fi
+    if [ -z "$R2_BUCKET_NAME" ]; then die "R2_BUCKET_NAME is required when STORAGE_PROVIDER=R2."; fi
+    if [ -z "$R2_ACCESS_KEY_ID" ]; then die "R2_ACCESS_KEY_ID is required when STORAGE_PROVIDER=R2."; fi
+    if [ -z "$R2_SECRET_ACCESS_KEY" ]; then die "R2_SECRET_ACCESS_KEY is required when STORAGE_PROVIDER=R2."; fi
+  fi
   for k in $PUB_KEY_VARS; do check_key "$k" pub; done
   for k in $PRIV_KEY_VARS; do check_key "$k" priv; done
   if [ "$mode" = reuse ]; then
-    local required="GHCR_OWNER_REPO TENANT_ID EDGE_CELL_ID CLINIC_FACILITY_ID FACILITY_LICENSE_PUBLIC_KEY"
+    local required="GHCR_OWNER_REPO TENANT_ID EDGE_CELL_ID CLINIC_FACILITY_ID FACILITY_LICENSE_PUBLIC_KEY STORAGE_PROVIDER"
     if [ "$hubmode" = B ]; then
       required="$required MESSAGING_HUB_URL CLINIC_HUB_CLIENT_ID CLINIC_HUB_CLIENT_SECRET BILLING_HUB_CLIENT_ID BILLING_HUB_CLIENT_SECRET CLINIC_HUB_SIGNING_KEY BILLING_HUB_SIGNING_KEY"
     elif [ "$UPSTREAM_ENABLED" = true ]; then
       required="$required UPSTREAM_HUB_URL UPSTREAM_CLIENT_ID UPSTREAM_CLIENT_SECRET EDGE_HUB_SIGNING_KEY"
+    fi
+    if [ "$STORAGE_PROVIDER" = S3 ]; then
+      required="$required S3_BUCKET_NAME S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY"
+    elif [ "$STORAGE_PROVIDER" = R2 ]; then
+      required="$required R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY"
     fi
     for k in $required; do
       if [ -z "${!k}" ]; then die "$k is empty in $ENV_FILE. Fix it, or re-run with --force and the options (a missing key can also be given with its option on this command: ./install.sh apply|upgrade stores it in $ENV_FILE)."; fi
@@ -597,6 +680,21 @@ ORGANIZATION_HUB_PUBLIC_KEY=$ORGANIZATION_HUB_PUBLIC_KEY
 # Database
 POSTGRES_USER=$POSTGRES_USER
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+
+# Clinical Record Storage
+STORAGE_PROVIDER=$STORAGE_PROVIDER
+STORAGE_ENABLE_LOCAL_FALLBACK=$STORAGE_ENABLE_LOCAL_FALLBACK
+S3_SERVICE_URL=$S3_SERVICE_URL
+S3_BUCKET_NAME=$S3_BUCKET_NAME
+S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
+S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
+S3_REGION=$S3_REGION
+S3_FORCE_PATH_STYLE=$S3_FORCE_PATH_STYLE
+R2_ACCOUNT_ID=$R2_ACCOUNT_ID
+R2_BUCKET_NAME=$R2_BUCKET_NAME
+R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID
+R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY
+R2_PUBLIC_URL=$R2_PUBLIC_URL
 
 # Service secrets
 HANGFIRE_DASHBOARD_PASSWORD=$HANGFIRE_DASHBOARD_PASSWORD
@@ -781,6 +879,7 @@ next_steps() {
     echo "  Air-gapped:      same-cell traffic only; cross-cell/portal messages are rejected, not queued. To connect later: set UPSTREAM_ENABLED=true + UPSTREAM_* in .env, then ./install.sh apply"
   fi
   echo "  Backups:         every ${BACKUP_INTERVAL_HOURS}h to $BACKUP_DIR, kept ${BACKUP_RETENTION_DAYS} days.  Copy .env somewhere safe too."
+  echo "  Storage:         $STORAGE_PROVIDER (fallback to local disk: $STORAGE_ENABLE_LOCAL_FALLBACK)"
   echo "  Status / logs:   ./install.sh status      docker compose logs -f clinic-api"
   echo "  Upgrade:         ./install.sh upgrade --tag <version>"
 }

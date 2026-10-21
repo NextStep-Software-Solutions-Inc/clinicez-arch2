@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-09T16:22:00Z
+# BRIEFING — 2026-10-21T08:36:00Z
 
 ## Mission
-Conduct an objective quality review and adversarial critique of the Comprehensive Clinic Features Master Plan Specification focusing on backend architecture, concurrency, PhilHealth statutory compliance, and data sync.
+Conduct an independent review and adversarial critique of the Storage Abstraction, Provider Implementations (S3ClinicStorageAdapter, R2ClinicStorageService, FallbackClinicStorageService), Dependency Injection, and On-Premise / Cloud S3 Compatibility in clinic-api.
 
 ## 🔒 My Identity
 - Archetype: reviewer_critic
@@ -10,6 +10,8 @@ Conduct an objective quality review and adversarial critique of the Comprehensiv
 - Original parent: 45a7f0e0-f5b1-41d1-a74d-e52fd5602522
 - Milestone: master_plan_review
 - Instance: 1 of 1
+- Current Milestone: storage_migration_review (2026-10-21)
+- Current Parent: 0570e9be-cc00-4a26-807d-12537fe47556 (orchestrator_20)
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code
@@ -21,31 +23,43 @@ Conduct an objective quality review and adversarial critique of the Comprehensiv
 - Review Bi-directional Yakap XML mapping into <ENLISTMENT>, <PROFILE>, <SOAP>, <DIAGNOSTIC>, <MEDICINE>
 - Actively check for integrity violations
 - Issue explicit verdict (APPROVE or REQUEST_CHANGES) in handoff.md
+- Review Storage Abstraction, Provider Implementations, and On-Premise / Cloud S3 Compatibility
+- Check integrity violations (hardcoded results, dummy implementations, facade classes, fabricated logs)
+- Never place source code or tests into .agents/teamwork/
 
 ## Current Parent
-- Conversation ID: 45a7f0e0-f5b1-41d1-a74d-e52fd5602522
-- Updated: 2026-10-09T16:10:40Z
+- Conversation ID: 0570e9be-cc00-4a26-807d-12537fe47556
+- Updated: 2026-10-21T08:28:53Z
 
 ## Review Scope
-- **Files to review**:
-  - `docs/plans/comprehensive-clinic-features-plan.md`
-  - `.agents/teamwork/ORIGINAL_REQUEST.md`
-  - Reference files in `services/clinic-api/`, `services/interop-hub/`, `services/patient-api/`, `KonsultaData_v1.14.dtd`
-- **Interface contracts**: Clean Architecture, PhilHealth Yakap DTD/XML schemas, Outbox envelopes
-- **Review criteria**: Correctness, statutory compliance, concurrency & double-booking prevention, schema & data mapping, completeness, integrity
+- **Files reviewed**:
+  - `services/clinic-api/ClinicEz.Clinic.Application/Common/Interfaces/IClinicStorageService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/S3ClinicStorageAdapter.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/R2ClinicStorageService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/FallbackClinicStorageService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/LocalClinicStorageService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/ClinicEncryptionService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/ClinicEncryptionKeyRing.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/DependencyInjection.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Options/S3Options.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Options/R2Options.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Options/StorageOptions.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/R2ClinicStorageServiceTests.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/FallbackClinicStorageServiceTests.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicStorageEncryptionIntegrationTests.cs`
+  - `deploy/clinic-api/docker-compose.yml`
+  - `.github/workflows/deploy-clinic-api-dev.yml`
+  - `scripts/migrate-clinic-storage-to-r2.sh` and `scripts/migrate-clinic-storage-to-r2.ps1`
+  - `docs/architecture/data-ownership.md` and `docs/deployment-configuration.md`
+- **Interface contracts**: `IClinicStorageService`
+- **Review criteria**: Correctness, stream & byte array handling, on-premise S3 compatibility, path normalization, 404 mapping, fallback read/write/delete semantics, integrity violations
 
 ## Key Decisions Made
-- Completed in-depth review across all 6 target architecture dimensions.
-- Identified 8 critical architectural defects and discrepancies requiring remediation:
-  1. Concurrency: Plain B-Tree index used instead of PostgreSQL GiST exclusion constraint (`tstzrange`), failing to prevent concurrent double-booking.
-  2. Database types: DDL uses `integer` for enums, but `ApplicationDbContext` global convention maps all enums to `varchar(50)`.
-  3. Tenant isolation: EF Core entity configuration files omit `ClinicId == CurrentClinicId` query filters, overwriting tenant isolation.
-  4. Transmittal pipeline: `CreateYakapTransmittalCommandHandler` lacks repository injection and query orchestration for the new domain entities.
-  5. C# compilation: `Party.ForFacility` called with string `"Clinic"` instead of `FacilityType.Clinic`.
-  6. Typing: `MapPhysicalExam` references non-existent `YakapPhysicalExamDto` and ghost parameter `PhysicalExamFinding`.
-  7. Timezone: `ISlotAvailabilityService` queries UTC `ScheduledAt` against local date without timezone translation.
-  8. Migration backfill: `DEFAULT now()` on `Appointments.EndTimeUtc` corrupts pre-existing appointment intervals.
-- Determined verdict: `REQUEST_CHANGES`.
+- Executed compilation: `ClinicEz.Clinic.Infrastructure.csproj` built with 0 errors, 0 warnings.
+- Executed storage test suite: 12/12 tests in `R2ClinicStorageServiceTests` and `FallbackClinicStorageServiceTests` passed in 129 ms.
+- Executed full application test suite: 3,286/3,286 tests passed in 23 s.
+- Verified forensic integrity: no facade/dummy code, no hardcoded test responses, genuine cryptographic roundtrip and error translation.
+- Verdict: APPROVE.
 
 ## Artifact Index
 - `.agents/teamwork/reviewer_1/DISPATCH.md` — Dispatch log
@@ -55,20 +69,20 @@ Conduct an objective quality review and adversarial critique of the Comprehensiv
 
 ## Review Checklist
 - **Items reviewed**:
-  - `docs/plans/comprehensive-clinic-features-plan.md` (full 1,726 lines)
-  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Persistence/ApplicationDbContext.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Yakap/Services/YakapClinicalMapper.cs`
-  - `services/clinic-api/ClinicEz.Clinic.Application/Features/Yakap/Commands/CreateYakapTransmittal/CreateYakapTransmittalCommand.cs`
-  - `packages/shared-dotnet/Interop/Party.cs`
-  - `KonsultaData_v1.14.dtd`
-- **Verdict**: REQUEST_CHANGES
-- **Unverified claims**: GiST concurrency prevention claim refuted (DDL uses B-tree); enum integer DDL refuted (convention is varchar); Party.ForFacility signature refuted.
+  - `IClinicStorageService` contract & implementations
+  - `S3ClinicStorageAdapter` client configuration, endpoint derivation, `ForcePathStyle`, path normalization, 404 mapping
+  - `R2ClinicStorageService` specialization
+  - `FallbackClinicStorageService` write routing, fallback read on 404, fallback deletion, file existence check
+  - `DependencyInjection.cs` dynamic resolution of S3, R2, and Local
+  - On-premise subscriber compatibility (MinIO, Ceph, Wasabi, Dell EMC ECS)
+- **Verdict**: APPROVE
+- **Unverified claims**: None; all claims independently verified through source inspection and automated tests.
 
 ## Attack Surface
 - **Hypotheses tested**:
-  - Can concurrent appointments collide despite application check? Confirmed: Yes, B-Tree index and xmin on insert do not prevent range overlaps.
-  - Does enum persistence match DDL? Confirmed: No, schema uses varchar(50) convention while DDL uses integer.
-  - Does Party.ForFacility compile? Confirmed: No, type mismatch.
-  - Can DTD validate without immunizations? Confirmed: Yes, fallback 999 under OtherImm is valid against DTD.
-- **Vulnerabilities found**: Concurrency race window, EF Core enum runtime exception, cross-tenant leak risk via query filter overwrite, transmittal orchestration gap.
-- **Untested angles**: Local edge cell offline synchronization replay behavior under partitioned network.
+  - Does S3 404 map to standard `FileNotFoundException` without leaking SDK details? Confirmed: Yes, mapped cleanly in `OpenReadEncryptedStreamAsync`.
+  - Does path-style addressing work for on-premise IP/host endpoints? Confirmed: Yes, `ForcePathStyle = true` is configured and default.
+  - Does fallback delete prevent orphan files from resurrecting on local disk? Confirmed: Yes, `DeleteEncryptedFileAsync` purges both primary and fallback.
+  - Can cross-tenant files be decrypted by other tenants? Confirmed: No, HKDF-SHA256 salt & context causes AEAD tag verification failure (`CryptographicException`).
+- **Vulnerabilities found**: None.
+- **Untested angles**: Network partition latency timeouts when primary S3 has high packet drop rates (standard AWS SDK 30s timeout and 3 retries apply).

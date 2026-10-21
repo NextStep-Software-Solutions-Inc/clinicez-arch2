@@ -1,27 +1,37 @@
-# Progress - Challenger 2 (Growth & CDS Challenger)
+# Progress - Challenger 2 (Storage Fallback, S3 Endpoints & Migration Idempotency)
 
-Last visited: 2026-10-09T16:25:30Z
+Last visited: 2026-10-21T08:42:00Z
 
 ## Status
-Completed adversarial empirical testing across R4 WHO Growth Calculations, R3 Allergy CDS & Problem Lists, and R3 PhilPEN Risk Stratification. Generating formal handoff report and verdict.
+All empirical adversarial testing completed with 100% pass rate. Writing final `handoff.md` and sending notification to parent orchestrator.
 
 ## Completed Steps
-- [x] Received dispatch instructions and initialized BRIEFING.md
-- [x] Initialized progress.md
-- [x] Inspected master plan `docs/plans/comprehensive-clinic-features-plan.md` sections on R3 and R4
-- [x] Inspected statutory lookup table `services/clinic-api/ClinicEz.Clinic.Infrastructure/PhilHealth/Catalog/Seed/lib_zscore.json`
-- [x] Inspected existing Yakap implementations (`YakapClinicalMapper.cs`, `KonsultaData_v1.14.dtd`)
-- [x] Designed and executed empirical stress test harnesses in Python:
-  - Discovered typo in `lib_zscore.json` item 1381 (`weight: "7..9"`)
-  - Discovered schema bifurcation (`length` vs `height`) between age cohorts `0-23` and `24-60`
-  - Discovered query failure on discrete statutory lookup tables vs continuous measurements
-  - Discovered statutory classification boundary rules (`-3SD` is `Moderately Wasted`, only `< -3SD` is `Severely Wasted`; `+3SD` is `Overweight`, only `> +3SD` is `Obese`)
-  - Verified math boundary failures ($X \le 0$ yielding `NaN` and `OverflowException` in C# `decimal`)
-  - Discovered CDS case-sensitivity bug (`Status == "Active"`), anaphylaxis downgrade bug, and missing cross-reactivity taxonomy
-  - Discovered PhilPEN missing-lab fallback flaw (substituting FBS instead of validated non-lab WHO/ISH BMI) and missing clinical safety gating for severe hypertension in young patients
-- [x] Confirmed zero git modifications to source tree (`git status --porcelain`)
+- [x] Received dispatch instructions and appended to `DISPATCH.md`
+- [x] Initialized `BRIEFING.md` and `progress.md`
+- [x] Inspected source code of `FallbackClinicStorageService.cs`, `S3ClinicStorageAdapter.cs`, `R2ClinicStorageService.cs`, `DependencyInjection.cs`
+- [x] Inspected existing unit tests in `FallbackClinicStorageServiceTests.cs` and `R2ClinicStorageServiceTests.cs`
+- [x] Inspected migration scripts: `scripts/migrate-clinic-storage-to-r2.sh` and `scripts/migrate-clinic-storage-to-r2.ps1`
+- [x] Executed official unit tests via `dotnet test`: 12/12 passed (126 ms)
+- [x] Executed full storage integration tests: 18/18 passed (1 s)
+- [x] Executed empirical validation for migration scripts:
+  - Missing credentials validation (both `.sh` and `.ps1` exit 1)
+  - Missing endpoint validation (both `.sh` and `.ps1` exit 1)
+  - Missing directory validation (both `.sh` and `.ps1` exit 1)
+  - Dry run non-destructive safety (source files 100% untouched, SHA256 verified)
+- [x] Designed and executed 26-scenario empirical adversarial stress test harness:
+  - Primary write exclusive routing (byte and stream overloads)
+  - Read short-circuiting on primary hit
+  - Primary 404/NotFound fallback engagement (byte and stream overloads)
+  - Double miss `FileNotFoundException` propagation
+  - Server errors (500) and network disconnects correctly bubble up
+  - Deletion lifecycle and FileExists short-circuiting
+  - S3 custom endpoints (`http://192.168.1.100:9000`, `http://minio:9000`) with `ForcePathStyle = true`
+  - Trailing slash normalization, R2 AccountId derivation, AWS RegionEndpoint resolution
+  - Missing endpoint validation and credentials selection
+  - 26/26 tests passed
+- [x] Confirmed zero unauthorized git modifications (`git status --porcelain`)
+- [x] Updated `BRIEFING.md`
 
 ## Upcoming Steps
-- [ ] Write comprehensive `handoff.md` with 5 components, challenge report, and explicit verdict `REQUEST_CHANGES`
-- [ ] Update `BRIEFING.md`
-- [ ] Send coordination message to orchestrator parent agent via `send_message`
+- [ ] Write `handoff.md` with explicit verdict `CONFIRMED / APPROVE`
+- [ ] Send coordination message to orchestrator parent via `send_message`

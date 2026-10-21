@@ -1788,3 +1788,91 @@ In `Consultations.screen.tsx`, update the signing flow and feedback modals to re
   bun test apps/clinic-app/tests/billingReceiptAndSoaReview.test.ts apps/clinic-app/tests/billing_and_cashier_mode.test.ts
   ```
 - [ ] Type check passes with 0 errors: `cd apps/clinic-app && bun x tsc --noEmit`
+
+
+## 2026-10-21T08:13:16Z
+
+Independent architectural review, security validation, and deployment confirmation of the Clinic File Storage migration to S3-compatible object storage (supporting both Cloudflare R2 and private subscriber on-premise servers such as MinIO and Ceph) across clinic-api.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Architecture & Provider Abstraction Review
+Review the storage abstraction and DI wiring in services/clinic-api/ClinicEz.Clinic.Infrastructure:
+- IClinicStorageService contract supporting byte array and stream overloads (SaveEncryptedStreamAsync, OpenReadEncryptedStreamAsync).
+- S3ClinicStorageAdapter: Generalized S3 client supporting custom on-premise endpoints (S3:ServiceUrl), path-style addressing (ForcePathStyle), and Cloudflare R2 fallback resolution.
+- R2ClinicStorageService: Clean specialization for Cloudflare R2.
+- FallbackClinicStorageService: Read fallback bridge ensuring zero downtime during migration.
+- DependencyInjection.cs: Storage provider configuration resolving "S3", "R2", and "Local".
+
+### R2. Cryptographic Security & Multi-Tenancy Boundary Audit
+Audit the encryption pipeline against zero-knowledge Clinic Master Key (CMK) requirements:
+- Ensure files are encrypted with AES-256-GCM via ClinicEncryptionService using per-file DEKs wrapped with HKDF-derived CMK before reaching storage.
+- Confirm that the S3 storage bucket contains solely opaque .cez ciphertexts with zero plaintext patient data or PHI in object keys or metadata.
+- Verify strict folder partitioning per tenant and clinic (tenants/{tenantId}/clinics/{clinicId}/records/{attachmentId}.cez and tenants/{tenantId}/clinics/{clinicId}/lab-results/{resultId}.cez).
+- Confirm that cross-tenant decryption attempts fail authentication tag verification.
+
+### R3. On-Premise Subscriber & Cloud S3 Compatibility
+Verify that on-premise subscribers hosting their own storage servers (e.g., MinIO, Ceph, Wasabi, Dell EMC ECS) can configure S3:ServiceUrl and authentication credentials seamlessly, while cloud instances default to Cloudflare R2.
+
+### R4. Deployment & Migration Runbook Verification
+Audit deployment configs and one-time migration tooling:
+- deploy/clinic-api/docker-compose.yml: Correct environment variable mapping (Storage__*, S3__*, R2__*) and volume retention.
+- .github/workflows/deploy-clinic-api-dev.yml: GitHub secrets mapping and validation logic.
+- scripts/migrate-clinic-storage-to-r2.sh and scripts/migrate-clinic-storage-to-r2.ps1: Idempotent migration script supporting dry-run and custom S3 endpoints.
+- Documentation in docs/architecture/data-ownership.md and docs/deployment-configuration.md.
+
+## Verification Resources
+
+- Test suite: services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj
+- S3 & Fallback Unit Tests: R2ClinicStorageServiceTests.cs, FallbackClinicStorageServiceTests.cs
+- Cryptographic Round-Trip & Boundary Tests: ClinicStorageEncryptionIntegrationTests.cs
+- Architecture Reference: clinic-file-storage-migration-plan.md
+
+## Acceptance Criteria
+
+### Security & Functional Criteria
+- [ ] Zero unencrypted data or PHI is stored in S3 object keys or S3 custom metadata headers.
+- [ ] Storage keys strictly adhere to tenants/{tenantId}/clinics/{clinicId}/records/{id}.cez and tenants/{tenantId}/clinics/{clinicId}/lab-results/{id}.cez.
+- [ ] Attempting to decrypt Tenant A's ciphertext using Tenant B's credentials throws CryptographicException.
+- [ ] All unit and integration tests pass with zero failures: dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj.
+- [ ] Solution compiles cleanly with zero warnings or errors: dotnet build services/clinic-api/ClinicEz.Clinic.Infrastructure/ClinicEz.Clinic.Infrastructure.csproj.
+- [ ] Migration scripts (.sh and .ps1) operate idempotently without modifying source ciphertext or re-uploading identical existing keys.
+
+
+## 2026-10-21T11:26:25Z
+
+Full multi-agent team.
+
+Add Cloudflare Turnstile bot challenge protection across all ClinicEZ public entry point forms (Contact Us, Newsletter subscription, and Patient Self-Intake Join) with defense-in-depth verification enforced across both the Next.js BFF route handlers and ASP.NET Core portal-api endpoints, while relying on Clerk Attack Protection for authentication entry points.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Client-Side Challenge Integration
+Integrate non-intrusive bot challenge execution into public entry point forms in @clinicez/portal-web (Contact Us, Newsletter subscription, and Patient Self-Intake Join), ensuring challenge tokens are automatically acquired on interaction/submission and attached to request payloads.
+
+### R2. BFF Route Handler Verification
+Enforce server-side verification of incoming challenge tokens in Next.js App Router public API routes (/api/v1/public/contact, /api/v1/public/newsletter, /api/v1/public/join) using Cloudflare's siteverify endpoint before proxying requests to upstream microservices. Reject invalid, expired, or missing tokens with 403 Forbidden.
+
+### R3. Backend Core API Defense-in-Depth
+Validate challenge tokens within the ASP.NET Core portal-api endpoints (/contact, /public/newsletter, /public/join) so that direct API invocations cannot bypass client-side verification.
+
+### R4. Development and Testing Compatibility
+Provide automatic fallback to official Cloudflare test keys (1x00000000000000000000AA / 1x0000000000000000000000000000000AA) when environment credentials are not supplied, ensuring local development and CI pipelines run without external friction.
+
+## Acceptance Criteria
+
+### Automated Token Verification
+- [ ] Requests to /api/v1/public/contact, /api/v1/public/newsletter, and /api/v1/public/join without a challenge token or with an invalid token receive a 400 or 403 response.
+- [ ] Requests with a valid challenge token succeed and proceed to normal processing.
+- [ ] services/portal-api rejects direct invalid submissions when bot protection is active.
+
+### Build and Test Integrity
+- [ ] dotnet test services/portal-api/ClinicEz.Portal.Tests passes with new test coverage for token validation.
+- [ ] Next.js unit and integration tests pass for the new verification helper and route handlers.
+- [ ] Full workspace build and typecheck (bun run typecheck, bun run lint) complete without errors.

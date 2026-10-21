@@ -45,6 +45,8 @@ Set each value as a repository / environment **secret or variable** (Settings â†
 | `LICENSING_TTL_DAYS` / `LICENSING_GRACE_DAYS` / `LICENSING_RENEW_BEFORE_DAYS` | no | portal-api | Facility license lifetime (clamped to 30-90), read-only grace after expiry, renewal lead time (`Licensing__*`; defaults `30` / `14` / `10`). Variables. |
 | `BILLING_DEFAULT_PLAN_SLUG` / `BILLING_TRIAL_DAYS` | no | portal-api | Plan a new workspace starts on and its trial length (`Billing__DefaultPlanSlug` / `__TrialDays`; defaults `starter` / `14`). The plan catalog itself (limits, features, prices) lives in the portal's `appsettings.json`. Variables. |
 | `CLINIC_ENCRYPTION_MASTER_SECRET` | yes | clinic-api | Wraps the per-file keys of stored clinical records (`ClinicEncryption__MasterSecret`). Required, at least 32 characters, there is no built-in fallback any more. Changing it makes files written under the old secret unreadable unless the old value is kept in `CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0` / `_1` (see Rotation); keep it with the backups. Secret. |
+| `CLINIC_R2_BUCKET_NAME` / `_ACCOUNT_ID` / `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | yes (if cloud) | clinic-api | Cloudflare R2 bucket credentials for encrypted clinical attachments. Falls back to shared `R2_*` values. |
+| `S3_SERVICE_URL` / `S3_BUCKET_NAME` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | no | clinic-api | Generic S3 adapter settings for on-premise subscribers hosting their own storage server (MinIO, Ceph, Wasabi). |
 | `PHILHEALTH_PROXY_URL` | no | clinic-api | Base URL of the PhilHealth proxy (`PhilHealthProxy__BaseUrl`, default `http://philhealth-proxy:8080`). Variable. |
 | `FACILITY_SUBDOMAIN_CLINIC` / `_LABORATORY` / `_PHARMACY` / `_ORGANIZATION` | no | portal-api, patient-api | Service subdomain per facility type (defaults `clinic`, `lab`, `pharmacy`, `org`). |
 | `VERIFICATION_BASE_URL` | no | clinic-api, laboratory-api | Public URL embedded in QR codes. Defaults to `https://<BASE_DOMAIN>`. |
@@ -94,7 +96,7 @@ Generate the plain secrets with `scripts/generate-secrets` and the key pairs wit
 - [ ] Hub: `INTEROP_HUB_DB_CONNECTION_STRING`, `INTEROP_HUB_PORTAL_CLIENT_SECRET`, `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY`, `PORTAL_HUB_SIGNING_PUBLIC_KEY`.
 - [ ] Hub client secrets: `<SVC>_HUB_CLIENT_ID` / `<SVC>_HUB_CLIENT_SECRET` for the 7 services.
 - [ ] portal-api: `PORTAL_DB_CONNECTION_STRING`, `PORTAL_CLERK_SECRET_KEY`, `PORTAL_XENDIT_SECRET_KEY`, `PORTAL_XENDIT_CALLBACK_TOKEN`, Hangfire password, `BASE_DOMAIN`.
-- [ ] clinic-api: `CLINIC_DB_CONNECTION_STRING`, `CLINIC_ENCRYPTION_MASTER_SECRET`, `CLINIC_DOCUMENT_SIGNING_KEY`, `CLINIC_JWT_SIGNING_KEY`, `CLINICAPP_HANGFIRE_PASSWORD` (or `HANGFIRE_PASSWORD`).
+- [ ] clinic-api: `CLINIC_DB_CONNECTION_STRING`, `CLINIC_ENCRYPTION_MASTER_SECRET`, `CLINIC_DOCUMENT_SIGNING_KEY`, `CLINIC_JWT_SIGNING_KEY`, `CLINICAPP_HANGFIRE_PASSWORD` (or `HANGFIRE_PASSWORD`), `CLINIC_R2_*` (or shared `R2_*` or on-premise `S3_*` / MinIO credentials).
 - [ ] laboratory-api: `LABORATORY_DB_CONNECTION_STRING`, `LABORATORY_DOCUMENT_SIGNING_KEY`, `LAB_JWT_SIGNING_KEY`.
 - [ ] pharmacy-api: `PHARMACY_DB_CONNECTION_STRING`, `PHARMACY_GAMOT_UPSC_SECRET_KEY`, `PHARMACY_JWT_SIGNING_KEY`.
 - [ ] billing-api: `BILLING_DB_CONNECTION_STRING`, `BILLING_JWT_SIGNING_KEY`.

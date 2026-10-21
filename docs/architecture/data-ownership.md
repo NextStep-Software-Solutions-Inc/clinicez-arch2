@@ -17,7 +17,7 @@ Related: [interop-hub.md](interop-hub.md) · [platform-contract.md](platform-con
 
 | Data class | System of record | Notes |
 |---|---|---|
-| Clinical record: encounters, consultations, vitals, diagnoses, orders issued, prescriptions issued, attachments | **clinic-api** of the issuing facility (its own database; on-prem or cloud) | Documents the clinic issues are the clinic's record even if copies exist elsewhere. |
+| Clinical record: encounters, consultations, vitals, diagnoses, orders issued, prescriptions issued, attachments | **clinic-api** of the issuing facility (its own database; on-prem or cloud) | Documents the clinic issues are the clinic's record even if copies exist elsewhere. Binary attachments and lab reports are encrypted with AES-256-GCM via the Clinic Master Key (CMK) and stored as `.cez` ciphertexts in S3-compatible object storage (Cloudflare R2, AWS S3, or private subscriber MinIO/Ceph servers) segregated by tenant/clinic folders. |
 | Laboratory requisitions, specimens, analyzer data, results, reports | **laboratory-api** of the performing lab | The ordering clinic's copy of a result (`lab.result.finalized`) is a received document, imported into the clinic record. |
 | Prescription orders received, dispense records, inventory | **pharmacy-api** of the dispensing pharmacy | The clinic's copy of a dispense (`rx.dispensed`) is a received notification. |
 | Patient account and patient-owned data (profile, self-reported history, government ids, files) | **patient-api** (cloud) | Plus a **copy of documents the patient received** (patient's right of access): lab slips, prescriptions, lab results, medical certificates. See below. Patient sessions are per device: a patient may be signed in on any number of devices (one session row per `deviceId` in patient-api's database, no Redis); signing one device out revokes only that session. |
@@ -79,6 +79,7 @@ Backups of the hub database therefore contain at most 7 days of undelivered enve
 
 - Outbox shipped rows: 7 days; inbox ids: 14 days (`Messaging:OutboxRetentionDays`, `InboxRetentionDays`). Dead-lettered outbox rows (hub rejected) are kept for diagnosis; there is no automatic purge of them in the SDK today.
 - Clinical, laboratory and pharmacy records: retained by each facility according to its own legal retention duty; no automated purge exists in code.
+- Clinical record attachments and lab results (clinic-api): Encrypted with AES-256-GCM envelope encryption using per-file DEKs wrapped with the Clinic Master Key (CMK derived via HKDF-SHA256). Stored as `.cez` ciphertexts in dedicated S3-compatible object storage (Cloudflare R2, AWS S3, or private subscriber MinIO/Ceph storage servers). Stored objects are strictly partitioned into tenant/clinic folders: `tenants/{tenantId}/clinics/{clinicId}/records/{attachmentId}.cez` and `tenants/{tenantId}/clinics/{clinicId}/lab-results/{resultId}.cez`. Zero unencrypted patient data or metadata touches the object store.
 - patient-api: soft-delete on account removal (Clerk webhook sets `IsDeleted`); no hard-delete job in the code reviewed.
 
 ## What happens when things end
