@@ -2229,6 +2229,8 @@ export default function ConsultationsScreen() {
         category: consultationFee.category,
         unitPrice: consultationFee.standardPrice,
         quantity: 1,
+        doctorId: doctor.id,
+        doctorName: doctor.name,
       });
     }
     for (const proc of orderedProcedures) {
@@ -2242,6 +2244,8 @@ export default function ConsultationsScreen() {
         category: proc.category || procInfo?.category || 'Procedure',
         unitPrice: proc.standardPrice || procInfo?.standardPrice || 0,
         quantity: 1,
+        doctorId: (proc as any).orderedByDoctorId || doctor.id,
+        doctorName: (proc as any).orderedByDoctorName || doctor.name,
       });
     }
     for (const inHouseLab of inHouseLabs) {
@@ -2260,6 +2264,8 @@ export default function ConsultationsScreen() {
         category: inHouseLab.category || matchedDiag?.category || 'Diagnostic',
         unitPrice,
         quantity: 1,
+        doctorId: doctor.id,
+        doctorName: doctor.name,
       });
     }
     if (billItems.length === 0) {
@@ -2269,6 +2275,8 @@ export default function ConsultationsScreen() {
         category: 'Consultation',
         unitPrice: 500,
         quantity: 1,
+        doctorId: doctor.id,
+        doctorName: doctor.name,
       });
     }
     const effectiveBillItems = soaReviewItems.length > 0 ? soaReviewItems : billItems;
@@ -2279,7 +2287,6 @@ export default function ConsultationsScreen() {
         queueItemId: selectedPatient.id,
         consultationId,
         attendingDoctorId: doctor.id,
-        attendingDoctorName: doctor.name,
         discountType: soaDiscountType || 'None',
         discountIdNumber: soaDiscountId.trim() || undefined,
         notes: 'Consultation & procedures bill forwarded to Cashier',
@@ -2289,7 +2296,17 @@ export default function ConsultationsScreen() {
         const isAlreadyGeneratedConflict =
           invoiceErr.status === 409 ||
           (invoiceErr.message || '').toLowerCase().includes('already been generated');
-        if (!isAlreadyGeneratedConflict) {
+        if (isAlreadyGeneratedConflict) {
+          const [invoices] = await clinicService.getInvoices(undefined, undefined, 'Draft');
+          const matched = invoices?.find(
+            (inv) => inv.queueItemId === selectedPatient.id || inv.patientId === selectedPatient.patientId,
+          );
+          if (matched) {
+            setCreatedInvoiceId(matched.id);
+            setCreatedInvoiceNumber(matched.invoiceNumber);
+            setCreatedInvoiceTotal(matched.netAmount);
+          }
+        } else {
           setIsSigning(false);
           const reason = invoiceErr.message || 'Unable to generate cashier billing invoice';
           const msg = `Cannot sign encounter — Step failed: Cashier Billing Invoice (${reason}). Encounter was not signed.`;
@@ -2376,7 +2393,9 @@ export default function ConsultationsScreen() {
     setIsSigned(true);
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setSignedAt(nowStr);
-    const successMsg = `Encounter signed by ${doctor.name} (${finalPrc}) at ${nowStr}. Lab requisitions, nursing orders and the cashier invoice were forwarded.`;
+    const successMsg = createdInvoiceNumber
+      ? `Doctor signed clinical chart and posted Draft SOA #${createdInvoiceNumber} to Cashier.`
+      : `Encounter signed by ${doctor.name} (${finalPrc}) at ${nowStr}. Lab requisitions, nursing orders and the cashier invoice were forwarded.`;
     setBanner({
       text: successMsg,
       isError: false,
@@ -2387,6 +2406,9 @@ export default function ConsultationsScreen() {
 
   const buildBillableItems = (): CreateInvoiceRequest['lineItems'] => {
     const items: CreateInvoiceRequest['lineItems'] = [];
+    const doctor = signer;
+    const docId = doctor?.id;
+    const docName = doctor?.name;
     if (consultationFee) {
       items.push({
         serviceItemId: consultationFee.id,
@@ -2395,6 +2417,8 @@ export default function ConsultationsScreen() {
         category: consultationFee.category,
         unitPrice: consultationFee.standardPrice,
         quantity: 1,
+        doctorId: docId,
+        doctorName: docName,
       });
     }
     for (const proc of orderedProcedures) {
@@ -2408,6 +2432,8 @@ export default function ConsultationsScreen() {
         category: proc.category || procInfo?.category || 'Procedure',
         unitPrice: proc.standardPrice || procInfo?.standardPrice || 0,
         quantity: 1,
+        doctorId: (proc as any).orderedByDoctorId || docId,
+        doctorName: (proc as any).orderedByDoctorName || docName,
       });
     }
     const inHouseLabs = orderedLabs.filter((l) => l.fulfillmentMode === 'in_house');
@@ -2427,6 +2453,19 @@ export default function ConsultationsScreen() {
         category: inHouseLab.category || matchedDiag?.category || 'Diagnostic',
         unitPrice,
         quantity: 1,
+        doctorId: docId,
+        doctorName: docName,
+      });
+    }
+    if (items.length === 0) {
+      items.push({
+        itemCode: isDentalEnabled ? 'CONS-DENT' : 'CONS-GEN',
+        description: isDentalEnabled ? 'Dental Consultation' : 'General Outpatient Consultation',
+        category: 'Consultation',
+        unitPrice: 500,
+        quantity: 1,
+        doctorId: docId,
+        doctorName: docName,
       });
     }
     return items;
@@ -2450,7 +2489,6 @@ export default function ConsultationsScreen() {
       queueItemId: selectedPatient.id,
       consultationId: signedConsultationId || undefined,
       attendingDoctorId: doctor.id,
-      attendingDoctorName: doctor.name,
       discountType: soaDiscountType || 'None',
       discountIdNumber: soaDiscountId.trim() || undefined,
       notes: 'Consultation & procedures bill forwarded to Cashier',
@@ -2458,7 +2496,26 @@ export default function ConsultationsScreen() {
     });
     setIsRetryingInvoice(false);
     if (invoiceErr) {
-      notify.error(`Failed to forward invoice to cashier: ${invoiceErr.message || 'unknown error'}`);
+      const isAlreadyGeneratedConflict =
+        invoiceErr.status === 409 ||
+        (invoiceErr.message || '').toLowerCase().includes('already been generated');
+      if (isAlreadyGeneratedConflict) {
+        const [invoices] = await clinicService.getInvoices(undefined, undefined, 'Draft');
+        const matched = invoices?.find(
+          (inv) => inv.queueItemId === selectedPatient.id || inv.patientId === selectedPatient.patientId,
+        );
+        if (matched) {
+          setCreatedInvoiceId(matched.id);
+          setCreatedInvoiceNumber(matched.invoiceNumber);
+          setCreatedInvoiceTotal(matched.netAmount);
+          notify.success(`Draft invoice #${matched.invoiceNumber} successfully queued to Cashier.`);
+          setPostEncounterModalVisible(true);
+        } else {
+          notify.error(`Failed to forward invoice to cashier: ${invoiceErr.message || 'unknown error'}`);
+        }
+      } else {
+        notify.error(`Failed to forward invoice to cashier: ${invoiceErr.message || 'unknown error'}`);
+      }
     } else if (invoiceResult) {
       setCreatedInvoiceId(invoiceResult.id);
       setCreatedInvoiceNumber(invoiceResult.invoiceNumber);
@@ -6124,7 +6181,9 @@ export default function ConsultationsScreen() {
                     Clinical Encounter Signed & Synchronized
                   </ThemedText>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    Clinical notes, prescriptions, and lab orders are securely saved.
+                    {createdInvoiceNumber
+                      ? `Doctor signed clinical chart and posted Draft SOA #${createdInvoiceNumber} to Cashier.`
+                      : 'Doctor signed clinical chart and posted Draft SOA to Cashier.'}
                   </ThemedText>
                 </View>
               </View>

@@ -202,14 +202,14 @@ public class BillingAndCashierWorkflowTests
         item1.Description.Should().Be("General Medical Consultation");
         item1.TotalPrice.Should().Be(500m);
         var (doc1Id, doc1Name) = GetDoctorInfo(item1);
-        if (doc1Name != null) doc1Name.Should().Be("Dr. Wave Ambray");
+        doc1Name.Should().Be("Dr. Wave Ambray");
 
         // Verify line item 2
         var item2 = mergedResult.LineItems[1];
         item2.Description.Should().Be("Tooth Restoration Composite");
         item2.TotalPrice.Should().Be(1500m);
         var (doc2Id, doc2Name) = GetDoctorInfo(item2);
-        if (doc2Name != null) doc2Name.Should().Be("Dr. Allan Santos");
+        doc2Name.Should().Be("Dr. Allan Santos");
 
         // Totals recalculated accurately
         mergedResult.GrossAmount.Should().Be(2000m);
@@ -443,11 +443,10 @@ public class BillingAndCashierWorkflowTests
         var doctorAShare = report.DoctorShares.FirstOrDefault(d => d.DoctorName.Contains("Wave Ambray") || d.DoctorId == docAId.ToString());
         var doctorBShare = report.DoctorShares.FirstOrDefault(d => d.DoctorName.Contains("Allan Santos") || d.DoctorId == docBId.ToString());
 
-        if (doctorAShare != null && doctorBShare != null)
-        {
-            doctorAShare.TotalConsultationGross.Should().Be(500m);
-            doctorBShare.TotalProcedureGross.Should().Be(1500m);
-        }
+        doctorAShare.Should().NotBeNull("Doctor A share should be present in the report");
+        doctorBShare.Should().NotBeNull("Doctor B share should be present in the report");
+        doctorAShare!.TotalConsultationGross.Should().Be(500m);
+        doctorBShare!.TotalProcedureGross.Should().Be(1500m);
     }
 
     [Fact]

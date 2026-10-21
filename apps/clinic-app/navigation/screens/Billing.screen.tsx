@@ -50,6 +50,8 @@ import {
   type ReceiptItem,
 } from '../../utils/printHelper';
 
+type BillingTab = 'active' | 'unsettled' | 'paid';
+
 interface LineItemForm {
   id: string;
   code: string;
@@ -57,6 +59,8 @@ interface LineItemForm {
   category: string;
   price: number;
   qty: number;
+  doctorId?: string;
+  doctorName?: string;
 }
 
 /** The patient being billed: either a queue entry or a patient opened from another screen. */
@@ -72,6 +76,9 @@ interface BillingPatient {
   existingInvoiceNumber?: string;
   hasOpenSoa?: boolean;
   activeInvoice?: InvoiceRecord;
+  isPromissory?: boolean;
+  promissoryDueDate?: string;
+  promissoryReason?: string;
 }
 
 interface Remittance {
@@ -79,6 +86,7 @@ interface Remittance {
   cashInDrawer: number;
   gcashCollected: number;
   discountsGiven: number;
+  totalUnpaidBalances?: number;
 }
 
 interface ReceiptSummary extends ReceiptData {
@@ -133,6 +141,10 @@ function toBillingPatient(
 ): BillingPatient {
   const openInv = openSoaMap?.get(item.id) || openSoaMap?.get(item.patientId);
   const paidInvNum = billedMap?.get(item.id) || billedMap?.get(item.patientId);
+  const isPromissory = Boolean(
+    openInv?.notes?.includes('[PROMISSORY NOTE]') ||
+    openInv?.notes?.toLowerCase().includes('promissory note')
+  );
   return {
     key: item.id,
     patientId: item.patientId,
@@ -145,6 +157,7 @@ function toBillingPatient(
     activeInvoice: openInv,
     isAlreadyBilled: !openInv && Boolean(paidInvNum),
     existingInvoiceNumber: openInv ? openInv.invoiceNumber : paidInvNum,
+    isPromissory,
   };
 }
 
@@ -157,6 +170,7 @@ export default function BillingScreen() {
   const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead } = useClinic();
   const { current: currentStaff, currentName } = useStaff();
 
+  const [activeTab, setActiveTab] = useState<BillingTab>('active');
   const [services, setServices] = useState<ClinicServiceItem[]>([]);
   const [patients, setPatients] = useState<BillingPatient[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
@@ -188,19 +202,40 @@ export default function BillingScreen() {
   const [currentPatientProfile, setCurrentPatientProfile] = useState<ClinicPatient | null>(null);
   const handledParamPatientRef = useRef<string | null>(null);
 
+  // Defer / Promissory Note Modal State
+  const [deferModalVisible, setDeferModalVisible] = useState(false);
+  const [deferReason, setDeferReason] = useState('Patient requested deferred settlement / promissory note signed');
+  const [deferDueDate, setDeferDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [deferGuarantor, setDeferGuarantor] = useState('');
+  const [isDeferring, setIsDeferring] = useState(false);
+
+  // Custom Item Modal State
+  const [customItemModalVisible, setCustomItemModalVisible] = useState(false);
+  const [customItemName, setCustomItemName] = useState('');
+  const [customItemCategory, setCustomItemCategory] = useState('Supply');
+  const [customItemPrice, setCustomItemPrice] = useState('');
+  const [customItemQty, setCustomItemQty] = useState('1');
+  const [customItemDoctorName, setCustomItemDoctorName] = useState('');
+
   const loadInitialData = useCallback(async () => {
     const todayStr = getManilaTodayStr();
     const [
       [servicesData, svcErr],
       [queueData, qErr],
       [eodData, eodErr],
-      [invoicesData, invErr],
+      [invoicesTodayData, invErr],
+      [openDraftsData, draftErr],
       [settingsData],
     ] = await Promise.all([
       clinicService.getServices(),
       clinicService.getQueue({ view: 'All' }),
       clinicService.getDailyEodReport(),
       clinicService.getInvoices(todayStr),
+      clinicService.getInvoices(undefined, undefined, 'Draft'),
       clinicService.getSettings(),
     ]);
 
@@ -212,11 +247,14 @@ export default function BillingScreen() {
       setServices(servicesData ?? []);
     }
 
-    if (invErr) {
-      errors.invoices = invErr.message || 'Unable to load today\'s invoices.';
+    if (invErr && draftErr) {
+      errors.invoices = invErr.message || 'Unable to load invoices.';
     }
 
-    const allInvoices = invoicesData ?? [];
+    const invoiceMap = new Map<string, InvoiceRecord>();
+    for (const inv of (invoicesTodayData ?? [])) invoiceMap.set(inv.id, inv);
+    for (const inv of (openDraftsData ?? [])) invoiceMap.set(inv.id, inv);
+    const allInvoices = Array.from(invoiceMap.values());
     setInvoices(allInvoices);
     if (settingsData) setClinicSettings(settingsData);
 
@@ -244,11 +282,16 @@ export default function BillingScreen() {
       errors.eod = eodErr?.message || 'Unable to load today\'s totals.';
       setRemittance(null);
     } else {
+      const totalUnpaidBalances = allInvoices
+        .filter((i) => i.status !== 'Paid' && i.status !== 'Voided')
+        .reduce((sum, i) => sum + (i.balanceDue ?? Math.max(0, i.netAmount - (i.amountPaid ?? 0))), 0);
+
       setRemittance({
         grossToday: eodData.totalGrossAmount,
         cashInDrawer: eodData.cashInDrawer,
         gcashCollected: eodData.collectionsByMethod.find(c => c.method === 'GCash')?.totalAmount ?? 0,
         discountsGiven: eodData.totalDiscountsGiven,
+        totalUnpaidBalances,
       });
     }
 
@@ -276,6 +319,8 @@ export default function BillingScreen() {
         category: l.category,
         price: l.unitPrice,
         qty: l.quantity,
+        doctorId: l.doctorId,
+        doctorName: l.doctorName,
       }));
       setLineItems(initialItems);
       setDiscountType(p.activeInvoice.discountType || 'None');
@@ -352,6 +397,8 @@ export default function BillingScreen() {
           category: 'Consultation',
           price: consultPrice,
           qty: 1,
+          doctorId: p.doctorId,
+          doctorName: p.doctorName,
         });
         addedCount++;
       }
@@ -380,6 +427,8 @@ export default function BillingScreen() {
               category: proc.category || matchedSvc?.category || 'Procedure',
               price: matchedSvc?.standardPrice ?? 0,
               qty: 1,
+              doctorId: proc.orderedByDoctorId || p.doctorId,
+              doctorName: proc.orderedByDoctorName || p.doctorName,
             });
             addedCount++;
           }
@@ -464,8 +513,137 @@ export default function BillingScreen() {
         category: svc.category,
         price: svc.standardPrice,
         qty: 1,
+        doctorId: selectedPatient?.doctorId,
+        doctorName: selectedPatient?.doctorName || currentName,
       }
     ]);
+  };
+
+  const handleUpdateQty = (itemId: string, newQty: number) => {
+    const validQty = Math.max(1, newQty);
+    setLineItems(prev =>
+      prev.map(item => (item.id === itemId ? { ...item, qty: validQty } : item))
+    );
+  };
+
+  const handleAddCustomItem = () => {
+    const name = customItemName.trim();
+    const price = parseFloat(customItemPrice) || 0;
+    const qty = parseInt(customItemQty, 10) || 1;
+    if (!name) {
+      notify.error('Item description is required.');
+      return;
+    }
+    setLineItems((prev) => [
+      ...prev,
+      {
+        id: `custom-${Date.now()}-${Math.random()}`,
+        code: `CUST-${Date.now().toString().slice(-4)}`,
+        name,
+        category: customItemCategory || 'Supply',
+        price,
+        qty: Math.max(1, qty),
+        doctorId: selectedPatient?.doctorId,
+        doctorName: customItemDoctorName.trim() || selectedPatient?.doctorName || currentName,
+      },
+    ]);
+    setCustomItemName('');
+    setCustomItemPrice('');
+    setCustomItemQty('1');
+    setCustomItemModalVisible(false);
+    notify.success(`Added ${name} with clinician attribution.`);
+  };
+
+  const handleSelectUnsettledInvoice = (inv: InvoiceRecord) => {
+    const p: BillingPatient = {
+      key: `unsettled-${inv.id}`,
+      patientId: inv.patientId,
+      patientName: inv.patientName,
+      queueItemId: inv.queueItemId,
+      hasOpenSoa: true,
+      activeInvoice: inv,
+      isAlreadyBilled: false,
+      existingInvoiceNumber: inv.invoiceNumber,
+      isPromissory: true,
+    };
+    handleSelectPatient(p);
+    setActiveTab('active');
+  };
+
+  const handleDeferPayment = async () => {
+    if (!selectedPatient) return;
+    if (lineItems.length === 0) {
+      Alert.alert('Empty invoice', 'Add at least one billable item before generating a promissory note.');
+      return;
+    }
+    if (!deferDueDate.trim()) {
+      notify.error('Promissory due date is mandatory.');
+      return;
+    }
+    if (!deferReason.trim()) {
+      notify.error('Audit reason for promissory note is mandatory.');
+      return;
+    }
+
+    setIsDeferring(true);
+    const guarantorText = deferGuarantor.trim() ? ` (Guarantor: ${deferGuarantor.trim()})` : '';
+    const promissoryNote = `[PROMISSORY NOTE] Patient deferred payment due on ${deferDueDate.trim()}. Reason: ${deferReason.trim()} (Auth: ${currentName || 'Authorized Cashier'})${guarantorText}`.trim();
+
+    try {
+      const lineItemsPayload = lineItems.map((l) => ({
+        serviceItemId: undefined,
+        itemCode: l.code,
+        description: l.name,
+        category: l.category,
+        unitPrice: l.price,
+        quantity: l.qty,
+        doctorId: l.doctorId,
+        doctorName: l.doctorName,
+      }));
+
+      if (activeInvoice) {
+        const [updated, err] = await clinicService.updateInvoice(activeInvoice.id, {
+          discountType,
+          discountIdNumber: discountId,
+          notes: promissoryNote,
+          lineItems: lineItemsPayload,
+        });
+        if (err || !updated) {
+          throw new Error(err?.message || 'Unable to update invoice with promissory note.');
+        }
+      } else {
+        const [created, err] = await clinicService.createInvoice({
+          patientId: selectedPatient.patientId,
+          patientName: selectedPatient.patientName,
+          queueItemId: selectedPatient.queueItemId,
+          attendingDoctorId: selectedPatient.doctorId,
+          discountType,
+          discountIdNumber: discountId,
+          notes: promissoryNote,
+          allowDuplicate: true,
+          lineItems: lineItemsPayload,
+        });
+        if (err || !created) {
+          throw new Error(err?.message || 'Unable to create invoice for promissory note.');
+        }
+      }
+
+      if (selectedPatient.queueItemId) {
+        await clinicService.completeQueueItem(selectedPatient.queueItemId);
+      }
+
+      notify.success(`Promissory note logged for ${selectedPatient.patientName}. Moved to Unsettled.`);
+      setDeferModalVisible(false);
+      setSelectedPatient(null);
+      setActiveInvoice(null);
+      setLineItems([]);
+      await loadInitialData();
+      setActiveTab('unsettled');
+    } catch (err: any) {
+      Alert.alert('Promissory note failed', err?.message || 'Unable to log promissory note.');
+    } finally {
+      setIsDeferring(false);
+    }
   };
 
   const handleRemoveItem = (id: string) => {
@@ -501,9 +679,43 @@ export default function BillingScreen() {
   };
 
   const handlePrintProfessionalReceipt = (receipt?: ReceiptSummary | InvoiceRecord) => {
-    const invId = (receipt as any)?.invoiceId || (receipt as any)?.id || activeInvoice?.id;
-    if (invId) {
-      openDocument(clinicService.getInvoicePdfUrl(invId));
+    if (receipt) {
+      if ('items' in receipt && Array.isArray((receipt as any).items)) {
+        printProfessionalReceipt(receipt as ReceiptSummary, printLetterhead);
+      } else {
+        const inv = receipt as InvoiceRecord;
+        const payment = inv.payments?.[0];
+        const receiptData: ReceiptData = {
+          orNumber: payment?.paymentNumber || inv.invoiceNumber.replace(/^INV-/, 'OR-'),
+          invoiceNumber: inv.invoiceNumber,
+          patientName: inv.patientName,
+          patientId: inv.patientId,
+          cashierName: payment?.receivedByStaffName || inv.billedByStaffName || currentName,
+          paidAt: payment?.paymentDate
+            ? new Date(payment.paymentDate).toLocaleString('en-PH')
+            : new Date(inv.invoiceDate).toLocaleString('en-PH'),
+          paymentMethod: payment?.method || 'Cash',
+          referenceNumber: payment?.referenceNumber,
+          grossAmount: inv.grossAmount,
+          discountType: inv.discountType,
+          discountIdNumber: inv.discountIdNumber,
+          discountAmount: inv.discountAmount,
+          netAmount: inv.netAmount,
+          cashTendered: payment?.method === 'Cash' ? payment.amount : undefined,
+          change: 0,
+          items: (inv.lineItems || []).map((li) => ({
+            code: li.itemCode,
+            description: li.description,
+            category: li.category,
+            unitPrice: li.unitPrice,
+            quantity: li.quantity,
+            totalPrice: li.totalPrice,
+            doctorId: li.doctorId,
+            doctorName: li.doctorName,
+          })),
+        };
+        printProfessionalReceipt(receiptData, printLetterhead);
+      }
     } else if (lastReceipt) {
       printProfessionalReceipt(lastReceipt, printLetterhead);
     }
@@ -536,6 +748,8 @@ export default function BillingScreen() {
         unitPrice: li.unitPrice,
         quantity: li.quantity,
         totalPrice: li.totalPrice,
+        doctorId: li.doctorId,
+        doctorName: li.doctorName,
       })),
     };
     printThermalReceipt(receiptData, printLetterhead);
@@ -631,6 +845,8 @@ export default function BillingScreen() {
           category: l.category,
           unitPrice: l.price,
           quantity: l.qty,
+          doctorId: l.doctorId,
+          doctorName: l.doctorName,
         })),
       });
 
@@ -654,7 +870,6 @@ export default function BillingScreen() {
         patientName: selectedPatient.patientName,
         queueItemId: selectedPatient.queueItemId,
         attendingDoctorId: selectedPatient.doctorId,
-        attendingDoctorName: selectedPatient.doctorName,
         discountType,
         discountIdNumber: discountId,
         notes: `Settled via ${paymentMethod}`,
@@ -666,6 +881,8 @@ export default function BillingScreen() {
           category: l.category,
           unitPrice: l.price,
           quantity: l.qty,
+          doctorId: l.doctorId,
+          doctorName: l.doctorName,
         })),
       };
 
@@ -715,6 +932,8 @@ export default function BillingScreen() {
       unitPrice: li.price,
       quantity: li.qty,
       totalPrice: li.price * li.qty,
+      doctorId: li.doctorId,
+      doctorName: li.doctorName,
     }));
 
     setLastReceipt({
@@ -836,13 +1055,36 @@ export default function BillingScreen() {
             valueColor={theme.colors.primary}
             style={styles.statItem}
           />
+          {typeof remittance.totalUnpaidBalances === 'number' && remittance.totalUnpaidBalances > 0 && (
+            <StatCard
+              label="Unpaid / Promissory"
+              value={formatPeso(remittance.totalUnpaidBalances)}
+              icon="alertCircle"
+              valueColor={theme.colors.emergencyText}
+              style={styles.statItem}
+            />
+          )}
         </>
       )}
     </View>
   );
 
-  const patientsToBill = patientChoices.filter((p) => !p.isAlreadyBilled || p.hasOpenSoa);
+  const activePatients = patientChoices.filter(
+    (p) => (!p.isAlreadyBilled || p.hasOpenSoa) && !p.isPromissory
+  );
+  const patientsToBill = selectedPatient && !activePatients.some((p) => p.key === selectedPatient.key)
+    ? [selectedPatient, ...activePatients]
+    : activePatients;
   const paidInvoicesToday = invoices.filter((i) => i.status === 'Paid');
+  const unsettledInvoices = invoices.filter(
+    (i) =>
+      i.status !== 'Paid' &&
+      i.status !== 'Voided' &&
+      (Boolean(i.notes?.includes('[PROMISSORY NOTE]')) ||
+        Boolean(i.notes?.toLowerCase().includes('promissory')) ||
+        Boolean((i as any).isDeferred) ||
+        patientChoices.some((p) => p.isPromissory && (p.activeInvoice?.id === i.id || p.patientId === i.patientId))),
+  );
 
   const renderPatientSelector = () => (
     <Card>
@@ -919,6 +1161,13 @@ export default function BillingScreen() {
                     icon="print"
                     title="Thermal POS"
                     onPress={() => handleReprintPaidThermal(inv)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    icon="print"
+                    title="OR (A4)"
+                    onPress={() => handlePrintProfessionalReceipt(inv)}
                   />
                   <Button
                     size="sm"
@@ -1021,6 +1270,13 @@ export default function BillingScreen() {
               variant="primary"
               title="Thermal Paper (POS)"
               onPress={handlePrintThermalReceipt}
+            />
+            <Button
+              size="md"
+              icon="print"
+              variant="secondary"
+              title="Professional OR (A4)"
+              onPress={() => handlePrintProfessionalReceipt(lastReceipt || undefined)}
             />
             <Button
               size="md"
@@ -1131,8 +1387,29 @@ export default function BillingScreen() {
             <View style={styles.flexFill}>
               <ThemedText variant="bodyBold">{item.name}</ThemedText>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                {item.category} · {formatPeso(item.price)} × {item.qty}
+                {item.category}{item.doctorName ? ` • ${item.doctorName.startsWith('Dr.') ? item.doctorName : `Dr. ${item.doctorName}`}` : ''} · {formatPeso(item.price)}
               </ThemedText>
+            </View>
+            <View style={styles.qtyStepperRow}>
+              <Pressable
+                onPress={() => handleUpdateQty(item.id, item.qty - 1)}
+                style={styles.qtyBtn}
+                accessibilityRole="button"
+                accessibilityLabel={`Decrease quantity of ${item.name}`}
+              >
+                <Icon name="minus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+              </Pressable>
+              <ThemedText variant="bodyBold" style={styles.qtyText}>
+                {item.qty}
+              </ThemedText>
+              <Pressable
+                onPress={() => handleUpdateQty(item.id, item.qty + 1)}
+                style={styles.qtyBtn}
+                accessibilityRole="button"
+                accessibilityLabel={`Increase quantity of ${item.name}`}
+              >
+                <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+              </Pressable>
             </View>
             <ThemedText variant="bodyBold" color={theme.colors.primary}>
               {formatPeso(item.price * item.qty)}
@@ -1148,6 +1425,19 @@ export default function BillingScreen() {
           </View>
         ))
       )}
+
+      <View style={styles.customItemActionRow}>
+        <Button
+          size="sm"
+          variant="secondary"
+          icon="plus"
+          title="+ Custom Supply / Med"
+          onPress={() => {
+            setCustomItemDoctorName(selectedPatient?.doctorName || currentName);
+            setCustomItemModalVisible(true);
+          }}
+        />
+      </View>
 
       <View style={styles.catalogSection}>
         <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
@@ -1303,24 +1593,289 @@ export default function BillingScreen() {
         </View>
       )}
 
-      <Button
-        variant="success"
-        size="lg"
-        icon="check"
-        title={
-          activeInvoice
-            ? `Settle SOA (${formatPeso(netAmount)}) and issue receipt`
-            : `Collect ${formatPeso(netAmount)} and issue receipt`
-        }
-        loading={isProcessing}
-        disabled={
-          !selectedPatient ||
-          lineItems.length === 0 ||
-          (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate)
-        }
-        onPress={handleSettlePayment}
-      />
+      <View style={styles.settleActionRow}>
+        <Button
+          variant="success"
+          size="lg"
+          icon="check"
+          title={
+            activeInvoice
+              ? `Settle SOA (${formatPeso(netAmount)}) and issue receipt`
+              : `Collect ${formatPeso(netAmount)} and issue receipt`
+          }
+          loading={isProcessing}
+          disabled={
+            !selectedPatient ||
+            lineItems.length === 0 ||
+            (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate)
+          }
+          onPress={handleSettlePayment}
+          style={styles.flexFill}
+        />
+        {selectedPatient && lineItems.length > 0 && (
+          <Button
+            variant="outline"
+            size="lg"
+            icon="clock"
+            title="Defer / Promissory Note"
+            disabled={isProcessing || isDeferring}
+            onPress={() => {
+              setDeferReason('');
+              const defDate = new Date();
+              defDate.setDate(defDate.getDate() + 7);
+              setDeferDueDate(defDate.toISOString().split('T')[0]);
+              setDeferModalVisible(true);
+            }}
+          />
+        )}
+      </View>
     </Card>
+  );
+
+  const renderTabBar = () => (
+    <View style={styles.tabBar}>
+      <Pressable
+        style={[styles.tabButton, activeTab === 'active' && styles.tabButtonActive]}
+        onPress={() => setActiveTab('active')}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: activeTab === 'active' }}
+      >
+        <Icon
+          name="clock"
+          size={theme.sizes.iconSm}
+          color={activeTab === 'active' ? theme.colors.primary : theme.colors.textSecondary}
+        />
+        <ThemedText
+          variant={activeTab === 'active' ? 'bodyBold' : 'body'}
+          color={activeTab === 'active' ? theme.colors.primary : theme.colors.textSecondary}
+        >
+          Active Queue
+        </ThemedText>
+        <Badge
+          label={`${activePatients.length}`}
+          variant={activeTab === 'active' ? 'primary' : 'neutral'}
+          size="sm"
+        />
+      </Pressable>
+
+      <Pressable
+        style={[styles.tabButton, activeTab === 'unsettled' && styles.tabButtonActive]}
+        onPress={() => setActiveTab('unsettled')}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: activeTab === 'unsettled' }}
+      >
+        <Icon
+          name="alertCircle"
+          size={theme.sizes.iconSm}
+          color={activeTab === 'unsettled' ? theme.colors.emergencyText : theme.colors.textSecondary}
+        />
+        <ThemedText
+          variant={activeTab === 'unsettled' ? 'bodyBold' : 'body'}
+          color={activeTab === 'unsettled' ? theme.colors.emergencyText : theme.colors.textSecondary}
+        >
+          Unsettled / Promissory
+        </ThemedText>
+        <Badge
+          label={`${unsettledInvoices.length}`}
+          variant={activeTab === 'unsettled' ? 'emergency' : 'neutral'}
+          size="sm"
+        />
+      </Pressable>
+
+      <Pressable
+        style={[styles.tabButton, activeTab === 'paid' && styles.tabButtonActive]}
+        onPress={() => setActiveTab('paid')}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: activeTab === 'paid' }}
+      >
+        <Icon
+          name="checkCircle"
+          size={theme.sizes.iconSm}
+          color={activeTab === 'paid' ? theme.colors.successText : theme.colors.textSecondary}
+        />
+        <ThemedText
+          variant={activeTab === 'paid' ? 'bodyBold' : 'body'}
+          color={activeTab === 'paid' ? theme.colors.successText : theme.colors.textSecondary}
+        >
+          Billed & Paid Today
+        </ThemedText>
+        <Badge
+          label={`${paidInvoicesToday.length}`}
+          variant={activeTab === 'paid' ? 'success' : 'neutral'}
+          size="sm"
+        />
+      </Pressable>
+    </View>
+  );
+
+  const renderUnsettledPromissory = () => (
+    <Card>
+      <CardHeader
+        title="Unsettled Accounts & Promissory Notes"
+        icon="alertCircle"
+        rightAction={<Badge label={`${unsettledInvoices.length}`} variant="emergency" size="sm" />}
+      />
+      {unsettledInvoices.length === 0 ? (
+        <EmptyState
+          icon="checkCircle"
+          title="No unsettled or promissory accounts"
+          description="Patients with deferred payments or promissory notes will appear here for collection."
+        />
+      ) : (
+        <View style={styles.unsettledList}>
+          {unsettledInvoices.map((inv) => {
+            const dueDateMatch = inv.notes?.match(/due on ([^.]+)\./i);
+            const dueDate = dueDateMatch?.[1];
+            const balance = inv.balanceDue ?? Math.max(0, inv.netAmount - (inv.amountPaid ?? 0));
+            return (
+              <View key={inv.id} style={styles.unsettledRow}>
+                <View style={styles.flexFill}>
+                  <View style={styles.unsettledTitleRow}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      {inv.patientName}
+                    </ThemedText>
+                    <Badge label={`SOA #${inv.invoiceNumber}`} variant="warning" size="sm" />
+                    {dueDate && (
+                      <Badge label={`Due: ${dueDate}`} variant="emergency" size="sm" />
+                    )}
+                  </View>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Balance Due: {formatPeso(balance)} • Gross: {formatPeso(inv.grossAmount)}
+                    {inv.attendingDoctorName ? ` • Dr. ${inv.attendingDoctorName}` : ''}
+                  </ThemedText>
+                  {inv.notes && (
+                    <ThemedText variant="caption" color={theme.colors.emergencyText} numberOfLines={2}>
+                      {inv.notes}
+                    </ThemedText>
+                  )}
+                </View>
+                <View style={styles.unsettledActionsRow}>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    icon="cash"
+                    title="Collect Payment"
+                    onPress={() => handleSelectUnsettledInvoice(inv)}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    icon="fileText"
+                    title="View SOA (PDF)"
+                    onPress={() => openDocument(clinicService.getInvoicePdfUrl(inv.id))}
+                  />
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </Card>
+  );
+
+  const renderDeferModal = () => (
+    <Modal
+      visible={deferModalVisible}
+      onClose={() => setDeferModalVisible(false)}
+      title="Defer Payment (Promissory Note)"
+    >
+      <View style={styles.modalBody}>
+        <ThemedText variant="body" color={theme.colors.textSecondary}>
+          Discharge patient without full payment today. The balance due of {formatPeso(netAmount)} will remain open as Accounts Receivable under the Unsettled / Promissory tab.
+        </ThemedText>
+        <Input
+          label="Promissory Due Date"
+          placeholder="YYYY-MM-DD"
+          value={deferDueDate}
+          onChangeText={setDeferDueDate}
+          required
+        />
+        <Input
+          label="Audit Reason"
+          placeholder="e.g. Patient forgot wallet; agreed to settle next visit"
+          value={deferReason}
+          onChangeText={setDeferReason}
+          required
+        />
+        <Input
+          label="Guarantor / Contact (Optional)"
+          placeholder="Name and contact number of guarantor"
+          value={deferGuarantor}
+          onChangeText={setDeferGuarantor}
+        />
+        <View style={styles.modalActionsRow}>
+          <Button
+            variant="ghost"
+            size="md"
+            title="Cancel"
+            onPress={() => setDeferModalVisible(false)}
+          />
+          <Button
+            variant="danger"
+            size="md"
+            icon="clock"
+            title="Confirm Promissory & Discharge"
+            loading={isDeferring}
+            onPress={handleDeferPayment}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderCustomItemModal = () => (
+    <Modal
+      visible={customItemModalVisible}
+      onClose={() => setCustomItemModalVisible(false)}
+      title="Add Custom Supply or Medication"
+    >
+      <View style={styles.modalBody}>
+        <Input
+          label="Item Description"
+          placeholder="e.g. Syringe 10ml, Sterile Gauze, Salbutamol"
+          value={customItemName}
+          onChangeText={setCustomItemName}
+          required
+        />
+        <Input
+          label="Unit Price (₱)"
+          keyboardType="numeric"
+          placeholder="0.00"
+          value={customItemPrice}
+          onChangeText={setCustomItemPrice}
+          required
+        />
+        <Input
+          label="Quantity"
+          keyboardType="numeric"
+          placeholder="1"
+          value={customItemQty}
+          onChangeText={setCustomItemQty}
+          required
+        />
+        <Input
+          label="Ordering / Attending Clinician"
+          placeholder="Dr. Name"
+          value={customItemDoctorName}
+          onChangeText={setCustomItemDoctorName}
+        />
+        <View style={styles.modalActionsRow}>
+          <Button
+            variant="ghost"
+            size="md"
+            title="Cancel"
+            onPress={() => setCustomItemModalVisible(false)}
+          />
+          <Button
+            variant="primary"
+            size="md"
+            icon="plus"
+            title="Add Item"
+            onPress={handleAddCustomItem}
+          />
+        </View>
+      </View>
+    </Modal>
   );
 
   return (
@@ -1331,21 +1886,45 @@ export default function BillingScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
         {renderTotals()}
+        {renderTabBar()}
 
-        <View style={[styles.columns, isWide && styles.columnsWide]}>
-          <View style={[styles.column, isWide && styles.mainColumn]}>
-            {renderPatientSelector()}
-            {renderInvoiceItems()}
-            {renderDiscounts()}
+        {activeTab === 'active' && (
+          <View style={[styles.columns, isWide && styles.columnsWide]}>
+            <View style={[styles.column, isWide && styles.mainColumn]}>
+              {renderPatientSelector()}
+              {renderInvoiceItems()}
+              {renderDiscounts()}
+            </View>
+            <View style={[styles.column, isWide && styles.sideColumn]}>
+              {renderPayment()}
+              {renderTotalsAndSettle()}
+            </View>
+          </View>
+        )}
+
+        {activeTab === 'unsettled' && (
+          <View style={[styles.columns, isWide && styles.columnsWide]}>
+            <View style={[styles.column, isWide && styles.mainColumn]}>
+              {renderUnsettledPromissory()}
+            </View>
+            {selectedPatient && (
+              <View style={[styles.column, isWide && styles.sideColumn]}>
+                {renderPayment()}
+                {renderTotalsAndSettle()}
+              </View>
+            )}
+          </View>
+        )}
+
+        {activeTab === 'paid' && (
+          <View style={styles.columns}>
             {renderBilledAndPaidToday()}
           </View>
-          <View style={[styles.column, isWide && styles.sideColumn]}>
-            {renderPayment()}
-            {renderTotalsAndSettle()}
-          </View>
-        </View>
+        )}
       </ScrollView>
       {renderReceiptModal()}
+      {renderDeferModal()}
+      {renderCustomItemModal()}
     </ResponsiveLayout>
   );
 }
@@ -1535,5 +2114,97 @@ const styles = StyleSheet.create({
   receiptModalDoneRow: {
     alignItems: 'center',
     marginTop: theme.spacing.xs,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.xs,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.sm,
+  },
+  tabButtonActive: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+  },
+  qtyStepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+  },
+  qtyBtn: {
+    padding: theme.spacing.xs,
+  },
+  qtyText: {
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  customItemActionRow: {
+    marginTop: theme.spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  unsettledList: {
+    gap: theme.spacing.sm,
+  },
+  unsettledRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  unsettledTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: 2,
+    flexWrap: 'wrap',
+  },
+  unsettledActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  modalBody: {
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  settleActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
 });

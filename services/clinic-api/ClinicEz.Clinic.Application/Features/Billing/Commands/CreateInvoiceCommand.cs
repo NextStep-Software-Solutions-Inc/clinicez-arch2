@@ -163,6 +163,10 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
                     if (request.DiscountType == DiscountType.None && existingInvoice.DiscountAmount > 0m)
                     {
                         discountAmount = existingInvoice.DiscountAmount;
+                        if (grossAmount > 0m && discountAmount < grossAmount)
+                        {
+                            discountPercentage = Math.Round((discountAmount / grossAmount) * 100m, 2);
+                        }
                     }
                     else
                     {
@@ -184,7 +188,11 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
                 existingInvoice.NetAmount = netAmount;
                 existingInvoice.BalanceDue = Math.Max(0m, netAmount - existingInvoice.AmountPaid);
 
-                if (existingInvoice.AmountPaid >= netAmount && netAmount > 0m)
+                if (existingInvoice.BalanceDue <= 0m && existingInvoice.AmountPaid > 0m)
+                {
+                    existingInvoice.Status = InvoiceStatus.Paid;
+                }
+                else if (existingInvoice.AmountPaid >= netAmount && netAmount > 0m)
                 {
                     existingInvoice.Status = InvoiceStatus.Paid;
                 }
