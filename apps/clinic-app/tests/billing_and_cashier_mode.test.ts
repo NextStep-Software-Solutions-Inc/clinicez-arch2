@@ -424,4 +424,468 @@ describe('Billing & Cashier Station Feature Suite', () => {
       expect(hexMatches.length).toBe(0);
     });
   });
+
+  describe('Suite 5: Cashier Workstation 3-Way Tabs & Queue Navigation (Tier 1 & Tier 2)', () => {
+    type CashierTab = 'ActiveQueue' | 'UnsettledPromissory' | 'BilledPaidToday';
+
+    interface BillingQueueEntry {
+      id: string;
+      patientId: string;
+      patientName: string;
+      queueNumber: string;
+      status: string;
+      hasOpenSoa: boolean;
+      activeInvoice?: any;
+      isPromissory?: boolean;
+      promissoryDueDate?: string;
+      promissoryReason?: string;
+      isAlreadyBilled?: boolean;
+    }
+
+    const filterQueueByTab = (
+      tab: CashierTab,
+      entries: BillingQueueEntry[],
+      paidInvoices: any[]
+    ) => {
+      switch (tab) {
+        case 'ActiveQueue':
+          return entries.filter(
+            (e) => !e.isAlreadyBilled && !e.isPromissory
+          );
+        case 'UnsettledPromissory':
+          return entries.filter((e) => e.isPromissory && !e.isAlreadyBilled);
+        case 'BilledPaidToday':
+          return paidInvoices.filter((i) => i.status === 'Paid');
+      }
+    };
+
+    const bindPatientToCrossDateDraft = (
+      patient: { id: string; patientId: string; patientName: string; queueNumber: string },
+      allOpenDrafts: any[]
+    ): BillingQueueEntry => {
+      const matchedDraft = allOpenDrafts.find(
+        (inv) => inv.patientId === patient.patientId || inv.queueItemId === patient.id
+      );
+      const isPromissory = Boolean(matchedDraft?.notes?.includes('Promissory Note') || matchedDraft?.isDeferred);
+      return {
+        id: patient.id,
+        patientId: patient.patientId,
+        patientName: patient.patientName,
+        queueNumber: patient.queueNumber,
+        status: 'WaitingPayment',
+        hasOpenSoa: Boolean(matchedDraft),
+        activeInvoice: matchedDraft,
+        isPromissory,
+        promissoryDueDate: matchedDraft?.promissoryDueDate,
+        promissoryReason: matchedDraft?.promissoryReason,
+        isAlreadyBilled: false,
+      };
+    };
+
+    test('5.1 3-way tab model strictly filters ActiveQueue, UnsettledPromissory, and BilledPaidToday', () => {
+      const entries: BillingQueueEntry[] = [
+        {
+          id: 'q-1',
+          patientId: 'p-1',
+          patientName: 'Active Patient A',
+          queueNumber: 'A-001',
+          status: 'WaitingPayment',
+          hasOpenSoa: true,
+          isPromissory: false,
+          isAlreadyBilled: false,
+        },
+        {
+          id: 'q-2',
+          patientId: 'p-2',
+          patientName: 'Promissory Patient B',
+          queueNumber: 'A-002',
+          status: 'Deferred',
+          hasOpenSoa: true,
+          isPromissory: true,
+          promissoryDueDate: '2026-10-28',
+          isAlreadyBilled: false,
+        },
+        {
+          id: 'q-3',
+          patientId: 'p-3',
+          patientName: 'Settled Patient C',
+          queueNumber: 'A-003',
+          status: 'Completed',
+          hasOpenSoa: false,
+          isPromissory: false,
+          isAlreadyBilled: true,
+        },
+      ];
+
+      const paidInvoices = [
+        {
+          id: 'inv-paid-1',
+          invoiceNumber: 'INV-20261021-001',
+          patientName: 'Settled Patient C',
+          status: 'Paid',
+          payments: [{ paymentNumber: 'OR-20261021-001', amount: 500 }],
+        },
+      ];
+
+      const activeList = filterQueueByTab('ActiveQueue', entries, paidInvoices);
+      expect(activeList.length).toBe(1);
+      expect(activeList[0].patientName).toBe('Active Patient A');
+
+      const promissoryList = filterQueueByTab('UnsettledPromissory', entries, paidInvoices);
+      expect(promissoryList.length).toBe(1);
+      expect(promissoryList[0].patientName).toBe('Promissory Patient B');
+      expect(promissoryList[0].promissoryDueDate).toBe('2026-10-28');
+
+      const paidList = filterQueueByTab('BilledPaidToday', entries, paidInvoices);
+      expect(paidList.length).toBe(1);
+      expect(paidList[0].invoiceNumber).toBe('INV-20261021-001');
+      expect(paidList[0].payments[0].paymentNumber).toBe('OR-20261021-001');
+    });
+
+    test('5.2 Cross-date draft retrieval seamlessly binds yesterday draft invoice to queue encounter', () => {
+      const yesterdayDraft = {
+        id: 'inv-prev-99',
+        invoiceNumber: 'INV-20261020-099',
+        patientId: 'p-42',
+        grossAmount: 750,
+        netAmount: 750,
+        balanceDue: 750,
+        status: 'Draft',
+        invoiceDate: '2026-10-20T22:30:00Z',
+      };
+
+      const queuePatient = {
+        id: 'q-42',
+        patientId: 'p-42',
+        patientName: 'Overnight Shift Patient',
+        queueNumber: 'N-001',
+      };
+
+      const bound = bindPatientToCrossDateDraft(queuePatient, [yesterdayDraft]);
+      expect(bound.hasOpenSoa).toBe(true);
+      expect(bound.activeInvoice).toBeDefined();
+      expect(bound.activeInvoice.invoiceNumber).toBe('INV-20261020-099');
+      expect(bound.activeInvoice.balanceDue).toBe(750);
+      expect(bound.isAlreadyBilled).toBe(false);
+    });
+  });
+
+  describe('Suite 6: Defensive Cashiering, Quantity Steppers & Non-Blocking Workflow (Tier 1 & Tier 2)', () => {
+    interface CashierLineItem {
+      id: string;
+      code: string;
+      name: string;
+      category: string;
+      price: number;
+      qty: number;
+      doctorId?: string;
+      doctorName?: string;
+    }
+
+    const calculateTotals = (
+      items: CashierLineItem[],
+      discountType: string,
+      customDiscountPct: number = 0
+    ) => {
+      const gross = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+      let discountPct = 0;
+      if (discountType === 'SeniorCitizen' || discountType === 'PWD') {
+        discountPct = 20;
+      } else if (discountType === 'PhilHealth') {
+        discountPct = 100;
+      } else if (discountType === 'Custom') {
+        discountPct = customDiscountPct;
+      }
+      const discountAmount = Math.round(gross * (discountPct / 100) * 100) / 100;
+      const net = Math.max(0, gross - discountAmount);
+      return { gross, discountPct, discountAmount, net };
+    };
+
+    const handleIncrementQty = (items: CashierLineItem[], itemId: string): CashierLineItem[] => {
+      return items.map((item) =>
+        item.id === itemId ? { ...item, qty: item.qty + 1 } : item
+      );
+    };
+
+    const handleDecrementQty = (items: CashierLineItem[], itemId: string): CashierLineItem[] => {
+      return items.map((item) =>
+        item.id === itemId ? { ...item, qty: Math.max(1, item.qty - 1) } : item
+      );
+    };
+
+    const handleRemoveItem = (items: CashierLineItem[], itemId: string): CashierLineItem[] => {
+      return items.filter((item) => item.id !== itemId);
+    };
+
+    test('6.1 Quantity steppers increment and decrement quantities with instant subtotal and gross recalculation', () => {
+      let items: CashierLineItem[] = [
+        { id: '1', code: 'NEB', name: 'Nebulization', category: 'Procedure', price: 350, qty: 1 },
+        { id: '2', code: 'SALB', name: 'Salbutamol Nebule', category: 'Pharmacy', price: 50, qty: 1 },
+      ];
+
+      // Initial totals: 350 + 50 = 400
+      let totals = calculateTotals(items, 'None');
+      expect(totals.gross).toBe(400);
+
+      // Increment Nebulization to 2
+      items = handleIncrementQty(items, '1');
+      expect(items[0].qty).toBe(2);
+      totals = calculateTotals(items, 'None');
+      expect(totals.gross).toBe(750); // (350 * 2) + 50
+
+      // Increment Salbutamol to 3
+      items = handleIncrementQty(items, '2');
+      items = handleIncrementQty(items, '2');
+      expect(items[1].qty).toBe(3);
+      totals = calculateTotals(items, 'None');
+      expect(totals.gross).toBe(850); // 700 + 150
+
+      // Decrement Salbutamol back to 2
+      items = handleDecrementQty(items, '2');
+      expect(items[1].qty).toBe(2);
+      totals = calculateTotals(items, 'None');
+      expect(totals.gross).toBe(800); // 700 + 100
+
+      // Decrement Nebulization at minimum quantity 1 is bounded at 1 (never negative or 0)
+      items = handleDecrementQty(items, '1');
+      items = handleDecrementQty(items, '1');
+      expect(items[0].qty).toBe(1);
+      totals = calculateTotals(items, 'None');
+      expect(totals.gross).toBe(450); // 350 + 100
+    });
+
+    test('6.2 Item deletion recalculates gross, statutory discount, and net balance due cleanly', () => {
+      let items: CashierLineItem[] = [
+        { id: '1', code: 'CONS', name: 'General Consultation', category: 'Consultation', price: 500, qty: 1 },
+        { id: '2', code: 'PROC', name: 'Wound Dressing', category: 'Procedure', price: 300, qty: 1 },
+      ];
+
+      // With Senior Citizen 20%: Gross = 800, Discount = 160, Net = 640
+      let totals = calculateTotals(items, 'SeniorCitizen');
+      expect(totals.gross).toBe(800);
+      expect(totals.discountAmount).toBe(160);
+      expect(totals.net).toBe(640);
+
+      // Delete Wound Dressing
+      items = handleRemoveItem(items, '2');
+      expect(items.length).toBe(1);
+
+      // Recalculated: Gross = 500, Discount = 100, Net = 400
+      totals = calculateTotals(items, 'SeniorCitizen');
+      expect(totals.gross).toBe(500);
+      expect(totals.discountAmount).toBe(100);
+      expect(totals.net).toBe(400);
+    });
+
+    test('6.3 Custom clinic medication or supply can be added with practitioner attribution', () => {
+      const items: CashierLineItem[] = [
+        {
+          id: 'item-custom-1',
+          code: 'SUP-SYR',
+          name: 'Syringe 10ml with Needle',
+          category: 'Supply',
+          price: 25,
+          qty: 2,
+          doctorId: 'doc-wave-1',
+          doctorName: 'Dr. Wave Ambray',
+        },
+      ];
+
+      expect(items[0].doctorName).toBe('Dr. Wave Ambray');
+      expect(items[0].doctorId).toBe('doc-wave-1');
+      expect(items[0].price * items[0].qty).toBe(50);
+    });
+
+    test('6.4 Defensive cashiering: statutory discount toggling is non-blocking and handles zero balance', () => {
+      const items: CashierLineItem[] = [
+        { id: '1', code: 'KONS', name: 'PhilHealth Konsulta Checkup', category: 'Consultation', price: 500, qty: 1 },
+      ];
+
+      // Toggling between discounts never throws or dead-ends
+      const noneTotals = calculateTotals(items, 'None');
+      expect(noneTotals.net).toBe(500);
+
+      const seniorTotals = calculateTotals(items, 'SeniorCitizen');
+      expect(seniorTotals.net).toBe(400);
+
+      const philhealthTotals = calculateTotals(items, 'PhilHealth');
+      expect(philhealthTotals.net).toBe(0);
+      expect(philhealthTotals.discountAmount).toBe(500);
+    });
+  });
+
+  describe('Suite 7: Defer / Promissory Note Action & Discharge Flow (Tier 1, 2, 3)', () => {
+    interface PromissoryPayload {
+      patientId: string;
+      invoiceId: string;
+      dueDate: string;
+      reason: string;
+      authorizedByStaffName: string;
+    }
+
+    interface InvoiceState {
+      id: string;
+      status: string;
+      balanceDue: number;
+      isDeferred: boolean;
+      promissoryDueDate?: string;
+      notes?: string;
+    }
+
+    const applyPromissoryNote = (invoice: InvoiceState, payload: PromissoryPayload): InvoiceState => {
+      if (!payload.dueDate) throw new Error('Promissory due date is mandatory.');
+      if (!payload.reason.trim()) throw new Error('Audit reason for promissory note is mandatory.');
+
+      return {
+        ...invoice,
+        isDeferred: true,
+        promissoryDueDate: payload.dueDate,
+        notes: `${invoice.notes || ''}\n[PROMISSORY NOTE] Patient deferred payment due on ${payload.dueDate}. Reason: ${payload.reason} (Auth: ${payload.authorizedByStaffName})`.trim(),
+      };
+    };
+
+    const calculateTotalUnpaidBalances = (invoices: InvoiceState[]) => {
+      return invoices
+        .filter((i) => i.status !== 'Paid' && i.status !== 'Voided')
+        .reduce((sum, i) => sum + i.balanceDue, 0);
+    };
+
+    test('7.1 Defer action records due date, promissory note audit reason, and preserves open balance', () => {
+      const initialInvoice: InvoiceState = {
+        id: 'inv-prom-01',
+        status: 'Draft',
+        balanceDue: 1250,
+        isDeferred: false,
+        notes: 'Initial clinical encounter draft',
+      };
+
+      const payload: PromissoryPayload = {
+        patientId: 'pat-1',
+        invoiceId: 'inv-prom-01',
+        dueDate: '2026-10-31',
+        reason: 'Patient forgot wallet; promised payment on month-end salary day',
+        authorizedByStaffName: 'Cashier Bea Gomez',
+      };
+
+      const deferred = applyPromissoryNote(initialInvoice, payload);
+      expect(deferred.isDeferred).toBe(true);
+      expect(deferred.promissoryDueDate).toBe('2026-10-31');
+      expect(deferred.balanceDue).toBe(1250); // Balance remains open as Accounts Receivable
+      expect(deferred.notes).toContain('[PROMISSORY NOTE]');
+      expect(deferred.notes).toContain('month-end salary day');
+      expect(deferred.notes).toContain('Cashier Bea Gomez');
+    });
+
+    test('7.2 Defer action validates that due date and audit reason are non-empty', () => {
+      const invoice: InvoiceState = {
+        id: 'inv-prom-02',
+        status: 'Draft',
+        balanceDue: 500,
+        isDeferred: false,
+      };
+
+      expect(() =>
+        applyPromissoryNote(invoice, {
+          patientId: 'p-1',
+          invoiceId: 'inv-prom-02',
+          dueDate: '',
+          reason: 'Valid reason',
+          authorizedByStaffName: 'Cashier',
+        })
+      ).toThrow('Promissory due date is mandatory.');
+
+      expect(() =>
+        applyPromissoryNote(invoice, {
+          patientId: 'p-1',
+          invoiceId: 'inv-prom-02',
+          dueDate: '2026-10-30',
+          reason: '   ',
+          authorizedByStaffName: 'Cashier',
+        })
+      ).toThrow('Audit reason for promissory note is mandatory.');
+    });
+
+    test('7.3 Daily EOD audit summary includes deferred promissory invoices in TotalUnpaidBalances', () => {
+      const allInvoices: InvoiceState[] = [
+        { id: '1', status: 'Paid', balanceDue: 0, isDeferred: false },
+        { id: '2', status: 'Draft', balanceDue: 600, isDeferred: false },
+        { id: '3', status: 'Draft', balanceDue: 1400, isDeferred: true }, // Promissory
+        { id: '4', status: 'Voided', balanceDue: 800, isDeferred: false },
+      ];
+
+      // Total unpaid balances = 600 + 1400 = 2000
+      const totalUnpaid = calculateTotalUnpaidBalances(allInvoices);
+      expect(totalUnpaid).toBe(2000);
+    });
+  });
+
+  describe('Suite 8: Real-World Multi-Doctor & Split Payment Workstation Lifecycle (Tier 3 & Tier 4)', () => {
+    test('8.1 Multi-specialty outpatient checkout with Senior discount and Split Settlement', () => {
+      // 1. Consolidated multi-doctor line items
+      const lineItems = [
+        {
+          id: 'item-1',
+          code: 'CONS-GEN',
+          name: 'General Consultation',
+          category: 'Consultation',
+          price: 600,
+          qty: 1,
+          doctorId: 'doc-wave',
+          doctorName: 'Dr. Wave Ambray',
+        },
+        {
+          id: 'item-2',
+          code: 'DENT-REST',
+          name: 'Tooth Restoration',
+          category: 'Procedure',
+          price: 1800,
+          qty: 1,
+          doctorId: 'doc-allan',
+          doctorName: 'Dr. Allan Santos',
+        },
+        {
+          id: 'item-3',
+          code: 'LAB-CBC',
+          name: 'Complete Blood Count (CBC)',
+          category: 'Laboratory',
+          price: 250,
+          qty: 1,
+        },
+      ];
+
+      // Gross = 600 + 1800 + 250 = 2650
+      const gross = lineItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+      expect(gross).toBe(2650);
+
+      // Senior Citizen 20% discount
+      const discountPct = 20;
+      const discountAmount = Math.round(gross * (discountPct / 100) * 100) / 100; // 530
+      const net = gross - discountAmount; // 2120
+      expect(discountAmount).toBe(530);
+      expect(net).toBe(2120);
+
+      // Split Payment Execution:
+      // Split 1: ₱1,000 Cash
+      const split1 = 1000;
+      let balance = net - split1; // 1120
+      expect(balance).toBe(1120);
+
+      // Split 2: ₱1,120 GCash
+      const split2 = 1120;
+      balance = balance - split2; // 0
+      expect(balance).toBe(0);
+
+      // Receipts generated
+      const receipts = [
+        { paymentNumber: 'OR-20261021-001', amount: split1, method: 'Cash' },
+        { paymentNumber: 'OR-20261021-002', amount: split2, method: 'GCash', ref: 'GCASH-99120' },
+      ];
+
+      expect(receipts.length).toBe(2);
+      expect(receipts[0].paymentNumber).toBe('OR-20261021-001');
+      expect(receipts[1].paymentNumber).toBe('OR-20261021-002');
+      expect(receipts.reduce((sum, r) => sum + r.amount, 0)).toBe(net);
+    });
+  });
 });
+

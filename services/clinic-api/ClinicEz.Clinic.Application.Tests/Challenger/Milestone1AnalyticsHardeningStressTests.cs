@@ -115,7 +115,10 @@ public class Milestone1AnalyticsHardeningStressTests
             AmountPaid = 1200m,
             BalanceDue = 0m,
             Status = InvoiceStatus.Paid,
-            AttendingDoctorName = "Dr. C1 Doctor"
+            LineItems = new List<InvoiceLineItem>
+            {
+                new() { DoctorName = "Dr. C1 Doctor", Description = "Consultation", Category = "Consultation", UnitPrice = 1500m, TotalPrice = 1500m }
+            }
         };
         await invoiceRepo.AddAsync(inv1);
 
@@ -176,7 +179,10 @@ public class Milestone1AnalyticsHardeningStressTests
             AmountPaid = 40000m,
             BalanceDue = 0m,
             Status = InvoiceStatus.Paid,
-            AttendingDoctorName = "Dr. C2 Foreign"
+            LineItems = new List<InvoiceLineItem>
+            {
+                new() { DoctorName = "Dr. C2 Foreign", Description = "Consultation", Category = "Consultation", UnitPrice = 50000m, TotalPrice = 50000m }
+            }
         };
         await invoiceRepo.AddAsync(inv2);
 
@@ -474,7 +480,10 @@ public class Milestone1AnalyticsHardeningStressTests
             AmountPaid = 800m,
             BalanceDue = 0m,
             Status = InvoiceStatus.Paid,
-            AttendingDoctorName = "Dr. Active"
+            LineItems = new List<InvoiceLineItem>
+            {
+                new() { DoctorName = "Dr. Active", Description = "Consultation", Category = "Consultation", UnitPrice = 1000m, TotalPrice = 1000m }
+            }
         };
         await invoiceRepo.AddAsync(validInv);
 
@@ -493,8 +502,7 @@ public class Milestone1AnalyticsHardeningStressTests
             DiscountAmount = 1000m,
             AmountPaid = 0m,
             BalanceDue = 4000m,
-            Status = InvoiceStatus.Voided,
-            AttendingDoctorName = "Dr. Active"
+            Status = InvoiceStatus.Voided
         };
         await invoiceRepo.AddAsync(voidedInv);
 
@@ -513,8 +521,7 @@ public class Milestone1AnalyticsHardeningStressTests
             DiscountAmount = 600m,
             AmountPaid = 0m,
             BalanceDue = 0m,
-            Status = InvoiceStatus.Refunded,
-            AttendingDoctorName = "Dr. Active"
+            Status = InvoiceStatus.Refunded
         };
         await invoiceRepo.AddAsync(refundedInv);
 
@@ -690,15 +697,14 @@ public class Milestone1AnalyticsHardeningStressTests
             PatientId = Guid.NewGuid(),
             PatientName = "Patient One",
             AttendingDoctorId = docId,
-            AttendingDoctorName = docName,
             GrossAmount = 3500m,
             NetAmount = 3500m,
             Status = InvoiceStatus.Paid,
             LineItems = new List<InvoiceLineItem>
             {
-                new() { Category = "Consultation", Description = "Specialist Consult", UnitPrice = 1000m, TotalPrice = 1000m },
-                new() { Category = "Procedure", Description = "Minor Excision", UnitPrice = 2000m, TotalPrice = 2000m },
-                new() { Category = "Pharmacy", Description = "Antibiotics", UnitPrice = 500m, TotalPrice = 500m }
+                new() { DoctorId = docId, DoctorName = docName, Category = "Consultation", Description = "Specialist Consult", UnitPrice = 1000m, TotalPrice = 1000m },
+                new() { DoctorId = docId, DoctorName = docName, Category = "Procedure", Description = "Minor Excision", UnitPrice = 2000m, TotalPrice = 2000m },
+                new() { DoctorId = docId, DoctorName = docName, Category = "Pharmacy", Description = "Antibiotics", UnitPrice = 500m, TotalPrice = 500m }
             }
         };
         await invoiceRepo.AddAsync(invoice);
@@ -816,7 +822,6 @@ public class Milestone1AnalyticsHardeningStressTests
             InvoiceDate = today,
             PatientId = patient.Id,
             PatientName = "Solo Patient",
-            AttendingDoctorName = "Dr. Solo",
             GrossAmount = 800m,
             NetAmount = 800m,
             AmountPaid = 800m,
@@ -824,7 +829,7 @@ public class Milestone1AnalyticsHardeningStressTests
             Status = InvoiceStatus.Paid,
             LineItems = new List<InvoiceLineItem>
             {
-                new() { Category = "Consultation", Description = "General Checkup", UnitPrice = 800m, TotalPrice = 800m }
+                new() { DoctorName = "Dr. Solo", Category = "Consultation", Description = "General Checkup", UnitPrice = 800m, TotalPrice = 800m }
             }
         };
         await invoiceRepo.AddAsync(invoice);

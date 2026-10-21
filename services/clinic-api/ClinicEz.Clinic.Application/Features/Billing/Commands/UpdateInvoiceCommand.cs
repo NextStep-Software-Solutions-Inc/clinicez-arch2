@@ -100,7 +100,10 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
 
                 invoice.LineItems.Add(new InvoiceLineItem
                 {
+                    Id = Guid.Empty,
                     InvoiceId = invoice.Id,
+                    DoctorId = item.DoctorId,
+                    DoctorName = item.DoctorName,
                     ServiceItemId = item.ServiceItemId,
                     ItemCode = item.ItemCode,
                     Description = item.Description,
@@ -121,21 +124,28 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
             invoice.DiscountIdNumber = request.DiscountIdNumber?.Trim();
 
             decimal discountPercentage = 0m;
+            decimal discountAmount = 0m;
             if (invoice.DiscountType == DiscountType.SeniorCitizen || invoice.DiscountType == DiscountType.Pwd)
             {
                 discountPercentage = 20.00m;
+                discountAmount = Math.Round(invoice.GrossAmount * (discountPercentage / 100m), 2);
             }
             else if (invoice.DiscountType == DiscountType.PhilHealthKonsulta)
             {
                 discountPercentage = 100.00m;
+                discountAmount = invoice.LineItems
+                    .Where(li => string.Equals(li.Category, "Consultation", StringComparison.OrdinalIgnoreCase) ||
+                                 (li.ItemCode != null && li.ItemCode.StartsWith("KONSULTA", StringComparison.OrdinalIgnoreCase)))
+                    .Sum(li => li.TotalPrice);
             }
             else if (invoice.DiscountType == DiscountType.Custom && request.CustomDiscountPercentage.HasValue)
             {
                 discountPercentage = Math.Clamp(request.CustomDiscountPercentage.Value, 0m, 100m);
+                discountAmount = Math.Round(invoice.GrossAmount * (discountPercentage / 100m), 2);
             }
 
             invoice.DiscountPercentage = discountPercentage;
-            invoice.DiscountAmount = Math.Round(invoice.GrossAmount * (discountPercentage / 100m), 2);
+            invoice.DiscountAmount = discountAmount;
         }
 
         invoice.NetAmount = Math.Max(0m, invoice.GrossAmount - invoice.DiscountAmount);
@@ -244,7 +254,6 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
             invoice.AppointmentId,
             invoice.ConsultationId,
             invoice.AttendingDoctorId,
-            invoice.AttendingDoctorName,
             invoice.GrossAmount,
             invoice.DiscountType,
             invoice.DiscountIdNumber,
@@ -258,6 +267,8 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
             invoice.BilledByStaffName,
             invoice.LineItems.Select(l => new InvoiceLineItemDto(
                 l.Id,
+                l.DoctorId,
+                l.DoctorName,
                 l.ServiceItemId,
                 l.ItemCode,
                 l.Description,

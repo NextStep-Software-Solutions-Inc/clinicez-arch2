@@ -64,8 +64,7 @@ public class GetDoctorSharesReportQueryHandler : IRequestHandler<GetDoctorShares
             .Select(i => new
             {
                 i.AttendingDoctorId,
-                i.AttendingDoctorName,
-                LineItems = i.LineItems.Select(li => new { li.Category, li.TotalPrice }).ToList()
+                LineItems = i.LineItems.Select(li => new { li.DoctorId, li.DoctorName, li.Category, li.TotalPrice }).ToList()
             })
             .ToListAsync(cancellationToken);
 
@@ -86,15 +85,19 @@ public class GetDoctorSharesReportQueryHandler : IRequestHandler<GetDoctorShares
             int encounterCount = group.Count();
 
             // Consultations line items for this doctor
-            var docInvoices = invoices.Where(i => i.AttendingDoctorName == docName || (group.Key.DoctorId != Guid.Empty && i.AttendingDoctorId == group.Key.DoctorId)).ToList();
-            decimal consultGross = docInvoices
-                .SelectMany(i => i.LineItems)
+            var docLineItems = invoices
+                .SelectMany(i => i.LineItems.Select(li => new { li.DoctorId, li.DoctorName, li.Category, li.TotalPrice, i.AttendingDoctorId }))
+                .Where(li => (li.DoctorName != null && string.Equals(li.DoctorName, docName, StringComparison.OrdinalIgnoreCase)) ||
+                             (group.Key.DoctorId != Guid.Empty && li.DoctorId == group.Key.DoctorId) ||
+                             (group.Key.DoctorId != Guid.Empty && li.DoctorId == null && string.IsNullOrEmpty(li.DoctorName) && li.AttendingDoctorId == group.Key.DoctorId))
+                .ToList();
+
+            decimal consultGross = docLineItems
                 .Where(li => li.Category.Contains("Consultation", StringComparison.OrdinalIgnoreCase))
                 .Sum(li => li.TotalPrice);
 
             int procedureCount = procedures.Count(p => p.OrderedByDoctorName == docName || p.PerformedByStaffName == docName);
-            decimal procedureGross = docInvoices
-                .SelectMany(i => i.LineItems)
+            decimal procedureGross = docLineItems
                 .Where(li => li.Category.Contains("Procedure", StringComparison.OrdinalIgnoreCase))
                 .Sum(li => li.TotalPrice);
 

@@ -115,7 +115,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
                 i.BalanceDue,
                 i.DiscountType,
                 i.DiscountAmount,
-                i.AttendingDoctorName
+                LineItems = i.LineItems.Select(li => new { li.DoctorName, li.TotalPrice }).ToList()
             })
             .ToListAsync(cancellationToken);
 
@@ -224,7 +224,10 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
             {
                 var docName = g.Key;
                 var encounters = g.Count();
-                var billed = invoices.Where(i => i.AttendingDoctorName == docName).Sum(i => i.NetAmount);
+                var billed = invoices
+                    .SelectMany(i => i.LineItems)
+                    .Where(li => li.DoctorName != null && string.Equals(li.DoctorName, docName, StringComparison.OrdinalIgnoreCase))
+                    .Sum(li => li.TotalPrice);
                 return new DoctorStatDto(docName, encounters, billed);
             })
             .OrderByDescending(d => d.EncountersCount)

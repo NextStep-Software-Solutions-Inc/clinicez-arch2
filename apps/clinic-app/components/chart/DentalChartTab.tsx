@@ -704,7 +704,7 @@ export default function DentalChartTab({
                               testID={`tab-void-condition-${recKey}`}
                               style={styles.removeConditionBtn}
                             >
-                              <Icon name="closeCircle" size={14} color={theme.colors.warningText} />
+                              <Icon name="close" size={14} color={theme.colors.warningText} />
                               <ThemedText variant="captionBold" color={theme.colors.warningText}>
                                 Void
                               </ThemedText>
@@ -774,7 +774,7 @@ export default function DentalChartTab({
                               testID={`tab-void-condition-${recKey}`}
                               style={styles.removeConditionBtn}
                             >
-                              <Icon name="closeCircle" size={14} color={theme.colors.warningText} />
+                              <Icon name="close" size={14} color={theme.colors.warningText} />
                               <ThemedText variant="captionBold" color={theme.colors.warningText}>
                                 Void
                               </ThemedText>

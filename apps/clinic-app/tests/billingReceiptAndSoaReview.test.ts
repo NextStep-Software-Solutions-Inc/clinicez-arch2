@@ -290,4 +290,143 @@ describe('Billing Receipt & SOA Review Feature Tests', () => {
       expect(billingSource).not.toContain('title="Professional PDF"');
     });
   });
+
+  describe('Suite 6: Multi-Doctor Line-Item Attribution & Document Separation Contracts (Tier 1 & Tier 4)', () => {
+    test('6.1 Statement of Account (SOA) formats with INV- prefix and itemized services table', () => {
+      const multiDoctorInvoice: InvoicePdfData = {
+        invoiceNumber: 'INV-20261021-042',
+        invoiceDate: 'Oct 21, 2026',
+        status: 'Draft',
+        patientName: 'Gloria Macapagal',
+        patientId: 'p-multi-9912',
+        queueNumber: 'A-042',
+        grossAmount: 2300,
+        discountType: 'None',
+        discountAmount: 0,
+        netAmount: 2300,
+        balanceDue: 2300,
+        notes: 'Multi-doctor outpatient visit awaiting settlement.',
+        items: [
+          {
+            code: 'CONS-GEN',
+            description: 'General Medicine Consultation • Dr. Wave Ambray',
+            category: 'Consultation',
+            unitPrice: 500,
+            quantity: 1,
+            totalPrice: 500,
+          },
+          {
+            code: 'DENT-PROC',
+            description: 'Tooth Extraction & Restoration • Dr. Allan Santos',
+            category: 'Procedure',
+            unitPrice: 1800,
+            quantity: 1,
+            totalPrice: 1800,
+          },
+        ],
+      };
+
+      const html = buildInvoicePdfHtml(multiDoctorInvoice, sampleLetterhead);
+      expect(html).toContain('INV #INV-20261021-042');
+      expect(html).toContain('STATEMENT OF ACCOUNT (SOA)');
+      expect(html).toContain('General Medicine Consultation • Dr. Wave Ambray');
+      expect(html).toContain('Tooth Extraction &amp; Restoration • Dr. Allan Santos');
+      expect(html).toContain('₱2,300.00');
+    });
+
+    test('6.2 Official Receipt (OR) formats with OR- prefix and isolates payment settlement details', () => {
+      const multiDoctorReceipt: ReceiptData = {
+        orNumber: 'OR-20261021-042',
+        invoiceNumber: 'INV-20261021-042',
+        patientName: 'Gloria Macapagal',
+        cashierName: 'Maria Santos, Cashier',
+        paidAt: 'Oct 21, 2026, 11:30 AM',
+        paymentMethod: 'GCash',
+        referenceNumber: 'GCASH-REF-99281',
+        grossAmount: 2300,
+        discountType: 'None',
+        discountAmount: 0,
+        netAmount: 2300,
+        change: 0,
+        items: [
+          {
+            code: 'CONS-GEN',
+            description: 'General Medicine Consultation • Dr. Wave Ambray',
+            category: 'Consultation',
+            unitPrice: 500,
+            quantity: 1,
+            totalPrice: 500,
+          },
+          {
+            code: 'DENT-PROC',
+            description: 'Tooth Extraction & Restoration • Dr. Allan Santos',
+            category: 'Procedure',
+            unitPrice: 1800,
+            quantity: 1,
+            totalPrice: 1800,
+          },
+        ],
+      };
+
+      const html = buildProfessionalReceiptHtml(multiDoctorReceipt, sampleLetterhead);
+      expect(html).toContain('OR #OR-20261021-042');
+      expect(html).toContain('OFFICIAL RECEIPT');
+      expect(html).toContain('Maria Santos, Cashier');
+      expect(html).toContain('GCash');
+      expect(html).toContain('GCASH-REF-99281');
+      expect(html).toContain('BIR TAX &amp; VAT BREAKDOWN');
+    });
+
+    test('6.3 Thermal POS format (58/80mm) includes document separation, clinician labels, and VAT-exempt healthcare notice', () => {
+      const thermalReceipt: ReceiptData = {
+        orNumber: 'OR-20261021-099',
+        invoiceNumber: 'INV-20261021-099',
+        patientName: 'Ramon Magsaysay',
+        cashierName: 'Juanita Perez, Cashier',
+        paidAt: 'Oct 21, 2026, 2:00 PM',
+        paymentMethod: 'Cash',
+        grossAmount: 850,
+        discountType: 'PWD',
+        discountIdNumber: 'PWD-12345',
+        discountAmount: 170,
+        netAmount: 680,
+        cashTendered: 1000,
+        change: 320,
+        items: [
+          {
+            code: 'CONS-GEN',
+            description: 'Consultation • Dr. Wave Ambray',
+            category: 'Consultation',
+            unitPrice: 500,
+            quantity: 1,
+            totalPrice: 500,
+          },
+          {
+            code: 'PROC-NEB',
+            description: 'Nebulization • Dr. Allan Santos',
+            category: 'Procedure',
+            unitPrice: 350,
+            quantity: 1,
+            totalPrice: 350,
+          },
+        ],
+      };
+
+      const html = buildThermalReceiptHtml(thermalReceipt, sampleLetterhead);
+      expect(html).toContain('#OR-20261021-099');
+      expect(html).toContain('OFFICIAL RECEIPT');
+      expect(html).toContain('Consultation • Dr. Wave Ambray');
+      expect(html).toContain('Nebulization • Dr. Allan Santos');
+      expect(html).toContain('Discount (PWD - ID: PWD-12345)');
+      expect(html).toContain('-₱170.00');
+      expect(html).toContain('NET AMOUNT PAID:');
+      expect(html).toContain('₱680.00');
+      expect(html).toContain('Cash Tendered:');
+      expect(html).toContain('₱1,000.00');
+      expect(html).toContain('Change Returned:');
+      expect(html).toContain('₱320.00');
+      expect(html).toContain('THIS SERVES AS AN OFFICIAL RECEIPT');
+    });
+  });
 });
+

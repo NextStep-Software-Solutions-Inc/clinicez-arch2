@@ -183,7 +183,7 @@ public class LocalCashierOwnershipTests
     [Theory]
     [InlineData(InvoiceStatus.Voided)]
     [InlineData(InvoiceStatus.Refunded)]
-    [InlineData(InvoiceStatus.Draft)]
+    [InlineData(InvoiceStatus.Paid)]
     public async Task A_Visit_Can_Be_Invoiced_Again_Only_After_Its_Invoice_Was_Voided_Or_Refunded(InvoiceStatus existing)
     {
         var (db, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -211,7 +211,7 @@ public class LocalCashierOwnershipTests
 
         var create = () => handler.Handle(Command(consultationId: consultationId), CancellationToken.None);
 
-        if (existing == InvoiceStatus.Draft)
+        if (existing == InvoiceStatus.Paid)
         {
             await create.Should().ThrowAsync<ConflictException>();
         }

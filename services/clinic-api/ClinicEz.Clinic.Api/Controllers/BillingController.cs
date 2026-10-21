@@ -143,7 +143,6 @@ public sealed class BillingController : ControllerBase
             request.AppointmentId,
             request.ConsultationId,
             request.AttendingDoctorId,
-            request.AttendingDoctorName,
             request.DiscountType,
             request.DiscountIdNumber,
             request.CustomDiscountPercentage,

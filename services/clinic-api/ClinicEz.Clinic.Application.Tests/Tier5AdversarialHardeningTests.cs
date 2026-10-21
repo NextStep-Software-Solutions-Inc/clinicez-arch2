@@ -764,17 +764,16 @@ public class Tier5AdversarialHardeningTests
             PatientId = enc.PatientId,
             PatientName = enc.PatientName,
             AttendingDoctorId = doctorId,
-            AttendingDoctorName = doctorName,
             GrossAmount = 8500m,
             NetAmount = 8500m,
             BalanceDue = 0m,
             Status = InvoiceStatus.Paid,
             LineItems = new List<InvoiceLineItem>
             {
-                new() { Description = "Specialist Consultation", Category = "General Consultation", TotalPrice = 1500m },
-                new() { Description = "Minor Surgical Excision", Category = "Clinical Procedure", TotalPrice = 4000m },
-                new() { Description = "Post-op Antibiotics", Category = "Pharmacy Drugs", TotalPrice = 2000m },
-                new() { Description = "Biopsy Pathology Order", Category = "Laboratory Diagnostic", TotalPrice = 1000m }
+                new() { DoctorId = doctorId, DoctorName = doctorName, Description = "Specialist Consultation", Category = "General Consultation", TotalPrice = 1500m },
+                new() { DoctorId = doctorId, DoctorName = doctorName, Description = "Minor Surgical Excision", Category = "Clinical Procedure", TotalPrice = 4000m },
+                new() { DoctorId = doctorId, DoctorName = doctorName, Description = "Post-op Antibiotics", Category = "Pharmacy Drugs", TotalPrice = 2000m },
+                new() { DoctorId = doctorId, DoctorName = doctorName, Description = "Biopsy Pathology Order", Category = "Laboratory Diagnostic", TotalPrice = 1000m }
             }
         };
         await invoiceRepo.AddAsync(invoice);
@@ -929,14 +928,13 @@ public class Tier5AdversarialHardeningTests
             PatientId = enc.PatientId,
             PatientName = enc.PatientName,
             AttendingDoctorId = docId,
-            AttendingDoctorName = docName,
             GrossAmount = 0m,
             NetAmount = 0m,
             BalanceDue = 0m,
             Status = InvoiceStatus.Paid,
             LineItems = new List<InvoiceLineItem>
             {
-                new() { Description = "Pro Bono Consultation", Category = "Consultation", TotalPrice = 0m }
+                new() { DoctorId = docId, DoctorName = docName, Description = "Pro Bono Consultation", Category = "Consultation", TotalPrice = 0m }
             }
         };
         await invoiceRepo.AddAsync(invoice);

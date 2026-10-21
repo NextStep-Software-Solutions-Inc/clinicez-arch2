@@ -75,7 +75,6 @@ public class GetInvoicesQueryHandler : IRequestHandler<GetInvoicesQuery, List<In
             invoice.AppointmentId,
             invoice.ConsultationId,
             invoice.AttendingDoctorId,
-            invoice.AttendingDoctorName,
             invoice.GrossAmount,
             invoice.DiscountType,
             invoice.DiscountIdNumber,
@@ -89,6 +88,8 @@ public class GetInvoicesQueryHandler : IRequestHandler<GetInvoicesQuery, List<In
             invoice.BilledByStaffName,
             invoice.LineItems.Select(l => new InvoiceLineItemDto(
                 l.Id,
+                l.DoctorId,
+                l.DoctorName,
                 l.ServiceItemId,
                 l.ItemCode,
                 l.Description,

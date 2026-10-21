@@ -502,6 +502,8 @@ export interface InvoiceLineItem {
   unitPrice: number;
   quantity: number;
   totalPrice: number;
+  doctorId?: string;
+  doctorName?: string;
 }
 
 export interface PaymentRecord {
@@ -2095,6 +2097,8 @@ export interface CreateInvoiceRequest {
     category: string;
     unitPrice: number;
     quantity: number;
+    doctorId?: string;
+    doctorName?: string;
   }>;
 }
 
@@ -2117,6 +2121,8 @@ export interface UpdateInvoiceRequest {
     category: string;
     unitPrice: number;
     quantity: number;
+    doctorId?: string;
+    doctorName?: string;
   }>;
 }
 

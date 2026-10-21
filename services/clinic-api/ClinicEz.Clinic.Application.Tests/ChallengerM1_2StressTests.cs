@@ -238,7 +238,6 @@ public class ChallengerM1_2StressTests
             PatientId = Guid.NewGuid(),
             PatientName = "Edge Patient",
             AttendingDoctorId = null,
-            AttendingDoctorName = null,
             DiscountType = DiscountType.SeniorCitizen,
             DiscountIdNumber = null, // null ID
             GrossAmount = 1000m,
@@ -429,6 +428,8 @@ public class ChallengerM1_2StressTests
             {
                 lineItems.Add(new InvoiceLineItem
                 {
+                    DoctorId = docId,
+                    DoctorName = docName,
                     Description = "Consultation",
                     Category = "Consultation",
                     UnitPrice = consultGross,
@@ -439,6 +440,8 @@ public class ChallengerM1_2StressTests
             {
                 lineItems.Add(new InvoiceLineItem
                 {
+                    DoctorId = docId,
+                    DoctorName = docName,
                     Description = "Procedure",
                     Category = "Procedure",
                     UnitPrice = procGross,
@@ -456,7 +459,6 @@ public class ChallengerM1_2StressTests
                 PatientId = enc.PatientId,
                 PatientName = enc.PatientName,
                 AttendingDoctorId = docId,
-                AttendingDoctorName = docName,
                 GrossAmount = totalGross,
                 NetAmount = totalGross,
                 Status = InvoiceStatus.Paid,

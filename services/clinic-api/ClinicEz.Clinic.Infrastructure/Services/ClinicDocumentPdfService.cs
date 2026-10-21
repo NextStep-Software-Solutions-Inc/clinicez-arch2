@@ -883,7 +883,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         var patientIdStr = patient?.PatientCode ?? (invoice.PatientId != Guid.Empty ? invoice.PatientId.ToString().Substring(0, 8) : "N/A");
         var docName = doctor != null
             ? (!string.IsNullOrWhiteSpace(doctor.Title) ? $"{doctor.Title} {doctor.FirstName} {doctor.LastName}" : $"Dr. {doctor.FirstName} {doctor.LastName}")
-            : invoice.AttendingDoctorName ?? "Attending Clinician";
+            : (invoice.LineItems.FirstOrDefault(li => !string.IsNullOrWhiteSpace(li.DoctorName))?.DoctorName ?? "Attending Clinician");
         var doctorPrc = doctor?.PrcLicenseNumber ?? "Registered Clinician";
 
         var statusLabel = invoice.Status == Domain.Enums.InvoiceStatus.Paid ? "PAID OFFICIAL INVOICE" : "STATEMENT OF ACCOUNT";
@@ -1013,6 +1013,10 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             table.Cell().Background(rowBg).BorderBottom(0.5f).BorderColor("#E2E8F0").PaddingVertical(5).PaddingHorizontal(6).Column(itemCol =>
                             {
                                 itemCol.Item().Text(item.Description).FontSize(9f).Bold().FontColor("#0F172A");
+                                if (!string.IsNullOrWhiteSpace(item.DoctorName))
+                                {
+                                    itemCol.Item().Text($"Clinician: {item.DoctorName}").FontSize(7.5f).FontColor("#0D9488");
+                                }
                                 if (!string.IsNullOrWhiteSpace(item.ItemCode))
                                 {
                                     itemCol.Item().Text($"Code: {item.ItemCode}").FontSize(7.5f).FontColor("#94A3B8");
@@ -1117,13 +1121,14 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             InvoiceDate = DateTime.UtcNow,
             PatientId = preview.PatientId ?? Guid.Empty,
             PatientName = preview.PatientName,
-            AttendingDoctorName = preview.AttendingDoctorName,
             DiscountType = preview.DiscountType,
             DiscountIdNumber = preview.DiscountIdNumber,
             Status = Domain.Enums.InvoiceStatus.Draft,
             Notes = preview.Notes,
             LineItems = preview.LineItems.Select(item => new InvoiceLineItem
             {
+                DoctorId = item.DoctorId,
+                DoctorName = item.DoctorName,
                 ServiceItemId = item.ServiceItemId,
                 ItemCode = item.ItemCode,
                 Description = item.Description,

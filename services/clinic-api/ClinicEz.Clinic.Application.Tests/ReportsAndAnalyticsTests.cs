@@ -74,7 +74,10 @@ public class ReportsAndAnalyticsTests
             BalanceDue = 0m,
             AmountPaid = 480m,
             Status = InvoiceStatus.Paid,
-            AttendingDoctorName = "Dr. Cruz"
+            LineItems = new List<InvoiceLineItem>
+            {
+                new() { DoctorName = "Dr. Cruz", Description = "Consultation", Category = "Consultation", UnitPrice = 600m, TotalPrice = 600m }
+            }
         };
         await invoiceRepo.AddAsync(invoice);
 
@@ -249,7 +252,6 @@ public class ReportsAndAnalyticsTests
             PatientId = enc.PatientId,
             PatientName = enc.PatientName,
             AttendingDoctorId = docId,
-            AttendingDoctorName = "Dr. Juan Reyes",
             GrossAmount = 1000m,
             NetAmount = 1000m,
             Status = InvoiceStatus.Paid,
@@ -257,6 +259,8 @@ public class ReportsAndAnalyticsTests
             {
                 new()
                 {
+                    DoctorId = docId,
+                    DoctorName = "Dr. Juan Reyes",
                     Description = "Specialist Consultation",
                     Category = "Consultation",
                     UnitPrice = 600m,
@@ -265,6 +269,8 @@ public class ReportsAndAnalyticsTests
                 },
                 new()
                 {
+                    DoctorId = docId,
+                    DoctorName = "Dr. Juan Reyes",
                     Description = "Nebulization Session",
                     Category = "Procedure",
                     UnitPrice = 400m,

@@ -400,7 +400,6 @@ public class Milestone2And3QuestPdfStressTests
             PatientId = patient.Id,
             PatientName = $"{patient.FirstName} {patient.LastName}",
             AttendingDoctorId = doctor.Id,
-            AttendingDoctorName = $"Dr. {doctor.FirstName} {doctor.LastName}",
             DiscountType = Domain.Enums.DiscountType.SeniorCitizen,
             DiscountIdNumber = "OSCA-987654",
             DiscountPercentage = 20m,
@@ -413,6 +412,8 @@ public class Milestone2And3QuestPdfStressTests
             {
                 new()
                 {
+                    DoctorId = doctor.Id,
+                    DoctorName = $"Dr. {doctor.FirstName} {doctor.LastName}",
                     Description = "General Consultation",
                     Category = "Consultation",
                     UnitPrice = 500m,
@@ -421,6 +422,8 @@ public class Milestone2And3QuestPdfStressTests
                 },
                 new()
                 {
+                    DoctorId = doctor.Id,
+                    DoctorName = $"Dr. {doctor.FirstName} {doctor.LastName}",
                     Description = "Complete Blood Count (CBC)",
                     Category = "Laboratory",
                     UnitPrice = 1000m,
@@ -442,7 +445,6 @@ public class Milestone2And3QuestPdfStressTests
             PatientId = patient.Id,
             PatientName = $"{patient.FirstName} {patient.LastName}",
             AttendingDoctorId = doctor.Id,
-            AttendingDoctorName = $"Dr. {doctor.FirstName} {doctor.LastName}",
             GrossAmount = 1000m,
             NetAmount = 1000m,
             AmountPaid = 1000m,
@@ -479,7 +481,6 @@ public class Milestone2And3QuestPdfStressTests
             patient.Id,
             $"{patient.FirstName} {patient.LastName}",
             "Q-002",
-            $"Dr. {doctor.FirstName} {doctor.LastName}",
             doctor.PrcLicenseNumber,
             Domain.Enums.DiscountType.Pwd,
             "PWD-123456",

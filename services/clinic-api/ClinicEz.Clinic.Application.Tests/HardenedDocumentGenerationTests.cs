@@ -1244,7 +1244,6 @@ public class HardenedDocumentGenerationTests
             InvoiceDate = date,
             PatientId = Guid.NewGuid(),
             PatientName = "Juanita Cruz",
-            AttendingDoctorName = "Dr. Roberto Santos, MD",
             GrossAmount = 1500m,
             NetAmount = 1500m,
             BalanceDue = 1500m,
@@ -1252,7 +1251,7 @@ public class HardenedDocumentGenerationTests
             BilledByStaffName = "Authorized Cashier",
             LineItems = new List<InvoiceLineItem>
             {
-                new() { Description = "Comprehensive Consultation", Category = "Consultation", TotalPrice = 1500m, Quantity = 1, UnitPrice = 1500m }
+                new() { DoctorName = "Dr. Roberto Santos, MD", Description = "Comprehensive Consultation", Category = "Consultation", TotalPrice = 1500m, Quantity = 1, UnitPrice = 1500m }
             }
         };
         var invoicePdf = _pdfService.GenerateInvoicePdf(invoice, settings);

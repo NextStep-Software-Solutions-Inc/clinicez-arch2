@@ -462,6 +462,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<InvoiceLineItem>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.DoctorName).HasMaxLength(150);
             entity.Property(e => e.Description).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);

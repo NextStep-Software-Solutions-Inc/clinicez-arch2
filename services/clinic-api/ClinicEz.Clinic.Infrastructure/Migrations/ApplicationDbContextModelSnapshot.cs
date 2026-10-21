@@ -2633,9 +2633,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<Guid?>("AttendingDoctorId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("AttendingDoctorName")
-                        .HasColumnType("text");
-
                     b.Property<decimal>("BalanceDue")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -2760,6 +2757,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("DoctorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DoctorName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
 
                     b.Property<Guid>("InvoiceId")
                         .HasColumnType("uuid");
