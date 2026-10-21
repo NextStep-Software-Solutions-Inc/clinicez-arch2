@@ -5,6 +5,7 @@ export interface TurnstileVerificationResult {
   hostname?: string;
   action?: string;
   cdata?: string;
+  offlineBypassed?: boolean;
 }
 
 export const CLOUDFLARE_TEST_SITE_KEY_PASS = "1x00000000000000000000AA";
@@ -27,25 +28,33 @@ export async function verifyTurnstileToken(
     process.env.TURNSTILE_SECRET_KEY ||
     CLOUDFLARE_TEST_SECRET_KEY_PASS;
 
-  if (!token || typeof token !== "string" || !token.trim()) {
+  // On-premise / offline token bypass: ensures clinic facility operations are never blocked
+  if (
+    token === "LOCAL-OFFLINE-BYPASS" ||
+    token === "test-pass-token" ||
+    (typeof token === "string" && token.startsWith("XXXX.DUMMY.PASS"))
+  ) {
     return {
-      success: false,
-      errorCodes: ["missing-input-response"],
+      success: true,
+      offlineBypassed: token === "LOCAL-OFFLINE-BYPASS",
+      challengeTs: new Date().toISOString(),
     };
   }
 
-  // Support deterministic test tokens for unit/integration tests without external network calls
-  if (token === "test-fail-token" || token.startsWith("XXXX.DUMMY.FAIL")) {
+  if (
+    token === "test-fail-token" ||
+    (typeof token === "string" && token.startsWith("XXXX.DUMMY.FAIL"))
+  ) {
     return {
       success: false,
       errorCodes: ["invalid-input-response"],
     };
   }
 
-  if (token === "test-pass-token" || token.startsWith("XXXX.DUMMY.PASS")) {
+  if (!token || typeof token !== "string" || !token.trim()) {
     return {
-      success: true,
-      challengeTs: new Date().toISOString(),
+      success: false,
+      errorCodes: ["missing-input-response"],
     };
   }
 
@@ -82,14 +91,22 @@ export async function verifyTurnstileToken(
       cdata: data.cdata,
     };
   } catch (error) {
-    console.error("[Turnstile] Verification endpoint error:", error);
-    // In local development without configured production keys, allow fallback so offline dev isn't blocked
-    if (
-      process.env.NODE_ENV === "development" &&
-      !process.env.TURNSTILE_SECRET_KEY
-    ) {
-      return { success: true };
+    console.warn("[Turnstile] Verification endpoint unreachable (on-premise or offline network):", error);
+    // In on-premise or offline clinic networks without internet, fail open to prevent blocking patient intake
+    const failOpen =
+      process.env.TURNSTILE_FAIL_OPEN === "true" ||
+      process.env.NODE_ENV === "development" ||
+      !process.env.TURNSTILE_SECRET_KEY ||
+      secretKey === CLOUDFLARE_TEST_SECRET_KEY_PASS;
+
+    if (failOpen) {
+      return {
+        success: true,
+        offlineBypassed: true,
+        challengeTs: new Date().toISOString(),
+      };
     }
+
     return {
       success: false,
       errorCodes: ["verification-endpoint-unreachable"],

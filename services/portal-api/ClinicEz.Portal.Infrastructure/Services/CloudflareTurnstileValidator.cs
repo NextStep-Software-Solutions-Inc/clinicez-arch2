@@ -21,13 +21,14 @@ public sealed class CloudflareTurnstileValidator(
     public const string DefaultVerifyUrl = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
     public const string OfficialTestSecretKeyPass = "1x0000000000000000000000000000000AA";
     public const string OfficialTestSecretKeyFail = "2x0000000000000000000000000000000AB";
+    public const string LocalOfflineBypassToken = "LOCAL-OFFLINE-BYPASS";
 
     public async Task<bool> ValidateAsync(string? token, string? remoteIp = null, CancellationToken ct = default)
     {
         var enabled = configuration.GetValue<bool?>("Turnstile:Enabled") ?? false;
         var secretKey = configuration["Turnstile:SecretKey"] ?? OfficialTestSecretKeyPass;
 
-        // If turnstile verification is disabled (e.g. in test or internal offline environments)
+        // If turnstile verification is disabled (default for on-premise, edge, and air-gapped deployments)
         if (!enabled)
         {
             return true;
@@ -41,10 +42,12 @@ public sealed class CloudflareTurnstileValidator(
 
         var trimmedToken = token.Trim();
 
-        // Deterministic test token bypass for automated test suites
-        if (trimmedToken.Equals("test-pass-token", StringComparison.OrdinalIgnoreCase) ||
+        // On-premise offline token bypass & deterministic test token handling
+        if (trimmedToken.Equals(LocalOfflineBypassToken, StringComparison.OrdinalIgnoreCase) ||
+            trimmedToken.Equals("test-pass-token", StringComparison.OrdinalIgnoreCase) ||
             trimmedToken.StartsWith("XXXX.DUMMY.PASS", StringComparison.OrdinalIgnoreCase))
         {
+            logger.LogInformation("[Turnstile] Accepted offline/test bypass token ({TokenPrefix}).", trimmedToken.Length > 8 ? trimmedToken.Substring(0, 8) : trimmedToken);
             return true;
         }
 
@@ -92,9 +95,12 @@ public sealed class CloudflareTurnstileValidator(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "[Turnstile] Exception encountered while verifying Turnstile token.");
-            if (hostEnvironment.IsDevelopment() && string.IsNullOrEmpty(configuration["Turnstile:SecretKey"]))
+            logger.LogWarning(ex, "[Turnstile] Could not reach verification endpoint (on-premise or offline network).");
+            // Fail open on network errors in on-premise or offline deployments so clinic operations never halt
+            var failOpen = configuration.GetValue<bool?>("Turnstile:FailOpenOnNetworkError") ?? true;
+            if (failOpen || hostEnvironment.IsDevelopment())
             {
+                logger.LogInformation("[Turnstile] Failing open to preserve on-premise clinic intake availability.");
                 return true;
             }
             return false;

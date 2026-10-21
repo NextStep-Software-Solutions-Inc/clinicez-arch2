@@ -98,4 +98,10 @@ describe("Cloudflare Turnstile Verification Helper", () => {
     expect(simulateRouteHandlerGuard({ success: false }).status).toBe(403);
     expect(simulateRouteHandlerGuard({ success: true }).status).toBe(200);
   });
+
+  test("T1.6: On-premise offline token bypass resolves immediately without network request", async () => {
+    const resOffline = await verifyTurnstileToken("LOCAL-OFFLINE-BYPASS");
+    expect(resOffline.success).toBe(true);
+    expect(resOffline.offlineBypassed).toBe(true);
+  });
 });

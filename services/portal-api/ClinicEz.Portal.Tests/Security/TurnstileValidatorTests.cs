@@ -80,6 +80,7 @@ public class TurnstileValidatorTests
 
     [Theory]
     [InlineData("test-pass-token")]
+    [InlineData("LOCAL-OFFLINE-BYPASS")]
     [InlineData("XXXX.DUMMY.PASS.TEST")]
     [InlineData("xxxx.dummy.pass.456")]
     public async Task ValidateAsync_WithDeterministicTestPassTokens_ReturnsTrue(string token)
