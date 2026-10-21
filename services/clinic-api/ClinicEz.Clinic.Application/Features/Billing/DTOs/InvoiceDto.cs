@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Application.Features.Billing.DTOs;
 
+[method: JsonConstructor]
 public record InvoiceLineItemDto(
     Guid Id,
     Guid? DoctorId,
@@ -17,6 +19,11 @@ public record InvoiceLineItemDto(
     decimal TotalPrice
 )
 {
+    public InvoiceLineItemDto()
+        : this(Guid.Empty, null, null, null, null, string.Empty, string.Empty, 0m, 1, 0m)
+    {
+    }
+
     public InvoiceLineItemDto(
         Guid id,
         Guid? serviceItemId,
@@ -69,6 +76,7 @@ public record InvoiceDto(
     List<PaymentRecordDto> Payments
 );
 
+[method: JsonConstructor]
 public record CreateInvoiceLineItemRequest(
     Guid? DoctorId,
     string? DoctorName,
@@ -80,6 +88,11 @@ public record CreateInvoiceLineItemRequest(
     int Quantity
 )
 {
+    public CreateInvoiceLineItemRequest()
+        : this(null, null, null, null, string.Empty, string.Empty, 0m, 1)
+    {
+    }
+
     public CreateInvoiceLineItemRequest(
         Guid? serviceItemId,
         string? itemCode,

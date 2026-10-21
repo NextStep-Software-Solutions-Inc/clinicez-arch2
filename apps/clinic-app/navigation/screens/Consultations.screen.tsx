@@ -395,14 +395,12 @@ export default function ConsultationsScreen() {
   const [mobileWorkstationView, setMobileWorkstationView] = useState<'soap' | 'chart'>('soap');
   const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
   const [postEncounterModalVisible, setPostEncounterModalVisible] = useState(false);
-  const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
-  const [createdInvoiceNumber, setCreatedInvoiceNumber] = useState<string | null>(null);
-  const [createdInvoiceTotal, setCreatedInvoiceTotal] = useState<number | null>(null);
-  const [isRetryingInvoice, setIsRetryingInvoice] = useState(false);
-  const [reviewSoaModalVisible, setReviewSoaModalVisible] = useState(false);
-  const [soaReviewItems, setSoaReviewItems] = useState<CreateInvoiceRequest['lineItems']>([]);
-  const [soaDiscountType, setSoaDiscountType] = useState<DiscountType>('None');
-  const [soaDiscountId, setSoaDiscountId] = useState('');
+  const [reviewChargeSlipModalVisible, setReviewChargeSlipModalVisible] = useState(false);
+  const [chargeSlipItems, setChargeSlipItems] = useState<CreateInvoiceRequest['lineItems']>([]);
+  // Aliases for compatibility
+  const reviewSoaModalVisible = reviewChargeSlipModalVisible;
+  const setReviewSoaModalVisible = setReviewChargeSlipModalVisible;
+  const soaReviewItems = chargeSlipItems;
 
   // Multi-Provider Queue Room / Station & Status Filter States (Persistent per staff)
   const staffKey = current?.id ? `clinicez:consultations:${current.id}` : 'clinicez:consultations:default';
@@ -1320,9 +1318,7 @@ export default function ConsultationsScreen() {
     setIsYakapEligible(false);
     setPhilHealthAtc('WALKEDIN');
     setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
-    setCreatedInvoiceId(null);
-    setCreatedInvoiceNumber(null);
-    setCreatedInvoiceTotal(null);
+    setChargeSlipItems([]);
     setPostEncounterModalVisible(false);
   };
 
@@ -1331,9 +1327,7 @@ export default function ConsultationsScreen() {
     setIsSigned(false);
     setSignedAt(null);
     setSignedConsultationId(null);
-    setCreatedInvoiceId(null);
-    setCreatedInvoiceNumber(null);
-    setCreatedInvoiceTotal(null);
+    setChargeSlipItems([]);
     setIsFollowUpEncounter(true);
     setBanner(null);
     setSubjective(selectedPatient.chiefComplaint ? `Follow-up: ${selectedPatient.chiefComplaint}.` : '');
@@ -2219,112 +2213,7 @@ export default function ConsultationsScreen() {
       }
     }
 
-    // Step 5: Auto-create draft billing invoice for the Cashier BEFORE signing
-    const billItems: CreateInvoiceRequest['lineItems'] = [];
-    if (consultationFee) {
-      billItems.push({
-        serviceItemId: consultationFee.id,
-        itemCode: consultationFee.code,
-        description: consultationFee.name,
-        category: consultationFee.category,
-        unitPrice: consultationFee.standardPrice,
-        quantity: 1,
-        doctorId: doctor.id,
-        doctorName: doctor.name,
-      });
-    }
-    for (const proc of orderedProcedures) {
-      const procInfo = procedureCatalog.find(
-        (p) => p.name.toLowerCase() === proc.name.toLowerCase() || (p.code && p.code === proc.code)
-      );
-      billItems.push({
-        serviceItemId: proc.serviceItemId || procInfo?.id,
-        itemCode: proc.code || procInfo?.code,
-        description: proc.name,
-        category: proc.category || procInfo?.category || 'Procedure',
-        unitPrice: proc.standardPrice || procInfo?.standardPrice || 0,
-        quantity: 1,
-        doctorId: (proc as any).orderedByDoctorId || doctor.id,
-        doctorName: (proc as any).orderedByDoctorName || doctor.name,
-      });
-    }
-    for (const inHouseLab of inHouseLabs) {
-      const matchedDiag = diagnosticCatalog.find((d) => d.name.toLowerCase() === inHouseLab.name.toLowerCase());
-      const philHealthCode = inHouseLab.philHealthCode || matchedDiag?.philHealthCode;
-      const isCoveredByYakap = Boolean(isYakapEligible && philHealthCode);
-      const unitPrice = isCoveredByYakap ? 0 : (inHouseLab.standardPrice ?? matchedDiag?.standardPrice ?? 0);
-      const description = isCoveredByYakap
-        ? `${inHouseLab.name} (PhilHealth Yakap - ₱0 Co-pay)`
-        : inHouseLab.name;
-
-      billItems.push({
-        serviceItemId: inHouseLab.serviceItemId || matchedDiag?.id,
-        itemCode: inHouseLab.code || matchedDiag?.code,
-        description,
-        category: inHouseLab.category || matchedDiag?.category || 'Diagnostic',
-        unitPrice,
-        quantity: 1,
-        doctorId: doctor.id,
-        doctorName: doctor.name,
-      });
-    }
-    if (billItems.length === 0) {
-      billItems.push({
-        itemCode: isDentalEnabled ? 'CONS-DENT' : 'CONS-GEN',
-        description: isDentalEnabled ? 'Dental Consultation' : 'General Outpatient Consultation',
-        category: 'Consultation',
-        unitPrice: 500,
-        quantity: 1,
-        doctorId: doctor.id,
-        doctorName: doctor.name,
-      });
-    }
-    const effectiveBillItems = soaReviewItems.length > 0 ? soaReviewItems : billItems;
-    if (!createdInvoiceId) {
-      const [invoiceResult, invoiceErr] = await clinicService.createInvoice({
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
-        queueItemId: selectedPatient.id,
-        consultationId,
-        attendingDoctorId: doctor.id,
-        discountType: soaDiscountType || 'None',
-        discountIdNumber: soaDiscountId.trim() || undefined,
-        notes: 'Consultation & procedures bill forwarded to Cashier',
-        lineItems: effectiveBillItems,
-      });
-      if (invoiceErr) {
-        const isAlreadyGeneratedConflict =
-          invoiceErr.status === 409 ||
-          (invoiceErr.message || '').toLowerCase().includes('already been generated');
-        if (isAlreadyGeneratedConflict) {
-          const [invoices] = await clinicService.getInvoices(undefined, undefined, 'Draft');
-          const matched = invoices?.find(
-            (inv) => inv.queueItemId === selectedPatient.id || inv.patientId === selectedPatient.patientId,
-          );
-          if (matched) {
-            setCreatedInvoiceId(matched.id);
-            setCreatedInvoiceNumber(matched.invoiceNumber);
-            setCreatedInvoiceTotal(matched.netAmount);
-          }
-        } else {
-          setIsSigning(false);
-          const reason = invoiceErr.message || 'Unable to generate cashier billing invoice';
-          const msg = `Cannot sign encounter — Step failed: Cashier Billing Invoice (${reason}). Encounter was not signed.`;
-          setBanner({
-            text: msg,
-            isError: true,
-          });
-          notify.error(msg, { traceId: invoiceErr.traceId });
-          return;
-        }
-      } else if (invoiceResult) {
-        setCreatedInvoiceId(invoiceResult.id);
-        setCreatedInvoiceNumber(invoiceResult.invoiceNumber);
-        setCreatedInvoiceTotal(invoiceResult.netAmount);
-      }
-    }
-
-    // Step 6: Sign Consultation ONLY after all pre-sign steps succeeded
+    // Step 5: Sign Consultation ONLY after all pre-sign steps succeeded
     const [, signErr] = await clinicService.signConsultation(consultationId, {
       prcLicenseNumber: finalPrc,
       ptrNumber: doctorPtr.trim() || signerStaff?.ptrNumber,
@@ -2393,9 +2282,7 @@ export default function ConsultationsScreen() {
     setIsSigned(true);
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setSignedAt(nowStr);
-    const successMsg = createdInvoiceNumber
-      ? `Doctor signed clinical chart and posted Draft SOA #${createdInvoiceNumber} to Cashier.`
-      : `Encounter signed by ${doctor.name} (${finalPrc}) at ${nowStr}. Lab requisitions, nursing orders and the cashier invoice were forwarded.`;
+    const successMsg = `Encounter signed by ${doctor.name} (${finalPrc}) at ${nowStr}. Clinical charge slip posted to Cashier.`;
     setBanner({
       text: successMsg,
       isError: false,
@@ -2471,82 +2358,13 @@ export default function ConsultationsScreen() {
     return items;
   };
 
-  const handleRetryForwardToCashier = async () => {
-    if (!selectedPatient) return;
-    const doctor = requireSigner();
-    if (!doctor) return;
-    setIsRetryingInvoice(true);
-    const billItems = buildBillableItems();
-    const effectiveBillItems = soaReviewItems.length > 0 ? soaReviewItems : billItems;
-    if (effectiveBillItems.length === 0) {
-      notify.error('No billable consultation fee or procedures found to forward.');
-      setIsRetryingInvoice(false);
-      return;
-    }
-    const [invoiceResult, invoiceErr] = await clinicService.createInvoice({
-      patientId: selectedPatient.patientId,
-      patientName: selectedPatient.patientName,
-      queueItemId: selectedPatient.id,
-      consultationId: signedConsultationId || undefined,
-      attendingDoctorId: doctor.id,
-      discountType: soaDiscountType || 'None',
-      discountIdNumber: soaDiscountId.trim() || undefined,
-      notes: 'Consultation & procedures bill forwarded to Cashier',
-      lineItems: effectiveBillItems,
-    });
-    setIsRetryingInvoice(false);
-    if (invoiceErr) {
-      const isAlreadyGeneratedConflict =
-        invoiceErr.status === 409 ||
-        (invoiceErr.message || '').toLowerCase().includes('already been generated');
-      if (isAlreadyGeneratedConflict) {
-        const [invoices] = await clinicService.getInvoices(undefined, undefined, 'Draft');
-        const matched = invoices?.find(
-          (inv) => inv.queueItemId === selectedPatient.id || inv.patientId === selectedPatient.patientId,
-        );
-        if (matched) {
-          setCreatedInvoiceId(matched.id);
-          setCreatedInvoiceNumber(matched.invoiceNumber);
-          setCreatedInvoiceTotal(matched.netAmount);
-          notify.success(`Draft invoice #${matched.invoiceNumber} successfully queued to Cashier.`);
-          setPostEncounterModalVisible(true);
-        } else {
-          notify.error(`Failed to forward invoice to cashier: ${invoiceErr.message || 'unknown error'}`);
-        }
-      } else {
-        notify.error(`Failed to forward invoice to cashier: ${invoiceErr.message || 'unknown error'}`);
-      }
-    } else if (invoiceResult) {
-      setCreatedInvoiceId(invoiceResult.id);
-      setCreatedInvoiceNumber(invoiceResult.invoiceNumber);
-      setCreatedInvoiceTotal(invoiceResult.netAmount);
-      notify.success(`Draft invoice #${invoiceResult.invoiceNumber} successfully queued to Cashier.`);
-      setPostEncounterModalVisible(true);
-    }
-  };
-
-  const soaGrossAmount = useMemo(
-    () => soaReviewItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
-    [soaReviewItems]
+  const chargeSlipGross = useMemo(
+    () => chargeSlipItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
+    [chargeSlipItems]
   );
+  const soaGrossAmount = chargeSlipGross;
 
-  const soaDiscountPercentage = useMemo(() => {
-    if (soaDiscountType === 'SeniorCitizen' || soaDiscountType === 'Pwd') return 20;
-    if (soaDiscountType === 'PhilHealthKonsulta') return 100;
-    return 0;
-  }, [soaDiscountType]);
-
-  const soaDiscountAmount = useMemo(
-    () => Math.round(soaGrossAmount * (soaDiscountPercentage / 100)),
-    [soaGrossAmount, soaDiscountPercentage]
-  );
-
-  const soaNetAmount = useMemo(
-    () => Math.max(0, soaGrossAmount - soaDiscountAmount),
-    [soaGrossAmount, soaDiscountAmount]
-  );
-
-  const handleInitiateSignAndReviewSoa = () => {
+  const handleInitiateSignAndReviewChargeSlip = () => {
     if (!selectedPatient) return;
     setBanner(null);
 
@@ -2593,66 +2411,16 @@ export default function ConsultationsScreen() {
       return;
     }
 
-    // Auto-populate billable items
+    // Auto-populate billable items for read-only charge slip preview
     const items = buildBillableItems();
-    setSoaReviewItems(items);
-    setSoaDiscountType('None');
-    setSoaDiscountId('');
-    setReviewSoaModalVisible(true);
+    setChargeSlipItems(items);
+    setReviewChargeSlipModalVisible(true);
   };
 
-  const updateSoaItemQty = (index: number, newQty: number) => {
-    setSoaReviewItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, quantity: Math.max(1, newQty) } : item))
-    );
-  };
-
-  const updateSoaItemPrice = (index: number, newPrice: number) => {
-    setSoaReviewItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, unitPrice: Math.max(0, newPrice) } : item))
-    );
-  };
-
-  const handlePrintSoaPreview = async () => {
-    if (!selectedPatient) return;
-    try {
-      const [blob, err] = await clinicService.downloadInvoicePreviewPdf({
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
-        queueNumber: selectedPatient.queueNumber,
-        attendingDoctorName: signerName,
-        doctorPrcLicense: doctorPrc.trim() || signerPrc,
-        discountType: 'None',
-        lineItems: soaReviewItems.map((item) => ({
-          serviceItemId: item.serviceItemId,
-          itemCode: item.itemCode,
-          description: item.description,
-          category: item.category,
-          unitPrice: item.unitPrice,
-          quantity: item.quantity,
-        })),
-        notes: 'Statement of Account Preview',
-      });
-      if (blob && !err) {
-        openDocumentBlob(blob);
-      } else {
-        notify.error('Unable to generate backend SOA PDF.');
-      }
-    } catch {
-      notify.error('Failed to stream SOA PDF.');
-    }
-  };
-
-  const handlePrintApprovedSoa = () => {
-    if (createdInvoiceId) {
-      openDocument(clinicService.getInvoicePdfUrl(createdInvoiceId));
-    } else {
-      handlePrintSoaPreview();
-    }
-  };
+  const handleInitiateSignAndReviewSoa = handleInitiateSignAndReviewChargeSlip;
 
   const handleConfirmAndSignEncounter = async () => {
-    setReviewSoaModalVisible(false);
+    setReviewChargeSlipModalVisible(false);
     await handleSignAndSync();
   };
 
@@ -4907,15 +4675,6 @@ export default function ConsultationsScreen() {
                     variant="outline"
                     onPress={handleStartFollowUpEncounter}
                   />
-                  {!createdInvoiceNumber && !createdInvoiceId ? (
-                    <Button
-                      title="Retry forward to cashier"
-                      icon="billing"
-                      variant="secondary"
-                      loading={isRetryingInvoice}
-                      onPress={handleRetryForwardToCashier}
-                    />
-                  ) : null}
                 </View>
               </Card>
             ) : (
@@ -4930,7 +4689,7 @@ export default function ConsultationsScreen() {
                 variant={isYakapEligible && !isYakapReady ? 'outline' : 'primary'}
                 loading={isSigning}
                 disabled={isSigning || (isYakapEligible && !isYakapReady)}
-                onPress={handleInitiateSignAndReviewSoa}
+                onPress={handleInitiateSignAndReviewChargeSlip}
               />
             )}
     </View>
@@ -5999,11 +5758,11 @@ export default function ConsultationsScreen() {
           </Modal>
         ) : null}
 
-        {/* Review Statement of Account (SOA) Modal */}
+        {/* Clinical Charge Slip Preview Modal (Read-Only) */}
         <Modal
-          visible={reviewSoaModalVisible}
-          onClose={() => setReviewSoaModalVisible(false)}
-          title="Review Statement of Account (SOA)"
+          visible={reviewChargeSlipModalVisible}
+          onClose={() => setReviewChargeSlipModalVisible(false)}
+          title="Clinical Charge Slip Preview"
           subtitle={selectedPatient ? `Patient: ${selectedPatient.patientName} (${selectedPatient.queueNumber})` : undefined}
           maxWidth={620}
         >
@@ -6012,20 +5771,20 @@ export default function ConsultationsScreen() {
               <Icon name="billing" size={theme.sizes.iconMd} color={theme.colors.primary} />
               <View style={styles.soaHeaderNoticeText}>
                 <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  Review Services & Statutory Discounts
+                  Clinical Charge Slip (Read-Only)
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  Verify billable items and statutory discounts before signing and forwarding the invoice to the Cashier.
+                  Review clinical charges and procedures rendered during this encounter. Upon signing, this charge slip will be posted to the Cashier for compilation into the Statement of Account (SOA), statutory discount application, and payment collection.
                 </ThemedText>
               </View>
             </View>
 
             {/* Billable Items List */}
             <ThemedText variant="smallBold" color={theme.colors.textSecondary} style={styles.soaSectionTitle}>
-              BILLABLE SERVICES & PROCEDURES ({soaReviewItems.length})
+              CLINICAL CHARGES ({chargeSlipItems.length})
             </ThemedText>
 
-            {soaReviewItems.length === 0 ? (
+            {chargeSlipItems.length === 0 ? (
               <View style={styles.soaEmptyItemsBox}>
                 <Icon name="info" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
                 <ThemedText variant="small" color={theme.colors.textMuted}>
@@ -6047,70 +5806,39 @@ export default function ConsultationsScreen() {
                   <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={{ flex: 2, textAlign: 'right' }}>
                     Amount
                   </ThemedText>
-                  <View style={{ width: 32 }} />
                 </View>
 
-                {soaReviewItems.map((item, index) => (
+                {chargeSlipItems.map((item, index) => (
                   <View key={`${item.description}-${index}`} style={styles.soaTableRow}>
                     <View style={{ flex: 3 }}>
                       <ThemedText variant="bodyBold" color={theme.colors.text}>
                         {item.description}
                       </ThemedText>
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        {item.category} {item.itemCode ? `• ${item.itemCode}` : ''}
+                        {item.category} {item.itemCode ? `• ${item.itemCode}` : ''} {item.doctorName ? `• ${item.doctorName}` : ''}
                       </ThemedText>
                     </View>
 
-                    {/* Quantity Stepper */}
-                    <View style={styles.soaQtyStepper}>
-                      <Pressable
-                        onPress={() => updateSoaItemQty(index, item.quantity - 1)}
-                        style={styles.soaStepperBtn}
-                        accessibilityLabel="Decrease quantity"
-                      >
-                        <Icon name="minus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-                      </Pressable>
-                      <ThemedText variant="bodyBold" color={theme.colors.text} style={styles.soaQtyText}>
+                    {/* Read-Only Quantity */}
+                    <View style={{ flex: 1.5, alignItems: 'center', justifyContent: 'center' }}>
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
                         {item.quantity}
                       </ThemedText>
-                      <Pressable
-                        onPress={() => updateSoaItemQty(index, item.quantity + 1)}
-                        style={styles.soaStepperBtn}
-                        accessibilityLabel="Increase quantity"
-                      >
-                        <Icon name="plus" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
-                      </Pressable>
                     </View>
 
-                    {/* Unit Price Input */}
-                    <View style={styles.soaPriceInputWrap}>
-                      <ThemedText variant="caption" color={theme.colors.textMuted}>₱</ThemedText>
-                      <TextInput
-                        style={styles.soaPriceInput}
-                        keyboardType="numeric"
-                        value={String(item.unitPrice)}
-                        onChangeText={(val) => {
-                          const clean = val.replace(/[^0-9.]/g, '');
-                          const num = clean ? parseFloat(clean) : 0;
-                          updateSoaItemPrice(index, isNaN(num) ? 0 : num);
-                        }}
-                      />
+                    {/* Read-Only Unit Price */}
+                    <View style={{ flex: 2, alignItems: 'flex-end', justifyContent: 'center' }}>
+                      <ThemedText variant="body" color={theme.colors.textSecondary}>
+                        ₱{item.unitPrice.toFixed(2)}
+                      </ThemedText>
                     </View>
 
-                    {/* Total Amount */}
-                    <ThemedText variant="bodyBold" color={theme.colors.text} style={styles.soaRowTotal}>
-                      ₱{(item.unitPrice * item.quantity).toFixed(2)}
-                    </ThemedText>
-
-                    <Pressable
-                      onPress={() => {
-                        setSoaReviewItems((prev) => prev.filter((_, i) => i !== index));
-                      }}
-                      style={styles.soaDeleteButton}
-                      accessibilityLabel="Remove item"
-                    >
-                      <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergency} />
-                    </Pressable>
+                    {/* Read-Only Total Amount */}
+                    <View style={{ flex: 2, alignItems: 'flex-end', justifyContent: 'center' }}>
+                      <ThemedText variant="bodyBold" color={theme.colors.text}>
+                        ₱{(item.unitPrice * item.quantity).toFixed(2)}
+                      </ThemedText>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -6120,35 +5848,29 @@ export default function ConsultationsScreen() {
             <View style={styles.soaTotalsCard}>
               <View style={styles.soaTotalRow}>
                 <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  Total Billable Clinical Services
+                  Total Clinical Charges
                 </ThemedText>
                 <ThemedText variant="title" color={theme.colors.primary}>
-                  ₱{soaGrossAmount.toFixed(2)}
+                  ₱{chargeSlipGross.toFixed(2)}
                 </ThemedText>
               </View>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Review clinical items, quantities, and procedure fees above. Statutory discounts (Senior Citizen / PWD / PhilHealth Konsulta) and official collection will be applied by the Cashier.
+                This is a read-only clinical charge slip. The Cashier will compile the Statement of Account (SOA), apply statutory discounts (Senior Citizen / PWD / PhilHealth Konsulta), and record payment upon patient checkout.
               </ThemedText>
             </View>
 
             {/* Modal Actions */}
             <View style={styles.soaActionsRow}>
-              <Button
-                title="Print SOA (PDF)"
-                icon="print"
-                variant="outline"
-                size="md"
-                onPress={handlePrintSoaPreview}
-              />
+              <View />
               <View style={styles.soaActionsRight}>
                 <Button
                   title="Back to SOAP"
                   variant="ghost"
                   size="md"
-                  onPress={() => setReviewSoaModalVisible(false)}
+                  onPress={() => setReviewChargeSlipModalVisible(false)}
                 />
                 <Button
-                  title="Confirm & Sign Encounter"
+                  title="Sign Encounter & Post Charge Slip"
                   icon="check"
                   variant="primary"
                   size="md"
@@ -6181,18 +5903,16 @@ export default function ConsultationsScreen() {
                     Clinical Encounter Signed & Synchronized
                   </ThemedText>
                   <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                    {createdInvoiceNumber
-                      ? `Doctor signed clinical chart and posted Draft SOA #${createdInvoiceNumber} to Cashier.`
-                      : 'Doctor signed clinical chart and posted Draft SOA to Cashier.'}
+                    Doctor signed clinical chart and posted charge slip to Cashier.
                   </ThemedText>
                 </View>
               </View>
 
-              {createdInvoiceTotal !== null ? (
+              {chargeSlipGross > 0 ? (
                 <View style={styles.postEncounterInvoiceBadge}>
                   <Icon name="billing" size={theme.sizes.iconSm} color={theme.colors.primaryDark} />
                   <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                    Invoice {createdInvoiceNumber || 'Created'}: ₱{createdInvoiceTotal.toFixed(2)} (Queued for Checkout)
+                    Clinical Charge Slip: ₱{chargeSlipGross.toFixed(2)} (Posted to Cashier)
                   </ThemedText>
                 </View>
               ) : null}
@@ -6251,15 +5971,6 @@ export default function ConsultationsScreen() {
                     setPostEncounterModalVisible(false);
                     handleOpenPrescriptionSlip();
                   }}
-                />
-              )}
-              {createdInvoiceNumber && (
-                <Button
-                  title="Print SOA (PDF)"
-                  icon="print"
-                  variant="outline"
-                  size="sm"
-                  onPress={handlePrintApprovedSoa}
                 />
               )}
               <Button

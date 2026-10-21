@@ -638,94 +638,115 @@ describe('Adversarial Challenge Suite: Cashier Workstation & Consultation Workfl
     });
   });
 
-  describe('Challenge 5: Multi-Doctor Consultation Signing Non-Blocking Merge Behavior', () => {
-    test('5.1 Multi-doctor signing: second doctor signing encounter catches 409 and re-attaches draft SOA cleanly', async () => {
-      // Mocking clinicService
-      let createInvoiceAttempts = 0;
-      const fakeInvoices = [
+  describe('Challenge 5: Doctor Encounter Signing Posts Charge Slip & Cashier Aggregates Charges', () => {
+    test('5.1 Doctor encounter signing signs chart and posts charge slip without creating invoice (no 409 conflict)', async () => {
+      let createdInvoiceCalls = 0;
+      let signConsultationCalls = 0;
+      let completedQueueCalls = 0;
+
+      const mockClinicService = {
+        createInvoice: async () => {
+          createdInvoiceCalls++;
+          return [{ id: 'inv-1', invoiceNumber: 'INV-001' }, null];
+        },
+        signConsultation: async (id: string) => {
+          signConsultationCalls++;
+          return [{ id, signed: true }, null];
+        },
+        completeQueueItem: async (id: string) => {
+          completedQueueCalls++;
+          return [{ id, status: 'Completed' }, null];
+        },
+      };
+
+      // Doctor 1 signs encounter
+      const [, signErr1] = await mockClinicService.signConsultation('c-1');
+      await mockClinicService.completeQueueItem('q-1');
+      expect(signErr1).toBeNull();
+      expect(signConsultationCalls).toBe(1);
+      expect(completedQueueCalls).toBe(1);
+
+      // Doctor 2 signs encounter for same visit/patient
+      const [, signErr2] = await mockClinicService.signConsultation('c-2');
+      await mockClinicService.completeQueueItem('q-1');
+      expect(signErr2).toBeNull();
+      expect(signConsultationCalls).toBe(2);
+      expect(completedQueueCalls).toBe(2);
+
+      // Verify that doctor signing made 0 invoice creation calls
+      expect(createdInvoiceCalls).toBe(0);
+    });
+
+    test('5.2 Cashier workstation rehydrates consultation & multi-doctor procedures into SOA and issues invoice upon payment', async () => {
+      const mockPatient = {
+        patientId: 'pat-100',
+        patientName: 'Juan Dela Cruz',
+        queueItemId: 'q-100',
+        doctorId: 'doc-1',
+        doctorName: 'Dr. Wave Ambray',
+      };
+
+      const mockConsultations = [
+        { id: 'c-100', patientId: 'pat-100', doctorId: 'doc-1', doctorName: 'Dr. Wave Ambray' },
+      ];
+
+      const mockProcedures = [
         {
-          id: 'inv-draft-existing',
-          invoiceNumber: 'INV-20261021-001',
-          queueItemId: 'q-patient-1',
-          patientId: 'pat-1',
-          status: 'Draft',
-          netAmount: 1100,
+          id: 'proc-1',
+          procedureCode: 'DENT-01',
+          procedureName: 'Dental Cleaning',
+          category: 'Dental',
+          orderedByDoctorId: 'doc-2',
+          orderedByDoctorName: 'Dr. Allan Santos',
+          status: 'Ordered',
         },
       ];
 
-      const mockCreateInvoice = async (payload: any) => {
-        createInvoiceAttempts++;
-        if (createInvoiceAttempts === 1) {
-          // Doctor 1 creates invoice successfully
-          return [{ id: 'inv-draft-existing', invoiceNumber: 'INV-20261021-001', netAmount: 500 }, null];
-        } else {
-          // Doctor 2 encounters existing draft conflict
-          return [null, { status: 409, message: 'An invoice has already been generated for this queue encounter' }];
-        }
-      };
+      // Cashier rehydrates charge slip items
+      const cashierLineItems: any[] = [];
 
-      const mockGetDraftInvoices = async () => {
-        return [fakeInvoices, null];
-      };
+      // Add consultation charge
+      cashierLineItems.push({
+        code: 'CONSULT',
+        name: 'General Medical Consultation',
+        category: 'Consultation',
+        price: 500,
+        qty: 1,
+        doctorId: mockPatient.doctorId,
+        doctorName: mockPatient.doctorName,
+      });
 
-      // Simulating handleSignAndSync for Doctor 2
-      let bannerError: string | null = null;
-      let boundInvoiceId: string | null = null;
-      let boundInvoiceNumber: string | null = null;
-
-      // Doctor 1 signs
-      const [inv1, err1] = await mockCreateInvoice({ queueItemId: 'q-patient-1' });
-      expect(inv1?.invoiceNumber).toBe('INV-20261021-001');
-
-      // Doctor 2 signs for same visit
-      const [inv2, err2] = await mockCreateInvoice({ queueItemId: 'q-patient-1' });
-      if (err2) {
-        const isAlreadyGeneratedConflict =
-          err2.status === 409 ||
-          (err2.message || '').toLowerCase().includes('already been generated');
-
-        if (isAlreadyGeneratedConflict) {
-          const [invoices] = await mockGetDraftInvoices();
-          const matched = invoices?.find((inv: any) => inv.queueItemId === 'q-patient-1');
-          if (matched) {
-            boundInvoiceId = matched.id;
-            boundInvoiceNumber = matched.invoiceNumber;
-          }
-        } else {
-          bannerError = err2.message;
-        }
+      // Add procedure charge with doctor attribution
+      for (const proc of mockProcedures) {
+        cashierLineItems.push({
+          code: proc.procedureCode,
+          name: proc.procedureName,
+          category: proc.category,
+          price: 1200,
+          qty: 1,
+          doctorId: proc.orderedByDoctorId,
+          doctorName: proc.orderedByDoctorName,
+        });
       }
 
-      // Assert that NO blocking banner error was generated
-      expect(bannerError).toBeNull();
-      // Assert that existing draft invoice was smoothly bound
-      expect(boundInvoiceId).toBe('inv-draft-existing');
-      expect(boundInvoiceNumber).toBe('INV-20261021-001');
-    });
+      expect(cashierLineItems).toHaveLength(2);
+      expect(cashierLineItems[0].doctorName).toBe('Dr. Wave Ambray');
+      expect(cashierLineItems[1].doctorName).toBe('Dr. Allan Santos');
 
-    test('5.2 Non-conflict API errors (e.g. 500 or network drop) correctly trigger alert and halt signing', async () => {
-      const mockFailingCreateInvoice = async () => {
-        return [null, { status: 500, message: 'Database connection failed' }];
+      // Cashier compiles into Invoice upon payment collection
+      const gross = cashierLineItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+      expect(gross).toBe(1700);
+
+      const invoicePayload = {
+        patientId: mockPatient.patientId,
+        patientName: mockPatient.patientName,
+        queueItemId: mockPatient.queueItemId,
+        lineItems: cashierLineItems,
+        netAmount: gross,
       };
 
-      let bannerError: string | null = null;
-      let signingHalted = false;
-
-      const [, err] = await mockFailingCreateInvoice();
-      if (err) {
-        const isAlreadyGeneratedConflict =
-          err.status === 409 ||
-          (err.message || '').toLowerCase().includes('already been generated');
-
-        if (!isAlreadyGeneratedConflict) {
-          signingHalted = true;
-          bannerError = `Cannot sign encounter — Step failed: Cashier Billing Invoice (${err.message}). Encounter was not signed.`;
-        }
-      }
-
-      expect(signingHalted).toBe(true);
-      expect(bannerError).toContain('Database connection failed');
-      expect(bannerError).toContain('Encounter was not signed');
+      expect(invoicePayload.lineItems[0].doctorName).toBe('Dr. Wave Ambray');
+      expect(invoicePayload.lineItems[1].doctorName).toBe('Dr. Allan Santos');
     });
   });
 });

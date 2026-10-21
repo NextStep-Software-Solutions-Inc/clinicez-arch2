@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
@@ -960,6 +961,85 @@ public class BillingAndCashierWorkflowTests
         split2.Payments.Should().HaveCount(2);
         split2.Payments[1].PaymentNumber.Should().StartWith("OR-");
         split2.Payments[0].PaymentNumber.Should().NotBe(split2.Payments[1].PaymentNumber);
+    }
+
+    [Fact]
+    public void SystemTextJson_Must_Deserialize_CreateInvoiceLineItemRequest_And_Commands_Without_Constructor_Ambiguity()
+    {
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+        };
+
+        // 1. Deserializing individual CreateInvoiceLineItemRequest
+        const string lineItemJson = """
+        {
+            "doctorId": "22222222-2222-2222-2222-222222222222",
+            "doctorName": "Dr. Allan Santos",
+            "serviceItemId": "33333333-3333-3333-3333-333333333333",
+            "itemCode": "DENT-CLEAN",
+            "description": "Dental Oral Prophylaxis",
+            "category": "Procedure",
+            "unitPrice": 1200.50,
+            "quantity": 2
+        }
+        """;
+
+        var lineItem = JsonSerializer.Deserialize<CreateInvoiceLineItemRequest>(lineItemJson, options);
+        lineItem.Should().NotBeNull();
+        lineItem!.DoctorId.Should().Be(Guid.Parse("22222222-2222-2222-2222-222222222222"));
+        lineItem.DoctorName.Should().Be("Dr. Allan Santos");
+        lineItem.ItemCode.Should().Be("DENT-CLEAN");
+        lineItem.Description.Should().Be("Dental Oral Prophylaxis");
+        lineItem.Category.Should().Be("Procedure");
+        lineItem.UnitPrice.Should().Be(1200.50m);
+        lineItem.Quantity.Should().Be(2);
+
+        // 2. Deserializing CreateInvoiceRequest with lineItems
+        const string createInvoiceJson = """
+        {
+            "patientId": "11111111-1111-1111-1111-111111111111",
+            "patientName": "Juan Dela Cruz",
+            "discountType": "None",
+            "lineItems": [
+                {
+                    "doctorId": "22222222-2222-2222-2222-222222222222",
+                    "doctorName": "Dr. Allan Santos",
+                    "description": "Dental Cleaning",
+                    "category": "Procedure",
+                    "unitPrice": 1200.0,
+                    "quantity": 1
+                }
+            ]
+        }
+        """;
+
+        var createReq = JsonSerializer.Deserialize<CreateInvoiceRequest>(createInvoiceJson, options);
+        createReq.Should().NotBeNull();
+        createReq!.LineItems.Should().HaveCount(1);
+        createReq.LineItems[0].DoctorName.Should().Be("Dr. Allan Santos");
+
+        // 3. Deserializing UpdateInvoiceRequest with lineItems
+        const string updateInvoiceJson = """
+        {
+            "discountType": "SeniorCitizen",
+            "discountIdNumber": "SC-12345",
+            "lineItems": [
+                {
+                    "description": "General Consultation",
+                    "category": "Consultation",
+                    "unitPrice": 500.0,
+                    "quantity": 1
+                }
+            ]
+        }
+        """;
+
+        var updateReq = JsonSerializer.Deserialize<UpdateInvoiceRequest>(updateInvoiceJson, options);
+        updateReq.Should().NotBeNull();
+        updateReq!.LineItems.Should().HaveCount(1);
+        updateReq.LineItems![0].Description.Should().Be("General Consultation");
     }
 
     #endregion

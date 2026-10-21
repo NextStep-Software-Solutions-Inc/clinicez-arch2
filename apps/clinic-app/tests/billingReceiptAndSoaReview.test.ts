@@ -220,7 +220,7 @@ describe('Billing Receipt & SOA Review Feature Tests', () => {
     });
   });
 
-  describe('Suite 4: Consultations Screen Statement of Account (SOA) Review Flow', () => {
+  describe('Suite 4: Consultations Screen Read-Only Clinical Charge Slip Review Flow', () => {
     const fs = require('fs');
     const path = require('path');
     const consultSource = fs.readFileSync(
@@ -228,37 +228,37 @@ describe('Billing Receipt & SOA Review Feature Tests', () => {
       'utf-8'
     );
 
-    test('4.1 Consultations screen exports reviewSoaModalVisible and handleInitiateSignAndReviewSoa', () => {
-      expect(consultSource).toContain('const [reviewSoaModalVisible, setReviewSoaModalVisible] = useState(false);');
-      expect(consultSource).toContain('const handleInitiateSignAndReviewSoa = () => {');
-      expect(consultSource).toContain('const [soaReviewItems, setSoaReviewItems] = useState');
-      expect(consultSource).toContain('const [soaDiscountType, setSoaDiscountType] = useState');
+    test('4.1 Consultations screen exports reviewChargeSlipModalVisible and handleInitiateSignAndReviewChargeSlip', () => {
+      expect(consultSource).toContain('const [reviewChargeSlipModalVisible, setReviewChargeSlipModalVisible] = useState(false);');
+      expect(consultSource).toContain('const handleInitiateSignAndReviewChargeSlip = () => {');
+      expect(consultSource).toContain('const [chargeSlipItems, setChargeSlipItems] = useState');
     });
 
-    test('4.2 Sign encounter button triggers handleInitiateSignAndReviewSoa', () => {
-      expect(consultSource).toContain('onPress={handleInitiateSignAndReviewSoa}');
+    test('4.2 Sign encounter button triggers handleInitiateSignAndReviewChargeSlip', () => {
+      expect(consultSource).toContain('onPress={handleInitiateSignAndReviewChargeSlip}');
     });
 
-    test('4.3 Review SOA Modal displays billable items, totals, and Print SOA (PDF)', () => {
-      expect(consultSource).toContain('title="Review Statement of Account (SOA)"');
-      expect(consultSource).toContain('BILLABLE SERVICES &amp; PROCEDURES'.replace('&amp;', '&'));
-      expect(consultSource).toContain('Total Billable Clinical Services');
-      expect(consultSource).toContain('title="Print SOA (PDF)"');
-      expect(consultSource).toContain('onPress={handlePrintSoaPreview}');
-      expect(consultSource).toContain('title="Confirm &amp; Sign Encounter"'.replace('&amp;', '&'));
+    test('4.3 Charge Slip Preview Modal is strictly read-only and posts to Cashier (no SOA editing, no Print SOA)', () => {
+      expect(consultSource).toContain('title="Clinical Charge Slip Preview"');
+      expect(consultSource).toContain('CLINICAL CHARGES');
+      expect(consultSource).toContain('Total Clinical Charges');
+      expect(consultSource).toContain('title="Sign Encounter & Post Charge Slip"');
       expect(consultSource).toContain('onPress={handleConfirmAndSignEncounter}');
+      // Doctor must preview read-only charge slip, NOT Statement of Account (SOA)
+      expect(consultSource).not.toContain('title="Review Statement of Account (SOA)"');
+      expect(consultSource).not.toContain('title="Print SOA (PDF)"');
     });
 
-    test('4.4 handleSignAndSync uses reviewed SOA line items and chosen statutory discount', () => {
-      expect(consultSource).toContain('const effectiveBillItems = soaReviewItems.length > 0 ? soaReviewItems : billItems;');
-      expect(consultSource).toContain('discountType: soaDiscountType || \'None\'');
-      expect(consultSource).toContain('discountIdNumber: soaDiscountId.trim() || undefined');
+    test('4.4 Doctor encounter signing does NOT create an invoice (strictly posts charge slip to Cashier)', () => {
+      // In handleSignConsultation, clinicService.createInvoice is NOT called
+      expect(consultSource).not.toMatch(/handleSignConsultation[\s\S]*?clinicService\.createInvoice/);
+      expect(consultSource).toContain('Encounter signed by ${doctor.name} (${finalPrc}) at ${nowStr}. Clinical charge slip posted to Cashier.');
     });
 
-    test('4.5 Post-Encounter Action Dialog contains Print SOA (PDF) button when invoice is created', () => {
-      expect(consultSource).toContain('createdInvoiceNumber && (');
-      expect(consultSource).toContain('title="Print SOA (PDF)"');
-      expect(consultSource).toContain('onPress={handlePrintApprovedSoa}');
+    test('4.5 Post-Encounter Dialog confirms charge slip is posted to Cashier without creating an invoice', () => {
+      expect(consultSource).toContain('Clinical Encounter Signed & Synchronized');
+      expect(consultSource).toContain('Doctor signed clinical chart and posted charge slip to Cashier.');
+      expect(consultSource).toContain('Clinical Charge Slip: ₱{chargeSlipGross.toFixed(2)} (Posted to Cashier)');
     });
   });
 
