@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { siteEmails } from "@/config/site";
 import { joinApiUrl } from "@shared/safe";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 const PORTAL_API_URL = (
   process.env.NEXT_PUBLIC_API_URL ||
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
     const lastName = String(body?.lastName || "").trim();
     const email = String(body?.email || "").trim();
     const message = String(body?.message || "").trim();
+    const turnstileToken = body?.turnstileToken ? String(body.turnstileToken).trim() : undefined;
 
     if (!firstName || !lastName || !email || !message) {
       return NextResponse.json(
@@ -76,6 +78,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Server-side Turnstile verification
+    const clientIp =
+      request.headers.get("cf-connecting-ip") ||
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      undefined;
+
+    const turnstileResult = await verifyTurnstileToken(turnstileToken, clientIp, {
+      expectedAction: "contact_us",
+    });
+
+    if (!turnstileResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Bot verification failed. Please complete the security challenge.",
+          errorCodes: turnstileResult.errorCodes,
+        },
+        { status: 403 }
+      );
+    }
+
     const name = `${firstName} ${lastName}`.trim();
     const targetUrl = joinApiUrl(PORTAL_API_URL, "/contact");
 
@@ -85,7 +108,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({ name, email, message }),
+      body: JSON.stringify({ name, email, message, turnstileToken }),
     });
 
     const data = await res.json().catch(() => ({}));

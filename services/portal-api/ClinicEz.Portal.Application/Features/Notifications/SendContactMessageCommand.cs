@@ -10,7 +10,7 @@ namespace ClinicEz.Portal.Application.Features.Notifications;
 /// A visitor's message from the public "Contact us" form. It is emailed to the inbox configured in
 /// <c>Notifications:ContactInbox</c>; the visitor never chooses the recipient or the template.
 /// </summary>
-public record SendContactMessageCommand(string Name, string Email, string Message) : IRequest<bool>;
+public record SendContactMessageCommand(string Name, string Email, string Message, string? TurnstileToken = null) : IRequest<bool>;
 
 public class SendContactMessageCommandValidator : AbstractValidator<SendContactMessageCommand>
 {

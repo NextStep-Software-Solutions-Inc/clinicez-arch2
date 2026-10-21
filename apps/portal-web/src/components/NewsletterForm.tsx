@@ -1,13 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2 } from "lucide-react";
+import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget";
 
 export function NewsletterForm() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileWidgetHandle>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +31,11 @@ export function NewsletterForm() {
       const res = await fetch("/api/v1/public/newsletter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, source: "footer" }),
+        body: JSON.stringify({
+          email: cleanEmail,
+          source: "footer",
+          turnstileToken: turnstileToken || undefined,
+        }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -36,11 +43,17 @@ export function NewsletterForm() {
       if (res.ok && data.success) {
         setSubscribed(true);
         setEmail("");
+        setTurnstileToken(null);
+        turnstileRef.current?.reset();
         toast.success(data.message || "Thank you for subscribing to Clinic EZ updates!");
       } else {
+        turnstileRef.current?.reset();
+        setTurnstileToken(null);
         toast.error(data.message || "Unable to subscribe. Please try again later.");
       }
     } catch {
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
       toast.error("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
@@ -57,31 +70,43 @@ export function NewsletterForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 w-full max-w-sm">
-      <input
-        type="email"
-        placeholder="Enter your email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        disabled={loading}
-        aria-label="Email for newsletter subscription"
-        required
-        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 transition-colors"
-      />
-      <button
-        type="submit"
-        disabled={loading}
-        className="inline-flex items-center justify-center h-10 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60 transition-colors shrink-0 shadow-sm shadow-primary/20 cursor-pointer"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-            Joining...
-          </>
-        ) : (
-          "Subscribe"
-        )}
-      </button>
-    </form>
+    <div className="flex flex-col gap-2 w-full max-w-sm">
+      <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2 w-full">
+        <input
+          type="email"
+          placeholder="Enter your email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={loading}
+          aria-label="Email for newsletter subscription"
+          required
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60 transition-colors"
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          className="inline-flex items-center justify-center h-10 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60 transition-colors shrink-0 shadow-sm shadow-primary/20 cursor-pointer"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              Joining...
+            </>
+          ) : (
+            "Subscribe"
+          )}
+        </button>
+      </form>
+      <div className="w-full flex justify-start">
+        <TurnstileWidget
+          ref={turnstileRef}
+          action="newsletter_signup"
+          size="compact"
+          onSuccess={(token) => setTurnstileToken(token)}
+          onExpire={() => setTurnstileToken(null)}
+          onError={() => setTurnstileToken(null)}
+        />
+      </div>
+    </div>
   );
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { joinApiUrl } from "@shared/safe";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 const PORTAL_API_URL = (
   process.env.NEXT_PUBLIC_API_URL ||
@@ -14,6 +15,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const email = String(body?.email || "").trim().toLowerCase();
     const source = String(body?.source || "website").trim();
+    const turnstileToken = body?.turnstileToken ? String(body.turnstileToken).trim() : undefined;
 
     if (!email) {
       return NextResponse.json(
@@ -29,6 +31,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Verify Turnstile bot protection token
+    const clientIp =
+      request.headers.get("cf-connecting-ip") ||
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      undefined;
+
+    const turnstileResult = await verifyTurnstileToken(turnstileToken, clientIp, {
+      expectedAction: "newsletter_signup",
+    });
+
+    if (!turnstileResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Bot verification failed. Please complete the security challenge.",
+          errorCodes: turnstileResult.errorCodes,
+        },
+        { status: 403 }
+      );
+    }
+
     // Forward to portal-api backend
     const targetUrl = joinApiUrl(PORTAL_API_URL, "/public/newsletter");
 
@@ -38,7 +61,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({ email, source }),
+      body: JSON.stringify({ email, source, turnstileToken }),
     });
 
     const data = await res.json().catch(() => ({}));
@@ -69,10 +92,10 @@ export async function POST(request: NextRequest) {
       { status: res.status || 500 }
     );
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Failed to process subscription.";
+    const msg = err instanceof Error ? err.message : "Internal subscription service error.";
     return NextResponse.json(
-      { success: false, message: `Subscription failed: ${msg}` },
-      { status: 500 }
+      { success: false, message: `Unable to subscribe: ${msg}` },
+      { status: 502 }
     );
   }
 }

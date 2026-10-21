@@ -65,6 +65,9 @@ export interface PatientJoinRequestedPayload {
   // Structured Clinical Lists & External Attachments
   allergies?: PatientJoinAllergyItem[];
   attachments?: PatientJoinAttachmentItem[];
+
+  // Bot Challenge Verification
+  turnstileToken?: string;
 }
 
 export interface DigitalRegistrationPass {

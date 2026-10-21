@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { joinApiUrl } from "@shared/safe";
 import { type PatientJoinRequestedPayload } from "@/components/join/types";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 const PORTAL_API_URL = (
   process.env.PORTAL_API_URL ||
@@ -24,6 +25,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: "Missing required patient demographic or facility routing fields." },
         { status: 400 }
+      );
+    }
+
+    // 2. Server-side Turnstile verification
+    const clientIp =
+      request.headers.get("cf-connecting-ip") ||
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      undefined;
+
+    const turnstileResult = await verifyTurnstileToken(payload.turnstileToken, clientIp, {
+      expectedAction: "patient_join",
+    });
+
+    if (!turnstileResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Bot verification failed. Please complete the security challenge.",
+          errorCodes: turnstileResult.errorCodes,
+        },
+        { status: 403 }
       );
     }
 

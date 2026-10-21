@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Check, CheckCircle2, Copy, Loader2, Mail, MapPin, Phone } from "lucide-react";
 import { siteEmails } from "@/config/site";
+import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget";
 
 interface PublicContactInfo {
   headquartersAddress: string;
@@ -30,6 +31,9 @@ export function ContactUsClient() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileWidgetHandle>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
@@ -91,10 +95,13 @@ export function ContactUsClient() {
           lastName: lastName.trim(),
           email: email.trim(),
           message: message.trim(),
+          turnstileToken,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        turnstileRef.current?.reset();
+        setTurnstileToken(null);
         throw new Error(data.message || "Unable to send your message right now.");
       }
       setSubmitSuccess(
@@ -104,6 +111,8 @@ export function ContactUsClient() {
       setLastName("");
       setEmail("");
       setMessage("");
+      setTurnstileToken(null);
+      turnstileRef.current?.reset();
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : "Unable to send your message right now.");
     } finally {
@@ -206,7 +215,7 @@ export function ContactUsClient() {
             </div>
           </div>
 
-          {/* Call Us */}
+          {/* Phone */}
           <div className="flex items-start">
             <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mr-6 shrink-0">
               <Phone className="h-5 w-5" />
@@ -214,58 +223,40 @@ export function ContactUsClient() {
             <div className="space-y-1">
               <h3 className="text-xl font-bold mb-2">Call Us</h3>
               {loadingInfo ? (
-                <div className="space-y-2 animate-pulse">
-                  <div className="h-4 w-40 bg-muted rounded" />
-                  <div className="h-4 w-48 bg-muted rounded" />
-                </div>
+                <div className="h-4 w-36 bg-muted rounded animate-pulse" />
               ) : (
-                <div>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`tel:${contactInfo.phoneNumber.replace(/[^\d+]/g, "")}`}
-                      className="text-muted-foreground hover:text-primary transition-colors font-medium underline-offset-4 hover:underline"
-                    >
-                      {contactInfo.phoneNumber}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(contactInfo.phoneNumber, "phone")}
-                      title="Copy phone number"
-                      className="inline-flex items-center justify-center p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                    >
-                      {copiedKey === "phone" ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    {copiedKey === "phone" && (
-                      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                        Copied
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {contactInfo.operatingHours}
-                  </p>
-                </div>
+                <a
+                  href={`tel:${contactInfo.phoneNumber.replace(/[^+\d]/g, "")}`}
+                  className="text-muted-foreground hover:text-primary transition-colors"
+                >
+                  {contactInfo.phoneNumber}
+                </a>
               )}
+              <p className="text-xs text-muted-foreground mt-1">
+                {contactInfo.operatingHours}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Contact Form (In-Browser Submission) */}
-        <div className="rounded-3xl border border-border bg-card/50 backdrop-blur-xl p-8 shadow-2xl shadow-primary/5 relative">
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            {submitError && (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                {submitError}
+        {/* Contact Form */}
+        <div className="bg-card border border-border/60 rounded-2xl p-8 sm:p-10 shadow-sm relative">
+          <h2 className="text-2xl font-bold mb-2">Send us a message</h2>
+          <p className="text-sm text-muted-foreground mb-6">
+            Fill out the form below and we will get back to you shortly.
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {submitSuccess && (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5" />
+                <span>{submitSuccess}</span>
               </div>
             )}
-            {submitSuccess && (
-              <div className="rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm text-foreground flex items-start gap-2.5">
-                <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                <span>{submitSuccess}</span>
+
+            {submitError && (
+              <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                {submitError}
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -320,6 +311,14 @@ export function ContactUsClient() {
                 placeholder="How can we help you today?"
               />
             </div>
+
+            <TurnstileWidget
+              ref={turnstileRef}
+              action="contact_us"
+              onSuccess={(token) => setTurnstileToken(token)}
+              onExpire={() => setTurnstileToken(null)}
+              onError={() => setTurnstileToken(null)}
+            />
 
             <button
               type="submit"
