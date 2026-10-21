@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
 import {
   ThemedText,
@@ -11,10 +11,11 @@ import {
   CardHeader,
   SegmentedControl,
 } from '../ui';
-import type {
-  ClinicPatient,
-  PatientChart,
-  ClinicalProcedureRecord,
+import {
+  clinicService,
+  type ClinicPatient,
+  type PatientChart,
+  type ClinicalProcedureRecord,
 } from '../../services/clinicService';
 import {
   ToothSurfaceDiagram,
@@ -25,6 +26,7 @@ import {
   sortToothSurfaces,
   getToothDescription,
   normalizeTeethToMultiRecord,
+  voidConditionOnTooth,
   getDominantToothStatus,
   getConditionDotColor,
   calculateDmftMetrics,
@@ -44,6 +46,7 @@ export interface DentalChartTabProps {
   chart?: PatientChart | null;
   focusToothNumber?: number;
   onOrderProcedure?: (toothNumber: number, toothSurface?: string) => void;
+  onVoidCondition?: (toothNumber: number, recordId: string, reason?: string) => void | Promise<void>;
   onRemoveCondition?: (toothNumber: number, conditionIdOrStatus: string) => void;
   onRefreshChart?: () => void;
   testID?: string;
@@ -178,6 +181,7 @@ export default function DentalChartTab({
   chart,
   focusToothNumber,
   onOrderProcedure,
+  onVoidCondition,
   onRemoveCondition,
   onRefreshChart,
   testID = 'dental-chart-tab',
@@ -192,6 +196,8 @@ export default function DentalChartTab({
   const [selectedToothNumber, setSelectedToothNumber] = useState<number | null>(
     focusToothNumber ?? null
   );
+  const [localTeethOverride, setLocalTeethOverride] = useState<Record<number, DentalToothRecord[]> | null>(null);
+  const [voidReasonInput, setVoidReasonInput] = useState<string>('');
 
   // Auto-switch dentition and select tooth if focusToothNumber changes
   useEffect(() => {
@@ -205,19 +211,26 @@ export default function DentalChartTab({
     }
   }, [focusToothNumber]);
 
-  // Aggregate tooth records from chart into multi-condition records
-  const multiTeethMap = useMemo<Record<number, DentalToothRecord[]>>(() => {
+  const propMultiTeethMap = useMemo<Record<number, DentalToothRecord[]>>(() => {
     const teethList: DentalToothRecord[] =
       chart?.dentalTeeth || chart?.dentalChart?.teeth || [];
     return normalizeTeethToMultiRecord(teethList);
   }, [chart?.dentalTeeth, chart?.dentalChart?.teeth]);
+
+  useEffect(() => {
+    setLocalTeethOverride(null);
+  }, [propMultiTeethMap]);
+
+  // Aggregate tooth records from chart into multi-condition records
+  const multiTeethMap = localTeethOverride ?? propMultiTeethMap;
 
   // Backward-compatible single-record map for primary record access
   const teethMap = useMemo<Record<number, DentalToothRecord>>(() => {
     const map: Record<number, DentalToothRecord> = {};
     for (const [numStr, recs] of Object.entries(multiTeethMap)) {
       const num = Number(numStr);
-      map[num] = recs[0] || {
+      const activeNonVoided = recs.filter((r) => !r.isVoided && r.isCurrent !== false);
+      map[num] = activeNonVoided[activeNonVoided.length - 1] || recs[recs.length - 1] || {
         id: `rec-${num}`,
         toothNumber: num,
         status: 'Healthy',
@@ -243,11 +256,11 @@ export default function DentalChartTab({
   const selectedToothRecord = useMemo<DentalToothRecord | null>(() => {
     if (!selectedToothNumber) return null;
     const currentNonHealthy = selectedToothRecords.filter(
-      (r) => r.status !== 'Healthy' && r.isCurrent !== false
+      (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent !== false
     );
-    if (currentNonHealthy.length > 0) return currentNonHealthy[0];
-    const currentAny = selectedToothRecords.filter((r) => r.isCurrent !== false);
-    if (currentAny.length > 0) return currentAny[0];
+    if (currentNonHealthy.length > 0) return currentNonHealthy[currentNonHealthy.length - 1];
+    const currentAny = selectedToothRecords.filter((r) => !r.isVoided && r.isCurrent !== false);
+    if (currentAny.length > 0) return currentAny[currentAny.length - 1];
     return {
       id: `rec-${selectedToothNumber}`,
       toothNumber: selectedToothNumber,
@@ -257,6 +270,31 @@ export default function DentalChartTab({
       createdAt: new Date().toISOString(),
     };
   }, [selectedToothRecords, selectedToothNumber]);
+
+  const handleVoidCondition = async (toothNumber: number, recordIdOrStatus: string) => {
+    const currentRecs = multiTeethMap[toothNumber] || [];
+    const reason = voidReasonInput.trim() || 'Voided in patient dental chart';
+    const nextRecs = voidConditionOnTooth(currentRecs, recordIdOrStatus, {
+      voidReason: reason,
+    });
+    setLocalTeethOverride({
+      ...multiTeethMap,
+      [toothNumber]: nextRecs,
+    });
+    setVoidReasonInput('');
+
+    if (onVoidCondition) {
+      await onVoidCondition(toothNumber, recordIdOrStatus, reason);
+    } else if (onRemoveCondition) {
+      onRemoveCondition(toothNumber, recordIdOrStatus);
+    } else {
+      const resolvedPatientId = patientId || patient?.id || chart?.patientId;
+      if (resolvedPatientId) {
+        await clinicService.voidDentalToothRecord(resolvedPatientId, recordIdOrStatus, reason);
+        onRefreshChart?.();
+      }
+    }
+  };
 
   // Procedures history for the selected tooth
   const toothProcedures = useMemo<ClinicalProcedureRecord[]>(() => {
@@ -285,8 +323,8 @@ export default function DentalChartTab({
 
   const renderToothCell = (toothNum: number) => {
     const records = multiTeethMap[toothNum] || [];
-    const activeRecords = records.filter((r) => r.isCurrent !== false);
-    const status = getDominantToothStatus(activeRecords.length > 0 ? activeRecords : records);
+    const activeRecords = records.filter((r) => !r.isVoided && r.isCurrent !== false);
+    const status = getDominantToothStatus(activeRecords);
     const isSelected = selectedToothNumber === toothNum;
     const colors = getToothStatusColor(status);
 
@@ -343,10 +381,16 @@ export default function DentalChartTab({
   };
 
   const activeConditions = selectedToothRecords.filter(
-    (r) => r.status !== 'Healthy' && r.isCurrent !== false
+    (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent !== false
   );
   const historicalConditions = selectedToothRecords.filter(
-    (r) => r.status !== 'Healthy' && r.isCurrent === false
+    (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent === false
+  );
+  const voidedConditions = selectedToothRecords.filter(
+    (r) => r.isVoided === true && r.status !== 'Healthy'
+  );
+  const canVoidRecords = Boolean(
+    onVoidCondition || onRemoveCondition || patientId || patient?.id || chart?.patientId
   );
 
   return (
@@ -587,9 +631,21 @@ export default function DentalChartTab({
 
             {/* Recorded Conditions on Tooth #XX List (Current Active Status) */}
             <View style={styles.conditionsSection} testID="tab-recorded-conditions-list">
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                RECORDED CONDITIONS ON TOOTH #{selectedToothNumber} ({activeConditions.length})
-              </ThemedText>
+              <View style={styles.conditionsSectionHeader}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  RECORDED CONDITIONS ON TOOTH #{selectedToothNumber} ({activeConditions.length})
+                </ThemedText>
+                {canVoidRecords && (activeConditions.length > 0 || historicalConditions.length > 0) ? (
+                  <TextInput
+                    value={voidReasonInput}
+                    onChangeText={setVoidReasonInput}
+                    placeholder="Optional void reason..."
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.voidReasonInput}
+                    testID="tab-void-reason-input"
+                  />
+                ) : null}
+              </View>
               {activeConditions.length === 0 ? (
                 <View style={styles.healthyBox}>
                   <ThemedText variant="small" color={theme.colors.successText}>
@@ -598,19 +654,20 @@ export default function DentalChartTab({
                 </View>
               ) : (
                 <View style={styles.conditionsList}>
-                  {activeConditions.map((cond, idx) => {
+                  {[...activeConditions].reverse().map((cond, idx) => {
                     const origSurf = cond.surface ? sortToothSurfaces(cond.surface) : '';
                     const actSurf =
                       cond.activeSurface !== undefined && cond.activeSurface !== null
                         ? sortToothSurfaces(cond.activeSurface)
                         : origSurf;
                     const hasPartialDiff = Boolean(origSurf && actSurf && origSurf !== actSurf);
+                    const recKey = cond.id || cond.status.toLowerCase();
 
                     return (
                       <View
                         key={cond.id || `${cond.status}-${idx}`}
                         style={styles.conditionCard}
-                        testID={`tab-condition-${cond.id || cond.status.toLowerCase()}`}
+                        testID={`tab-condition-${recKey}`}
                       >
                         <View style={styles.conditionHeader}>
                           <View style={styles.conditionBadgeRow}>
@@ -633,17 +690,17 @@ export default function DentalChartTab({
                               </ThemedText>
                             ) : null}
                           </View>
-                          {onRemoveCondition ? (
+                          {canVoidRecords ? (
                             <Pressable
                               accessibilityRole="button"
-                              accessibilityLabel={`Remove ${cond.status} from Tooth #${selectedToothNumber}`}
-                              onPress={() => onRemoveCondition(selectedToothNumber, cond.id || cond.status)}
-                              testID={`tab-remove-condition-${cond.id || cond.status.toLowerCase()}`}
+                              accessibilityLabel={`Void ${cond.status} on Tooth #${selectedToothNumber}`}
+                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
+                              testID={`tab-void-condition-${recKey}`}
                               style={styles.removeConditionBtn}
                             >
-                              <Icon name="trash" size={14} color={theme.colors.emergency} />
-                              <ThemedText variant="captionBold" color={theme.colors.emergency}>
-                                Remove
+                              <Icon name="closeCircle" size={14} color={theme.colors.warningText} />
+                              <ThemedText variant="captionBold" color={theme.colors.warningText}>
+                                Void
                               </ThemedText>
                             </Pressable>
                           ) : null}
@@ -665,7 +722,7 @@ export default function DentalChartTab({
               )}
             </View>
 
-            {/* Historical Conditions (Previous Encounters) — Left Screen Longitudinal Audit */}
+            {/* Historical Conditions (Previous Encounters) — Left Screen Longitudinal Stack */}
             <View style={styles.conditionsSection} testID="tab-historical-conditions-list">
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
                 HISTORICAL CONDITIONS (PREVIOUS ENCOUNTERS) ({historicalConditions.length})
@@ -678,13 +735,14 @@ export default function DentalChartTab({
                 </View>
               ) : (
                 <View style={styles.conditionsList}>
-                  {historicalConditions.map((cond, idx) => {
+                  {[...historicalConditions].reverse().map((cond, idx) => {
                     const origSurf = cond.surface ? sortToothSurfaces(cond.surface) : '';
+                    const recKey = cond.id || cond.status.toLowerCase();
                     return (
                       <View
                         key={cond.id || `hist-${cond.status}-${idx}`}
                         style={[styles.conditionCard, styles.conditionCardHistorical]}
-                        testID={`tab-historical-condition-${cond.id || cond.status.toLowerCase()}`}
+                        testID={`tab-historical-condition-${recKey}`}
                       >
                         <View style={styles.conditionHeader}>
                           <View style={styles.conditionBadgeRow}>
@@ -702,6 +760,20 @@ export default function DentalChartTab({
                               {origSurf ? `Surfaces: ${origSurf}` : 'Full Tooth / Intact'}
                             </ThemedText>
                           </View>
+                          {canVoidRecords ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Void historical ${cond.status} on Tooth #${selectedToothNumber}`}
+                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
+                              testID={`tab-void-condition-${recKey}`}
+                              style={styles.removeConditionBtn}
+                            >
+                              <Icon name="closeCircle" size={14} color={theme.colors.warningText} />
+                              <ThemedText variant="captionBold" color={theme.colors.warningText}>
+                                Void
+                              </ThemedText>
+                            </Pressable>
+                          ) : null}
                         </View>
 
                         {cond.notes ? (
@@ -720,6 +792,57 @@ export default function DentalChartTab({
                 </View>
               )}
             </View>
+
+            {/* Voided Conditions Audit Trail */}
+            {voidedConditions.length > 0 ? (
+              <View style={styles.conditionsSection} testID="tab-voided-conditions-list">
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  VOIDED ENTRIES (AUDIT TRAIL) ({voidedConditions.length})
+                </ThemedText>
+                <View style={styles.conditionsList}>
+                  {[...voidedConditions].reverse().map((cond, idx) => {
+                    const origSurf = cond.surface ? sortToothSurfaces(cond.surface) : '';
+                    const recKey = cond.id || cond.status.toLowerCase();
+                    return (
+                      <View
+                        key={cond.id || `void-${cond.status}-${idx}`}
+                        style={[styles.conditionCard, styles.conditionCardVoided]}
+                        testID={`tab-voided-condition-${recKey}`}
+                      >
+                        <View style={styles.conditionHeader}>
+                          <View style={styles.conditionBadgeRow}>
+                            <Badge
+                              label={getToothStatusLabel(cond.status)}
+                              variant="neutral"
+                              size="sm"
+                            />
+                            <Badge
+                              label="Voided"
+                              variant="emergency"
+                              size="sm"
+                            />
+                            <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                              {origSurf ? `Surfaces: ${origSurf}` : 'Full Tooth / Intact'}
+                            </ThemedText>
+                          </View>
+                        </View>
+
+                        {cond.notes ? (
+                          <ThemedText variant="small" color={theme.colors.textMuted} style={styles.conditionNotes}>
+                            {cond.notes}
+                          </ThemedText>
+                        ) : null}
+
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          Recorded: {formatRecordedDate(cond.createdAt)} • Voided: {formatRecordedDate(cond.voidedAt)} • By: {cond.voidedBy || 'Attending Clinician'}
+                          {cond.voidReason ? ` • Reason: ${cond.voidReason}` : ''}
+                        </ThemedText>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
 
             {/* Tooth Findings & Surfaces Details (Preserved for tests) */}
             <View style={styles.detailRow}>
@@ -954,6 +1077,24 @@ const styles = StyleSheet.create({
   conditionsSection: {
     gap: theme.spacing.xs,
   },
+  conditionsSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  voidReasonInput: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    fontSize: theme.typography.fontSize.xs,
+    color: theme.colors.text,
+    backgroundColor: theme.colors.surface,
+    minWidth: 180,
+  },
   healthyBox: {
     backgroundColor: theme.colors.successBg,
     borderColor: theme.colors.successBorder,
@@ -975,6 +1116,11 @@ const styles = StyleSheet.create({
   conditionCardHistorical: {
     opacity: 0.72,
     backgroundColor: theme.colors.surfaceSubtle,
+  },
+  conditionCardVoided: {
+    opacity: 0.56,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderStyle: 'dashed',
   },
   conditionHeader: {
     flexDirection: 'row',

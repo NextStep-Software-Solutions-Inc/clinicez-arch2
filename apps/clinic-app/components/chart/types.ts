@@ -119,6 +119,7 @@ export interface ChartLayoutProps {
   availableTabs?: SegmentedOption<ChartTab>[];
   focusToothNumber?: number;
   onOrderDentalProcedure?: (toothNumber: number, toothSurface?: string) => void;
+  onVoidDentalCondition?: (toothNumber: number, recordId: string, reason?: string) => void | Promise<void>;
 }
 
 export interface PatientChartModalProps {
@@ -140,6 +141,7 @@ export interface PatientChartModalProps {
   availableTabs?: SegmentedOption<ChartTab>[];
   focusToothNumber?: number;
   onOrderDentalProcedure?: (toothNumber: number, toothSurface?: string) => void;
+  onVoidDentalCondition?: (toothNumber: number, recordId: string, reason?: string) => void | Promise<void>;
 
   // Tab Action Handlers
   onViewPrescriptionSlip?: (consultation: ConsultationRecord) => void;

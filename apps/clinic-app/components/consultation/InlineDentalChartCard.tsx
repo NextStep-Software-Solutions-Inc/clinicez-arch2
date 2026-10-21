@@ -263,7 +263,8 @@ export function InlineDentalChartCard({
     (lockState.hasAnyCurrentEncounterRecord ? 'Decayed' : activeRecord?.status ?? 'Decayed');
   const isWholeToothStaged = isWholeToothStatus(stagedStatus);
   const stagedSurfaces: string = isWholeToothStaged ? '' : stagedSurfacesState ?? '';
-  const stagedNotes: string = stagedNotesState ?? '';
+  const stagedNotes: string =
+    stagedNotesState ?? (!lockState.hasAnyCurrentEncounterRecord ? activeRecord?.notes ?? '' : '');
 
   const saveCheck = useMemo(
     () =>

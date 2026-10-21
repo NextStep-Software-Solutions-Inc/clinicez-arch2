@@ -59,6 +59,7 @@ export default function PatientChartModal({
   availableTabs: availableTabsProp,
   focusToothNumber,
   onOrderDentalProcedure,
+  onVoidDentalCondition,
 }: PatientChartModalProps) {
   const { settings } = useClinic();
   const configuredLayout: ChartLayoutMode =
@@ -183,6 +184,7 @@ export default function PatientChartModal({
     availableTabs,
     focusToothNumber,
     onOrderDentalProcedure,
+    onVoidDentalCondition,
   };
 
   return (
