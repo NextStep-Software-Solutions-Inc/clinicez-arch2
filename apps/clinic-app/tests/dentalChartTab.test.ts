@@ -82,6 +82,12 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('rect'),
   Line: createMockComponent('line'),
   default: createMockComponent('svg'),
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -154,7 +160,7 @@ describe('DentalChartTab — Patient Chart Odontogram & Layout Integration', () 
       clinicId: 'cl-001',
       patientId: 'pt-juan-001',
       toothNumber: 16,
-      status: 'Decay',
+      status: 'Decayed',
       surface: 'MOD',
       notes: 'Deep occlusal and mesial-distal decay',
       createdAt: '2026-03-01T00:00:00Z',
@@ -166,7 +172,7 @@ describe('DentalChartTab — Patient Chart Odontogram & Layout Integration', () 
       clinicId: 'cl-001',
       patientId: 'pt-juan-001',
       toothNumber: 21,
-      status: 'Crown',
+      status: 'Crowned',
       surface: 'L',
       notes: 'Porcelain fused to metal crown placed',
       createdAt: '2026-02-15T00:00:00Z',
@@ -318,7 +324,7 @@ describe('DentalChartTab — Patient Chart Odontogram & Layout Integration', () 
 
     expect(html).toContain('Tooth #16');
     expect(html).toContain('Upper Right First Molar');
-    expect(html).toContain('Decay');
+    expect(html).toContain('Decayed');
     expect(html).toContain('AFFECTED SURFACES');
     expect(html).toContain('MOD');
     expect(html).toContain('CLINICAL NOTES');
@@ -455,5 +461,96 @@ describe('DentalChartTab — Patient Chart Odontogram & Layout Integration', () 
       })
     );
     expect(drawerHtml).toContain('Dental Chart');
+  });
+
+  // Test 9: Longitudinal history stack & audit-safe Void action in Left-Side Pane
+  test('9. Displays full longitudinal condition stack (Current, Historical, and Voided) and audit-safe Void buttons', () => {
+    const stackedTeeth: DentalToothRecord[] = [
+      {
+        id: 'stack-1-decayed',
+        tenantId: 'tn-01',
+        clinicId: 'cl-001',
+        patientId: 'pt-juan-001',
+        toothNumber: 16,
+        status: 'Decayed',
+        surface: 'MOD',
+        isCurrent: false,
+        notes: 'Initial visit: deep MOD caries',
+        createdAt: '2026-01-10T09:00:00Z',
+        recordedBy: 'Dr. Maria Santos',
+      },
+      {
+        id: 'stack-2-extracted',
+        tenantId: 'tn-01',
+        clinicId: 'cl-001',
+        patientId: 'pt-juan-001',
+        toothNumber: 16,
+        status: 'Missing',
+        surface: '',
+        isCurrent: false,
+        notes: 'Second visit: tooth extracted',
+        createdAt: '2026-02-10T09:00:00Z',
+        recordedBy: 'Dr. Maria Santos',
+      },
+      {
+        id: 'stack-3-implant',
+        tenantId: 'tn-01',
+        clinicId: 'cl-001',
+        patientId: 'pt-juan-001',
+        toothNumber: 16,
+        status: 'Implant',
+        surface: '',
+        isCurrent: true,
+        notes: 'Third visit: dental implant placed',
+        createdAt: '2026-03-10T09:00:00Z',
+        recordedBy: 'Dr. Juan Reyes',
+      },
+      {
+        id: 'stack-4-voided',
+        tenantId: 'tn-01',
+        clinicId: 'cl-001',
+        patientId: 'pt-juan-001',
+        toothNumber: 16,
+        status: 'Fractured',
+        surface: 'B',
+        isCurrent: false,
+        isVoided: true,
+        voidedAt: '2026-03-11T10:00:00Z',
+        voidedBy: 'Dr. Juan Reyes',
+        voidReason: 'Entered on wrong tooth number',
+        notes: 'Erroneous entry',
+        createdAt: '2026-03-11T09:00:00Z',
+        recordedBy: 'Dr. Juan Reyes',
+      },
+    ];
+
+    const stackedChart: PatientChart = {
+      ...MOCK_CHART,
+      dentalTeeth: stackedTeeth,
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(DentalChartTab, {
+        patient: MOCK_PATIENT,
+        chart: stackedChart,
+        focusToothNumber: 16,
+        onVoidCondition: () => {},
+      })
+    );
+
+    // Top-of-stack active condition is Pontic / Implant
+    expect(html).toContain('Pontic / Implant');
+    expect(html).toContain('Third visit: dental implant placed');
+    expect(html).toContain('data-testid="tab-void-condition-stack-3-implant"');
+
+    // Historical stack entries remain visible in Left-Side Pane
+    expect(html).toContain('HISTORICAL CONDITIONS (PREVIOUS ENCOUNTERS) (2)');
+    expect(html).toContain('Initial visit: deep MOD caries');
+    expect(html).toContain('Second visit: tooth extracted');
+
+    // Voided audit trail entry is preserved and displayed
+    expect(html).toContain('VOIDED ENTRIES (AUDIT TRAIL) (1)');
+    expect(html).toContain('Entered on wrong tooth number');
+    expect(html).toContain('Voided');
   });
 });

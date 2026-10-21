@@ -112,6 +112,12 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('rect'),
   Line: createMockComponent('line'),
   default: createMockComponent('svg'),
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -676,7 +682,8 @@ describe('Milestone 3 Gate 2: Empirical Challenger 2 Stress Suite', () => {
       expect(fs.existsSync(checkScriptPath)).toBe(true);
 
       const { execSync } = require('child_process');
-      const output = execSync(`node "${checkScriptPath}" --strict`, {
+      const runtime = process.execPath || 'node';
+      const output = execSync(`"${runtime}" "${checkScriptPath}" --strict`, {
         cwd: path.resolve(__dirname, '..'),
         encoding: 'utf8',
       });

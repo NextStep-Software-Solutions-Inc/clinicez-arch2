@@ -22,7 +22,7 @@ export { CHART_TABS };
 export type { ChartTab, ChartLayoutMode, PatientChartModalProps };
 
 /**
- * Top-Level Medical Chart Modal Orchestrator
+ * Top-Level Patient Chart Modal Orchestrator
  *
  * Responsibilities:
  *  - Manages modal visibility, active tab, active patient, and edit modal state.
@@ -59,6 +59,7 @@ export default function PatientChartModal({
   availableTabs: availableTabsProp,
   focusToothNumber,
   onOrderDentalProcedure,
+  onVoidDentalCondition,
 }: PatientChartModalProps) {
   const { settings } = useClinic();
   const configuredLayout: ChartLayoutMode =
@@ -183,6 +184,7 @@ export default function PatientChartModal({
     availableTabs,
     focusToothNumber,
     onOrderDentalProcedure,
+    onVoidDentalCondition,
   };
 
   return (

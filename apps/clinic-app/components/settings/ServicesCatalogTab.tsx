@@ -21,6 +21,7 @@ const SERVICE_CATEGORY_LABEL: Record<string, string> = {
   Medicine: 'Medicines',
   Diagnostic: 'Diagnostics',
   Procedure: 'Procedures',
+  Dental: 'Dental Services',
   Consultation: 'Consultations',
   NursingService: 'Nursing Services',
 };
@@ -69,6 +70,7 @@ export default function ServicesCatalogTab({
   const [editPhilHealthCode, setEditPhilHealthCode] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [seedingDental, setSeedingDental] = useState(false);
 
   const visibleServices =
     selectedCategory === 'All'
@@ -186,6 +188,28 @@ export default function ServicesCatalogTab({
     notify.success(`Service "${item.name}" ${nextActive ? 'activated' : 'deactivated'}.`);
   };
 
+  const handleSeedDentalServices = async () => {
+    setSeedingDental(true);
+    const [seeded, err] = await clinicService.seedDentalServices();
+    setSeedingDental(false);
+
+    if (err || !seeded) {
+      notify.error(err?.message || 'Could not seed dental services.');
+      return;
+    }
+
+    if (onRefreshServices) {
+      await onRefreshServices();
+    }
+    // Also merge seeded items into state to guarantee immediate UI responsiveness
+    setServices((prev) => {
+      const existingCodes = new Set(prev.map((s) => s.code.toUpperCase()));
+      const toAdd = seeded.filter((s) => !existingCodes.has(s.code.toUpperCase()));
+      return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+    });
+    notify.success('Dental services added to catalog successfully.');
+  };
+
   return (
     <View style={styles.container}>
       <Card>
@@ -193,7 +217,16 @@ export default function ServicesCatalogTab({
           title="Fee Schedule & Services Catalog"
           subtitle="Fees, outpatient consultations, diagnostic procedures, and clinical price lists"
           rightAction={
-            <Button title="Add service item" icon="plus" onPress={handleOpenAdd} />
+            <View style={styles.headerActions}>
+              <Button
+                title="Add Dental Services"
+                variant="secondary"
+                icon="plus"
+                loading={seedingDental}
+                onPress={handleSeedDentalServices}
+              />
+              <Button title="Add service item" icon="plus" onPress={handleOpenAdd} />
+            </View>
           }
         />
         <CardContent>
@@ -203,7 +236,7 @@ export default function ServicesCatalogTab({
             style={styles.chipScroll}
             contentContainerStyle={styles.chipRow}
           >
-            {(['All', 'Consultation', 'Procedure', 'Diagnostic', 'Medicine', 'NursingService'] as const).map(
+            {(['All', 'Consultation', 'Procedure', 'Diagnostic', 'Dental', 'Medicine', 'NursingService'] as const).map(
               (cat) => {
                 const count =
                   cat === 'All'
@@ -228,14 +261,16 @@ export default function ServicesCatalogTab({
           ) : visibleServices.length === 0 ? (
             <EmptyState
               icon="clipboard"
-              title="No catalog items found"
+              title={selectedCategory === 'Dental' ? 'No dental services in catalog' : 'No catalog items found'}
               description={
-                selectedCategory === 'All'
+                selectedCategory === 'Dental'
+                  ? 'Add Philippine primary care dental presets (oral prophylaxis, restorative fillings, exodontia, sealants, etc.) to your clinic fee schedule.'
+                  : selectedCategory === 'All'
                   ? 'Add consultation fees and medical procedures to your clinic price list.'
                   : `No items in ${selectedCategory} category yet.`
               }
-              actionTitle="Add first service"
-              onAction={handleOpenAdd}
+              actionTitle={selectedCategory === 'Dental' ? 'Seed Dental Services' : 'Add first service'}
+              onAction={selectedCategory === 'Dental' ? handleSeedDentalServices : handleOpenAdd}
             />
           ) : (
             <View style={styles.serviceList}>
@@ -348,7 +383,7 @@ export default function ServicesCatalogTab({
 
         <FieldGroup label="Category">
           <View style={styles.chipRow}>
-            {['Consultation', 'Procedure', 'Diagnostic', 'Medicine', 'NursingService'].map((cat) => (
+            {['Consultation', 'Procedure', 'Diagnostic', 'Dental', 'Medicine', 'NursingService'].map((cat) => (
               <Chip
                 key={cat}
                 label={cat}
@@ -420,7 +455,7 @@ export default function ServicesCatalogTab({
 
         <FieldGroup label="Category">
           <View style={styles.chipRow}>
-            {['Consultation', 'Procedure', 'Diagnostic', 'Medicine', 'NursingService'].map((cat) => (
+            {['Consultation', 'Procedure', 'Diagnostic', 'Dental', 'Medicine', 'NursingService'].map((cat) => (
               <Chip
                 key={cat}
                 label={cat}
@@ -468,6 +503,12 @@ export default function ServicesCatalogTab({
 const styles = StyleSheet.create({
   container: {
     gap: theme.spacing.lg,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
   serviceRightCol: {
     alignItems: 'flex-end',

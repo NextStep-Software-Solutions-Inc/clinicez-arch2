@@ -79,6 +79,12 @@ mock.module('react-native-svg', () => ({
   Rect: 'Rect',
   Line: 'Line',
   default: 'Svg',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -356,7 +362,7 @@ describe('Adversarial Medical Chart Workstation Layouts Refinement (Round 1)', (
         })
       );
 
-      expect(markup).toContain('Medical chart');
+      expect(markup).toContain('Patient Chart');
       expect(markup).toContain('Maria Dela Cruz');
       expect(markup).toContain('Code:');
       expect(markup).toContain('PAT-2026-99123');

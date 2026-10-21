@@ -63,6 +63,10 @@ mock.module('react-native-svg', () => ({
   Polyline: 'Polyline',
   Polygon: 'Polygon',
   G: 'G',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  Text: ({ children }: any) => children,
 }));
 
 mock.module('../constants/fonts', () => ({

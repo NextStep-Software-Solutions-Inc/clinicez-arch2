@@ -24,6 +24,9 @@
     "build:portal": "bun run --cwd apps/portal-web build",
     "build:patient-web": "bun run --cwd apps/patient-app build:web",
     "build:clinic-web": "bun run --cwd apps/clinic-app build:web",
+    "build:cashier-web": "bun run --cwd apps/cashier-app build:web",
+    "build:lab-web": "bun run --cwd apps/laboratory-app build:web",
+    "build:pharmacy-web": "bun run --cwd apps/pharmacy-app build:web",
     "seed:dev": "powershell -ExecutionPolicy Bypass -File scripts/seed-dev-patients.ps1"
   },
   "devDependencies": {

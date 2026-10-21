@@ -2,14 +2,19 @@ namespace ClinicEz.Clinic.Domain.Enums;
 
 /// <summary>
 /// Clinical status of an individual tooth in the dental odontogram.
-/// Uses plain-English taxonomy conforming to clinicez-ui-ux-expert standards.
+/// Uses plain-English clinical taxonomy conforming to clinicez-ui-ux-expert standards.
 /// </summary>
 public enum ToothStatus
 {
     Healthy = 1,
-    Decay = 2,
+    Decayed = 2,
     Filled = 3,
     Missing = 4,
-    Crown = 5,
-    Extraction = 6
+    Crowned = 5,
+    ForExtraction = 6,
+    Sealant = 7,
+    Fractured = 8,
+    Impacted = 9,
+    RootCanal = 10,
+    Implant = 11
 }

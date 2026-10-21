@@ -58,6 +58,8 @@ export interface ClinicRole {
   createdAt: string;
 }
 
+export type SignatureMode = 'ESignatureSpecimen' | 'DigitalSealOnly' | 'WetSignature';
+
 export interface StaffMember {
   id: string;
   tenantId: string;
@@ -80,6 +82,8 @@ export interface StaffMember {
   s2LicenseNumber?: string;
   philHealthPan?: string;
   specialty?: string;
+  signatureSpecimen?: string | null;
+  defaultSignatureMode?: SignatureMode;
   isActive: boolean;
   createdAt: string;
   hasCredentials?: boolean;
@@ -103,6 +107,8 @@ export interface CreateStaffPayload {
   s2LicenseNumber?: string;
   philHealthPan?: string;
   specialty?: string;
+  signatureSpecimen?: string | null;
+  defaultSignatureMode?: SignatureMode;
   initialPassword?: string;
   sendInviteEmail?: boolean;
 }
@@ -124,6 +130,8 @@ export interface UpdateStaffPayload {
   s2LicenseNumber?: string;
   philHealthPan?: string;
   specialty?: string;
+  signatureSpecimen?: string | null;
+  defaultSignatureMode?: SignatureMode;
   isActive?: boolean;
 }
 
@@ -138,6 +146,8 @@ export interface UpdateMyProfilePayload {
   s2LicenseNumber?: string;
   philHealthPan?: string;
   specialty?: string;
+  signatureSpecimen?: string | null;
+  defaultSignatureMode?: SignatureMode;
 }
 
 export interface ResetStaffPasswordResult {
@@ -363,6 +373,26 @@ export interface AppointmentItem {
   reason?: string;
   notes?: string;
   createdAt: string;
+  reminder24hSent?: boolean;
+  reminder2hSent?: boolean;
+  reminder24hSentAt?: string | null;
+  reminder2hSentAt?: string | null;
+  lastReminderSentAt?: string | null;
+  lastReminderType?: string | null;
+}
+
+export interface GetAppointmentsOptions {
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+  doctorId?: string;
+  status?: AppointmentStatus;
+}
+
+export interface RescheduleAppointmentRequest {
+  newScheduledAt: string;
+  durationMinutes?: number;
+  reason?: string;
 }
 
 export interface DoctorBreakTimeItem {
@@ -472,6 +502,8 @@ export interface InvoiceLineItem {
   unitPrice: number;
   quantity: number;
   totalPrice: number;
+  doctorId?: string;
+  doctorName?: string;
 }
 
 export interface PaymentRecord {
@@ -507,6 +539,7 @@ export interface InvoiceRecord {
   amountPaid: number;
   balanceDue: number;
   status: InvoiceStatus;
+  billingRequestedAt?: string;
   notes?: string;
   billedByStaffName?: string;
   lineItems: InvoiceLineItem[];
@@ -809,6 +842,51 @@ export interface DoctorStat {
   totalBilled: number;
 }
 
+export interface HourlyFlowPoint {
+  hour: number;
+  hourLabel: string;
+  checkInCount: number;
+  percentage: number;
+}
+
+export interface VisitTypeSplit {
+  walkInCount: number;
+  walkInPercentage: number;
+  appointmentCount: number;
+  appointmentPercentage: number;
+}
+
+export interface AcuitySplit {
+  routineCount: number;
+  routinePercentage: number;
+  urgentCount: number;
+  urgentPercentage: number;
+  emergencyCount: number;
+  emergencyPercentage: number;
+}
+
+export interface DemographicDistribution {
+  pediatricCount: number;
+  pediatricPercentage: number;
+  adultCount: number;
+  adultPercentage: number;
+  seniorCount: number;
+  seniorPercentage: number;
+  maleCount: number;
+  malePercentage: number;
+  femaleCount: number;
+  femalePercentage: number;
+  otherCount: number;
+  otherPercentage: number;
+}
+
+export interface FinancialEfficiency {
+  collectionEfficiencyRate: number;
+  discountImpactRate: number;
+  averageRevenuePerPatient: number;
+  totalDiscounts: number;
+}
+
 export interface ClinicAnalytics {
   startDate: string;
   endDate: string;
@@ -827,6 +905,11 @@ export interface ClinicAnalytics {
   topDiagnoses: MorbidityItem[];
   topServices: ServiceUsage[];
   doctorStats: DoctorStat[];
+  hourlyFlow?: HourlyFlowPoint[];
+  visitTypeSplit?: VisitTypeSplit;
+  acuitySplit?: AcuitySplit;
+  demographics?: DemographicDistribution;
+  financialEfficiency?: FinancialEfficiency;
 }
 
 export interface MorbidityDiseaseRow {
@@ -1425,7 +1508,18 @@ export interface PatientChart {
   dentalProcedures?: ClinicalProcedureRecord[];
 }
 
-export type ToothStatus = 'Healthy' | 'Decay' | 'Filled' | 'Missing' | 'Crown' | 'Extraction';
+export type ToothStatus =
+  | 'Healthy'
+  | 'Decayed'
+  | 'Filled'
+  | 'Missing'
+  | 'Crowned'
+  | 'ForExtraction'
+  | 'Sealant'
+  | 'Fractured'
+  | 'Impacted'
+  | 'RootCanal'
+  | 'Implant';
 
 export interface DentalToothRecord {
   id: string;
@@ -1437,9 +1531,19 @@ export interface DentalToothRecord {
   toothNumber: number;
   status: ToothStatus;
   surface?: string | null;
+  activeSurface?: string | null;
+  isCurrent?: boolean;
+  isCurrentEncounter?: boolean;
+  supersededAt?: string | null;
+  supersededByRecordId?: string | null;
   notes?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+  recordedBy?: string | null;
+  isVoided?: boolean;
+  voidedAt?: string | null;
+  voidedBy?: string | null;
+  voidReason?: string | null;
 }
 
 export interface DentalSummary {
@@ -1466,6 +1570,9 @@ export interface UpsertDentalToothRecordPayload {
   surface?: string | null;
   notes?: string | null;
   consultationId?: string | null;
+  removeCondition?: boolean;
+  conditionId?: string | null;
+  recordedBy?: string | null;
 }
 
 export interface BatchSaveDentalChartPayload {
@@ -1475,6 +1582,9 @@ export interface BatchSaveDentalChartPayload {
     status: ToothStatus;
     surface?: string | null;
     notes?: string | null;
+    removeCondition?: boolean;
+    conditionId?: string | null;
+    recordedBy?: string | null;
   }[];
 }
 
@@ -1776,11 +1886,18 @@ export interface ClinicSettingsRecord {
   letterheadAddress?: string;
   letterheadContact?: string;
   letterheadFooter?: string;
+  letterheadAccentColorHex?: string | null;
+  documentAccentColorHex?: string | null;
+  letterheadDohLto?: string;
+  dohLicenseToOperate?: string;
+  paperSize?: 'Letter' | 'A4' | 'A5';
   preferredChartLayout?: 'modal' | 'split' | 'drawer';
   isJoinEnabled?: boolean;
   joinCode?: string | null;
   joinCodeExpiresAt?: string | null;
   clearJoinCode?: boolean;
+
+  cashierMode?: 'ClinicDesk' | 'CashierCounter';
 
   // Milestone 2 Directory Publishing & Dynamic Booking Capacity
   isDirectoryPublished?: boolean;
@@ -1803,10 +1920,26 @@ export interface ClinicSettingsRecord {
   primaryColorHex?: string;
   specialtyMode?: 'Medical' | 'Dental' | 'Multi-Specialty' | 'MultiSpecialty';
   enableDentalModule?: boolean;
+
+  defaultApproverName?: string | null;
+  defaultApproverTitle?: string | null;
+  documentSignatoriesJson?: string | null;
+
+  // Milestone 5 Calendar Appointment Reminders & Push Notification Settings
+  enableAppointmentReminders?: boolean;
+  appointmentReminder24hEnabled?: boolean;
+  appointmentReminder2hEnabled?: boolean;
+  enableStaffAppointmentNotifications?: boolean;
+}
+
+export interface DocumentSignatoryItemConfig {
+  preparedByTitle?: string | null;
+  approverName?: string | null;
+  approverTitle?: string | null;
 }
 
 export type NotificationUrgency = 'Routine' | 'Urgent' | 'Stat';
-export type StaffNotificationCategory = 'LabResult' | 'Queue' | 'ClinicalAlert' | 'System';
+export type StaffNotificationCategory = 'LabResult' | 'Queue' | 'ClinicalAlert' | 'System' | 'Appointment';
 
 export interface ClinicStaffNotification {
   id: string;
@@ -1964,6 +2097,8 @@ export interface CreateInvoiceRequest {
     category: string;
     unitPrice: number;
     quantity: number;
+    doctorId?: string;
+    doctorName?: string;
   }>;
 }
 
@@ -1972,6 +2107,23 @@ export interface RecordPaymentRequest {
   method: PaymentMethod;
   referenceNumber?: string;
   notes?: string;
+}
+
+export interface UpdateInvoiceRequest {
+  discountType?: DiscountType;
+  discountIdNumber?: string;
+  customDiscountPercentage?: number;
+  notes?: string;
+  lineItems?: Array<{
+    serviceItemId?: string;
+    itemCode?: string;
+    description: string;
+    category: string;
+    unitPrice: number;
+    quantity: number;
+    doctorId?: string;
+    doctorName?: string;
+  }>;
 }
 
 export interface PatientSeedResult {
@@ -2088,10 +2240,24 @@ export const clinicService = {
   },
 
   // Appointments
-  async getAppointments(date?: string, status?: AppointmentStatus) {
+  async getAppointments(
+    paramsOrDate?: string | GetAppointmentsOptions,
+    status?: AppointmentStatus
+  ) {
     const params = new URLSearchParams();
-    if (date) params.append('date', date);
-    if (status) params.append('status', status);
+    if (typeof paramsOrDate === 'string') {
+      if (paramsOrDate) params.append('date', paramsOrDate);
+      if (status) params.append('status', status);
+    } else if (paramsOrDate && typeof paramsOrDate === 'object') {
+      if (paramsOrDate.date) params.append('date', paramsOrDate.date);
+      if (paramsOrDate.startDate) params.append('startDate', paramsOrDate.startDate);
+      if (paramsOrDate.endDate) params.append('endDate', paramsOrDate.endDate);
+      if (paramsOrDate.doctorId) params.append('doctorId', paramsOrDate.doctorId);
+      const effectiveStatus = paramsOrDate.status || status;
+      if (effectiveStatus) params.append('status', effectiveStatus);
+    } else if (status) {
+      params.append('status', status);
+    }
     const qs = params.toString();
     return clinicApiClient.get<AppointmentItem[]>(`/appointments${qs ? `?${qs}` : ''}`);
   },
@@ -2162,12 +2328,14 @@ export const clinicService = {
     return clinicApiClient.post<PrescriptionSlipData>(`/prescriptions/${consultationId}/record-external-dispense`, payload);
   },
 
-  getPrescriptionSlipPdfUrl(consultationId: string) {
-    return clinicApiUrl(`/prescriptions/${consultationId}/slip-pdf`);
+  getPrescriptionSlipPdfUrl(consultationId: string, options?: { wet?: boolean }) {
+    const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
+    return clinicApiUrl(`/prescriptions/${consultationId}/slip-pdf${qs}`);
   },
 
-  getPrescriptionSlipPdfByNumberUrl(prescriptionNumber: string) {
-    return clinicApiUrl(`/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf`);
+  getPrescriptionSlipPdfByNumberUrl(prescriptionNumber: string, options?: { wet?: boolean }) {
+    const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
+    return clinicApiUrl(`/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf${qs}`);
   },
 
   // ICD-10 Search
@@ -2190,8 +2358,37 @@ export const clinicService = {
     return clinicApiClient.post<InvoiceRecord>('/billing/invoices', payload);
   },
 
+  async updateInvoice(invoiceId: string, payload: UpdateInvoiceRequest) {
+    return clinicApiClient.put<InvoiceRecord>(`/billing/invoices/${invoiceId}`, payload);
+  },
+
   async recordPayment(invoiceId: string, payload: RecordPaymentRequest) {
     return clinicApiClient.post<InvoiceRecord>(`/billing/invoices/${invoiceId}/pay`, payload);
+  },
+
+  getInvoicePdfUrl(invoiceId: string) {
+    return clinicApiUrl(`/billing/invoices/${invoiceId}/pdf`);
+  },
+
+  async downloadInvoicePreviewPdf(payload: {
+    patientId?: string;
+    patientName: string;
+    queueNumber?: string;
+    attendingDoctorName?: string;
+    doctorPrcLicense?: string;
+    discountType: DiscountType;
+    discountIdNumber?: string;
+    lineItems: Array<{
+      serviceItemId?: string;
+      itemCode?: string;
+      description: string;
+      category: string;
+      unitPrice: number;
+      quantity: number;
+    }>;
+    notes?: string;
+  }) {
+    return clinicApiClient.postBlob<typeof payload>(clinicApiUrl('/billing/invoices/preview-pdf'), payload);
   },
 
   // Services Catalog & Fee Schedule
@@ -2231,6 +2428,10 @@ export const clinicService = {
 
   async bulkImportServices(items: BulkImportServiceItem[]) {
     return clinicApiClient.post<BulkImportResult>('/services/bulk-import', { items });
+  },
+
+  async seedDentalServices() {
+    return clinicApiClient.post<ClinicServiceItem[]>('/services/seed-dental');
   },
 
   // Procedures & Nursing Station
@@ -2330,8 +2531,9 @@ export const clinicService = {
     return clinicApiUrl(`/lab-orders/${orderId}/report-pdf`);
   },
 
-  getLabOrderSlipPdfUrl(orderId: string) {
-    return clinicApiUrl(`/lab-orders/${orderId}/slip-pdf`);
+  getLabOrderSlipPdfUrl(orderId: string, options?: { wet?: boolean }) {
+    const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
+    return clinicApiUrl(`/lab-orders/${orderId}/slip-pdf${qs}`);
   },
 
   // Interop: patient share-token import (scan-to-fetch)
@@ -2376,6 +2578,15 @@ export const clinicService = {
     return clinicApiClient.get<DailyEodReport>(`/reports/daily-eod${qs}`);
   },
 
+  getDailyEodPdfUrl(date?: string): string {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return clinicApiUrl(`/reports/daily-eod/pdf${qs}`);
+  },
+
+  getDailyEodReportPdfUrl(date?: string): string {
+    return this.getDailyEodPdfUrl(date);
+  },
+
   // Advanced Reports & Executive Analytics
   async getClinicAnalytics(startDate?: string, endDate?: string) {
     const params = new URLSearchParams();
@@ -2383,6 +2594,18 @@ export const clinicService = {
     if (endDate) params.append('endDate', endDate);
     const qs = params.toString();
     return clinicApiClient.get<ClinicAnalytics>(`/reports/analytics${qs ? `?${qs}` : ''}`);
+  },
+
+  getAnalyticsPdfUrl(startDate?: string, endDate?: string): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/analytics/pdf${qs ? `?${qs}` : ''}`);
+  },
+
+  getClinicAnalyticsPdfUrl(startDate?: string, endDate?: string): string {
+    return this.getAnalyticsPdfUrl(startDate, endDate);
   },
 
   async getMorbidityReport(startDate?: string, endDate?: string) {
@@ -2393,6 +2616,18 @@ export const clinicService = {
     return clinicApiClient.get<MorbidityReport>(`/reports/morbidity${qs ? `?${qs}` : ''}`);
   },
 
+  getMorbidityPdfUrl(startDate?: string, endDate?: string): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/morbidity/pdf${qs ? `?${qs}` : ''}`);
+  },
+
+  getMorbidityReportPdfUrl(startDate?: string, endDate?: string): string {
+    return this.getMorbidityPdfUrl(startDate, endDate);
+  },
+
   async getTaxDiscountAuditReport(startDate?: string, endDate?: string) {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
@@ -2401,12 +2636,40 @@ export const clinicService = {
     return clinicApiClient.get<TaxDiscountAuditReport>(`/reports/tax-discounts${qs ? `?${qs}` : ''}`);
   },
 
+  getTaxDiscountsPdfUrl(startDate?: string, endDate?: string): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/tax-discounts/pdf${qs ? `?${qs}` : ''}`);
+  },
+
+  getTaxDiscountAuditReportPdfUrl(startDate?: string, endDate?: string): string {
+    return this.getTaxDiscountsPdfUrl(startDate, endDate);
+  },
+
+  getTaxDiscountAuditPdfUrl(startDate?: string, endDate?: string): string {
+    return this.getTaxDiscountsPdfUrl(startDate, endDate);
+  },
+
   async getDoctorSharesReport(startDate?: string, endDate?: string) {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
     const qs = params.toString();
     return clinicApiClient.get<DoctorSharesReport>(`/reports/doctor-shares${qs ? `?${qs}` : ''}`);
+  },
+
+  getDoctorSharesPdfUrl(startDate?: string, endDate?: string): string {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiUrl(`/reports/doctor-shares/pdf${qs ? `?${qs}` : ''}`);
+  },
+
+  getDoctorSharesReportPdfUrl(startDate?: string, endDate?: string): string {
+    return this.getDoctorSharesPdfUrl(startDate, endDate);
   },
 
   // Patient Chart
@@ -2732,16 +2995,16 @@ export const clinicService = {
     return clinicApiClient.post<AppointmentItem>('/appointments', payload);
   },
 
-  async rescheduleAppointment(id: string, payload: {
-    newScheduledAt: string;
-    durationMinutes?: number;
-    reason?: string;
-  }) {
+  async rescheduleAppointment(id: string, payload: RescheduleAppointmentRequest) {
     return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/reschedule`, payload);
   },
 
   async cancelAppointment(id: string, reason?: string) {
     return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/cancel`, { reason });
+  },
+
+  async sendAppointmentReminder(id: string) {
+    return clinicApiClient.post<AppointmentItem>(`/appointments/${id}/remind`);
   },
 
   // Doctor Schedules, Rosters & Availability
@@ -2823,8 +3086,9 @@ export const clinicService = {
     return clinicApiClient.get<MedicalCertificateRecord[]>(`/documents/medical-certificates${qs ? `?${qs}` : ''}`);
   },
 
-  getMedicalCertificatePdfUrl(id: string) {
-    return clinicApiUrl(`/documents/medical-certificates/${id}/pdf`);
+  getMedicalCertificatePdfUrl(id: string, options?: { wet?: boolean }) {
+    const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
+    return clinicApiUrl(`/documents/medical-certificates/${id}/pdf${qs}`);
   },
 
   async issueReferralLetter(payload: {
@@ -2854,8 +3118,9 @@ export const clinicService = {
     return clinicApiClient.get<ReferralLetterRecord[]>(`/documents/referrals${qs ? `?${qs}` : ''}`);
   },
 
-  getReferralLetterPdfUrl(id: string) {
-    return clinicApiUrl(`/documents/referrals/${id}/pdf`);
+  getReferralLetterPdfUrl(id: string, options?: { wet?: boolean }) {
+    const qs = options?.wet !== undefined ? `?wet=${options.wet ? 'true' : 'false'}` : '';
+    return clinicApiUrl(`/documents/referrals/${id}/pdf${qs}`);
   },
 
   async verifyDocument(securityDigestOrNumber: string) {
@@ -2974,7 +3239,26 @@ export const clinicService = {
   },
 
   async updateSettings(payload: Partial<ClinicSettingsRecord>) {
-    return clinicApiClient.put<ClinicSettingsRecord>('/settings', payload);
+    const finalPayload = { ...payload };
+    if (finalPayload.dohLicenseToOperate !== undefined && finalPayload.letterheadDohLto === undefined) {
+      finalPayload.letterheadDohLto = finalPayload.dohLicenseToOperate;
+    } else if (finalPayload.letterheadDohLto !== undefined && finalPayload.dohLicenseToOperate === undefined) {
+      finalPayload.dohLicenseToOperate = finalPayload.letterheadDohLto;
+    }
+    return clinicApiClient.put<ClinicSettingsRecord>('/settings', finalPayload);
+  },
+
+  getSampleDocumentPdfUrl(docType: string, options?: { wet?: boolean; paperSize?: string }) {
+    const params: string[] = [];
+    if (docType) params.push(`docType=${encodeURIComponent(docType)}`);
+    if (options?.wet !== undefined) {
+      params.push(`wet=${options.wet ? 'true' : 'false'}`);
+    }
+    if (options?.paperSize) {
+      params.push(`paperSize=${encodeURIComponent(options.paperSize)}`);
+    }
+    const qs = params.length > 0 ? `?${params.join('&')}` : '';
+    return clinicApiUrl(`/settings/sample-document-pdf${qs}`);
   },
 
   async getWorkspaceProfile() {
@@ -3304,6 +3588,16 @@ export const clinicService = {
 
   async saveDentalChartBatch(patientId: string, payload: BatchSaveDentalChartPayload) {
     return this.batchSaveDentalChart(patientId, payload);
+  },
+
+  async voidDentalToothRecord(patientId: string, recordId: string, reason?: string) {
+    return clinicApiClient.post<DentalToothRecord>(`/dental/patients/${patientId}/teeth/${recordId}/void`, {
+      reason: reason || null,
+    });
+  },
+
+  async voidToothRecord(patientId: string, recordId: string, reason?: string) {
+    return this.voidDentalToothRecord(patientId, recordId, reason);
   },
 };
 

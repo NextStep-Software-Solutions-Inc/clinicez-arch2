@@ -86,6 +86,12 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('rect'),
   Line: createMockComponent('line'),
   default: createMockComponent('svg'),
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -184,7 +190,7 @@ describe('Challenger MC-2 Empirical Stress Suite', () => {
             clinicId: 'cl-001',
             patientId: patient.id,
             toothNumber: 55,
-            status: 'Decay',
+            status: 'Decayed',
             surface: 'MOD',
             notes: 'Deciduous molar caries requiring pulpotomy evaluation',
             createdAt: '2026-04-01T00:00:00Z',
@@ -211,7 +217,7 @@ describe('Challenger MC-2 Empirical Stress Suite', () => {
       // Inspector must display plain-English tooth name and details
       expect(html).toContain('Tooth #55');
       expect(html).toContain('Upper Right Primary Second Molar');
-      expect(html).toContain('Decay');
+      expect(html).toContain('Decayed');
       expect(html).toContain('MOD');
       expect(html).toContain('Deciduous molar caries requiring pulpotomy evaluation');
     });
@@ -815,7 +821,7 @@ describe('Challenger MC-2 Empirical Stress Suite', () => {
           clinicId: 'cl-001',
           patientId: patient.id,
           toothNumber: 11,
-          status: 'Crown',
+          status: 'Crowned',
           surface: 'L',
           notes: 'Ceramic veneer / crown intact',
           createdAt: '2026-03-01T00:00:00Z',

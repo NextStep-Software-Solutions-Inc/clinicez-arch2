@@ -67,9 +67,9 @@ public class BatchSaveDentalChartCommandHandlerTests
             Teeth: new List<ToothRecordInput>
             {
                 new(ToothNumber: 11, Status: ToothStatus.Healthy, Surface: null, Notes: "Intact"),
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "dom", Notes: "Caries on occlusal/mesial/distal"),
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "dom", Notes: "Caries on occlusal/mesial/distal"),
                 new(ToothNumber: 26, Status: ToothStatus.Filled, Surface: "O", Notes: "Amalgam"),
-                new(ToothNumber: 38, Status: ToothStatus.Extraction, Surface: null, Notes: "Impacted wisdom tooth")
+                new(ToothNumber: 38, Status: ToothStatus.ForExtraction, Surface: null, Notes: "Impacted wisdom tooth")
             }
         );
 
@@ -83,7 +83,7 @@ public class BatchSaveDentalChartCommandHandlerTests
 
         // Tooth 16 surface canonicalized to "MOD"
         var tooth16 = result.Teeth.First(t => t.ToothNumber == 16);
-        tooth16.Status.Should().Be(ToothStatus.Decay);
+        tooth16.Status.Should().Be(ToothStatus.Decayed);
         tooth16.Surface.Should().Be("MOD");
 
         // Verify database persistence
@@ -119,7 +119,7 @@ public class BatchSaveDentalChartCommandHandlerTests
             ClinicId = _clinicId,
             PatientId = patientId,
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "MOD",
             Notes = "Caries observed previously"
         }, CancellationToken.None);
@@ -138,8 +138,8 @@ public class BatchSaveDentalChartCommandHandlerTests
             ConsultationId: null,
             Teeth: new List<ToothRecordInput>
             {
-                // Updating tooth 16 to Filled
-                new(ToothNumber: 16, Status: ToothStatus.Filled, Surface: "MOD", Notes: "Restoration complete"),
+                // Updating tooth 16 Decay record in place
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "MOD", Notes: "Updated caries assessment"),
                 // Inserting new tooth 21
                 new(ToothNumber: 21, Status: ToothStatus.Healthy, Surface: null, Notes: "Normal")
             }
@@ -151,13 +151,85 @@ public class BatchSaveDentalChartCommandHandlerTests
         // Assert
         result.Teeth.Should().HaveCount(2);
 
-        var dbRecords = await toothRepo.Query(t => t.PatientId == patientId).ToListAsync();
+        var dbRecords = await toothRepo.Query(t => t.PatientId == patientId && !t.IsDeleted).ToListAsync();
         dbRecords.Should().HaveCount(2);
 
         var tooth16 = dbRecords.First(t => t.ToothNumber == 16);
-        tooth16.Status.Should().Be(ToothStatus.Filled);
-        tooth16.Notes.Should().Be("Restoration complete");
+        tooth16.Status.Should().Be(ToothStatus.Decayed);
+        tooth16.Notes.Should().Be("Updated caries assessment");
         tooth16.UpdatedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_BatchSave_WithMultiConditionTooth_PreservesBothConditionsInDatabase()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+
+        var patientId = Guid.NewGuid();
+        await patientRepo.AddAsync(new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-MULTI-BATCH",
+            FirstName = "Andres",
+            LastName = "Silang",
+            ContactNumber = "09171234567"
+        }, CancellationToken.None);
+
+        // Existing tooth 16 Filled on O
+        await toothRepo.AddAsync(new DentalToothRecord
+        {
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientId = patientId,
+            ToothNumber = 16,
+            Status = ToothStatus.Filled,
+            Surface = "O",
+            Notes = "Prior occlusal restoration"
+        }, CancellationToken.None);
+
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var chartQueryHandler = new GetPatientDentalChartQueryHandler(toothRepo, procRepo, _clinicContext);
+        var sender = Substitute.For<ISender>();
+        sender.Send(Arg.Is<GetPatientDentalChartQuery>(q => q.PatientId == patientId), Arg.Any<CancellationToken>())
+            .Returns(ci => chartQueryHandler.Handle(ci.Arg<GetPatientDentalChartQuery>(), ci.Arg<CancellationToken>()));
+
+        var handler = new BatchSaveDentalChartCommandHandler(toothRepo, patientRepo, uow, _clinicContext, sender);
+
+        var command = new BatchSaveDentalChartCommand(
+            PatientId: patientId,
+            ConsultationId: null,
+            Teeth: new List<ToothRecordInput>
+            {
+                // New condition on tooth 16: Decay on MD
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "MD", Notes: "Recurrent caries on mesial-distal"),
+                // New tooth 21 Healthy
+                new(ToothNumber: 21, Status: ToothStatus.Healthy, Surface: null, Notes: "Normal")
+            }
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert: Tooth 16 has 2 distinct conditions, plus tooth 21 has 1 condition = 3 total records
+        result.Teeth.Should().HaveCount(3);
+        result.Summary.Should().NotBeNull();
+        result.Summary!.TotalTeethRecorded.Should().Be(2); // Distinct teeth: 16 and 21
+        result.Summary.FilledCount.Should().Be(1);
+        result.Summary.DecayCount.Should().Be(1);
+        result.Summary.HealthyCount.Should().Be(1);
+        result.Summary.DmftIndex.Should().Be(1); // Tooth 16 is counted once in DMFT (Decayed/Filled)
+
+        var tooth16Records = result.Teeth.Where(t => t.ToothNumber == 16).ToList();
+        tooth16Records.Should().HaveCount(2);
+        tooth16Records.Should().Contain(t => t.Status == ToothStatus.Filled && t.Surface == "O");
+        tooth16Records.Should().Contain(t => t.Status == ToothStatus.Decayed && t.Surface == "MD");
     }
 
     [Fact]
@@ -191,7 +263,7 @@ public class BatchSaveDentalChartCommandHandlerTests
             {
                 new(ToothNumber: 11, Status: ToothStatus.Healthy),
                 new(ToothNumber: 21, Status: ToothStatus.Healthy),
-                new(ToothNumber: 56, Status: ToothStatus.Decay) // Invalid child tooth (child quadrants max at 5)
+                new(ToothNumber: 56, Status: ToothStatus.Decayed) // Invalid child tooth (child quadrants max at 5)
             }
         );
 
@@ -237,7 +309,7 @@ public class BatchSaveDentalChartCommandHandlerTests
             Teeth: new List<ToothRecordInput>
             {
                 new(ToothNumber: 11, Status: ToothStatus.Healthy),
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "XYZ") // Invalid surface characters
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "XYZ") // Invalid surface characters
             }
         );
 
@@ -327,7 +399,7 @@ public class BatchSaveDentalChartCommandHandlerTests
             ConsultationId: null,
             Teeth: new List<ToothRecordInput>
             {
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "MOD", Notes: "Our clinic record")
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "MOD", Notes: "Our clinic record")
             }
         );
 
@@ -337,7 +409,7 @@ public class BatchSaveDentalChartCommandHandlerTests
         // Assert
         result.Teeth.Should().HaveCount(1);
         result.Teeth[0].ClinicId.Should().Be(_clinicId);
-        result.Teeth[0].Status.Should().Be(ToothStatus.Decay);
+        result.Teeth[0].Status.Should().Be(ToothStatus.Decayed);
 
         // Other clinic record remains unaltered
         var otherRecord = await toothRepo.Query(t => t.ClinicId == otherClinicId && t.ToothNumber == 16, ignoreQueryFilters: true).FirstAsync();

@@ -33,7 +33,13 @@ public sealed record AppointmentDto(
     string AttachedFileIdsJson,
     string ShareFieldsJson,
     IReadOnlyList<string> SharedScopes,
-    IReadOnlyList<ShareItemDto> SharedItems)
+    IReadOnlyList<ShareItemDto> SharedItems,
+    bool Reminder24hSent = false,
+    bool Reminder2hSent = false,
+    DateTime? Reminder24hSentAt = null,
+    DateTime? Reminder2hSentAt = null,
+    DateTime? LastReminderSentAt = null,
+    string? LastReminderType = null)
 {
     public static AppointmentDto From(Appointment a) => new(
         a.Id,
@@ -54,7 +60,13 @@ public sealed record AppointmentDto(
         a.AttachedFileIdsJson ?? "[]",
         a.ShareFieldsJson ?? "[]",
         SharingScopeNames.Of(a.SharedScopes),
-        ParseItems(a.SharedItemsJson));
+        ParseItems(a.SharedItemsJson),
+        a.Reminder24hSent,
+        a.Reminder2hSent,
+        a.Reminder24hSentAt,
+        a.Reminder2hSentAt,
+        a.LastReminderSentAt,
+        a.LastReminderType);
 
     private static IReadOnlyList<ShareItemDto> ParseItems(string? json) =>
         string.IsNullOrWhiteSpace(json)
@@ -64,7 +76,10 @@ public sealed record AppointmentDto(
 
 public sealed record GetAppointmentsQuery(
     DateOnly? Date = null,
-    AppointmentStatus? Status = null) : IRequest<IReadOnlyList<AppointmentDto>>;
+    AppointmentStatus? Status = null,
+    DateOnly? StartDate = null,
+    DateOnly? EndDate = null,
+    Guid? DoctorId = null) : IRequest<IReadOnlyList<AppointmentDto>>;
 
 public sealed class GetAppointmentsQueryHandler : IRequestHandler<GetAppointmentsQuery, IReadOnlyList<AppointmentDto>>
 {
@@ -84,11 +99,35 @@ public sealed class GetAppointmentsQueryHandler : IRequestHandler<GetAppointment
         var query = _appointmentRepository.Query(a => a.ClinicId == _clinicContext.ClinicId)
             .AsQueryable();
 
-        if (request.Date.HasValue)
+        if (request.StartDate.HasValue || request.EndDate.HasValue)
+        {
+            if (request.StartDate.HasValue && request.EndDate.HasValue)
+            {
+                var startUtc = request.StartDate.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+                var endUtc = request.EndDate.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+                query = query.Where(a => a.ScheduledAt >= startUtc && a.ScheduledAt <= endUtc);
+            }
+            else if (request.StartDate.HasValue)
+            {
+                var startUtc = request.StartDate.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+                query = query.Where(a => a.ScheduledAt >= startUtc);
+            }
+            else if (request.EndDate.HasValue)
+            {
+                var endUtc = request.EndDate.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+                query = query.Where(a => a.ScheduledAt <= endUtc);
+            }
+        }
+        else if (request.Date.HasValue)
         {
             var startUtc = request.Date.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
             var endUtc = request.Date.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
             query = query.Where(a => a.ScheduledAt >= startUtc && a.ScheduledAt <= endUtc);
+        }
+
+        if (request.DoctorId.HasValue)
+        {
+            query = query.Where(a => a.DoctorId == request.DoctorId.Value);
         }
 
         if (request.Status.HasValue)

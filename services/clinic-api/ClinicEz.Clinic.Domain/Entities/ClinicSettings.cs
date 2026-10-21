@@ -43,13 +43,28 @@ public sealed class ClinicSettings : BaseEntity
 
     public decimal DefaultConsultationFee { get; set; } = 400.00m;
     public decimal VatRate { get; set; } = 0.12m;
+    public decimal DefaultDoctorSharePercentage { get; set; } = 0.70m;
+
+    /// <summary>
+    /// Cashier station operational mode:
+    /// - "ClinicDesk": Invoices and payments are collected directly at the clinic desk (standalone).
+    /// - "CashierCounter": Invoices are dispatched to the central cashier counter (billing-api / cashier-app).
+    /// </summary>
+    public string CashierMode { get; set; } = "ClinicDesk";
 
     // Letterhead and prescription formatting
     public string? LetterheadHeader { get; set; }
     public string? LetterheadSubHeader { get; set; }
     public string? LetterheadAddress { get; set; }
     public string? LetterheadContact { get; set; }
+    public string? LetterheadDohLto { get; set; }
     public string? LetterheadFooter { get; set; }
+    /// <summary>
+    /// Document / Letterhead Accent Color used for clinical printouts, divider bars, and document headers.
+    /// Completely independent of workstation UI color branding (<see cref="PrimaryColorHex"/>).
+    /// If null or empty, falls back to <see cref="PrimaryColorHex"/>.
+    /// </summary>
+    public string? LetterheadAccentColorHex { get; set; }
     public string PrimaryColorHex { get; set; } = "#0284C7";
     public string? PrimaryLogoUrl { get; set; }
     public string PaperSize { get; set; } = "Letter";
@@ -133,5 +148,38 @@ public sealed class ClinicSettings : BaseEntity
     /// Defaults to false.
     /// </summary>
     public bool EnableDentalModule { get; set; } = false;
+
+    /// <summary>
+    /// Default signatory / approver name for operational and statutory reports (e.g. "Dr. Roberto Santos, MD").
+    /// If null or empty, defaults to "Authorized Signatory".
+    /// </summary>
+    public string? DefaultApproverName { get; set; }
+
+    /// <summary>
+    /// Default signatory / approver role or title for reports (e.g. "Medical Director", "Clinic Administrator").
+    /// If null or empty, defaults to the specific report standard title.
+    /// </summary>
+    public string? DefaultApproverTitle { get; set; }
+
+    /// <summary>
+    /// Optional JSON-serialized dictionary of per-document/report signatory configuration.
+    /// Key: document identifier (e.g. "DailyEod", "Morbidity", "TaxDiscounts", "DoctorShares", "Analytics").
+    /// Value: <see cref="DocumentSignatoryConfig"/> JSON.
+    /// </summary>
+    public string? DocumentSignatoriesJson { get; set; }
+
+    public bool EnableAppointmentReminders { get; set; } = true;
+    public bool AppointmentReminder24hEnabled { get; set; } = true;
+    public bool AppointmentReminder2hEnabled { get; set; } = true;
+    public bool EnableStaffAppointmentNotifications { get; set; } = true;
 }
+
+/// <summary>
+/// Configurable signatory and titles for a specific report or clinical document.
+/// </summary>
+public sealed record DocumentSignatoryConfig(
+    string? PreparedByTitle = null,
+    string? ApproverName = null,
+    string? ApproverTitle = null
+);
 

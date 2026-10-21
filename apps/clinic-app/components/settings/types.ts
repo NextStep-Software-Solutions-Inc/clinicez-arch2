@@ -1,13 +1,13 @@
 export type SettingsTabKey =
   | 'general'
   | 'readiness'
+  | 'documents'
   | 'staff'
   | 'rbac'
   | 'services'
   | 'fields'
   | 'philhealth'
-  | 'license'
-  | 'audit';
+  | 'license';
 
 export interface SettingsTabItem {
   key: SettingsTabKey;

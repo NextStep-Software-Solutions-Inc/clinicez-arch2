@@ -3,14 +3,15 @@ import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import {
   Modal,
   ThemedText,
-  Button,
   Badge,
   Icon,
   Input,
   SegmentedControl,
 } from '../ui';
+import Button from '../ui/Button';
 import { theme } from '../../constants/theme';
-import type { ClinicServiceItem } from '../../services/clinicService';
+import type { ClinicServiceItem, ClinicRoom } from '../../services/clinicService';
+import { useClinic } from '../../context/ClinicContext';
 
 export interface OrderCatalogItemPayload {
   serviceItemId: string;
@@ -25,6 +26,10 @@ export interface OrderCatalogItemPayload {
   instructions?: string;
   toothNumber?: number;
   toothSurface?: string;
+  roomId?: string;
+  roomName?: string;
+  targetRoomId?: string;
+  targetRoomName?: string;
 }
 
 export interface ExistingOrderItemContext {
@@ -34,13 +39,19 @@ export interface ExistingOrderItemContext {
   instructions?: string;
   toothNumber?: number;
   toothSurface?: string;
+  roomId?: string;
+  roomName?: string;
+  targetRoomId?: string;
+  targetRoomName?: string;
 }
 
 export interface OrderCatalogSearchModalProps {
   visible: boolean;
   onClose: () => void;
   catalog?: ClinicServiceItem[];
-  initialCategory?: 'Diagnostic' | 'Procedure' | 'All';
+  rooms?: ClinicRoom[];
+  initialRoomId?: string;
+  initialCategory?: 'Diagnostic' | 'Procedure' | 'Dental' | 'All';
   isYakapEligible?: boolean;
   onSelectOrder: (order: OrderCatalogItemPayload) => void;
   alreadyOrderedNames?: string[];
@@ -48,16 +59,18 @@ export interface OrderCatalogSearchModalProps {
   existingOrders?: ExistingOrderItemContext[];
   initialToothNumber?: number;
   initialToothSurface?: string;
+  initialSelectedItem?: ClinicServiceItem;
   testID?: string;
 }
 
-type CategoryTab = 'All' | 'Diagnostic' | 'Procedure';
+export type CategoryTab = 'All' | 'Diagnostic' | 'Procedure' | 'Dental';
 type FulfillmentMode = 'in_house' | 'outside';
 
-const CATEGORY_TABS: Array<{ value: CategoryTab; label: string }> = [
+export const CATEGORY_TABS: Array<{ value: CategoryTab; label: string }> = [
   { value: 'All', label: 'All Items' },
   { value: 'Diagnostic', label: 'Diagnostic' },
   { value: 'Procedure', label: 'Procedure' },
+  { value: 'Dental', label: 'Dental' },
 ];
 
 const FULFILLMENT_OPTIONS: Array<{ value: FulfillmentMode; label: string }> = [
@@ -65,7 +78,7 @@ const FULFILLMENT_OPTIONS: Array<{ value: FulfillmentMode; label: string }> = [
   { value: 'outside', label: 'Outside Laboratory' },
 ];
 
-const DIAGNOSTIC_FASTING_CHIPS = [
+export const DIAGNOSTIC_FASTING_CHIPS = [
   '10-12 hr fasting',
   '8 hr fasting',
   'Random / Non-fasting',
@@ -73,11 +86,19 @@ const DIAGNOSTIC_FASTING_CHIPS = [
   'STAT',
 ];
 
-const PROCEDURE_INSTRUCTION_CHIPS = [
+export const PROCEDURE_INSTRUCTION_CHIPS = [
   'STAT',
   'Routine',
   'Pre/post vitals required',
   'Wound care / sterile technique',
+];
+
+export const DENTAL_CLINICAL_INSTRUCTION_CHIPS = [
+  'Local anesthesia (Infiltration)',
+  'Mandibular nerve block',
+  'Rubber dam isolation',
+  'Post-extraction care instructions',
+  'Suture removal 7 days',
 ];
 
 const IN_HOUSE_RAPID_TEST_REGEX = /fingerstick|ecg|dipstick|rapid|rbs|urinalysis/i;
@@ -98,6 +119,8 @@ export function OrderCatalogSearchModal({
   visible,
   onClose,
   catalog = [],
+  rooms,
+  initialRoomId,
   initialCategory = 'All',
   isYakapEligible = false,
   onSelectOrder,
@@ -106,28 +129,65 @@ export function OrderCatalogSearchModal({
   existingOrders = [],
   initialToothNumber,
   initialToothSurface,
+  initialSelectedItem,
   testID = 'order-catalog-search-modal',
 }: OrderCatalogSearchModalProps) {
+  const clinic = useClinic();
+  const targetRooms = useMemo(() => {
+    if (rooms && rooms.length > 0) return rooms;
+    if (clinic?.rooms && clinic.rooms.length > 0) {
+      const treatment = clinic.rooms.filter((r) => r.isActive && r.type === 'Treatment');
+      return treatment.length > 0 ? treatment : clinic.rooms.filter((r) => r.isActive);
+    }
+    return [];
+  }, [rooms, clinic?.rooms]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryTab>(initialCategory);
-  const [selectedItem, setSelectedItem] = useState<ClinicServiceItem | null>(null);
-  const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>('in_house');
+  const [selectedItem, setSelectedItem] = useState<ClinicServiceItem | null>(() => initialSelectedItem ?? null);
+  const [fulfillmentMode, setFulfillmentMode] = useState<FulfillmentMode>(() =>
+    initialSelectedItem ? getHeuristicFulfillmentMode(initialSelectedItem) : 'in_house'
+  );
   const [instructions, setInstructions] = useState('');
+  const [selectedRoomId, setSelectedRoomId] = useState<string>(() => {
+    return initialRoomId || (targetRooms[0]?.id ?? '');
+  });
 
   // Reset form when modal becomes visible or initialCategory changes
   useEffect(() => {
     if (visible) {
       setSearchQuery('');
       setSelectedCategory(initialCategory);
-      setSelectedItem(null);
-      setFulfillmentMode('in_house');
+      setSelectedItem(initialSelectedItem ?? null);
+      if (initialSelectedItem) {
+        setFulfillmentMode(getHeuristicFulfillmentMode(initialSelectedItem));
+        const existing = existingOrders?.find(
+          (o) =>
+            o.name.toLowerCase() === initialSelectedItem.name.toLowerCase() ||
+            (o.code && initialSelectedItem.code && o.code.toLowerCase() === initialSelectedItem.code.toLowerCase())
+        );
+        if (existing?.roomId || existing?.targetRoomId) {
+          setSelectedRoomId(existing.roomId || existing.targetRoomId || '');
+        } else if (initialRoomId) {
+          setSelectedRoomId(initialRoomId);
+        } else if (targetRooms.length > 0) {
+          setSelectedRoomId(targetRooms[0].id);
+        }
+      } else {
+        setFulfillmentMode('in_house');
+        if (initialRoomId) {
+          setSelectedRoomId(initialRoomId);
+        } else if (targetRooms.length > 0) {
+          setSelectedRoomId(targetRooms[0].id);
+        }
+      }
       if (initialToothNumber) {
         setInstructions(`Tooth #${initialToothNumber}${initialToothSurface ? ` (${initialToothSurface})` : ''}`);
       } else {
         setInstructions('');
       }
     }
-  }, [visible, initialCategory, initialToothNumber, initialToothSurface]);
+  }, [visible, initialCategory, initialToothNumber, initialToothSurface, initialRoomId, targetRooms, initialSelectedItem, existingOrders]);
 
   const filteredCatalog = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -138,7 +198,9 @@ export function OrderCatalogSearchModal({
       if (selectedCategory === 'Diagnostic') {
         if (!catLower.includes('diagnostic')) return false;
       } else if (selectedCategory === 'Procedure') {
-        if (!catLower.includes('procedure') && !catLower.includes('nursing')) return false;
+        if (!catLower.includes('procedure') && !catLower.includes('nursing') && !catLower.includes('dental')) return false;
+      } else if (selectedCategory === 'Dental') {
+        if (!catLower.includes('dental')) return false;
       }
 
       if (q) {
@@ -171,9 +233,21 @@ export function OrderCatalogSearchModal({
     if (isOrdered && existing) {
       setFulfillmentMode(existing.fulfillmentMode || getHeuristicFulfillmentMode(item));
       setInstructions(existing.instructions || '');
+      if (existing.roomId || existing.targetRoomId) {
+        setSelectedRoomId(existing.roomId || existing.targetRoomId || '');
+      }
     } else {
       setFulfillmentMode(getHeuristicFulfillmentMode(item));
-      setInstructions('');
+      if (initialToothNumber) {
+        setInstructions(`Tooth #${initialToothNumber}${initialToothSurface ? ` (${initialToothSurface})` : ''}`);
+      } else {
+        setInstructions('');
+      }
+      if (initialRoomId) {
+        setSelectedRoomId(initialRoomId);
+      } else if (targetRooms.length > 0) {
+        setSelectedRoomId(targetRooms[0].id);
+      }
     }
   };
 
@@ -193,6 +267,10 @@ export function OrderCatalogSearchModal({
   };
 
   const isDiagnostic = (selectedItem?.category || '').toLowerCase().includes('diagnostic');
+  const isDental =
+    selectedCategory === 'Dental' ||
+    Boolean(initialToothNumber) ||
+    Boolean(selectedItem && (selectedItem.category || '').toLowerCase().includes('dental'));
   const isSelectedAlreadyOrdered = selectedItem
     ? alreadyOrderedNames.some((n) => n.toLowerCase() === selectedItem.name.toLowerCase()) ||
       alreadyOrderedCodes.some((c) => c.toLowerCase() === selectedItem.code.toLowerCase())
@@ -207,6 +285,8 @@ export function OrderCatalogSearchModal({
   const handleSubmit = () => {
     if (!selectedItem) return;
 
+    const resolvedRoom = targetRooms.find((r) => r.id === selectedRoomId) ?? targetRooms[0];
+
     const payload: OrderCatalogItemPayload = {
       serviceItemId: selectedItem.id,
       code: selectedItem.code,
@@ -220,6 +300,10 @@ export function OrderCatalogSearchModal({
       instructions: instructions.trim() ? instructions.trim() : undefined,
       toothNumber: initialToothNumber,
       toothSurface: initialToothSurface,
+      roomId: !isDiagnostic && resolvedRoom ? resolvedRoom.id : undefined,
+      roomName: !isDiagnostic && resolvedRoom ? resolvedRoom.name : undefined,
+      targetRoomId: !isDiagnostic && resolvedRoom ? resolvedRoom.id : undefined,
+      targetRoomName: !isDiagnostic && resolvedRoom ? resolvedRoom.name : undefined,
     };
 
     onSelectOrder(payload);
@@ -396,7 +480,7 @@ export function OrderCatalogSearchModal({
 
                   <View style={styles.itemPriceCol}>
                     <ThemedText variant="smallBold" color={theme.colors.primary}>
-                      ₱{item.standardPrice.toLocaleString()}
+                      ₱{(item.standardPrice ?? 0).toLocaleString()}
                     </ThemedText>
                   </View>
                 </Pressable>
@@ -446,15 +530,60 @@ export function OrderCatalogSearchModal({
               </View>
             ) : null}
 
+            {/* Procedure Room Selection */}
+            {!isDiagnostic && targetRooms.length > 0 ? (
+              <View style={styles.configFieldSection}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Send / Assign to Room
+                </ThemedText>
+                <View style={styles.chipsWrap}>
+                  {targetRooms.map((room) => {
+                    const isSelected = selectedRoomId === room.id;
+                    return (
+                      <Pressable
+                        key={room.id}
+                        style={[
+                          styles.instructionChip,
+                          isSelected && styles.instructionChipActive,
+                        ]}
+                        onPress={() => setSelectedRoomId(room.id)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={`Assign to ${room.name}`}
+                        testID={`${testID}-room-option-${room.id}`}
+                      >
+                        <ThemedText
+                          variant="captionBold"
+                          color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
+                        >
+                          {room.name}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Select which treatment room or dental operatory to assign this procedure to.
+                </ThemedText>
+              </View>
+            ) : null}
+
             {/* Clinical & Fasting Instructions */}
             <View style={styles.configFieldSection}>
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                {isDiagnostic
+                {isDental
+                  ? 'Dental Clinical Instructions & Notes'
+                  : isDiagnostic
                   ? 'Fasting & Clinical Instructions'
                   : 'Procedure Instructions & Notes'}
               </ThemedText>
               <View style={styles.chipsWrap}>
-                {(isDiagnostic ? DIAGNOSTIC_FASTING_CHIPS : PROCEDURE_INSTRUCTION_CHIPS).map(
+                {(isDental
+                  ? DENTAL_CLINICAL_INSTRUCTION_CHIPS
+                  : isDiagnostic
+                  ? DIAGNOSTIC_FASTING_CHIPS
+                  : PROCEDURE_INSTRUCTION_CHIPS
+                ).map(
                   (chip) => {
                     const isActive = instructions.includes(chip);
                     return (
@@ -508,7 +637,7 @@ export function OrderCatalogSearchModal({
                     </>
                   ) : (
                     <ThemedText variant="title" color={theme.colors.primary}>
-                      ₱{selectedItem.standardPrice.toLocaleString()}
+                      ₱{(selectedItem.standardPrice ?? 0).toLocaleString()}
                     </ThemedText>
                   )}
                 </View>
@@ -516,7 +645,7 @@ export function OrderCatalogSearchModal({
               {isYakapCovered ? (
                 <ThemedText variant="caption" color={theme.colors.successText}>
                   PhilHealth Yakap formulary benefit covers 100% patient co-pay (Standard fee: ₱
-                  {selectedItem.standardPrice.toLocaleString()}).
+                  {(selectedItem.standardPrice ?? 0).toLocaleString()}).
                 </ThemedText>
               ) : isDiagnostic && fulfillmentMode === 'outside' ? (
                 <ThemedText variant="caption" color={theme.colors.textMuted}>

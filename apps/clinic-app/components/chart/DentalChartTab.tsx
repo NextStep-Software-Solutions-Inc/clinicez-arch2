@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
 import {
   ThemedText,
@@ -11,13 +11,26 @@ import {
   CardHeader,
   SegmentedControl,
 } from '../ui';
-import type {
-  ClinicPatient,
-  PatientChart,
-  DentalToothRecord,
-  ClinicalProcedureRecord,
+import {
+  clinicService,
+  type ClinicPatient,
+  type PatientChart,
+  type ClinicalProcedureRecord,
 } from '../../services/clinicService';
 import {
+  ToothSurfaceDiagram,
+  DentalToothRecord,
+  ToothStatus,
+  ToothSurfaceCode,
+  getToothStatusLabel,
+  sortToothSurfaces,
+  getToothDescription,
+  normalizeTeethToMultiRecord,
+  resolveToothEffectiveState,
+  voidConditionOnTooth,
+  getDominantToothStatus,
+  getConditionDotColor,
+  calculateDmftMetrics,
   ADULT_UPPER_RIGHT,
   ADULT_UPPER_LEFT,
   ADULT_LOWER_RIGHT,
@@ -26,9 +39,7 @@ import {
   CHILD_UPPER_LEFT,
   CHILD_LOWER_RIGHT,
   CHILD_LOWER_LEFT,
-  ToothStatus,
-  sortToothSurfaces,
-} from '../consultation/InlineDentalChartCard';
+} from '../dental';
 
 export interface DentalChartTabProps {
   patient?: ClinicPatient | null;
@@ -36,6 +47,8 @@ export interface DentalChartTabProps {
   chart?: PatientChart | null;
   focusToothNumber?: number;
   onOrderProcedure?: (toothNumber: number, toothSurface?: string) => void;
+  onVoidCondition?: (toothNumber: number, recordId: string, reason?: string) => void | Promise<void>;
+  onRemoveCondition?: (toothNumber: number, conditionIdOrStatus: string) => void;
   onRefreshChart?: () => void;
   testID?: string;
 }
@@ -48,87 +61,30 @@ const DENTITION_OPTIONS = [
 ];
 
 export function getPlainEnglishToothName(toothNumber: number): string {
-  const toothNames: Record<number, string> = {
-    // Adult Upper Right (Quadrant 1)
-    18: 'Upper Right Third Molar (Wisdom)',
-    17: 'Upper Right Second Molar',
-    16: 'Upper Right First Molar',
-    15: 'Upper Right Second Premolar',
-    14: 'Upper Right First Premolar',
-    13: 'Upper Right Canine (Cuspid)',
-    12: 'Upper Right Lateral Incisor',
-    11: 'Upper Right Central Incisor',
-    // Adult Upper Left (Quadrant 2)
-    21: 'Upper Left Central Incisor',
-    22: 'Upper Left Lateral Incisor',
-    23: 'Upper Left Canine (Cuspid)',
-    24: 'Upper Left First Premolar',
-    25: 'Upper Left Second Premolar',
-    26: 'Upper Left First Molar',
-    27: 'Upper Left Second Molar',
-    28: 'Upper Left Third Molar (Wisdom)',
-    // Adult Lower Left (Quadrant 3)
-    31: 'Lower Left Central Incisor',
-    32: 'Lower Left Lateral Incisor',
-    33: 'Lower Left Canine (Cuspid)',
-    34: 'Lower Left First Premolar',
-    35: 'Lower Left Second Premolar',
-    36: 'Lower Left First Molar',
-    37: 'Lower Left Second Molar',
-    38: 'Lower Left Third Molar (Wisdom)',
-    // Adult Lower Right (Quadrant 4)
-    41: 'Lower Right Central Incisor',
-    42: 'Lower Right Lateral Incisor',
-    43: 'Lower Right Canine (Cuspid)',
-    44: 'Lower Right First Premolar',
-    45: 'Lower Right Second Premolar',
-    46: 'Lower Right First Molar',
-    47: 'Lower Right Second Molar',
-    48: 'Lower Right Third Molar (Wisdom)',
-    // Deciduous Upper Right (Quadrant 5)
-    55: 'Upper Right Primary Second Molar',
-    54: 'Upper Right Primary First Molar',
-    53: 'Upper Right Primary Canine',
-    52: 'Upper Right Primary Lateral Incisor',
-    51: 'Upper Right Primary Central Incisor',
-    // Deciduous Upper Left (Quadrant 6)
-    61: 'Upper Left Primary Central Incisor',
-    62: 'Upper Left Primary Lateral Incisor',
-    63: 'Upper Left Primary Canine',
-    64: 'Upper Left Primary First Molar',
-    65: 'Upper Left Primary Second Molar',
-    // Deciduous Lower Left (Quadrant 7)
-    71: 'Lower Left Primary Central Incisor',
-    72: 'Lower Left Primary Lateral Incisor',
-    73: 'Lower Left Primary Canine',
-    74: 'Lower Left Primary First Molar',
-    75: 'Lower Left Primary Second Molar',
-    // Deciduous Lower Right (Quadrant 8)
-    81: 'Lower Right Primary Central Incisor',
-    82: 'Lower Right Primary Lateral Incisor',
-    83: 'Lower Right Primary Canine',
-    84: 'Lower Right Primary First Molar',
-    85: 'Lower Right Primary Second Molar',
-  };
-  return toothNames[toothNumber] || `Tooth #${toothNumber}`;
+  return getToothDescription(toothNumber);
 }
 
 export function getStatusBadgeVariant(
   status?: ToothStatus | string
-): 'success' | 'emergency' | 'info' | 'neutral' | 'warning' {
+): 'success' | 'emergency' | 'info' | 'neutral' | 'warning' | 'purple' {
   switch (status) {
     case 'Healthy':
+    case 'Sealant':
       return 'success';
-    case 'Decay':
+    case 'Decayed':
+    case 'ForExtraction':
       return 'emergency';
+    case 'Fractured':
+    case 'Impacted':
+      return 'warning';
     case 'Filled':
+    case 'Implant':
       return 'info';
     case 'Missing':
       return 'neutral';
-    case 'Crown':
-      return 'warning';
-    case 'Extraction':
-      return 'emergency';
+    case 'Crowned':
+    case 'RootCanal':
+      return 'purple';
     default:
       return 'neutral';
   }
@@ -140,11 +96,17 @@ export function getToothStatusColor(status?: ToothStatus | string): {
   text: string;
 } {
   switch (status) {
-    case 'Decay':
+    case 'Decayed':
       return {
         bg: theme.colors.emergencyBg,
         border: theme.colors.emergencyBorder,
         text: theme.colors.emergencyText,
+      };
+    case 'Fractured':
+      return {
+        bg: theme.colors.urgentBg,
+        border: theme.colors.urgentBorder,
+        text: theme.colors.urgentText,
       };
     case 'Filled':
       return {
@@ -152,22 +114,41 @@ export function getToothStatusColor(status?: ToothStatus | string): {
         border: theme.colors.infoBorder,
         text: theme.colors.infoText,
       };
+    case 'Sealant':
+      return {
+        bg: theme.colors.routineBg,
+        border: theme.colors.routineBorder,
+        text: theme.colors.routineText,
+      };
+    case 'Implant':
+      return {
+        bg: theme.colors.primaryLight,
+        border: theme.colors.primaryBorder,
+        text: theme.colors.primaryDark,
+      };
+    case 'Impacted':
+      return {
+        bg: theme.colors.warningBg,
+        border: theme.colors.warningBorder,
+        text: theme.colors.warningText,
+      };
     case 'Missing':
       return {
         bg: theme.colors.surfaceSubtle,
         border: theme.colors.borderDark,
         text: theme.colors.textMuted,
       };
-    case 'Crown':
+    case 'Crowned':
+    case 'RootCanal':
       return {
-        bg: theme.colors.warningBg,
-        border: theme.colors.warningBorder,
-        text: theme.colors.warningText,
+        bg: theme.colors.purpleBg,
+        border: theme.colors.purpleBorder,
+        text: theme.colors.purpleText,
       };
-    case 'Extraction':
+    case 'ForExtraction':
       return {
         bg: theme.colors.emergencySubtle,
-        border: theme.colors.emergency,
+        border: theme.colors.emergencyBorder,
         text: theme.colors.emergencyText,
       };
     case 'Healthy':
@@ -180,12 +161,29 @@ export function getToothStatusColor(status?: ToothStatus | string): {
   }
 }
 
+function formatRecordedDate(dateStr?: string | null): string {
+  if (!dateStr) return 'Just now';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString([], {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
 export default function DentalChartTab({
   patient,
   patientId,
   chart,
   focusToothNumber,
   onOrderProcedure,
+  onVoidCondition,
+  onRemoveCondition,
   onRefreshChart,
   testID = 'dental-chart-tab',
 }: DentalChartTabProps) {
@@ -199,6 +197,8 @@ export default function DentalChartTab({
   const [selectedToothNumber, setSelectedToothNumber] = useState<number | null>(
     focusToothNumber ?? null
   );
+  const [localTeethOverride, setLocalTeethOverride] = useState<Record<number, DentalToothRecord[]> | null>(null);
+  const [voidReasonInput, setVoidReasonInput] = useState<string>('');
 
   // Auto-switch dentition and select tooth if focusToothNumber changes
   useEffect(() => {
@@ -212,76 +212,95 @@ export default function DentalChartTab({
     }
   }, [focusToothNumber]);
 
-  // Aggregate tooth records from chart
-  const teethMap = useMemo<Record<number, DentalToothRecord>>(() => {
-    const map: Record<number, DentalToothRecord> = {};
+  const propMultiTeethMap = useMemo<Record<number, DentalToothRecord[]>>(() => {
     const teethList: DentalToothRecord[] =
       chart?.dentalTeeth || chart?.dentalChart?.teeth || [];
-    for (const t of teethList) {
-      map[t.toothNumber] = t;
+    const normalized = normalizeTeethToMultiRecord(teethList);
+    for (const numStr of Object.keys(normalized)) {
+      const num = Number(numStr);
+      normalized[num] = resolveToothEffectiveState(normalized[num]).allRecords;
     }
-    return map;
+    return normalized;
   }, [chart?.dentalTeeth, chart?.dentalChart?.teeth]);
 
-  // Compute DMFT metrics
-  const summary = useMemo(() => {
-    let decayedCount = 0;
-    let missingCount = 0;
-    let filledCount = 0;
-    let crownCount = 0;
-    let extractionCount = 0;
-    let healthyCount = 0;
+  useEffect(() => {
+    setLocalTeethOverride(null);
+  }, [propMultiTeethMap]);
 
-    for (const record of Object.values(teethMap)) {
-      switch (record.status) {
-        case 'Decay':
-          decayedCount++;
-          break;
-        case 'Missing':
-          missingCount++;
-          break;
-        case 'Filled':
-          filledCount++;
-          break;
-        case 'Crown':
-          crownCount++;
-          break;
-        case 'Extraction':
-          extractionCount++;
-          break;
-        case 'Healthy':
-          healthyCount++;
-          break;
-      }
-    }
+  // Aggregate tooth records from chart into multi-condition records
+  const multiTeethMap = localTeethOverride ?? propMultiTeethMap;
 
-    const totalCharted = Object.keys(teethMap).length;
-    const dmftScore = decayedCount + missingCount + filledCount;
-
-    return {
-      totalCharted,
-      decayedCount,
-      missingCount,
-      filledCount,
-      crownCount,
-      extractionCount,
-      healthyCount,
-      dmftScore,
-    };
-  }, [teethMap]);
-
-  // Selected tooth details
-  const selectedToothRecord = useMemo<DentalToothRecord | null>(() => {
-    if (!selectedToothNumber) return null;
-    return (
-      teethMap[selectedToothNumber] || {
-        toothNumber: selectedToothNumber,
+  // Backward-compatible single-record map for primary record access
+  const teethMap = useMemo<Record<number, DentalToothRecord>>(() => {
+    const map: Record<number, DentalToothRecord> = {};
+    for (const [numStr, recs] of Object.entries(multiTeethMap)) {
+      const num = Number(numStr);
+      const activeNonVoided = recs.filter((r) => !r.isVoided && r.isCurrent !== false);
+      map[num] = activeNonVoided[activeNonVoided.length - 1] || recs[recs.length - 1] || {
+        id: `rec-${num}`,
+        toothNumber: num,
         status: 'Healthy',
         surface: '',
         notes: '',
-      }
+        createdAt: new Date().toISOString(),
+      };
+    }
+    return map;
+  }, [multiTeethMap]);
+
+  // Compute DMFT metrics counting distinct teeth
+  const summary = useMemo(() => {
+    return calculateDmftMetrics(multiTeethMap);
+  }, [multiTeethMap]);
+
+  // Selected tooth details
+  const selectedToothRecords = useMemo<DentalToothRecord[]>(() => {
+    if (!selectedToothNumber) return [];
+    return multiTeethMap[selectedToothNumber] || [];
+  }, [multiTeethMap, selectedToothNumber]);
+
+  const selectedToothRecord = useMemo<DentalToothRecord | null>(() => {
+    if (!selectedToothNumber) return null;
+    const currentNonHealthy = selectedToothRecords.filter(
+      (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent !== false
     );
-  }, [teethMap, selectedToothNumber]);
+    if (currentNonHealthy.length > 0) return currentNonHealthy[currentNonHealthy.length - 1];
+    const currentAny = selectedToothRecords.filter((r) => !r.isVoided && r.isCurrent !== false);
+    if (currentAny.length > 0) return currentAny[currentAny.length - 1];
+    return {
+      id: `rec-${selectedToothNumber}`,
+      toothNumber: selectedToothNumber,
+      status: 'Healthy',
+      surface: '',
+      notes: '',
+      createdAt: new Date().toISOString(),
+    };
+  }, [selectedToothRecords, selectedToothNumber]);
+
+  const handleVoidCondition = async (toothNumber: number, recordIdOrStatus: string) => {
+    const currentRecs = multiTeethMap[toothNumber] || [];
+    const reason = voidReasonInput.trim() || 'Voided in patient dental chart';
+    const nextRecs = voidConditionOnTooth(currentRecs, recordIdOrStatus, {
+      voidReason: reason,
+    });
+    setLocalTeethOverride({
+      ...multiTeethMap,
+      [toothNumber]: nextRecs,
+    });
+    setVoidReasonInput('');
+
+    if (onVoidCondition) {
+      await onVoidCondition(toothNumber, recordIdOrStatus, reason);
+    } else if (onRemoveCondition) {
+      onRemoveCondition(toothNumber, recordIdOrStatus);
+    } else {
+      const resolvedPatientId = patientId || patient?.id || chart?.patientId;
+      if (resolvedPatientId) {
+        await clinicService.voidDentalToothRecord(resolvedPatientId, recordIdOrStatus, reason);
+        onRefreshChart?.();
+      }
+    }
+  };
 
   // Procedures history for the selected tooth
   const toothProcedures = useMemo<ClinicalProcedureRecord[]>(() => {
@@ -309,10 +328,15 @@ export default function DentalChartTab({
   const lowerLeft = dentitionMode === 'Adult' ? ADULT_LOWER_LEFT : CHILD_LOWER_LEFT;
 
   const renderToothCell = (toothNum: number) => {
-    const record = teethMap[toothNum];
-    const status = record?.status || 'Healthy';
+    const records = multiTeethMap[toothNum] || [];
+    const activeRecords = records.filter((r) => !r.isVoided && r.isCurrent !== false);
+    const status = getDominantToothStatus(activeRecords);
     const isSelected = selectedToothNumber === toothNum;
     const colors = getToothStatusColor(status);
+
+    const nonHealthyStatuses = Array.from(
+      new Set(activeRecords.filter((r) => r.status !== 'Healthy').map((r) => r.status))
+    );
 
     return (
       <Pressable
@@ -323,7 +347,10 @@ export default function DentalChartTab({
         onPress={() => setSelectedToothNumber(toothNum)}
         style={[
           styles.toothCell,
-          { backgroundColor: colors.bg, borderColor: isSelected ? theme.colors.primaryDark : colors.border },
+          {
+            backgroundColor: status === 'Missing' ? theme.colors.surfaceSubtle : theme.colors.surface,
+            borderColor: isSelected ? theme.colors.primaryDark : colors.border,
+          },
           isSelected && styles.toothCellSelected,
         ]}
       >
@@ -333,14 +360,44 @@ export default function DentalChartTab({
         >
           {toothNum}
         </ThemedText>
-        {record?.surface ? (
-          <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.surfaceLabel}>
-            {sortToothSurfaces(record.surface)}
-          </ThemedText>
+
+        {/* 5-Surface Trapezoid Diagram on Tooth Cell */}
+        <ToothSurfaceDiagram
+          toothNumber={toothNum}
+          conditions={activeRecords}
+          size={28}
+          showLabels={false}
+          testID={`cell-diagram-${toothNum}`}
+        />
+
+        {/* Multi-Condition Colored Dots */}
+        {nonHealthyStatuses.length > 0 ? (
+          <View style={styles.multiConditionDots} testID={`multi-dots-${toothNum}`}>
+            {nonHealthyStatuses.map((st) => (
+              <View
+                key={st}
+                style={[styles.conditionDot, { backgroundColor: getConditionDotColor(st) }]}
+                testID={`dot-${st.toLowerCase()}-${toothNum}`}
+              />
+            ))}
+          </View>
         ) : null}
       </Pressable>
     );
   };
+
+  const activeConditions = selectedToothRecords.filter(
+    (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent !== false
+  );
+  const historicalConditions = selectedToothRecords.filter(
+    (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent === false
+  );
+  const voidedConditions = selectedToothRecords.filter(
+    (r) => r.isVoided === true && r.status !== 'Healthy'
+  );
+  const canVoidRecords = Boolean(
+    onVoidCondition || onRemoveCondition || patientId || patient?.id || chart?.patientId
+  );
 
   return (
     <ScrollView
@@ -432,72 +489,78 @@ export default function DentalChartTab({
         />
 
         {/* Odontogram Grid */}
-        <View style={styles.quadrantGrid} testID="odontogram-grid">
-          {/* Maxillary Arch (Upper) */}
-          <View style={styles.archContainer}>
-            <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.archTitle}>
-              MAXILLARY ARCH (UPPER)
-            </ThemedText>
-            <View style={styles.archRow}>
-              {/* Upper Right Quadrant */}
-              <View style={styles.quadrantCol}>
-                <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.quadrantLabel}>
-                  {dentitionMode === 'Adult' ? 'Q1 • Upper Right' : 'Q5 • Upper Right'}
-                </ThemedText>
-                <View style={styles.teethRow}>
-                  {upperRight.map((t) => renderToothCell(t))}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.gridScrollContent}
+        >
+          <View style={styles.quadrantGrid} testID="odontogram-grid">
+            {/* Maxillary Arch (Upper) */}
+            <View style={styles.archContainer}>
+              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.archTitle}>
+                MAXILLARY ARCH (UPPER)
+              </ThemedText>
+              <View style={styles.archRow}>
+                {/* Upper Right Quadrant */}
+                <View style={styles.quadrantCol}>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.quadrantLabel}>
+                    {dentitionMode === 'Adult' ? 'Q1 • Upper Right' : 'Q5 • Upper Right'}
+                  </ThemedText>
+                  <View style={styles.teethRow}>
+                    {upperRight.map((t) => renderToothCell(t))}
+                  </View>
                 </View>
-              </View>
 
-              {/* Arch Midline Divider */}
-              <View style={styles.midline} />
+                {/* Arch Midline Divider */}
+                <View style={styles.midline} />
 
-              {/* Upper Left Quadrant */}
-              <View style={styles.quadrantCol}>
-                <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.quadrantLabel}>
-                  {dentitionMode === 'Adult' ? 'Q2 • Upper Left' : 'Q6 • Upper Left'}
-                </ThemedText>
-                <View style={styles.teethRow}>
-                  {upperLeft.map((t) => renderToothCell(t))}
+                {/* Upper Left Quadrant */}
+                <View style={styles.quadrantCol}>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.quadrantLabel}>
+                    {dentitionMode === 'Adult' ? 'Q2 • Upper Left' : 'Q6 • Upper Left'}
+                  </ThemedText>
+                  <View style={styles.teethRow}>
+                    {upperLeft.map((t) => renderToothCell(t))}
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
 
-          {/* Horizontal Occlusal Plane Separator */}
-          <View style={styles.occlusalPlane} />
+            {/* Horizontal Occlusal Plane Separator */}
+            <View style={styles.occlusalPlane} />
 
-          {/* Mandibular Arch (Lower) */}
-          <View style={styles.archContainer}>
-            <View style={styles.archRow}>
-              {/* Lower Right Quadrant */}
-              <View style={styles.quadrantCol}>
-                <View style={styles.teethRow}>
-                  {lowerRight.map((t) => renderToothCell(t))}
+            {/* Mandibular Arch (Lower) */}
+            <View style={styles.archContainer}>
+              <View style={styles.archRow}>
+                {/* Lower Right Quadrant */}
+                <View style={styles.quadrantCol}>
+                  <View style={styles.teethRow}>
+                    {lowerRight.map((t) => renderToothCell(t))}
+                  </View>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.quadrantLabel}>
+                    {dentitionMode === 'Adult' ? 'Q4 • Lower Right' : 'Q8 • Lower Right'}
+                  </ThemedText>
                 </View>
-                <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.quadrantLabel}>
-                  {dentitionMode === 'Adult' ? 'Q4 • Lower Right' : 'Q8 • Lower Right'}
-                </ThemedText>
-              </View>
 
-              {/* Arch Midline Divider */}
-              <View style={styles.midline} />
+                {/* Arch Midline Divider */}
+                <View style={styles.midline} />
 
-              {/* Lower Left Quadrant */}
-              <View style={styles.quadrantCol}>
-                <View style={styles.teethRow}>
-                  {lowerLeft.map((t) => renderToothCell(t))}
+                {/* Lower Left Quadrant */}
+                <View style={styles.quadrantCol}>
+                  <View style={styles.teethRow}>
+                    {lowerLeft.map((t) => renderToothCell(t))}
+                  </View>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.quadrantLabel}>
+                    {dentitionMode === 'Adult' ? 'Q3 • Lower Left' : 'Q7 • Lower Left'}
+                  </ThemedText>
                 </View>
-                <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.quadrantLabel}>
-                  {dentitionMode === 'Adult' ? 'Q3 • Lower Left' : 'Q7 • Lower Left'}
-                </ThemedText>
               </View>
+              <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.archTitle}>
+                MANDIBULAR ARCH (LOWER)
+              </ThemedText>
             </View>
-            <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.archTitle}>
-              MANDIBULAR ARCH (LOWER)
-            </ThemedText>
           </View>
-        </View>
+        </ScrollView>
 
         {/* Legend */}
         <View style={styles.legendRow}>
@@ -507,7 +570,7 @@ export default function DentalChartTab({
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: theme.colors.emergencyBg, borderColor: theme.colors.emergencyBorder }]} />
-            <ThemedText variant="caption" color={theme.colors.emergencyText}>Decay</ThemedText>
+            <ThemedText variant="caption" color={theme.colors.emergencyText}>Decayed</ThemedText>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: theme.colors.infoBg, borderColor: theme.colors.infoBorder }]} />
@@ -518,12 +581,12 @@ export default function DentalChartTab({
             <ThemedText variant="caption" color={theme.colors.textMuted}>Missing</ThemedText>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: theme.colors.warningBg, borderColor: theme.colors.warningBorder }]} />
-            <ThemedText variant="caption" color={theme.colors.warningText}>Crown</ThemedText>
+            <View style={[styles.legendDot, { backgroundColor: theme.colors.purpleBg, borderColor: theme.colors.purpleBorder }]} />
+            <ThemedText variant="caption" color={theme.colors.purpleText}>Crowned</ThemedText>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: theme.colors.emergencySubtle, borderColor: theme.colors.emergency }]} />
-            <ThemedText variant="caption" color={theme.colors.emergencyText}>Extraction</ThemedText>
+            <ThemedText variant="caption" color={theme.colors.emergencyText}>For Extraction</ThemedText>
           </View>
         </View>
       </Card>
@@ -539,12 +602,12 @@ export default function DentalChartTab({
             rightAction={
               <View style={styles.inspectorHeaderActions}>
                 <Badge
-                  label={selectedToothRecord?.status || 'Healthy'}
+                  label={getToothStatusLabel(selectedToothRecord?.status || 'Healthy')}
                   variant={getStatusBadgeVariant(selectedToothRecord?.status)}
                 />
                 {onOrderProcedure ? (
                   <Button
-                    title="+ Order Procedure"
+                    title="Order Procedure"
                     variant="primary"
                     size="sm"
                     icon="plus"
@@ -561,7 +624,233 @@ export default function DentalChartTab({
           />
 
           <View style={styles.inspectorContent}>
-            {/* Tooth Findings & Surfaces */}
+            {/* Visual 5-Surface Diagram */}
+            <View style={styles.inspectorDiagramWrapper}>
+              <ToothSurfaceDiagram
+                toothNumber={selectedToothNumber}
+                conditions={activeConditions}
+                size={80}
+                showLabels={true}
+                testID="tab-inspector-surface-diagram"
+              />
+            </View>
+
+            {/* Recorded Conditions on Tooth #XX List (Current Active Status) */}
+            <View style={styles.conditionsSection} testID="tab-recorded-conditions-list">
+              <View style={styles.conditionsSectionHeader}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  RECORDED CONDITIONS ON TOOTH #{selectedToothNumber} ({activeConditions.length})
+                </ThemedText>
+                {canVoidRecords && (activeConditions.length > 0 || historicalConditions.length > 0) ? (
+                  <TextInput
+                    value={voidReasonInput}
+                    onChangeText={setVoidReasonInput}
+                    placeholder="Optional void reason..."
+                    placeholderTextColor={theme.colors.textMuted}
+                    style={styles.voidReasonInput}
+                    testID="tab-void-reason-input"
+                  />
+                ) : null}
+              </View>
+              {activeConditions.length === 0 ? (
+                <View style={styles.healthyBox}>
+                  <ThemedText variant="small" color={theme.colors.successText}>
+                    Healthy — No abnormal conditions or restorations recorded.
+                  </ThemedText>
+                </View>
+              ) : (
+                <View style={styles.conditionsList}>
+                  {[...activeConditions].reverse().map((cond, idx) => {
+                    const origSurf = cond.surface ? sortToothSurfaces(cond.surface) : '';
+                    const actSurf =
+                      cond.activeSurface !== undefined && cond.activeSurface !== null
+                        ? sortToothSurfaces(cond.activeSurface)
+                        : origSurf;
+                    const hasPartialDiff = Boolean(origSurf && actSurf && origSurf !== actSurf);
+                    const recKey = cond.id || cond.status.toLowerCase();
+
+                    return (
+                      <View
+                        key={cond.id || `${cond.status}-${idx}`}
+                        style={styles.conditionCard}
+                        testID={`tab-condition-${recKey}`}
+                      >
+                        <View style={styles.conditionHeader}>
+                          <View style={styles.conditionBadgeRow}>
+                            <Badge
+                              label={getToothStatusLabel(cond.status)}
+                              variant={getStatusBadgeVariant(cond.status)}
+                              size="sm"
+                            />
+                            <Badge
+                              label="Current"
+                              variant="success"
+                              size="sm"
+                            />
+                            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                              {actSurf ? `Surfaces: ${actSurf}` : 'Full Tooth / Intact'}
+                            </ThemedText>
+                            {hasPartialDiff ? (
+                              <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                                {`• Originally: ${origSurf}`}
+                              </ThemedText>
+                            ) : null}
+                          </View>
+                          {canVoidRecords ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Void ${cond.status} on Tooth #${selectedToothNumber}`}
+                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
+                              testID={`tab-void-condition-${recKey}`}
+                              style={styles.removeConditionBtn}
+                            >
+                              <Icon name="close" size={14} color={theme.colors.warningText} />
+                              <ThemedText variant="captionBold" color={theme.colors.warningText}>
+                                Void
+                              </ThemedText>
+                            </Pressable>
+                          ) : null}
+                        </View>
+
+                        {cond.notes ? (
+                          <ThemedText variant="small" color={theme.colors.text} style={styles.conditionNotes}>
+                            {cond.notes}
+                          </ThemedText>
+                        ) : null}
+
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          Recorded: {formatRecordedDate(cond.createdAt)} • By: {cond.recordedBy || 'Attending Clinician'}
+                        </ThemedText>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
+            {/* Historical Conditions (Previous Encounters) — Left Screen Longitudinal Stack */}
+            <View style={styles.conditionsSection} testID="tab-historical-conditions-list">
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                HISTORICAL CONDITIONS (PREVIOUS ENCOUNTERS) ({historicalConditions.length})
+              </ThemedText>
+              {historicalConditions.length === 0 ? (
+                <View style={styles.emptyTimelineBox}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    No previous encounter history for this tooth.
+                  </ThemedText>
+                </View>
+              ) : (
+                <View style={styles.conditionsList}>
+                  {[...historicalConditions].reverse().map((cond, idx) => {
+                    const origSurf = cond.surface ? sortToothSurfaces(cond.surface) : '';
+                    const recKey = cond.id || cond.status.toLowerCase();
+                    return (
+                      <View
+                        key={cond.id || `hist-${cond.status}-${idx}`}
+                        style={[styles.conditionCard, styles.conditionCardHistorical]}
+                        testID={`tab-historical-condition-${recKey}`}
+                      >
+                        <View style={styles.conditionHeader}>
+                          <View style={styles.conditionBadgeRow}>
+                            <Badge
+                              label={getToothStatusLabel(cond.status)}
+                              variant={getStatusBadgeVariant(cond.status)}
+                              size="sm"
+                            />
+                            <Badge
+                              label="Historical"
+                              variant="neutral"
+                              size="sm"
+                            />
+                            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                              {origSurf ? `Surfaces: ${origSurf}` : 'Full Tooth / Intact'}
+                            </ThemedText>
+                          </View>
+                          {canVoidRecords ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Void historical ${cond.status} on Tooth #${selectedToothNumber}`}
+                              onPress={() => handleVoidCondition(selectedToothNumber, cond.id || cond.status)}
+                              testID={`tab-void-condition-${recKey}`}
+                              style={styles.removeConditionBtn}
+                            >
+                              <Icon name="close" size={14} color={theme.colors.warningText} />
+                              <ThemedText variant="captionBold" color={theme.colors.warningText}>
+                                Void
+                              </ThemedText>
+                            </Pressable>
+                          ) : null}
+                        </View>
+
+                        {cond.notes ? (
+                          <ThemedText variant="small" color={theme.colors.text} style={styles.conditionNotes}>
+                            {cond.notes}
+                          </ThemedText>
+                        ) : null}
+
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          Recorded: {formatRecordedDate(cond.createdAt)} • By: {cond.recordedBy || 'Attending Clinician'}
+                          {cond.supersededAt ? ` • Superseded: ${formatRecordedDate(cond.supersededAt)}` : ''}
+                        </ThemedText>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+
+            {/* Voided Conditions Audit Trail */}
+            {voidedConditions.length > 0 ? (
+              <View style={styles.conditionsSection} testID="tab-voided-conditions-list">
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  VOIDED ENTRIES (AUDIT TRAIL) ({voidedConditions.length})
+                </ThemedText>
+                <View style={styles.conditionsList}>
+                  {[...voidedConditions].reverse().map((cond, idx) => {
+                    const origSurf = cond.surface ? sortToothSurfaces(cond.surface) : '';
+                    const recKey = cond.id || cond.status.toLowerCase();
+                    return (
+                      <View
+                        key={cond.id || `void-${cond.status}-${idx}`}
+                        style={[styles.conditionCard, styles.conditionCardVoided]}
+                        testID={`tab-voided-condition-${recKey}`}
+                      >
+                        <View style={styles.conditionHeader}>
+                          <View style={styles.conditionBadgeRow}>
+                            <Badge
+                              label={getToothStatusLabel(cond.status)}
+                              variant="neutral"
+                              size="sm"
+                            />
+                            <Badge
+                              label="Voided"
+                              variant="emergency"
+                              size="sm"
+                            />
+                            <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                              {origSurf ? `Surfaces: ${origSurf}` : 'Full Tooth / Intact'}
+                            </ThemedText>
+                          </View>
+                        </View>
+
+                        {cond.notes ? (
+                          <ThemedText variant="small" color={theme.colors.textMuted} style={styles.conditionNotes}>
+                            {cond.notes}
+                          </ThemedText>
+                        ) : null}
+
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          Recorded: {formatRecordedDate(cond.createdAt)} • Voided: {formatRecordedDate(cond.voidedAt)} • By: {cond.voidedBy || 'Attending Clinician'}
+                          {cond.voidReason ? ` • Reason: ${cond.voidReason}` : ''}
+                        </ThemedText>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Tooth Findings & Surfaces Details (Preserved for tests) */}
             <View style={styles.detailRow}>
               <View style={styles.detailCol}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -682,6 +971,11 @@ const styles = StyleSheet.create({
   dentitionSwitcher: {
     width: 220,
   },
+  gridScrollContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   quadrantGrid: {
     backgroundColor: theme.colors.surfaceSubtle,
     borderRadius: theme.radii.md,
@@ -689,6 +983,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     gap: theme.spacing.md,
+    minWidth: '100%',
   },
   archContainer: {
     alignItems: 'center',
@@ -701,57 +996,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
+    gap: theme.spacing.md,
   },
   quadrantCol: {
-    flex: 1,
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
   quadrantLabel: {
-    letterSpacing: 0.2,
+    letterSpacing: 0.5,
   },
   teethRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: theme.spacing.xs,
+    gap: 4,
   },
   midline: {
     width: 2,
-    alignSelf: 'stretch',
-    backgroundColor: theme.colors.borderDark,
-    marginHorizontal: theme.spacing.sm,
+    height: 70,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radii.full,
   },
   occlusalPlane: {
-    height: 2,
-    backgroundColor: theme.colors.borderDark,
+    height: 1,
+    backgroundColor: theme.colors.border,
     marginVertical: theme.spacing.xs,
   },
   toothCell: {
-    width: 38,
-    height: 48,
+    width: 44,
+    minHeight: 64,
     borderRadius: theme.radii.sm,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: theme.spacing.xs,
+    padding: 2,
+    gap: 2,
   },
   toothCellSelected: {
     borderWidth: 2,
-    backgroundColor: theme.colors.primarySubtle,
+  },
+  multiConditionDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  conditionDot: {
+    width: 5,
+    height: 5,
+    borderRadius: theme.radii.full,
   },
   surfaceLabel: {
-    letterSpacing: 0.2,
+    letterSpacing: 0.5,
   },
   legendRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.md,
+    paddingTop: theme.spacing.xs,
     justifyContent: 'center',
-    paddingTop: theme.spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
   },
   legendItem: {
     flexDirection: 'row',
@@ -761,12 +1062,11 @@ const styles = StyleSheet.create({
   legendDot: {
     width: 12,
     height: 12,
-    borderRadius: theme.radii.full,
+    borderRadius: theme.radii.xs,
     borderWidth: 1,
   },
   inspectorCard: {
     padding: theme.spacing.lg,
-    gap: theme.spacing.md,
   },
   inspectorHeaderActions: {
     flexDirection: 'row',
@@ -774,19 +1074,90 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   inspectorContent: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
+  inspectorDiagramWrapper: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xs,
+  },
+  conditionsSection: {
+    gap: theme.spacing.xs,
+  },
+  conditionsSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  voidReasonInput: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    ...theme.typography.caption,
+    color: theme.colors.text,
+    backgroundColor: theme.colors.surface,
+    minWidth: 180,
+  },
+  healthyBox: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.sm,
+  },
+  conditionsList: {
+    gap: theme.spacing.xs,
+  },
+  conditionCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  conditionCardHistorical: {
+    opacity: 0.72,
+    backgroundColor: theme.colors.surfaceSubtle,
+  },
+  conditionCardVoided: {
+    opacity: 0.56,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderStyle: 'dashed',
+  },
+  conditionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  conditionBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  removeConditionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: theme.spacing.xs,
+  },
+  conditionNotes: {
+    fontStyle: 'italic',
   },
   detailRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.xl,
-    paddingBottom: theme.spacing.md,
+    gap: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderColor: theme.colors.border,
   },
   detailCol: {
     flex: 1,
-    minWidth: 200,
     gap: theme.spacing.xs,
   },
   procedureTimelineSection: {
@@ -796,16 +1167,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   emptyTimelineBox: {
-    padding: theme.spacing.md,
     backgroundColor: theme.colors.surfaceSubtle,
     borderRadius: theme.radii.sm,
+    padding: theme.spacing.md,
+    alignItems: 'center',
   },
   timelineList: {
     gap: theme.spacing.sm,
   },
   timelineItem: {
     flexDirection: 'row',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   timelineLeftBar: {
     alignItems: 'center',
@@ -816,7 +1188,6 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.primary,
-    marginTop: 4,
   },
   timelineLine: {
     width: 2,
@@ -827,9 +1198,9 @@ const styles = StyleSheet.create({
   timelineBody: {
     flex: 1,
     backgroundColor: theme.colors.surfaceSubtle,
-    padding: theme.spacing.sm,
     borderRadius: theme.radii.sm,
-    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+    gap: 2,
   },
   timelineHeader: {
     flexDirection: 'row',
@@ -837,6 +1208,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   procNotes: {
-    fontStyle: 'italic',
+    marginTop: 2,
   },
 });

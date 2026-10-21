@@ -152,6 +152,10 @@ mock.module('react-native-svg', () => ({
   Polyline: 'Polyline',
   Polygon: 'Polygon',
   default: 'Svg',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  Text: ({ children }: any) => children,
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -1062,8 +1066,8 @@ describe('Challenger 2 Empirical Stress Test: UX States, Navigation & Scrolling'
       expect(res2.destinationParams.orderId).toBe('order-uuid-666'); // fallback to item.id
     });
 
-    // Category 7: Settings (All 9 Settings Tabs)
-    test('Category 7: Settings maps all 9 tabs with sub-parameters', () => {
+    // Category 7: Settings (All 8 Settings Tabs)
+    test('Category 7: Settings maps all 8 tabs with sub-parameters', () => {
       const expectedTabs = [
         'general',
         'services',
@@ -1073,7 +1077,6 @@ describe('Challenger 2 Empirical Stress Test: UX States, Navigation & Scrolling'
         'fields',
         'philhealth',
         'license',
-        'audit',
       ];
 
       for (const tab of expectedTabs) {
@@ -1103,8 +1106,8 @@ describe('Challenger 2 Empirical Stress Test: UX States, Navigation & Scrolling'
       }
     });
 
-    test('Category 7: SETTINGS_NAV_ITEMS maps 1:1 to all 9 settings tabs', () => {
-      expect(SETTINGS_NAV_ITEMS.length).toBe(9);
+    test('Category 7: SETTINGS_NAV_ITEMS maps 1:1 to all 8 settings tabs', () => {
+      expect(SETTINGS_NAV_ITEMS.length).toBe(8);
       const tabKeys = SETTINGS_NAV_ITEMS.map((item) => {
         const res = resolveSearchNavigation(item);
         return res.destinationParams.tab;
@@ -1119,7 +1122,6 @@ describe('Challenger 2 Empirical Stress Test: UX States, Navigation & Scrolling'
         'fields',
         'philhealth',
         'license',
-        'audit',
       ]);
     });
 

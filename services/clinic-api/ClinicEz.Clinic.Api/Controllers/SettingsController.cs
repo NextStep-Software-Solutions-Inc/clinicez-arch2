@@ -10,8 +10,8 @@ using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Workspace;
-using Microsoft.AspNetCore.Authorization;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,15 +24,18 @@ public sealed class SettingsController : ControllerBase
     private readonly ISender _sender;
     private readonly IClinicDocumentPdfService? _pdfService;
     private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly ISampleDocumentGenerator? _sampleDocGenerator;
 
     public SettingsController(
         ISender sender,
         IClinicDocumentPdfService? pdfService = null,
-        IRepository<ClinicSettings>? settingsRepo = null)
+        IRepository<ClinicSettings>? settingsRepo = null,
+        ISampleDocumentGenerator? sampleDocGenerator = null)
     {
         _sender = sender;
         _pdfService = pdfService;
         _settingsRepo = settingsRepo;
+        _sampleDocGenerator = sampleDocGenerator;
     }
 
     [HttpGet]
@@ -68,6 +71,36 @@ public sealed class SettingsController : ControllerBase
 
         var pdfBytes = _pdfService.GenerateReceptionPlacardPdf(settings, qrUrl ?? string.Empty, joinCode, expiresAt);
         return File(pdfBytes, "application/pdf", "ReceptionPlacard.pdf");
+    }
+
+    [HttpGet("sample-document-pdf")]
+    [HasPermission(ClinicPermissions.SettingsRead)]
+    public async Task<IActionResult> DownloadSampleDocumentPdf(
+        [FromQuery] string docType = "Medical Certificate",
+        [FromQuery] bool wet = false,
+        [FromQuery] string? paperSize = null,
+        CancellationToken ct = default)
+    {
+        if (_sampleDocGenerator == null)
+        {
+            return StatusCode(503, "Sample document generator is unavailable.");
+        }
+
+        var settings = _settingsRepo != null
+            ? await _settingsRepo.Query().FirstOrDefaultAsync(ct)
+            : null;
+
+        settings ??= new ClinicSettings
+        {
+            TenantId = "default",
+            ClinicName = "Clinic EZ Partner Medical Clinic",
+            LetterheadHeader = "CLINIC EZ HEALTHCARE CENTER",
+            LetterheadAddress = "124 Rizal Avenue, San Pedro, Laguna",
+            LetterheadContact = "Tel: (02) 8876-5432 • Mobile: +63 917 123 4567"
+        };
+
+        var (pdfBytes, fileName) = _sampleDocGenerator.GenerateSamplePdf(docType, wet, paperSize, settings);
+        return File(pdfBytes, "application/pdf", fileName);
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Interop.Persistence;
 using ClinicEz.Shared.Workspace;
@@ -155,6 +156,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<ClinicStaffNotification>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ClinicAuditEntry>().HasQueryFilter(e => e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<DentalToothRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PaymentRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         modelBuilder.Entity<ClinicStaffNotification>(b =>
         {
@@ -224,6 +226,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.S2LicenseNumber).HasMaxLength(50);
             entity.Property(e => e.Specialty).HasMaxLength(100);
             entity.Property(e => e.PhilHealthPan).HasMaxLength(50);
+            entity.Property(e => e.SignatureSpecimen).HasColumnType("text");
+            entity.Property(e => e.DefaultSignatureMode).HasConversion<string>().HasMaxLength(50);
 
             entity.HasOne(e => e.ClinicRole)
                 .WithMany(r => r.StaffMembers)
@@ -261,6 +265,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasIndex(e => new { e.TenantId, e.ClinicId });
             entity.HasIndex(e => e.ScheduledAt);
             entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.ScheduledAt, e.EndTimeUtc });
+            entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.Reminder24hSent });
+            entity.HasIndex(e => new { e.Status, e.ScheduledAt, e.Reminder2hSent });
         });
 
         modelBuilder.Entity<DoctorScheduleTemplate>(entity =>
@@ -335,6 +341,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.QueueDate });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.CheckInTime });
         });
 
         modelBuilder.Entity<TriageVitals>(entity =>
@@ -392,6 +399,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
             entity.HasIndex(e => new { e.TenantId, e.BranchId });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.EncounterDate });
         });
 
         modelBuilder.Entity<EncounterDiagnosis>(entity =>
@@ -454,6 +462,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<InvoiceLineItem>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.DoctorName).HasMaxLength(150);
             entity.Property(e => e.Description).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
@@ -466,6 +475,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.PaymentNumber).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Amount).HasPrecision(18, 2);
             entity.Property(e => e.ReferenceNumber).HasMaxLength(100);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PaymentDate });
         });
 
         modelBuilder.Entity<ClinicalProcedure>(entity =>
@@ -481,6 +491,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                 .HasForeignKey(e => e.TargetRoomId)
                 .OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.ScheduledAt });
         });
 
         modelBuilder.Entity<ClinicLabOrder>(entity =>
@@ -503,6 +514,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.OrderNumber }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.OrderDate });
         });
 
         modelBuilder.Entity<ClinicLabOrderItem>(entity =>
@@ -808,8 +820,10 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.PrcLicenseNumber).IsRequired().HasMaxLength(50);
             entity.Property(e => e.FitnessStatus).HasMaxLength(50);
             entity.Property(e => e.Purpose).HasMaxLength(50);
+            entity.Property(e => e.SecurityDigest).HasMaxLength(100);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.CertificateNumber }).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.SecurityDigest });
         });
 
         modelBuilder.Entity<ReferralLetter>(entity =>
@@ -822,8 +836,10 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.ReferredToFacility).IsRequired().HasMaxLength(150);
             entity.Property(e => e.ReferredDepartment).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Urgency).HasMaxLength(50);
+            entity.Property(e => e.SecurityDigest).HasMaxLength(100);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.ReferralNumber }).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.SecurityDigest });
         });
 
         modelBuilder.Entity<ClinicRecordAttachment>(entity =>
@@ -869,11 +885,14 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.FacilitySlug).HasMaxLength(100);
             entity.Property(e => e.ClinicName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.AccreditationNumber).HasMaxLength(100);
+            entity.Property(e => e.LetterheadDohLto).HasMaxLength(100);
+            entity.Property(e => e.LetterheadAccentColorHex).HasMaxLength(20);
             entity.Property(e => e.PmccNumber).HasMaxLength(100);
             entity.Property(e => e.SoftwareCertificateId).HasMaxLength(100);
             entity.Property(e => e.KonsultaEndpoint).HasMaxLength(255);
             entity.Property(e => e.DefaultConsultationFee).HasPrecision(18, 2);
             entity.Property(e => e.VatRate).HasPrecision(5, 4);
+            entity.Property(e => e.CashierMode).HasMaxLength(50).HasDefaultValue("ClinicDesk");
             entity.Property(e => e.PreferredChartLayout).HasMaxLength(50).HasDefaultValue("modal");
             entity.Property(e => e.IsJoinEnabled).HasDefaultValue(true);
             entity.Property(e => e.JoinCode).HasMaxLength(50);
@@ -887,6 +906,13 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.EnableChipLevelQueueCalling).HasDefaultValue(false);
             entity.Property(e => e.IsDirectoryPublished).HasDefaultValue(false);
             entity.Property(e => e.IsOnlineBookingPaused).HasDefaultValue(false);
+            entity.Property(e => e.DefaultApproverName).HasMaxLength(200);
+            entity.Property(e => e.DefaultApproverTitle).HasMaxLength(200);
+            entity.Property(e => e.DocumentSignatoriesJson).HasColumnType("text");
+            entity.Property(e => e.EnableAppointmentReminders).HasDefaultValue(true);
+            entity.Property(e => e.AppointmentReminder24hEnabled).HasDefaultValue(true);
+            entity.Property(e => e.AppointmentReminder2hEnabled).HasDefaultValue(true);
+            entity.Property(e => e.EnableStaffAppointmentNotifications).HasDefaultValue(true);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
         });
 
@@ -1012,13 +1038,23 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.PatientName).HasMaxLength(150);
             entity.Property(e => e.ToothNumber).IsRequired();
-            entity.Property(e => e.Status).IsRequired().HasConversion<string>().HasMaxLength(50);
+            entity.Property(e => e.Status)
+                .IsRequired()
+                .HasConversion<string>()
+                .HasMaxLength(50);
             entity.Property(e => e.Surface).HasMaxLength(20);
+            entity.Property(e => e.ActiveSurface).HasMaxLength(20);
+            entity.Property(e => e.IsCurrent).IsRequired().HasDefaultValue(true);
+            entity.Property(e => e.RecordedBy).HasMaxLength(200);
             entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.IsVoided).IsRequired().HasDefaultValue(false);
+            entity.Property(e => e.VoidedBy).HasMaxLength(200);
+            entity.Property(e => e.VoidReason).HasMaxLength(500);
 
             // Composite indexes for fast odontogram reads and tooth history
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
             entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.ToothNumber });
+            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.ToothNumber, e.IsCurrent });
             entity.HasIndex(e => new { e.ClinicId, e.ConsultationId });
         });
 

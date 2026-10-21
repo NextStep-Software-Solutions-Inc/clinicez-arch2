@@ -86,6 +86,12 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('rect'),
   Line: createMockComponent('line'),
   default: createMockComponent('svg'),
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -518,7 +524,7 @@ describe('Adversarial Challenger Deep Stress Test Harness (Milestone MC Iteratio
         {
           id: 'dt-adv-55',
           toothNumber: 55,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'MOD',
           notes: 'Deep decay on primary molar',
         },
@@ -553,7 +559,7 @@ describe('Adversarial Challenger Deep Stress Test Harness (Milestone MC Iteratio
         expect(html).toContain('Odontogram Visualizer');
         expect(html).toContain('Tooth #55');
         expect(html).toContain('Upper Right Primary Second Molar');
-        expect(html).toContain('Decay');
+        expect(html).toContain('Decayed');
         expect(html).toContain('MOD');
         expect(html).toContain('Pulpotomy - Primary Tooth');
 

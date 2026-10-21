@@ -118,6 +118,13 @@ export class ClinicApiClient {
     if (error) return [null, ClinicApiClient.toError(error)];
     return [response?.data ?? null, null];
   }
+
+  /** Authenticated binary POST request (dynamic PDF previews). */
+  async postBlob<B = unknown>(url: string, body?: B, config?: AxiosRequestConfig): Promise<[Blob | null, ApiError | null]> {
+    const [response, error] = await safeAwait(this.client.post<Blob>(url, body, { ...config, responseType: 'blob' }));
+    if (error) return [null, ClinicApiClient.toError(error)];
+    return [response?.data ?? null, null];
+  }
 }
 
 export const clinicApiClient = new ClinicApiClient({ baseUrl: getApiBaseUrl, authenticated: true });

@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -24,7 +27,10 @@ public sealed record UpdateClinicSettingsCommand(
     string? LetterheadSubHeader = null,
     string? LetterheadAddress = null,
     string? LetterheadContact = null,
+    string? LetterheadDohLto = null,
     string? LetterheadFooter = null,
+    string? LetterheadAccentColorHex = null,
+    string? DocumentAccentColorHex = null,
     string? PrimaryColorHex = null,
     string? PrimaryLogoUrl = null,
     string? PaperSize = null,
@@ -44,22 +50,34 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableStatAudioAlert = null,
     bool? EnableStatVibrationAlert = null,
     string? SpecialtyMode = null,
-    bool? EnableDentalModule = null) : IRequest<ClinicSettingsDto>;
+    bool? EnableDentalModule = null,
+    decimal? DefaultDoctorSharePercentage = null,
+    string? CashierMode = null,
+    string? DefaultApproverName = null,
+    string? DefaultApproverTitle = null,
+    string? DocumentSignatoriesJson = null,
+    bool? EnableAppointmentReminders = null,
+    bool? AppointmentReminder24hEnabled = null,
+    bool? AppointmentReminder2hEnabled = null,
+    bool? EnableStaffAppointmentNotifications = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
     private readonly IRepository<ClinicSettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IRepository<ClinicServiceItem>? _serviceRepo;
 
     public UpdateClinicSettingsCommandHandler(
         IRepository<ClinicSettings> settingsRepo,
         IClinicContext clinicContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IRepository<ClinicServiceItem>? serviceRepo = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
+        _serviceRepo = serviceRepo;
     }
 
     public async Task<ClinicSettingsDto> Handle(UpdateClinicSettingsCommand request, CancellationToken ct)
@@ -120,8 +138,15 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.LetterheadContact != null)
             settings.LetterheadContact = string.IsNullOrWhiteSpace(request.LetterheadContact) ? null : request.LetterheadContact.Trim();
 
+        if (request.LetterheadDohLto != null)
+            settings.LetterheadDohLto = string.IsNullOrWhiteSpace(request.LetterheadDohLto) ? null : request.LetterheadDohLto.Trim();
+
         if (request.LetterheadFooter != null)
             settings.LetterheadFooter = string.IsNullOrWhiteSpace(request.LetterheadFooter) ? null : request.LetterheadFooter.Trim();
+
+        var docAccent = request.LetterheadAccentColorHex ?? request.DocumentAccentColorHex;
+        if (docAccent != null)
+            settings.LetterheadAccentColorHex = string.IsNullOrWhiteSpace(docAccent) ? null : docAccent.Trim();
 
         if (request.PrimaryColorHex != null)
             settings.PrimaryColorHex = request.PrimaryColorHex.Trim();
@@ -190,10 +215,50 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             {
                 settings.EnableDentalModule = true;
             }
+
+            if (_serviceRepo != null &&
+                (string.Equals(mode, "Dental", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(mode, "MultiSpecialty", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(mode, "Multi-Specialty", StringComparison.OrdinalIgnoreCase)))
+            {
+                await EnsureDentalPresetsSeededAsync(ct);
+            }
         }
 
         if (request.EnableDentalModule.HasValue)
             settings.EnableDentalModule = request.EnableDentalModule.Value;
+
+        if (request.DefaultDoctorSharePercentage.HasValue && request.DefaultDoctorSharePercentage.Value >= 0)
+            settings.DefaultDoctorSharePercentage = request.DefaultDoctorSharePercentage.Value;
+
+        if (!string.IsNullOrWhiteSpace(request.CashierMode))
+        {
+            var normalizedMode = request.CashierMode.Trim();
+            settings.CashierMode = string.Equals(normalizedMode, "CashierCounter", StringComparison.OrdinalIgnoreCase)
+                ? "CashierCounter"
+                : "ClinicDesk";
+        }
+
+        if (request.DefaultApproverName != null)
+            settings.DefaultApproverName = string.IsNullOrWhiteSpace(request.DefaultApproverName) ? null : request.DefaultApproverName.Trim();
+
+        if (request.DefaultApproverTitle != null)
+            settings.DefaultApproverTitle = string.IsNullOrWhiteSpace(request.DefaultApproverTitle) ? null : request.DefaultApproverTitle.Trim();
+
+        if (request.DocumentSignatoriesJson != null)
+            settings.DocumentSignatoriesJson = string.IsNullOrWhiteSpace(request.DocumentSignatoriesJson) ? null : request.DocumentSignatoriesJson.Trim();
+
+        if (request.EnableAppointmentReminders.HasValue)
+            settings.EnableAppointmentReminders = request.EnableAppointmentReminders.Value;
+
+        if (request.AppointmentReminder24hEnabled.HasValue)
+            settings.AppointmentReminder24hEnabled = request.AppointmentReminder24hEnabled.Value;
+
+        if (request.AppointmentReminder2hEnabled.HasValue)
+            settings.AppointmentReminder2hEnabled = request.AppointmentReminder2hEnabled.Value;
+
+        if (request.EnableStaffAppointmentNotifications.HasValue)
+            settings.EnableStaffAppointmentNotifications = request.EnableStaffAppointmentNotifications.Value;
 
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
@@ -246,7 +311,66 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.IsDirectoryPublished,
             settings.IsOnlineBookingPaused,
             settings.SpecialtyMode,
-            settings.EnableDentalModule);
+            settings.EnableDentalModule,
+            settings.DefaultDoctorSharePercentage,
+            settings.CashierMode,
+            LetterheadDohLto: settings.LetterheadDohLto,
+            LetterheadAccentColorHex: settings.LetterheadAccentColorHex,
+            DefaultApproverName: settings.DefaultApproverName,
+            DefaultApproverTitle: settings.DefaultApproverTitle,
+            DocumentSignatoriesJson: settings.DocumentSignatoriesJson,
+            EnableAppointmentReminders: settings.EnableAppointmentReminders,
+            AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
+            AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
+            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications);
+    }
+
+    private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)
+    {
+        if (_serviceRepo == null) return;
+
+        var allServices = await _serviceRepo.Query()
+            .IgnoreQueryFilters()
+            .Where(s => s.ClinicId == _clinicContext.ClinicId)
+            .ToListAsync(ct);
+
+        var existingMap = allServices
+            .Where(s => !string.IsNullOrWhiteSpace(s.Code))
+            .GroupBy(s => s.Code.Trim().ToUpperInvariant())
+            .ToDictionary(g => g.Key, g => g.First());
+
+        foreach (var def in DentalCatalogDefaults.Defaults)
+        {
+            var codeUpper = def.Code.Trim().ToUpperInvariant();
+            if (existingMap.TryGetValue(codeUpper, out var existing))
+            {
+                if (existing.IsDeleted)
+                {
+                    existing.IsDeleted = false;
+                    existing.DeletedAt = null;
+                    existing.DeletedBy = null;
+                    existing.IsActive = true;
+                }
+            }
+            else
+            {
+                var newItem = new ClinicServiceItem
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = _clinicContext.TenantId,
+                    ClinicId = _clinicContext.ClinicId,
+                    Code = def.Code,
+                    Name = def.Name,
+                    Category = def.Category,
+                    StandardPrice = def.StandardPrice,
+                    Description = def.Description,
+                    IsActive = true
+                };
+
+                await _serviceRepo.AddAsync(newItem, ct);
+                existingMap[codeUpper] = newItem;
+            }
+        }
     }
 }
 

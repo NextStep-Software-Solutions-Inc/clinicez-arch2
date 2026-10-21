@@ -85,10 +85,10 @@ public class ChallengerMaEmpiricalTests
             new(ToothNumber: 11, Status: ToothStatus.Healthy, Surface: null, Notes: "Tooth 1"),
             new(ToothNumber: 12, Status: ToothStatus.Healthy, Surface: null, Notes: "Tooth 2"),
             new(ToothNumber: 13, Status: ToothStatus.Healthy, Surface: null, Notes: "Tooth 3"),
-            new(ToothNumber: 99, Status: ToothStatus.Decay, Surface: "O", Notes: "Tooth 4 - INVALID TOOTH NUMBER"),
+            new(ToothNumber: 99, Status: ToothStatus.Decayed, Surface: "O", Notes: "Tooth 4 - INVALID TOOTH NUMBER"),
             new(ToothNumber: 14, Status: ToothStatus.Healthy, Surface: null, Notes: "Tooth 5"),
             new(ToothNumber: 15, Status: ToothStatus.Healthy, Surface: null, Notes: "Tooth 6"),
-            new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "MOD", Notes: "Tooth 7"),
+            new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "MOD", Notes: "Tooth 7"),
             new(ToothNumber: 17, Status: ToothStatus.Healthy, Surface: null, Notes: "Tooth 8"),
             new(ToothNumber: 18, Status: ToothStatus.Healthy, Surface: null, Notes: "Tooth 9"),
             new(ToothNumber: 21, Status: ToothStatus.Healthy, Surface: null, Notes: "Tooth 10")
@@ -138,7 +138,7 @@ public class ChallengerMaEmpiricalTests
             new(ToothNumber: 11, Status: ToothStatus.Healthy),
             new(ToothNumber: 12, Status: ToothStatus.Healthy),
             new(ToothNumber: 13, Status: ToothStatus.Healthy),
-            new(ToothNumber: 14, Status: ToothStatus.Decay, Surface: "XYZ"), // INVALID SURFACE
+            new(ToothNumber: 14, Status: ToothStatus.Decayed, Surface: "XYZ"), // INVALID SURFACE
             new(ToothNumber: 15, Status: ToothStatus.Healthy),
             new(ToothNumber: 16, Status: ToothStatus.Filled, Surface: "MOD"),
             new(ToothNumber: 17, Status: ToothStatus.Healthy),
@@ -214,8 +214,8 @@ public class ChallengerMaEmpiricalTests
             null,
             new List<ToothRecordInput>
             {
-                new(ToothNumber: 11, Status: ToothStatus.Decay, Notes: "Mutated"),
-                new(ToothNumber: 12, Status: ToothStatus.Extraction, Notes: "Mutated"),
+                new(ToothNumber: 11, Status: ToothStatus.Decayed, Notes: "Mutated"),
+                new(ToothNumber: 12, Status: ToothStatus.ForExtraction, Notes: "Mutated"),
                 new(ToothNumber: 99, Status: ToothStatus.Healthy) // Invalid
             }
         );
@@ -277,7 +277,7 @@ public class ChallengerMaEmpiricalTests
             new List<ToothRecordInput>
             {
                 new(ToothNumber: 11, Status: ToothStatus.Healthy, Surface: null, Notes: "Normal incisor"),
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "O", Notes: "Initial cavity observation"),
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "O", Notes: "Initial cavity observation"),
                 new(ToothNumber: 21, Status: ToothStatus.Healthy, Surface: null, Notes: "Normal incisor"),
                 new(ToothNumber: 16, Status: ToothStatus.Filled, Surface: "dom", Notes: "Composite restoration completed in same session")
             }
@@ -340,8 +340,8 @@ public class ChallengerMaEmpiricalTests
             new List<ToothRecordInput>
             {
                 new(ToothNumber: 46, Status: ToothStatus.Healthy, Notes: "Step 1"),
-                new(ToothNumber: 46, Status: ToothStatus.Decay, Surface: "O", Notes: "Step 2"),
-                new(ToothNumber: 46, Status: ToothStatus.Crown, Surface: "MODBL", Notes: "Step 3 - Final Crown")
+                new(ToothNumber: 46, Status: ToothStatus.Decayed, Surface: "O", Notes: "Step 2"),
+                new(ToothNumber: 46, Status: ToothStatus.Crowned, Surface: "MODBL", Notes: "Step 3 - Final Crown")
             }
         );
 
@@ -351,7 +351,7 @@ public class ChallengerMaEmpiricalTests
         // Assert
         result.Teeth.Should().HaveCount(1);
         var tooth46 = result.Teeth[0];
-        tooth46.Status.Should().Be(ToothStatus.Crown);
+        tooth46.Status.Should().Be(ToothStatus.Crowned);
         tooth46.Surface.Should().Be("MODBL");
         tooth46.Notes.Should().Be("Step 3 - Final Crown");
     }
@@ -402,8 +402,8 @@ public class ChallengerMaEmpiricalTests
             null,
             new List<ToothRecordInput>
             {
-                new(ToothNumber: 36, Status: ToothStatus.Decay, Surface: "O", Notes: "Severe caries"),
-                new(ToothNumber: 36, Status: ToothStatus.Extraction, Surface: null, Notes: "Extracted completely")
+                new(ToothNumber: 36, Status: ToothStatus.Decayed, Surface: "O", Notes: "Severe caries"),
+                new(ToothNumber: 36, Status: ToothStatus.ForExtraction, Surface: null, Notes: "Extracted completely")
             }
         );
 
@@ -413,11 +413,11 @@ public class ChallengerMaEmpiricalTests
         // Assert
         result.Teeth.Should().HaveCount(1);
         var tooth36 = result.Teeth[0];
-        tooth36.Status.Should().Be(ToothStatus.Extraction);
+        tooth36.Status.Should().Be(ToothStatus.ForExtraction);
         tooth36.Notes.Should().Be("Extracted completely");
 
         var dbRecord = await toothRepo.Query(t => t.PatientId == patientId).FirstAsync();
-        dbRecord.Status.Should().Be(ToothStatus.Extraction);
+        dbRecord.Status.Should().Be(ToothStatus.ForExtraction);
         dbRecord.Notes.Should().Be("Extracted completely");
     }
 

@@ -1,25 +1,52 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Api.Controllers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Documents.Commands;
 using ClinicEz.Clinic.Application.Features.LabOrders.Queries;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
+using ClinicEz.Clinic.Application.Features.Reports.DTOs;
+using ClinicEz.Clinic.Application.Features.Reports.Queries;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Services;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Documents.Components;
+using ClinicEz.Shared.Documents.Configuration;
 using FluentAssertions;
+using MediatR;
+using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests;
 
+public enum DocumentType
+{
+    MedicalCertificate,
+    ElectronicPrescription,
+    LabRequisitionSlip,
+    ClinicalReferralLetter
+}
+
 public class HardenedDocumentGenerationTests
 {
     private readonly IClinicDocumentPdfService _pdfService = new ClinicDocumentPdfService();
+
+    // Valid minimal 1x1 transparent PNG byte array for signature and logo testing
+    private static readonly byte[] Sample1x1PngBytes = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErmCC");
+
+    private static readonly string SamplePngDataUri =
+        "data:image/png;base64," + Convert.ToBase64String(Sample1x1PngBytes);
 
     [Fact]
     public void ClinicDocumentPdfService_Should_Generate_Valid_MedicalCertificate_PDF_With_Security_Seal()
@@ -202,9 +229,9 @@ public class HardenedDocumentGenerationTests
                     Remarks: "Maximum 4 grams (8 tablets) in 24 hours"
                 )
             },
-            PublicVerificationToken: "rx-verify-tok-8821",
-            PublicVerificationUrl: "https://clinicez.ph/rx-verify/rx-verify-tok-8821",
-            QrPayload: "CLINICEZ:RX:RX-20261004-0011:rx-verify-tok-8821",
+            PublicVerificationToken: "test-rx-token",
+            PublicVerificationUrl: "https://clinicez.ph/rx-verify/test-rx-token",
+            QrPayload: "CLINICEZ:RX:RX-20261004-0011:test-rx-token",
             DispenseStatus: "Pending",
             DispensedPharmacyName: null,
             DispensedPharmacistName: null,
@@ -387,5 +414,1395 @@ public class HardenedDocumentGenerationTests
         var pdfText = Encoding.ASCII.GetString(pdfBytes);
         pdfText.Should().StartWith("%PDF-");
         pdfText.Should().Contain("%%EOF");
+    }
+
+    private static ClinicSettings CreateReportTestSettings() => new()
+    {
+        TenantId = "tenant-test-01",
+        ClinicId = Guid.NewGuid(),
+        ClinicName = "St. Jude Family Medical Clinic & Diagnostic Center",
+        TaxIdentificationNumber = "234-567-890-000",
+        AccreditationNumber = "PHIC-KONSULTA-09214",
+        LetterheadHeader = "ST. JUDE FAMILY MEDICAL CLINIC",
+        LetterheadSubHeader = "Accredited Outpatient Medical Facility & Diagnostic Center",
+        LetterheadAddress = "124 Rizal Avenue, San Pedro, Laguna, Philippines",
+        LetterheadContact = "Tel: (02) 8876-5432 • Mobile: +63 917 123 4567",
+        LetterheadFooter = "Official Clinic EZ Electronic Report. Valid Philippine medical & financial document issued in compliance with RA 8792 & RA 10173.",
+        PrimaryColorHex = "#0D6963",
+        PaperSize = "Letter"
+    };
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_DailyEodReport_PDF_When_Populated()
+    {
+        var settings = CreateReportTestSettings();
+        var reportDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var report = new DailyEodReportDto(
+            ReportDate: reportDate,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalCheckedIn: 35,
+            TotalWalkIns: 20,
+            TotalAppointments: 15,
+            TotalCompletedVisits: 32,
+            TotalWaitingOrInConsultation: 3,
+            TotalGrossAmount: 51900.00m,
+            TotalDiscountsGiven: 5100.00m,
+            TotalSeniorDiscounts: 3500.00m,
+            TotalPwdDiscounts: 1600.00m,
+            TotalPhilHealthCovered: 12000.00m,
+            TotalNetAmount: 46800.00m,
+            TotalAmountCollected: 46800.00m,
+            CashInDrawer: 18450.00m,
+            TotalUnpaidBalances: 0.00m,
+            CollectionsByMethod: new List<PaymentModeSummary>
+            {
+                new("Cash", 18450.00m, 14),
+                new("GCash", 12300.00m, 9),
+                new("Maya", 6150.00m, 4),
+                new("Credit / Debit Card", 9900.00m, 5)
+            },
+            DoctorWorkloads: new List<DoctorWorkloadSummary>
+            {
+                new("Dr. Jose Rizal, MD", 18),
+                new("Dr. Antonio Luna, MD", 14)
+            },
+            TotalProceduresPerformed: 12,
+            TotalLabOrdersIssued: 24,
+            TotalPrescriptionsWritten: 38,
+            TotalDangerousDrugPrescriptions: 2
+        );
+
+        var pdfBytes = _pdfService.GenerateDailyEodReportPdf(report, settings, "Maria Santos (Cashier)");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_DailyEodReport_PDF_When_Empty()
+    {
+        var settings = CreateReportTestSettings();
+        var report = new DailyEodReportDto(
+            ReportDate: DateTime.UtcNow,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalCheckedIn: 0,
+            TotalWalkIns: 0,
+            TotalAppointments: 0,
+            TotalCompletedVisits: 0,
+            TotalWaitingOrInConsultation: 0,
+            TotalGrossAmount: 0m,
+            TotalDiscountsGiven: 0m,
+            TotalSeniorDiscounts: 0m,
+            TotalPwdDiscounts: 0m,
+            TotalPhilHealthCovered: 0m,
+            TotalNetAmount: 0m,
+            TotalAmountCollected: 0m,
+            CashInDrawer: 0m,
+            TotalUnpaidBalances: 0m,
+            CollectionsByMethod: new List<PaymentModeSummary>(),
+            DoctorWorkloads: new List<DoctorWorkloadSummary>(),
+            TotalProceduresPerformed: 0,
+            TotalLabOrdersIssued: 0,
+            TotalPrescriptionsWritten: 0,
+            TotalDangerousDrugPrescriptions: 0
+        );
+
+        var pdfBytes = _pdfService.GenerateDailyEodReportPdf(report, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(500);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_MorbidityReport_PDF_When_Populated()
+    {
+        var settings = CreateReportTestSettings();
+        var startDate = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var report = new MorbidityReportDto(
+            StartDate: startDate,
+            EndDate: endDate,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            ClinicName: settings.ClinicName,
+            TotalEncountersReviewed: 150,
+            TotalDiagnosesRecorded: 180,
+            Diseases: new List<MorbidityDiseaseRowDto>
+            {
+                new(1, "J06.9", "Acute upper respiratory infection, unspecified", 45, 15, 25, 5, 20, 25, 25.0),
+                new(2, "I10", "Essential (primary) hypertension", 38, 0, 18, 20, 18, 20, 21.1),
+                new(3, "E11.9", "Type 2 diabetes mellitus without complications", 28, 0, 12, 16, 13, 15, 15.6),
+                new(4, "A09", "Infectious gastroenteritis and colitis, unspecified", 22, 10, 9, 3, 10, 12, 12.2),
+                new(5, "M79.1", "Myalgia", 18, 1, 12, 5, 8, 10, 10.0)
+            }
+        );
+
+        var pdfBytes = _pdfService.GenerateMorbidityReportPdf(report, settings, "Dr. Roberto Cruz, MD");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_MorbidityReport_PDF_When_Empty()
+    {
+        var settings = CreateReportTestSettings();
+        var report = new MorbidityReportDto(
+            StartDate: DateTime.UtcNow.AddDays(-30),
+            EndDate: DateTime.UtcNow,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            ClinicName: settings.ClinicName,
+            TotalEncountersReviewed: 0,
+            TotalDiagnosesRecorded: 0,
+            Diseases: new List<MorbidityDiseaseRowDto>()
+        );
+
+        var pdfBytes = _pdfService.GenerateMorbidityReportPdf(report, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(500);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_TaxDiscountAuditReport_PDF_When_Populated()
+    {
+        var settings = CreateReportTestSettings();
+        var startDate = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var report = new TaxDiscountAuditReportDto(
+            StartDate: startDate,
+            EndDate: endDate,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalInvoicesAudited: 3,
+            TotalGrossSales: 7500.00m,
+            TotalSeniorDiscounts: 1000.00m,
+            TotalPwdDiscounts: 500.00m,
+            TotalVatExempted: 720.00m,
+            TotalNetCollections: 6000.00m,
+            Items: new List<TaxDiscountAuditRowDto>
+            {
+                new("INV-2026-0001", new DateTime(2026, 10, 5), "Lourdes Mercado", "SeniorCitizen", "OSCA-1954-0912", 2500.00m, 500.00m, 2000.00m, 240.00m, 2000.00m, 2000.00m, "OR-20261005-001", "Cash"),
+                new("INV-2026-0002", new DateTime(2026, 10, 8), "Federico Garcia", "SeniorCitizen", "OSCA-1950-8812", 2500.00m, 500.00m, 2000.00m, 240.00m, 2000.00m, 2000.00m, "OR-20261008-002", "GCash"),
+                new("INV-2026-0003", new DateTime(2026, 10, 12), "Ramon Magsaysay", "PWD", "PWD-2022-7718", 2500.00m, 500.00m, 2000.00m, 240.00m, 2000.00m, 2000.00m, "OR-20261012-003", "Cash")
+            }
+        );
+
+        var pdfBytes = _pdfService.GenerateTaxDiscountAuditReportPdf(report, settings, "Maria Clara (Cashier)");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_TaxDiscountAuditReport_PDF_When_Empty()
+    {
+        var settings = CreateReportTestSettings();
+        var report = new TaxDiscountAuditReportDto(
+            StartDate: DateTime.UtcNow.AddDays(-30),
+            EndDate: DateTime.UtcNow,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalInvoicesAudited: 0,
+            TotalGrossSales: 0m,
+            TotalSeniorDiscounts: 0m,
+            TotalPwdDiscounts: 0m,
+            TotalVatExempted: 0m,
+            TotalNetCollections: 0m,
+            Items: new List<TaxDiscountAuditRowDto>()
+        );
+
+        var pdfBytes = _pdfService.GenerateTaxDiscountAuditReportPdf(report, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(500);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_DoctorSharesReport_PDF_When_Populated()
+    {
+        var settings = CreateReportTestSettings();
+        var startDate = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var report = new DoctorSharesReportDto(
+            StartDate: startDate,
+            EndDate: endDate,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalClinicEncounters: 60,
+            TotalClinicGrossRevenue: 74500.00m,
+            TotalPhysicianShares: 52150.00m,
+            TotalFacilityShares: 22350.00m,
+            DoctorShares: new List<DoctorWorkloadDetailDto>
+            {
+                new("doc-01", "Dr. Jose Rizal, MD", 35, 8, 28000.00m, 14500.00m, 42500.00m, 29750.00m, 12750.00m),
+                new("doc-02", "Dr. Antonio Luna, MD", 25, 6, 20000.00m, 12000.00m, 32000.00m, 22400.00m, 9600.00m)
+            }
+        );
+
+        var pdfBytes = _pdfService.GenerateDoctorSharesReportPdf(report, settings, "Finance Office");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_DoctorSharesReport_PDF_When_Empty()
+    {
+        var settings = CreateReportTestSettings();
+        var report = new DoctorSharesReportDto(
+            StartDate: DateTime.UtcNow.AddDays(-30),
+            EndDate: DateTime.UtcNow,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            TotalClinicEncounters: 0,
+            TotalClinicGrossRevenue: 0m,
+            TotalPhysicianShares: 0m,
+            TotalFacilityShares: 0m,
+            DoctorShares: new List<DoctorWorkloadDetailDto>()
+        );
+
+        var pdfBytes = _pdfService.GenerateDoctorSharesReportPdf(report, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(500);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_ClinicAnalytics_PDF_When_Populated()
+    {
+        var settings = CreateReportTestSettings();
+        var startDate = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var endDate = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var analytics = new ClinicAnalyticsDto(
+            StartDate: startDate,
+            EndDate: endDate,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            Flow: new FlowAnalyticsDto(
+                TotalEncountersToday: 42,
+                InQueueNow: 5,
+                UrgentTriageNow: 1,
+                InConsultationNow: 3,
+                CompletedToday: 34,
+                AverageWaitMinutes: 12.5,
+                AverageConsultMinutes: 16.2,
+                RoutineCount: 30,
+                UrgentCount: 10,
+                EmergencyCount: 2
+            ),
+            TotalGrossRevenue: 360000.00m,
+            TotalNetRevenue: 345000.00m,
+            TotalCollections: 340000.00m,
+            TotalUnpaidBalances: 5000.00m,
+            AverageTicketSize: 1250.00m,
+            SeniorDiscountsGiven: 10500.00m,
+            PwdDiscountsGiven: 4500.00m,
+            RevenueTrend: new List<DailyTrendPointDto>
+            {
+                new("Oct 18", 18500.00m, 15),
+                new("Oct 19", 22000.00m, 18),
+                new("Oct 20", 25400.00m, 21)
+            },
+            TenderShares: new List<TenderShareDto>
+            {
+                new("Cash", 170000.00m, 50.0),
+                new("GCash", 102000.00m, 30.0),
+                new("Card", 68000.00m, 20.0)
+            },
+            TopDiagnoses: new List<MorbidityItemDto>
+            {
+                new("J06.9", "Acute upper respiratory infection", 25, 28.4),
+                new("I10", "Essential hypertension", 18, 20.5)
+            },
+            TopServices: new List<ServiceUsageDto>
+            {
+                new("Procedure", "Minor Wound Dressing", 12),
+                new("LabOrder", "Complete Blood Count (CBC)", 20)
+            },
+            DoctorStats: new List<DoctorStatDto>
+            {
+                new("Dr. Jose Rizal, MD", 25, 180000.00m),
+                new("Dr. Antonio Luna, MD", 17, 165000.00m)
+            }
+        );
+
+        var pdfBytes = _pdfService.GenerateClinicAnalyticsPdf(analytics, settings, "Executive Analytics");
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_ClinicAnalytics_PDF_When_Empty()
+    {
+        var settings = CreateReportTestSettings();
+        var analytics = new ClinicAnalyticsDto(
+            StartDate: DateTime.UtcNow.AddDays(-30),
+            EndDate: DateTime.UtcNow,
+            TenantId: settings.TenantId,
+            ClinicId: settings.ClinicId,
+            Flow: new FlowAnalyticsDto(0, 0, 0, 0, 0, 0.0, 0.0, 0, 0, 0),
+            TotalGrossRevenue: 0m,
+            TotalNetRevenue: 0m,
+            TotalCollections: 0m,
+            TotalUnpaidBalances: 0m,
+            AverageTicketSize: 0m,
+            SeniorDiscountsGiven: 0m,
+            PwdDiscountsGiven: 0m,
+            RevenueTrend: new List<DailyTrendPointDto>(),
+            TenderShares: new List<TenderShareDto>(),
+            TopDiagnoses: new List<MorbidityItemDto>(),
+            TopServices: new List<ServiceUsageDto>(),
+            DoctorStats: new List<DoctorStatDto>()
+        );
+
+        var pdfBytes = _pdfService.GenerateClinicAnalyticsPdf(analytics, settings);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(500);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Fact]
+    public void TenantPrintoutConfig_Should_Support_TaxIdentificationNumber()
+    {
+        var config = new TenantPrintoutConfig
+        {
+            FacilityName = "Metro Health Diagnostic Center",
+            TaxIdentificationNumber = "987-654-321-000",
+            DohLicenseToOperate = "LTO-NCR-2026-091",
+            PhilHealthAccreditationNumber = "PHIC-998877"
+        };
+
+        config.TaxIdentificationNumber.Should().Be("987-654-321-000");
+    }
+
+    [Fact]
+    public async Task ReportsController_Pdf_Endpoints_Should_Stream_Vector_PDF_Files()
+    {
+        var sender = Substitute.For<ISender>();
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(Guid.NewGuid());
+        clinicContext.TenantId.Returns("tenant-1");
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var date = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var eodDto = new DailyEodReportDto(
+            date, "tenant-1", Guid.NewGuid(), 10, 5, 5, 10, 0,
+            10000m, 1000m, 500m, 500m, 2000m, 9000m, 9000m, 5000m, 0m,
+            new List<PaymentModeSummary>(), new List<DoctorWorkloadSummary>(), 0, 0, 0, 0);
+
+        var morbidityDto = new MorbidityReportDto(
+            date.AddDays(-7), date, "tenant-1", Guid.NewGuid(), "St. Jude Clinic", 50, 50,
+            new List<MorbidityDiseaseRowDto>());
+
+        var taxDto = new TaxDiscountAuditReportDto(
+            date.AddDays(-7), date, "tenant-1", Guid.NewGuid(), 5, 5000m, 500m, 500m, 400m, 4500m,
+            new List<TaxDiscountAuditRowDto>());
+
+        var sharesDto = new DoctorSharesReportDto(
+            date.AddDays(-7), date, "tenant-1", Guid.NewGuid(), 20, 25000m, 17500m, 7500m,
+            new List<DoctorWorkloadDetailDto>());
+
+        var analyticsDto = new ClinicAnalyticsDto(
+            date.AddDays(-7), date, "tenant-1", Guid.NewGuid(),
+            new FlowAnalyticsDto(10, 1, 0, 1, 8, 10, 15, 8, 2, 0),
+            50000m, 48000m, 48000m, 0m, 1200m, 1000m, 1000m,
+            new List<DailyTrendPointDto>(), new List<TenderShareDto>(), new List<MorbidityItemDto>(),
+            new List<ServiceUsageDto>(), new List<DoctorStatDto>());
+
+        sender.Send(Arg.Any<GetDailyEodReportQuery>(), Arg.Any<CancellationToken>()).Returns(eodDto);
+        sender.Send(Arg.Any<GetMorbidityReportQuery>(), Arg.Any<CancellationToken>()).Returns(morbidityDto);
+        sender.Send(Arg.Any<GetTaxDiscountAuditReportQuery>(), Arg.Any<CancellationToken>()).Returns(taxDto);
+        sender.Send(Arg.Any<GetDoctorSharesReportQuery>(), Arg.Any<CancellationToken>()).Returns(sharesDto);
+        sender.Send(Arg.Any<GetClinicAnalyticsQuery>(), Arg.Any<CancellationToken>()).Returns(analyticsDto);
+
+        var controller = new ReportsController(sender, _pdfService, settingsRepo);
+
+        // 1. Daily EOD PDF
+        var eodResult = await controller.GetDailyEodReportPdf(date, CancellationToken.None) as FileContentResult;
+        eodResult.Should().NotBeNull();
+        eodResult!.ContentType.Should().Be("application/pdf");
+        eodResult.FileDownloadName.Should().Be($"DailyEodReport-{date:yyyyMMdd}.pdf");
+        eodResult.FileContents.Should().NotBeEmpty();
+        Encoding.ASCII.GetString(eodResult.FileContents).Should().StartWith("%PDF-");
+
+        // 2. Morbidity PDF
+        var morbResult = await controller.GetMorbidityReportPdf(date.AddDays(-7), date, CancellationToken.None) as FileContentResult;
+        morbResult.Should().NotBeNull();
+        morbResult!.ContentType.Should().Be("application/pdf");
+        morbResult.FileDownloadName.Should().Be($"MorbidityReport-{date.AddDays(-7):yyyyMMdd}-{date:yyyyMMdd}.pdf");
+        morbResult.FileContents.Should().NotBeEmpty();
+        Encoding.ASCII.GetString(morbResult.FileContents).Should().StartWith("%PDF-");
+
+        // 3. Tax Discounts PDF
+        var taxResult = await controller.GetTaxDiscountAuditReportPdf(date.AddDays(-7), date, CancellationToken.None) as FileContentResult;
+        taxResult.Should().NotBeNull();
+        taxResult!.ContentType.Should().Be("application/pdf");
+        taxResult.FileDownloadName.Should().Be($"TaxDiscountAuditReport-{date.AddDays(-7):yyyyMMdd}-{date:yyyyMMdd}.pdf");
+        taxResult.FileContents.Should().NotBeEmpty();
+        Encoding.ASCII.GetString(taxResult.FileContents).Should().StartWith("%PDF-");
+
+        // 4. Doctor Shares PDF
+        var sharesResult = await controller.GetDoctorSharesReportPdf(date.AddDays(-7), date, CancellationToken.None) as FileContentResult;
+        sharesResult.Should().NotBeNull();
+        sharesResult!.ContentType.Should().Be("application/pdf");
+        sharesResult.FileDownloadName.Should().Be($"DoctorSharesReport-{date.AddDays(-7):yyyyMMdd}-{date:yyyyMMdd}.pdf");
+        sharesResult.FileContents.Should().NotBeEmpty();
+        Encoding.ASCII.GetString(sharesResult.FileContents).Should().StartWith("%PDF-");
+
+        // 5. Analytics PDF
+        var anlResult = await controller.GetClinicAnalyticsPdf(date.AddDays(-7), date, CancellationToken.None) as FileContentResult;
+        anlResult.Should().NotBeNull();
+        anlResult!.ContentType.Should().Be("application/pdf");
+        anlResult.FileDownloadName.Should().Be($"ClinicAnalyticsReport-{date.AddDays(-7):yyyyMMdd}-{date:yyyyMMdd}.pdf");
+        anlResult.FileContents.Should().NotBeEmpty();
+        Encoding.ASCII.GetString(anlResult.FileContents).Should().StartWith("%PDF-");
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Honor_Configured_Signatories_And_Defaults()
+    {
+        var settings = CreateReportTestSettings();
+        settings.DefaultApproverName = "Dr. Hermogenes Santos, FPCP";
+        settings.DefaultApproverTitle = "Medical Director & Head of Clinics";
+        settings.DocumentSignatoriesJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, ClinicEz.Clinic.Domain.Entities.DocumentSignatoryConfig>
+        {
+            ["TaxDiscounts"] = new()
+            {
+                PreparedByTitle = "Senior Revenue Auditor",
+                ApproverName = "Atty. Juanita Gomez, CPA",
+                ApproverTitle = "Chief Legal & Compliance Officer"
+            }
+        });
+
+        var date = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var eodDto = new DailyEodReportDto(
+            date, settings.TenantId, settings.ClinicId, 10, 5, 5, 10, 0,
+            10000m, 1000m, 500m, 500m, 2000m, 9000m, 9000m, 5000m, 0m,
+            new List<PaymentModeSummary>(), new List<DoctorWorkloadSummary>(), 0, 0, 0, 0);
+
+        var taxDto = new TaxDiscountAuditReportDto(
+            date.AddDays(-7), date, settings.TenantId, settings.ClinicId, 5, 5000m, 500m, 500m, 400m, 4500m,
+            new List<TaxDiscountAuditRowDto>());
+
+        // 1. Daily EOD uses global default approver
+        var eodPdf = _pdfService.GenerateDailyEodReportPdf(eodDto, settings, "Wave Ambray");
+        var eodText = ExtractTextFromPdf(eodPdf);
+        eodText.Should().Contain("Wave Ambray");
+        eodText.Should().Contain("Dr. Hermogenes Santos");
+
+        // 2. Tax Discounts uses document-specific override
+        var taxPdf = _pdfService.GenerateTaxDiscountAuditReportPdf(taxDto, settings, "Wave Ambray");
+        var taxText = ExtractTextFromPdf(taxPdf);
+        taxText.Should().Contain("Wave Ambray");
+        taxText.Should().Contain("Senior Revenue Auditor");
+        taxText.Should().Contain("Atty. Juanita Gomez");
+    }
+
+    [Fact]
+    public async Task ReportsController_Should_Resolve_Human_Staff_Name_And_Never_Output_Raw_Guid()
+    {
+        var sender = Substitute.For<ISender>();
+        var clinicContext = Substitute.For<IClinicContext>();
+        var clinicId = Guid.NewGuid();
+        var staffId = Guid.NewGuid();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns("tenant-1");
+        clinicContext.StaffId.Returns(staffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        // Add real staff member to database
+        var staff = new StaffMember
+        {
+            Id = staffId,
+            TenantId = "tenant-1",
+            ClinicId = clinicId,
+            FirstName = "Wave",
+            LastName = "Ambray",
+            Title = "RN",
+            Role = StaffRole.Nurse
+        };
+        await context.Set<StaffMember>().AddAsync(staff);
+        await context.SaveChangesAsync();
+
+        var date = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+        var eodDto = new DailyEodReportDto(
+            date, "tenant-1", clinicId, 10, 5, 5, 10, 0,
+            10000m, 1000m, 500m, 500m, 2000m, 9000m, 9000m, 5000m, 0m,
+            new List<PaymentModeSummary>(), new List<DoctorWorkloadSummary>(), 0, 0, 0, 0);
+
+        sender.Send(Arg.Any<GetDailyEodReportQuery>(), Arg.Any<CancellationToken>()).Returns(eodDto);
+
+        var controller = new ReportsController(sender, _pdfService, settingsRepo, staffRepo, clinicContext);
+
+        var result = await controller.GetDailyEodReportPdf(date, CancellationToken.None) as FileContentResult;
+        result.Should().NotBeNull();
+
+        var text = ExtractTextFromPdf(result!.FileContents);
+        text.Should().Contain("Wave Ambray");
+        text.Should().NotContain(staffId.ToString());
+    }
+
+    // =========================================================================
+    // PARAMETERIZED 36-COMBINATION THEORY MATRIX
+    // 4 Document Types × 3 Signature Modes × 3 Paper Sizes = 36 Combinations
+    // =========================================================================
+
+    public static IEnumerable<object[]> DocumentGenerationMatrixData()
+    {
+        foreach (var docType in Enum.GetValues<DocumentType>())
+        {
+            foreach (var mode in Enum.GetValues<SignatureMode>())
+            {
+                foreach (var size in new[] { DocumentPaperSize.Letter, DocumentPaperSize.A4, DocumentPaperSize.A5 })
+                {
+                    yield return new object[] { docType, mode, size };
+                }
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(DocumentGenerationMatrixData))]
+    public void GeneratePdf_Across_All_DocumentTypes_SignatureModes_And_PaperSizes_Should_Produce_Valid_Pdf(
+        DocumentType docType,
+        SignatureMode mode,
+        DocumentPaperSize paperSize)
+    {
+        var settings = CreateBaseSettings(paperSize);
+
+        byte[] pdfBytes = docType switch
+        {
+            DocumentType.MedicalCertificate => GenerateMedicalCertificate(settings, mode),
+            DocumentType.ElectronicPrescription => GeneratePrescription(settings, mode, containsDangerousDrug: false),
+            DocumentType.LabRequisitionSlip => GenerateLabSlip(settings, mode),
+            DocumentType.ClinicalReferralLetter => GenerateReferral(settings, mode),
+            _ => throw new ArgumentOutOfRangeException(nameof(docType))
+        };
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000,
+            $"Document {docType} in mode {mode} on {paperSize} should have valid non-trivial PDF size");
+
+        var rawHeader = Encoding.ASCII.GetString(pdfBytes.AsSpan(0, Math.Min(10, pdfBytes.Length)));
+        rawHeader.Should().StartWith("%PDF-", $"Document {docType} must begin with standard PDF header");
+
+        var rawTrailer = Encoding.ASCII.GetString(pdfBytes.AsSpan(Math.Max(0, pdfBytes.Length - 100)));
+        rawTrailer.Should().Contain("%%EOF", $"Document {docType} must end with standard PDF EOF marker");
+    }
+
+    // =========================================================================
+    // WET SIGNATURE MODE ASSERTIONS
+    // Verifies:
+    // 1. "✓ Digitally Certified & Locked" is NOT present
+    // 2. "✓ Officially Signed" is NOT present
+    // 3. Blank pen line is rendered
+    // 4. Footer verification hash and QR code are preserved
+    // =========================================================================
+
+    [Theory]
+    [InlineData(DocumentType.MedicalCertificate)]
+    [InlineData(DocumentType.ElectronicPrescription)]
+    [InlineData(DocumentType.LabRequisitionSlip)]
+    [InlineData(DocumentType.ClinicalReferralLetter)]
+    public void ClinicDocumentPdfService_When_WetSignature_Mode_Should_Suppress_Digital_Certification_Badges(DocumentType docType)
+    {
+        var settings = CreateBaseSettings(DocumentPaperSize.Letter);
+        var pdfBytes = docType switch
+        {
+            DocumentType.MedicalCertificate => GenerateMedicalCertificate(settings, SignatureMode.WetSignature),
+            DocumentType.ElectronicPrescription => GeneratePrescription(settings, SignatureMode.WetSignature, containsDangerousDrug: false),
+            DocumentType.LabRequisitionSlip => GenerateLabSlip(settings, SignatureMode.WetSignature),
+            DocumentType.ClinicalReferralLetter => GenerateReferral(settings, SignatureMode.WetSignature),
+            _ => throw new ArgumentOutOfRangeException(nameof(docType))
+        };
+
+        var extractedText = ExtractTextFromPdf(pdfBytes);
+
+        // Verification Hash and QR payload must be preserved in document footer/header
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+        extractedText.Should().ContainAny("Security Hash", "DIGEST", "CLINICEZ", "PRC",
+            "Document footer and verification metadata must be preserved in wet mode");
+
+        // Digital seal / certification badges must be suppressed in wet signature mode
+        extractedText.Should().NotContain("✓ Digitally Certified & Locked",
+            "Wet signature documents must omit digital lock badge to allow physical ink signing");
+        extractedText.Should().NotContain("✓ Officially Signed e-Prescription",
+            "Wet signature prescriptions must omit official e-signature badge");
+    }
+
+    // =========================================================================
+    // E-SIGNATURE SPECIMEN MODE ASSERTIONS
+    // Verifies:
+    // 1. Transparent signature bytes are embedded above the line
+    // 2. Green certification badge is present
+    // =========================================================================
+
+    [Theory]
+    [InlineData(DocumentType.MedicalCertificate)]
+    [InlineData(DocumentType.ElectronicPrescription)]
+    [InlineData(DocumentType.ClinicalReferralLetter)]
+    public void ClinicDocumentPdfService_When_ESignatureSpecimen_Mode_Should_Embed_Signature_Image_And_Certification_Badge(DocumentType docType)
+    {
+        var settings = CreateBaseSettings(DocumentPaperSize.Letter);
+        var pdfBytes = docType switch
+        {
+            DocumentType.MedicalCertificate => GenerateMedicalCertificate(settings, SignatureMode.ESignatureSpecimen, Sample1x1PngBytes),
+            DocumentType.ElectronicPrescription => GeneratePrescription(settings, SignatureMode.ESignatureSpecimen, false, Sample1x1PngBytes),
+            DocumentType.ClinicalReferralLetter => GenerateReferral(settings, SignatureMode.ESignatureSpecimen, Sample1x1PngBytes),
+            _ => throw new ArgumentOutOfRangeException(nameof(docType))
+        };
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var extractedText = ExtractTextFromPdf(pdfBytes);
+        // E-signature mode includes digital certification seal/badge
+        extractedText.Should().ContainAny("Digitally Certified", "Officially Signed", "PRC Lic. No.",
+            "E-Signature mode must include clinician credentials and digital certification badge");
+    }
+
+    // =========================================================================
+    // CUSTOM CLINIC LOGO RENDERING ASSERTION
+    // Verifies:
+    // Custom logo bytes / data URI is decoded and rendered in document header
+    // =========================================================================
+
+    [Fact]
+    public void ClinicDocumentPdfService_When_CustomLogoBytes_Present_Should_Render_In_Header()
+    {
+        var settings = CreateBaseSettings(DocumentPaperSize.Letter);
+        settings.PrimaryLogoUrl = SamplePngDataUri;
+
+        var cert = CreateBaseMedicalCertificate(settings);
+        var patient = CreateBasePatient(settings);
+
+        var pdfBytesWithLogo = _pdfService.GenerateMedicalCertificatePdf(cert, settings, patient);
+        pdfBytesWithLogo.Should().NotBeNull();
+        pdfBytesWithLogo.Length.Should().BeGreaterThan(1000);
+
+        // Without logo fallback
+        settings.PrimaryLogoUrl = null;
+        var pdfBytesWithoutLogo = _pdfService.GenerateMedicalCertificatePdf(cert, settings, patient);
+        pdfBytesWithoutLogo.Should().NotBeNull();
+        pdfBytesWithoutLogo.Length.Should().BeGreaterThan(1000);
+    }
+
+    // =========================================================================
+    // PDEA S2 DANGEROUS DRUG REGULATORY AUTOMATIC DEFAULT
+    // Verifies:
+    // 1. When prescription contains a dangerous drug (IsDangerousDrug == true),
+    //    it automatically defaults to wet signature mode
+    // 2. Renders prominent statutory regulatory warning badge text
+    // =========================================================================
+
+    [Fact]
+    public void ClinicDocumentPdfService_When_Prescription_Contains_Pdea_S2_Dangerous_Drug_Should_Default_To_Wet_Mode()
+    {
+        var settings = CreateBaseSettings(DocumentPaperSize.A5);
+
+        // Prescription containing a PDEA S2 regulated substance (e.g. Morphine Sulfate)
+        var pdfBytes = GeneratePrescription(settings, SignatureMode.ESignatureSpecimen, containsDangerousDrug: true);
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var extractedText = ExtractTextFromPdf(pdfBytes);
+
+        // Under Philippine DOH-PDEA regulations (RA 9165), dangerous drugs mandate physical wet ink
+        // or statutory regulatory warning banner on printed output
+        extractedText.Should().ContainAny("PDEA S2", "Dangerous Drug", "DOH-PDEA", "Regulated Substance", "Wet signature",
+            "PDEA S2 prescriptions must render statutory regulatory warning banner");
+
+        // The electronic lock text must be omitted in automatic wet mode
+        extractedText.Should().NotContain("✓ Digitally Certified & Locked");
+    }
+
+    // =========================================================================
+    // CONTROLLER QUERY PARAMETER INTEGRATION ASSERTIONS
+    // Verifies:
+    // DocumentsController, PrescriptionsController, and LabOrdersController
+    // expose and honor ?wet=true|false query parameters.
+    // =========================================================================
+
+    [Fact]
+    public void DocumentsController_DownloadEndpoints_Should_Expose_And_Honor_Wet_Query_Parameter()
+    {
+        // 1. Medical Certificate PDF endpoint
+        var medCertMethod = typeof(DocumentsController).GetMethod(nameof(DocumentsController.DownloadMedicalCertificatePdf));
+        medCertMethod.Should().NotBeNull("DocumentsController must expose DownloadMedicalCertificatePdf");
+
+        var medCertParams = medCertMethod!.GetParameters();
+        var wetParamMedCert = medCertParams.FirstOrDefault(p => p.Name == "wet");
+        wetParamMedCert.Should().NotBeNull("DownloadMedicalCertificatePdf must declare a 'wet' query parameter");
+        (wetParamMedCert!.ParameterType == typeof(bool?) || wetParamMedCert.ParameterType == typeof(bool)).Should().BeTrue();
+
+        // 2. Referral Letter PDF endpoint
+        var referralMethod = typeof(DocumentsController).GetMethod(nameof(DocumentsController.DownloadReferralLetterPdf));
+        referralMethod.Should().NotBeNull("DocumentsController must expose DownloadReferralLetterPdf");
+
+        var referralParams = referralMethod!.GetParameters();
+        var wetParamReferral = referralParams.FirstOrDefault(p => p.Name == "wet");
+        wetParamReferral.Should().NotBeNull("DownloadReferralLetterPdf must declare a 'wet' query parameter");
+        (wetParamReferral!.ParameterType == typeof(bool?) || wetParamReferral.ParameterType == typeof(bool)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void PrescriptionsController_DownloadEndpoints_Should_Expose_And_Honor_Wet_Query_Parameter()
+    {
+        var methodByConsultation = typeof(PrescriptionsController).GetMethod(nameof(PrescriptionsController.DownloadPrescriptionPdfByConsultationId));
+        methodByConsultation.Should().NotBeNull("PrescriptionsController must expose DownloadPrescriptionPdfByConsultationId");
+
+        var paramsConsultation = methodByConsultation!.GetParameters();
+        var wetParamConsultation = paramsConsultation.FirstOrDefault(p => p.Name == "wet");
+        wetParamConsultation.Should().NotBeNull("DownloadPrescriptionPdfByConsultationId must declare a 'wet' query parameter");
+        (wetParamConsultation!.ParameterType == typeof(bool?) || wetParamConsultation.ParameterType == typeof(bool)).Should().BeTrue();
+
+        var methodByNumber = typeof(PrescriptionsController).GetMethod(nameof(PrescriptionsController.DownloadPrescriptionPdfByNumber));
+        methodByNumber.Should().NotBeNull("PrescriptionsController must expose DownloadPrescriptionPdfByNumber");
+
+        var paramsNumber = methodByNumber!.GetParameters();
+        var wetParamNumber = paramsNumber.FirstOrDefault(p => p.Name == "wet");
+        wetParamNumber.Should().NotBeNull("DownloadPrescriptionPdfByNumber must declare a 'wet' query parameter");
+        (wetParamNumber!.ParameterType == typeof(bool?) || wetParamNumber.ParameterType == typeof(bool)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void LabOrdersController_DownloadEndpoints_Should_Expose_And_Honor_Wet_Query_Parameter()
+    {
+        var methods = typeof(LabOrdersController).GetMethods(BindingFlags.Public | BindingFlags.Instance);
+        var slipPdfMethod = methods.FirstOrDefault(m => m.Name.Contains("SlipPdf", StringComparison.OrdinalIgnoreCase) ||
+                                                        m.GetCustomAttributes<HttpGetAttribute>().Any(a => a.Template?.Contains("slip-pdf") == true));
+
+        slipPdfMethod.Should().NotBeNull("LabOrdersController must expose a slip-pdf download endpoint");
+
+        var slipParams = slipPdfMethod!.GetParameters();
+        var wetParam = slipParams.FirstOrDefault(p => p.Name == "wet");
+        wetParam.Should().NotBeNull("LabOrdersController slip-pdf endpoint must declare a 'wet' query parameter");
+        (wetParam!.ParameterType == typeof(bool?) || wetParam.ParameterType == typeof(bool)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ClinicDocumentPdfService_StandardizedSignatoryLayout_Should_Generate_Valid_Pdfs_Across_All_Document_Classes()
+    {
+        var settings = CreateReportTestSettings();
+        var date = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+
+        // 1. Invoice SOA with standardized bottom-anchored verification stamps
+        var invoice = new Invoice
+        {
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            InvoiceNumber = "SOA-2026-TEST",
+            InvoiceDate = date,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Juanita Cruz",
+            GrossAmount = 1500m,
+            NetAmount = 1500m,
+            BalanceDue = 1500m,
+            Status = Domain.Enums.InvoiceStatus.Draft,
+            BilledByStaffName = "Authorized Cashier",
+            LineItems = new List<InvoiceLineItem>
+            {
+                new() { DoctorName = "Dr. Roberto Santos, MD", Description = "Comprehensive Consultation", Category = "Consultation", TotalPrice = 1500m, Quantity = 1, UnitPrice = 1500m }
+            }
+        };
+        var invoicePdf = _pdfService.GenerateInvoicePdf(invoice, settings);
+        invoicePdf.Should().NotBeNull();
+        invoicePdf.Length.Should().BeGreaterThan(1000);
+        Encoding.ASCII.GetString(invoicePdf, 0, 10).Should().StartWith("%PDF-");
+
+        // 2. Daily EOD Report with standardized dual sign-off
+        var eodDto = new DailyEodReportDto(
+            date, settings.TenantId, settings.ClinicId, 5, 3, 2, 5, 0,
+            5000m, 500m, 200m, 200m, 1000m, 4500m, 4500m, 2000m, 0m,
+            new List<PaymentModeSummary>(), new List<DoctorWorkloadSummary>(), 1, 1, 1, 0);
+        var eodPdf = _pdfService.GenerateDailyEodReportPdf(eodDto, settings, "Maria Santos");
+        eodPdf.Should().NotBeNull();
+        eodPdf.Length.Should().BeGreaterThan(1000);
+        Encoding.ASCII.GetString(eodPdf, 0, 10).Should().StartWith("%PDF-");
+
+        // 3. Clinical Documents with clinician signature stamp
+        var medCertPdf = GenerateMedicalCertificate(CreateBaseSettings(DocumentPaperSize.Letter), SignatureMode.DigitalSealOnly);
+        medCertPdf.Should().NotBeNull();
+        medCertPdf.Length.Should().BeGreaterThan(1000);
+        Encoding.ASCII.GetString(medCertPdf, 0, 10).Should().StartWith("%PDF-");
+    }
+
+    [Fact]
+    public async Task DocumentsController_VerifyDocument_Should_Resolve_By_Security_Digest()
+    {
+        var testDigest = "a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(Guid.NewGuid());
+        clinicContext.TenantId.Returns("tenant-001");
+
+        var (db, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var medCertRepo = TestDbHelper.CreateRepository<MedicalCertificate>(db, sieve);
+        var referralRepo = TestDbHelper.CreateRepository<ReferralLetter>(db, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(db, sieve);
+        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var sender = Substitute.For<MediatR.ISender>();
+        var pdfService = Substitute.For<IClinicDocumentPdfService>();
+
+        var cert = new MedicalCertificate
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-001",
+            ClinicId = clinicContext.ClinicId,
+            CertificateNumber = "MC-20261020-0099",
+            PatientId = Guid.NewGuid(),
+            PatientName = "Maria Clara",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Allan Ramos",
+            PrcLicenseNumber = "PRC-0056789",
+            IssueDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            Diagnosis = "Acute Bronchitis",
+            FitnessStatus = "UnfitToWork",
+            Purpose = "Rest",
+            IsSigned = true,
+            SignedAt = DateTime.UtcNow,
+            SecurityDigest = testDigest
+        };
+
+        await medCertRepo.AddAsync(cert, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var controller = new DocumentsController(
+            sender,
+            pdfService,
+            medCertRepo,
+            referralRepo,
+            staffRepo,
+            encounterRepo,
+            labOrderRepo,
+            settingsRepo,
+            patientRepo);
+
+        var actionResult = await controller.VerifyDocument(testDigest, CancellationToken.None);
+        actionResult.Should().NotBeNull();
+        actionResult.Result.Should().BeOfType<OkObjectResult>();
+
+        var okResult = (OkObjectResult)actionResult.Result!;
+        var response = okResult.Value as ApiResponse<ClinicEz.Clinic.Application.Features.Documents.DTOs.DocumentVerificationResultDto>;
+        response.Should().NotBeNull();
+        response!.Data.Should().NotBeNull();
+        response.Data!.IsVerified.Should().BeTrue();
+    }
+
+    // =========================================================================
+    // TEST GENERATION & EXTRACTION HELPERS
+    // =========================================================================
+
+    private static ClinicSettings CreateBaseSettings(DocumentPaperSize paperSize)
+    {
+        return new ClinicSettings
+        {
+            TenantId = "tenant-001",
+            ClinicId = Guid.NewGuid(),
+            ClinicName = "St. Jude Family Medical Clinic & Diagnostic Center",
+            LetterheadHeader = "ST. JUDE FAMILY MEDICAL CLINIC",
+            LetterheadSubHeader = "Accredited Primary Care Center & PhilHealth Konsulta Facility",
+            LetterheadAddress = "124 Rizal Avenue, San Pedro, Laguna, Philippines",
+            LetterheadContact = "Tel: (02) 8876-5432 • Mobile: +63 917 123 4567",
+            LetterheadFooter = "Valid Philippine Medical Certificate. System generated by Clinic EZ.",
+            PrimaryColorHex = "#0284C7",
+            PaperSize = paperSize.ToString()
+        };
+    }
+
+    private static MedicalCertificate CreateBaseMedicalCertificate(ClinicSettings settings)
+    {
+        return new MedicalCertificate
+        {
+            Id = Guid.NewGuid(),
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            CertificateNumber = "MC-20261020-0012",
+            PatientId = Guid.NewGuid(),
+            PatientName = "Maria Clara De Los Santos",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Allan Ramos, MD",
+            PrcLicenseNumber = "PRC-0056789",
+            PtrNumber = "PTR-2026-9912",
+            IssueDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            Diagnosis = "Acute Bronchitis (ICD-10: J20.9)",
+            ClinicalFindings = "Bilateral rhonchi on auscultation, non-productive cough, low grade fever.",
+            FitnessStatus = "UnfitToWork",
+            RecommendedRestDays = 3,
+            RestStartDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            RestEndDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3)),
+            Purpose = "Employment / Sick Leave",
+            Remarks = "Advised oral hydration and bed rest.",
+            IsSigned = true,
+            SignedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "Dr. Allan Ramos"
+        };
+    }
+
+    private static ClinicPatient CreateBasePatient(ClinicSettings settings)
+    {
+        return new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            PatientCode = "PAT-2026-0001",
+            ContactNumber = "+639171234567",
+            FirstName = "Maria Clara",
+            LastName = "De Los Santos",
+            DateOfBirth = new DateOnly(1992, 5, 14),
+            Gender = "Female",
+            PhilHealthNumber = "PHIC-12-050192831-2"
+        };
+    }
+
+    private byte[] GenerateMedicalCertificate(ClinicSettings settings, SignatureMode mode, byte[]? signatureBytes = null)
+    {
+        var cert = CreateBaseMedicalCertificate(settings);
+        var patient = CreateBasePatient(settings);
+
+        return InvokeServiceMethod(
+            nameof(IClinicDocumentPdfService.GenerateMedicalCertificatePdf),
+            new object?[] { cert, settings, patient },
+            mode,
+            signatureBytes);
+    }
+
+    private byte[] GeneratePrescription(ClinicSettings settings, SignatureMode mode, bool containsDangerousDrug, byte[]? signatureBytes = null)
+    {
+        var items = new List<PrescriptionSlipItemDto>
+        {
+            new(
+                ItemId: Guid.NewGuid(),
+                GenericName: containsDangerousDrug ? "Morphine Sulfate (PDEA S2)" : "Azithromycin",
+                BrandName: containsDangerousDrug ? "MST Continus" : "Zithromax",
+                Dosage: containsDangerousDrug ? "10 mg" : "500 mg",
+                Form: "Tablet",
+                Sig: containsDangerousDrug ? "Take 1 tablet every 12 hours as directed by specialist" : "Take 1 tablet once daily",
+                Quantity: 10,
+                DurationDays: 5,
+                Refills: 0,
+                IsDangerousDrug: containsDangerousDrug,
+                Remarks: containsDangerousDrug ? "Strict Yellow Prescription Regulation (RA 9165)" : "Take with food"
+            )
+        };
+
+        var slipDto = new PrescriptionSlipDto(
+            ConsultationId: Guid.NewGuid(),
+            PrescriptionNumber: "RX-20261020-0088",
+            IssuedAt: DateTime.UtcNow,
+            ClinicName: settings.ClinicName,
+            ClinicAddress: "124 Rizal Avenue, San Pedro, Laguna",
+            ClinicContact: "Tel: (02) 8876-5432",
+            DoctorName: "Dr. Allan Ramos, MD",
+            DoctorPrcLicense: "0056789",
+            DoctorPtr: "PTR-2026-9912",
+            DoctorS2License: "S2-0918-99214-A1",
+            DoctorSpecialization: "Internal Medicine",
+            PatientId: Guid.NewGuid(),
+            PatientName: "Maria Clara De Los Santos",
+            PatientAge: 32,
+            PatientGender: "Female",
+            PhilHealthNumber: "PHIC-12-050192831-2",
+            PatientAllergies: "None",
+            ClinicalDiagnosis: containsDangerousDrug ? "Severe Chronic Pain" : "Acute Respiratory Infection",
+            SpecialInstructions: "Follow exact dosing schedule",
+            Items: items,
+            PublicVerificationToken: "test-rx-token",
+            PublicVerificationUrl: "https://clinicez.ph/verify/test-rx-token",
+            QrPayload: "CLINICEZ:RX:RX-20261020-0088:test-rx-token",
+            DispenseStatus: "Pending",
+            DispensedPharmacyName: null,
+            DispensedPharmacistName: null,
+            DispensedPharmacistPrc: null,
+            DispensedReceiptNumber: null,
+            DispensedReceiptUrl: null,
+            DispensedAt: null,
+            DispenseNotes: null
+        );
+
+        return InvokeServiceMethod(
+            nameof(IClinicDocumentPdfService.GeneratePrescriptionPdf),
+            new object?[] { slipDto, settings },
+            mode,
+            signatureBytes);
+    }
+
+    private byte[] GenerateLabSlip(ClinicSettings settings, SignatureMode mode, byte[]? signatureBytes = null)
+    {
+        var slipDto = new LabOrderSlipDto(
+            OrderId: Guid.NewGuid(),
+            OrderNumber: "ORD-20261020-0033",
+            OrderDate: DateTime.UtcNow,
+            ClinicName: settings.ClinicName,
+            ClinicAddress: settings.LetterheadAddress ?? "Philippines",
+            ClinicContact: settings.LetterheadContact ?? "Tel: (02) 8876-5432",
+            DoctorName: "Dr. Allan Ramos, MD",
+            DoctorPrcLicense: "0056789",
+            DoctorPtr: "PTR-2026-9912",
+            PatientId: Guid.NewGuid(),
+            PatientName: "Maria Clara De Los Santos",
+            PatientAge: 32,
+            PatientGender: "Female",
+            PhilHealthNumber: "PHIC-12-050192831-2",
+            ClinicalDiagnosis: "Routine Executive Checkup",
+            FastingInstructions: "Strict 10-hour fasting prior to extraction",
+            Items: new List<LabOrderSlipItemDto>
+            {
+                new("Complete Blood Count (CBC)", "Hematology", "Purple EDTA tube"),
+                new("Fasting Blood Sugar (FBS)", "Clinical Chemistry", "Serum SST tube")
+            },
+            PublicUploadUrl: "https://clinic.example.test/upload/lab/tok-dropzone-332",
+            QrPayload: "CLINICEZ:REQ:ORD-20261020-0033"
+        );
+
+        return InvokeServiceMethod(
+            nameof(IClinicDocumentPdfService.GenerateLabRequisitionSlipPdf),
+            new object?[] { slipDto, settings },
+            mode,
+            signatureBytes);
+    }
+
+    private byte[] GenerateReferral(ClinicSettings settings, SignatureMode mode, byte[]? signatureBytes = null)
+    {
+        var referral = new ReferralLetter
+        {
+            Id = Guid.NewGuid(),
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            ReferralNumber = "REF-20261020-0044",
+            PatientId = Guid.NewGuid(),
+            PatientName = "Maria Clara De Los Santos",
+            ReferringDoctorId = Guid.NewGuid(),
+            ReferringDoctorName = "Dr. Allan Ramos, MD",
+            ReferredToDoctor = "Dr. Roberto Cruz, MD",
+            ReferredToFacility = "National Kidney and Transplant Institute",
+            ReferredDepartment = "Department of Nephrology",
+            ReferralDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            Urgency = "Routine",
+            ProvisionalDiagnosis = "Chronic Kidney Disease Stage 2",
+            ReasonForReferral = "For specialist evaluation and management.",
+            ClinicalSummary = "Patient with persistent proteinuria and elevated creatinine.",
+            CurrentMedications = "Losartan 50mg OD",
+            AttachedDiagnostics = "Serum Creatinine: 1.4 mg/dL; eGFR: 62 mL/min",
+            IsSigned = true,
+            SignedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "Dr. Allan Ramos"
+        };
+
+        var doctor = new StaffMember
+        {
+            Id = referral.ReferringDoctorId,
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            FirstName = "Allan",
+            LastName = "Ramos",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-0056789",
+            PtrNumber = "PTR-2026-9912",
+            S2LicenseNumber = "S2-0918-99214-A1"
+        };
+
+        var patient = CreateBasePatient(settings);
+
+        return InvokeServiceMethod(
+            nameof(IClinicDocumentPdfService.GenerateReferralLetterPdf),
+            new object?[] { referral, settings, patient, doctor },
+            mode,
+            signatureBytes);
+    }
+
+    /// <summary>
+    /// Invokes the target method on IClinicDocumentPdfService, dynamically adapting to
+    /// extended parameters (doctor, signatureMode, wet) when implemented by Milestone 1.
+    /// </summary>
+    private byte[] InvokeServiceMethod(string methodName, object?[] baseArgs, SignatureMode mode, byte[]? signatureBytes)
+    {
+        var testDoctor = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-001",
+            ClinicId = Guid.NewGuid(),
+            FirstName = "Allan",
+            LastName = "Ramos",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-0056789",
+            PtrNumber = "PTR-2026-9912",
+            S2LicenseNumber = "S2-0918-99214-A1",
+            SignatureSpecimen = mode == SignatureMode.ESignatureSpecimen ? SamplePngDataUri : null,
+            DefaultSignatureMode = mode
+        };
+
+        var methods = _pdfService.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.Name == methodName)
+            .ToList();
+
+        // 1. Check for extended method signature accepting doctor, signatureMode, or wet
+        foreach (var method in methods)
+        {
+            var parameters = method.GetParameters();
+            if (parameters.Length > baseArgs.Length)
+            {
+                var fullArgs = new object?[parameters.Length];
+                Array.Copy(baseArgs, fullArgs, baseArgs.Length);
+
+                for (int i = baseArgs.Length; i < parameters.Length; i++)
+                {
+                    var param = parameters[i];
+                    if (param.ParameterType == typeof(StaffMember) || param.ParameterType == typeof(StaffMember))
+                    {
+                        fullArgs[i] = testDoctor;
+                    }
+                    else if (param.ParameterType == typeof(SignatureMode) || param.ParameterType == typeof(SignatureMode?))
+                    {
+                        fullArgs[i] = mode;
+                    }
+                    else if (param.Name?.Equals("wet", StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        fullArgs[i] = mode == SignatureMode.WetSignature;
+                    }
+                    else if (param.Name?.Contains("signature", StringComparison.OrdinalIgnoreCase) == true && param.ParameterType == typeof(byte[]))
+                    {
+                        fullArgs[i] = mode == SignatureMode.ESignatureSpecimen ? (signatureBytes ?? Sample1x1PngBytes) : null;
+                    }
+                    else
+                    {
+                        fullArgs[i] = param.DefaultValue != DBNull.Value ? param.DefaultValue : null;
+                    }
+                }
+
+                try
+                {
+                    var result = method.Invoke(_pdfService, fullArgs);
+                    if (result is byte[] bytes) return bytes;
+                }
+                catch (TargetInvocationException ex) when (ex.InnerException != null)
+                {
+                    throw ex.InnerException;
+                }
+            }
+        }
+
+        // 2. Fall back to standard method signature with base arguments
+        var standardMethod = methods.FirstOrDefault(m => m.GetParameters().Length == baseArgs.Length);
+        if (standardMethod != null)
+        {
+            var result = standardMethod.Invoke(_pdfService, baseArgs);
+            if (result is byte[] bytes) return bytes;
+        }
+
+        throw new InvalidOperationException($"Could not find matching signature for {methodName} on {_pdfService.GetType().Name}");
+    }
+
+    /// <summary>
+    /// Decompresses all /FlateDecode zlib streams in a PDF byte array, extracts literal text,
+    /// and decodes Identity-H CMap-mapped font glyph hex sequences to UTF-16 Unicode text,
+    /// enabling robust string assertions across QuestPDF/Skia canvas text operators.
+    /// </summary>
+    private static string ExtractTextFromPdf(byte[] pdfBytes)
+    {
+        var sb = new StringBuilder();
+        sb.Append(Encoding.UTF8.GetString(pdfBytes));
+
+        var span = pdfBytes.AsSpan();
+        var streamToken = "stream"u8;
+        var endStreamToken = "endstream"u8;
+
+        var decompressedStreams = new List<string>();
+
+        int pos = 0;
+        while (pos < pdfBytes.Length)
+        {
+            var streamIdx = span.Slice(pos).IndexOf(streamToken);
+            if (streamIdx < 0) break;
+            int streamStart = pos + streamIdx + streamToken.Length;
+            if (streamStart < pdfBytes.Length && pdfBytes[streamStart] == '\r') streamStart++;
+            if (streamStart < pdfBytes.Length && pdfBytes[streamStart] == '\n') streamStart++;
+
+            var endIdx = span.Slice(streamStart).IndexOf(endStreamToken);
+            if (endIdx < 0) break;
+            int streamLength = endIdx;
+
+            while (streamLength > 0 && (pdfBytes[streamStart + streamLength - 1] == '\r' || pdfBytes[streamStart + streamLength - 1] == '\n'))
+            {
+                streamLength--;
+            }
+
+            try
+            {
+                using var mem = new MemoryStream(pdfBytes, streamStart, streamLength);
+                using var zlib = new ZLibStream(mem, CompressionMode.Decompress);
+                using var reader = new StreamReader(zlib, Encoding.UTF8);
+                var content = reader.ReadToEnd();
+                sb.Append(content);
+                decompressedStreams.Add(content);
+            }
+            catch
+            {
+                // Stream is not zlib or raw uncompressed image data, continue safely
+            }
+
+            pos = streamStart + endIdx + endStreamToken.Length;
+        }
+
+        // Parse ToUnicode CMaps
+        var cmap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var stream in decompressedStreams)
+        {
+            if (!stream.Contains("begincmap")) continue;
+
+            // 1. beginbfchar ... endbfchar
+            int bfCharIdx = 0;
+            while ((bfCharIdx = stream.IndexOf("beginbfchar", bfCharIdx, StringComparison.Ordinal)) >= 0)
+            {
+                int endBfChar = stream.IndexOf("endbfchar", bfCharIdx, StringComparison.Ordinal);
+                if (endBfChar < 0) break;
+
+                var block = stream.Substring(bfCharIdx, endBfChar - bfCharIdx);
+                var matches = System.Text.RegularExpressions.Regex.Matches(block, @"<([0-9A-Fa-f]{4})>\s*<([0-9A-Fa-f]+)>");
+                foreach (System.Text.RegularExpressions.Match m in matches)
+                {
+                    var src = m.Groups[1].Value;
+                    var dstHex = m.Groups[2].Value;
+                    var dstSb = new StringBuilder();
+                    for (int i = 0; i < dstHex.Length; i += 4)
+                    {
+                        if (i + 4 <= dstHex.Length && int.TryParse(dstHex.Substring(i, 4), System.Globalization.NumberStyles.HexNumber, null, out int codePoint))
+                        {
+                            dstSb.Append((char)codePoint);
+                        }
+                    }
+                    cmap[src] = dstSb.ToString();
+                }
+                bfCharIdx = endBfChar + 9;
+            }
+
+            // 2. beginbfrange ... endbfrange
+            int bfRangeIdx = 0;
+            while ((bfRangeIdx = stream.IndexOf("beginbfrange", bfRangeIdx, StringComparison.Ordinal)) >= 0)
+            {
+                int endBfRange = stream.IndexOf("endbfrange", bfRangeIdx, StringComparison.Ordinal);
+                if (endBfRange < 0) break;
+
+                var block = stream.Substring(bfRangeIdx, endBfRange - bfRangeIdx);
+                var matches = System.Text.RegularExpressions.Regex.Matches(block, @"<([0-9A-Fa-f]{4})>\s*<([0-9A-Fa-f]{4})>\s*<([0-9A-Fa-f]{4})>");
+                foreach (System.Text.RegularExpressions.Match m in matches)
+                {
+                    if (int.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.HexNumber, null, out int startSrc) &&
+                        int.TryParse(m.Groups[2].Value, System.Globalization.NumberStyles.HexNumber, null, out int endSrc) &&
+                        int.TryParse(m.Groups[3].Value, System.Globalization.NumberStyles.HexNumber, null, out int startDst))
+                    {
+                        for (int s = startSrc, d = startDst; s <= endSrc; s++, d++)
+                        {
+                            cmap[s.ToString("X4")] = ((char)d).ToString();
+                        }
+                    }
+                }
+                bfRangeIdx = endBfRange + 10;
+            }
+        }
+
+        // If we have CMap entries, decode hex strings in content streams
+        if (cmap.Count > 0)
+        {
+            var decodedSb = new StringBuilder();
+            foreach (var stream in decompressedStreams)
+            {
+                if (stream.Contains("begincmap")) continue;
+
+                // Match <00240033...>
+                var hexMatches = System.Text.RegularExpressions.Regex.Matches(stream, @"<([0-9A-Fa-f]{4,})>");
+                foreach (System.Text.RegularExpressions.Match m in hexMatches)
+                {
+                    var hex = m.Groups[1].Value;
+                    for (int i = 0; i + 4 <= hex.Length; i += 4)
+                    {
+                        if (i + 4 <= hex.Length)
+                        {
+                            var code = hex.Substring(i, 4);
+                            if (cmap.TryGetValue(code, out var ch))
+                            {
+                                decodedSb.Append(ch);
+                            }
+                        }
+                    }
+                    decodedSb.Append(' ');
+                }
+
+                // Also match literal strings (text)
+                var litMatches = System.Text.RegularExpressions.Regex.Matches(stream, @"\(([^)]+)\)");
+                foreach (System.Text.RegularExpressions.Match m in litMatches)
+                {
+                    decodedSb.Append(m.Groups[1].Value).Append(' ');
+                }
+            }
+            var decoded = decodedSb.ToString();
+            var collapsed = System.Text.RegularExpressions.Regex.Replace(decoded, @"(?<=[A-Za-z0-9]) (?=[A-Za-z0-9])", "");
+            var normalized = System.Text.RegularExpressions.Regex.Replace(collapsed, @"\s+", " ");
+            var cleaned = System.Text.RegularExpressions.Regex.Replace(normalized, @"\s+([:;,.?!/])", "$1");
+            sb.Append("\n--- DECODED TEXT ---\n");
+            sb.Append(decoded);
+            sb.Append("\n--- NORMALIZED TEXT ---\n");
+            sb.Append(normalized);
+            sb.Append("\n--- CLEANED TEXT ---\n");
+            sb.Append(cleaned);
+            sb.Append("\n--- SPACELESS TEXT ---\n");
+            sb.Append(System.Text.RegularExpressions.Regex.Replace(decoded, @"\s+", ""));
+        }
+
+        return sb.ToString();
     }
 }

@@ -18,7 +18,6 @@ public sealed class Invoice : BaseEntity
     public Guid? AppointmentId { get; set; }
     public Guid? ConsultationId { get; set; }
     public Guid? AttendingDoctorId { get; set; }
-    public string? AttendingDoctorName { get; set; }
 
     public decimal GrossAmount { get; set; }
     public DiscountType DiscountType { get; set; } = DiscountType.None;
@@ -49,8 +48,10 @@ public sealed class Invoice : BaseEntity
 
 public sealed class InvoiceLineItem
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
     public Guid InvoiceId { get; set; }
+    public Guid? DoctorId { get; set; }
+    public string? DoctorName { get; set; }
     public Guid? ServiceItemId { get; set; }
     public string? ItemCode { get; set; }
     public required string Description { get; set; }

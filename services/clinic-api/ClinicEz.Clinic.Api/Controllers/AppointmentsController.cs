@@ -26,11 +26,19 @@ public sealed class AppointmentsController : ControllerBase
     [HttpGet]
     [HasPermission(ClinicPermissions.AppointmentsRead)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<AppointmentDto>>>> GetAppointments(
-        [FromQuery] DateOnly? date,
-        [FromQuery] AppointmentStatus? status,
-        CancellationToken ct)
+        [FromQuery] DateOnly? date = null,
+        [FromQuery] AppointmentStatus? status = null,
+        [FromQuery] DateOnly? startDate = null,
+        [FromQuery] DateOnly? endDate = null,
+        [FromQuery] Guid? doctorId = null,
+        CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetAppointmentsQuery(date, status), ct);
+        var result = await _sender.Send(new GetAppointmentsQuery(
+            Date: date,
+            Status: status,
+            StartDate: startDate,
+            EndDate: endDate,
+            DoctorId: doctorId), ct);
         return Ok(ApiResponse<IReadOnlyList<AppointmentDto>>.Success(result));
     }
 
@@ -66,6 +74,17 @@ public sealed class AppointmentsController : ControllerBase
         var command = new CancelAppointmentCommand(id, request?.Reason);
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<AppointmentDto>.Success(result, "Appointment cancelled successfully."));
+    }
+
+    [HttpPost("{id:guid}/remind")]
+    [HasPermission(ClinicPermissions.AppointmentsManage)]
+    public async Task<ActionResult<ApiResponse<AppointmentDto>>> SendAppointmentReminder(
+        Guid id,
+        CancellationToken ct)
+    {
+        var command = new SendAppointmentReminderCommand(id);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<AppointmentDto>.Success(result, "Appointment reminder sent successfully."));
     }
 }
 

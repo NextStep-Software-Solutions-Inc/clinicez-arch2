@@ -9,6 +9,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Features.Billing.Queries;
 
@@ -36,13 +37,16 @@ public class GetInvoicesQueryHandler : IRequestHandler<GetInvoicesQuery, List<In
         var query = _invoiceRepo.Query()
             .Include(i => i.LineItems)
             .Include(i => i.Payments)
+            .AsSplitQuery()
             .AsNoTracking();
 
         if (request.Date.HasValue)
         {
-            var dayStart = request.Date.Value.Date;
-            var dayEnd = dayStart.AddDays(1);
-            query = query.Where(i => i.InvoiceDate >= dayStart && i.InvoiceDate < dayEnd);
+            var dayStart = request.Date.Value.ToStartOfDayUtc();
+            var dayEnd = request.Date.Value.ToEndOfDayExclusiveUtc();
+            query = query.Where(i =>
+                (i.InvoiceDate >= dayStart && i.InvoiceDate < dayEnd) ||
+                i.Payments.Any(p => p.PaymentDate >= dayStart && p.PaymentDate < dayEnd));
         }
 
         if (request.PatientId.HasValue)
@@ -71,7 +75,6 @@ public class GetInvoicesQueryHandler : IRequestHandler<GetInvoicesQuery, List<In
             invoice.AppointmentId,
             invoice.ConsultationId,
             invoice.AttendingDoctorId,
-            invoice.AttendingDoctorName,
             invoice.GrossAmount,
             invoice.DiscountType,
             invoice.DiscountIdNumber,
@@ -85,6 +88,8 @@ public class GetInvoicesQueryHandler : IRequestHandler<GetInvoicesQuery, List<In
             invoice.BilledByStaffName,
             invoice.LineItems.Select(l => new InvoiceLineItemDto(
                 l.Id,
+                l.DoctorId,
+                l.DoctorName,
                 l.ServiceItemId,
                 l.ItemCode,
                 l.Description,

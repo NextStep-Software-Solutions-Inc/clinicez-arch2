@@ -10,6 +10,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Features.Procedures.Queries;
 
@@ -48,8 +49,8 @@ public class GetProceduresQueryHandler : IRequestHandler<GetProceduresQuery, Lis
 
         if (request.Date.HasValue)
         {
-            var dayStart = request.Date.Value.Date;
-            var dayEnd = dayStart.AddDays(1);
+            var dayStart = request.Date.Value.ToStartOfDayUtc();
+            var dayEnd = request.Date.Value.ToEndOfDayExclusiveUtc();
             query = query.Where(p => p.ScheduledAt >= dayStart && p.ScheduledAt < dayEnd);
         }
 

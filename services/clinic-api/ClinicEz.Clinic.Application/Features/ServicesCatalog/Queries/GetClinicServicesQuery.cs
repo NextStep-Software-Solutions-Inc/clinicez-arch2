@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
 using ClinicEz.Clinic.Application.Features.ServicesCatalog.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -18,19 +19,103 @@ public class GetClinicServicesQueryHandler : IRequestHandler<GetClinicServicesQu
     private readonly IRepository<ClinicServiceItem> _serviceRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<ClinicSettings>? _settingsRepo;
 
     public GetClinicServicesQueryHandler(
         IRepository<ClinicServiceItem> serviceRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<ClinicSettings>? settingsRepo = null)
     {
         _serviceRepo = serviceRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _settingsRepo = settingsRepo;
     }
 
     public async Task<List<ClinicServiceItemDto>> Handle(GetClinicServicesQuery request, CancellationToken cancellationToken)
     {
+        ClinicSettings? settings = null;
+        if (_settingsRepo != null)
+        {
+            settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var specialtyMode = settings?.SpecialtyMode?.Trim();
+        bool isDental = string.Equals(specialtyMode, "Dental", StringComparison.OrdinalIgnoreCase);
+        bool isMultiSpecialty = string.Equals(specialtyMode, "MultiSpecialty", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(specialtyMode, "Multi-Specialty", StringComparison.OrdinalIgnoreCase);
+
+        // Fetch all existing services for this clinic, including soft-deleted items to prevent duplicate key violations
+        var allServices = await _serviceRepo.Query()
+            .IgnoreQueryFilters()
+            .Where(s => s.ClinicId == _clinicContext.ClinicId)
+            .ToListAsync(cancellationToken);
+
+        var existingMap = allServices
+            .Where(s => !string.IsNullOrWhiteSpace(s.Code))
+            .GroupBy(s => s.Code.Trim().ToUpperInvariant())
+            .ToDictionary(g => g.Key, g => g.First());
+
+        bool anyCreatedOrRestored = false;
+        var targetDefaults = new List<ClinicServiceItem>();
+
+        if (isDental)
+        {
+            // Dental clinic: ensure all canonical dental presets exist
+            targetDefaults.AddRange(DentalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
+        }
+        else if (isMultiSpecialty)
+        {
+            // Multi-specialty clinic: ensure both general medical and dental presets exist
+            targetDefaults.AddRange(GeneralMedicalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
+            targetDefaults.AddRange(DentalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
+        }
+        else
+        {
+            // Medical or default clinic: if no active services exist at all, seed general medical presets
+            if (!allServices.Any(s => !s.IsDeleted))
+            {
+                targetDefaults.AddRange(GeneralMedicalCatalogDefaults.CreateDefaults(_clinicContext.TenantId, _clinicContext.ClinicId));
+            }
+        }
+
+        foreach (var def in targetDefaults)
+        {
+            var codeUpper = def.Code.Trim().ToUpperInvariant();
+            if (existingMap.TryGetValue(codeUpper, out var existingItem))
+            {
+                if (existingItem.IsDeleted)
+                {
+                    existingItem.IsDeleted = false;
+                    existingItem.DeletedAt = null;
+                    existingItem.DeletedBy = null;
+                    existingItem.IsActive = true;
+                    anyCreatedOrRestored = true;
+                }
+            }
+            else
+            {
+                def.Id = def.Id == Guid.Empty ? Guid.NewGuid() : def.Id;
+                await _serviceRepo.AddAsync(def, cancellationToken);
+                existingMap[codeUpper] = def;
+                allServices.Add(def);
+                anyCreatedOrRestored = true;
+            }
+        }
+
+        if (anyCreatedOrRestored)
+        {
+            try
+            {
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                // Idempotent concurrency safety: another thread/request committed concurrently
+            }
+        }
+
         var query = _serviceRepo.Query();
 
         if (!string.IsNullOrWhiteSpace(request.Category))
@@ -47,31 +132,6 @@ public class GetClinicServicesQueryHandler : IRequestHandler<GetClinicServicesQu
             .OrderBy(s => s.Category)
             .ThenBy(s => s.Name)
             .ToListAsync(cancellationToken);
-
-        // Auto-seed default primary care fee schedule if empty for this clinic
-        if (!items.Any() && string.IsNullOrWhiteSpace(request.Category))
-        {
-            var defaultServices = new List<ClinicServiceItem>
-            {
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "CONS-GEN", Name = "General Consultation", Category = "Consultation", StandardPrice = 500m, Description = "Comprehensive outpatient primary care medical consultation" },
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "CONS-PEDIA", Name = "Pediatric Consultation", Category = "Consultation", StandardPrice = 600m, Description = "Infant and child wellness and acute illness consultation" },
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "CONS-FU", Name = "Follow-up Consultation", Category = "Consultation", StandardPrice = 350m, Description = "Return follow-up review within 14 days" },
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-NEB", Name = "Nebulization Therapy", Category = "Procedure", StandardPrice = 250m, Description = "Inhalation bronchodilator nebulization session" },
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-WOUND", Name = "Wound Dressing & Debridement", Category = "Procedure", StandardPrice = 350m, Description = "Aseptic wound dressing, cleansing, and bandage application" },
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-ECG", Name = "12-Lead Electrocardiogram (ECG)", Category = "Diagnostic", StandardPrice = 450m, Description = "Standard 12-lead ECG tracing with physician interpretation", PhilHealthCode = "93000", PhilHealthDescription = "Electrocardiogram, routine ECG with at least 12 leads", IsPhilHealthFormulary = true },
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-SUTURE", Name = "Minor Suture / Laceration Repair", Category = "Procedure", StandardPrice = 850m, Description = "Local anesthesia and primary closure of minor skin laceration" },
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-VAX", Name = "Vaccine Administration Fee", Category = "NursingService", StandardPrice = 250m, Description = "Intramuscular or subcutaneous vaccine administration and observation" },
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "LAB-RBS", Name = "Random Blood Sugar (RBS) Rapid Test", Category = "Diagnostic", StandardPrice = 150m, Description = "Capillary blood glucose fingerstick test", PhilHealthCode = "82947", PhilHealthDescription = "Glucose; quantitative, blood (except reagent strip)", IsPhilHealthFormulary = true }
-            };
-
-            foreach (var svc in defaultServices)
-            {
-                await _serviceRepo.AddAsync(svc, cancellationToken);
-            }
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-            items = defaultServices;
-        }
 
         return items.Select(s => new ClinicServiceItemDto(
             s.Id,

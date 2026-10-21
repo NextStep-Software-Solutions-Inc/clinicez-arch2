@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 using ClinicEz.Clinic.Application.Features.Billing.DTOs;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
+using ClinicEz.Clinic.Application.Features.Dental.DTOs;
 using ClinicEz.Clinic.Application.Features.Immunizations.DTOs;
 using ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
@@ -45,6 +46,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
     private readonly IRepository<PatientImmunization>? _immunizationRepo;
     private readonly IRepository<ClinicRecordAttachment>? _attachmentRepo;
     private readonly IRepository<PatientPhysicalExamProfile>? _physicalExamRepo;
+    private readonly IRepository<DentalToothRecord>? _dentalToothRepo;
 
     public GetPatientChartQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
@@ -63,7 +65,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         IRepository<PatientAllergy>? allergyRepo = null,
         IRepository<PatientImmunization>? immunizationRepo = null,
         IRepository<ClinicRecordAttachment>? attachmentRepo = null,
-        IRepository<PatientPhysicalExamProfile>? physicalExamRepo = null)
+        IRepository<PatientPhysicalExamProfile>? physicalExamRepo = null,
+        IRepository<DentalToothRecord>? dentalToothRepo = null)
     {
         _consultationRepo = consultationRepo;
         _triageRepo = triageRepo;
@@ -82,6 +85,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         _immunizationRepo = immunizationRepo;
         _attachmentRepo = attachmentRepo;
         _physicalExamRepo = physicalExamRepo;
+        _dentalToothRepo = dentalToothRepo;
     }
 
     public async Task<PatientChartDto> Handle(GetPatientChartQuery request, CancellationToken cancellationToken)
@@ -332,57 +336,112 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             )).ToList();
         }
 
-        var consultationDtos = consultations.Select(c => new ConsultationEncounterDto(
-            c.Id,
-            c.TenantId ?? _clinicContext.TenantId,
-            c.ClinicId,
-            c.QueueItemId,
-            c.AppointmentId,
-            c.PatientId,
-            c.PatientName,
-            c.DoctorId,
-            c.DoctorName,
-            c.EncounterDate,
-            c.Subjective,
-            c.Objective,
-            c.Assessment,
-            c.Plan,
-            c.HomeInstructions,
-            c.DoctorPrcLicense,
-            c.DoctorPtr,
-            c.DoctorS2License,
-            c.IsSigned,
-            c.SignedAt,
-            c.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-            c.Prescriptions.Select(p => new PrescriptionItemDto(
-                p.Id,
-                p.GenericName,
-                p.BrandName,
-                p.Dosage,
-                p.Form,
-                p.Sig,
-                p.Quantity,
-                p.DurationDays,
-                p.Refills,
-                p.IsDangerousDrug,
-                p.Remarks,
-                p.PhilHealthDrugCode
-            )).ToList(),
-            c.IsYakapEligible,
-            c.PhilHealthSignSympCode,
-            c.PhilHealthOtherComplaint,
-            c.PhilHealthPainSite,
-            c.PhilHealthCaseNo ?? c.HciCaseNo,
-            c.PhilHealthSoapTransNo ?? c.SoapTransNo,
-            c.DoctorPhilHealthPan,
-            c.PhilHealthAtc,
-            c.HciCaseNo ?? c.PhilHealthCaseNo,
-            c.HciTransNo,
-            c.SoapTransNo ?? c.PhilHealthSoapTransNo,
-            c.GeneralSurveyId,
-            c.GeneralSurveyRemarks,
-            c.PhysicalExamFindingsJson
-        )).ToList();
+        // Dental Tooth Records
+        var dentalToothDtos = new List<DentalToothRecordDto>();
+        if (_dentalToothRepo != null)
+        {
+            var dentalRecords = await _dentalToothRepo
+                .Query(t => t.ClinicId == _clinicContext.ClinicId && t.PatientId == request.PatientId && !t.IsDeleted)
+                .AsNoTracking()
+                .OrderBy(t => t.ToothNumber)
+                .ThenBy(t => t.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            dentalToothDtos = dentalRecords.Select(r => new DentalToothRecordDto(
+                r.Id,
+                r.TenantId ?? _clinicContext.TenantId,
+                r.ClinicId,
+                r.PatientId,
+                r.ConsultationId,
+                r.ToothNumber,
+                r.Status,
+                r.Surface,
+                r.Notes,
+                r.CreatedAt,
+                r.UpdatedAt,
+                r.PatientName,
+                r.RecordedBy ?? r.UpdatedBy ?? r.CreatedBy,
+                r.IsCurrent && !r.IsVoided ? (r.ActiveSurface ?? r.Surface) : null,
+                r.IsCurrent && !r.IsVoided,
+                r.SupersededAt,
+                r.SupersededByRecordId,
+                r.IsVoided,
+                r.VoidedAt,
+                r.VoidedBy,
+                r.VoidReason
+            )).ToList();
+        }
+
+        var dentalFindingsByConsultationId = dentalToothDtos
+            .Where(d => d.ConsultationId.HasValue)
+            .GroupBy(d => d.ConsultationId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var consultationDtos = consultations.Select(c =>
+        {
+            var encounterFindings = new List<DentalToothRecordDto>();
+            if (dentalFindingsByConsultationId.TryGetValue(c.Id, out var findings))
+            {
+                encounterFindings.AddRange(findings);
+            }
+
+            var dateMatches = dentalToothDtos
+                .Where(d => !d.ConsultationId.HasValue && DateOnly.FromDateTime(d.CreatedAt) == DateOnly.FromDateTime(c.EncounterDate));
+            encounterFindings.AddRange(dateMatches);
+
+            return new ConsultationEncounterDto(
+                c.Id,
+                c.TenantId ?? _clinicContext.TenantId,
+                c.ClinicId,
+                c.QueueItemId,
+                c.AppointmentId,
+                c.PatientId,
+                c.PatientName,
+                c.DoctorId,
+                c.DoctorName,
+                c.EncounterDate,
+                c.Subjective,
+                c.Objective,
+                c.Assessment,
+                c.Plan,
+                c.HomeInstructions,
+                c.DoctorPrcLicense,
+                c.DoctorPtr,
+                c.DoctorS2License,
+                c.IsSigned,
+                c.SignedAt,
+                c.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
+                c.Prescriptions.Select(p => new PrescriptionItemDto(
+                    p.Id,
+                    p.GenericName,
+                    p.BrandName,
+                    p.Dosage,
+                    p.Form,
+                    p.Sig,
+                    p.Quantity,
+                    p.DurationDays,
+                    p.Refills,
+                    p.IsDangerousDrug,
+                    p.Remarks,
+                    p.PhilHealthDrugCode
+                )).ToList(),
+                c.IsYakapEligible,
+                c.PhilHealthSignSympCode,
+                c.PhilHealthOtherComplaint,
+                c.PhilHealthPainSite,
+                c.PhilHealthCaseNo ?? c.HciCaseNo,
+                c.PhilHealthSoapTransNo ?? c.SoapTransNo,
+                c.DoctorPhilHealthPan,
+                c.PhilHealthAtc,
+                c.HciCaseNo ?? c.PhilHealthCaseNo,
+                c.HciTransNo,
+                c.SoapTransNo ?? c.PhilHealthSoapTransNo,
+                c.GeneralSurveyId,
+                c.GeneralSurveyRemarks,
+                c.PhysicalExamFindingsJson,
+                DentalFindings: encounterFindings.Count > 0 ? encounterFindings : null
+            );
+        }).ToList();
 
         var vitalsDtos = vitals.Select(v => new TriageVitalsDto(
             v.Id,
@@ -470,7 +529,6 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             i.AppointmentId,
             i.ConsultationId,
             i.AttendingDoctorId,
-            i.AttendingDoctorName,
             i.GrossAmount,
             i.DiscountType,
             i.DiscountIdNumber,
@@ -484,6 +542,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             i.BilledByStaffName,
             i.LineItems.Select(li => new InvoiceLineItemDto(
                 li.Id,
+                li.DoctorId,
+                li.DoctorName,
                 li.ServiceItemId,
                 li.ItemCode,
                 li.Description,
@@ -628,7 +688,9 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             allergyDtos,
             immunizationDtos,
             attachmentDtos,
-            PhysicalExamProfile: physicalExamDto
+            PhysicalExamProfile: physicalExamDto,
+            DentalTeeth: dentalToothDtos,
+            DentalProcedures: procedureDtos.Where(p => p.Category == "Dental" || p.ToothNumber.HasValue).ToList()
         );
     }
 

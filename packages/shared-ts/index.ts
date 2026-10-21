@@ -6,3 +6,4 @@ export * from './apiUrl';
 export * from './bloodType';
 export * from './permissions';
 export * from './search';
+export * from './analytics';

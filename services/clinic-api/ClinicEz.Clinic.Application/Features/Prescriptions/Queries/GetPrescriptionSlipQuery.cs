@@ -132,7 +132,8 @@ public class GetPrescriptionSlipQueryHandler : IRequestHandler<GetPrescriptionSl
             encounter.RxDispensedReceiptUrl,
             encounter.RxDispensedAt,
             encounter.RxNotes,
-            RxPharmacyStatusDto.From(encounter)
+            RxPharmacyStatusDto.From(encounter),
+            patient?.DateOfBirth
         );
     }
 }

@@ -2,6 +2,7 @@ using ClinicEz.Billing.Application.Abstractions;
 using ClinicEz.Billing.Application.Dtos;
 using ClinicEz.Billing.Domain.Entities;
 using ClinicEz.Billing.Domain.Enums;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -88,8 +89,16 @@ public sealed class InvoiceService
             invoices = invoices.Where(i => i.PatientName.ToLower().Contains(name));
         }
 
-        if (query.FromUtc is { } from) invoices = invoices.Where(i => i.CreatedAtUtc >= from);
-        if (query.ToUtc is { } to) invoices = invoices.Where(i => i.CreatedAtUtc < to);
+        if (query.FromUtc is { } from)
+        {
+            var fromUtc = from.AsUtc();
+            invoices = invoices.Where(i => i.CreatedAtUtc >= fromUtc);
+        }
+        if (query.ToUtc is { } to)
+        {
+            var toUtc = to.AsUtc();
+            invoices = invoices.Where(i => i.CreatedAtUtc < toUtc);
+        }
 
         var total = await invoices.CountAsync(ct);
         var items = await invoices

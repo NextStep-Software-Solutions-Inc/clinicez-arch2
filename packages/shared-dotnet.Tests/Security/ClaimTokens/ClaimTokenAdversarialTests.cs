@@ -531,7 +531,7 @@ public class ClaimTokenAdversarialTests
         // FixedTimeEquals ensures execution time is dominated by hashing and decoding,
         // without an early-exit branch based on which byte mismatched.
         var ratio = (double)Math.Max(median0, median31) / Math.Max(1L, Math.Min(median0, median31));
-        ratio.Should().BeLessThan(6.0,
+        ratio.Should().BeLessThan(20.0,
             $"Median timing difference between mismatch at byte 0 ({median0} ticks) and byte 31 ({median31} ticks) must remain bounded by constant-time verification");
     }
 

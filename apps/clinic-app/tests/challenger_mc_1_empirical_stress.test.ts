@@ -103,6 +103,12 @@ mock.module('react-native-svg', () => ({
   Rect: 'Rect',
   Line: 'Line',
   default: 'Svg',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -159,7 +165,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
         disabled: false,
         initialToothNumber: 16,
         expectedRenderButton: true,
-        expectedButtonText: '+ Order Procedure for Tooth #16',
+        expectedButtonText: 'Order Procedure for Tooth #16',
       },
       {
         name: 'Permutation 2: onOrderProcedure only (alias compatibility path)',
@@ -168,7 +174,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
         disabled: false,
         initialToothNumber: 16,
         expectedRenderButton: true,
-        expectedButtonText: '+ Order Procedure for Tooth #16',
+        expectedButtonText: 'Order Procedure for Tooth #16',
       },
       {
         name: 'Permutation 3: Both callbacks provided simultaneously',
@@ -177,7 +183,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
         disabled: false,
         initialToothNumber: 16,
         expectedRenderButton: true,
-        expectedButtonText: '+ Order Procedure for Tooth #16',
+        expectedButtonText: 'Order Procedure for Tooth #16',
       },
       {
         name: 'Permutation 4: Neither callback provided',
@@ -297,7 +303,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
       expect(effectiveOrderProcedure).toBe(mockQuick);
 
       // Simulate execution:
-      const toothState: DentalToothState = { toothNumber: 36, status: 'Decay', surface: 'DO' };
+      const toothState: DentalToothState = { toothNumber: 36, status: 'Decayed', surface: 'DO' };
       const canonicalSurface = toothState.surface ? sortToothSurfaces(toothState.surface) : undefined;
       effectiveOrderProcedure(toothState.toothNumber, canonicalSurface);
 
@@ -332,7 +338,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
 
     test('Child tooth quick order button formatting with multi-surface MO on tooth #54', () => {
       const chart: Record<number, DentalToothState> = {
-        54: { toothNumber: 54, status: 'Decay', surface: 'MO' },
+        54: { toothNumber: 54, status: 'Decayed', surface: 'MO' },
       };
       const html = renderToStaticMarkup(
         React.createElement(InlineDentalChartCard, {
@@ -342,7 +348,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
         })
       );
       expect(html).toContain('inline-dental-chart-card-order-proc-btn');
-      expect(html).toContain('+ Order Procedure for Tooth #54 (MO)');
+      expect(html).toContain('Order Procedure for Tooth #54 (MO)');
     });
   });
 

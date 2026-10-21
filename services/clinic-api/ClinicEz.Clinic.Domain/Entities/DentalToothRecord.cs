@@ -26,10 +26,37 @@ public sealed class DentalToothRecord : BaseEntity
     public ToothStatus Status { get; set; } = ToothStatus.Healthy;
 
     /// <summary>
-    /// Comma-separated or combined tooth surfaces: M (Mesial), O (Occlusal), D (Distal), B (Buccal), L (Lingual).
+    /// Comma-separated or combined tooth surfaces originally recorded at the time of the encounter:
+    /// M (Mesial), O (Occlusal), D (Distal), B (Buccal), L (Lingual).
     /// Standardized to uppercase (e.g. "MOD", "DO", "B").
+    /// Immutable across future encounters so historical visit logs remain accurate.
     /// </summary>
     public string? Surface { get; set; }
 
+    /// <summary>
+    /// Surfaces from this record that remain currently active on the tooth (e.g. "M" after "O" is later filled).
+    /// Null when whole-tooth or when all surfaces of this record have been superseded.
+    /// </summary>
+    public string? ActiveSurface { get; set; }
+
+    /// <summary>
+    /// True while this record still governs the whole tooth or at least one active surface;
+    /// false once superseded by a newer treatment, extraction (Missing), or Healthy reset.
+    /// </summary>
+    public bool IsCurrent { get; set; } = true;
+
+    public DateTime? SupersededAt { get; set; }
+    public Guid? SupersededByRecordId { get; set; }
+    public string? RecordedBy { get; set; }
+
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// True when this signed/committed tooth condition was voided by a clinician to correct an error
+    /// while preserving the clinical audit trail.
+    /// </summary>
+    public bool IsVoided { get; set; } = false;
+    public DateTime? VoidedAt { get; set; }
+    public string? VoidedBy { get; set; }
+    public string? VoidReason { get; set; }
 }

@@ -38,7 +38,7 @@ public static class DependencyInjection
         var schemaName = configuration["DbSchema"] ?? "public";
 
         // Must be registered before Hangfire/interop so the schema exists when they start (fresh on-prem installs).
-        services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.DatabaseMigrationHostedService>();
+        services.AddHostedService<ClinicEz.Clinic.Infrastructure.Persistence.DatabaseMigrationHostedService>();
 
         services.AddHttpContextAccessor();
         services.AddScoped<IClinicContext, ClinicContext>();
@@ -49,6 +49,7 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString, npgsqlOptions =>
             {
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", schemaName);
+                npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
             });
         });
 
@@ -77,6 +78,7 @@ public static class DependencyInjection
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyCleanupHostedService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.EodReconciliationBackgroundService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.NotificationRetentionCleanupBackgroundService>();
+        services.AddHostedService<ClinicEz.Clinic.Infrastructure.BackgroundServices.AppointmentReminderBackgroundService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.Persistence.ClinicRoleSeederHostedService>();
 
         // Audit Logging & Forensic Activity Trail Pipeline (M1)
@@ -142,6 +144,7 @@ public static class DependencyInjection
         services.AddScoped<ILabResultReviewedPublisher, LabResultReviewedPublisher>();
         services.AddClinicEzDocumentEngine();
         services.AddScoped<IClinicDocumentPdfService, ClinicDocumentPdfService>();
+        services.AddScoped<ISampleDocumentGenerator, SampleDocumentGenerator>();
         // Read eagerly: a missing or too-short ClinicEncryption:MasterSecret stops the service from starting.
         services.AddSingleton(ClinicEz.Clinic.Infrastructure.Services.Storage.ClinicEncryptionKeyRing.FromConfiguration(configuration));
         services.AddSingleton<IClinicEncryptionService, ClinicEz.Clinic.Infrastructure.Services.Storage.ClinicEncryptionService>();

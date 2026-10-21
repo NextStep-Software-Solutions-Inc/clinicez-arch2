@@ -47,6 +47,51 @@ public record DoctorStatDto(
     decimal TotalBilled
 );
 
+public record HourlyFlowPointDto(
+    int Hour,
+    string HourLabel,
+    int CheckInCount,
+    double Percentage
+);
+
+public record VisitTypeSplitDto(
+    int WalkInCount,
+    double WalkInPercentage,
+    int AppointmentCount,
+    double AppointmentPercentage
+);
+
+public record AcuitySplitDto(
+    int RoutineCount,
+    double RoutinePercentage,
+    int UrgentCount,
+    double UrgentPercentage,
+    int EmergencyCount,
+    double EmergencyPercentage
+);
+
+public record DemographicDistributionDto(
+    int PediatricCount,
+    double PediatricPercentage,
+    int AdultCount,
+    double AdultPercentage,
+    int SeniorCount,
+    double SeniorPercentage,
+    int MaleCount,
+    double MalePercentage,
+    int FemaleCount,
+    double FemalePercentage,
+    int OtherCount,
+    double OtherPercentage
+);
+
+public record FinancialEfficiencyDto(
+    double CollectionEfficiencyRate,
+    double DiscountImpactRate,
+    decimal AverageRevenuePerPatient,
+    decimal TotalDiscounts
+);
+
 public record ClinicAnalyticsDto(
     DateTime StartDate,
     DateTime EndDate,
@@ -64,5 +109,10 @@ public record ClinicAnalyticsDto(
     List<TenderShareDto> TenderShares,
     List<MorbidityItemDto> TopDiagnoses,
     List<ServiceUsageDto> TopServices,
-    List<DoctorStatDto> DoctorStats
+    List<DoctorStatDto> DoctorStats,
+    List<HourlyFlowPointDto>? HourlyFlow = null,
+    VisitTypeSplitDto? VisitTypeSplit = null,
+    AcuitySplitDto? AcuitySplit = null,
+    DemographicDistributionDto? Demographics = null,
+    FinancialEfficiencyDto? FinancialEfficiency = null
 );

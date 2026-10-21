@@ -1,136 +1,159 @@
-# Project: Universal Pluggable Search Provider Framework across ClinicEZ
+# Project: Clinic Analytics and Statutory Reports Hardening
 
 ## Architecture
-- **Layer 1: Shared Platform Standards (`packages/shared-dotnet` & `packages/shared-ts`)**:
-  - C# contracts (`ISearchProvider`, `SearchResultItemDto`, `SearchResponseDto`, `SearchBadgeDto`, `SearchQuery`) and reflection-based assembly scanning extension (`AddPluggableSearch<TAssemblyMarker>()`) in `packages/shared-dotnet/Search/`.
-  - TypeScript registry (`UniversalSearchRegistry`, singleton `universalSearchRegistry`), `SearchContributor`, `SearchItem`, and DTOs in `packages/shared-ts/search/`.
-  - Decoupled, zero-dependency foundation enabling any backend microservice and frontend app to register domain entities dynamically.
-- **Layer 2: Clinic Backend Pluggable Service (`services/clinic-api`)**:
-  - MediatR query `GlobalClinicSearchQuery` and orchestrator `GlobalClinicSearchQueryHandler` executing active providers concurrently via `Task.WhenAll` with 500ms timeout, fault-isolated try-catch, tenant isolation (`ClinicId == CurrentClinicId`), and RBAC permission checks (`HasPermission`).
-  - 7 domain feature search providers in feature folders: `PatientSearchProvider`, `ConsultationSearchProvider`, `AppointmentSearchProvider`, `SettingSearchProvider`, `QueueSearchProvider`, `BillingSearchProvider`, `LabOrderSearchProvider`.
-  - REST API endpoint `SearchController` (`GET /api/v1/search?q={query}&category={category}&limit={limit}`).
-- **Layer 3: Clinic Workstation Command Palette UX (`apps/clinic-app`)**:
-  - Header search trigger pill in `ClinicHeaderBar` and global hotkey listener (`Cmd+K`, `Ctrl+K`, `/` outside inputs, `Esc`) in `workstationShortcuts.web.ts`.
-  - Command palette `GlobalSearchModal` with 200ms debouncing, dynamic category tabs, arrow-key navigation, 4 explicit UI states (skeleton loading, empty state, zero-state quick actions, active results with semantic urgency badges: routine/urgent/emergency/neutral).
-  - Direct deep navigation dispatch to clinical records and Settings tabs (`general`, `services`, `staff`, `access`/`rbac`, `facility`/`readiness`, `philhealth`, `license`, `audit`).
-  - Strict compliance with `@clinicez/design-tokens` (brand teal `#0D6963`, semantic colors, 0 raw hex codes).
-- **Layer 4: Portal Web Cross-App Integration (`apps/portal-web`)**:
-  - Integration of `@shared/safe/search` registry into `WorkspaceSearchDialog.tsx` for cross-platform unified search parity.
+- **Layer 1: Shared Platform Standards (`packages/shared-dotnet`)**:
+  - `TenantPrintoutConfig` with `TaxIdentificationNumber` and branding metadata.
+  - `TenantLetterheadComponent` and `DocumentFooterComponent` with legal disclaimers, page numbering (`Page X of Y`), and cryptographic stamps.
+  - Standardized Signatory Layout System (`ClinicianSignatoryComponent`, `DualSignatoryComponent`, `DocumentLayoutExtensions`, `DocumentSpacingConstants`): Enforces `.ShowEntire().ExtendVertical().AlignBottom()` with a guaranteed 20pt buffer (12pt signatory bottom padding + 8pt footer top padding) ensuring signatures and verification seals never touch or kiss the footer divider line across all current and future PDF documents.
+  - `IDocumentSecurityService` (HMAC-SHA256 canonical digest `SEC-SHA256-{hex}`) and `IQrCodeService` (PNG byte matrix).
+- **Layer 2: Clinic Backend Data & Query Engine (`services/clinic-api/ClinicEz.Clinic.Application` & `Infrastructure`)**:
+  - Elimination of all mock fallbacks (dummy doctors, hardcoded diagnoses, static wait/consult times, fictitious invoices, hardcoded clinic names).
+  - Server-side EF Core database aggregations (`SumAsync`, `CountAsync`, `GroupBy` projections) across reports.
+  - `ApplicationDbContext.cs` composite temporal indexes on `(TenantId, ClinicId, Date)` for `ConsultationEncounters`, `PaymentRecords`, `ClinicalProcedures`, `ClinicLabOrders`, and `QueueItems`, plus query filter on `PaymentRecord`.
+  - `ClinicSettings` integration: dynamic retrieval of clinic metadata (`ClinicName`, `DefaultConsultationFee`, `DefaultDoctorSharePercentage`).
+  - QuestPDF vector report generation in `ClinicDocumentPdfService.cs` implementing `IClinicDocumentPdfService`.
+  - Dedicated REST streaming endpoints in `ReportsController.cs` (`GET /api/v1/reports/{reportType}/pdf`).
+- **Layer 3: Workstation Frontend & Interactive Charting (`apps/clinic-app`)**:
+  - Pure vector SVG chart components in `apps/clinic-app/components/analytics/` (`TrendLineChart`, `WorkloadBarChart`, `TenderDonutChart`, `MorbidityDistributionChart`) using `react-native-svg` and `@clinicez/design-tokens`.
+  - 4 core UI/UX states (Skeleton loader, Empty state with CTA, Error state with retry, Active data).
+  - Interactive hover/touch tooltips, filter toggles, responsive scaling (<768px, 768-1023px, >=1024px), and Philippine Peso `₱` currency formatting.
+  - `Dashboard.screen.tsx` modernization: removal of `maxWidth: theme.sizes.contentMaxWidth` on desktop, rich analytics layout, and complete replacement of raw monospace `<pre>` print modal with official QuestPDF vector streaming.
+- **Layer 4: Dual Track Verification & Quality Gates**:
+  - Parallel E2E Testing Track producing opaque-box requirement-driven test suite (Tiers 1-4) published via `TEST_READY.md`.
+  - Final Milestone Phase 1 (100% E2E test pass) and Phase 2 (Adversarial coverage hardening).
+  - Strict compliance with `bun run lint:tokens` (0 violations) and `bun run lint:hosts` (0 violations).
 
 ---
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | `ISearchProvider` C# Interface | Universal contract for pluggable backend search providers | M1 | Survey |
-| 2 | `SearchResultItemDto` & DTOs | Unified immutable records for search items and envelopes | M1 | Survey |
-| 3 | `AddPluggableSearch<T>` DI Extension | Reflection assembly scanning for zero-touch provider registration | M1 | Survey |
-| 4 | Shared TS Registry & Contributor | `universalSearchRegistry.ts` and `SearchContributor` contracts | M1 | Survey |
-| 5 | Shared Contracts Unit Tests | Tests for shared .NET and TS search contracts and registry | M1 | Survey |
-| 6 | `GlobalClinicSearchQuery` & Handler | MediatR concurrent orchestrator using `Task.WhenAll` | M2 | Survey |
-| 7 | Backend Fault Tolerance & Timeout | 500ms linked CTS timeout and per-provider try-catch isolation | M2 | Survey |
-| 8 | Multi-Tenant & Clinic Isolation | Enforcement of `ClinicId == CurrentClinicId` across all queries | M2 | Survey |
-| 9 | RBAC Permission Pre-Filtering | Skipping unpermitted providers before query execution | M2 | Survey |
-| 10 | `PatientSearchProvider` | Queries patients by name, PIN, code, DOB, contact, Senior/PWD | M2 | Survey |
-| 11 | `ConsultationSearchProvider` | Queries encounters by SOAP notes, diagnoses, ICD-10, clinician | M2 | Survey |
-| 12 | `AppointmentSearchProvider` | Queries appointments by patient, doctor, date, status, reason | M2 | Survey |
-| 13 | `QueueSearchProvider` | Queries active OPD tickets by number, priority, station | M2 | Survey |
-| 14 | `LabOrderSearchProvider` | Queries diagnostic orders by order number, test name, panic flags | M2 | Survey |
-| 15 | `BillingSearchProvider` | Queries financial records by invoice number, patient, balance | M2 | Survey |
-| 16 | `SettingSearchProvider` | Queries rooms, services catalog & fees, staff roster, facility info | M2 | Survey |
-| 17 | `SearchController` REST Endpoint | `GET /api/v1/search` with whitespace query early return | M2 | Survey |
-| 18 | Backend Unit & Integration Tests | Automated test suite for query handler and 7 providers | M2 | Survey |
-| 19 | Clinic Header Bar Search Pill | Desktop search input pill and mobile search icon in `ClinicHeaderBar` | M3 | Survey |
-| 20 | Workstation Global Hotkeys | `Cmd+K`, `Ctrl+K`, and `/` outside inputs with `isInput` guard | M3 | Survey |
-| 21 | Debounced Query Execution (200ms) | Keystroke debounce delaying network queries by 200ms | M3 | Survey |
-| 22 | Command Palette 4 UI States | Skeletons, empty state, zero-state quick actions, active results | M3 | Survey |
-| 23 | Dynamic Category Filter Tabs | Horizontal category pills dynamically derived from active providers | M3 | Survey |
-| 24 | Keyboard Result Navigation | Arrow Up/Down navigation, active index highlight, Enter dispatch, Esc | M3 | Survey |
-| 25 | Deep Navigation Dispatch | Direct routing to target records and Settings tabs | M3 | Survey |
-| 26 | Design Token Governance | Strict `@clinicez/design-tokens` compliance (0 raw hex codes) | M3 | Survey |
-| 27 | Portal Web Search Integration | Integration of shared registry into `WorkspaceSearchDialog.tsx` | M4 | Survey |
-| 28 | Comprehensive E2E Verification | 100% pass of Tiers 1-4 E2E tests and Tier 5 adversarial hardening | M5 | Survey |
+| 1 | Remove Analytics Mock Wait/Consult Durations | Eliminate fallback 14.5m wait / 18.0m consult; return genuine 0.0 | M1 | Survey |
+| 2 | Remove Analytics Mock Diagnoses | Eliminate hardcoded I10/J06.9/E11.9 fallback list in `GetClinicAnalyticsQuery` | M1 | Survey |
+| 3 | Remove Morbidity Mock Diseases & Demographics | Eliminate 35yo male default and hardcoded DOH top 5 diseases in `GetMorbidityReportQuery` | M1 | Survey |
+| 4 | Remove Hardcoded Clinic Name | Retrieve clinic name from `ClinicSettings` instead of hardcoded string | M1 | Survey |
+| 5 | Remove Tax Discount Mock Invoices | Eliminate fake Maria Santos / Antonio Reyes mock invoices in `GetTaxDiscountAuditReportQuery` | M1 | Survey |
+| 6 | Remove Doctor Shares Mock Doctors & Hardcoded Fee | Eliminate dummy doctors (Dr. Cruz/Reyes/Santos) and hardcoded ₱500 fee | M1 | Survey |
+| 7 | Add DefaultDoctorSharePercentage to ClinicSettings | Configurable physician share percentage (default 70%) in `ClinicSettings` | M1 | Survey |
+| 8 | Server-Side EF Core Aggregations for Daily EOD | Refactor unpaged `ToListAsync` to DB `GroupBy`, `SumAsync`, `CountAsync` projections | M1 | Survey |
+| 9 | Server-Side EF Core Aggregations for Analytics | Refactor flow telemetry, revenue trend, tender shares, top services to DB | M1 | Survey |
+| 10 | Server-Side EF Core Aggregations for Morbidity | Database-level projection and aggregation of ICD-10 diagnoses | M1 | Survey |
+| 11 | Server-Side EF Core Aggregations for Tax Discounts | Direct projection to `TaxDiscountAuditRowDto` with DB sums | M1 | Survey |
+| 12 | Server-Side EF Core Aggregations for Doctor Shares | Server-side grouped queries for encounters, procedures, and doctor revenue | M1 | Survey |
+| 13 | Composite Temporal Indexes in ApplicationDbContext | Add `(TenantId, ClinicId, Date)` indexes on Encounters, Payments, Procedures, LabOrders, Queue | M1 | Survey |
+| 14 | PaymentRecord Global Query Filter | Enforce multi-tenant `!e.IsDeleted && e.ClinicId == CurrentClinicId` on `PaymentRecord` | M1 | Survey |
+| 15 | Backend Empty-Dataset Test Suite | Automated unit tests asserting genuine zeroes and empty lists on empty date ranges | M1 | Survey |
+| 16 | TenantPrintoutConfig TIN Support | Add `TaxIdentificationNumber` to `TenantPrintoutConfig` and `TenantLetterheadComponent` | M2 | Survey |
+| 17 | IClinicDocumentPdfService Reports Extension | Interface method contracts for all 5 operational and statutory reports | M2 | Survey |
+| 18 | Daily EOD Reconciliation QuestPDF Builder | Multi-section vector PDF with census, financial summary, tender breakdown, sign-off | M2 | Survey |
+| 19 | DOH Outpatient Morbidity QuestPDF Builder | Multi-page statutory disease report with age/sex cohorts and Repeating Header | M2 | Survey |
+| 20 | BIR Tax & Discount Audit QuestPDF Builder | Multi-page statutory audit report with Senior/PWD discounts, VAT exempt sales, OR tracking | M2 | Survey |
+| 21 | Doctor Shares Settlement QuestPDF Builder | Multi-page physician fees and facility retention settlement report | M2 | Survey |
+| 22 | Executive Clinic Analytics QuestPDF Builder | Comprehensive analytics report with KPI telemetry, trends, tenders, top services | M2 | Survey |
+| 23 | Cryptographic Tamper Seal & Security Digest | Canonical HMAC-SHA256 hash (`SEC-SHA256-`) stamped in statutory footers | M2 | Survey |
+| 24 | Embedded QR Verification Code | Generated PNG QR matrix linking to document verification URL | M2 | Survey |
+| 25 | ReportsController 5 Streaming PDF Endpoints | `GET /api/v1/reports/{reportType}/pdf` streaming vector PDF with `[HasPermission]` | M2 | Survey |
+| 26 | Backend QuestPDF Generation Tests | Unit tests verifying valid PDF byte generation and empty-dataset handling | M2 | Survey |
+| 27 | TrendLineChart SVG Component | Interactive line chart with revenue/visits toggle, hover/touch tooltips, 4 states | M3 | Survey |
+| 28 | WorkloadBarChart SVG Component | Interactive bar chart with encounters/revenue toggle, rounded bars, tooltips, 4 states | M3 | Survey |
+| 29 | TenderDonutChart SVG Component | Interactive donut chart with semantic token colors, center cutout KPI, 4 states | M3 | Survey |
+| 30 | MorbidityDistributionChart SVG Component | Ranked horizontal bars with demographic age sub-bars, filter toggles, 4 states | M3 | Survey |
+| 31 | Pure SVG & Zero External Chart Library | Implement all charts purely with `react-native-svg` and `@clinicez/design-tokens` | M3 | Survey |
+| 32 | Design Token Audit Compliance | Strict `@clinicez/design-tokens` compliance (`bun run lint:tokens` 0 violations) | M3 | Survey |
+| 33 | Network Isolation Audit Compliance | Strict LAN isolation (`bun run lint:hosts` 0 violations) | M3 | Survey |
+| 34 | Chart Components Unit Tests | Comprehensive component unit tests covering all 4 states, scaling, and math edge cases | M3 | Survey |
+| 35 | Full-Width Desktop Workstation Layout | Remove `maxWidth: theme.sizes.contentMaxWidth` constraint in `Dashboard.screen.tsx` | M4 | Survey |
+| 36 | Analytics Tab Charting Integration | Embed `TrendLineChart`, `TenderDonutChart`, `MorbidityDistributionChart`, `WorkloadBarChart` | M4 | Survey |
+| 37 | Frontend PDF Streaming URL Helpers | Add client helpers in `clinicService.ts` for all 5 report PDF endpoints | M4 | Survey |
+| 38 | Elimination of Legacy Monospace Print Dialog | Remove raw ASCII text generator and `<pre>` modal in `Dashboard.screen.tsx` | M4 | Survey |
+| 39 | 1-Click Vector PDF Export & Print | Integrate `openDocument(url)` with authenticated blob streaming in Reports and Analytics tabs | M4 | Survey |
+| 40 | Dashboard Analytics Integration Tests | Automated tests in `apps/clinic-app/tests/` for analytics charts and PDF export triggers | M4 | Survey |
+| 41 | E2E Test Suite (Tiers 1-4) Pass | 100% pass of requirement-driven opaque-box E2E test suite from `TEST_READY.md` | M5 | Survey |
+| 42 | Tier 5 Adversarial Coverage Hardening | Adversarial stress testing via Challenger -> Worker -> Reviewer loop | M5 | Survey |
 
 ---
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Shared Platform Search Standards | `packages/shared-dotnet/Search/` and `packages/shared-ts/search/` | none | DONE |
-| M2 | Clinic Backend Pluggable Search Core & 7 Feature Providers | `services/clinic-api` MediatR orchestrator, 7 domain providers, `SearchController`, unit tests | M1 | DONE |
-| M3 | Clinic Workstation Command Palette UX & Deep Navigation | `apps/clinic-app` `GlobalSearchModal`, `ClinicHeaderBar`, shortcuts, category tabs, deep navigation | M1, M2 | DONE |
-| M4 | Portal Web Cross-App Integration | `apps/portal-web` `WorkspaceSearchDialog` integration with shared search | M1 | DONE |
-| M5 | Final Milestone: 100% E2E Test Pass & Adversarial Hardening | Pass 100% of E2E test suite (Tiers 1-4) and Tier 5 adversarial stress testing | M2, M3, M4 | DONE |
+| M1 | Backend Database Aggregations, Indexing & Mock Elimination | `services/clinic-api` queries, `ApplicationDbContext.cs`, `ClinicSettings`, unit tests | none | DONE |
+| M2 | Enterprise QuestPDF Vector PDF Document Builders & Streaming Endpoints | `packages/shared-dotnet`, `services/clinic-api` infrastructure & controller, PDF tests | M1 | DONE |
+| M3 | Interactive SVG Charting Components & Design Token Hardening | `apps/clinic-app/components/analytics/`, tests, token & host linting | none | DONE |
+| M4 | Workstation Dashboard Modernization & PDF Streaming Integration | `apps/clinic-app` `Dashboard.screen.tsx`, `clinicService.ts`, integration tests | M2, M3 | DONE |
+| M5 | Final Milestone: 100% E2E Test Pass & Adversarial Hardening | Full stack verification (Tiers 1-4 pass + Tier 5 adversarial stress testing) | M1, M2, M3, M4 | DONE |
 
 ---
 
 ## Interface Contracts
 
-### Shared .NET (`packages/shared-dotnet/Search/`)
-- `ISearchProvider`:
-  - `string Category { get; }`
-  - `int Priority { get; }`
-  - `string? RequiredPermission { get; }`
-  - `Task<IReadOnlyList<SearchResultItemDto>> SearchAsync(string query, Guid tenantId, int limit, CancellationToken ct);`
-- `SearchResultItemDto(string Id, string Category, string Title, string Subtitle, string? BadgeText, string? BadgeVariant, string TargetRoute, Dictionary<string, string>? RouteParams, SearchBadgeDto? Badge)`
-- `SearchResponseDto(IReadOnlyList<SearchResultItemDto> Items, int TotalCount)`
-- `SearchServiceExtensions.AddPluggableSearch<TAssemblyMarker>(IServiceCollection services)`
+### 1. Backend Report DTOs & Query Endpoints (`services/clinic-api`)
+- `GetDailyEodReportQuery(DateTime? Date)` -> `DailyEodReportDto`
+- `GetClinicAnalyticsQuery(DateTime? StartDate, DateTime? EndDate)` -> `ClinicAnalyticsDto`
+- `GetMorbidityReportQuery(DateTime? StartDate, DateTime? EndDate)` -> `MorbidityReportDto`
+- `GetTaxDiscountAuditReportQuery(DateTime? StartDate, DateTime? EndDate)` -> `TaxDiscountAuditReportDto`
+- `GetDoctorSharesReportQuery(DateTime? StartDate, DateTime? EndDate)` -> `DoctorSharesReportDto`
 
-### Shared TypeScript (`packages/shared-ts/search/`)
-- `SearchBadgeVariant`: `'routine' | 'urgent' | 'emergency' | 'neutral'`
-- `SearchItem`: `{ id, category, title, subtitle, badgeText?, badgeVariant?, targetRoute, routeParams?, onSelect? }`
-- `SearchContributor`: `{ id, category, categoryLabel, priority?, requiredPermission?, search: (query, signal?) => Promise<SearchItem[]> | SearchItem[] }`
-- `universalSearchRegistry`: `{ register(contributor), unregister(id), getContributors(), getCategories(), clear() }`
+### 2. PDF Generator Interface (`ClinicEz.Clinic.Application.Common.Interfaces`)
+- `IClinicDocumentPdfService`:
+  - `byte[] GenerateDailyEodReportPdf(DailyEodReportDto report, ClinicSettings settings, string? preparedByName = null)`
+  - `byte[] GenerateMorbidityReportPdf(MorbidityReportDto report, ClinicSettings settings, string? preparedByName = null)`
+  - `byte[] GenerateTaxDiscountAuditReportPdf(TaxDiscountAuditReportDto report, ClinicSettings settings, string? preparedByName = null)`
+  - `byte[] GenerateDoctorSharesReportPdf(DoctorSharesReportDto report, ClinicSettings settings, string? preparedByName = null)`
+  - `byte[] GenerateClinicAnalyticsPdf(ClinicAnalyticsDto analytics, ClinicSettings settings, string? preparedByName = null)`
 
-### REST API (`GET /api/v1/search`)
-- Query parameters: `q` (string, required), `category` (string, optional), `limit` (int, optional, default 20)
-- Response: `ApiResponse<SearchResponseDto>`
+### 3. REST Streaming PDF Endpoints (`GET /api/v1/reports/...`)
+- `GET /api/v1/reports/daily-eod/pdf?date={yyyy-MM-dd}` -> `application/pdf`
+- `GET /api/v1/reports/morbidity/pdf?startDate={yyyy-MM-dd}&endDate={yyyy-MM-dd}` -> `application/pdf`
+- `GET /api/v1/reports/tax-discounts/pdf?startDate={yyyy-MM-dd}&endDate={yyyy-MM-dd}` -> `application/pdf`
+- `GET /api/v1/reports/doctor-shares/pdf?startDate={yyyy-MM-dd}&endDate={yyyy-MM-dd}` -> `application/pdf`
+- `GET /api/v1/reports/analytics/pdf?startDate={yyyy-MM-dd}&endDate={yyyy-MM-dd}` -> `application/pdf`
+
+### 4. Frontend SVG Chart Components (`apps/clinic-app/components/analytics/`)
+- `TrendLineChart`: `{ data: DailyTrendPoint[], loading?: boolean, error?: string | null, onRetry?: () => void, height?: number }`
+- `WorkloadBarChart`: `{ data: DoctorStat[], loading?: boolean, error?: string | null, onRetry?: () => void, height?: number }`
+- `TenderDonutChart`: `{ data: TenderShare[], loading?: boolean, error?: string | null, onRetry?: () => void, height?: number }`
+- `MorbidityDistributionChart`: `{ data: MorbidityItem[] | MorbidityDiseaseRow[], loading?: boolean, error?: string | null, onRetry?: () => void, height?: number }`
 
 ---
 
 ## Code Layout
-- `packages/shared-dotnet/Search/`
-  - `ISearchProvider.cs`
-  - `SearchResultItemDto.cs`
-  - `SearchResponseDto.cs`
-  - `SearchBadgeDto.cs`
-  - `SearchQuery.cs`
-  - `SearchServiceExtensions.cs`
-- `packages/shared-dotnet.Tests/Search/`
-  - `SearchPluggableFrameworkTests.cs`
-- `packages/shared-ts/search/`
-  - `dto.ts`
-  - `searchRegistry.ts`
-  - `index.ts`
-- `packages/shared-ts/`
-  - `search.test.ts`
-  - `index.ts` (re-exports `./search`)
+- `packages/shared-dotnet/`
+  - `Documents/Configuration/TenantPrintoutConfig.cs` (Add `TaxIdentificationNumber`)
+  - `Documents/Components/TenantLetterheadComponent.cs` (Display TIN)
+  - `Documents/Components/DocumentFooterComponent.cs`
+  - `Documents/Security/DocumentSecurityService.cs`
+  - `Documents/Security/QrCodeService.cs`
+- `services/clinic-api/ClinicEz.Clinic.Domain/`
+  - `Entities/ClinicSettings.cs` (Add `DefaultDoctorSharePercentage`)
 - `services/clinic-api/ClinicEz.Clinic.Application/`
-  - `Features/Search/Queries/GlobalClinicSearchQuery.cs`
-  - `Features/Search/Queries/GlobalClinicSearchQueryHandler.cs`
-  - `Features/Patients/Search/PatientSearchProvider.cs`
-  - `Features/Consultations/Search/ConsultationSearchProvider.cs`
-  - `Features/Appointments/Search/AppointmentSearchProvider.cs`
-  - `Features/Queue/Search/QueueSearchProvider.cs`
-  - `Features/LabOrders/Search/LabOrderSearchProvider.cs`
-  - `Features/Billing/Search/BillingSearchProvider.cs`
-  - `Features/Settings/Search/SettingSearchProvider.cs`
-  - `DependencyInjection.cs`
-- `services/clinic-api/ClinicEz.Clinic.Api/Controllers/`
-  - `SearchController.cs`
-- `services/clinic-api/ClinicEz.Clinic.Application.Tests/Features/Search/`
-  - `GlobalClinicSearchQueryHandlerTests.cs`
-  - `DomainSearchProvidersTests.cs`
+  - `Features/Settings/DTOs/ClinicSettingsDto.cs`
+  - `Features/Settings/Commands/UpdateClinicSettingsCommand.cs`
+  - `Features/Reports/Queries/GetDailyEodReportQuery.cs`
+  - `Features/Reports/Queries/GetClinicAnalyticsQuery.cs`
+  - `Features/Reports/Queries/GetMorbidityReportQuery.cs`
+  - `Features/Reports/Queries/GetTaxDiscountAuditReportQuery.cs`
+  - `Features/Reports/Queries/GetDoctorSharesReportQuery.cs`
+  - `Common/Interfaces/IClinicDocumentPdfService.cs`
+- `services/clinic-api/ClinicEz.Clinic.Infrastructure/`
+  - `Persistence/ApplicationDbContext.cs` (Composite temporal indexes & query filter)
+  - `Services/ClinicDocumentPdfService.cs` (QuestPDF report builders)
+- `services/clinic-api/ClinicEz.Clinic.Api/`
+  - `Controllers/ReportsController.cs` (5 `/pdf` streaming endpoints)
+- `services/clinic-api/ClinicEz.Clinic.Application.Tests/`
+  - `ReportsAndAnalyticsTests.cs` (Add empty-dataset tests)
+  - `HardenedDocumentGenerationTests.cs` (Add QuestPDF report tests)
 - `apps/clinic-app/`
-  - `components/search/GlobalSearchModal.tsx`
-  - `components/search/SearchResultItemRow.tsx`
-  - `components/search/SearchCategoryTabs.tsx`
-  - `components/search/GlobalSearchProvider.tsx`
-  - `components/layout/ClinicHeaderBar.tsx`
-  - `components/layout/ResponsiveLayout.tsx`
-  - `utils/workstationShortcuts.web.ts`
-  - `utils/workstationShortcuts.ts`
+  - `components/analytics/`
+    - `TrendLineChart.tsx`
+    - `WorkloadBarChart.tsx`
+    - `TenderDonutChart.tsx`
+    - `MorbidityDistributionChart.tsx`
+    - `index.ts`
+  - `navigation/screens/Dashboard.screen.tsx`
   - `services/clinicService.ts`
-  - `tests/globalSearchModal.test.ts`
-- `apps/portal-web/`
-  - `src/components/dashboard/WorkspaceSearchDialog.tsx`
+  - `services/documentOpener.ts`
+  - `tests/analyticsCharts.test.ts`
+  - `tests/dashboardAnalyticsIntegration.test.ts`
+- `tests/e2e/` (Derived and managed by E2E Testing Track)
+  - `TEST_INFRA.md`
+  - `TEST_READY.md`

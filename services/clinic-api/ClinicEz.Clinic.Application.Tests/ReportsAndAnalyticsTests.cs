@@ -74,7 +74,10 @@ public class ReportsAndAnalyticsTests
             BalanceDue = 0m,
             AmountPaid = 480m,
             Status = InvoiceStatus.Paid,
-            AttendingDoctorName = "Dr. Cruz"
+            LineItems = new List<InvoiceLineItem>
+            {
+                new() { DoctorName = "Dr. Cruz", Description = "Consultation", Category = "Consultation", UnitPrice = 600m, TotalPrice = 600m }
+            }
         };
         await invoiceRepo.AddAsync(invoice);
 
@@ -249,7 +252,6 @@ public class ReportsAndAnalyticsTests
             PatientId = enc.PatientId,
             PatientName = enc.PatientName,
             AttendingDoctorId = docId,
-            AttendingDoctorName = "Dr. Juan Reyes",
             GrossAmount = 1000m,
             NetAmount = 1000m,
             Status = InvoiceStatus.Paid,
@@ -257,6 +259,8 @@ public class ReportsAndAnalyticsTests
             {
                 new()
                 {
+                    DoctorId = docId,
+                    DoctorName = "Dr. Juan Reyes",
                     Description = "Specialist Consultation",
                     Category = "Consultation",
                     UnitPrice = 600m,
@@ -265,6 +269,8 @@ public class ReportsAndAnalyticsTests
                 },
                 new()
                 {
+                    DoctorId = docId,
+                    DoctorName = "Dr. Juan Reyes",
                     Description = "Nebulization Session",
                     Category = "Procedure",
                     UnitPrice = 400m,
@@ -284,5 +290,155 @@ public class ReportsAndAnalyticsTests
                                                   && d.TotalGrossGenerated == 1000m
                                                   && d.EstimatedPhysicianShare == 700m
                                                   && d.ClinicFacilityShare == 300m);
+    }
+
+    [Fact]
+    public async Task GetClinicAnalytics_EmptyDataset_ShouldReturnZeroesAndEmptyLists()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+        var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
+        var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+
+        var handler = new GetClinicAnalyticsQueryHandler(
+            queueRepo, invoiceRepo, paymentRepo, consultRepo, procRepo, labRepo, _clinicContext);
+
+        var result = await handler.Handle(new GetClinicAnalyticsQuery(), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result.TotalGrossRevenue.Should().Be(0m);
+        result.TotalNetRevenue.Should().Be(0m);
+        result.TotalCollections.Should().Be(0m);
+        result.TotalUnpaidBalances.Should().Be(0m);
+        result.AverageTicketSize.Should().Be(0m);
+        result.SeniorDiscountsGiven.Should().Be(0m);
+        result.PwdDiscountsGiven.Should().Be(0m);
+        result.Flow.TotalEncountersToday.Should().Be(0);
+        result.Flow.CompletedToday.Should().Be(0);
+        result.Flow.AverageWaitMinutes.Should().Be(0.0);
+        result.Flow.AverageConsultMinutes.Should().Be(0.0);
+        result.TopDiagnoses.Should().BeEmpty();
+        result.TopServices.Should().BeEmpty();
+        result.DoctorStats.Should().BeEmpty();
+        result.TenderShares.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetDailyEodReport_EmptyDataset_ShouldReturnZeroCensusAndBalances()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+        var paymentRepo = TestDbHelper.CreateRepository<PaymentRecord>(context, sieve);
+        var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var handler = new GetDailyEodReportQueryHandler(
+            queueRepo, invoiceRepo, paymentRepo, consultRepo, procRepo, labRepo, _clinicContext, settingsRepo);
+
+        var result = await handler.Handle(new GetDailyEodReportQuery(DateTime.UtcNow.Date), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result.TotalCheckedIn.Should().Be(0);
+        result.TotalWalkIns.Should().Be(0);
+        result.TotalAppointments.Should().Be(0);
+        result.TotalCompletedVisits.Should().Be(0);
+        result.TotalWaitingOrInConsultation.Should().Be(0);
+        result.TotalGrossAmount.Should().Be(0m);
+        result.TotalDiscountsGiven.Should().Be(0m);
+        result.TotalSeniorDiscounts.Should().Be(0m);
+        result.TotalPwdDiscounts.Should().Be(0m);
+        result.TotalPhilHealthCovered.Should().Be(0m);
+        result.TotalNetAmount.Should().Be(0m);
+        result.TotalAmountCollected.Should().Be(0m);
+        result.CashInDrawer.Should().Be(0m);
+        result.TotalUnpaidBalances.Should().Be(0m);
+        result.CollectionsByMethod.Should().BeEmpty();
+        result.DoctorWorkloads.Should().BeEmpty();
+        result.TotalProceduresPerformed.Should().Be(0);
+        result.TotalLabOrdersIssued.Should().Be(0);
+        result.TotalPrescriptionsWritten.Should().Be(0);
+        result.TotalDangerousDrugPrescriptions.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetMorbidityReport_EmptyDataset_ShouldReturnEmptyDiseasesAndRealClinicName()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var settings = new ClinicSettings
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            ClinicName = "St. Jude Family Clinic"
+        };
+        await settingsRepo.AddAsync(settings);
+        await uow.SaveChangesAsync();
+
+        var handler = new GetMorbidityReportQueryHandler(consultRepo, patientRepo, _clinicContext, settingsRepo);
+        var result = await handler.Handle(new GetMorbidityReportQuery(), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result.TotalEncountersReviewed.Should().Be(0);
+        result.TotalDiagnosesRecorded.Should().Be(0);
+        result.Diseases.Should().BeEmpty();
+        result.ClinicName.Should().Be("St. Jude Family Clinic");
+    }
+
+    [Fact]
+    public async Task GetTaxDiscountAuditReport_EmptyDataset_ShouldReturnEmptyItemsAndZeroTotals()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+
+        var handler = new GetTaxDiscountAuditReportQueryHandler(invoiceRepo, _clinicContext);
+        var result = await handler.Handle(new GetTaxDiscountAuditReportQuery(), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result.TotalInvoicesAudited.Should().Be(0);
+        result.TotalGrossSales.Should().Be(0m);
+        result.TotalSeniorDiscounts.Should().Be(0m);
+        result.TotalPwdDiscounts.Should().Be(0m);
+        result.TotalVatExempted.Should().Be(0m);
+        result.TotalNetCollections.Should().Be(0m);
+        result.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetDoctorSharesReport_EmptyDataset_ShouldReturnEmptyDoctorSharesAndZeroRevenue()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var consultRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(context, sieve);
+        var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var settings = new ClinicSettings
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            ClinicName = "General Clinic",
+            DefaultDoctorSharePercentage = 0.75m
+        };
+        await settingsRepo.AddAsync(settings);
+        await uow.SaveChangesAsync();
+
+        var handler = new GetDoctorSharesReportQueryHandler(consultRepo, invoiceRepo, procRepo, _clinicContext, settingsRepo);
+        var result = await handler.Handle(new GetDoctorSharesReportQuery(), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result.TotalClinicEncounters.Should().Be(0);
+        result.TotalClinicGrossRevenue.Should().Be(0m);
+        result.TotalPhysicianShares.Should().Be(0m);
+        result.TotalFacilityShares.Should().Be(0m);
+        result.DoctorShares.Should().BeEmpty();
     }
 }

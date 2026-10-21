@@ -81,7 +81,33 @@ public sealed class DentalController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<DentalChartDto>.Success(result, "Dental chart saved successfully."));
     }
+
+    /// <summary>
+    /// Voids a signed/committed tooth condition record while preserving the clinical audit trail
+    /// and restoring the previous non-voided status in the tooth's stack.
+    /// </summary>
+    [HttpPost("patients/{patientId:guid}/teeth/{recordId:guid}/void")]
+    [HasPermission(ClinicPermissions.ConsultationsWrite)]
+    public async Task<ActionResult<ApiResponse<DentalChartDto>>> VoidToothRecord(
+        Guid patientId,
+        Guid recordId,
+        [FromBody] VoidDentalToothRecordRequest? request,
+        CancellationToken ct)
+    {
+        var command = new VoidDentalToothRecordCommand(
+            patientId,
+            recordId,
+            request?.Reason
+        );
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<DentalChartDto>.Success(result, "Tooth condition record voided."));
+    }
 }
+
+public sealed record VoidDentalToothRecordRequest(
+    string? Reason = null
+);
 
 public sealed record UpsertDentalToothRecordRequest(
     int ToothNumber,

@@ -15,7 +15,8 @@ public enum StaffNotificationCategory
     LabResult = 0,
     Queue = 1,
     ClinicalAlert = 2,
-    System = 3
+    System = 3,
+    Appointment = 4
 }
 
 public sealed class ClinicStaffNotification : BaseEntity

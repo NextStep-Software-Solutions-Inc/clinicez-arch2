@@ -46,8 +46,7 @@ public sealed class BillingSearchProvider : ISearchProvider
             .Where(inv =>
                 inv.InvoiceNumber.ToLower().Contains(term) ||
                 inv.PatientName.ToLower().Contains(term) ||
-                (inv.AttendingDoctorName != null && inv.AttendingDoctorName.ToLower().Contains(term)) ||
-                inv.LineItems.Any(li => li.Description.ToLower().Contains(term)))
+                inv.LineItems.Any(li => (li.DoctorName != null && li.DoctorName.ToLower().Contains(term)) || li.Description.ToLower().Contains(term)))
             .OrderByDescending(inv => inv.InvoiceDate)
             .Take(boundedLimit)
             .ToListAsync(ct);

@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using ClinicEz.Clinic.Domain.Enums;
 
 namespace ClinicEz.Clinic.Application.Features.Billing.DTOs;
 
+[method: JsonConstructor]
 public record InvoiceLineItemDto(
     Guid Id,
+    Guid? DoctorId,
+    string? DoctorName,
     Guid? ServiceItemId,
     string? ItemCode,
     string Description,
@@ -13,7 +17,26 @@ public record InvoiceLineItemDto(
     decimal UnitPrice,
     int Quantity,
     decimal TotalPrice
-);
+)
+{
+    public InvoiceLineItemDto()
+        : this(Guid.Empty, null, null, null, null, string.Empty, string.Empty, 0m, 1, 0m)
+    {
+    }
+
+    public InvoiceLineItemDto(
+        Guid id,
+        Guid? serviceItemId,
+        string? itemCode,
+        string description,
+        string category,
+        decimal unitPrice,
+        int quantity,
+        decimal totalPrice)
+        : this(id, null, null, serviceItemId, itemCode, description, category, unitPrice, quantity, totalPrice)
+    {
+    }
+}
 
 public record PaymentRecordDto(
     Guid Id,
@@ -38,7 +61,6 @@ public record InvoiceDto(
     Guid? AppointmentId,
     Guid? ConsultationId,
     Guid? AttendingDoctorId,
-    string? AttendingDoctorName,
     decimal GrossAmount,
     DiscountType DiscountType,
     string? DiscountIdNumber,
@@ -54,14 +76,34 @@ public record InvoiceDto(
     List<PaymentRecordDto> Payments
 );
 
+[method: JsonConstructor]
 public record CreateInvoiceLineItemRequest(
+    Guid? DoctorId,
+    string? DoctorName,
     Guid? ServiceItemId,
     string? ItemCode,
     string Description,
     string Category,
     decimal UnitPrice,
     int Quantity
-);
+)
+{
+    public CreateInvoiceLineItemRequest()
+        : this(null, null, null, null, string.Empty, string.Empty, 0m, 1)
+    {
+    }
+
+    public CreateInvoiceLineItemRequest(
+        Guid? serviceItemId,
+        string? itemCode,
+        string description,
+        string category,
+        decimal unitPrice,
+        int quantity)
+        : this(null, null, serviceItemId, itemCode, description, category, unitPrice, quantity)
+    {
+    }
+}
 
 public record CreateInvoiceRequest(
     Guid PatientId,
@@ -70,7 +112,6 @@ public record CreateInvoiceRequest(
     Guid? AppointmentId,
     Guid? ConsultationId,
     Guid? AttendingDoctorId,
-    string? AttendingDoctorName,
     DiscountType DiscountType,
     string? DiscountIdNumber,
     decimal? CustomDiscountPercentage,
@@ -83,5 +124,16 @@ public record RecordPaymentRequest(
     decimal Amount,
     PaymentMethod Method,
     string? ReferenceNumber,
+    string? Notes
+);
+
+public record InvoicePreviewRequest(
+    Guid? PatientId,
+    string PatientName,
+    string? QueueNumber,
+    string? DoctorPrcLicense,
+    DiscountType DiscountType,
+    string? DiscountIdNumber,
+    List<CreateInvoiceLineItemRequest> LineItems,
     string? Notes
 );

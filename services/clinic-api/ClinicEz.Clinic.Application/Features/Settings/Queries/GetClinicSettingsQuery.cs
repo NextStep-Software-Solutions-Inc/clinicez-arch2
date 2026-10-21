@@ -107,7 +107,18 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.IsDirectoryPublished,
             settings.IsOnlineBookingPaused,
             settings.SpecialtyMode,
-            settings.EnableDentalModule);
+            settings.EnableDentalModule,
+            settings.DefaultDoctorSharePercentage,
+            settings.CashierMode,
+            LetterheadDohLto: settings.LetterheadDohLto,
+            LetterheadAccentColorHex: settings.LetterheadAccentColorHex,
+            DefaultApproverName: settings.DefaultApproverName,
+            DefaultApproverTitle: settings.DefaultApproverTitle,
+            DocumentSignatoriesJson: settings.DocumentSignatoriesJson,
+            EnableAppointmentReminders: settings.EnableAppointmentReminders,
+            AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
+            AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
+            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications);
     }
 }
 

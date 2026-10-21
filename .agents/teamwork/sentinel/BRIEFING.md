@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-19T09:05:00Z
+# BRIEFING — 2026-10-21T00:05:08Z
 
 ## Mission
-Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-api`, `apps/clinic-app`, and `apps/portal-web`), strictly governed by `clinicez-ui-ux-expert` and `clinicez-search-provider-expert`, and coordinated with the active Clinic Workspace Global Search implementation.
+Orchestrate and monitor the implementation of multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows in ClinicEZ.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -27,6 +27,30 @@ Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-
 - Active Project Orchestrator (orchestrator_16): f5149305-0cef-4eab-abca-0a9878057169
 - Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
 - Victory Auditor (victory_auditor_16): 663db1e1-f744-4c32-92a7-3991c2f398c0
+- Cleaned up: task-30 killed, task-32 killed, all subagents killed
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-dental-fix/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_17): 5cc4a844-dcce-47fb-b084-d9a7fe5f1618
+- Active Crons: task-42 (Progress Reporting), task-44 (Liveness Check)
+- Victory Auditor: to be spawned on victory claim
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_18): f5795226-f404-4e8d-8697-7ddd8b968279
+- Active Crons: task-36 (Progress Reporting), task-38 (Liveness Check)
+- Victory Auditor: to be spawned on victory claim
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-billing/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_billing_review): 862e57ca-e9c9-4748-a69c-1f9fb51464ca
+- Active Crons: task-38 (Progress Reporting), task-40 (Liveness Check)
+- Victory Auditor (victory_auditor_billing_review): c511277c-9dd2-437b-abc0-bf9c70edd8a2
+- Cleaned up: task-38 killed, task-40 killed, all subagents killed
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_2): 03338571-a68e-4b29-91d0-1c6ef4eb0062
+- Active Crons: task-26 (Progress Reporting), task-28 (Liveness Check)
+- Victory Auditor: to be spawned on victory claim
+- Victory Auditor (victory_auditor_2): 53251c79-b82b-4af9-b30e-e693aeecb7be
+- Cleaned up: task-26 killed, task-28 killed, all subagents killed
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_billing_workflow): ad6bd746-c457-48e8-bebc-182ea31b181b
+- Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
+- Victory Auditor (victory_auditor_billing_workflow): d8ed5215-5b05-4463-895f-804d6bd472b8
 - Cleaned up: task-30 killed, task-32 killed, all subagents killed
 
 ## 🔒 Key Constraints
@@ -86,33 +110,76 @@ Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-
 - R2: Dental Chart Backend & Specialty Mode in ClinicSettings and DentalToothRecord CQRS
 - R3: Clean, jargon-free UI in Consultation (InlineDentalChartCard) & Patient Chart (DentalChartTab), Settings UI, design tokens
 - R4: Pluggable search integration
+- Route to General (`teamwork_preview_orchestrator`) for Dental Module & Clinical Workstation Live-Testing Bug Fixes and UX Enhancements
+- Dedicated isolated git worktree: /Users/macuser/projects/github/nextstep/clinicez-dental-fix (branch fix/dental-chart-and-workstation-ux)
+- R1: Patient Chart Dental Sync & Longitudinal Encounter Dental Summary
+- R2: 5-Surface Odontogram Visualization & Structured Multi-Condition Tooth Records (per-condition timestamp, doctor, surface, notes; distinct DMFT counts)
+- R3: Procedure Room Selection, Per-Procedure Sent Indicator & Button '+' Normalization
+- R4: Full-Width Responsive Workstation Layout (remove maxWidth from Consultations, Patients, Dashboard)
+- Zero raw hex color literals or direct palette.ts imports (@clinicez/design-tokens)
+- Route to General (`teamwork_preview_orchestrator`) for Clinic Analytics and Statutory Reports overhaul
+- Eliminate hardcoded mock fallbacks across reports queries; return genuine 0 counts and empty lists (R1)
+- High-performance server-side EF Core aggregations (SumAsync, CountAsync, GroupBy) & composite temporal indexes on (TenantId, ClinicId, Date/Time) (R2)
+- Interactive SVG chart components (TrendLineChart, WorkloadBarChart, TenderDonutChart, MorbidityDistributionChart) in apps/clinic-app/components/analytics/ rooted in @clinicez/design-tokens with 4-state completion (R3)
+- Enterprise-grade print-ready vector PDF generation with QuestPDF in ClinicDocumentPdfService and streaming endpoints in ReportsController.cs with QR cryptographic verification (R4)
+- Automated test verification: dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests and cd apps/clinic-app && bun test tests pass with 0 failures
+- Passes design tokens audit (bun run lint:tokens) and network isolation audit (bun run lint:hosts) with 0 violations
+- Route to General (`teamwork_preview_orchestrator`) for ClinicEZ Billing System Hardening Review
+- Dual-mode cashier routing (`ClinicDesk` vs `CashierCounter`) & concurrency audit in `services/clinic-api` (R1)
+- Clinic station settings & UI/UX audit against `@clinicez/design-tokens` (zero raw hex values) in `apps/clinic-app` (R2)
+- Clinical workstation non-disruptive queue flow & post-encounter dialog audit in `apps/clinic-app` (R3)
+- Statement of Account (SOA) review & settlement audit in `apps/clinic-app` (R4)
+- Architecture documentation & interop integrity in `docs/architecture/billing.md` (R5)
+- Automated execution of all 7 test suites & static token audit with 100% pass rate
+- Route to General (`teamwork_preview_orchestrator`) for Calendar Appointment Push Notification and Reminder System
+- Multi-service scope: packages/shared-dotnet, services/clinic-api, services/patient-api, apps/clinic-app
+- Background reminder service with 24h & 2h advance window evaluations
+- Instant event push notifications via interop hub & transactional outbox
+- Doctor staff notifications in clinic workstation notification center
+- On-demand manual reminder dispatch from inspection modal
+- Strict design token compliance (@clinicez/design-tokens) and full test verification
 - Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
+- Route to General (`teamwork_preview_orchestrator`) for multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows
+- R1: Multi-Doctor Charge Capture & Single Visit Draft SOA (merge into existing draft/partially paid invoice instead of 409 Conflict)
+- R2: Per-Item Clinician Attribution & Clean Invoice Bounding (InvoiceLineItem.DoctorId & DoctorName; remove single AttendingDoctorName; compute DoctorSharesReport per item)
+- R3: Document Separation: Statement of Account (INV-...) vs. Official Receipt (OR-...)
+- R4: Cashier Workstation UI/UX & Queue Lifecycle (3 tabs, cross-date draft retrieval, defensive cashiering, defer/promissory note)
+- R5: Encounter Signing UX Alignment in Consultations.screen.tsx (Charge Slip / Draft SOA posting)
+- Automated EF Core migrations using dotnet ef migrations add AddDoctorToInvoiceLineItem
+- Strict design tokens compliance (@clinicez/design-tokens)
+- Automated test verification: backend invoice tests, frontend billing tests, typecheck
 
 ## User Context
-- **Last user request**: Implement the Clean, Integrated Dental Module inside ClinicEZ (`services/clinic-api`, `apps/clinic-app`, and `apps/portal-web`), strictly governed by project skills `clinicez-ui-ux-expert` and `clinicez-search-provider-expert`, and coordinated with the active Clinic Workspace Global Search implementation.
+- **Last user request**: Implement the multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows in ClinicEZ, adhering strictly to real clinic practice and `@clinicez/design-tokens` standards.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded request verbatim to `ORIGINAL_REQUEST.md` (`## 2026-10-19T05:00:54Z`).
-  - Executed Milestones MA, MB, MC, MD under `orchestrator_16`.
-  - Independent 3-phase victory audit conducted by `victory_auditor_16` resulting in `VICTORY CONFIRMED`.
-  - Cleaned up background crons and swarm agents.
+  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` under timestamp `## 2026-10-21T00:05:08Z`.
+  - Routed to General path (`teamwork_preview_orchestrator`).
+  - Implemented multi-doctor draft SOA merging and paid duplicate prevention in `CreateInvoiceCommand.cs`.
+  - Added `DoctorId` & `DoctorName` to `InvoiceLineItem` and cleanly dropped `AttendingDoctorName` via automated migration `20261021003544_AddDoctorToInvoiceLineItem.cs`.
+  - Updated `GetDoctorSharesReportQuery.cs` to discover clinicians across line items, procedures, and consultations and compute revenue shares per clinician.
+  - Implemented 3-way queue tabs (`Active Queue`, `Unsettled / Promissory`, `Billed & Paid Today`), defensive cashiering (steppers, deletions, custom items), and Defer/Promissory Note action in `Billing.screen.tsx`.
+  - Aligned encounter signing in `Consultations.screen.tsx` to attach doctor attribution and post Draft SOAs without conflict.
+  - Verified document separation between Statement of Account (`INV-...`) and Official Receipt (`OR-...`) across POS and A4 formats.
+  - Independent Victory Audit completed: `VICTORY CONFIRMED`.
 
 ## Project Status
 - **Phase**: complete
 - **Route**: General -> teamwork_preview_orchestrator
-- **Active Subagents**: none (all killed)
-- **Active Tasks**: none (all killed)
+- **Active Subagents**: none (cleaned up)
+- **Active Tasks**: none (cleaned up)
 
 ## Victory Audit Status
 - **Triggered**: yes
+- **Auditor Conv ID**: d8ed5215-5b05-4463-895f-804d6bd472b8 (victory_auditor_billing_workflow)
 - **Verdict**: VICTORY CONFIRMED
-- **Auditor Conv ID**: 663db1e1-f744-4c32-92a7-3991c2f398c0
 - **Retry count**: 0
 
 ## Artifact Index
 - /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel briefing memory
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel briefing archive
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/handoff.md — Sentinel handoff report
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_16/handoff.md — Orchestrator 16 final handoff report
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_16/handoff.md — Victory Auditor 16 report (VICTORY CONFIRMED)
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent working memory
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/handoff.md — Sentinel final completion handoff
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_billing_workflow/handoff.md — Project Orchestrator completion report
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_billing_workflow/handoff.md — Independent Victory Auditor report
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/TEST_READY.md — Comprehensive E2E test catalog
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/services/clinic-api/ClinicEz.Clinic.Infrastructure/Migrations/20261021003544_AddDoctorToInvoiceLineItem.cs — Automated EF Core migration

@@ -112,6 +112,12 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('rect'),
   Line: createMockComponent('line'),
   default: createMockComponent('svg'),
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -660,7 +666,8 @@ describe('Challenger 2 Empirical Verification: Audit Workstation Inspection & Ex
         : path.resolve(process.cwd());
       const scriptPath = path.resolve(rootDir, 'apps/clinic-app/scripts/check-tokens.mjs');
 
-      const result = execSync(`node "${scriptPath}" --strict`, {
+      const runtime = process.execPath || 'node';
+      const result = execSync(`"${runtime}" "${scriptPath}" --strict`, {
         cwd: rootDir,
         encoding: 'utf8',
       });

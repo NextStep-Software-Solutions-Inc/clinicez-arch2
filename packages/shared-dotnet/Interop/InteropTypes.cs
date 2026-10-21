@@ -45,6 +45,8 @@ public static class InteropTypes
     public const string PatientJoinRequested = "patient.join.requested";
     /// <summary>Clinic -> patient-api. Payload: <c>PatientQueueAlertPayload</c> (called to room or approaching turn queue alert).</summary>
     public const string PatientQueueAlert = "patient.queue.alert";
+    /// <summary>Clinic -> patient-api. Payload: <c>PatientAppointmentAlertPayload</c> (appointment lifecycle and reminder push alert).</summary>
+    public const string PatientAppointmentAlert = "patient.appointment.alert";
 
     // Laboratory
     public const string LabOrderIssued = "lab.order.issued";

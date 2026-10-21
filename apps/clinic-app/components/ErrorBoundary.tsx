@@ -234,7 +234,8 @@ const styles = StyleSheet.create({
   },
   headerBlock: {
     alignItems: 'center',
-    maxWidth: 560,
+    width: '100%',
+    maxWidth: 600,
     gap: theme.spacing.sm,
   },
   titleText: {
@@ -246,7 +247,7 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     width: '100%',
-    maxWidth: 640,
+    maxWidth: 600,
     backgroundColor: theme.colors.emergencyBg,
     borderColor: theme.colors.emergencyBorder,
     borderWidth: theme.sizes.borderWidth,
@@ -272,12 +273,13 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.emergencyBorder,
   },
   metaItem: {
-    minWidth: 130,
+    flex: 1,
+    minWidth: 120,
     gap: theme.spacing.xs / 2,
   },
   logSection: {
     width: '100%',
-    maxWidth: 640,
+    maxWidth: 600,
     gap: theme.spacing.sm,
   },
   logWrapper: {
@@ -300,7 +302,7 @@ const styles = StyleSheet.create({
   },
   actions: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 600,
     gap: theme.spacing.sm,
     marginTop: theme.spacing.sm,
   },

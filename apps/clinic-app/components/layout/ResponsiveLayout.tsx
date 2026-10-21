@@ -64,10 +64,16 @@ export default function ResponsiveLayout({
     }
   };
 
+  const handleOpenSearch = React.useCallback(() => {
+    if (openSearch) {
+      openSearch();
+    }
+  }, [openSearch]);
+
   useWorkstationShortcuts({
     onNavigate: handleNavigate,
     onToggleSidebar: cycleMode,
-    onOpenSearch: openSearch,
+    onOpenSearch: openSearch ? handleOpenSearch : undefined,
   });
 
   if (!isWorkstation) {
@@ -86,7 +92,7 @@ export default function ResponsiveLayout({
             subtitle={headerSubtitle}
             actions={actions}
             rightAction={rightAction}
-            onOpenSearch={openSearch}
+            onOpenSearch={openSearch ? handleOpenSearch : undefined}
           />
         ) : null}
         <View style={[styles.content, insets.bottom > 0 && { paddingBottom: insets.bottom }]}>{children}</View>
@@ -122,7 +128,7 @@ export default function ResponsiveLayout({
             subtitle={headerSubtitle}
             actions={actions}
             rightAction={rightAction}
-            onOpenSearch={openSearch}
+            onOpenSearch={openSearch ? handleOpenSearch : undefined}
           />
         )}
         <View style={[styles.content, insets.bottom > 0 && { paddingBottom: insets.bottom }]}>{children}</View>

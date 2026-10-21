@@ -81,6 +81,12 @@ mock.module('react-native-svg', () => ({
   Rect: 'Rect',
   Line: 'Line',
   default: 'Svg',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -249,7 +255,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     );
 
     // Header title and patient name
-    expect(markup).toContain('Medical chart');
+    expect(markup).toContain('Patient Chart');
     expect(markup).toContain('Maria DB');
     expect(markup).toContain('PAT-2026-00001');
     expect(markup).toContain('26 yrs');
@@ -366,7 +372,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       })
     );
 
-    expect(markup).toContain('Medical chart');
+    expect(markup).toContain('Patient Chart');
     // Tab body skeleton indicators
     expect(markup).not.toContain('Total Visits');
   });
@@ -400,7 +406,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       })
     );
 
-    expect(markup).toContain('Medical chart');
+    expect(markup).toContain('Patient Chart');
   });
 
   test('11. Removes Edit Demographics button from summary spine and preserves header pencil button', () => {
@@ -653,7 +659,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
           clinicId: 'clinic-1',
           patientId: 'pat-001',
           toothNumber: 16,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'MOD',
           notes: 'Deep occlusal decay',
           createdAt: '2026-03-01T00:00:00Z',
@@ -677,7 +683,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).toContain('Odontogram Visualizer');
     expect(markup).toContain('Tooth #16');
     expect(markup).toContain('Upper Right First Molar');
-    expect(markup).toContain('Decay');
+    expect(markup).toContain('Decayed');
     expect(markup).toContain('MOD');
   });
 
@@ -691,7 +697,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
           clinicId: 'clinic-1',
           patientId: 'pat-001',
           toothNumber: 16,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'MOD',
           notes: 'Deep occlusal decay',
           createdAt: '2026-03-01T00:00:00Z',
@@ -716,7 +722,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     expect(markup).toContain('Dental Chart');
     expect(markup).toContain('Tooth #16');
     expect(markup).toContain('Upper Right First Molar');
-    expect(markup).toContain('Decay');
+    expect(markup).toContain('Decayed');
   });
 
   test('24. In-app navigation deep link with preferredLayout="drawer", activeTab="dental", and child tooth focusToothNumber={54}', () => {
@@ -767,7 +773,7 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
           clinicId: 'clinic-1',
           patientId: 'pat-001',
           toothNumber: 16,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'MOD',
           notes: 'Deep occlusal decay',
           createdAt: '2026-03-01T00:00:00Z',

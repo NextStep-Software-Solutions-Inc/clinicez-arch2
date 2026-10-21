@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { theme } from '../../constants/theme';
 import {
@@ -14,8 +14,53 @@ import {
   SkeletonList,
   ErrorState,
 } from '../ui';
+import {
+  ToothSurfaceDiagram,
+  DentalToothRecord,
+  ToothStatus,
+  ToothSurfaceCode,
+  CANONICAL_SURFACES,
+  SELECTABLE_TOOTH_STATUS_OPTIONS,
+  TOOTH_STATUS_OPTIONS,
+  getToothStatusLabel,
+  ADULT_UPPER_RIGHT,
+  ADULT_UPPER_LEFT,
+  ADULT_LOWER_RIGHT,
+  ADULT_LOWER_LEFT,
+  CHILD_UPPER_RIGHT,
+  CHILD_UPPER_LEFT,
+  CHILD_LOWER_RIGHT,
+  CHILD_LOWER_LEFT,
+  sortToothSurfaces,
+  getToothDescription,
+  normalizeTeethToMultiRecord,
+  resolveToothEffectiveState,
+  isWholeToothStatus,
+  getCurrentEncounterLockedState,
+  canApplyConditionToTooth,
+  applyStagedConditionToTooth,
+  removeCurrentEncounterConditionFromTooth,
+  getDominantToothStatus,
+  getConditionDotColor,
+} from '../dental';
 
-export type ToothStatus = 'Healthy' | 'Decay' | 'Filled' | 'Missing' | 'Crown' | 'Extraction';
+export type { ToothStatus, ToothSurfaceCode, DentalToothRecord };
+export {
+  ADULT_UPPER_RIGHT,
+  ADULT_UPPER_LEFT,
+  ADULT_LOWER_RIGHT,
+  ADULT_LOWER_LEFT,
+  CHILD_UPPER_RIGHT,
+  CHILD_UPPER_LEFT,
+  CHILD_LOWER_RIGHT,
+  CHILD_LOWER_LEFT,
+  CANONICAL_SURFACES,
+  SELECTABLE_TOOTH_STATUS_OPTIONS,
+  TOOTH_STATUS_OPTIONS,
+  getToothStatusLabel,
+  sortToothSurfaces,
+  getToothDescription,
+};
 
 export interface DentalToothState {
   toothNumber: number;
@@ -25,78 +70,21 @@ export interface DentalToothState {
 }
 
 export interface InlineDentalChartCardProps {
-  teeth?: Record<number, DentalToothState> | DentalToothState[];
-  chart?: Record<number, DentalToothState> | DentalToothState[];
-  onChangeTooth?: (tooth: DentalToothState) => void;
-  onChange?: (chart: Record<number, DentalToothState>) => void;
+  teeth?: Record<number, any> | any[];
+  chart?: Record<number, any> | any[];
+  consultationId?: string | null;
+  onChangeTooth?: (tooth: DentalToothState | DentalToothRecord) => void;
+  onChange?: (chart: any) => void;
   onOrderProcedure?: (toothNumber: number, toothSurface?: string) => void;
   onQuickOrderProcedure?: (toothNumber: number, toothSurface?: string) => void;
+  onRemoveCondition?: (toothNumber: number, conditionIdOrStatus: string) => void;
+  onAddCondition?: (record: Omit<DentalToothRecord, 'id' | 'createdAt'>) => void;
   disabled?: boolean;
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
   initialToothNumber?: number;
   testID?: string;
-}
-
-export const ADULT_UPPER_RIGHT = [18, 17, 16, 15, 14, 13, 12, 11] as const;
-export const ADULT_UPPER_LEFT = [21, 22, 23, 24, 25, 26, 27, 28] as const;
-export const ADULT_LOWER_RIGHT = [48, 47, 46, 45, 44, 43, 42, 41] as const;
-export const ADULT_LOWER_LEFT = [31, 32, 33, 34, 35, 36, 37, 38] as const;
-
-export const CHILD_UPPER_RIGHT = [55, 54, 53, 52, 51] as const;
-export const CHILD_UPPER_LEFT = [61, 62, 63, 64, 65] as const;
-export const CHILD_LOWER_RIGHT = [85, 84, 83, 82, 81] as const;
-export const CHILD_LOWER_LEFT = [71, 72, 73, 74, 75] as const;
-
-export const CANONICAL_SURFACES = ['M', 'O', 'D', 'B', 'L'] as const;
-export type ToothSurfaceCode = (typeof CANONICAL_SURFACES)[number];
-
-export const TOOTH_STATUS_OPTIONS: readonly ToothStatus[] = [
-  'Healthy',
-  'Decay',
-  'Filled',
-  'Missing',
-  'Crown',
-  'Extraction',
-] as const;
-
-export function sortToothSurfaces(surfaces: string | string[]): string {
-  const set = new Set((Array.isArray(surfaces) ? surfaces.join('') : surfaces).toUpperCase().split(''));
-  return CANONICAL_SURFACES.filter((s) => set.has(s)).join('');
-}
-
-export function getToothDescription(toothNumber: number): string {
-  const q = Math.floor(toothNumber / 10);
-  const pos = toothNumber % 10;
-  const arch = q === 1 || q === 2 || q === 5 || q === 6 ? 'Upper' : 'Lower';
-  const side = q === 1 || q === 4 || q === 5 || q === 8 ? 'Right' : 'Left';
-  const isChild = q >= 5;
-
-  let toothType = '';
-  if (isChild) {
-    switch (pos) {
-      case 1: toothType = 'Central Incisor'; break;
-      case 2: toothType = 'Lateral Incisor'; break;
-      case 3: toothType = 'Canine'; break;
-      case 4: toothType = 'First Molar'; break;
-      case 5: toothType = 'Second Molar'; break;
-      default: toothType = 'Tooth';
-    }
-  } else {
-    switch (pos) {
-      case 1: toothType = 'Central Incisor'; break;
-      case 2: toothType = 'Lateral Incisor'; break;
-      case 3: toothType = 'Canine'; break;
-      case 4: toothType = 'First Premolar'; break;
-      case 5: toothType = 'Second Premolar'; break;
-      case 6: toothType = 'First Molar'; break;
-      case 7: toothType = 'Second Molar'; break;
-      case 8: toothType = 'Third Molar'; break;
-      default: toothType = 'Tooth';
-    }
-  }
-  return `${arch} ${side} ${toothType}`;
 }
 
 type DentitionMode = 'Adult' | 'Child';
@@ -106,13 +94,63 @@ const DENTITION_OPTIONS: Array<{ value: DentitionMode; label: string }> = [
   { value: 'Child', label: 'Child (51–85)' },
 ];
 
+function formatRecordedDate(dateStr?: string | null): string {
+  if (!dateStr) return 'Just now';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString([], {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+function getActiveClinicianName(): string {
+  const ctx = (globalThis as any).__mockClinicContext;
+  if (ctx?.staffMember?.fullName) return ctx.staffMember.fullName;
+  if (ctx?.user?.fullName) return ctx.user.fullName;
+  return 'Attending Clinician';
+}
+
+function getStatusBadgeVariant(
+  status: ToothStatus
+): 'success' | 'warning' | 'info' | 'neutral' | 'purple' | 'emergency' {
+  switch (status) {
+    case 'Healthy':
+    case 'Sealant':
+      return 'success';
+    case 'Decayed':
+    case 'Fractured':
+    case 'Impacted':
+      return 'warning';
+    case 'Filled':
+    case 'Implant':
+      return 'info';
+    case 'Missing':
+      return 'neutral';
+    case 'Crowned':
+    case 'RootCanal':
+      return 'purple';
+    case 'ForExtraction':
+    default:
+      return 'emergency';
+  }
+}
+
 export function InlineDentalChartCard({
   teeth,
   chart,
+  consultationId = null,
   onChangeTooth,
   onChange,
   onOrderProcedure,
   onQuickOrderProcedure,
+  onRemoveCondition,
+  onAddCondition,
   disabled = false,
   loading = false,
   error = null,
@@ -134,16 +172,51 @@ export function InlineDentalChartCard({
     initialToothNumber ?? null
   );
 
-  const normalizedTeeth = useMemo<Record<number, DentalToothState>>(() => {
-    if (Array.isArray(effectiveTeeth)) {
-      const map: Record<number, DentalToothState> = {};
-      for (const t of effectiveTeeth) {
-        map[t.toothNumber] = t;
-      }
-      return map;
-    }
-    return effectiveTeeth || {};
+  const [localTeethOverride, setLocalTeethOverride] = useState<Record<number, DentalToothRecord[]> | null>(null);
+
+  useEffect(() => {
+    setLocalTeethOverride(null);
   }, [effectiveTeeth]);
+
+  // Normalize all input teeth into multi-condition records: Record<number, DentalToothRecord[]>
+  const multiTeethMap = useMemo<Record<number, DentalToothRecord[]>>(() => {
+    if (localTeethOverride) return localTeethOverride;
+    const normalized = normalizeTeethToMultiRecord(effectiveTeeth as any);
+    for (const numStr of Object.keys(normalized)) {
+      const num = Number(numStr);
+      normalized[num] = resolveToothEffectiveState(normalized[num]).allRecords;
+    }
+    return normalized;
+  }, [effectiveTeeth, localTeethOverride]);
+
+  const multiTeethRef = useRef<Record<number, DentalToothRecord[]>>(multiTeethMap);
+  multiTeethRef.current = multiTeethMap;
+
+  // Backward-compatible single-state mapping for legacy consumers (only current active records)
+  const normalizedTeeth = useMemo<Record<number, DentalToothState>>(() => {
+    const map: Record<number, DentalToothState> = {};
+    for (const [numStr, recs] of Object.entries(multiTeethMap)) {
+      const num = Number(numStr);
+      const activeRecs = recs.filter((r) => r.isCurrent !== false);
+      const dominant = getDominantToothStatus(activeRecs);
+      const surfaces = sortToothSurfaces(
+        activeRecs.map((r) => r.activeSurface ?? r.surface ?? '').join('')
+      );
+      const notes = activeRecs.map((r) => r.notes).filter(Boolean).join('; ');
+      map[num] = {
+        toothNumber: num,
+        status: dominant,
+        surface: surfaces,
+        notes,
+      };
+    }
+    return map;
+  }, [multiTeethMap]);
+
+  const selectedToothRecords = useMemo<DentalToothRecord[]>(() => {
+    if (!selectedToothNumber) return [];
+    return multiTeethMap[selectedToothNumber] || [];
+  }, [multiTeethMap, selectedToothNumber]);
 
   const selectedToothState = useMemo<DentalToothState | null>(() => {
     if (!selectedToothNumber) return null;
@@ -157,77 +230,271 @@ export function InlineDentalChartCard({
     );
   }, [normalizedTeeth, selectedToothNumber]);
 
+  // Staging form state for adding/updating conditions (only committed on explicit Save Condition click)
+  const [stagedStatusState, setStagedStatusState] = useState<ToothStatus | null>(null);
+  const [stagedSurfacesState, setStagedSurfacesState] = useState<string | null>(null);
+  const [stagedNotesState, setStagedNotesState] = useState<string | null>(null);
+
+  const stagedRef = useRef<{
+    status: ToothStatus | null;
+    surfaces: string | null;
+    notes: string | null;
+  }>({
+    status: null,
+    surfaces: null,
+    notes: null,
+  });
+
+  const activeRecord = useMemo(() => {
+    if (selectedToothRecords.length === 0) return null;
+    const currentNonHealthy = selectedToothRecords.filter(
+      (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent !== false
+    );
+    if (currentNonHealthy.length > 0) {
+      return currentNonHealthy[currentNonHealthy.length - 1];
+    }
+    return null;
+  }, [selectedToothRecords]);
+
+  const lockState = useMemo(
+    () => getCurrentEncounterLockedState(selectedToothRecords, consultationId),
+    [selectedToothRecords, consultationId]
+  );
+
+  // Default staged status to the tooth's most recent status (or 'Decayed' if Healthy)
+  // while keeping stagedSurfaces empty until the clinician explicitly toggles surfaces for the current encounter.
+  const stagedStatus: ToothStatus =
+    stagedStatusState ??
+    (lockState.hasAnyCurrentEncounterRecord ? 'Decayed' : activeRecord?.status ?? 'Decayed');
+  const isWholeToothStaged = isWholeToothStatus(stagedStatus);
+  const stagedSurfaces: string = isWholeToothStaged ? '' : stagedSurfacesState ?? '';
+  const stagedNotes: string =
+    stagedNotesState ?? (!lockState.hasAnyCurrentEncounterRecord ? activeRecord?.notes ?? '' : '');
+
+  const saveCheck = useMemo(
+    () =>
+      canApplyConditionToTooth(
+        selectedToothRecords,
+        stagedStatus,
+        isWholeToothStaged ? '' : stagedSurfaces,
+        consultationId
+      ),
+    [selectedToothRecords, stagedStatus, isWholeToothStaged, stagedSurfaces, consultationId]
+  );
+
   const abnormalCount = useMemo(() => {
-    return Object.values(normalizedTeeth).filter(
-      (t) => t.status && t.status !== 'Healthy'
-    ).length;
-  }, [normalizedTeeth]);
+    let count = 0;
+    for (const recs of Object.values(multiTeethMap)) {
+      if (recs.some((r) => r.status !== 'Healthy' && r.isCurrent !== false)) {
+        count++;
+      }
+    }
+    return count;
+  }, [multiTeethMap]);
 
   const handleSelectTooth = (toothNumber: number) => {
     setSelectedToothNumber(toothNumber);
+    setStagedStatusState(null);
+    setStagedSurfacesState(null);
+    setStagedNotesState(null);
+    stagedRef.current = { status: null, surfaces: null, notes: null };
   };
 
-  const notifyChange = (updated: DentalToothState) => {
-    onChangeTooth?.(updated);
+  const notifyChange = (updatedTooth: DentalToothState, updatedMulti: Record<number, DentalToothRecord[]>) => {
+    onChangeTooth?.(updatedTooth);
     if (onChange) {
-      onChange({
-        ...normalizedTeeth,
-        [updated.toothNumber]: updated,
-      });
+      onChange(updatedMulti);
     }
   };
 
+  // Selecting tooth condition status ONLY stages locally — Save Condition must be explicitly clicked
   const handleUpdateStatus = (status: ToothStatus) => {
     if (disabled || !selectedToothNumber) return;
-    const current = selectedToothState || {
-      toothNumber: selectedToothNumber,
-      status: 'Healthy',
-      surface: '',
-      notes: '',
-    };
-    const updated: DentalToothState = {
-      ...current,
-      status,
-    };
-    notifyChange(updated);
+    const currentRecs = multiTeethRef.current[selectedToothNumber] || [];
+    const check = canApplyConditionToTooth(currentRecs, status, undefined, consultationId);
+    if (!check.allowed) return;
+
+    setStagedStatusState(status);
+    stagedRef.current.status = status;
+
+    if (isWholeToothStatus(status)) {
+      setStagedSurfacesState('');
+      stagedRef.current.surfaces = '';
+    }
   };
 
+  // Toggling tooth surfaces ONLY stages locally — Save Condition must be explicitly clicked
   const handleToggleSurface = (surfaceCode: ToothSurfaceCode) => {
     if (disabled || !selectedToothNumber) return;
-    const current = selectedToothState || {
-      toothNumber: selectedToothNumber,
-      status: 'Healthy',
-      surface: '',
-      notes: '',
-    };
-    const currentSurfaces = (current.surface || '').toUpperCase().split('');
-    let nextSurfaces: string[];
-    if (currentSurfaces.includes(surfaceCode)) {
-      nextSurfaces = currentSurfaces.filter((s) => s !== surfaceCode);
+    const curStatus = stagedRef.current.status ?? stagedStatus;
+    if (isWholeToothStatus(curStatus)) return;
+
+    const currentRecs = multiTeethRef.current[selectedToothNumber] || [];
+    const curLock = getCurrentEncounterLockedState(currentRecs, consultationId);
+    if (curLock.lockedSurfaces.has(surfaceCode)) return;
+
+    const baseSurfaces = stagedRef.current.surfaces ?? stagedSurfaces;
+    const chars = baseSurfaces.split('').filter(Boolean);
+    let nextChars: string[];
+    if (chars.includes(surfaceCode)) {
+      nextChars = chars.filter((c) => c !== surfaceCode);
     } else {
-      nextSurfaces = [...currentSurfaces, surfaceCode];
+      nextChars = [...chars, surfaceCode];
     }
-    const sorted = sortToothSurfaces(nextSurfaces);
-    const updated: DentalToothState = {
-      ...current,
-      surface: sorted,
-    };
-    notifyChange(updated);
+    const sorted = sortToothSurfaces(nextChars);
+    setStagedSurfacesState(sorted);
+    stagedRef.current.surfaces = sorted;
   };
 
+  // Editing notes ONLY stages locally — Save Condition must be explicitly clicked
   const handleNotesChange = (text: string) => {
     if (disabled || !selectedToothNumber) return;
-    const current = selectedToothState || {
-      toothNumber: selectedToothNumber,
+    setStagedNotesState(text);
+    stagedRef.current.notes = text;
+  };
+
+  const handleRemoveCondition = (toothNumber: number, conditionIdOrStatus: string) => {
+    if (disabled) return;
+
+    const currentRecs = multiTeethRef.current[toothNumber] || [];
+    const nextRecs = removeCurrentEncounterConditionFromTooth(
+      currentRecs,
+      conditionIdOrStatus,
+      consultationId
+    );
+
+    const nextMulti = {
+      ...multiTeethRef.current,
+      [toothNumber]: nextRecs,
+    };
+
+    multiTeethRef.current = nextMulti;
+    setLocalTeethOverride(nextMulti);
+    onRemoveCondition?.(toothNumber, conditionIdOrStatus);
+
+    const activeRecs = nextRecs.filter((r) => !r.isVoided && r.isCurrent !== false);
+    const updatedToothState: DentalToothState = {
+      toothNumber,
+      status: getDominantToothStatus(activeRecs),
+      surface: sortToothSurfaces(
+        activeRecs.map((r) => r.activeSurface ?? r.surface ?? '').join('')
+      ),
+      notes: activeRecs[activeRecs.length - 1]?.notes || '',
+    };
+
+    notifyChange(updatedToothState, nextMulti);
+  };
+
+  const handleResetToHealthy = () => {
+    if (disabled || !selectedToothNumber) return;
+    const toothNum = selectedToothNumber;
+    const currentRecs = multiTeethRef.current[toothNum] || [];
+    const clinician = getActiveClinicianName();
+
+    const nextRecs = applyStagedConditionToTooth(currentRecs, {
+      toothNumber: toothNum,
       status: 'Healthy',
       surface: '',
       notes: '',
+      recordedBy: clinician,
+      consultationId,
+      isCurrentEncounter: true,
+    });
+
+    const nextMulti = {
+      ...multiTeethRef.current,
+      [toothNum]: nextRecs,
     };
-    const updated: DentalToothState = {
-      ...current,
-      notes: text,
+
+    multiTeethRef.current = nextMulti;
+    setLocalTeethOverride(nextMulti);
+    setStagedStatusState(null);
+    setStagedSurfacesState('');
+    setStagedNotesState('');
+    stagedRef.current = { status: null, surfaces: '', notes: '' };
+
+    notifyChange(
+      {
+        toothNumber: toothNum,
+        status: 'Healthy',
+        surface: '',
+        notes: '',
+      },
+      nextMulti
+    );
+  };
+
+  const handleAddCondition = () => {
+    if (disabled || !selectedToothNumber) return;
+    const toothNum = selectedToothNumber;
+    const currentRecs = multiTeethRef.current[toothNum] || [];
+
+    const curStatus = stagedRef.current.status ?? stagedStatus;
+    const curSurfaces = isWholeToothStatus(curStatus)
+      ? ''
+      : stagedRef.current.surfaces ?? stagedSurfaces;
+    const curNotes = stagedRef.current.notes ?? stagedNotes;
+
+    const check = canApplyConditionToTooth(
+      currentRecs,
+      curStatus,
+      curSurfaces,
+      consultationId
+    );
+    if (!check.allowed) return;
+
+    const clinician = getActiveClinicianName();
+    const effectiveSurfaceForPayload = isWholeToothStatus(curStatus)
+      ? ''
+      : curStatus === 'Crowned'
+        ? sortToothSurfaces(curSurfaces || 'MODBL')
+        : sortToothSurfaces(curSurfaces || 'O');
+
+    const newRecordPayload = {
+      toothNumber: toothNum,
+      status: curStatus,
+      surface: effectiveSurfaceForPayload,
+      notes: curNotes,
+      recordedBy: clinician,
+      consultationId,
+      isCurrentEncounter: true,
     };
-    notifyChange(updated);
+
+    onAddCondition?.(newRecordPayload);
+
+    const nextRecs = applyStagedConditionToTooth(currentRecs, {
+      toothNumber: toothNum,
+      status: curStatus,
+      surface: curSurfaces,
+      notes: curNotes,
+      recordedBy: clinician,
+      consultationId,
+      isCurrentEncounter: true,
+    });
+
+    const nextMulti = {
+      ...multiTeethRef.current,
+      [toothNum]: nextRecs,
+    };
+
+    multiTeethRef.current = nextMulti;
+    setLocalTeethOverride(nextMulti);
+    setStagedSurfacesState('');
+    setStagedNotesState('');
+    stagedRef.current.surfaces = '';
+    stagedRef.current.notes = '';
+
+    const activeRecs = nextRecs.filter((r) => r.isCurrent !== false);
+    const updatedToothState: DentalToothState = {
+      toothNumber: toothNum,
+      status: getDominantToothStatus(activeRecs),
+      surface: sortToothSurfaces(
+        activeRecs.map((r) => r.activeSurface ?? r.surface ?? '').join('')
+      ),
+      notes: curNotes,
+    };
+
+    notifyChange(updatedToothState, nextMulti);
   };
 
   const handleOrderProcedure = () => {
@@ -267,10 +534,18 @@ export function InlineDentalChartCard({
   }
 
   const renderToothButton = (toothNumber: number) => {
-    const record = normalizedTeeth[toothNumber];
-    const status = record?.status || 'Healthy';
-    const surface = record?.surface || '';
+    const records = multiTeethMap[toothNumber] || [];
+    const activeRecords = records.filter((r) => !r.isVoided && r.isCurrent !== false);
+    const status = getDominantToothStatus(activeRecords);
+    const combinedSurface = sortToothSurfaces(
+      activeRecords.map((r) => r.activeSurface ?? r.surface ?? '').join('')
+    );
     const isSelected = selectedToothNumber === toothNumber;
+
+    // Distinct active non-healthy condition statuses for the dots row
+    const nonHealthyStatuses = Array.from(
+      new Set(activeRecords.filter((r) => r.status !== 'Healthy').map((r) => r.status))
+    );
 
     return (
       <Pressable
@@ -278,47 +553,61 @@ export function InlineDentalChartCard({
         onPress={() => handleSelectTooth(toothNumber)}
         style={({ pressed }) => [
           styles.toothCell,
-          isSelected && styles.toothCellSelected,
           status === 'Healthy' && styles.toothHealthy,
-          status === 'Decay' && styles.toothDecay,
-          status === 'Filled' && styles.toothFilled,
+          (status === 'Decayed' || status === 'Fractured') && styles.toothDecayed,
+          (status === 'Filled' || status === 'Sealant' || status === 'Implant') && styles.toothFilled,
           status === 'Missing' && styles.toothMissing,
-          status === 'Crown' && styles.toothCrown,
-          status === 'Extraction' && styles.toothExtraction,
+          (status === 'Crowned' || status === 'RootCanal') && styles.toothCrowned,
+          (status === 'ForExtraction' || status === 'Impacted') && styles.toothForExtraction,
+          isSelected && styles.toothCellSelected,
           pressed && styles.toothCellPressed,
         ]}
         accessibilityRole="button"
-        accessibilityLabel={`Tooth #${toothNumber}, status ${status}${surface ? `, surfaces ${surface}` : ''}`}
+        accessibilityLabel={`Tooth #${toothNumber}, status ${getToothStatusLabel(status)}${combinedSurface ? `, surfaces ${combinedSurface}` : ''}`}
         accessibilityState={{ selected: isSelected }}
         testID={`tooth-cell-${toothNumber}`}
       >
         <ThemedText
           variant="captionBold"
           color={
-            status === 'Healthy'
-              ? theme.colors.successText
-              : status === 'Decay'
-              ? theme.colors.urgentText
-              : status === 'Filled'
-              ? theme.colors.routineText
+            isSelected
+              ? theme.colors.primaryDark
+              : status === 'Healthy'
+              ? theme.colors.text
+              : status === 'Decayed' || status === 'ForExtraction' || status === 'Fractured'
+              ? theme.colors.emergencyText
+              : status === 'Filled' || status === 'Sealant' || status === 'Implant'
+              ? theme.colors.infoText
               : status === 'Missing'
               ? theme.colors.textMuted
-              : status === 'Crown'
+              : status === 'Crowned' || status === 'RootCanal'
               ? theme.colors.purpleText
-              : theme.colors.emergencyText
+              : theme.colors.warningText
           }
         >
           {toothNumber}
         </ThemedText>
-        {surface ? (
-          <ThemedText
-            variant="caption"
-            color={theme.colors.textSecondary}
-            numberOfLines={1}
-            style={styles.surfaceText}
-          >
-            {surface}
-          </ThemedText>
+
+        {/* 5-Surface Trapezoid Diagram on Tooth Cell */}
+        <ToothSurfaceDiagram
+          toothNumber={toothNumber}
+          conditions={activeRecords}
+          size={28}
+          showLabels={false}
+          testID={`cell-diagram-${toothNumber}`}
+        />
+
+        {/* Multi-Condition Colored Dots */}
+        {nonHealthyStatuses.length > 0 ? (
+          <View style={styles.multiConditionDots} testID={`multi-dots-${toothNumber}`}>
+            {nonHealthyStatuses.map((st) => (
+              <View
+                key={st}
+                style={[styles.conditionDot, { backgroundColor: getConditionDotColor(st) }]}
+                testID={`dot-${st.toLowerCase()}-${toothNumber}`}
+              />
+            ))}
+          </View>
         ) : null}
       </Pressable>
     );
@@ -329,9 +618,10 @@ export function InlineDentalChartCard({
   const lowerRightTeeth = dentitionMode === 'Adult' ? ADULT_LOWER_RIGHT : CHILD_LOWER_RIGHT;
   const lowerLeftTeeth = dentitionMode === 'Adult' ? ADULT_LOWER_LEFT : CHILD_LOWER_LEFT;
 
-  const currentSurfaces = selectedToothState?.surface
-    ? selectedToothState.surface.toUpperCase().split('')
-    : [];
+  // Active conditions for the Right Screen inspector list: ONLY current active non-healthy records (no historical or voided records)
+  const activeConditions = selectedToothRecords.filter(
+    (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent !== false
+  );
 
   return (
     <Card style={styles.card} testID={testID}>
@@ -425,153 +715,302 @@ export function InlineDentalChartCard({
               </View>
               {selectedToothState?.status ? (
                 <Badge
-                  label={selectedToothState.status}
-                  variant={
-                    selectedToothState.status === 'Healthy'
-                      ? 'success'
-                      : selectedToothState.status === 'Decay'
-                      ? 'warning'
-                      : selectedToothState.status === 'Filled'
-                      ? 'info'
-                      : selectedToothState.status === 'Missing'
-                      ? 'neutral'
-                      : selectedToothState.status === 'Crown'
-                      ? 'neutral'
-                      : 'emergency'
-                  }
+                  label={getToothStatusLabel(selectedToothState.status)}
+                  variant={getStatusBadgeVariant(selectedToothState.status)}
                   size="sm"
                 />
               ) : null}
             </View>
 
-            {/* Status Pills Selector */}
-            <View style={styles.sectionBlock}>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                Condition Status:
-              </ThemedText>
-              <View style={styles.pillsRow}>
-                {TOOTH_STATUS_OPTIONS.map((status) => {
-                  const isStatusSelected = selectedToothState?.status === status;
-                  return (
-                    <Pressable
-                      key={status}
-                      disabled={disabled}
-                      onPress={() => handleUpdateStatus(status)}
-                      style={({ pressed }) => [
-                        styles.statusPill,
-                        isStatusSelected && styles.statusPillSelected,
-                        isStatusSelected && status === 'Healthy' && styles.statusPillHealthy,
-                        isStatusSelected && status === 'Decay' && styles.statusPillDecay,
-                        isStatusSelected && status === 'Filled' && styles.statusPillFilled,
-                        isStatusSelected && status === 'Missing' && styles.statusPillMissing,
-                        isStatusSelected && status === 'Crown' && styles.statusPillCrown,
-                        isStatusSelected && status === 'Extraction' && styles.statusPillExtraction,
-                        pressed && styles.statusPillPressed,
-                        disabled && styles.disabledElement,
-                      ]}
-                      accessibilityRole="radio"
-                      accessibilityLabel={`${status} status`}
-                      accessibilityState={{ selected: isStatusSelected }}
-                      testID={`status-pill-${status.toLowerCase()}`}
-                    >
-                      <ThemedText
-                        variant="captionBold"
-                        color={
-                          isStatusSelected
-                            ? theme.colors.primaryDark
-                            : theme.colors.textSecondary
-                        }
-                      >
-                        {status}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Tooth Surface Chips */}
-            <View style={styles.sectionBlock}>
-              <View style={styles.surfaceHeader}>
+            {/* Side-by-Side /generative_ui Inspector Body: Left 5-Surface Trapezoid SVG, Right Controls */}
+            <View style={styles.inspectorMainGrid}>
+              {/* Left Column: Interactive 5-Surface Trapezoid Diagram */}
+              <View style={styles.diagramColumn}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                  Surfaces (Canonical MODBL):
+                  5-Surface Schematic:
                 </ThemedText>
-                {selectedToothState?.surface ? (
-                  <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
-                    Selected: {selectedToothState.surface}
+                <View style={styles.diagramWrapper}>
+                  <ToothSurfaceDiagram
+                    toothNumber={selectedToothNumber}
+                    conditions={activeConditions}
+                    interactive={!disabled && !isWholeToothStaged && !lockState.isWholeToothLocked}
+                    selectedSurfaces={isWholeToothStaged ? '' : stagedSurfaces}
+                    stagedStatus={stagedStatus}
+                    onToggleSurface={handleToggleSurface}
+                    size={96}
+                    testID="inspector-tooth-surface-diagram"
+                  />
+                  <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.diagramHint}>
+                    {isWholeToothStaged
+                      ? `Whole tooth status (${getToothStatusLabel(stagedStatus)}) — surfaces disabled`
+                      : 'Tap trapezoid zones or chips to toggle surfaces'}
                   </ThemedText>
-                ) : null}
+                </View>
               </View>
-              <View style={styles.chipsRow}>
-                {CANONICAL_SURFACES.map((code) => {
-                  const isSelected = currentSurfaces.includes(code);
-                  const labelMap: Record<ToothSurfaceCode, string> = {
-                    M: 'M (Mesial)',
-                    O: 'O (Occlusal)',
-                    D: 'D (Distal)',
-                    B: 'B (Buccal)',
-                    L: 'L (Lingual)',
-                  };
-                  return (
-                    <Pressable
-                      key={code}
-                      disabled={disabled}
-                      onPress={() => handleToggleSurface(code)}
-                      style={({ pressed }) => [
-                        styles.surfaceChip,
-                        isSelected && styles.surfaceChipSelected,
-                        pressed && styles.surfaceChipPressed,
-                        disabled && styles.disabledElement,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Surface ${code}`}
-                      accessibilityState={{ selected: isSelected }}
-                      testID={`surface-chip-${code.toLowerCase()}`}
-                    >
-                      <ThemedText
-                        variant="captionBold"
-                        color={isSelected ? theme.colors.primaryDark : theme.colors.text}
-                      >
-                        {labelMap[code]}
+
+              {/* Right Column: Condition Status, Surface Chips, Clinical Notes & Actions */}
+              <View style={styles.controlsColumn}>
+                {/* Status Pills Selector (excludes Healthy — Healthy is the implicit default when 0 conditions exist) */}
+                <View style={styles.sectionBlock}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Condition Status:
+                  </ThemedText>
+                  <View style={styles.pillsRow}>
+                    {SELECTABLE_TOOTH_STATUS_OPTIONS.map((status) => {
+                      const isStatusSelected = stagedStatus === status;
+                      const check = canApplyConditionToTooth(
+                        selectedToothRecords,
+                        status,
+                        undefined,
+                        consultationId
+                      );
+                      const isStatusDisabled = disabled || !check.allowed;
+                      return (
+                        <Pressable
+                          key={status}
+                          disabled={isStatusDisabled}
+                          onPress={() => handleUpdateStatus(status)}
+                          style={({ pressed }) => [
+                            styles.statusPill,
+                            isStatusSelected && styles.statusPillSelected,
+                            isStatusSelected && (status === 'Decayed' || status === 'Fractured') && styles.statusPillDecayed,
+                            isStatusSelected && (status === 'Filled' || status === 'Sealant' || status === 'Implant') && styles.statusPillFilled,
+                            isStatusSelected && status === 'Missing' && styles.statusPillMissing,
+                            isStatusSelected && (status === 'Crowned' || status === 'RootCanal') && styles.statusPillCrowned,
+                            isStatusSelected && (status === 'ForExtraction' || status === 'Impacted') && styles.statusPillForExtraction,
+                            pressed && styles.statusPillPressed,
+                            isStatusDisabled && styles.disabledElement,
+                          ]}
+                          accessibilityRole="radio"
+                          accessibilityLabel={`${getToothStatusLabel(status)} status`}
+                          accessibilityState={{ selected: isStatusSelected, disabled: isStatusDisabled }}
+                          testID={`status-pill-${status.toLowerCase()}`}
+                        >
+                          <ThemedText
+                            variant="captionBold"
+                            color={
+                              isStatusSelected
+                                ? theme.colors.primaryDark
+                                : theme.colors.textSecondary
+                            }
+                          >
+                            {getToothStatusLabel(status)}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Tooth Surface Chips */}
+                <View style={styles.sectionBlock}>
+                  <View style={styles.surfaceHeader}>
+                    <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                      Surfaces (Canonical MODBL):
+                    </ThemedText>
+                    {isWholeToothStaged ? (
+                      <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                        Whole Tooth (Surfaces Disabled)
                       </ThemedText>
+                    ) : stagedSurfaces ? (
+                      <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+                        Selected: {stagedSurfaces}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  <View style={styles.chipsRow}>
+                    {CANONICAL_SURFACES.map((code) => {
+                      const isSelected = !isWholeToothStaged && stagedSurfaces.includes(code);
+                      const isSurfaceLockedInEncounter = lockState.lockedSurfaces.has(code);
+                      const isChipDisabled =
+                        disabled || isWholeToothStaged || isSurfaceLockedInEncounter;
+                      const labelMap: Record<ToothSurfaceCode, string> = {
+                        M: 'M (Mesial)',
+                        O: 'O (Occlusal)',
+                        D: 'D (Distal)',
+                        B: 'B (Buccal)',
+                        L: 'L (Lingual)',
+                      };
+                      return (
+                        <Pressable
+                          key={code}
+                          disabled={isChipDisabled}
+                          onPress={() => handleToggleSurface(code)}
+                          style={({ pressed }) => [
+                            styles.surfaceChip,
+                            isSelected && styles.surfaceChipSelected,
+                            pressed && styles.surfaceChipPressed,
+                            isChipDisabled && styles.disabledElement,
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Surface ${code}`}
+                          accessibilityState={{ selected: isSelected, disabled: isChipDisabled }}
+                          testID={`surface-chip-${code.toLowerCase()}`}
+                        >
+                          <ThemedText
+                            variant="captionBold"
+                            color={
+                              isChipDisabled
+                                ? theme.colors.textMuted
+                                : isSelected
+                                  ? theme.colors.primaryDark
+                                  : theme.colors.text
+                            }
+                          >
+                            {labelMap[code]}
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {!disabled && !lockState.isWholeToothLocked && !saveCheck.allowed && saveCheck.reason ? (
+                    <ThemedText
+                      variant="caption"
+                      color={theme.colors.warningText}
+                      testID="same-encounter-lock-notice"
+                    >
+                      {saveCheck.reason}
+                    </ThemedText>
+                  ) : null}
+                </View>
+
+                {/* Clinical Notes */}
+                <View style={styles.sectionBlock}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Clinical Findings & Remarks:
+                  </ThemedText>
+                  <Input
+                    placeholder="Enter clinical observations, caries depth, or treatment plan..."
+                    value={stagedNotes}
+                    onChangeText={handleNotesChange}
+                    editable={!disabled}
+                    multiline
+                    numberOfLines={2}
+                    containerStyle={styles.notesInputContainer}
+                    testID={`${testID}-notes-input`}
+                  />
+                </View>
+
+                {/* Action Buttons Row */}
+                <View style={styles.actionButtonsRow}>
+                  {!disabled ? (
+                    <Pressable
+                      style={styles.addConditionRow}
+                      onPress={handleAddCondition}
+                      disabled={!saveCheck.allowed}
+                      testID={`${testID}-save-condition-trigger`}
+                    >
+                      <Button
+                        title="Save Condition"
+                        variant="outline"
+                        size="sm"
+                        icon="plus"
+                        disabled={!saveCheck.allowed}
+                        onPress={handleAddCondition}
+                        testID={`${testID}-save-condition-btn`}
+                      />
                     </Pressable>
-                  );
-                })}
+                  ) : null}
+
+                  {!disabled && effectiveOrderProcedure ? (
+                    <View style={styles.actionsRow}>
+                      <Button
+                        title={`Order Procedure for Tooth #${selectedToothNumber}${
+                          selectedToothState?.surface ? ` (${selectedToothState.surface})` : ''
+                        }`}
+                        variant="primary"
+                        size="sm"
+                        icon="plus"
+                        onPress={handleOrderProcedure}
+                        testID={`${testID}-order-proc-btn`}
+                      />
+                    </View>
+                  ) : null}
+                </View>
               </View>
             </View>
 
-            {/* Clinical Notes */}
-            <View style={styles.sectionBlock}>
+            {/* Recorded Conditions on Tooth #XX (Right Screen: Latest/Current Status Only; Prior Visit Records Untouchable) */}
+            <View style={styles.sectionBlock} testID="recorded-conditions-section">
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-                Clinical Findings & Remarks:
+                Recorded Conditions on Tooth #{selectedToothNumber}:
               </ThemedText>
-              <Input
-                placeholder="Enter clinical observations, caries depth, or treatment plan..."
-                value={selectedToothState?.notes || ''}
-                onChangeText={handleNotesChange}
-                editable={!disabled}
-                multiline
-                numberOfLines={2}
-                containerStyle={styles.notesInputContainer}
-                testID={`${testID}-notes-input`}
-              />
-            </View>
+              {activeConditions.length === 0 ? (
+                <View style={styles.healthyConditionBox}>
+                  <ThemedText variant="small" color={theme.colors.textSecondary}>
+                    Healthy — No abnormal conditions or restorations recorded
+                  </ThemedText>
+                </View>
+              ) : (
+                <View style={styles.conditionsList}>
+                  {activeConditions.map((cond, idx) => {
+                    const origSurf = cond.surface ? sortToothSurfaces(cond.surface) : '';
+                    const actSurf =
+                      cond.activeSurface !== undefined && cond.activeSurface !== null
+                        ? sortToothSurfaces(cond.activeSurface)
+                        : origSurf;
+                    const isCurrentEncounterRecord =
+                      cond.isCurrentEncounter === true ||
+                      Boolean(
+                        consultationId &&
+                          cond.consultationId &&
+                          cond.consultationId === consultationId
+                      );
 
-            {/* Quick Action: Order Dental Procedure */}
-            {!disabled && effectiveOrderProcedure ? (
-              <View style={styles.actionsRow}>
-                <Button
-                  title={`+ Order Procedure for Tooth #${selectedToothNumber}${
-                    selectedToothState?.surface ? ` (${selectedToothState.surface})` : ''
-                  }`}
-                  variant="primary"
-                  size="sm"
-                  icon="plus"
-                  onPress={handleOrderProcedure}
-                  testID={`${testID}-order-proc-btn`}
-                />
-              </View>
-            ) : null}
+                    return (
+                      <View
+                        key={cond.id || `${cond.status}-${cond.surface}-${idx}`}
+                        style={styles.conditionCard}
+                        testID={`condition-item-${cond.id || cond.status.toLowerCase()}`}
+                      >
+                        <View style={styles.conditionHeader}>
+                          <View style={styles.conditionBadgeRow}>
+                            <Badge
+                              label={getToothStatusLabel(cond.status)}
+                              variant={getStatusBadgeVariant(cond.status)}
+                              size="sm"
+                            />
+                            <Badge
+                              label={isCurrentEncounterRecord ? 'Current Visit' : 'Prior Visit'}
+                              variant={isCurrentEncounterRecord ? 'success' : 'neutral'}
+                              size="sm"
+                            />
+                            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                              {actSurf ? `Surfaces: ${actSurf}` : 'Full Tooth / Intact'}
+                            </ThemedText>
+                          </View>
+
+                          {!disabled && isCurrentEncounterRecord ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Remove ${getToothStatusLabel(cond.status)} from Tooth #${selectedToothNumber}`}
+                              onPress={() => handleRemoveCondition(selectedToothNumber, cond.id || cond.status)}
+                              testID={`remove-condition-${cond.id || cond.status.toLowerCase()}`}
+                              style={styles.removeConditionBtn}
+                            >
+                              <Icon name="trash" size={14} color={theme.colors.emergency} />
+                              <ThemedText variant="captionBold" color={theme.colors.emergency}>
+                                Remove
+                              </ThemedText>
+                            </Pressable>
+                          ) : null}
+                        </View>
+
+                        {cond.notes ? (
+                          <ThemedText variant="small" color={theme.colors.text} style={styles.conditionNotes}>
+                            {cond.notes}
+                          </ThemedText>
+                        ) : null}
+
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          Recorded: {formatRecordedDate(cond.createdAt)} • By: {cond.recordedBy || 'Attending Clinician'}
+                        </ThemedText>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
           </View>
         ) : (
           <View style={styles.emptyInspector}>
@@ -635,7 +1074,7 @@ const styles = StyleSheet.create({
   },
   midline: {
     width: 2,
-    height: 48,
+    height: 60,
     backgroundColor: theme.colors.primary,
     marginHorizontal: theme.spacing.xs,
     borderRadius: theme.radii.full,
@@ -647,8 +1086,8 @@ const styles = StyleSheet.create({
     marginVertical: theme.spacing.xs,
   },
   toothCell: {
-    width: 38,
-    height: 46,
+    width: 44,
+    minHeight: 64,
     borderRadius: theme.radii.sm,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
@@ -656,6 +1095,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 2,
+    gap: 2,
   },
   toothCellSelected: {
     borderColor: theme.colors.focusRing,
@@ -665,31 +1105,42 @@ const styles = StyleSheet.create({
   toothCellPressed: {
     opacity: 0.8,
   },
+  multiConditionDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  conditionDot: {
+    width: 5,
+    height: 5,
+    borderRadius: theme.radii.full,
+  },
   surfaceText: {
     letterSpacing: 0.2,
   },
   toothHealthy: {
-    backgroundColor: theme.colors.successBg,
-    borderColor: theme.colors.successBorder,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
   },
-  toothDecay: {
-    backgroundColor: theme.colors.urgentBg,
-    borderColor: theme.colors.urgentBorder,
+  toothDecayed: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.emergencyBorder,
   },
   toothFilled: {
-    backgroundColor: theme.colors.routineBg,
-    borderColor: theme.colors.routineBorder,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.infoBorder,
   },
   toothMissing: {
     backgroundColor: theme.colors.surfaceSubtle,
     borderColor: theme.colors.borderDark,
   },
-  toothCrown: {
-    backgroundColor: theme.colors.purpleBg,
+  toothCrowned: {
+    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.purpleBorder,
   },
-  toothExtraction: {
-    backgroundColor: theme.colors.emergencyBg,
+  toothForExtraction: {
+    backgroundColor: theme.colors.surface,
     borderColor: theme.colors.emergencyBorder,
   },
   inspector: {
@@ -699,6 +1150,33 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     padding: theme.spacing.md,
     gap: theme.spacing.md,
+  },
+  inspectorMainGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.lg,
+    alignItems: 'flex-start',
+  },
+  diagramColumn: {
+    width: 148,
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+  },
+  controlsColumn: {
+    flex: 1,
+    minWidth: 240,
+    gap: theme.spacing.sm,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   inspectorHeader: {
     flexDirection: 'row',
@@ -714,6 +1192,56 @@ const styles = StyleSheet.create({
   },
   sectionBlock: {
     gap: theme.spacing.xs,
+  },
+  healthyConditionBox: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.sm,
+  },
+  conditionsList: {
+    gap: theme.spacing.xs,
+  },
+  conditionCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  conditionCardHistorical: {
+    opacity: 0.72,
+    backgroundColor: theme.colors.surfaceSubtle,
+  },
+  conditionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  conditionBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  removeConditionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: theme.spacing.xs,
+  },
+  conditionNotes: {
+    fontStyle: 'italic',
+  },
+  diagramWrapper: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  diagramHint: {
+    textAlign: 'center',
   },
   pillsRow: {
     flexDirection: 'row',
@@ -731,11 +1259,7 @@ const styles = StyleSheet.create({
   statusPillSelected: {
     borderWidth: 1.5,
   },
-  statusPillHealthy: {
-    backgroundColor: theme.colors.successBg,
-    borderColor: theme.colors.success,
-  },
-  statusPillDecay: {
+  statusPillDecayed: {
     backgroundColor: theme.colors.urgentBg,
     borderColor: theme.colors.urgent,
   },
@@ -747,11 +1271,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceSubtle,
     borderColor: theme.colors.borderDark,
   },
-  statusPillCrown: {
+  statusPillCrowned: {
     backgroundColor: theme.colors.purpleBg,
     borderColor: theme.colors.purple,
   },
-  statusPillExtraction: {
+  statusPillForExtraction: {
     backgroundColor: theme.colors.emergencyBg,
     borderColor: theme.colors.emergency,
   },
@@ -786,6 +1310,11 @@ const styles = StyleSheet.create({
   notesInputContainer: {
     marginTop: 2,
   },
+  addConditionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    paddingTop: theme.spacing.xs,
+  },
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
@@ -804,3 +1333,5 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
 });
+
+export default InlineDentalChartCard;

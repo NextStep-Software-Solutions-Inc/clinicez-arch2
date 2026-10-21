@@ -27,7 +27,17 @@ import { useClinic } from '@context/ClinicContext';
 import { useStaff, formatStaffName } from '@context/StaffContext';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import { Alert, notify } from '@utils/feedback';
-import { printReceiptDialog } from '@utils/printHelper';
+import { openDocument } from '../../services/documentOpener';
+import {
+  TrendLineChart,
+  TenderDonutChart,
+  MorbidityDistributionChart,
+  WorkloadBarChart,
+  HourlyFlowBarChart,
+  AcuityDonutChart,
+} from '../../components/analytics';
+import DateRangePickerModal from '../../components/ui/DateRangePickerModal';
+import DatePickerModal from '../../components/ui/DatePickerModal';
 import { getPortalBaseUrl } from '../../services/runtimeConfig';
 import { resolveTenantContext } from '@shared/safe';
 import {
@@ -53,8 +63,8 @@ type QueueFilter = 'ALL' | 'Waiting' | 'Triaged' | 'InConsultation' | 'OnHold' |
 
 const PRIORITY_OPTIONS: QueuePriority[] = ['Routine', 'Urgent', 'Emergency'];
 
-const peso = (value: number) =>
-  `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const peso = (value?: number | null) =>
+  `₱${(value ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const parseOptionalInt = (value: string): number | undefined => {
   const parsed = parseInt(value, 10);
@@ -182,6 +192,42 @@ function LoadingBlock({ rows = 4 }: { rows?: number }) {
   );
 }
 
+function getManilaTodayStr(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+  } catch {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+}
+
+function formatDateRangeLabel(start?: string, end?: string): string {
+  if (!start && !end) return 'Select Date Range';
+  if (start && !end) return `From ${start}`;
+  if (!start && end) return `Up to ${end}`;
+  if (start && end && start === end) return start;
+  return `${start} to ${end}`;
+}
+
+function computeDatePresetRange(preset: 'today' | '7d' | '30d' | 'ytd'): { start: string; end: string } {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+  if (preset === 'today') {
+    return { start: todayStr, end: todayStr };
+  }
+  if (preset === '7d') {
+    const d = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+    return { start: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, end: todayStr };
+  }
+  if (preset === '30d') {
+    const d = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
+    return { start: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, end: todayStr };
+  }
+  return { start: `${now.getFullYear()}-01-01`, end: todayStr };
+}
+
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
   const { facilityName, letterhead, settings, rooms } = useClinic();
@@ -234,14 +280,23 @@ export default function DashboardScreen() {
   const [triage, setTriage] = useState<TriageForm>(EMPTY_TRIAGE);
   const [savingTriage, setSavingTriage] = useState(false);
 
-  // Statutory reports state
+  // Statutory reports and analytics state
   const [reportType, setReportType] = useState<ReportType>('DAILY_EOD');
   const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
   const [morbidityReport, setMorbidityReport] = useState<MorbidityReport | null>(null);
   const [taxReport, setTaxReport] = useState<TaxDiscountAuditReport | null>(null);
   const [doctorSharesReport, setDoctorSharesReport] = useState<DoctorSharesReport | null>(null);
   const [reportsError, setReportsError] = useState<string | null>(null);
-  const [printModalVisible, setPrintModalVisible] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsStartDate, setAnalyticsStartDate] = useState('');
+  const [analyticsEndDate, setAnalyticsEndDate] = useState('');
+  const [reportsStartDate, setReportsStartDate] = useState('');
+  const [reportsEndDate, setReportsEndDate] = useState('');
+  const [eodDate, setEodDate] = useState('');
+  const [isAnalyticsDateRangeModalOpen, setIsAnalyticsDateRangeModalOpen] = useState(false);
+  const [isReportsDateRangeModalOpen, setIsReportsDateRangeModalOpen] = useState(false);
+  const [isEodDatePickerModalOpen, setIsEodDatePickerModalOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     const [
@@ -254,7 +309,7 @@ export default function DashboardScreen() {
       [sharesData, sharesErr],
     ] = await Promise.all([
       clinicService.getQueueMetrics(),
-      clinicService.getQueue(),
+      clinicService.getQueue({ view: 'All' }),
       clinicService.getClinicAnalytics(),
       clinicService.getDailyEodReport(),
       clinicService.getMorbidityReport(),
@@ -275,6 +330,43 @@ export default function DashboardScreen() {
     setDoctorSharesReport(sharesData ?? null);
     const reportErr = eodErr ?? morbidityErr ?? taxErr ?? sharesErr;
     setReportsError(reportErr ? reportErr.message : null);
+  }, []);
+
+  const loadAnalytics = useCallback(async (start?: string, end?: string) => {
+    setAnalyticsLoading(true);
+    const [
+      [analyticsData, analyticsErr],
+      [morbidityData, morbidityErr],
+    ] = await Promise.all([
+      clinicService.getClinicAnalytics(start || undefined, end || undefined),
+      clinicService.getMorbidityReport(start || undefined, end || undefined),
+    ]);
+    setAnalytics(analyticsData ?? null);
+    setAnalyticsError(analyticsErr ? analyticsErr.message : null);
+    if (morbidityData) setMorbidityReport(morbidityData);
+    if (morbidityErr && !analyticsErr) setAnalyticsError(morbidityErr.message);
+    setAnalyticsLoading(false);
+  }, []);
+
+  const loadReports = useCallback(async (type: ReportType, start?: string, end?: string, date?: string) => {
+    setReportsError(null);
+    if (type === 'DAILY_EOD') {
+      const [data, err] = await clinicService.getDailyEodReport(date || undefined);
+      setEodReport(data ?? null);
+      if (err) setReportsError(err.message);
+    } else if (type === 'MORBIDITY') {
+      const [data, err] = await clinicService.getMorbidityReport(start || undefined, end || undefined);
+      setMorbidityReport(data ?? null);
+      if (err) setReportsError(err.message);
+    } else if (type === 'TAX_DISCOUNT') {
+      const [data, err] = await clinicService.getTaxDiscountAuditReport(start || undefined, end || undefined);
+      setTaxReport(data ?? null);
+      if (err) setReportsError(err.message);
+    } else if (type === 'DOCTOR_SHARES') {
+      const [data, err] = await clinicService.getDoctorSharesReport(start || undefined, end || undefined);
+      setDoctorSharesReport(data ?? null);
+      if (err) setReportsError(err.message);
+    }
   }, []);
 
   useEffect(() => {
@@ -689,10 +781,29 @@ export default function DashboardScreen() {
     };
   }, [queue]);
 
-  const filteredQueue = useMemo(
-    () => (queue ?? []).filter((item) => queueFilter === 'ALL' || item.status === queueFilter),
-    [queue, queueFilter]
-  );
+  const filteredQueue = useMemo(() => {
+    const list = (queue ?? []).filter((item) => queueFilter === 'ALL' || item.status === queueFilter);
+    if (queueFilter === 'ALL') {
+      const statusOrder: Record<string, number> = {
+        InConsultation: 0,
+        Triaged: 1,
+        Waiting: 2,
+        PendingProcedure: 3,
+        ReEvaluation: 4,
+        OnHold: 5,
+        Completed: 6,
+        NoShow: 7,
+        Cancelled: 8,
+      };
+      return [...list].sort((a, b) => {
+        const orderA = statusOrder[a.status] ?? 99;
+        const orderB = statusOrder[b.status] ?? 99;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.sequenceNumber - b.sequenceNumber;
+      });
+    }
+    return list;
+  }, [queue, queueFilter]);
 
   const reportTitle: Record<ReportType, string> = {
     DAILY_EOD: 'Daily end-of-day report',
@@ -701,59 +812,51 @@ export default function DashboardScreen() {
     DOCTOR_SHARES: 'Doctor shares',
   };
 
-  /** Plain-text version of the selected report, used by the print dialog. */
-  const buildReportText = (): string => {
-    const lines: string[] = [];
-    if (letterhead.header) lines.push(letterhead.header);
-    if (letterhead.subHeader) lines.push(letterhead.subHeader);
-    if (letterhead.address) lines.push(letterhead.address);
-    if (letterhead.contact) lines.push(letterhead.contact);
-    if (lines.length) lines.push('');
-
-    if (reportType === 'DAILY_EOD' && eodReport) {
-      lines.push(`Report date: ${eodReport.reportDate}`);
-      lines.push(`Checked in: ${eodReport.totalCheckedIn}`);
-      lines.push(`Completed visits: ${eodReport.totalCompletedVisits}`);
-      lines.push(`Gross: ${peso(eodReport.totalGrossAmount)}`);
-      lines.push(`Discounts: ${peso(eodReport.totalDiscountsGiven)}`);
-      lines.push(`PhilHealth covered: ${peso(eodReport.totalPhilHealthCovered)}`);
-      lines.push(`Net: ${peso(eodReport.totalNetAmount)}`);
-      lines.push(`Collected: ${peso(eodReport.totalAmountCollected)}`);
-      lines.push(`Unpaid: ${peso(eodReport.totalUnpaidBalances)}`);
-      eodReport.collectionsByMethod.forEach((m) => lines.push(`  ${m.method}: ${peso(m.totalAmount)}`));
-    } else if (reportType === 'MORBIDITY' && morbidityReport) {
-      lines.push(`Period: ${morbidityReport.startDate} to ${morbidityReport.endDate}`);
-      lines.push(`Encounters reviewed: ${morbidityReport.totalEncountersReviewed}`);
-      morbidityReport.diseases.forEach((d) =>
-        lines.push(`${d.rank}. ${d.icd10Code} ${d.description} - ${d.totalCases} (${d.percentageOfTotal.toFixed(1)}%)`)
-      );
-    } else if (reportType === 'TAX_DISCOUNT' && taxReport) {
-      lines.push(`Period: ${taxReport.startDate} to ${taxReport.endDate}`);
-      lines.push(`Invoices audited: ${taxReport.totalInvoicesAudited}`);
-      lines.push(`Gross sales: ${peso(taxReport.totalGrossSales)}`);
-      lines.push(`Senior discounts: ${peso(taxReport.totalSeniorDiscounts)}`);
-      lines.push(`PWD discounts: ${peso(taxReport.totalPwdDiscounts)}`);
-      lines.push(`VAT exempted: ${peso(taxReport.totalVatExempted)}`);
-      lines.push(`Net collections: ${peso(taxReport.totalNetCollections)}`);
-    } else if (reportType === 'DOCTOR_SHARES' && doctorSharesReport) {
-      lines.push(`Period: ${doctorSharesReport.startDate} to ${doctorSharesReport.endDate}`);
-      doctorSharesReport.doctorShares.forEach((d) =>
-        lines.push(
-          `${d.doctorName}: ${d.totalEncounters} visits, gross ${peso(d.totalGrossGenerated)}, share ${peso(d.estimatedPhysicianShare)}`
-        )
-      );
+  const getCurrentReportPdfUrl = useCallback((): string => {
+    switch (reportType) {
+      case 'DAILY_EOD':
+        return clinicService.getDailyEodPdfUrl(eodDate || eodReport?.reportDate);
+      case 'MORBIDITY':
+        return clinicService.getMorbidityPdfUrl(
+          reportsStartDate || morbidityReport?.startDate,
+          reportsEndDate || morbidityReport?.endDate
+        );
+      case 'TAX_DISCOUNT':
+        return clinicService.getTaxDiscountsPdfUrl(
+          reportsStartDate || taxReport?.startDate,
+          reportsEndDate || taxReport?.endDate
+        );
+      case 'DOCTOR_SHARES':
+        return clinicService.getDoctorSharesPdfUrl(
+          reportsStartDate || doctorSharesReport?.startDate,
+          reportsEndDate || doctorSharesReport?.endDate
+        );
     }
+  }, [reportType, eodDate, eodReport, reportsStartDate, reportsEndDate, morbidityReport, taxReport, doctorSharesReport]);
 
-    lines.push('');
-    lines.push(`Prepared by: ${currentName || '________________'}`);
-    if (letterhead.footer) lines.push(letterhead.footer);
-    return lines.join('\n');
-  };
+  const handleExportReportPdf = useCallback(async (customUrl?: string) => {
+    if (isExportingPdf) return;
+    setIsExportingPdf(true);
+    const url = customUrl || getCurrentReportPdfUrl();
+    try {
+      const opened = await openDocument(url);
+      if (!opened) {
+        notify.error('Unable to open document. Please check popup permissions.');
+      }
+    } catch (err: any) {
+      notify.error(err?.message ?? 'Failed to stream vector PDF.');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }, [isExportingPdf, getCurrentReportPdfUrl]);
 
-  const handlePrintReport = () => {
-    printReceiptDialog(reportTitle[reportType], buildReportText());
-    setPrintModalVisible(false);
-  };
+  const handleExportAnalyticsPdf = useCallback(async () => {
+    const url = clinicService.getAnalyticsPdfUrl(
+      analyticsStartDate || undefined,
+      analyticsEndDate || undefined
+    );
+    await handleExportReportPdf(url);
+  }, [analyticsStartDate, analyticsEndDate, handleExportReportPdf]);
 
   const currentReportReady =
     (reportType === 'DAILY_EOD' && !!eodReport) ||
@@ -1060,10 +1163,11 @@ export default function DashboardScreen() {
   // Tab: analytics
   // ------------------------------------------------------------------
   const renderAnalytics = () => {
-    if (loading && !analytics) {
+    if ((loading || analyticsLoading) && !analytics) {
       return (
         <View style={styles.section}>
           <View style={styles.statRow}>
+            <SkeletonStat style={styles.statItem} />
             <SkeletonStat style={styles.statItem} />
             <SkeletonStat style={styles.statItem} />
             <SkeletonStat style={styles.statItem} />
@@ -1077,15 +1181,109 @@ export default function DashboardScreen() {
         <ErrorState
           title="Unable to load analytics"
           message={analyticsError ?? 'No analytics are available yet.'}
-          onRetry={retry}
+          onRetry={() => loadAnalytics(analyticsStartDate, analyticsEndDate)}
         />
       );
     }
 
-    const maxRevenue = Math.max(...analytics.revenueTrend.map((p) => p.revenue), 1);
-
     return (
       <View style={styles.section}>
+        {/* Top Controls: Date Range Filters & 1-Click PDF Actions */}
+        <View style={styles.analyticsHeaderRow}>
+          <View style={styles.datePickerToolbar}>
+            <Pressable
+              style={styles.dateRangeTriggerBtn}
+              onPress={() => setIsAnalyticsDateRangeModalOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Select analytics date range"
+            >
+              <View style={styles.dateRangeTriggerContent}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Date Range
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  {formatDateRangeLabel(analyticsStartDate, analyticsEndDate)}
+                </ThemedText>
+              </View>
+            </Pressable>
+
+            <View style={styles.presetChipsRow}>
+              {(['today', '7d', '30d', 'ytd'] as const).map((preset) => {
+                const labelMap = {
+                  today: 'Today',
+                  '7d': 'Last 7 Days',
+                  '30d': 'Last 30 Days',
+                  ytd: 'Year to Date',
+                };
+                return (
+                  <Pressable
+                    key={preset}
+                    style={styles.presetChip}
+                    onPress={() => {
+                      const range = computeDatePresetRange(preset);
+                      setAnalyticsStartDate(range.start);
+                      setAnalyticsEndDate(range.end);
+                      loadAnalytics(range.start, range.end);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${labelMap[preset]}`}
+                  >
+                    <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                      {labelMap[preset]}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.applyButtonWrap}>
+              <Button
+                title={analyticsLoading ? 'Filtering...' : 'Apply Filter'}
+                variant="outline"
+                size="sm"
+                icon="refresh"
+                disabled={analyticsLoading}
+                onPress={() => loadAnalytics(analyticsStartDate, analyticsEndDate)}
+              />
+            </View>
+          </View>
+          <View style={styles.reportActionsRow}>
+            <Button
+              title={isExportingPdf ? 'Exporting...' : 'Export Analytics PDF'}
+              variant="outline"
+              size="sm"
+              icon="download"
+              disabled={isExportingPdf}
+              onPress={handleExportAnalyticsPdf}
+              accessibilityLabel="Export analytics vector PDF"
+            />
+            <Button
+              title={isExportingPdf ? 'Preparing...' : 'Print'}
+              variant="primary"
+              size="sm"
+              icon="print"
+              disabled={isExportingPdf}
+              onPress={handleExportAnalyticsPdf}
+              accessibilityLabel="Print analytics vector PDF"
+            />
+          </View>
+        </View>
+
+        <DateRangePickerModal
+          visible={isAnalyticsDateRangeModalOpen}
+          onClose={() => setIsAnalyticsDateRangeModalOpen(false)}
+          startDate={analyticsStartDate}
+          endDate={analyticsEndDate}
+          boundaryMode="pastOrToday"
+          onApply={(start, end) => {
+            setAnalyticsStartDate(start);
+            setAnalyticsEndDate(end);
+            setIsAnalyticsDateRangeModalOpen(false);
+            loadAnalytics(start, end);
+          }}
+        />
+
+        {/* KPI Stat Cards */}
         <View style={styles.statRow}>
           <StatCard
             style={styles.statItem}
@@ -1131,126 +1329,213 @@ export default function DashboardScreen() {
             value={`${analytics.flow.averageConsultMinutes.toFixed(1)} min`}
             icon="clock"
           />
-          <StatCard style={styles.statItem} label="Average ticket" value={peso(analytics.averageTicketSize)} icon="receipt" />
+          <StatCard
+            style={styles.statItem}
+            label="Average ticket"
+            value={peso(analytics.averageTicketSize)}
+            icon="receipt"
+          />
         </View>
 
+        {analytics.financialEfficiency ? (
+          <View style={styles.statRow}>
+            <StatCard
+              style={styles.statItem}
+              label="Collection Efficiency"
+              value={`${analytics.financialEfficiency.collectionEfficiencyRate.toFixed(1)}%`}
+              subtext="Collections vs Net Billed"
+              icon="cash"
+              valueColor={theme.colors.success}
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Discount Penetration"
+              value={`${analytics.financialEfficiency.discountImpactRate.toFixed(1)}%`}
+              subtext="Discounts vs Gross"
+              icon="tag"
+              valueColor={theme.colors.warningText}
+            />
+            <StatCard
+              style={styles.statItem}
+              label="Avg Revenue / Patient"
+              value={peso(analytics.financialEfficiency.averageRevenuePerPatient)}
+              subtext="Per unique patient"
+              icon="receipt"
+            />
+          </View>
+        ) : null}
+
+        {/* 1. TrendLineChart: Daily Revenue vs Patient Volume Trend */}
         <Card>
-          <CardHeader title="Revenue trend" subtitle={`${analytics.startDate} to ${analytics.endDate}`} />
+          <CardHeader
+            title="Revenue & Patient Volume Trend"
+            subtitle={`${analytics.startDate} to ${analytics.endDate}`}
+          />
+          <CardContent>
+            <TrendLineChart
+              data={analytics.revenueTrend}
+              loading={analyticsLoading}
+              error={analyticsError}
+              onRetry={() => loadAnalytics(analyticsStartDate, analyticsEndDate)}
+            />
+          </CardContent>
+        </Card>
+
+        {/* 2. Responsive 2-Column: TenderDonutChart & WorkloadBarChart */}
+        <View style={styles.twoCol}>
+          <Card style={styles.col}>
+            <CardHeader title="Payment Tender Collection Shares" />
+            <CardContent>
+              <TenderDonutChart
+                data={analytics.tenderShares}
+                loading={analyticsLoading}
+                error={analyticsError}
+                onRetry={() => loadAnalytics(analyticsStartDate, analyticsEndDate)}
+              />
+            </CardContent>
+          </Card>
+
+          <Card style={styles.col}>
+            <CardHeader title="Physician Encounters & Workload" />
+            <CardContent>
+              <WorkloadBarChart
+                data={analytics.doctorStats}
+                loading={analyticsLoading}
+                error={analyticsError}
+                onRetry={() => loadAnalytics(analyticsStartDate, analyticsEndDate)}
+              />
+            </CardContent>
+          </Card>
+        </View>
+
+        {/* 3. Responsive 2-Column: Hourly Peak Arrival Flow & Triage Acuity / Visit Channel */}
+        <View style={styles.twoCol}>
+          <Card style={styles.col}>
+            <CardHeader
+              title="Hourly Peak Arrival Flow"
+              subtitle="Queue check-in velocity (7 AM - 6 PM)"
+            />
+            <CardContent>
+              <HourlyFlowBarChart
+                data={analytics.hourlyFlow ?? []}
+                loading={analyticsLoading}
+                error={analyticsError}
+                onRetry={() => loadAnalytics(analyticsStartDate, analyticsEndDate)}
+              />
+            </CardContent>
+          </Card>
+
+          <Card style={styles.col}>
+            <CardHeader
+              title="Triage Acuity & Channel Distribution"
+              subtitle="Acuity triage breakdown & walk-in ratio"
+            />
+            <CardContent>
+              <AcuityDonutChart
+                acuityData={analytics.acuitySplit}
+                visitTypeData={analytics.visitTypeSplit}
+                loading={analyticsLoading}
+                error={analyticsError}
+                onRetry={() => loadAnalytics(analyticsStartDate, analyticsEndDate)}
+              />
+            </CardContent>
+          </Card>
+        </View>
+
+        {/* 4. Patient Demographics & Age Cohort Breakdown */}
+        {analytics.demographics ? (
+          <Card>
+            <CardHeader
+              title="Patient Demographics & Age Cohorts"
+              subtitle={`Total registered patient cohort: ${analytics.demographics.pediatricCount + analytics.demographics.adultCount + analytics.demographics.seniorCount}`}
+            />
+            <CardContent>
+              <View style={styles.demographicGrid}>
+                <View style={styles.demoCohortItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Pediatric (&lt;18y)
+                  </ThemedText>
+                  <ThemedText variant="title" color={theme.colors.primaryDark}>
+                    {analytics.demographics.pediatricCount}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {`${Math.round(analytics.demographics.pediatricPercentage)}%`}
+                  </ThemedText>
+                </View>
+                <View style={styles.demoCohortItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Adult (18–59y)
+                  </ThemedText>
+                  <ThemedText variant="title" color={theme.colors.primaryDark}>
+                    {analytics.demographics.adultCount}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {`${Math.round(analytics.demographics.adultPercentage)}%`}
+                  </ThemedText>
+                </View>
+                <View style={styles.demoCohortItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Senior (60+y)
+                  </ThemedText>
+                  <ThemedText variant="title" color={theme.colors.primaryDark}>
+                    {analytics.demographics.seniorCount}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {`${Math.round(analytics.demographics.seniorPercentage)}%`}
+                  </ThemedText>
+                </View>
+                <View style={styles.demoCohortItem}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Female / Male / Other
+                  </ThemedText>
+                  <ThemedText variant="title" color={theme.colors.primaryDark}>
+                    {`${analytics.demographics.femaleCount} / ${analytics.demographics.maleCount} / ${analytics.demographics.otherCount}`}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    Gender split
+                  </ThemedText>
+                </View>
+              </View>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {/* 5. MorbidityDistributionChart: Top ICD-10 Conditions with Demographic Age Cohorts */}
+        <Card>
+          <CardHeader
+            title="Top ICD-10 Morbidity Distribution"
+            subtitle={`${morbidityReport?.startDate ?? analytics.startDate} to ${morbidityReport?.endDate ?? analytics.endDate}`}
+          />
+          <CardContent>
+            <MorbidityDistributionChart
+              data={morbidityReport?.diseases ?? (analytics.topDiagnoses as any) ?? []}
+              loading={analyticsLoading}
+              error={analyticsError}
+              onRetry={() => loadAnalytics(analyticsStartDate, analyticsEndDate)}
+            />
+          </CardContent>
+        </Card>
+
+        {/* 4. Top Services Breakdown */}
+        <Card>
+          <CardHeader title="Top Services Billed" />
           <CardContent style={styles.listGap}>
-            {analytics.revenueTrend.length === 0 ? (
+            {analytics.topServices.length === 0 ? (
               <ThemedText variant="body" color={theme.colors.textMuted}>
-                No revenue recorded in this period.
+                No services billed in this period.
               </ThemedText>
             ) : (
-              analytics.revenueTrend.map((point) => (
-                <View key={point.dateLabel} style={styles.trendRow}>
-                  <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.trendLabel}>
-                    {point.dateLabel}
+              analytics.topServices.map((service) => (
+                <View key={`${service.itemType}-${service.itemName}`} style={styles.rowBetween}>
+                  <ThemedText variant="body" style={styles.flexFill}>
+                    {service.itemName}
                   </ThemedText>
-                  <ProgressBar progress={(point.revenue / maxRevenue) * 100} style={styles.trendBar} />
-                  <ThemedText variant="smallBold" style={styles.trendValue}>
-                    {peso(point.revenue)}
-                  </ThemedText>
+                  <ThemedText variant="smallBold">{service.quantity}</ThemedText>
                 </View>
               ))
             )}
           </CardContent>
         </Card>
-
-        <View style={styles.twoCol}>
-          <Card style={styles.col}>
-            <CardHeader title="Payment methods" />
-            <CardContent style={styles.listGap}>
-              {analytics.tenderShares.length === 0 ? (
-                <ThemedText variant="body" color={theme.colors.textMuted}>
-                  No payments recorded.
-                </ThemedText>
-              ) : (
-                analytics.tenderShares.map((share) => (
-                  <View key={share.method} style={styles.listGap}>
-                    <View style={styles.rowBetween}>
-                      <ThemedText variant="body">{share.method}</ThemedText>
-                      <ThemedText variant="smallBold">
-                        {peso(share.totalAmount)} • {share.percentage.toFixed(1)}%
-                      </ThemedText>
-                    </View>
-                    <ProgressBar progress={share.percentage} color={theme.colors.info} />
-                  </View>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card style={styles.col}>
-            <CardHeader title="Top diagnoses" />
-            <CardContent style={styles.listGap}>
-              {analytics.topDiagnoses.length === 0 ? (
-                <ThemedText variant="body" color={theme.colors.textMuted}>
-                  No diagnoses recorded.
-                </ThemedText>
-              ) : (
-                analytics.topDiagnoses.map((dx) => (
-                  <View key={dx.icd10Code} style={styles.rowBetween}>
-                    <View style={styles.flexFill}>
-                      <ThemedText variant="body">{dx.description}</ThemedText>
-                      <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        {dx.icd10Code}
-                      </ThemedText>
-                    </View>
-                    <ThemedText variant="smallBold">
-                      {dx.caseCount} • {dx.percentageShare.toFixed(1)}%
-                    </ThemedText>
-                  </View>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </View>
-
-        <View style={styles.twoCol}>
-          <Card style={styles.col}>
-            <CardHeader title="Top services" />
-            <CardContent style={styles.listGap}>
-              {analytics.topServices.length === 0 ? (
-                <ThemedText variant="body" color={theme.colors.textMuted}>
-                  No services billed.
-                </ThemedText>
-              ) : (
-                analytics.topServices.map((service) => (
-                  <View key={`${service.itemType}-${service.itemName}`} style={styles.rowBetween}>
-                    <ThemedText variant="body" style={styles.flexFill}>
-                      {service.itemName}
-                    </ThemedText>
-                    <ThemedText variant="smallBold">{service.quantity}</ThemedText>
-                  </View>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card style={styles.col}>
-            <CardHeader title="Doctor workload" />
-            <CardContent style={styles.listGap}>
-              {analytics.doctorStats.length === 0 ? (
-                <ThemedText variant="body" color={theme.colors.textMuted}>
-                  No consultations recorded.
-                </ThemedText>
-              ) : (
-                analytics.doctorStats.map((doctor) => (
-                  <View key={doctor.doctorName} style={styles.rowBetween}>
-                    <View style={styles.flexFill}>
-                      <ThemedText variant="body">{doctor.doctorName}</ThemedText>
-                      <ThemedText variant="caption" color={theme.colors.textMuted}>
-                        {doctor.encountersCount} encounters
-                      </ThemedText>
-                    </View>
-                    <ThemedText variant="smallBold">{peso(doctor.totalBilled)}</ThemedText>
-                  </View>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </View>
       </View>
     );
   };
@@ -1273,7 +1558,25 @@ export default function DashboardScreen() {
     if (reportType === 'DAILY_EOD' && eodReport) {
       return (
         <Card>
-          <CardHeader title={reportTitle.DAILY_EOD} subtitle={eodReport.reportDate} />
+          <CardHeader
+            title={reportTitle.DAILY_EOD}
+            subtitle={eodReport.reportDate}
+            rightAction={
+              <Button
+                title="Export Daily EOD PDF"
+                variant="outline"
+                size="sm"
+                icon="download"
+                disabled={isExportingPdf}
+                onPress={() =>
+                  handleExportReportPdf(
+                    clinicService.getDailyEodPdfUrl(eodDate || eodReport.reportDate)
+                  )
+                }
+                accessibilityLabel="Export Daily EOD PDF"
+              />
+            }
+          />
           <CardContent style={styles.listGap}>
             <DataRow label="Checked in" value={eodReport.totalCheckedIn} />
             <DataRow label="Walk-ins" value={eodReport.totalWalkIns} />
@@ -1314,6 +1617,24 @@ export default function DashboardScreen() {
           <CardHeader
             title={reportTitle.MORBIDITY}
             subtitle={`${morbidityReport.startDate} to ${morbidityReport.endDate}`}
+            rightAction={
+              <Button
+                title="Export Morbidity PDF"
+                variant="outline"
+                size="sm"
+                icon="download"
+                disabled={isExportingPdf}
+                onPress={() =>
+                  handleExportReportPdf(
+                    clinicService.getMorbidityPdfUrl(
+                      reportsStartDate || morbidityReport.startDate,
+                      reportsEndDate || morbidityReport.endDate
+                    )
+                  )
+                }
+                accessibilityLabel="Export Morbidity PDF"
+              />
+            }
           />
           <CardContent style={styles.listGap}>
             <DataRow label="Encounters reviewed" value={morbidityReport.totalEncountersReviewed} />
@@ -1349,7 +1670,28 @@ export default function DashboardScreen() {
     if (reportType === 'TAX_DISCOUNT' && taxReport) {
       return (
         <Card>
-          <CardHeader title={reportTitle.TAX_DISCOUNT} subtitle={`${taxReport.startDate} to ${taxReport.endDate}`} />
+          <CardHeader
+            title={reportTitle.TAX_DISCOUNT}
+            subtitle={`${taxReport.startDate} to ${taxReport.endDate}`}
+            rightAction={
+              <Button
+                title="Export Tax Audit PDF"
+                variant="outline"
+                size="sm"
+                icon="download"
+                disabled={isExportingPdf}
+                onPress={() =>
+                  handleExportReportPdf(
+                    clinicService.getTaxDiscountsPdfUrl(
+                      reportsStartDate || taxReport.startDate,
+                      reportsEndDate || taxReport.endDate
+                    )
+                  )
+                }
+                accessibilityLabel="Export Tax Audit PDF"
+              />
+            }
+          />
           <CardContent style={styles.listGap}>
             <DataRow label="Invoices audited" value={taxReport.totalInvoicesAudited} />
             <DataRow label="Gross sales" value={peso(taxReport.totalGrossSales)} />
@@ -1387,6 +1729,24 @@ export default function DashboardScreen() {
           <CardHeader
             title={reportTitle.DOCTOR_SHARES}
             subtitle={`${doctorSharesReport.startDate} to ${doctorSharesReport.endDate}`}
+            rightAction={
+              <Button
+                title="Export Doctor Shares PDF"
+                variant="outline"
+                size="sm"
+                icon="download"
+                disabled={isExportingPdf}
+                onPress={() =>
+                  handleExportReportPdf(
+                    clinicService.getDoctorSharesPdfUrl(
+                      reportsStartDate || doctorSharesReport.startDate,
+                      reportsEndDate || doctorSharesReport.endDate
+                    )
+                  )
+                }
+                accessibilityLabel="Export Doctor Shares PDF"
+              />
+            }
           />
           <CardContent style={styles.listGap}>
             <DataRow label="Clinic encounters" value={doctorSharesReport.totalClinicEncounters} />
@@ -1421,26 +1781,186 @@ export default function DashboardScreen() {
 
   const renderReports = () => (
     <View style={styles.section}>
-      <View style={styles.rowBetween}>
-        <SegmentedControl<ReportType>
-          value={reportType}
-          onChange={setReportType}
-          options={[
-            { value: 'DAILY_EOD', label: 'End of day' },
-            { value: 'MORBIDITY', label: 'Morbidity' },
-            { value: 'TAX_DISCOUNT', label: 'Discount audit' },
-            { value: 'DOCTOR_SHARES', label: 'Doctor shares' },
-          ]}
-        />
-        <Button
-          title="Print"
-          variant="outline"
-          size="sm"
-          icon="print"
-          disabled={!currentReportReady}
-          onPress={() => setPrintModalVisible(true)}
-        />
+      <View style={styles.reportsHeaderRow}>
+        <View style={styles.segmentedWrap}>
+          <SegmentedControl<ReportType>
+            value={reportType}
+            onChange={setReportType}
+            options={[
+              { value: 'DAILY_EOD', label: 'End of day' },
+              { value: 'MORBIDITY', label: 'Morbidity' },
+              { value: 'TAX_DISCOUNT', label: 'Discount audit' },
+              { value: 'DOCTOR_SHARES', label: 'Doctor shares' },
+            ]}
+          />
+        </View>
+        <View style={styles.reportActionsRow}>
+          <Button
+            title={isExportingPdf ? 'Exporting...' : 'Export PDF'}
+            variant="outline"
+            size="sm"
+            icon="download"
+            disabled={!currentReportReady || isExportingPdf}
+            onPress={() => handleExportReportPdf()}
+            accessibilityLabel="Export report vector PDF"
+          />
+          <Button
+            title={isExportingPdf ? 'Preparing...' : 'Print'}
+            variant="primary"
+            size="sm"
+            icon="print"
+            disabled={!currentReportReady || isExportingPdf}
+            onPress={() => handleExportReportPdf()}
+            accessibilityLabel="Print report vector PDF"
+          />
+        </View>
       </View>
+
+      {/* Date Filter Bar for Reports */}
+      <View style={styles.datePickerToolbar}>
+        {reportType === 'DAILY_EOD' ? (
+          <>
+            <Pressable
+              style={styles.dateRangeTriggerBtn}
+              onPress={() => setIsEodDatePickerModalOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Select EOD report date"
+            >
+              <View style={styles.dateRangeTriggerContent}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Report Date
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  {eodDate || getManilaTodayStr()}
+                </ThemedText>
+              </View>
+            </Pressable>
+
+            <View style={styles.presetChipsRow}>
+              <Pressable
+                style={styles.presetChip}
+                onPress={() => {
+                  const today = getManilaTodayStr();
+                  setEodDate(today);
+                  loadReports('DAILY_EOD', undefined, undefined, today);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Select Today for EOD"
+              >
+                <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                  Today
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={styles.presetChip}
+                onPress={() => {
+                  const now = new Date();
+                  const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                  const pad = (n: number) => String(n).padStart(2, '0');
+                  const yStr = `${y.getFullYear()}-${pad(y.getMonth() + 1)}-${pad(y.getDate())}`;
+                  setEodDate(yStr);
+                  loadReports('DAILY_EOD', undefined, undefined, yStr);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Select Yesterday for EOD"
+              >
+                <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                  Yesterday
+                </ThemedText>
+              </Pressable>
+            </View>
+          </>
+        ) : (
+          <>
+            <Pressable
+              style={styles.dateRangeTriggerBtn}
+              onPress={() => setIsReportsDateRangeModalOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Select report date range"
+            >
+              <View style={styles.dateRangeTriggerContent}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Date Range
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  {formatDateRangeLabel(reportsStartDate, reportsEndDate)}
+                </ThemedText>
+              </View>
+            </Pressable>
+
+            <View style={styles.presetChipsRow}>
+              {(['today', '7d', '30d'] as const).map((preset) => {
+                const labelMap = {
+                  today: 'Today',
+                  '7d': 'Last 7 Days',
+                  '30d': 'This Month',
+                };
+                return (
+                  <Pressable
+                    key={preset}
+                    style={styles.presetChip}
+                    onPress={() => {
+                      const range = computeDatePresetRange(preset);
+                      setReportsStartDate(range.start);
+                      setReportsEndDate(range.end);
+                      loadReports(reportType, range.start, range.end);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${labelMap[preset]}`}
+                  >
+                    <ThemedText variant="caption" color={theme.colors.primaryDark}>
+                      {labelMap[preset]}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
+        <View style={styles.applyButtonWrap}>
+          <Button
+            title="Apply Date"
+            variant="outline"
+            size="sm"
+            icon="refresh"
+            onPress={() => {
+              if (reportType === 'DAILY_EOD') {
+                loadReports('DAILY_EOD', undefined, undefined, eodDate);
+              } else {
+                loadReports(reportType, reportsStartDate, reportsEndDate);
+              }
+            }}
+          />
+        </View>
+      </View>
+
+      <DatePickerModal
+        visible={isEodDatePickerModalOpen}
+        onClose={() => setIsEodDatePickerModalOpen(false)}
+        value={eodDate || getManilaTodayStr()}
+        boundaryMode="pastOrToday"
+        label="Select EOD Report Date"
+        onSelect={(date) => {
+          setEodDate(date);
+          setIsEodDatePickerModalOpen(false);
+          loadReports('DAILY_EOD', undefined, undefined, date);
+        }}
+      />
+
+      <DateRangePickerModal
+        visible={isReportsDateRangeModalOpen}
+        onClose={() => setIsReportsDateRangeModalOpen(false)}
+        startDate={reportsStartDate}
+        endDate={reportsEndDate}
+        boundaryMode="pastOrToday"
+        onApply={(start, end) => {
+          setReportsStartDate(start);
+          setReportsEndDate(end);
+          setIsReportsDateRangeModalOpen(false);
+          loadReports(reportType, start, end);
+        }}
+      />
+
       {renderReportBody()}
     </View>
   );
@@ -1757,44 +2277,7 @@ export default function DashboardScreen() {
         />
       </Modal>
 
-      {/* Report print preview */}
-      <Modal
-        visible={printModalVisible}
-        onClose={() => setPrintModalVisible(false)}
-        title={reportTitle[reportType]}
-        subtitle="Print preview"
-        maxWidth={560}
-        footer={
-          <View style={styles.modalFooter}>
-            <Button title="Close" variant="outline" onPress={() => setPrintModalVisible(false)} />
-            <Button title="Print" variant="primary" icon="print" onPress={handlePrintReport} />
-          </View>
-        }
-      >
-        <View style={styles.preview}>
-          {letterhead.header || facilityName ? (
-            <ThemedText variant="h3" style={styles.centerText}>
-              {letterhead.header || facilityName}
-            </ThemedText>
-          ) : (
-            <Skeleton width="60%" height={theme.spacing.lg} />
-          )}
-          {letterhead.subHeader ? (
-            <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.centerText}>
-              {letterhead.subHeader}
-            </ThemedText>
-          ) : null}
-          {letterhead.address ? (
-            <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.centerText}>
-              {letterhead.address}
-            </ThemedText>
-          ) : null}
-          <View style={styles.divider} />
-          <ThemedText variant="code" style={styles.previewText}>
-            {buildReportText()}
-          </ThemedText>
-        </View>
-      </Modal>
+
 
       <ForceEodConfirmationModal
         visible={showForceEodModal}
@@ -1858,8 +2341,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     gap: theme.spacing.lg,
     width: '100%',
-    maxWidth: theme.sizes.contentMaxWidth,
-    alignSelf: 'center',
     paddingBottom: theme.spacing['4xl'],
   },
   section: {
@@ -2069,13 +2550,90 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  preview: {
+  analyticsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  dateRangePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+    flex: 1,
+  },
+  dateInputWrap: {
+    minWidth: 140,
+    flex: 1,
+  },
+  applyButtonWrap: {
+    paddingBottom: 2,
+  },
+  reportsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  segmentedWrap: {
+    flex: 1,
+    minWidth: 320,
+  },
+  reportActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  centerText: {
-    textAlign: 'center',
+  datePickerToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+    flex: 1,
   },
-  previewText: {
-    color: theme.colors.text,
+  dateRangeTriggerBtn: {
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    minWidth: 180,
+    justifyContent: 'center',
+  },
+  dateRangeTriggerContent: {
+    gap: 2,
+  },
+  presetChipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  presetChip: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+    borderRadius: theme.radii.full,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  demographicGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  demoCohortItem: {
+    flexGrow: 1,
+    flexBasis: 160,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
 });

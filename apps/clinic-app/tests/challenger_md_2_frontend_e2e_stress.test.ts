@@ -107,6 +107,12 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('rect'),
   Line: createMockComponent('line'),
   default: createMockComponent('svg'),
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -192,7 +198,7 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
       clinicId: 'cl-001',
       patientId: 'pt-adversarial-001',
       toothNumber: 16,
-      status: 'Decay',
+      status: 'Decayed',
       surface: 'MOD',
       notes: 'Deep occlusal and mesial-distal caries',
       createdAt: '2026-03-01T00:00:00Z',
@@ -204,7 +210,7 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
       clinicId: 'cl-001',
       patientId: 'pt-adversarial-001',
       toothNumber: 21,
-      status: 'Crown',
+      status: 'Crowned',
       surface: 'L',
       notes: 'Zirconia crown intact',
       createdAt: '2026-02-15T00:00:00Z',
@@ -308,7 +314,7 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
 
       expect(html).toContain('Tooth #16');
       expect(html).toContain('Upper Right First Molar');
-      expect(html).toContain('Decay');
+      expect(html).toContain('Decayed');
       expect(html).toContain('MOD');
       expect(html).toContain('data-testid="tooth-cell-16"');
     });
@@ -336,7 +342,7 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
 
       expect(html).toContain('Tooth #21');
       expect(html).toContain('Upper Left Central Incisor');
-      expect(html).toContain('Crown');
+      expect(html).toContain('Crowned');
     });
 
     test('1.3 Deciduous child tooth deep link (toothNumber: 55) auto-switches dentition to Child and focuses tooth', () => {
@@ -418,22 +424,22 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
       };
 
       // 1. In Adult mode, chart teeth 16, 11, 48
-      setTooth({ toothNumber: 16, status: 'Decay', surface: 'MOD', notes: 'Adult upper molar' });
+      setTooth({ toothNumber: 16, status: 'Decayed', surface: 'MOD', notes: 'Adult upper molar' });
       setTooth({ toothNumber: 11, status: 'Healthy', surface: '', notes: 'Intact' });
       setTooth({ toothNumber: 48, status: 'Missing', surface: '', notes: 'Extracted third molar' });
 
       expect(Object.keys(chartState).length).toBe(3);
 
       // 2. Switch to Child mode, chart teeth 51, 55, 85
-      setTooth({ toothNumber: 51, status: 'Decay', surface: 'M', notes: 'Deciduous central caries' });
+      setTooth({ toothNumber: 51, status: 'Decayed', surface: 'M', notes: 'Deciduous central caries' });
       setTooth({ toothNumber: 55, status: 'Filled', surface: 'O', notes: 'Deciduous filling' });
-      setTooth({ toothNumber: 85, status: 'Extraction', surface: '', notes: 'Deciduous extraction' });
+      setTooth({ toothNumber: 85, status: 'ForExtraction', surface: '', notes: 'Deciduous extraction' });
 
       // 3. Verify all 6 teeth are preserved in chart state
       expect(Object.keys(chartState).length).toBe(6);
 
       // 4. Switch back to Adult mode and update tooth 16 surface
-      setTooth({ toothNumber: 16, status: 'Decay', surface: 'MODBL', notes: 'Expanded to all surfaces' });
+      setTooth({ toothNumber: 16, status: 'Decayed', surface: 'MODBL', notes: 'Expanded to all surfaces' });
 
       // Verify Adult teeth:
       expect(chartState[16].surface).toBe('MODBL');
@@ -441,19 +447,19 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
       expect(chartState[48].status).toBe('Missing');
 
       // Verify Child teeth remain completely uncorrupted:
-      expect(chartState[51].status).toBe('Decay');
+      expect(chartState[51].status).toBe('Decayed');
       expect(chartState[51].surface).toBe('M');
       expect(chartState[55].status).toBe('Filled');
       expect(chartState[55].surface).toBe('O');
-      expect(chartState[85].status).toBe('Extraction');
+      expect(chartState[85].status).toBe('ForExtraction');
     });
 
     test('2.2 DMFT summary metrics in DentalChartTab correctly aggregate mixed dentition without negative or invalid values', () => {
       const mixedTeeth: DentalToothRecord[] = [
-        { id: '1', tenantId: 't1', clinicId: 'c1', patientId: 'p1', toothNumber: 16, status: 'Decay', surface: 'MOD', createdAt: '', updatedAt: '' },
+        { id: '1', tenantId: 't1', clinicId: 'c1', patientId: 'p1', toothNumber: 16, status: 'Decayed', surface: 'MOD', createdAt: '', updatedAt: '' },
         { id: '2', tenantId: 't1', clinicId: 'c1', patientId: 'p1', toothNumber: 26, status: 'Filled', surface: 'O', createdAt: '', updatedAt: '' },
         { id: '3', tenantId: 't1', clinicId: 'c1', patientId: 'p1', toothNumber: 38, status: 'Missing', surface: '', createdAt: '', updatedAt: '' },
-        { id: '4', tenantId: 't1', clinicId: 'c1', patientId: 'p1', toothNumber: 55, status: 'Decay', surface: 'O', createdAt: '', updatedAt: '' },
+        { id: '4', tenantId: 't1', clinicId: 'c1', patientId: 'p1', toothNumber: 55, status: 'Decayed', surface: 'O', createdAt: '', updatedAt: '' },
         { id: '5', tenantId: 't1', clinicId: 'c1', patientId: 'p1', toothNumber: 85, status: 'Filled', surface: 'MO', createdAt: '', updatedAt: '' },
         { id: '6', tenantId: 't1', clinicId: 'c1', patientId: 'p1', toothNumber: 11, status: 'Healthy', surface: '', createdAt: '', updatedAt: '' },
       ];
@@ -480,7 +486,7 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
 
     test('2.3 Batch save payload constructs valid DTO preserving both Adult and Child entries', () => {
       const consultationDentalChart: Record<number, DentalToothState> = {
-        16: { toothNumber: 16, status: 'Decay', surface: 'MOD', notes: 'Adult decay' },
+        16: { toothNumber: 16, status: 'Decayed', surface: 'MOD', notes: 'Adult decay' },
         55: { toothNumber: 55, status: 'Filled', surface: 'O', notes: 'Child filling' },
       };
 
@@ -492,7 +498,7 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
       }));
 
       expect(teethPayload.length).toBe(2);
-      expect(teethPayload.find((t) => t.toothNumber === 16)?.status).toBe('Decay');
+      expect(teethPayload.find((t) => t.toothNumber === 16)?.status).toBe('Decayed');
       expect(teethPayload.find((t) => t.toothNumber === 55)?.status).toBe('Filled');
     });
   });
@@ -547,13 +553,13 @@ describe('Milestone MD Challenger 2: Frontend E2E Empirical Stress Tests', () =>
         React.createElement(InlineDentalChartCard, {
           initialToothNumber: 14,
           teeth: {
-            14: { toothNumber: 14, status: 'Decay', surface: 'MOD' },
+            14: { toothNumber: 14, status: 'Decayed', surface: 'MOD' },
           },
           onOrderProcedure: handleOrder,
         })
       );
 
-      expect(html).toContain('+ Order Procedure for Tooth #14 (MOD)');
+      expect(html).toContain('Order Procedure for Tooth #14 (MOD)');
 
       // Execute simulated click
       handleOrder(14, 'MOD');

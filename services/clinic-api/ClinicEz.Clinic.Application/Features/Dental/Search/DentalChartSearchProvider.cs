@@ -129,7 +129,7 @@ public sealed class DentalChartSearchProvider : ISearchProvider
     }
 
     /// <summary>
-    /// Matches plain-English clinical status keywords ("decay", "filled", "missing", "crown", "extraction", "healthy").
+    /// Matches plain-English clinical status keywords ("decayed", "filled", "missing", "crowned", "for extraction", "sealant", "fractured", "impacted", "root canal", "implant", "healthy").
     /// </summary>
     public static ToothStatus? TryParseToothStatus(string term)
     {
@@ -140,28 +140,33 @@ public sealed class DentalChartSearchProvider : ISearchProvider
         return cleaned switch
         {
             "healthy" => ToothStatus.Healthy,
-            "decay" => ToothStatus.Decay,
-            "filled" => ToothStatus.Filled,
+            "decay" or "decayed" => ToothStatus.Decayed,
+            "filled" or "filling" => ToothStatus.Filled,
             "missing" => ToothStatus.Missing,
-            "crown" => ToothStatus.Crown,
-            "extraction" => ToothStatus.Extraction,
+            "crown" or "crowned" => ToothStatus.Crowned,
+            "extraction" or "forextraction" or "for extraction" => ToothStatus.ForExtraction,
+            "sealant" => ToothStatus.Sealant,
+            "fractured" => ToothStatus.Fractured,
+            "impacted" => ToothStatus.Impacted,
+            "rootcanal" => ToothStatus.RootCanal,
+            "implant" or "pontic" => ToothStatus.Implant,
             _ => null
         };
     }
 
     /// <summary>
     /// Maps tooth status to design-token semantic badge variants:
-    /// Decay -> Urgent ("urgent")
-    /// Extraction -> Emergency ("emergency")
-    /// Filled -> Routine ("routine")
-    /// Crown, Healthy, Missing -> Neutral ("neutral")
+    /// Decayed, Fractured, Impacted -> Urgent ("urgent")
+    /// ForExtraction -> Emergency ("emergency")
+    /// Filled, Sealant, Implant -> Routine ("routine")
+    /// Crowned, RootCanal, Healthy, Missing -> Neutral ("neutral")
     /// </summary>
     public static string MapBadgeVariant(ToothStatus status) => status switch
     {
-        ToothStatus.Decay => SearchBadgeVariant.Urgent,
-        ToothStatus.Extraction => SearchBadgeVariant.Emergency,
-        ToothStatus.Filled => SearchBadgeVariant.Routine,
-        ToothStatus.Crown => SearchBadgeVariant.Neutral,
+        ToothStatus.Decayed or ToothStatus.Fractured or ToothStatus.Impacted => SearchBadgeVariant.Urgent,
+        ToothStatus.ForExtraction => SearchBadgeVariant.Emergency,
+        ToothStatus.Filled or ToothStatus.Sealant or ToothStatus.Implant => SearchBadgeVariant.Routine,
+        ToothStatus.Crowned or ToothStatus.RootCanal => SearchBadgeVariant.Neutral,
         ToothStatus.Healthy or ToothStatus.Missing => SearchBadgeVariant.Neutral,
         _ => SearchBadgeVariant.Neutral
     };

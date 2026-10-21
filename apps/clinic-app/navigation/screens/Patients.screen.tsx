@@ -12,7 +12,7 @@ import {
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
 import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
-import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal } from '@ui';
+import { ThemedText, Badge, Button, Input, Card, Icon, IconSlot, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal } from '@ui';
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import * as DocumentPicker from 'expo-document-picker';
 import {
@@ -891,6 +891,13 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setPatientChart(null);
     const [chartData, chartErr] = await clinicService.getPatientChart(patient.id);
     if (chartData) {
+      if (!chartData.dentalTeeth || chartData.dentalTeeth.length === 0) {
+        const [dentalData] = await clinicService.getPatientDentalChart(patient.id);
+        if (dentalData?.teeth && dentalData.teeth.length > 0) {
+          chartData.dentalTeeth = dentalData.teeth;
+          chartData.dentalChart = dentalData;
+        }
+      }
       setPatientChart(chartData);
       setChartError(null);
       if (chartData.attachments && chartData.attachments.length > 0) {
@@ -1974,7 +1981,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                           >
                             <ThemedText
                               variant="captionBold"
-                              color={isSelected ? theme.colors.onPrimary : theme.colors.textSecondary}
+                              color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
                             >
                               {rel.label}
                             </ThemedText>
@@ -2708,23 +2715,71 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
               Queue Priority
             </ThemedText>
-            <View style={styles.relationshipGrid}>
-              {(['Routine', 'Urgent', 'Emergency'] as const).map((prio) => {
-                const isSelected = checkInPriority === prio;
+            <View style={styles.priorityGrid}>
+              {(
+                [
+                  {
+                    key: 'Routine',
+                    label: 'Routine',
+                    icon: 'check',
+                  },
+                  {
+                    key: 'Urgent',
+                    label: 'Urgent',
+                    icon: 'clock',
+                  },
+                  {
+                    key: 'Emergency',
+                    label: 'Emergency (STAT)',
+                    icon: 'emergency',
+                  },
+                ] as const
+              ).map((prio) => {
+                const isSelected = checkInPriority === prio.key;
+                const isEmergency = prio.key === 'Emergency';
+                const isUrgent = prio.key === 'Urgent';
+
+                const chipStyle = [
+                  styles.priorityChip,
+                  !isEmergency && !isUrgent && (isSelected ? styles.priorityChip_routine_selected : styles.priorityChip_routine),
+                  isUrgent && (isSelected ? styles.priorityChip_urgent_selected : styles.priorityChip_urgent),
+                  isEmergency && (isSelected ? styles.priorityChip_emergency_selected : styles.priorityChip_emergency),
+                ];
+
+                const textColor = isEmergency
+                  ? theme.colors.emergencyText
+                  : isUrgent
+                  ? theme.colors.urgentText
+                  : isSelected
+                  ? theme.colors.routineText
+                  : theme.colors.text;
+
+                const iconColor = isEmergency
+                  ? theme.colors.emergencyText
+                  : isUrgent
+                  ? theme.colors.urgentText
+                  : isSelected
+                  ? theme.colors.routineText
+                  : theme.colors.textMuted;
+
                 return (
                   <Pressable
-                    key={prio}
-                    onPress={() => setCheckInPriority(prio)}
-                    style={[
-                      styles.relationshipChip,
-                      isSelected && styles.relationshipChip_selected,
-                    ]}
+                    key={prio.key}
+                    accessibilityRole="button"
+                    accessibilityLabel={prio.label}
+                    onPress={() => setCheckInPriority(prio.key)}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                    style={chipStyle}
                   >
-                    <ThemedText
-                      variant="smallBold"
-                      color={isSelected ? theme.colors.textInverted : theme.colors.text}
-                    >
-                      {prio}
+                    {(isSelected || isUrgent || isEmergency) && (
+                      <IconSlot
+                        value={isSelected ? 'check' : prio.icon}
+                        size={13}
+                        color={iconColor}
+                      />
+                    )}
+                    <ThemedText variant="smallBold" color={textColor}>
+                      {prio.label}
                     </ThemedText>
                   </Pressable>
                 );
@@ -2772,8 +2827,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     gap: theme.spacing.lg,
     width: '100%',
-    maxWidth: theme.sizes.contentMaxWidth,
-    alignSelf: 'center',
     paddingBottom: theme.spacing['4xl'],
   },
   offlineBanner: {
@@ -3635,18 +3688,65 @@ const styles = StyleSheet.create({
   relationshipGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: theme.spacing.sm,
   },
   relationshipChip: {
+    minHeight: 34,
     paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: theme.colors.borderLight,
+    borderColor: theme.colors.borderDark,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   relationshipChip_selected: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
+    borderWidth: 1.5,
+  },
+  priorityGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  priorityChip: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: theme.radii.full,
+    borderWidth: 1,
+    backgroundColor: theme.colors.surface,
+  },
+  priorityChip_routine: {
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.surface,
+  },
+  priorityChip_routine_selected: {
+    backgroundColor: theme.colors.routineBg,
+    borderColor: theme.colors.routine,
+    borderWidth: 1.5,
+  },
+  priorityChip_urgent: {
+    borderColor: theme.colors.urgentBorder,
+    backgroundColor: theme.colors.surface,
+  },
+  priorityChip_urgent_selected: {
+    backgroundColor: theme.colors.urgentBg,
+    borderColor: theme.colors.urgent,
+    borderWidth: 1.5,
+  },
+  priorityChip_emergency: {
+    borderColor: theme.colors.emergencyBorder,
+    backgroundColor: theme.colors.surface,
+  },
+  priorityChip_emergency_selected: {
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergency,
+    borderWidth: 1.5,
   },
 });

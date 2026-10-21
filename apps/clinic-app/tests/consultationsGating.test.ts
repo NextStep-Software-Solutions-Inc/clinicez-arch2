@@ -82,6 +82,12 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('rect'),
   Line: createMockComponent('line'),
   default: createMockComponent('svg'),
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 mock.module('../constants/fonts', () => ({
@@ -209,7 +215,7 @@ describe('Consultations Workstation — Specialty Mode Gating & Dental Wiring', 
     const initialTeeth: Record<number, DentalToothState> = {
       14: {
         toothNumber: 14,
-        status: 'Decay',
+        status: 'Decayed',
         surface: 'MOD',
         notes: 'Deep caries involving pulp',
       },
@@ -224,7 +230,7 @@ describe('Consultations Workstation — Specialty Mode Gating & Dental Wiring', 
     );
 
     expect(html).toContain('Tooth #14');
-    expect(html).toContain('+ Order Procedure for Tooth #14 (MOD)');
+    expect(html).toContain('Order Procedure for Tooth #14 (MOD)');
     expect(html).toContain('inline-dental-chart-card-order-proc-btn');
 
     // Execute order callback
@@ -367,13 +373,13 @@ describe('Consultations Workstation — Specialty Mode Gating & Dental Wiring', 
     const dentalChart: Record<number, DentalToothState> = {
       21: {
         toothNumber: 21,
-        status: 'Crown',
+        status: 'Crowned',
         surface: 'L',
         notes: 'Porcelain crown placed',
       },
       26: {
         toothNumber: 26,
-        status: 'Decay',
+        status: 'Decayed',
         surface: 'MO',
         notes: 'Incipient lesion',
       },
@@ -427,8 +433,8 @@ describe('Consultations Workstation — Specialty Mode Gating & Dental Wiring', 
     expect(batchSavedPayload.consultationId).toBe('consult-encounter-999');
     expect(batchSavedPayload.teeth.length).toBe(2);
     expect(batchSavedPayload.teeth[0].toothNumber).toBe(21);
-    expect(batchSavedPayload.teeth[0].status).toBe('Crown');
+    expect(batchSavedPayload.teeth[0].status).toBe('Crowned');
     expect(batchSavedPayload.teeth[1].toothNumber).toBe(26);
-    expect(batchSavedPayload.teeth[1].status).toBe('Decay');
+    expect(batchSavedPayload.teeth[1].status).toBe('Decayed');
   });
 });
