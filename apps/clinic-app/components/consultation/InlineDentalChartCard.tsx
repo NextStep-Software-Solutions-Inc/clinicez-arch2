@@ -181,7 +181,12 @@ export function InlineDentalChartCard({
   // Normalize all input teeth into multi-condition records: Record<number, DentalToothRecord[]>
   const multiTeethMap = useMemo<Record<number, DentalToothRecord[]>>(() => {
     if (localTeethOverride) return localTeethOverride;
-    return normalizeTeethToMultiRecord(effectiveTeeth as any);
+    const normalized = normalizeTeethToMultiRecord(effectiveTeeth as any);
+    for (const numStr of Object.keys(normalized)) {
+      const num = Number(numStr);
+      normalized[num] = resolveToothEffectiveState(normalized[num]).allRecords;
+    }
+    return normalized;
   }, [effectiveTeeth, localTeethOverride]);
 
   const multiTeethRef = useRef<Record<number, DentalToothRecord[]>>(multiTeethMap);

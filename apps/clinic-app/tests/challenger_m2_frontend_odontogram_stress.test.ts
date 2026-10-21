@@ -179,6 +179,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
           surface: 'BL',
           activeSurface: 'BL',
           isCurrent: true,
+          isCurrentEncounter: true,
           notes: 'Buccal-lingual partial onlay restoration',
           createdAt: '2026-06-01T14:00:00Z',
           recordedBy: 'Dr. Ana Lim',
@@ -186,7 +187,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       ],
     };
 
-    test('1.1 Right Screen (InlineDentalChartCard) renders ONLY current active conditions per surface and excludes historical conditions from previous encounters', () => {
+    test('1.1 Right Screen (InlineDentalChartCard) renders ONLY current active conditions per surface, excludes superseded history, and keeps prior-encounter records untouchable', () => {
       const html = renderToStaticMarkup(
         React.createElement(InlineDentalChartCard, {
           chart: quadConditionTooth16,
@@ -221,18 +222,16 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(html).toContain('Dr. Juan Reyes');
       expect(html).toContain('Dr. Ana Lim');
 
-      // Remove buttons for each current condition
-      expect(html).toContain('data-testid="remove-condition-cond-16-filled"');
-      expect(html).toContain('data-testid="remove-condition-cond-16-decay"');
+      // Untouchable prior-encounter records have NO remove button; only current-encounter record has Remove
+      expect(html).not.toContain('data-testid="remove-condition-cond-16-filled"');
+      expect(html).not.toContain('data-testid="remove-condition-cond-16-decay"');
       expect(html).toContain('data-testid="remove-condition-cond-16-crown"');
     });
 
-    test('1.2 Left Screen (DentalChartTab) renders both current active conditions AND Historical Conditions (Previous Encounters)', () => {
-      let removedTooth: number | null = null;
-      let removedCond: string | null = null;
-      const handleRemove = (tooth: number, cond: string) => {
-        removedTooth = tooth;
-        removedCond = cond;
+    test('1.2 Left Screen (DentalChartTab) renders full chronological condition history stack with audit-safe Void buttons', () => {
+      let voidedRecordId: string | null = null;
+      const handleVoid = (tooth: number, recordId: string) => {
+        voidedRecordId = `${tooth}:${recordId}`;
       };
 
       const html = renderToStaticMarkup(
@@ -241,11 +240,11 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
             dentalTeeth: quadConditionTooth16[16],
           },
           focusToothNumber: 16,
-          onRemoveCondition: handleRemove,
+          onVoidCondition: handleVoid,
         })
       );
 
-      // Inspector pane exists
+      // Inspector pane exists with full chronological stack
       expect(html).toContain('data-testid="tooth-inspector-pane"');
       expect(html).toContain('Tooth #16');
       expect(html).toContain('RECORDED CONDITIONS ON TOOTH #16 (3)');
@@ -255,18 +254,20 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(html).toContain('data-testid="tab-condition-cond-16-decay"');
       expect(html).toContain('data-testid="tab-condition-cond-16-crown"');
 
-      // Historical Conditions section rendered on Left Screen!
+      // Superseded historical condition rendered in the stack on Left Screen!
       expect(html).toContain('data-testid="tab-historical-conditions-list"');
       expect(html).toContain('HISTORICAL CONDITIONS (PREVIOUS ENCOUNTERS) (1)');
       expect(html).toContain('data-testid="tab-historical-condition-cond-16-historical-decay"');
       expect(html).toContain('Initial occlusal caries noted in previous encounter');
       expect(html).toContain('Dr. Roberto Cruz');
 
-      // Active doctor names & remove buttons
+      // Attending clinicians & audit-safe Void buttons (no destructive Remove)
       expect(html).toContain('Dr. Maria Santos');
-      expect(html).toContain('data-testid="tab-remove-condition-cond-16-filled"');
-      expect(html).toContain('data-testid="tab-remove-condition-cond-16-decay"');
-      expect(html).toContain('data-testid="tab-remove-condition-cond-16-crown"');
+      expect(html).toContain('data-testid="tab-void-condition-cond-16-filled"');
+      expect(html).toContain('data-testid="tab-void-condition-cond-16-decay"');
+      expect(html).toContain('data-testid="tab-void-condition-cond-16-crown"');
+      expect(html).not.toContain('tab-remove-condition-');
+      expect(voidedRecordId).toBeNull();
     });
 
     test('1.3 Healthy tooth renders healthy condition box with zero remove buttons', () => {
@@ -627,13 +628,12 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
         createdAt: '2026-02-15T11:00:00Z',
       });
       const decayAfterComplete = records.find((r) => r.status === 'Decayed')!;
-      const filledAfterComplete = records.find((r) => r.status === 'Filled')!;
+      const filledRecordsAfterComplete = records.filter((r) => r.status === 'Filled' && r.isCurrent !== false);
       expect(decayAfterComplete.surface).toBe('MO'); // Original recorded surface intact for audit
       expect(decayAfterComplete.activeSurface).toBe('');
       expect(decayAfterComplete.isCurrent).toBe(false); // Superseded!
       expect(decayAfterComplete.supersededAt).toBe('2026-02-15T11:00:00Z');
-      expect(filledAfterComplete.activeSurface).toBe('MO');
-      expect(filledAfterComplete.isCurrent).toBe(true);
+      expect(sortToothSurfaces(filledRecordsAfterComplete.map((r) => r.activeSurface || '').join(''))).toBe('MO');
 
       // Surface M and O now both resolve to Filled
       expect(getSurfaceZoneColor('M', records).status).toBe('Filled');
@@ -663,10 +663,20 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(dmftAtT4.missingCount).toBe(1);
       expect(dmftAtT4.dmftScore).toBe(1);
 
-      // Guard: Cannot add Decay/Filled/Crown to a Missing tooth until reset to Healthy
-      expect(canApplyConditionToTooth(records, 'Decayed').allowed).toBe(false);
-      expect(canApplyConditionToTooth(records, 'Filled').allowed).toBe(false);
-      expect(canApplyConditionToTooth(records, 'Healthy').allowed).toBe(true);
+      // t5: Subsequent encounter -> Implant placed on previously Missing tooth supersedes Missing while preserving full stack
+      expect(canApplyConditionToTooth(records, 'Implant').allowed).toBe(true);
+      records = applyStagedConditionToTooth(records, {
+        id: 'rec-t5-implant',
+        toothNumber: 16,
+        status: 'Implant',
+        notes: 'Pontic / Implant placed at edentulous site',
+        recordedBy: 'Dr. Roberto Cruz',
+        createdAt: '2026-09-01T14:00:00Z',
+        isCurrentEncounter: true,
+      });
+      expect(records.filter((r) => r.isCurrent !== false).length).toBe(1);
+      expect(records.find((r) => r.isCurrent !== false)?.status).toBe('Implant');
+      expect(records.find((r) => r.id === 'rec-t4-missing')?.isCurrent).toBe(false);
     });
 
     test('5.3 Whole-tooth statuses (Healthy, Missing, Extraction) disable surface selection and apply to whole tooth', () => {

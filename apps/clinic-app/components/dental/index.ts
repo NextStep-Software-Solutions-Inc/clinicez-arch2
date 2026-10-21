@@ -28,6 +28,7 @@ export {
   canApplyConditionToTooth,
   applyStagedConditionToTooth,
   removeCurrentEncounterConditionFromTooth,
+  voidConditionOnTooth,
   getDominantToothStatus,
   getConditionDotColor,
   getSurfaceZoneColor,

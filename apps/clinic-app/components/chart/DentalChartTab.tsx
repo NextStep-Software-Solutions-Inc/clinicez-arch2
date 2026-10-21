@@ -26,6 +26,7 @@ import {
   sortToothSurfaces,
   getToothDescription,
   normalizeTeethToMultiRecord,
+  resolveToothEffectiveState,
   voidConditionOnTooth,
   getDominantToothStatus,
   getConditionDotColor,
@@ -214,7 +215,12 @@ export default function DentalChartTab({
   const propMultiTeethMap = useMemo<Record<number, DentalToothRecord[]>>(() => {
     const teethList: DentalToothRecord[] =
       chart?.dentalTeeth || chart?.dentalChart?.teeth || [];
-    return normalizeTeethToMultiRecord(teethList);
+    const normalized = normalizeTeethToMultiRecord(teethList);
+    for (const numStr of Object.keys(normalized)) {
+      const num = Number(numStr);
+      normalized[num] = resolveToothEffectiveState(normalized[num]).allRecords;
+    }
+    return normalized;
   }, [chart?.dentalTeeth, chart?.dentalChart?.teeth]);
 
   useEffect(() => {
@@ -1090,7 +1096,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.sm,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
-    fontSize: theme.typography.fontSize.xs,
+    ...theme.typography.caption,
     color: theme.colors.text,
     backgroundColor: theme.colors.surface,
     minWidth: 180,

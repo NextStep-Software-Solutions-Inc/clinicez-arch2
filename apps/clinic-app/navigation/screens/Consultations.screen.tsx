@@ -62,7 +62,11 @@ import {
   InlineDentalChartCard,
   DentalToothState,
 } from '../../components/consultation';
-import { normalizeTeethToMultiRecord, resolveToothEffectiveState } from '../../components/dental';
+import {
+  normalizeTeethToMultiRecord,
+  resolveToothEffectiveState,
+  voidConditionOnTooth,
+} from '../../components/dental';
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
 import { useClinic } from '../../context/ClinicContext';
@@ -1006,8 +1010,14 @@ export default function ConsultationsScreen() {
     if (activePatientId.current !== p.id) return;
 
     const [dentalData] = dentalRes;
+    const [chartData] = chartRes;
+    const matchedEncounter = chartData?.consultations?.find((c) => c.queueItemId === p.id);
     if (dentalData?.teeth && dentalData.teeth.length > 0) {
-      setDentalChart(normalizeTeethToMultiRecord(dentalData.teeth));
+      const taggedTeeth = dentalData.teeth.map((t) => ({
+        ...t,
+        isCurrentEncounter: Boolean(matchedEncounter?.id && t.consultationId === matchedEncounter.id),
+      }));
+      setDentalChart(normalizeTeethToMultiRecord(taggedTeeth));
     } else {
       setDentalChart({});
     }
@@ -1031,7 +1041,6 @@ export default function ConsultationsScreen() {
       setRecordError(null);
     }
 
-    const [chartData] = chartRes;
     if (chartData) {
       setPatientChart(chartData);
       const existingEncounter = chartData.consultations?.find((c) => c.queueItemId === p.id);
@@ -2109,36 +2118,33 @@ export default function ConsultationsScreen() {
     let savedDentalChartResponse: any = null;
     if (isDentalEnabled && Object.keys(dentalChart).length > 0) {
       const multiMap = normalizeTeethToMultiRecord(dentalChart as any);
-      const teethPayload = Object.values(multiMap).flat().map((rec) => ({
-        toothNumber: rec.toothNumber,
-        status: rec.status,
-        surface: rec.surface || undefined,
-        notes: rec.notes || undefined,
-      }));
-      const activeTeethPayload = Object.values(multiMap)
-        .flatMap((recs) => resolveToothEffectiveState(recs).currentRecords)
-        .map((rec) => ({
+      const currentEncounterRecords = Object.values(multiMap)
+        .flat()
+        .filter((rec) => !rec.isVoided && rec.status !== 'Healthy' && rec.isCurrentEncounter !== false);
+      if (currentEncounterRecords.length > 0) {
+        const teethPayload = currentEncounterRecords.map((rec) => ({
           toothNumber: rec.toothNumber,
           status: rec.status,
           surface: rec.surface || undefined,
           notes: rec.notes || undefined,
         }));
-      const [savedDentalChart, dentalErr] = await clinicService.batchSaveDentalChart(selectedPatient.patientId, {
-        consultationId,
-        teeth: activeTeethPayload.length > 0 ? activeTeethPayload : teethPayload,
-      });
-      if (dentalErr) {
-        setIsSigning(false);
-        const errDetail = dentalErr.message || 'Server rejected dental tooth records';
-        const msg = `Cannot sign encounter — Step failed: Save Dental Chart (${errDetail}). Encounter was not signed.`;
-        setBanner({
-          text: msg,
-          isError: true,
+        const [savedDentalChart, dentalErr] = await clinicService.batchSaveDentalChart(selectedPatient.patientId, {
+          consultationId,
+          teeth: teethPayload,
         });
-        notify.error(msg, { traceId: dentalErr.traceId });
-        return;
+        if (dentalErr) {
+          setIsSigning(false);
+          const errDetail = dentalErr.message || 'Server rejected dental tooth records';
+          const msg = `Cannot sign encounter — Step failed: Save Dental Chart (${errDetail}). Encounter was not signed.`;
+          setBanner({
+            text: msg,
+            isError: true,
+          });
+          notify.error(msg, { traceId: dentalErr.traceId });
+          return;
+        }
+        savedDentalChartResponse = savedDentalChart;
       }
-      savedDentalChartResponse = savedDentalChart;
     }
 
     // Partition orderedLabs into Outside Laboratory orders vs In-House Clinic tests
@@ -3175,11 +3181,47 @@ export default function ConsultationsScreen() {
       }
       setPatientChart(chartData);
       if (chartData.dentalTeeth && chartData.dentalTeeth.length > 0 && Object.keys(dentalChart).length === 0) {
-        const multiMap = normalizeTeethToMultiRecord(chartData.dentalTeeth);
+        const taggedTeeth = chartData.dentalTeeth.map((t) => ({
+          ...t,
+          isCurrentEncounter: Boolean(signedConsultationId && t.consultationId === signedConsultationId),
+        }));
+        const multiMap = normalizeTeethToMultiRecord(taggedTeeth);
         setDentalChart(multiMap);
       }
     }
-  }, [selectedPatient?.patientId, patientRecord?.id, dentalChart]);
+  }, [selectedPatient?.patientId, patientRecord?.id, dentalChart, signedConsultationId]);
+
+  const handleVoidDentalCondition = useCallback(
+    async (toothNumber: number, recordId: string, reason?: string) => {
+      const targetPatientId = selectedPatient?.patientId || patientRecord?.id;
+      if (!targetPatientId) return;
+      const [voidedRec, voidErr] = await clinicService.voidDentalToothRecord(
+        targetPatientId,
+        recordId,
+        reason || 'Voided in patient dental chart'
+      );
+      if (voidErr) {
+        notify.error(voidErr.message || 'Unable to void dental tooth record.');
+        return;
+      }
+      notify.success(`Voided condition on Tooth #${toothNumber}.`);
+      setDentalChart((prev) => {
+        const multi = normalizeTeethToMultiRecord(prev as any);
+        const currentRecs = multi[toothNumber] || [];
+        const nextRecs = voidConditionOnTooth(currentRecs, recordId, {
+          voidedBy: voidedRec?.voidedBy || signerName || 'Attending Clinician',
+          voidReason: voidedRec?.voidReason || reason || 'Voided in patient dental chart',
+          voidedAt: voidedRec?.voidedAt || new Date().toISOString(),
+        });
+        return {
+          ...multi,
+          [toothNumber]: nextRecs,
+        };
+      });
+      await refreshPatientChart(targetPatientId);
+    },
+    [selectedPatient?.patientId, patientRecord?.id, signerName, refreshPatientChart]
+  );
 
   // Specialized refresh for Diagnostics tab that reloads chart + lab orders without touching encounter SOAP
   const refreshDiagnosticsTab = useCallback(async () => {
@@ -3356,6 +3398,7 @@ export default function ConsultationsScreen() {
           patient={patientRecord}
           patientId={selectedPatient?.patientId || patientRecord?.id}
           chart={patientChart}
+          onVoidCondition={handleVoidDentalCondition}
           onRefreshChart={refreshPatientChart}
         />
       )}

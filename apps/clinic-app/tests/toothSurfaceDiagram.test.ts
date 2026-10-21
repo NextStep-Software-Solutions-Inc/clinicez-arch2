@@ -321,7 +321,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
   });
 
   // =========================================================================
-  // 4. Multi-Condition Tooth Inspector & Remove Action
+  // 4. Multi-Condition Tooth Inspector & Remove Action (Prior Visit Untouchable)
   // =========================================================================
   describe('4. Multi-Condition Tooth Inspector & Remove Action', () => {
     const multiRecordTeeth = {
@@ -334,6 +334,7 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
           notes: 'Old composite restoration',
           createdAt: '2026-01-15T09:00:00Z',
           recordedBy: 'Dr. Maria Santos',
+          isCurrentEncounter: false,
         },
         {
           id: 'cond-16-decay',
@@ -343,11 +344,12 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
           notes: 'Recurrent marginal caries',
           createdAt: '2026-10-20T10:30:00Z',
           recordedBy: 'Dr. Juan Reyes',
+          isCurrentEncounter: true,
         },
       ],
     };
 
-    test('Tooth Inspector renders all recorded conditions with status badge, surfaces, notes, doctor, and date', () => {
+    test('Tooth Inspector renders all recorded conditions with status badge, surfaces, notes, doctor, and date, while keeping prior visit records untouchable', () => {
       const html = renderToStaticMarkup(
         React.createElement(InlineDentalChartCard, {
           chart: multiRecordTeeth,
@@ -362,7 +364,8 @@ describe('ToothSurfaceDiagram & 5-Surface Odontogram (Milestone 2)', () => {
       expect(html).toContain('Dr. Juan Reyes');
       expect(html).toContain('Surfaces: O');
       expect(html).toContain('Surfaces: MD');
-      expect(html).toContain('data-testid="remove-condition-cond-16-filled"');
+      // Prior-visit record is untouchable (no Remove button), while current-visit record can be removed
+      expect(html).not.toContain('data-testid="remove-condition-cond-16-filled"');
       expect(html).toContain('data-testid="remove-condition-cond-16-decay"');
     });
 

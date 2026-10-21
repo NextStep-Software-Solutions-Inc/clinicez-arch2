@@ -268,14 +268,14 @@ export function normalizeTeethToMultiRecord(
     map[num].push(rec);
   }
 
-  // Filter out placeholder 'Healthy' records if any abnormal condition exists on that tooth,
-  // and resolve top-of-stack state for each tooth.
+  // Filter out placeholder 'Healthy' records if any abnormal condition exists on that tooth
   for (const numStr of Object.keys(map)) {
     const num = Number(numStr);
     const records = map[num];
     const hasAbnormal = records.some((r) => r.status !== 'Healthy');
-    const filtered = hasAbnormal ? records.filter((r) => r.status !== 'Healthy') : records;
-    map[num] = resolveToothEffectiveState(filtered).allRecords;
+    if (hasAbnormal) {
+      map[num] = records.filter((r) => r.status !== 'Healthy');
+    }
   }
 
   return map;
@@ -718,6 +718,39 @@ export function removeCurrentEncounterConditionFromTooth(
   });
 
   return resolveToothEffectiveState(remaining).allRecords;
+}
+
+export function voidConditionOnTooth(
+  existingRecords: DentalToothRecord[],
+  conditionIdOrStatus: string,
+  options?: {
+    voidedBy?: string;
+    voidReason?: string;
+    voidedAt?: string;
+  }
+): DentalToothRecord[] {
+  const nowIso = options?.voidedAt || new Date().toISOString();
+  const voidedBy = options?.voidedBy || 'Attending Clinician';
+  const voidReason = options?.voidReason || 'Voided in patient dental chart';
+
+  const updated = (existingRecords || []).map((r) => {
+    const matches =
+      r.id === conditionIdOrStatus ||
+      r.status.toLowerCase() === conditionIdOrStatus.toLowerCase();
+    if (!matches || r.isVoided) return r;
+    return {
+      ...r,
+      isVoided: true,
+      isCurrent: false,
+      activeSurface: '',
+      voidedAt: nowIso,
+      voidedBy,
+      voidReason,
+      updatedAt: nowIso,
+    };
+  });
+
+  return resolveToothEffectiveState(updated).allRecords;
 }
 
 export function getDominantToothStatus(records: DentalToothRecord[]): ToothStatus {

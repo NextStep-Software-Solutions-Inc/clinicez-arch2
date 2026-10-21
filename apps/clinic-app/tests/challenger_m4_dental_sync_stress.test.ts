@@ -497,10 +497,10 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
       const filePath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
       const content = fs.readFileSync(filePath, 'utf8');
 
-      // Verify the encounter signing block (around line 2137)
+      // Verify the encounter signing block
       expect(content).toContain('isDentalEnabled && Object.keys(dentalChart).length > 0');
       expect(content).toContain('const multiMap = normalizeTeethToMultiRecord(dentalChart as any);');
-      expect(content).toContain('const teethPayload = Object.values(multiMap).flat().map((rec) => ({');
+      expect(content).toContain('const teethPayload = currentEncounterRecords.map((rec) => ({');
       expect(content).toContain('toothNumber: rec.toothNumber,');
       expect(content).toContain('status: rec.status,');
       expect(content).toContain('surface: rec.surface || undefined,');
