@@ -137,6 +137,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           chart={patientChart}
           focusToothNumber={props.focusToothNumber}
           onOrderProcedure={props.onOrderDentalProcedure}
+          onVoidCondition={props.onVoidDentalCondition}
           onRefreshChart={onRefreshChart}
         />
       )}

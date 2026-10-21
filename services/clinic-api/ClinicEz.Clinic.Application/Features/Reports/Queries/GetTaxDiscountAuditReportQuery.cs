@@ -9,6 +9,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Features.Reports.Queries;
 
@@ -32,8 +33,12 @@ public class GetTaxDiscountAuditReportQueryHandler : IRequestHandler<GetTaxDisco
 
     public async Task<TaxDiscountAuditReportDto> Handle(GetTaxDiscountAuditReportQuery request, CancellationToken cancellationToken)
     {
-        var end = request.EndDate?.Date.AddDays(1) ?? DateTime.UtcNow.Date.AddDays(1);
-        var start = request.StartDate?.Date ?? end.AddDays(-30);
+        var end = request.EndDate.HasValue
+            ? request.EndDate.Value.ToEndOfDayExclusiveUtc()
+            : DateTime.UtcNow.ToStartOfDayUtc().AddDays(1);
+        var start = request.StartDate.HasValue
+            ? request.StartDate.Value.ToStartOfDayUtc()
+            : end.AddDays(-30);
 
         var invoices = await _invoiceRepo.Query(i => i.InvoiceDate >= start && i.InvoiceDate < end
                 && (i.DiscountType == DiscountType.SeniorCitizen || i.DiscountType == DiscountType.Pwd)

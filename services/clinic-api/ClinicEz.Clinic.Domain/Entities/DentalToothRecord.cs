@@ -50,4 +50,13 @@ public sealed class DentalToothRecord : BaseEntity
     public string? RecordedBy { get; set; }
 
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// True when this signed/committed tooth condition was voided by a clinician to correct an error
+    /// while preserving the clinical audit trail.
+    /// </summary>
+    public bool IsVoided { get; set; } = false;
+    public DateTime? VoidedAt { get; set; }
+    public string? VoidedBy { get; set; }
+    public string? VoidReason { get; set; }
 }

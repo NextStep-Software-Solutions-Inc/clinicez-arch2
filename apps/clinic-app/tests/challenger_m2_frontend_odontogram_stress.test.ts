@@ -141,7 +141,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
         {
           id: 'cond-16-historical-decay',
           toothNumber: 16,
-          status: 'Decay' as const,
+          status: 'Decayed' as const,
           surface: 'O',
           activeSurface: '',
           isCurrent: false,
@@ -164,7 +164,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
         {
           id: 'cond-16-decay',
           toothNumber: 16,
-          status: 'Decay' as const,
+          status: 'Decayed' as const,
           surface: 'MD',
           activeSurface: 'MD',
           isCurrent: true,
@@ -175,10 +175,11 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
         {
           id: 'cond-16-crown',
           toothNumber: 16,
-          status: 'Crown' as const,
+          status: 'Crowned' as const,
           surface: 'BL',
           activeSurface: 'BL',
           isCurrent: true,
+          isCurrentEncounter: true,
           notes: 'Buccal-lingual partial onlay restoration',
           createdAt: '2026-06-01T14:00:00Z',
           recordedBy: 'Dr. Ana Lim',
@@ -186,7 +187,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       ],
     };
 
-    test('1.1 Right Screen (InlineDentalChartCard) renders ONLY current active conditions per surface and excludes historical conditions from previous encounters', () => {
+    test('1.1 Right Screen (InlineDentalChartCard) renders ONLY current active conditions per surface, excludes superseded history, and keeps prior-encounter records untouchable', () => {
       const html = renderToStaticMarkup(
         React.createElement(InlineDentalChartCard, {
           chart: quadConditionTooth16,
@@ -221,18 +222,16 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(html).toContain('Dr. Juan Reyes');
       expect(html).toContain('Dr. Ana Lim');
 
-      // Remove buttons for each current condition
-      expect(html).toContain('data-testid="remove-condition-cond-16-filled"');
-      expect(html).toContain('data-testid="remove-condition-cond-16-decay"');
+      // Untouchable prior-encounter records have NO remove button; only current-encounter record has Remove
+      expect(html).not.toContain('data-testid="remove-condition-cond-16-filled"');
+      expect(html).not.toContain('data-testid="remove-condition-cond-16-decay"');
       expect(html).toContain('data-testid="remove-condition-cond-16-crown"');
     });
 
-    test('1.2 Left Screen (DentalChartTab) renders both current active conditions AND Historical Conditions (Previous Encounters)', () => {
-      let removedTooth: number | null = null;
-      let removedCond: string | null = null;
-      const handleRemove = (tooth: number, cond: string) => {
-        removedTooth = tooth;
-        removedCond = cond;
+    test('1.2 Left Screen (DentalChartTab) renders full chronological condition history stack with audit-safe Void buttons', () => {
+      let voidedRecordId: string | null = null;
+      const handleVoid = (tooth: number, recordId: string) => {
+        voidedRecordId = `${tooth}:${recordId}`;
       };
 
       const html = renderToStaticMarkup(
@@ -241,11 +240,11 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
             dentalTeeth: quadConditionTooth16[16],
           },
           focusToothNumber: 16,
-          onRemoveCondition: handleRemove,
+          onVoidCondition: handleVoid,
         })
       );
 
-      // Inspector pane exists
+      // Inspector pane exists with full chronological stack
       expect(html).toContain('data-testid="tooth-inspector-pane"');
       expect(html).toContain('Tooth #16');
       expect(html).toContain('RECORDED CONDITIONS ON TOOTH #16 (3)');
@@ -255,18 +254,20 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(html).toContain('data-testid="tab-condition-cond-16-decay"');
       expect(html).toContain('data-testid="tab-condition-cond-16-crown"');
 
-      // Historical Conditions section rendered on Left Screen!
+      // Superseded historical condition rendered in the stack on Left Screen!
       expect(html).toContain('data-testid="tab-historical-conditions-list"');
       expect(html).toContain('HISTORICAL CONDITIONS (PREVIOUS ENCOUNTERS) (1)');
       expect(html).toContain('data-testid="tab-historical-condition-cond-16-historical-decay"');
       expect(html).toContain('Initial occlusal caries noted in previous encounter');
       expect(html).toContain('Dr. Roberto Cruz');
 
-      // Active doctor names & remove buttons
+      // Attending clinicians & audit-safe Void buttons (no destructive Remove)
       expect(html).toContain('Dr. Maria Santos');
-      expect(html).toContain('data-testid="tab-remove-condition-cond-16-filled"');
-      expect(html).toContain('data-testid="tab-remove-condition-cond-16-decay"');
-      expect(html).toContain('data-testid="tab-remove-condition-cond-16-crown"');
+      expect(html).toContain('data-testid="tab-void-condition-cond-16-filled"');
+      expect(html).toContain('data-testid="tab-void-condition-cond-16-decay"');
+      expect(html).toContain('data-testid="tab-void-condition-cond-16-crown"');
+      expect(html).not.toContain('tab-remove-condition-');
+      expect(voidedRecordId).toBeNull();
     });
 
     test('1.3 Healthy tooth renders healthy condition box with zero remove buttons', () => {
@@ -302,9 +303,9 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       );
 
       expect(html).toContain('data-testid="multi-dots-16"');
-      expect(html).toContain('data-testid="dot-decay-16"');
+      expect(html).toContain('data-testid="dot-decayed-16"');
       expect(html).toContain('data-testid="dot-filled-16"');
-      expect(html).toContain('data-testid="dot-crown-16"');
+      expect(html).toContain('data-testid="dot-crowned-16"');
     });
   });
 
@@ -324,7 +325,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
         {
           id: '2',
           toothNumber: 16,
-          status: 'Decay' as const,
+          status: 'Decayed' as const,
           surface: 'MD',
           createdAt: '2026-10-20T00:00:00Z',
         },
@@ -341,7 +342,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
     test('2.2 Pathological tooth with Decay, Filled, AND Missing counts strictly ONCE in DMFT score', () => {
       const records = [
         { id: '1', toothNumber: 24, status: 'Filled' as const, surface: 'MOD', createdAt: '2024-01-01T00:00:00Z' },
-        { id: '2', toothNumber: 24, status: 'Decay' as const, surface: 'B', createdAt: '2025-01-01T00:00:00Z' },
+        { id: '2', toothNumber: 24, status: 'Decayed' as const, surface: 'B', createdAt: '2025-01-01T00:00:00Z' },
         { id: '3', toothNumber: 24, status: 'Missing' as const, createdAt: '2026-10-01T00:00:00Z' },
       ];
 
@@ -356,10 +357,10 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
     test('2.3 Full 32-tooth permanent mouth permutation: 13 distinct DMFT teeth does NOT equal sum of D+M+F (18)', () => {
       const records: any[] = [
         // 4 teeth with Decay only (11, 12, 13, 14)
-        { id: 'd1', toothNumber: 11, status: 'Decay', surface: 'M', createdAt: '2026-01-01T00:00:00Z' },
-        { id: 'd2', toothNumber: 12, status: 'Decay', surface: 'D', createdAt: '2026-01-01T00:00:00Z' },
-        { id: 'd3', toothNumber: 13, status: 'Decay', surface: 'O', createdAt: '2026-01-01T00:00:00Z' },
-        { id: 'd4', toothNumber: 14, status: 'Decay', surface: 'B', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'd1', toothNumber: 11, status: 'Decayed', surface: 'M', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'd2', toothNumber: 12, status: 'Decayed', surface: 'D', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'd3', toothNumber: 13, status: 'Decayed', surface: 'O', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'd4', toothNumber: 14, status: 'Decayed', surface: 'B', createdAt: '2026-01-01T00:00:00Z' },
 
         // 3 teeth with Filled only (21, 22, 23)
         { id: 'f1', toothNumber: 21, status: 'Filled', surface: 'M', createdAt: '2026-01-01T00:00:00Z' },
@@ -372,27 +373,27 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
 
         // 2 teeth with BOTH Decay and Filled (41, 42)
         { id: 'df1_f', toothNumber: 41, status: 'Filled', surface: 'O', createdAt: '2025-01-01T00:00:00Z' },
-        { id: 'df1_d', toothNumber: 41, status: 'Decay', surface: 'M', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'df1_d', toothNumber: 41, status: 'Decayed', surface: 'M', createdAt: '2026-01-01T00:00:00Z' },
         { id: 'df2_f', toothNumber: 42, status: 'Filled', surface: 'O', createdAt: '2025-01-01T00:00:00Z' },
-        { id: 'df2_d', toothNumber: 42, status: 'Decay', surface: 'D', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'df2_d', toothNumber: 42, status: 'Decayed', surface: 'D', createdAt: '2026-01-01T00:00:00Z' },
 
         // 1 tooth with BOTH Missing and Filled (43)
         { id: 'mf1_f', toothNumber: 43, status: 'Filled', surface: 'MOD', createdAt: '2025-01-01T00:00:00Z' },
         { id: 'mf1_m', toothNumber: 43, status: 'Missing', createdAt: '2026-01-01T00:00:00Z' },
 
         // 1 tooth with Decay, Missing, AND Filled (44)
-        { id: 'dmf_d', toothNumber: 44, status: 'Decay', surface: 'B', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'dmf_d', toothNumber: 44, status: 'Decayed', surface: 'B', createdAt: '2026-01-01T00:00:00Z' },
         { id: 'dmf_m', toothNumber: 44, status: 'Missing', createdAt: '2026-02-01T00:00:00Z' },
         { id: 'dmf_f', toothNumber: 44, status: 'Filled', surface: 'L', createdAt: '2025-01-01T00:00:00Z' },
 
         // 3 teeth with Crown only (15, 25, 35)
-        { id: 'c1', toothNumber: 15, status: 'Crown', createdAt: '2026-01-01T00:00:00Z' },
-        { id: 'c2', toothNumber: 25, status: 'Crown', createdAt: '2026-01-01T00:00:00Z' },
-        { id: 'c3', toothNumber: 35, status: 'Crown', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'c1', toothNumber: 15, status: 'Crowned', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'c2', toothNumber: 25, status: 'Crowned', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'c3', toothNumber: 35, status: 'Crowned', createdAt: '2026-01-01T00:00:00Z' },
 
         // 2 teeth with Extraction only (16, 26)
-        { id: 'e1', toothNumber: 16, status: 'Extraction', createdAt: '2026-01-01T00:00:00Z' },
-        { id: 'e2', toothNumber: 26, status: 'Extraction', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'e1', toothNumber: 16, status: 'ForExtraction', createdAt: '2026-01-01T00:00:00Z' },
+        { id: 'e2', toothNumber: 26, status: 'ForExtraction', createdAt: '2026-01-01T00:00:00Z' },
 
         // 14 remaining healthy teeth
         { id: 'h1', toothNumber: 17, status: 'Healthy', createdAt: '2026-01-01T00:00:00Z' },
@@ -458,9 +459,9 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
 
     test('2.5 Duplicate condition records on same tooth do not inflate counts', () => {
       const duplicateRecords = [
-        { id: '1', toothNumber: 16, status: 'Decay' as const, surface: 'O', createdAt: '2026-01-01T00:00:00Z' },
-        { id: '2', toothNumber: 16, status: 'Decay' as const, surface: 'O', createdAt: '2026-01-02T00:00:00Z' },
-        { id: '3', toothNumber: 16, status: 'Decay' as const, surface: 'M', createdAt: '2026-01-03T00:00:00Z' },
+        { id: '1', toothNumber: 16, status: 'Decayed' as const, surface: 'O', createdAt: '2026-01-01T00:00:00Z' },
+        { id: '2', toothNumber: 16, status: 'Decayed' as const, surface: 'O', createdAt: '2026-01-02T00:00:00Z' },
+        { id: '3', toothNumber: 16, status: 'Decayed' as const, surface: 'M', createdAt: '2026-01-03T00:00:00Z' },
       ];
 
       const metrics = calculateDmftMetrics(duplicateRecords);
@@ -501,7 +502,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
     test('3.3 Multi-condition tooth surface coloring maps Filled(O) to infoBg and Decay(MD) to emergencyBg', () => {
       const conditions = [
         { status: 'Filled' as const, surface: 'O' },
-        { status: 'Decay' as const, surface: 'MD' },
+        { status: 'Decayed' as const, surface: 'MD' },
       ];
 
       const oZone = getSurfaceZoneColor('O', conditions);
@@ -512,12 +513,12 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       const mZone = getSurfaceZoneColor('M', conditions);
       expect(mZone.bg).toBe(theme.colors.emergencyBg);
       expect(mZone.border).toBe(theme.colors.emergencyBorder);
-      expect(mZone.status).toBe('Decay');
+      expect(mZone.status).toBe('Decayed');
 
       const dZone = getSurfaceZoneColor('D', conditions);
       expect(dZone.bg).toBe(theme.colors.emergencyBg);
       expect(dZone.border).toBe(theme.colors.emergencyBorder);
-      expect(dZone.status).toBe('Decay');
+      expect(dZone.status).toBe('Decayed');
 
       const bZone = getSurfaceZoneColor('B', conditions);
       expect(bZone.bg).toBe(theme.colors.surface);
@@ -553,7 +554,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
         React.createElement(ToothSurfaceDiagram, {
           toothNumber: 16,
           conditions: [
-            { status: 'Decay', surface: 'M', activeSurface: 'M', isCurrent: true },
+            { status: 'Decayed', surface: 'M', activeSurface: 'M', isCurrent: true },
             { status: 'Filled', surface: 'O', activeSurface: 'O', isCurrent: true },
           ],
           size: 80,
@@ -582,14 +583,14 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       let records = applyStagedConditionToTooth([], {
         id: 'rec-t1-decay',
         toothNumber: 16,
-        status: 'Decay',
+        status: 'Decayed',
         surface: 'MO',
         notes: 'Initial mesial-occlusal caries',
         recordedBy: 'Dr. Maria Santos',
         createdAt: '2026-01-10T09:00:00Z',
       });
       expect(records.length).toBe(1);
-      expect(records[0].status).toBe('Decay');
+      expect(records[0].status).toBe('Decayed');
       expect(records[0].surface).toBe('MO');
       expect(records[0].activeSurface).toBe('MO');
       expect(records[0].isCurrent).toBe(true);
@@ -605,7 +606,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
         createdAt: '2026-02-01T10:00:00Z',
       });
       expect(records.length).toBe(2);
-      const decayAfterPartial = records.find((r) => r.status === 'Decay')!;
+      const decayAfterPartial = records.find((r) => r.status === 'Decayed')!;
       const filledAfterPartial = records.find((r) => r.status === 'Filled')!;
       expect(decayAfterPartial.surface).toBe('MO'); // Historical surface preserved
       expect(decayAfterPartial.activeSurface).toBe('M'); // Only M still actively decayed
@@ -613,7 +614,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(filledAfterPartial.activeSurface).toBe('O');
       expect(filledAfterPartial.isCurrent).toBe(true);
 
-      expect(getSurfaceZoneColor('M', records).status).toBe('Decay');
+      expect(getSurfaceZoneColor('M', records).status).toBe('Decayed');
       expect(getSurfaceZoneColor('O', records).status).toBe('Filled');
 
       // t3: Complete restoration — Filled on M (completing MO)
@@ -626,14 +627,13 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
         recordedBy: 'Dr. Maria Santos',
         createdAt: '2026-02-15T11:00:00Z',
       });
-      const decayAfterComplete = records.find((r) => r.status === 'Decay')!;
-      const filledAfterComplete = records.find((r) => r.status === 'Filled')!;
+      const decayAfterComplete = records.find((r) => r.status === 'Decayed')!;
+      const filledRecordsAfterComplete = records.filter((r) => r.status === 'Filled' && r.isCurrent !== false);
       expect(decayAfterComplete.surface).toBe('MO'); // Original recorded surface intact for audit
       expect(decayAfterComplete.activeSurface).toBe('');
       expect(decayAfterComplete.isCurrent).toBe(false); // Superseded!
       expect(decayAfterComplete.supersededAt).toBe('2026-02-15T11:00:00Z');
-      expect(filledAfterComplete.activeSurface).toBe('MO');
-      expect(filledAfterComplete.isCurrent).toBe(true);
+      expect(sortToothSurfaces(filledRecordsAfterComplete.map((r) => r.activeSurface || '').join(''))).toBe('MO');
 
       // Surface M and O now both resolve to Filled
       expect(getSurfaceZoneColor('M', records).status).toBe('Filled');
@@ -663,25 +663,35 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       expect(dmftAtT4.missingCount).toBe(1);
       expect(dmftAtT4.dmftScore).toBe(1);
 
-      // Guard: Cannot add Decay/Filled/Crown to a Missing tooth until reset to Healthy
-      expect(canApplyConditionToTooth(records, 'Decay').allowed).toBe(false);
-      expect(canApplyConditionToTooth(records, 'Filled').allowed).toBe(false);
-      expect(canApplyConditionToTooth(records, 'Healthy').allowed).toBe(true);
+      // t5: Subsequent encounter -> Implant placed on previously Missing tooth supersedes Missing while preserving full stack
+      expect(canApplyConditionToTooth(records, 'Implant').allowed).toBe(true);
+      records = applyStagedConditionToTooth(records, {
+        id: 'rec-t5-implant',
+        toothNumber: 16,
+        status: 'Implant',
+        notes: 'Pontic / Implant placed at edentulous site',
+        recordedBy: 'Dr. Roberto Cruz',
+        createdAt: '2026-09-01T14:00:00Z',
+        isCurrentEncounter: true,
+      });
+      expect(records.filter((r) => r.isCurrent !== false).length).toBe(1);
+      expect(records.find((r) => r.isCurrent !== false)?.status).toBe('Implant');
+      expect(records.find((r) => r.id === 'rec-t4-missing')?.isCurrent).toBe(false);
     });
 
     test('5.3 Whole-tooth statuses (Healthy, Missing, Extraction) disable surface selection and apply to whole tooth', () => {
       expect(isWholeToothStatus('Healthy')).toBe(true);
       expect(isWholeToothStatus('Missing')).toBe(true);
-      expect(isWholeToothStatus('Extraction')).toBe(true);
-      expect(isWholeToothStatus('Decay')).toBe(false);
+      expect(isWholeToothStatus('ForExtraction')).toBe(true);
+      expect(isWholeToothStatus('Decayed')).toBe(false);
       expect(isWholeToothStatus('Filled')).toBe(false);
-      expect(isWholeToothStatus('Crown')).toBe(false);
+      expect(isWholeToothStatus('Crowned')).toBe(false);
 
       // Extraction clears surfaces and supersedes prior encounter surface conditions
       const priorDecay = applyStagedConditionToTooth([], {
         id: 'rec-enc1-decay',
         toothNumber: 16,
-        status: 'Decay',
+        status: 'Decayed',
         surface: 'MO',
         consultationId: 'enc-1',
         isCurrentEncounter: false,
@@ -690,14 +700,14 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       const afterExtraction = applyStagedConditionToTooth(priorDecay, {
         id: 'rec-enc2-extraction',
         toothNumber: 16,
-        status: 'Extraction',
+        status: 'ForExtraction',
         surface: 'MO', // Even if passed, must be cleared to ''
         consultationId: 'enc-2',
         isCurrentEncounter: true,
       });
 
-      const activeExtraction = afterExtraction.find((r) => r.status === 'Extraction')!;
-      const supersededDecay = afterExtraction.find((r) => r.status === 'Decay')!;
+      const activeExtraction = afterExtraction.find((r) => r.status === 'ForExtraction')!;
+      const supersededDecay = afterExtraction.find((r) => r.status === 'Decayed')!;
       expect(activeExtraction.surface).toBe('');
       expect(activeExtraction.activeSurface).toBe('');
       expect(activeExtraction.isCurrent).toBe(true);
@@ -710,7 +720,7 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
       const enc1Records = applyStagedConditionToTooth([], {
         id: 'rec-enc1-o',
         toothNumber: 26,
-        status: 'Decay',
+        status: 'Decayed',
         surface: 'O',
         consultationId: 'enc-1',
         isCurrentEncounter: true,
@@ -742,11 +752,67 @@ describe('Challenger M2: Empirical Stress Test Suite (5-Surface Odontogram & Too
         createdAt: '2026-02-10T09:00:00Z',
       });
 
-      const historicalDecay = enc2Records.find((r) => r.status === 'Decay')!;
+      const historicalDecay = enc2Records.find((r) => r.status === 'Decayed')!;
       const currentFilled = enc2Records.find((r) => r.status === 'Filled')!;
       expect(historicalDecay.isCurrent).toBe(false);
       expect(currentFilled.isCurrent).toBe(true);
       expect(currentFilled.activeSurface).toBe('O');
+    });
+
+    test('5.5 Multiple surface statuses on the same tooth in the same encounter (Sealant on MOB + Fractured on DL) do not trigger false whole-tooth lock alert', () => {
+      // Step 1: Record Sealant on MOB of Tooth #21 in enc-1
+      let tooth21Records = applyStagedConditionToTooth([], {
+        id: 'rec-21-sealant',
+        toothNumber: 21,
+        status: 'Sealant',
+        surface: 'MOB',
+        consultationId: 'enc-1',
+        isCurrentEncounter: true,
+      });
+
+      const lockAfterFirst = getCurrentEncounterLockedState(tooth21Records, 'enc-1');
+      expect(lockAfterFirst.isWholeToothLocked).toBe(false);
+      expect(Array.from(lockAfterFirst.lockedSurfaces).sort()).toEqual(['B', 'M', 'O']);
+
+      // Empty staged surface after saving does not emit a false conflict alert
+      const emptySurfaceCheckAfterFirst = canApplyConditionToTooth(
+        tooth21Records,
+        'Fractured',
+        '',
+        'enc-1'
+      );
+      expect(emptySurfaceCheckAfterFirst.allowed).toBe(false);
+      expect(emptySurfaceCheckAfterFirst.reason).toBeUndefined();
+
+      // Selecting Fractured on remaining surfaces DL is allowed
+      expect(canApplyConditionToTooth(tooth21Records, 'Fractured', undefined, 'enc-1').allowed).toBe(true);
+      expect(canApplyConditionToTooth(tooth21Records, 'Fractured', 'DL', 'enc-1').allowed).toBe(true);
+
+      // Step 2: Record Fractured on DL of Tooth #21 in the same encounter (enc-1)
+      tooth21Records = applyStagedConditionToTooth(tooth21Records, {
+        id: 'rec-21-fractured',
+        toothNumber: 21,
+        status: 'Fractured',
+        surface: 'DL',
+        consultationId: 'enc-1',
+        isCurrentEncounter: true,
+      });
+
+      expect(tooth21Records.filter((r) => r.isCurrent !== false).length).toBe(2);
+      const lockAfterSecond = getCurrentEncounterLockedState(tooth21Records, 'enc-1');
+      // Even though all 5 surfaces (M, O, B, D, L) now have surface conditions, isWholeToothLocked must remain false
+      expect(lockAfterSecond.isWholeToothLocked).toBe(false);
+      expect(lockAfterSecond.lockedSurfaces.size).toBe(5);
+
+      // Empty staged surface after saving second condition must NOT show a false warning reason
+      const emptySurfaceCheckAfterSecond = canApplyConditionToTooth(
+        tooth21Records,
+        'Fractured',
+        '',
+        'enc-1'
+      );
+      expect(emptySurfaceCheckAfterSecond.allowed).toBe(false);
+      expect(emptySurfaceCheckAfterSecond.reason).toBeUndefined();
     });
   });
 });

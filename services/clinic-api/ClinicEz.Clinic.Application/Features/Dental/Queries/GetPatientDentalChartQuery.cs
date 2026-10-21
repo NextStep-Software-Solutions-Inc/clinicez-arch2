@@ -68,6 +68,7 @@ public sealed class GetPatientDentalChartQueryHandler : IRequestHandler<GetPatie
             .Query(t => t.ClinicId == _clinicContext.ClinicId && t.PatientId == request.PatientId && !t.IsDeleted)
             .AsNoTracking()
             .OrderBy(t => t.ToothNumber)
+            .ThenBy(t => t.CreatedAt)
             .ToListAsync(ct);
 
         var teethDtos = records.Select(r => new DentalToothRecordDto(
@@ -84,10 +85,14 @@ public sealed class GetPatientDentalChartQueryHandler : IRequestHandler<GetPatie
             r.UpdatedAt,
             r.PatientName,
             r.RecordedBy ?? r.UpdatedBy ?? r.CreatedBy,
-            r.IsCurrent ? (r.ActiveSurface ?? r.Surface) : null,
-            r.IsCurrent,
+            r.IsCurrent && !r.IsVoided ? (r.ActiveSurface ?? r.Surface) : null,
+            r.IsCurrent && !r.IsVoided,
             r.SupersededAt,
-            r.SupersededByRecordId
+            r.SupersededByRecordId,
+            r.IsVoided,
+            r.VoidedAt,
+            r.VoidedBy,
+            r.VoidReason
         )).ToList();
 
         var procedures = await _procRepo
@@ -101,14 +106,15 @@ public sealed class GetPatientDentalChartQueryHandler : IRequestHandler<GetPatie
             .Select(p => OrderProcedureCommandHandler.MapToDto(p, _clinicContext.TenantId))
             .ToList();
 
-        var lastExaminedAt = records.Count > 0
-            ? records.Max(r => r.UpdatedAt ?? r.CreatedAt)
+        var nonVoidedRecords = records.Where(r => !r.IsVoided).ToList();
+        var lastExaminedAt = nonVoidedRecords.Count > 0
+            ? nonVoidedRecords.Max(r => r.UpdatedAt ?? r.CreatedAt)
             : (DateTime?)null;
 
-        var currentRecords = records.Where(r => r.IsCurrent).ToList();
+        var currentRecords = nonVoidedRecords.Where(r => r.IsCurrent).ToList();
 
         var dmftCount = currentRecords
-            .Where(r => r.Status == ToothStatus.Decay || r.Status == ToothStatus.Missing || r.Status == ToothStatus.Filled)
+            .Where(r => r.Status == ToothStatus.Decayed || r.Status == ToothStatus.Missing || r.Status == ToothStatus.Filled)
             .Select(r => r.ToothNumber)
             .Distinct()
             .Count();
@@ -116,11 +122,11 @@ public sealed class GetPatientDentalChartQueryHandler : IRequestHandler<GetPatie
         var summary = new DentalSummaryDto(
             TotalTeethRecorded: currentRecords.Select(r => r.ToothNumber).Distinct().Count(),
             HealthyCount: currentRecords.Where(r => r.Status == ToothStatus.Healthy).Select(r => r.ToothNumber).Distinct().Count(),
-            DecayCount: currentRecords.Where(r => r.Status == ToothStatus.Decay).Select(r => r.ToothNumber).Distinct().Count(),
+            DecayCount: currentRecords.Where(r => r.Status == ToothStatus.Decayed).Select(r => r.ToothNumber).Distinct().Count(),
             FilledCount: currentRecords.Where(r => r.Status == ToothStatus.Filled).Select(r => r.ToothNumber).Distinct().Count(),
             MissingCount: currentRecords.Where(r => r.Status == ToothStatus.Missing).Select(r => r.ToothNumber).Distinct().Count(),
-            CrownCount: currentRecords.Where(r => r.Status == ToothStatus.Crown).Select(r => r.ToothNumber).Distinct().Count(),
-            ExtractionCount: currentRecords.Where(r => r.Status == ToothStatus.Extraction).Select(r => r.ToothNumber).Distinct().Count(),
+            CrownCount: currentRecords.Where(r => r.Status == ToothStatus.Crowned).Select(r => r.ToothNumber).Distinct().Count(),
+            ExtractionCount: currentRecords.Where(r => r.Status == ToothStatus.ForExtraction).Select(r => r.ToothNumber).Distinct().Count(),
             DmftIndex: dmftCount
         );
 

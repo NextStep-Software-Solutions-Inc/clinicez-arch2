@@ -283,30 +283,30 @@ describe('Milestone MC Empirical Stress Testing & Adversarial Challenge', () => 
       };
 
       // 1. Chart Adult permanent teeth
-      updateTooth({ toothNumber: 16, status: 'Decay', surface: 'MOD', notes: 'Adult upper molar decay' });
-      updateTooth({ toothNumber: 21, status: 'Crown', surface: '', notes: 'Ceramic central crown' });
+      updateTooth({ toothNumber: 16, status: 'Decayed', surface: 'MOD', notes: 'Adult upper molar decay' });
+      updateTooth({ toothNumber: 21, status: 'Crowned', surface: '', notes: 'Ceramic central crown' });
       updateTooth({ toothNumber: 36, status: 'Filled', surface: 'O', notes: 'Occlusal composite' });
       updateTooth({ toothNumber: 48, status: 'Missing', surface: '', notes: 'Extracted third molar' });
 
       expect(Object.keys(dentalChart).length).toBe(4);
-      expect(dentalChart[16].status).toBe('Decay');
+      expect(dentalChart[16].status).toBe('Decayed');
       expect(dentalChart[16].surface).toBe('MOD');
 
       // 2. Switch to Child dentition and chart primary deciduous teeth
-      updateTooth({ toothNumber: 55, status: 'Decay', surface: 'MO', notes: 'Primary molar caries' });
+      updateTooth({ toothNumber: 55, status: 'Decayed', surface: 'MO', notes: 'Primary molar caries' });
       updateTooth({ toothNumber: 85, status: 'Filled', surface: 'O', notes: 'Primary lower filled' });
 
       expect(Object.keys(dentalChart).length).toBe(6);
 
       // 3. Verify Adult teeth remain intact without data corruption
-      expect(dentalChart[16].status).toBe('Decay');
+      expect(dentalChart[16].status).toBe('Decayed');
       expect(dentalChart[16].surface).toBe('MOD');
-      expect(dentalChart[21].status).toBe('Crown');
+      expect(dentalChart[21].status).toBe('Crowned');
       expect(dentalChart[36].status).toBe('Filled');
       expect(dentalChart[48].status).toBe('Missing');
 
       // 4. Verify Child teeth remain intact
-      expect(dentalChart[55].status).toBe('Decay');
+      expect(dentalChart[55].status).toBe('Decayed');
       expect(dentalChart[55].surface).toBe('MO');
       expect(dentalChart[85].status).toBe('Filled');
 
@@ -337,9 +337,9 @@ describe('Milestone MC Empirical Stress Testing & Adversarial Challenge', () => 
 
     test('Switching dentition maintains non-healthy count badge accurately across mixed dentition', () => {
       const mixedChart: Record<number, DentalToothState> = {
-        16: { toothNumber: 16, status: 'Decay', surface: 'MOD' },
-        21: { toothNumber: 21, status: 'Crown' },
-        55: { toothNumber: 55, status: 'Decay', surface: 'O' },
+        16: { toothNumber: 16, status: 'Decayed', surface: 'MOD' },
+        21: { toothNumber: 21, status: 'Crowned' },
+        55: { toothNumber: 55, status: 'Decayed', surface: 'O' },
         85: { toothNumber: 85, status: 'Filled' },
         11: { toothNumber: 11, status: 'Healthy' },
       };
@@ -406,7 +406,7 @@ describe('Milestone MC Empirical Stress Testing & Adversarial Challenge', () => 
       };
 
       const multiSurfaceChart: Record<number, DentalToothState> = {
-        26: { toothNumber: 26, status: 'Decay', surface: 'MOD' },
+        26: { toothNumber: 26, status: 'Decayed', surface: 'MOD' },
       };
 
       const html = renderToStaticMarkup(

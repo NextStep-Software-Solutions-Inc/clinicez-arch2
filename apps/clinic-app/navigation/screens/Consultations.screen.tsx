@@ -62,7 +62,11 @@ import {
   InlineDentalChartCard,
   DentalToothState,
 } from '../../components/consultation';
-import { normalizeTeethToMultiRecord } from '../../components/dental';
+import {
+  normalizeTeethToMultiRecord,
+  resolveToothEffectiveState,
+  voidConditionOnTooth,
+} from '../../components/dental';
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
 import { useClinic } from '../../context/ClinicContext';
@@ -1006,8 +1010,14 @@ export default function ConsultationsScreen() {
     if (activePatientId.current !== p.id) return;
 
     const [dentalData] = dentalRes;
+    const [chartData] = chartRes;
+    const matchedEncounter = chartData?.consultations?.find((c) => c.queueItemId === p.id);
     if (dentalData?.teeth && dentalData.teeth.length > 0) {
-      setDentalChart(normalizeTeethToMultiRecord(dentalData.teeth));
+      const taggedTeeth = dentalData.teeth.map((t) => ({
+        ...t,
+        isCurrentEncounter: Boolean(matchedEncounter?.id && t.consultationId === matchedEncounter.id),
+      }));
+      setDentalChart(normalizeTeethToMultiRecord(taggedTeeth));
     } else {
       setDentalChart({});
     }
@@ -1031,7 +1041,6 @@ export default function ConsultationsScreen() {
       setRecordError(null);
     }
 
-    const [chartData] = chartRes;
     if (chartData) {
       setPatientChart(chartData);
       const existingEncounter = chartData.consultations?.find((c) => c.queueItemId === p.id);
@@ -2001,7 +2010,7 @@ export default function ConsultationsScreen() {
 
     let consultationId = signedConsultationId;
     if (!consultationId) {
-      const [consultation, createErr] = await clinicService.createConsultation({
+      const createPayload = {
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
         doctorId: doctor.id,
@@ -2036,10 +2045,22 @@ export default function ConsultationsScreen() {
           isDangerousDrug: p.isDangerousDrug,
           philHealthDrugCode: p.philHealthDrugCode,
         })),
-      });
+      };
+      let [consultation, createErr] = await clinicService.createConsultation(createPayload);
+      if (
+        createErr &&
+        (createErr.status === 409 ||
+          (createErr.message || '').toLowerCase().includes('already been signed'))
+      ) {
+        [consultation, createErr] = await clinicService.createConsultation({
+          ...createPayload,
+          queueItemId: undefined,
+        });
+      }
       if (createErr || !consultation?.id) {
         setIsSigning(false);
-        const msg = createErr?.message || 'The encounter could not be saved, so nothing was signed. Please try again.';
+        const reason = createErr?.message || 'Unable to save consultation record';
+        const msg = `Cannot sign encounter — Step failed: Save Consultation Notes (${reason}). Encounter was not signed.`;
         setBanner({
           text: msg,
           isError: true,
@@ -2082,7 +2103,8 @@ export default function ConsultationsScreen() {
       });
       if (updateErr) {
         setIsSigning(false);
-        const msg = updateErr.message || 'The encounter could not be updated before signing. Please try again.';
+        const reason = updateErr.message || 'Unable to update consultation record';
+        const msg = `Cannot sign encounter — Step failed: Save Consultation Notes (${reason}). Encounter was not signed.`;
         setBanner({
           text: msg,
           isError: true,
@@ -2092,102 +2114,44 @@ export default function ConsultationsScreen() {
       }
     }
 
-    // Atomic batch save dental chart BEFORE signing when dental is enabled and teeth have been marked
+    // Step 2: Atomic batch save dental chart BEFORE signing when dental is enabled and teeth have been marked
     let savedDentalChartResponse: any = null;
     if (isDentalEnabled && Object.keys(dentalChart).length > 0) {
       const multiMap = normalizeTeethToMultiRecord(dentalChart as any);
-      const teethPayload = Object.values(multiMap).flat().map((rec) => ({
-        toothNumber: rec.toothNumber,
-        status: rec.status,
-        surface: rec.surface || undefined,
-        notes: rec.notes || undefined,
-      }));
-      const activeTeethPayload = Object.values(multiMap)
+      const currentEncounterRecords = Object.values(multiMap)
         .flat()
-        .filter((rec) => rec.isCurrent !== false)
-        .map((rec) => ({
+        .filter((rec) => !rec.isVoided && rec.status !== 'Healthy' && rec.isCurrentEncounter !== false);
+      if (currentEncounterRecords.length > 0) {
+        const teethPayload = currentEncounterRecords.map((rec) => ({
           toothNumber: rec.toothNumber,
           status: rec.status,
           surface: rec.surface || undefined,
           notes: rec.notes || undefined,
         }));
-      const [savedDentalChart, dentalErr] = await clinicService.batchSaveDentalChart(selectedPatient.patientId, {
-        consultationId,
-        teeth: activeTeethPayload.length > 0 ? activeTeethPayload : teethPayload,
-      });
-      if (dentalErr) {
-        setIsSigning(false);
-        const errDetail = dentalErr.message || 'Server rejected dental tooth records';
-        const msg = `Dental chart records could not be saved: ${errDetail}. Encounter signing and cashier billing were halted to protect your clinical records. Please retry.`;
-        setBanner({
-          text: msg,
-          isError: true,
+        const [savedDentalChart, dentalErr] = await clinicService.batchSaveDentalChart(selectedPatient.patientId, {
+          consultationId,
+          teeth: teethPayload,
         });
-        notify.error(msg, { traceId: dentalErr.traceId });
-        return;
-      }
-      savedDentalChartResponse = savedDentalChart;
-    }
-
-    const [, signErr] = await clinicService.signConsultation(consultationId, {
-      prcLicenseNumber: finalPrc,
-      ptrNumber: doctorPtr.trim() || signerStaff?.ptrNumber,
-      s2LicenseNumber: finalS2,
-      doctorPhilHealthPan: finalPan,
-      philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'WALKEDIN') : undefined,
-    });
-    if (signErr) {
-      setIsSigning(false);
-      const msg = `The encounter was saved but could not be signed: ${signErr.message || 'unknown error'}. Press Sign again to retry.`;
-      setBanner({
-        text: msg,
-        isError: true,
-      });
-      notify.error(msg, { traceId: signErr.traceId });
-      return;
-    }
-
-    // Update left-side longitudinal Patient Chart dentalTeeth now that the encounter is signed
-    if (isDentalEnabled && Object.keys(dentalChart).length > 0) {
-      const multiMap = normalizeTeethToMultiRecord(dentalChart as any);
-      const targetPatientId = selectedPatient?.patientId || patientRecord?.id || '';
-      const syncedTeeth: DentalToothRecord[] =
-        savedDentalChartResponse?.teeth && savedDentalChartResponse.teeth.length > 0
-          ? savedDentalChartResponse.teeth
-          : Object.values(multiMap).flat().map((rec) => ({
-              ...rec,
-              tenantId: rec.tenantId || settings?.tenantId || (patientRecord as any)?.tenantId || '',
-              clinicId: rec.clinicId || settings?.clinicId || (patientRecord as any)?.clinicId || '',
-              patientId: targetPatientId,
-              consultationId,
-              notes: rec.notes || null,
-              surface: rec.surface || null,
-            }));
-      setPatientChart((prev) =>
-        prev
-          ? {
-              ...prev,
-              dentalTeeth: syncedTeeth,
-              ...(savedDentalChartResponse ? { dentalChart: savedDentalChartResponse } : {}),
-            }
-          : prev
-      );
-    }
-
-    if (prescriptions.length > 0) {
-      const [slip] = await clinicService.getPrescriptionSlip(consultationId);
-      if (slip) {
-        setPrescriptionSlip(slip);
+        if (dentalErr) {
+          setIsSigning(false);
+          const errDetail = dentalErr.message || 'Server rejected dental tooth records';
+          const msg = `Cannot sign encounter — Step failed: Save Dental Chart (${errDetail}). Encounter was not signed.`;
+          setBanner({
+            text: msg,
+            isError: true,
+          });
+          notify.error(msg, { traceId: dentalErr.traceId });
+          return;
+        }
+        savedDentalChartResponse = savedDentalChart;
       }
     }
-
-    const followUpIssues: string[] = [];
 
     // Partition orderedLabs into Outside Laboratory orders vs In-House Clinic tests
     const outsideLabs = orderedLabs.filter((l) => l.fulfillmentMode === 'outside');
     const inHouseLabs = orderedLabs.filter((l) => l.fulfillmentMode === 'in_house');
 
-    // Auto-create Diagnostic Lab Requisitions ONLY for outside labs
+    // Step 3: Auto-create Diagnostic Lab Requisitions for outside labs BEFORE signing
     if (outsideLabs.length > 0) {
       const [, labErr] = await clinicService.createLabOrder({
         patientId: selectedPatient.patientId,
@@ -2202,10 +2166,20 @@ export default function ConsultationsScreen() {
           instructions: l.instructions,
         })),
       });
-      if (labErr) followUpIssues.push('laboratory requisition');
+      if (labErr) {
+        setIsSigning(false);
+        const reason = labErr.message || 'Unable to create laboratory requisition';
+        const msg = `Cannot sign encounter — Step failed: Laboratory Requisition (${reason}). Encounter was not signed.`;
+        setBanner({
+          text: msg,
+          isError: true,
+        });
+        notify.error(msg, { traceId: labErr.traceId });
+        return;
+      }
     }
 
-    // Auto-order in-clinic procedures for the nursing station (only those not yet handed off)
+    // Step 4: Auto-order in-clinic procedures for the nursing/treatment station BEFORE signing
     const targetTreatmentRoom =
       treatmentRooms.find((r) => r.id === selectedTreatmentRoomId) ?? treatmentRooms[0];
     for (const proc of orderedProcedures) {
@@ -2231,11 +2205,21 @@ export default function ConsultationsScreen() {
             ? `${proc.instructions} (Assessment: ${assessment || 'Evaluation'})`
             : `Ordered during encounter for ${assessment || 'Evaluation'}`,
         });
-        if (procErr) followUpIssues.push(`procedure order (${proc.name})`);
+        if (procErr) {
+          setIsSigning(false);
+          const reason = procErr.message || `Unable to order procedure "${proc.name}"`;
+          const msg = `Cannot sign encounter — Step failed: Procedure Order (${proc.name}: ${reason}). Encounter was not signed.`;
+          setBanner({
+            text: msg,
+            isError: true,
+          });
+          notify.error(msg, { traceId: procErr.traceId });
+          return;
+        }
       }
     }
 
-    // Auto-create draft billing invoice for the Cashier, priced from the clinic's fee schedule
+    // Step 5: Auto-create draft billing invoice for the Cashier BEFORE signing
     const billItems: CreateInvoiceRequest['lineItems'] = [];
     if (consultationFee) {
       billItems.push({
@@ -2278,8 +2262,17 @@ export default function ConsultationsScreen() {
         quantity: 1,
       });
     }
+    if (billItems.length === 0) {
+      billItems.push({
+        itemCode: isDentalEnabled ? 'CONS-DENT' : 'CONS-GEN',
+        description: isDentalEnabled ? 'Dental Consultation' : 'General Outpatient Consultation',
+        category: 'Consultation',
+        unitPrice: 500,
+        quantity: 1,
+      });
+    }
     const effectiveBillItems = soaReviewItems.length > 0 ? soaReviewItems : billItems;
-    if (effectiveBillItems.length > 0) {
+    if (!createdInvoiceId) {
       const [invoiceResult, invoiceErr] = await clinicService.createInvoice({
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
@@ -2293,19 +2286,83 @@ export default function ConsultationsScreen() {
         lineItems: effectiveBillItems,
       });
       if (invoiceErr) {
-        followUpIssues.push('billing invoice');
+        const isAlreadyGeneratedConflict =
+          invoiceErr.status === 409 ||
+          (invoiceErr.message || '').toLowerCase().includes('already been generated');
+        if (!isAlreadyGeneratedConflict) {
+          setIsSigning(false);
+          const reason = invoiceErr.message || 'Unable to generate cashier billing invoice';
+          const msg = `Cannot sign encounter — Step failed: Cashier Billing Invoice (${reason}). Encounter was not signed.`;
+          setBanner({
+            text: msg,
+            isError: true,
+          });
+          notify.error(msg, { traceId: invoiceErr.traceId });
+          return;
+        }
       } else if (invoiceResult) {
         setCreatedInvoiceId(invoiceResult.id);
         setCreatedInvoiceNumber(invoiceResult.invoiceNumber);
         setCreatedInvoiceTotal(invoiceResult.netAmount);
       }
-    } else {
-      followUpIssues.push('billing invoice (no consultation fee is set in the fee schedule)');
+    }
+
+    // Step 6: Sign Consultation ONLY after all pre-sign steps succeeded
+    const [, signErr] = await clinicService.signConsultation(consultationId, {
+      prcLicenseNumber: finalPrc,
+      ptrNumber: doctorPtr.trim() || signerStaff?.ptrNumber,
+      s2LicenseNumber: finalS2,
+      doctorPhilHealthPan: finalPan,
+      philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'WALKEDIN') : undefined,
+    });
+    if (signErr) {
+      setIsSigning(false);
+      const reason = signErr.message || 'Unable to sign consultation';
+      const msg = `Cannot sign encounter — Step failed: Sign Consultation (${reason}). Encounter was not signed.`;
+      setBanner({
+        text: msg,
+        isError: true,
+      });
+      notify.error(msg, { traceId: signErr.traceId });
+      return;
+    }
+
+    // Update left-side longitudinal Patient Chart dentalTeeth now that the encounter is signed
+    if (isDentalEnabled && Object.keys(dentalChart).length > 0) {
+      const multiMap = normalizeTeethToMultiRecord(dentalChart as any);
+      const targetPatientId = selectedPatient?.patientId || patientRecord?.id || '';
+      const syncedTeeth: DentalToothRecord[] =
+        savedDentalChartResponse?.teeth && savedDentalChartResponse.teeth.length > 0
+          ? savedDentalChartResponse.teeth
+          : Object.values(multiMap).flat().map((rec) => ({
+              ...rec,
+              tenantId: rec.tenantId || settings?.tenantId || (patientRecord as any)?.tenantId || '',
+              clinicId: rec.clinicId || settings?.clinicId || (patientRecord as any)?.clinicId || '',
+              patientId: targetPatientId,
+              consultationId,
+              notes: rec.notes || null,
+              surface: rec.surface || null,
+            }));
+      setPatientChart((prev) =>
+        prev
+          ? {
+              ...prev,
+              dentalTeeth: syncedTeeth,
+              ...(savedDentalChartResponse ? { dentalChart: savedDentalChartResponse } : {}),
+            }
+          : prev
+      );
+    }
+
+    if (prescriptions.length > 0) {
+      const [slip] = await clinicService.getPrescriptionSlip(consultationId);
+      if (slip) {
+        setPrescriptionSlip(slip);
+      }
     }
 
     // Complete queue item
-    const [, completeErr] = await clinicService.completeQueueItem(selectedPatient.id);
-    if (completeErr) followUpIssues.push('queue status update');
+    await clinicService.completeQueueItem(selectedPatient.id);
 
     // Update local state immediately and refetch queue & longitudinal patient chart in background
     setSelectedPatient((prev) => (prev ? { ...prev, status: 'Completed' } : null));
@@ -2319,21 +2376,12 @@ export default function ConsultationsScreen() {
     setIsSigned(true);
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setSignedAt(nowStr);
-    if (followUpIssues.length > 0) {
-      const warnMsg = `Encounter signed by ${doctor.name} at ${nowStr}, but these steps did not complete: ${followUpIssues.join(', ')}. Please redo them from the relevant station.`;
-      setBanner({
-        text: warnMsg,
-        isError: true,
-      });
-      notify.error(warnMsg);
-    } else {
-      const successMsg = `Encounter signed by ${doctor.name} (${finalPrc}) at ${nowStr}. Lab requisitions, nursing orders and the cashier invoice were forwarded.`;
-      setBanner({
-        text: successMsg,
-        isError: false,
-      });
-      notify.success(successMsg);
-    }
+    const successMsg = `Encounter signed by ${doctor.name} (${finalPrc}) at ${nowStr}. Lab requisitions, nursing orders and the cashier invoice were forwarded.`;
+    setBanner({
+      text: successMsg,
+      isError: false,
+    });
+    notify.success(successMsg);
     setPostEncounterModalVisible(true);
   };
 
@@ -3133,11 +3181,47 @@ export default function ConsultationsScreen() {
       }
       setPatientChart(chartData);
       if (chartData.dentalTeeth && chartData.dentalTeeth.length > 0 && Object.keys(dentalChart).length === 0) {
-        const multiMap = normalizeTeethToMultiRecord(chartData.dentalTeeth);
+        const taggedTeeth = chartData.dentalTeeth.map((t) => ({
+          ...t,
+          isCurrentEncounter: Boolean(signedConsultationId && t.consultationId === signedConsultationId),
+        }));
+        const multiMap = normalizeTeethToMultiRecord(taggedTeeth);
         setDentalChart(multiMap);
       }
     }
-  }, [selectedPatient?.patientId, patientRecord?.id, dentalChart]);
+  }, [selectedPatient?.patientId, patientRecord?.id, dentalChart, signedConsultationId]);
+
+  const handleVoidDentalCondition = useCallback(
+    async (toothNumber: number, recordId: string, reason?: string) => {
+      const targetPatientId = selectedPatient?.patientId || patientRecord?.id;
+      if (!targetPatientId) return;
+      const [voidedRec, voidErr] = await clinicService.voidDentalToothRecord(
+        targetPatientId,
+        recordId,
+        reason || 'Voided in patient dental chart'
+      );
+      if (voidErr) {
+        notify.error(voidErr.message || 'Unable to void dental tooth record.');
+        return;
+      }
+      notify.success(`Voided condition on Tooth #${toothNumber}.`);
+      setDentalChart((prev) => {
+        const multi = normalizeTeethToMultiRecord(prev as any);
+        const currentRecs = multi[toothNumber] || [];
+        const nextRecs = voidConditionOnTooth(currentRecs, recordId, {
+          voidedBy: voidedRec?.voidedBy || signerName || 'Attending Clinician',
+          voidReason: voidedRec?.voidReason || reason || 'Voided in patient dental chart',
+          voidedAt: voidedRec?.voidedAt || new Date().toISOString(),
+        });
+        return {
+          ...multi,
+          [toothNumber]: nextRecs,
+        };
+      });
+      await refreshPatientChart(targetPatientId);
+    },
+    [selectedPatient?.patientId, patientRecord?.id, signerName, refreshPatientChart]
+  );
 
   // Specialized refresh for Diagnostics tab that reloads chart + lab orders without touching encounter SOAP
   const refreshDiagnosticsTab = useCallback(async () => {
@@ -3314,6 +3398,7 @@ export default function ConsultationsScreen() {
           patient={patientRecord}
           patientId={selectedPatient?.patientId || patientRecord?.id}
           chart={patientChart}
+          onVoidCondition={handleVoidDentalCondition}
           onRefreshChart={refreshPatientChart}
         />
       )}

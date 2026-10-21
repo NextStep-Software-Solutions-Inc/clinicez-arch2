@@ -10,6 +10,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Features.LabOrders.Queries;
 
@@ -53,8 +54,8 @@ public class GetClinicLabOrdersQueryHandler : IRequestHandler<GetClinicLabOrders
 
         if (request.Date.HasValue)
         {
-            var dayStart = request.Date.Value.Date;
-            var dayEnd = dayStart.AddDays(1);
+            var dayStart = request.Date.Value.ToStartOfDayUtc();
+            var dayEnd = request.Date.Value.ToEndOfDayExclusiveUtc();
             query = query.Where(o => o.OrderDate >= dayStart && o.OrderDate < dayEnd);
         }
 

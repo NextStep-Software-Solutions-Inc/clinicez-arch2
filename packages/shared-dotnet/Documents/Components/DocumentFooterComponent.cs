@@ -22,7 +22,11 @@ public class DocumentFooterComponent : IComponent
     {
         container.Column(col =>
         {
-            col.Item().PaddingBottom(4).LineHorizontal(0.5f).LineColor("#D1D5DB");
+            col.Item()
+                .PaddingTop(DocumentSpacingConstants.FooterTopPadding)
+                .PaddingBottom(4)
+                .LineHorizontal(0.5f)
+                .LineColor("#D1D5DB");
 
             col.Item().Row(row =>
             {

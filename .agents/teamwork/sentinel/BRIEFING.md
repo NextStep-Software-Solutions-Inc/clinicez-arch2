@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-20T08:02:47Z
+# BRIEFING — 2026-10-21T00:05:08Z
 
 ## Mission
-Orchestrate and monitor the end-to-end implementation of the Calendar Appointment Push Notification and Reminder System in ClinicEZ across packages/shared-dotnet, services/clinic-api, services/patient-api, and apps/clinic-app.
+Orchestrate and monitor the implementation of multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows in ClinicEZ.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -47,6 +47,10 @@ Orchestrate and monitor the end-to-end implementation of the Calendar Appointmen
 - Victory Auditor: to be spawned on victory claim
 - Victory Auditor (victory_auditor_2): 53251c79-b82b-4af9-b30e-e693aeecb7be
 - Cleaned up: task-26 killed, task-28 killed, all subagents killed
+- Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel
+- Active Project Orchestrator (orchestrator_billing_workflow): ad6bd746-c457-48e8-bebc-182ea31b181b
+- Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
+- Victory Auditor: to be spawned on victory claim
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -134,30 +138,36 @@ Orchestrate and monitor the end-to-end implementation of the Calendar Appointmen
 - On-demand manual reminder dispatch from inspection modal
 - Strict design token compliance (@clinicez/design-tokens) and full test verification
 - Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
+- Route to General (`teamwork_preview_orchestrator`) for multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows
+- R1: Multi-Doctor Charge Capture & Single Visit Draft SOA (merge into existing draft/partially paid invoice instead of 409 Conflict)
+- R2: Per-Item Clinician Attribution & Clean Invoice Bounding (InvoiceLineItem.DoctorId & DoctorName; remove single AttendingDoctorName; compute DoctorSharesReport per item)
+- R3: Document Separation: Statement of Account (INV-...) vs. Official Receipt (OR-...)
+- R4: Cashier Workstation UI/UX & Queue Lifecycle (3 tabs, cross-date draft retrieval, defensive cashiering, defer/promissory note)
+- R5: Encounter Signing UX Alignment in Consultations.screen.tsx (Charge Slip / Draft SOA posting)
+- Automated EF Core migrations using dotnet ef migrations add AddDoctorToInvoiceLineItem
+- Strict design tokens compliance (@clinicez/design-tokens)
+- Automated test verification: backend invoice tests, frontend billing tests, typecheck
 
 ## User Context
-- **Last user request**: Implement a production-grade, end-to-end Calendar Appointment Push Notification and Reminder System in ClinicEZ across packages/shared-dotnet, services/clinic-api, services/patient-api, and apps/clinic-app.
+- **Last user request**: Implement the multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows in ClinicEZ, adhering strictly to real clinic practice and `@clinicez/design-tokens` standards.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` under timestamp `## 2026-10-20T08:02:47Z`.
+  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` under timestamp `## 2026-10-21T00:05:08Z`.
   - Routed to General path (`teamwork_preview_orchestrator`).
-  - Dispatched `orchestrator_2` (`03338571-a68e-4b29-91d0-1c6ef4eb0062`) targeting `/Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/orchestrator_2`.
-  - Scheduled Cron 1 (Progress Reporting, `task-26`) and Cron 2 (Liveness Check, `task-28`).
 
 ## Project Status
-- **Phase**: complete (VICTORY CONFIRMED by independent auditor victory_auditor_2)
+- **Phase**: in progress
 - **Route**: General -> teamwork_preview_orchestrator
-- **Active Subagents**: none (cleaned up)
-- **Active Tasks**: none (cleaned up)
+- **Active Subagents**: orchestrator_billing_workflow (to be spawned)
+- **Active Tasks**: crons to be scheduled
 
 ## Victory Audit Status
-- **Triggered**: yes
-- **Auditor Conv ID**: 53251c79-b82b-4af9-b30e-e693aeecb7be (victory_auditor_2)
-- **Verdict**: VICTORY CONFIRMED
+- **Triggered**: no
+- **Verdict**: pending
 - **Retry count**: 0
 
 ## Artifact Index
-- /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
-- /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent working memory
-- /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel archived content
-- /Users/macuser/projects/github/nextstep/clinicez-reminders/.agents/teamwork/orchestrator_2/ — Project Orchestrator 2 working directory
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent working memory
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING_ARCHIVE.md — Sentinel archived content
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_billing_workflow/ — Project Orchestrator working directory

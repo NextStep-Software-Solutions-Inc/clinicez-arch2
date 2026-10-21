@@ -6,6 +6,7 @@ using ClinicEz.Laboratory.Application.Common.Interfaces;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Shared.Documents;
+using ClinicEz.Shared.Documents.Common;
 using ClinicEz.Shared.Documents.Components;
 using ClinicEz.Shared.Documents.Configuration;
 using ClinicEz.Shared.Documents.Security;
@@ -226,27 +227,30 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
                     // 4. Signatures Section
                     if (report is null)
                     {
-                        col.Item().PaddingTop(16).AlignCenter().Text(UnverifiedNotice).FontSize(8.5f).Bold().FontColor("#B45309");
+                        col.SignatoryBlock(sig =>
+                        {
+                            sig.AlignCenter().Text(UnverifiedNotice).FontSize(8.5f).Bold().FontColor("#B45309");
+                        });
                     }
                     else
                     {
-                        col.Item().PaddingTop(16).Row(row =>
+                        col.SignatoryDual(new DualSignatoryModel
                         {
-                            row.RelativeItem().PaddingRight(20).Column(c =>
+                            ColumnGap = 40,
+                            Left = new SignatoryParty
                             {
-                                c.Item().Height(30); // Signature space
-                                c.Item().LineHorizontal(1).LineColor("#111827");
-                                c.Item().PaddingTop(3).AlignCenter().Text(report.MedicalTechnologistName).FontSize(9).Bold().FontColor("#111827");
-                                c.Item().AlignCenter().Text(Credential(MedicalTechnologistTitle, report.MedicalTechnologistPrcLicense)).FontSize(7.5f).FontColor("#4B5563");
-                            });
-
-                            row.RelativeItem().PaddingLeft(20).Column(c =>
+                                SignatureSpaceHeight = 30,
+                                Name = report.MedicalTechnologistName,
+                                Title = Credential(MedicalTechnologistTitle, report.MedicalTechnologistPrcLicense),
+                                AlignCenter = true
+                            },
+                            Right = new SignatoryParty
                             {
-                                c.Item().Height(30); // Signature space
-                                c.Item().LineHorizontal(1).LineColor("#111827");
-                                c.Item().PaddingTop(3).AlignCenter().Text(report.PathologistName).FontSize(9).Bold().FontColor("#111827");
-                                c.Item().AlignCenter().Text(Credential(PathologistTitle, report.PathologistPrcLicense)).FontSize(7.5f).FontColor("#4B5563");
-                            });
+                                SignatureSpaceHeight = 30,
+                                Name = report.PathologistName,
+                                Title = Credential(PathologistTitle, report.PathologistPrcLicense),
+                                AlignCenter = true
+                            }
                         });
                     }
                 });

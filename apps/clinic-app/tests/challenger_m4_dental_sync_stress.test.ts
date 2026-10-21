@@ -125,7 +125,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
       })
     );
 
-    const decayButtonHandler = renderedPressHandlers.get('status-pill-decay');
+    const decayButtonHandler = renderedPressHandlers.get('status-pill-decayed');
     const saveConditionHandler =
       renderedPressHandlers.get('inline-dental-chart-card-save-condition-btn') ??
       renderedPressHandlers.get('inline-dental-chart-card-save-condition-trigger');
@@ -145,7 +145,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
     expect(receivedChart[18]).toBeDefined();
     // CRITICAL EMPIRICAL PROOF: receivedChart[18] IS AN ARRAY, NOT AN OBJECT!
     expect(Array.isArray(receivedChart[18])).toBe(true);
-    expect(receivedChart[18][0].status).toBe('Decay');
+    expect(receivedChart[18][0].status).toBe('Decayed');
     expect(receivedChart[18].status).toBeUndefined(); // Array has no .status!
   });
 
@@ -157,7 +157,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
         {
           id: 'rec-18-decay-1700000000000',
           toothNumber: 18,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'O',
           notes: 'Deep caries noted',
           createdAt: new Date().toISOString(),
@@ -252,7 +252,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
         {
           id: 'rec-16-decay',
           toothNumber: 16,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'M',
           notes: 'New recurrent caries',
           createdAt: new Date().toISOString(),
@@ -284,7 +284,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
         {
           id: 'rec-18-decay',
           toothNumber: 18,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'O',
           notes: 'Cavity',
         },
@@ -312,7 +312,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
         {
           id: 'rec-18-decay',
           toothNumber: 18,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'O',
           notes: 'Cavity on occlusal',
           createdAt: '2026-10-20T01:00:00Z',
@@ -332,7 +332,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
         {
           id: 'rec-16-decay',
           toothNumber: 16,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'M',
           notes: 'Recurrent caries',
           createdAt: '2026-10-20T01:00:00Z',
@@ -349,13 +349,13 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
     expect(syncedTeeth.length).toBe(3);
 
     const tooth18 = syncedTeeth.find((t) => t.toothNumber === 18);
-    expect(tooth18?.status).toBe('Decay');
+    expect(tooth18?.status).toBe('Decayed');
     expect(tooth18?.surface).toBe('O');
     expect(tooth18?.notes).toBe('Cavity on occlusal');
 
     const tooth16Recs = syncedTeeth.filter((t) => t.toothNumber === 16);
     expect(tooth16Recs.length).toBe(2);
-    expect(tooth16Recs.map((r) => r.status).sort()).toEqual(['Decay', 'Filled']);
+    expect(tooth16Recs.map((r) => r.status).sort()).toEqual(['Decayed', 'Filled']);
 
     // Downstream DentalChartTab verification:
     const chartTabNormalized = normalizeTeethToMultiRecord(syncedTeeth);
@@ -393,7 +393,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
           {
             id: 'rec-16-2',
             toothNumber: 16,
-            status: 'Decay',
+            status: 'Decayed',
             surface: 'MD',
             notes: 'Recurrent marginal decay',
             createdAt: '2026-10-20T10:00:00Z',
@@ -403,7 +403,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
           {
             id: 'rec-18-1',
             toothNumber: 18,
-            status: 'Decay',
+            status: 'Decayed',
             surface: 'O',
             notes: 'Deep pit cavity',
             createdAt: '2026-10-20T10:00:00Z',
@@ -413,7 +413,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
           {
             id: 'rec-21-1',
             toothNumber: 21,
-            status: 'Crown',
+            status: 'Crowned',
             surface: 'MODBL',
             notes: 'PFM crown placed',
             createdAt: '2026-10-15T10:00:00Z',
@@ -423,7 +423,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
           {
             id: 'rec-36-1',
             toothNumber: 36,
-            status: 'Extraction',
+            status: 'ForExtraction',
             surface: '',
             notes: 'Grossly carious, indicated for extraction',
             createdAt: '2026-10-20T10:00:00Z',
@@ -468,7 +468,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
       expect(undefinedStatusItems.length).toBe(0);
 
       // 3. Every item has a valid ToothStatus string
-      const validStatuses = new Set(['Decay', 'Filled', 'Crown', 'Extraction', 'Missing', 'Healthy']);
+      const validStatuses = new Set(['Decayed', 'Filled', 'Crowned', 'ForExtraction', 'Missing', 'Healthy']);
       for (const item of teethPayload) {
         expect(typeof item.toothNumber).toBe('number');
         expect(validStatuses.has(item.status)).toBe(true);
@@ -478,9 +478,9 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
       // 4. Tooth 16 preserved as two flat items with distinct statuses and surfaces
       const tooth16Items = teethPayload.filter((t) => t.toothNumber === 16);
       expect(tooth16Items.length).toBe(2);
-      expect(tooth16Items.map((t) => t.status).sort()).toEqual(['Decay', 'Filled']);
+      expect(tooth16Items.map((t) => t.status).sort()).toEqual(['Decayed', 'Filled']);
       expect(tooth16Items.find((t) => t.status === 'Filled')?.surface).toBe('O');
-      expect(tooth16Items.find((t) => t.status === 'Decay')?.surface).toBe('MD');
+      expect(tooth16Items.find((t) => t.status === 'Decayed')?.surface).toBe('MD');
 
       // 5. Blank surfaces or notes are mapped to undefined (not empty string) for clean JSON serialization
       const tooth36 = teethPayload.find((t) => t.toothNumber === 36);
@@ -497,10 +497,10 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
       const filePath = path.resolve(__dirname, '../navigation/screens/Consultations.screen.tsx');
       const content = fs.readFileSync(filePath, 'utf8');
 
-      // Verify the encounter signing block (around line 2137)
+      // Verify the encounter signing block
       expect(content).toContain('isDentalEnabled && Object.keys(dentalChart).length > 0');
       expect(content).toContain('const multiMap = normalizeTeethToMultiRecord(dentalChart as any);');
-      expect(content).toContain('const teethPayload = Object.values(multiMap).flat().map((rec) => ({');
+      expect(content).toContain('const teethPayload = currentEncounterRecords.map((rec) => ({');
       expect(content).toContain('toothNumber: rec.toothNumber,');
       expect(content).toContain('status: rec.status,');
       expect(content).toContain('surface: rec.surface || undefined,');
@@ -534,7 +534,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
             {
               id: `rec-${toothNum}-decay`,
               toothNumber: toothNum,
-              status: 'Decay',
+              status: 'Decayed',
               surface: 'M',
               notes: 'Marginal caries',
               createdAt: '2026-10-20T00:00:00Z',
@@ -545,7 +545,7 @@ describe('Empirical Challenger: Instant Dental Chart Sync & Multi-Condition Stre
             {
               id: `rec-${toothNum}-crown`,
               toothNumber: toothNum,
-              status: 'Crown',
+              status: 'Crowned',
               surface: 'MODBL',
               notes: 'Full coverage',
               createdAt: '2026-10-18T00:00:00Z',

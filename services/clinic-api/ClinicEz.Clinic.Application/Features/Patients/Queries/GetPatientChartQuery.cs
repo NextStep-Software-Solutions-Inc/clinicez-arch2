@@ -361,10 +361,14 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 r.UpdatedAt,
                 r.PatientName,
                 r.RecordedBy ?? r.UpdatedBy ?? r.CreatedBy,
-                r.IsCurrent ? (r.ActiveSurface ?? r.Surface) : null,
-                r.IsCurrent,
+                r.IsCurrent && !r.IsVoided ? (r.ActiveSurface ?? r.Surface) : null,
+                r.IsCurrent && !r.IsVoided,
                 r.SupersededAt,
-                r.SupersededByRecordId
+                r.SupersededByRecordId,
+                r.IsVoided,
+                r.VoidedAt,
+                r.VoidedBy,
+                r.VoidReason
             )).ToList();
         }
 

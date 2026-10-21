@@ -15,6 +15,7 @@ export interface ToothConditionItem {
   surface?: string | null;
   activeSurface?: string | null;
   isCurrent?: boolean;
+  isVoided?: boolean;
   notes?: string | null;
 }
 
@@ -64,10 +65,10 @@ export function ToothSurfaceDiagram({
 }: ToothSurfaceDiagramProps) {
   const surfacesOrientation = getSurfacesForQuadrant(toothNumber);
 
-  // Normalize effective conditions array (filtering out historical superseded records)
+  // Normalize effective conditions array (filtering out historical superseded and voided records)
   const effectiveConditions = React.useMemo<ToothConditionItem[]>(() => {
     if (conditions && conditions.length > 0) {
-      return conditions.filter((c) => c.isCurrent !== false);
+      return conditions.filter((c) => !c.isVoided && c.isCurrent !== false);
     }
     if (status || surfaces) {
       return [{ status: status || 'Healthy', surface: surfaces || '', isCurrent: true }];
@@ -96,7 +97,7 @@ export function ToothSurfaceDiagram({
 
   const getZoneColors = (surface: ToothSurfaceCode) => {
     const isSelected = selectedSet.has(surface);
-    return getSurfaceZoneColor(surface, effectiveConditions, isSelected, stagedStatus);
+    return getSurfaceZoneColor(surface, effectiveConditions, isSelected);
   };
 
   const bColors = getZoneColors('B');
@@ -105,12 +106,12 @@ export function ToothSurfaceDiagram({
   const rightColors = getZoneColors(surfacesOrientation.right);
   const oColors = getZoneColors('O');
 
-  const isMissing =
-    stagedStatus === 'Missing' ||
-    effectiveConditions.some((c) => c.status === 'Missing' && c.isCurrent !== false);
-  const hasExtraction =
-    stagedStatus === 'Extraction' ||
-    effectiveConditions.some((c) => c.status === 'Extraction' && c.isCurrent !== false);
+  const isMissing = effectiveConditions.some(
+    (c) => c.status === 'Missing' && !c.isVoided && c.isCurrent !== false
+  );
+  const hasExtraction = effectiveConditions.some(
+    (c) => c.status === 'ForExtraction' && !c.isVoided && c.isCurrent !== false
+  );
 
   const renderSurfaceZone = (surface: ToothSurfaceCode, style: any) => {
     const isSelected = selectedSet.has(surface);

@@ -89,10 +89,10 @@ public class DentalChartSearchProviderTests
         var patientIdB = Guid.NewGuid();
 
         var toothA = CreateTooth(
-            _clinicIdA, "tenant-a", patientIdA, "Maria Clara", 16, ToothStatus.Decay, "MOD", "Deep caries on upper first molar");
+            _clinicIdA, "tenant-a", patientIdA, "Maria Clara", 16, ToothStatus.Decayed, "MOD", "Deep caries on upper first molar");
 
         var toothB = CreateTooth(
-            _clinicIdB, "tenant-b", patientIdB, "Maria Clara", 16, ToothStatus.Decay, "MOD", "Deep caries on upper first molar");
+            _clinicIdB, "tenant-b", patientIdB, "Maria Clara", 16, ToothStatus.Decayed, "MOD", "Deep caries on upper first molar");
 
         context.DentalToothRecords.AddRange(toothA, toothB);
         await context.SaveChangesAsync();
@@ -132,7 +132,7 @@ public class DentalChartSearchProviderTests
         var provider = new DentalChartSearchProvider(toothRepo);
 
         var activeTooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Active Patient", 11, ToothStatus.Healthy);
-        var deletedTooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Deleted Patient", 11, ToothStatus.Decay, isDeleted: true);
+        var deletedTooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Deleted Patient", 11, ToothStatus.Decayed, isDeleted: true);
 
         context.DentalToothRecords.AddRange(activeTooth, deletedTooth);
         await context.SaveChangesAsync();
@@ -162,7 +162,7 @@ public class DentalChartSearchProviderTests
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
         var provider = new DentalChartSearchProvider(toothRepo);
 
-        var targetTooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 16, ToothStatus.Decay, "MOD");
+        var targetTooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 16, ToothStatus.Decayed, "MOD");
         var otherTooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 26, ToothStatus.Healthy);
 
         context.DentalToothRecords.AddRange(targetTooth, otherTooth);
@@ -230,7 +230,7 @@ public class DentalChartSearchProviderTests
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
         var provider = new DentalChartSearchProvider(toothRepo);
 
-        var tooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 21, ToothStatus.Crown, notes: "Porcelain crown");
+        var tooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 21, ToothStatus.Crowned, notes: "Porcelain crown");
         context.DentalToothRecords.Add(tooth);
         await context.SaveChangesAsync();
 
@@ -244,14 +244,14 @@ public class DentalChartSearchProviderTests
     // 6. Tooth Status Queries (Decay, Filled, Crown, Extraction, Healthy, Missing)
     // =========================================================================
     [Theory]
-    [InlineData("Decay", ToothStatus.Decay, 14)]
-    [InlineData("decay", ToothStatus.Decay, 14)]
+    [InlineData("Decay", ToothStatus.Decayed, 14)]
+    [InlineData("decay", ToothStatus.Decayed, 14)]
     [InlineData("Filled", ToothStatus.Filled, 16)]
     [InlineData("filled", ToothStatus.Filled, 16)]
-    [InlineData("Crown", ToothStatus.Crown, 21)]
-    [InlineData("crown", ToothStatus.Crown, 21)]
-    [InlineData("Extraction", ToothStatus.Extraction, 36)]
-    [InlineData("extraction", ToothStatus.Extraction, 36)]
+    [InlineData("Crown", ToothStatus.Crowned, 21)]
+    [InlineData("crown", ToothStatus.Crowned, 21)]
+    [InlineData("Extraction", ToothStatus.ForExtraction, 36)]
+    [InlineData("extraction", ToothStatus.ForExtraction, 36)]
     [InlineData("Healthy", ToothStatus.Healthy, 11)]
     [InlineData("healthy", ToothStatus.Healthy, 11)]
     [InlineData("Missing", ToothStatus.Missing, 28)]
@@ -266,11 +266,11 @@ public class DentalChartSearchProviderTests
         var teeth = new[]
         {
             CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Patient 1", 11, ToothStatus.Healthy),
-            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Patient 2", 14, ToothStatus.Decay, "O"),
+            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Patient 2", 14, ToothStatus.Decayed, "O"),
             CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Patient 3", 16, ToothStatus.Filled, "MOD"),
-            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Patient 4", 21, ToothStatus.Crown),
+            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Patient 4", 21, ToothStatus.Crowned),
             CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Patient 5", 28, ToothStatus.Missing),
-            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Patient 6", 36, ToothStatus.Extraction)
+            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Patient 6", 36, ToothStatus.ForExtraction)
         };
 
         context.DentalToothRecords.AddRange(teeth);
@@ -302,11 +302,11 @@ public class DentalChartSearchProviderTests
 
         var teeth = new[]
         {
-            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P1", 14, ToothStatus.Decay, "B"),
-            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P2", 15, ToothStatus.Decay, "O"),
+            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P1", 14, ToothStatus.Decayed, "B"),
+            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P2", 15, ToothStatus.Decayed, "O"),
             CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P3", 16, ToothStatus.Filled, "MOD"),
-            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P4", 25, ToothStatus.Decay, "D"),
-            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P5", 35, ToothStatus.Decay, "L")
+            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P4", 25, ToothStatus.Decayed, "D"),
+            CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P5", 35, ToothStatus.Decayed, "L")
         };
 
         context.DentalToothRecords.AddRange(teeth);
@@ -332,10 +332,10 @@ public class DentalChartSearchProviderTests
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
         var provider = new DentalChartSearchProvider(toothRepo);
 
-        var tooth1 = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P1", 16, ToothStatus.Decay, notes: "Acute periapical abscess");
+        var tooth1 = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P1", 16, ToothStatus.Decayed, notes: "Acute periapical abscess");
         var tooth2 = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P2", 21, ToothStatus.Filled, notes: "Previous root canal therapy completed");
-        var tooth3 = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P3", 31, ToothStatus.Extraction, notes: "Vertical root fracture");
-        var tooth4 = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P4", 46, ToothStatus.Decay, notes: "Severe occlusal caries");
+        var tooth3 = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P3", 31, ToothStatus.ForExtraction, notes: "Vertical root fracture");
+        var tooth4 = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "P4", 46, ToothStatus.Decayed, notes: "Severe occlusal caries");
 
         context.DentalToothRecords.AddRange(tooth1, tooth2, tooth3, tooth4);
         await context.SaveChangesAsync();
@@ -350,12 +350,17 @@ public class DentalChartSearchProviderTests
     // 9. Semantic Badge Variant Mapping
     // =========================================================================
     [Theory]
-    [InlineData(ToothStatus.Decay, "Decay", SearchBadgeVariant.Urgent)]
-    [InlineData(ToothStatus.Extraction, "Extraction", SearchBadgeVariant.Emergency)]
+    [InlineData(ToothStatus.Decayed, "Decayed", SearchBadgeVariant.Urgent)]
+    [InlineData(ToothStatus.ForExtraction, "ForExtraction", SearchBadgeVariant.Emergency)]
     [InlineData(ToothStatus.Filled, "Filled", SearchBadgeVariant.Routine)]
-    [InlineData(ToothStatus.Crown, "Crown", SearchBadgeVariant.Neutral)]
+    [InlineData(ToothStatus.Crowned, "Crowned", SearchBadgeVariant.Neutral)]
     [InlineData(ToothStatus.Healthy, "Healthy", SearchBadgeVariant.Neutral)]
     [InlineData(ToothStatus.Missing, "Missing", SearchBadgeVariant.Neutral)]
+    [InlineData(ToothStatus.Sealant, "Sealant", SearchBadgeVariant.Routine)]
+    [InlineData(ToothStatus.Fractured, "Fractured", SearchBadgeVariant.Urgent)]
+    [InlineData(ToothStatus.Impacted, "Impacted", SearchBadgeVariant.Urgent)]
+    [InlineData(ToothStatus.RootCanal, "RootCanal", SearchBadgeVariant.Neutral)]
+    [InlineData(ToothStatus.Implant, "Implant", SearchBadgeVariant.Routine)]
     public async Task SearchAsync_BadgeVariantMapping_MapsStatusToCorrectVariant(
         ToothStatus status, string expectedBadgeText, string expectedVariant)
     {
@@ -388,7 +393,7 @@ public class DentalChartSearchProviderTests
         var provider = new DentalChartSearchProvider(toothRepo);
 
         var patientId = Guid.NewGuid();
-        var tooth = CreateTooth(_clinicIdA, "tenant-a", patientId, "Juan Dela Cruz", 16, ToothStatus.Decay, "MOD", "Deep caries");
+        var tooth = CreateTooth(_clinicIdA, "tenant-a", patientId, "Juan Dela Cruz", 16, ToothStatus.Decayed, "MOD", "Deep caries");
         context.DentalToothRecords.Add(tooth);
         await context.SaveChangesAsync();
 
@@ -399,7 +404,7 @@ public class DentalChartSearchProviderTests
 
         item.Id.Should().Be($"dental-{tooth.Id}");
         item.Category.Should().Be("Dental");
-        item.Title.Should().Be("Tooth #16 — Decay (MOD)");
+        item.Title.Should().Be("Tooth #16 — Decayed (MOD)");
         item.Subtitle.Should().Be("Patient: Juan Dela Cruz • Deep caries");
         item.TargetRoute.Should().Be("Patients");
 
@@ -423,7 +428,7 @@ public class DentalChartSearchProviderTests
         var toothRepo = TestDbHelper.CreateRepository<DentalToothRecord>(context, sieve);
         var provider = new DentalChartSearchProvider(toothRepo);
 
-        var tooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 16, ToothStatus.Decay);
+        var tooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 16, ToothStatus.Decayed);
         context.DentalToothRecords.Add(tooth);
         await context.SaveChangesAsync();
 
@@ -446,7 +451,7 @@ public class DentalChartSearchProviderTests
         for (int i = 11; i <= 35; i++)
         {
             context.DentalToothRecords.Add(CreateTooth(
-                _clinicIdA, "tenant-a", patientId, "Juan Dela Cruz", i, ToothStatus.Decay));
+                _clinicIdA, "tenant-a", patientId, "Juan Dela Cruz", i, ToothStatus.Decayed));
         }
         await context.SaveChangesAsync();
 
@@ -526,7 +531,7 @@ public class DentalChartSearchProviderTests
                 new("pat-1", "Patients", "Juan Dela Cruz", "PIN: 1", null, null, "Patients")
             }));
 
-        var tooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 16, ToothStatus.Decay, "MOD");
+        var tooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 16, ToothStatus.Decayed, "MOD");
         context.DentalToothRecords.Add(tooth);
         await context.SaveChangesAsync();
 
@@ -555,7 +560,7 @@ public class DentalChartSearchProviderTests
         patientProvider.Category.Returns("Patients");
         patientProvider.Priority.Returns(10);
 
-        var tooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 16, ToothStatus.Decay);
+        var tooth = CreateTooth(_clinicIdA, "tenant-a", Guid.NewGuid(), "Juan Dela Cruz", 16, ToothStatus.Decayed);
         context.DentalToothRecords.Add(tooth);
         await context.SaveChangesAsync();
 

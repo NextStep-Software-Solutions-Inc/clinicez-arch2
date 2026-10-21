@@ -201,7 +201,7 @@ describe('Challenger 2 Empirical Verification: Frontend Dental Search & Route Re
         title: 'Tooth #16 — Decay (MOD)',
         subtitle: 'Patient: Juan Dela Cruz • Deep caries',
         targetRoute: 'Patients',
-        badgeText: 'Decay',
+        badgeText: 'Decayed',
         badgeVariant: 'urgent',
         routeParams: {
           patientId: 'patient-guid-101',

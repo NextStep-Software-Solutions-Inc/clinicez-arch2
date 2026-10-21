@@ -9,6 +9,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Features.Reports.Queries;
 
@@ -50,9 +51,13 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
 
     public async Task<ClinicAnalyticsDto> Handle(GetClinicAnalyticsQuery request, CancellationToken cancellationToken)
     {
-        var end = request.EndDate?.Date.AddDays(1) ?? DateTime.UtcNow.Date.AddDays(1);
-        var start = request.StartDate?.Date ?? end.AddDays(-7);
-        var today = DateTime.UtcNow.Date;
+        var end = request.EndDate.HasValue
+            ? request.EndDate.Value.ToEndOfDayExclusiveUtc()
+            : DateTime.UtcNow.ToStartOfDayUtc().AddDays(1);
+        var start = request.StartDate.HasValue
+            ? request.StartDate.Value.ToStartOfDayUtc()
+            : end.AddDays(-7);
+        var today = DateTime.UtcNow.ToStartOfDayUtc();
         var tomorrow = today.AddDays(1);
 
         // 1. Flow & Telemetry (Today's queue telemetry)

@@ -196,7 +196,7 @@ const mockChart: PatientChart = {
       clinicId: 'clinic-1',
       patientId: 'pat-integration-1',
       toothNumber: 16,
-      status: 'Decay' as any,
+      status: 'Decayed' as any,
       surface: 'MD',
       notes: 'Mesial decay',
       createdAt: '2026-10-20T00:00:00Z',
@@ -418,7 +418,7 @@ describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration
             clinicId: 'clinic-1',
             patientId: 'pat-integration-1',
             toothNumber: 16,
-            status: 'Decay',
+            status: 'Decayed',
             surface: 'MD',
             notes: 'Recurrent marginal caries',
             createdAt: '2026-10-20T10:00:00Z',
@@ -432,7 +432,7 @@ describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration
             clinicId: 'clinic-1',
             patientId: 'pat-integration-1',
             toothNumber: 18,
-            status: 'Decay',
+            status: 'Decayed',
             surface: 'O',
             notes: 'Deep occlusal pit decay',
             createdAt: '2026-10-20T10:00:00Z',
@@ -490,20 +490,20 @@ describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration
       // Verify tooth 16 preserves BOTH conditions
       const tooth16 = patientChartState.dentalTeeth.filter((t: any) => t.toothNumber === 16);
       expect(tooth16.length).toBe(2);
-      expect(tooth16.map((r: any) => r.status).sort()).toEqual(['Decay', 'Filled']);
-      expect(tooth16.find((r: any) => r.status === 'Decay').surface).toBe('MD');
-      expect(tooth16.find((r: any) => r.status === 'Decay').notes).toBe('Recurrent marginal caries');
+      expect(tooth16.map((r: any) => r.status).sort()).toEqual(['Decayed', 'Filled']);
+      expect(tooth16.find((r: any) => r.status === 'Decayed').surface).toBe('MD');
+      expect(tooth16.find((r: any) => r.status === 'Decayed').notes).toBe('Recurrent marginal caries');
       expect(tooth16.find((r: any) => r.status === 'Filled').surface).toBe('O');
 
       // Verify tooth 18
       const tooth18 = patientChartState.dentalTeeth.find((t: any) => t.toothNumber === 18);
-      expect(tooth18.status).toBe('Decay');
+      expect(tooth18.status).toBe('Decayed');
       expect(tooth18.surface).toBe('O');
       expect(tooth18.notes).toBe('Deep occlusal pit decay');
 
       // Verify downstream DentalChartTab normalization does NOT revert to Healthy
       const normalizedForChartTab = normalizeTeethToMultiRecord(patientChartState.dentalTeeth);
-      expect(normalizedForChartTab[18][0].status).toBe('Decay');
+      expect(normalizedForChartTab[18][0].status).toBe('Decayed');
       expect(normalizedForChartTab[16].length).toBe(2);
 
       // Verify DMFT calculation metrics
@@ -521,7 +521,7 @@ describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration
       }));
       expect(teethPayload.length).toBe(3);
       expect(teethPayload.every((p) => p.status !== undefined)).toBe(true);
-      expect(teethPayload.find((p) => p.toothNumber === 18)?.status).toBe('Decay');
+      expect(teethPayload.find((p) => p.toothNumber === 18)?.status).toBe('Decayed');
     });
 
     test('4.2 Consultations.screen.tsx refreshPatientChart populates dentalTeeth with dentalChart fallback', () => {
@@ -579,7 +579,7 @@ describe('Milestone 4: Workstation Layout & Longitudinal Dental Sync Integration
         {
           id: 'df-1',
           toothNumber: 16,
-          status: 'Decay',
+          status: 'Decayed',
           surface: 'MD',
           notes: 'Cavitated lesion into dentin',
           recordedBy: 'Dr. Maria Santos',

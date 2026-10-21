@@ -303,7 +303,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
       expect(effectiveOrderProcedure).toBe(mockQuick);
 
       // Simulate execution:
-      const toothState: DentalToothState = { toothNumber: 36, status: 'Decay', surface: 'DO' };
+      const toothState: DentalToothState = { toothNumber: 36, status: 'Decayed', surface: 'DO' };
       const canonicalSurface = toothState.surface ? sortToothSurfaces(toothState.surface) : undefined;
       effectiveOrderProcedure(toothState.toothNumber, canonicalSurface);
 
@@ -338,7 +338,7 @@ describe('Challenger 1 Empirical Stress & Adversarial Suite (Milestone MC Iterat
 
     test('Child tooth quick order button formatting with multi-surface MO on tooth #54', () => {
       const chart: Record<number, DentalToothState> = {
-        54: { toothNumber: 54, status: 'Decay', surface: 'MO' },
+        54: { toothNumber: 54, status: 'Decayed', surface: 'MO' },
       };
       const html = renderToStaticMarkup(
         React.createElement(InlineDentalChartCard, {

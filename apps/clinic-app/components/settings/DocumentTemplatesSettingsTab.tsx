@@ -1455,6 +1455,7 @@ const styles = StyleSheet.create({
   signatureBlock: {
     marginTop: 'auto',
     paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
     alignItems: 'flex-end',
     gap: theme.spacing.xs,
   },

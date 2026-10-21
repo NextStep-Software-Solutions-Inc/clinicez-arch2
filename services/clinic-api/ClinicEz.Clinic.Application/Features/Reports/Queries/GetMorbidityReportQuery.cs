@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Features.Reports.Queries;
 
@@ -37,8 +38,12 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
 
     public async Task<MorbidityReportDto> Handle(GetMorbidityReportQuery request, CancellationToken cancellationToken)
     {
-        var end = request.EndDate?.Date.AddDays(1) ?? DateTime.UtcNow.Date.AddDays(1);
-        var start = request.StartDate?.Date ?? end.AddDays(-30);
+        var end = request.EndDate.HasValue
+            ? request.EndDate.Value.ToEndOfDayExclusiveUtc()
+            : DateTime.UtcNow.ToStartOfDayUtc().AddDays(1);
+        var start = request.StartDate.HasValue
+            ? request.StartDate.Value.ToStartOfDayUtc()
+            : end.AddDays(-30);
 
         var encounters = await _consultationRepo.Query(c => c.EncounterDate >= start && c.EncounterDate < end)
             .Include(c => c.Diagnoses)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Interop.Persistence;
 using ClinicEz.Shared.Workspace;
@@ -1036,12 +1037,18 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.PatientName).HasMaxLength(150);
             entity.Property(e => e.ToothNumber).IsRequired();
-            entity.Property(e => e.Status).IsRequired().HasConversion<string>().HasMaxLength(50);
+            entity.Property(e => e.Status)
+                .IsRequired()
+                .HasConversion<string>()
+                .HasMaxLength(50);
             entity.Property(e => e.Surface).HasMaxLength(20);
             entity.Property(e => e.ActiveSurface).HasMaxLength(20);
             entity.Property(e => e.IsCurrent).IsRequired().HasDefaultValue(true);
             entity.Property(e => e.RecordedBy).HasMaxLength(200);
             entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.IsVoided).IsRequired().HasDefaultValue(false);
+            entity.Property(e => e.VoidedBy).HasMaxLength(200);
+            entity.Property(e => e.VoidReason).HasMaxLength(500);
 
             // Composite indexes for fast odontogram reads and tooth history
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });

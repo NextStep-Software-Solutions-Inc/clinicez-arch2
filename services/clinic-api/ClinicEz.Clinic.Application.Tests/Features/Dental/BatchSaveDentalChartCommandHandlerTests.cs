@@ -67,9 +67,9 @@ public class BatchSaveDentalChartCommandHandlerTests
             Teeth: new List<ToothRecordInput>
             {
                 new(ToothNumber: 11, Status: ToothStatus.Healthy, Surface: null, Notes: "Intact"),
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "dom", Notes: "Caries on occlusal/mesial/distal"),
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "dom", Notes: "Caries on occlusal/mesial/distal"),
                 new(ToothNumber: 26, Status: ToothStatus.Filled, Surface: "O", Notes: "Amalgam"),
-                new(ToothNumber: 38, Status: ToothStatus.Extraction, Surface: null, Notes: "Impacted wisdom tooth")
+                new(ToothNumber: 38, Status: ToothStatus.ForExtraction, Surface: null, Notes: "Impacted wisdom tooth")
             }
         );
 
@@ -83,7 +83,7 @@ public class BatchSaveDentalChartCommandHandlerTests
 
         // Tooth 16 surface canonicalized to "MOD"
         var tooth16 = result.Teeth.First(t => t.ToothNumber == 16);
-        tooth16.Status.Should().Be(ToothStatus.Decay);
+        tooth16.Status.Should().Be(ToothStatus.Decayed);
         tooth16.Surface.Should().Be("MOD");
 
         // Verify database persistence
@@ -119,7 +119,7 @@ public class BatchSaveDentalChartCommandHandlerTests
             ClinicId = _clinicId,
             PatientId = patientId,
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "MOD",
             Notes = "Caries observed previously"
         }, CancellationToken.None);
@@ -139,7 +139,7 @@ public class BatchSaveDentalChartCommandHandlerTests
             Teeth: new List<ToothRecordInput>
             {
                 // Updating tooth 16 Decay record in place
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "MOD", Notes: "Updated caries assessment"),
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "MOD", Notes: "Updated caries assessment"),
                 // Inserting new tooth 21
                 new(ToothNumber: 21, Status: ToothStatus.Healthy, Surface: null, Notes: "Normal")
             }
@@ -155,7 +155,7 @@ public class BatchSaveDentalChartCommandHandlerTests
         dbRecords.Should().HaveCount(2);
 
         var tooth16 = dbRecords.First(t => t.ToothNumber == 16);
-        tooth16.Status.Should().Be(ToothStatus.Decay);
+        tooth16.Status.Should().Be(ToothStatus.Decayed);
         tooth16.Notes.Should().Be("Updated caries assessment");
         tooth16.UpdatedAt.Should().NotBeNull();
     }
@@ -208,7 +208,7 @@ public class BatchSaveDentalChartCommandHandlerTests
             Teeth: new List<ToothRecordInput>
             {
                 // New condition on tooth 16: Decay on MD
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "MD", Notes: "Recurrent caries on mesial-distal"),
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "MD", Notes: "Recurrent caries on mesial-distal"),
                 // New tooth 21 Healthy
                 new(ToothNumber: 21, Status: ToothStatus.Healthy, Surface: null, Notes: "Normal")
             }
@@ -229,7 +229,7 @@ public class BatchSaveDentalChartCommandHandlerTests
         var tooth16Records = result.Teeth.Where(t => t.ToothNumber == 16).ToList();
         tooth16Records.Should().HaveCount(2);
         tooth16Records.Should().Contain(t => t.Status == ToothStatus.Filled && t.Surface == "O");
-        tooth16Records.Should().Contain(t => t.Status == ToothStatus.Decay && t.Surface == "MD");
+        tooth16Records.Should().Contain(t => t.Status == ToothStatus.Decayed && t.Surface == "MD");
     }
 
     [Fact]
@@ -263,7 +263,7 @@ public class BatchSaveDentalChartCommandHandlerTests
             {
                 new(ToothNumber: 11, Status: ToothStatus.Healthy),
                 new(ToothNumber: 21, Status: ToothStatus.Healthy),
-                new(ToothNumber: 56, Status: ToothStatus.Decay) // Invalid child tooth (child quadrants max at 5)
+                new(ToothNumber: 56, Status: ToothStatus.Decayed) // Invalid child tooth (child quadrants max at 5)
             }
         );
 
@@ -309,7 +309,7 @@ public class BatchSaveDentalChartCommandHandlerTests
             Teeth: new List<ToothRecordInput>
             {
                 new(ToothNumber: 11, Status: ToothStatus.Healthy),
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "XYZ") // Invalid surface characters
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "XYZ") // Invalid surface characters
             }
         );
 
@@ -399,7 +399,7 @@ public class BatchSaveDentalChartCommandHandlerTests
             ConsultationId: null,
             Teeth: new List<ToothRecordInput>
             {
-                new(ToothNumber: 16, Status: ToothStatus.Decay, Surface: "MOD", Notes: "Our clinic record")
+                new(ToothNumber: 16, Status: ToothStatus.Decayed, Surface: "MOD", Notes: "Our clinic record")
             }
         );
 
@@ -409,7 +409,7 @@ public class BatchSaveDentalChartCommandHandlerTests
         // Assert
         result.Teeth.Should().HaveCount(1);
         result.Teeth[0].ClinicId.Should().Be(_clinicId);
-        result.Teeth[0].Status.Should().Be(ToothStatus.Decay);
+        result.Teeth[0].Status.Should().Be(ToothStatus.Decayed);
 
         // Other clinic record remains unaltered
         var otherRecord = await toothRepo.Query(t => t.ClinicId == otherClinicId && t.ToothNumber == 16, ignoreQueryFilters: true).FirstAsync();

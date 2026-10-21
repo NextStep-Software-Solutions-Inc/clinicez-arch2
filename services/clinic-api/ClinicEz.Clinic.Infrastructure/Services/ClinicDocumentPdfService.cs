@@ -1074,31 +1074,26 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         }
                     });
 
-                    // Verification Stamps
-                    col.Item().PaddingTop(24).Row(stamps =>
+                    // Verification Stamps & Compliance Notice
+                    col.SignatoryDual(new DualSignatoryModel
                     {
-                        stamps.RelativeItem().Column(att =>
+                        ColumnGap = 40,
+                        Left = new SignatoryParty
                         {
-                            att.Item().Height(30);
-                            att.Item().LineHorizontal(1).LineColor("#94A3B8");
-                            att.Item().PaddingTop(2).AlignCenter().Text(docName).FontSize(9f).Bold().FontColor("#0F172A");
-                            att.Item().AlignCenter().Text("Attending Clinician / Physician").FontSize(7.5f).FontColor("#64748B");
-                        });
-
-                        stamps.ConstantItem(40);
-
-                        stamps.RelativeItem().Column(cash =>
+                            SignatureSpaceHeight = 30,
+                            Name = docName,
+                            Title = "Attending Clinician / Physician",
+                            AlignCenter = true
+                        },
+                        Right = new SignatoryParty
                         {
-                            cash.Item().Height(30);
-                            cash.Item().LineHorizontal(1).LineColor("#94A3B8");
-                            cash.Item().PaddingTop(2).AlignCenter().Text(invoice.BilledByStaffName ?? "Authorized Billing Officer").FontSize(9f).Bold().FontColor("#0F172A");
-                            cash.Item().AlignCenter().Text("Billing Officer / Cashier").FontSize(7.5f).FontColor("#64748B");
-                        });
+                            SignatureSpaceHeight = 30,
+                            Name = invoice.BilledByStaffName ?? "Authorized Billing Officer",
+                            Title = "Billing Officer / Cashier",
+                            AlignCenter = true
+                        },
+                        BottomComplianceNotice = "Official Clinic EZ Statement of Account & Billing Invoice • Valid for healthcare accounting under RA 8792 & RA 10173"
                     });
-
-                    // Compliance notice
-                    col.Item().PaddingTop(16).AlignCenter().Text("Official Clinic EZ Statement of Account & Billing Invoice • Valid for healthcare accounting under RA 8792 & RA 10173")
-                        .FontSize(7.5f).FontColor("#94A3B8");
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
@@ -2148,25 +2143,23 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         string approverName,
         string approverTitle)
     {
-        col.Item().PaddingTop(14).Row(row =>
+        col.SignatoryDual(new DualSignatoryModel
         {
-            row.RelativeItem().Column(c =>
+            ColumnGap = 30,
+            Left = new SignatoryParty
             {
-                c.Item().Text("PREPARED BY:").FontSize(7f).SemiBold().FontColor("#64748B");
-                c.Item().PaddingTop(18).LineHorizontal(0.5f).LineColor("#9CA3AF");
-                c.Item().PaddingTop(2).Text(preparedBy).FontSize(8.5f).Bold().FontColor("#111827");
-                c.Item().Text(preparedTitle).FontSize(7f).FontColor("#6B7280");
-            });
-
-            row.ConstantItem(30).Height(1);
-
-            row.RelativeItem().Column(c =>
+                Label = "PREPARED BY:",
+                Name = preparedBy,
+                Title = preparedTitle,
+                SignatureSpaceHeight = 18
+            },
+            Right = new SignatoryParty
             {
-                c.Item().Text("NOTED / APPROVED BY:").FontSize(7f).SemiBold().FontColor("#64748B");
-                c.Item().PaddingTop(18).LineHorizontal(0.5f).LineColor("#9CA3AF");
-                c.Item().PaddingTop(2).Text(approverName).FontSize(8.5f).Bold().FontColor("#111827");
-                c.Item().Text(approverTitle).FontSize(7f).FontColor("#6B7280");
-            });
+                Label = "NOTED / APPROVED BY:",
+                Name = approverName,
+                Title = approverTitle,
+                SignatureSpaceHeight = 18
+            }
         });
     }
 
@@ -2258,61 +2251,16 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         SignatureMode mode,
         string digitalSealBadgeText)
     {
-        col.Item().ExtendVertical().AlignBottom().PaddingTop(14).AlignRight().Width(230).Column(stamp =>
+        col.SignatoryClinician(new ClinicianSignatoryModel
         {
-            if (mode == SignatureMode.ESignatureSpecimen && signatureBytes != null && signatureBytes.Length > 0)
-            {
-                stamp.Item().Height(38).AlignCenter().Image(signatureBytes).FitArea();
-            }
-            else if (mode == SignatureMode.ESignatureSpecimen)
-            {
-                stamp.Item().Height(36).AlignCenter().PaddingTop(12).Text("[Clinician E-Signature Specimen Applied]")
-                    .FontSize(7f).Italic().FontColor("#64748B");
-            }
-            else
-            {
-                stamp.Item().Height(mode == SignatureMode.WetSignature ? 42 : 24);
-            }
-
-            stamp.Item().LineHorizontal(1).LineColor("#111827");
-            stamp.Item().PaddingTop(3).AlignCenter().Text(doctorName).FontSize(10.5f).Bold().FontColor("#111827");
-            if (!string.IsNullOrWhiteSpace(titleOrSpecialty))
-            {
-                stamp.Item().AlignCenter().Text(titleOrSpecialty).FontSize(8f).SemiBold().FontColor("#4B5563");
-            }
-            if (!string.IsNullOrWhiteSpace(prcLicense))
-            {
-                var prcText = prcLicense.StartsWith("PRC", StringComparison.OrdinalIgnoreCase)
-                    ? prcLicense
-                    : $"PRC Lic. No. {prcLicense}";
-                stamp.Item().AlignCenter().Text(prcText).FontSize(7.5f).FontColor("#4B5563");
-            }
-            if (!string.IsNullOrWhiteSpace(ptrNumber))
-            {
-                var ptrText = ptrNumber.StartsWith("PTR", StringComparison.OrdinalIgnoreCase)
-                    ? ptrNumber
-                    : $"PTR No. {ptrNumber}";
-                stamp.Item().AlignCenter().Text(ptrText).FontSize(7.5f).FontColor("#4B5563");
-            }
-            if (!string.IsNullOrWhiteSpace(s2License))
-            {
-                var s2Text = s2License.StartsWith("PDEA", StringComparison.OrdinalIgnoreCase) || s2License.StartsWith("S2", StringComparison.OrdinalIgnoreCase)
-                    ? s2License
-                    : $"S2 No. {s2License}";
-                stamp.Item().AlignCenter().Text(s2Text).FontSize(7.5f).Bold().FontColor("#DC2626");
-            }
-
-            if (mode != SignatureMode.WetSignature && !string.IsNullOrWhiteSpace(digitalSealBadgeText))
-            {
-                var cleanBadgeText = digitalSealBadgeText.TrimStart('✓', ' ', '\t');
-                stamp.Item().PaddingTop(4).AlignCenter()
-                    .Border(1).BorderColor("#86EFAC").Background("#F0FDF4").PaddingVertical(2).PaddingHorizontal(6)
-                    .Row(badge =>
-                    {
-                        badge.ConstantItem(10).Height(10).Svg(DocumentSvgIcons.CheckmarkCircle("#16A34A"));
-                        badge.RelativeItem().PaddingLeft(3).Text(cleanBadgeText).FontSize(7f).Bold().FontColor("#15803D");
-                    });
-            }
+            DoctorName = doctorName,
+            TitleOrSpecialty = titleOrSpecialty,
+            PrcLicense = prcLicense,
+            PtrNumber = ptrNumber,
+            S2License = s2License,
+            SignatureBytes = signatureBytes,
+            Mode = mode,
+            DigitalSealBadgeText = digitalSealBadgeText
         });
     }
 }

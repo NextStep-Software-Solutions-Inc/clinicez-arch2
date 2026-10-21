@@ -84,12 +84,14 @@ public class GetEligibleYakapEncountersQueryHandler : IRequestHandler<GetEligibl
 
         if (request.StartDate.HasValue)
         {
-            query = query.Where(e => e.EncounterDate >= request.StartDate.Value);
+            var startUtc = request.StartDate.Value.ToStartOfDayUtc();
+            query = query.Where(e => e.EncounterDate >= startUtc);
         }
 
         if (request.EndDate.HasValue)
         {
-            query = query.Where(e => e.EncounterDate <= request.EndDate.Value);
+            var endUtc = request.EndDate.Value.ToEndOfDayExclusiveUtc();
+            query = query.Where(e => e.EncounterDate < endUtc);
         }
 
         var encounters = await query

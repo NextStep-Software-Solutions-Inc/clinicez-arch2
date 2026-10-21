@@ -63,7 +63,7 @@ public class GetPatientDentalChartQueryHandlerTests
             ClinicId = _clinicId,
             PatientId = patientId,
             ToothNumber = 21,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "M",
             Notes = "Incipient mesial caries"
         }, CancellationToken.None);
@@ -130,7 +130,7 @@ public class GetPatientDentalChartQueryHandlerTests
         result.Teeth[0].ToothNumber.Should().Be(11);
         result.Teeth[0].Status.Should().Be(ToothStatus.Healthy);
         result.Teeth[1].ToothNumber.Should().Be(21);
-        result.Teeth[1].Status.Should().Be(ToothStatus.Decay);
+        result.Teeth[1].Status.Should().Be(ToothStatus.Decayed);
         result.Teeth[2].ToothNumber.Should().Be(36);
         result.Teeth[2].Status.Should().Be(ToothStatus.Filled);
 
@@ -182,7 +182,7 @@ public class GetPatientDentalChartQueryHandlerTests
             ClinicId = otherClinicId,
             PatientId = patientId,
             ToothNumber = 16,
-            Status = ToothStatus.Decay
+            Status = ToothStatus.Decayed
         }, CancellationToken.None);
 
         await procRepo.AddAsync(new ClinicalProcedure
@@ -225,7 +225,7 @@ public class GetPatientDentalChartQueryHandlerTests
             ClinicId = _clinicId,
             PatientId = patientId,
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             IsDeleted = true,
             DeletedAt = DateTime.UtcNow
         };
@@ -289,7 +289,7 @@ public class GetPatientDentalChartQueryHandlerTests
             ClinicId = _clinicId,
             PatientId = patientId,
             ToothNumber = 16,
-            Status = ToothStatus.Decay,
+            Status = ToothStatus.Decayed,
             Surface = "MD",
             Notes = "Mesial and distal recurrent decay",
             CreatedBy = "Dr. Diagnostic Dentist"
@@ -334,7 +334,7 @@ public class GetPatientDentalChartQueryHandlerTests
         tooth16Filled!.Surface.Should().Be("O");
         tooth16Filled.RecordedBy.Should().Be("Dr. Restoring Dentist"); // UpdatedBy ?? CreatedBy
 
-        var tooth16Decay = result.Teeth.FirstOrDefault(t => t.ToothNumber == 16 && t.Status == ToothStatus.Decay);
+        var tooth16Decay = result.Teeth.FirstOrDefault(t => t.ToothNumber == 16 && t.Status == ToothStatus.Decayed);
         tooth16Decay.Should().NotBeNull();
         tooth16Decay!.Surface.Should().Be("MD");
         tooth16Decay.RecordedBy.Should().Be("Dr. Diagnostic Dentist"); // CreatedBy fallback

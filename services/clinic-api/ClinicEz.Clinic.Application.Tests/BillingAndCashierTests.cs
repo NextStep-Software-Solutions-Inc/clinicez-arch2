@@ -4,9 +4,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Billing.Commands;
 using ClinicEz.Clinic.Application.Features.Billing.DTOs;
+using ClinicEz.Clinic.Application.Features.Billing.Queries;
 using ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
 using ClinicEz.Clinic.Application.Features.Procedures.Commands;
+using ClinicEz.Clinic.Application.Features.Queue.Queries;
 using ClinicEz.Clinic.Application.Features.Reports.Queries;
 using ClinicEz.Clinic.Application.Features.ServicesCatalog.Commands;
 using ClinicEz.Clinic.Domain.Entities;
@@ -262,5 +264,162 @@ public class BillingAndCashierTests
         report.TotalAmountCollected.Should().Be(500m);
         report.CashInDrawer.Should().Be(500m);
         report.CollectionsByMethod.Should().ContainSingle(c => c.Method == "Cash" && c.TotalAmount == 500m);
+    }
+
+    [Fact]
+    public async Task GetInvoicesQuery_WithDate_ReturnsInvoicesCreatedOrSettledToday()
+    {
+        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
+
+        var today = DateTime.UtcNow;
+        var pastDate = today.AddDays(-10);
+
+        // 1. Invoice created and paid today
+        var invToday = new Invoice
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            InvoiceNumber = "INV-TODAY-001",
+            InvoiceDate = today,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Patient Today",
+            GrossAmount = 600m,
+            NetAmount = 600m,
+            AmountPaid = 600m,
+            BalanceDue = 0m,
+            Status = InvoiceStatus.Paid
+        };
+        invToday.Payments.Add(new PaymentRecord
+        {
+            InvoiceId = invToday.Id,
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PaymentNumber = "OR-TODAY-001",
+            PaymentDate = today,
+            Amount = 600m,
+            Method = PaymentMethod.Cash
+        });
+        await db.Invoices.AddAsync(invToday);
+
+        // 2. Invoice created in past (e.g. yesterday draft SOA) but settled/paid TODAY
+        var invPastPaidToday = new Invoice
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            InvoiceNumber = "INV-PAST-002",
+            InvoiceDate = pastDate,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Patient Past Settled Today",
+            GrossAmount = 1000m,
+            NetAmount = 1000m,
+            AmountPaid = 1000m,
+            BalanceDue = 0m,
+            Status = InvoiceStatus.Paid
+        };
+        invPastPaidToday.Payments.Add(new PaymentRecord
+        {
+            InvoiceId = invPastPaidToday.Id,
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PaymentNumber = "OR-TODAY-002",
+            PaymentDate = today,
+            Amount = 1000m,
+            Method = PaymentMethod.GCash
+        });
+        await db.Invoices.AddAsync(invPastPaidToday);
+
+        // 3. Past invoice not settled today
+        var invOldUnsettled = new Invoice
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            InvoiceNumber = "INV-OLD-003",
+            InvoiceDate = pastDate,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Patient Old",
+            GrossAmount = 400m,
+            NetAmount = 400m,
+            AmountPaid = 0m,
+            BalanceDue = 400m,
+            Status = InvoiceStatus.Draft
+        };
+        await db.Invoices.AddAsync(invOldUnsettled);
+
+        await db.SaveChangesAsync();
+
+        var handler = new GetInvoicesQueryHandler(invoiceRepo, _clinicContext);
+        var result = await handler.Handle(new GetInvoicesQuery(Date: today), CancellationToken.None);
+
+        result.Should().HaveCount(2);
+        result.Select(i => i.InvoiceNumber).Should().Contain("INV-TODAY-001");
+        result.Select(i => i.InvoiceNumber).Should().Contain("INV-PAST-002");
+        result.Select(i => i.InvoiceNumber).Should().NotContain("INV-OLD-003");
+    }
+
+    [Fact]
+    public async Task GetQueueQuery_WithViewAll_ReturnsBothActiveAndCompletedQueueItems()
+    {
+        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var queueRepo = TestDbHelper.CreateRepository<QueueItem>(db, sieve);
+
+        var today = DateTime.UtcNow;
+        var todayDate = DateOnly.FromDateTime(today);
+
+        await db.QueueItems.AddRangeAsync(
+            new QueueItem
+            {
+                TenantId = _testTenantId,
+                ClinicId = _testClinicId,
+                QueueNumber = "Q-101",
+                SequenceNumber = 1,
+                QueueDate = todayDate,
+                PatientId = Guid.NewGuid(),
+                PatientName = "Waiting Patient",
+                Priority = QueuePriority.Routine,
+                Status = QueueStatus.Waiting,
+                CheckInTime = today
+            },
+            new QueueItem
+            {
+                TenantId = _testTenantId,
+                ClinicId = _testClinicId,
+                QueueNumber = "Q-102",
+                SequenceNumber = 2,
+                QueueDate = todayDate,
+                PatientId = Guid.NewGuid(),
+                PatientName = "Triaged Patient",
+                Priority = QueuePriority.Urgent,
+                Status = QueueStatus.Triaged,
+                CheckInTime = today
+            },
+            new QueueItem
+            {
+                TenantId = _testTenantId,
+                ClinicId = _testClinicId,
+                QueueNumber = "Q-103",
+                SequenceNumber = 3,
+                QueueDate = todayDate,
+                PatientId = Guid.NewGuid(),
+                PatientName = "Completed Patient",
+                Priority = QueuePriority.Routine,
+                Status = QueueStatus.Completed,
+                CheckInTime = today
+            }
+        );
+
+        await db.SaveChangesAsync();
+
+        var handler = new GetQueueQueryHandler(queueRepo, _clinicContext);
+
+        // 1. Default view excludes Completed
+        var defaultQueue = await handler.Handle(new GetQueueQuery(Date: todayDate), CancellationToken.None);
+        defaultQueue.Should().HaveCount(2);
+        defaultQueue.Select(q => q.Status).Should().NotContain(QueueStatus.Completed);
+
+        // 2. View = "All" includes Completed
+        var allQueue = await handler.Handle(new GetQueueQuery(Date: todayDate, View: "All"), CancellationToken.None);
+        allQueue.Should().HaveCount(3);
+        allQueue.Select(q => q.Status).Should().Contain(QueueStatus.Completed);
     }
 }
