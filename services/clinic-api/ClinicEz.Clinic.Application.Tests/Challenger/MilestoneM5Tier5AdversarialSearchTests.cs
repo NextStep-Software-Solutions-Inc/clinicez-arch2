@@ -68,19 +68,19 @@ public class MilestoneM5Tier5AdversarialSearchTests
         // Arrange: 5 slow providers (delay 3000ms listening to ct) and 2 healthy providers (delay 15ms)
         var cancelledCount = 0;
 
-        Task<IReadOnlyList<SearchResultItemDto>> CreateSlowTask(string cat, CancellationToken ct) => Task.Run(async () =>
+        async Task<IReadOnlyList<SearchResultItemDto>> CreateSlowTask(string cat, CancellationToken ct)
         {
             try
             {
                 await Task.Delay(10000, ct);
-                return (IReadOnlyList<SearchResultItemDto>)new List<SearchResultItemDto> { CreateItem($"slow-{cat}", cat, $"Slow {cat}") };
+                return new List<SearchResultItemDto> { CreateItem($"slow-{cat}", cat, $"Slow {cat}") };
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
                 Interlocked.Increment(ref cancelledCount);
                 throw;
             }
-        }, ct);
+        }
 
         var providers = new List<ISearchProvider>
         {
