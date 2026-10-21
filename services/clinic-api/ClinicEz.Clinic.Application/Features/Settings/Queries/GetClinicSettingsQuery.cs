@@ -5,6 +5,7 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Security.Turnstile;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,15 +18,18 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
     private readonly IRepository<ClinicSettings> _settingsRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ITurnstileSettingResolver? _turnstileResolver;
 
     public GetClinicSettingsQueryHandler(
         IRepository<ClinicSettings> settingsRepo,
         IClinicContext clinicContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ITurnstileSettingResolver? turnstileResolver = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
+        _turnstileResolver = turnstileResolver;
     }
 
     public async Task<ClinicSettingsDto> Handle(GetClinicSettingsQuery request, CancellationToken ct)
@@ -60,6 +64,10 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             await _settingsRepo.AddAsync(settings, ct);
             await _unitOfWork.SaveChangesAsync(ct);
         }
+
+        var (isOverridden, overrideVal) = _turnstileResolver?.GetEnvironmentOverride() ?? (false, null);
+        var effectiveTurnstile = _turnstileResolver?.IsEnabled(settings.TurnstileEnabled) ?? settings.TurnstileEnabled;
+        var effectiveSiteKey = _turnstileResolver?.GetSiteKey(settings.TurnstileSiteKey) ?? settings.TurnstileSiteKey;
 
         return new ClinicSettingsDto(
             settings.Id,
@@ -118,7 +126,10 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             EnableAppointmentReminders: settings.EnableAppointmentReminders,
             AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
             AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
-            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications);
+            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications,
+            TurnstileEnabled: effectiveTurnstile,
+            TurnstileSiteKey: effectiveSiteKey,
+            IsTurnstileOverriddenByEnv: isOverridden,
+            TurnstileEnvOverrideValue: overrideVal);
     }
 }
-

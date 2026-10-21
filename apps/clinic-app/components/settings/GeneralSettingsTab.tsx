@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable, Image } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
@@ -11,6 +11,7 @@ import EmptyState from '../ui/EmptyState';
 import ErrorState from '../ui/ErrorState';
 import { SkeletonList } from '../ui/Skeleton';
 import SecuritySection from './SecuritySection';
+import BotProtectionSettingsCard from './BotProtectionSettingsCard';
 import AppUpdatesSettingsCard from './AppUpdatesSettingsCard';
 import EdgeServerSwitcherSection from './EdgeServerSwitcherSection';
 import { theme } from '../../constants/theme';
@@ -64,7 +65,7 @@ export const CLINIC_SPECIALTY_OPTIONS: SpecialtyOption[] = [
     badge: 'Exclusive Dentistry',
     icon: 'scan',
     description:
-      'Odontogram dental workstation with FDI adult (11–48) and child (51–85) charts, surface tracking, and quick-order dental procedures. General medical physical exam forms are disabled and dental module is permanently active.',
+      'Odontogram dental workstation with FDI adult (11â€“48) and child (51â€“85) charts, surface tracking, and quick-order dental procedures. General medical physical exam forms are disabled and dental module is permanently active.',
   },
   {
     id: 'Multi-Specialty',
@@ -72,7 +73,7 @@ export const CLINIC_SPECIALTY_OPTIONS: SpecialtyOption[] = [
     badge: 'Medical & Dental Care',
     icon: 'clinic',
     description:
-      'Integrated healthcare facility combining general medical consultations and dental care. The dental chart module can be enabled or disabled according to your facility’s clinical workflows.',
+      'Integrated healthcare facility combining general medical consultations and dental care. The dental chart module can be enabled or disabled according to your facilityâ€™s clinical workflows.',
   },
 ];
 
@@ -367,7 +368,7 @@ export default function GeneralSettingsTab({
                   value={operatingHours}
                   onChangeText={setOperatingHours}
                   placeholder="e.g. Mon-Fri 8:00 AM - 5:00 PM, Sat 8:00 AM - 12:00 PM"
-                  helperText={!operatingHours ? 'Not configured yet — please specify clinic schedule' : undefined}
+                  helperText={!operatingHours ? 'Not configured yet â€” please specify clinic schedule' : undefined}
                 />
                 <Input
                   containerStyle={styles.flexNarrow}
@@ -379,7 +380,7 @@ export default function GeneralSettingsTab({
                 />
                 <Input
                   containerStyle={styles.flexNarrow}
-                  label="Consultation fee (₱)"
+                  label="Consultation fee (â‚±)"
                   value={consultationFee}
                   onChangeText={setConsultationFee}
                   placeholder="e.g. 500.00"
@@ -585,7 +586,7 @@ export default function GeneralSettingsTab({
                         ? 'The FDI odontogram, tooth surface tracking, and dental procedure catalog are permanently active for Dental specialty practices.'
                         : effectiveSpecialty === 'Medical'
                         ? 'The dental chart module is inactive in Medical Mode. Select Dental or Multi-Specialty to activate dental charting.'
-                        : 'Enables adult (11–48) and child (51–85) FDI odontograms, tooth surface tracking, and quick-order dental procedures in consultation workstations and patient medical charts.'}
+                        : 'Enables adult (11â€“48) and child (51â€“85) FDI odontograms, tooth surface tracking, and quick-order dental procedures in consultation workstations and patient medical charts.'}
                     </ThemedText>
                   </View>
 
@@ -810,6 +811,9 @@ export default function GeneralSettingsTab({
 
       {/* Security PIN for offline devices */}
       <SecuritySection />
+
+      {/* Bot Challenge Protection (Turnstile) */}
+      <BotProtectionSettingsCard settings={settings} onSettingsUpdated={onSettingsUpdated} />
 
       {/* Over-The-Air (OTA) App Updates */}
       <AppUpdatesSettingsCard />

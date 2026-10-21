@@ -1,4 +1,4 @@
-import type { AxiosRequestConfig } from 'axios';
+﻿import type { AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
 import { SyncStatus, type SearchResponseDto, type ApiError } from '@shared/safe';
 
@@ -1930,6 +1930,12 @@ export interface ClinicSettingsRecord {
   appointmentReminder24hEnabled?: boolean;
   appointmentReminder2hEnabled?: boolean;
   enableStaffAppointmentNotifications?: boolean;
+
+  // Bot Challenge Protection (Turnstile)
+  turnstileEnabled?: boolean;
+  turnstileSiteKey?: string | null;
+  isTurnstileOverriddenByEnv?: boolean;
+  turnstileEnvOverrideValue?: boolean | null;
 }
 
 export interface DocumentSignatoryItemConfig {
@@ -3489,7 +3495,7 @@ export const clinicService = {
     return clinicApiClient.post<number>('/notifications/read-all');
   },
 
-  // ── Audit Trail & Forensic Logging (Milestone 3) ─────────────────────────
+  // â”€â”€ Audit Trail & Forensic Logging (Milestone 3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async getAuditLogs(params?: AuditFilterParams) {
     const qp = new URLSearchParams();
@@ -4363,7 +4369,7 @@ export function getOtherRoomCoverageText(
 
   if (otherRoomNames) {
     return isSelected
-      ? `Also in ${otherRoomNames} · Will cover both`
+      ? `Also in ${otherRoomNames} Â· Will cover both`
       : `Currently in ${otherRoomNames}`;
   }
 

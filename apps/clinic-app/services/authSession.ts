@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import { Platform } from 'react-native';
 import { ApiError, extractApiError, ensureApiPrefix, resolveTenantContext, type ApiResponse } from '@shared/safe';
 import { deleteSecureItem, getSecureItem, setSecureItem } from './secureStorage';
@@ -39,6 +39,8 @@ export interface AuthStatus {
   licenseStatus: string;
   requiresBootstrap: boolean;
   clinicName?: string | null;
+  turnstileEnabled?: boolean;
+  turnstileSiteKey?: string | null;
 }
 
 export type AuthResult<T> = [T | null, ApiError | null];
@@ -170,11 +172,12 @@ export async function getAuthStatus(): Promise<AuthResult<AuthStatus>> {
   }
 }
 
-export async function login(email: string, password: string): Promise<AuthResult<AuthUser>> {
+export async function login(email: string, password: string, turnstileToken?: string | null): Promise<AuthResult<AuthUser>> {
   const [tokens, error] = await post<AuthTokens>('/auth/login', {
     email: email.trim(),
     password,
     deviceLabel: deviceLabel(),
+    turnstileToken: turnstileToken || undefined,
   });
   if (error || !tokens) return [null, error ?? new ApiError('Sign-in failed.', 0)];
   await persist(tokens);
