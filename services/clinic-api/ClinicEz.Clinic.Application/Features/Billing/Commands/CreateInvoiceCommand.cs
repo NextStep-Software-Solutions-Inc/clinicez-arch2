@@ -112,22 +112,44 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
                 {
                     var qty = Math.Max(1, item.Quantity);
                     var unitPrice = Math.Max(0m, item.UnitPrice);
-                    var totalPrice = Math.Round(unitPrice * qty, 2);
+                    var targetDoctorId = item.DoctorId ?? request.AttendingDoctorId;
+                    var targetDoctorName = item.DoctorName;
 
-                    existingInvoice.LineItems.Add(new InvoiceLineItem
+                    // Consolidate identical items (same price, doctor, and item code/description)
+                    var existingItem = existingInvoice.LineItems.FirstOrDefault(li =>
+                        li.UnitPrice == unitPrice &&
+                        li.DoctorId == targetDoctorId &&
+                        ((!string.IsNullOrEmpty(item.ItemCode) && string.Equals(li.ItemCode, item.ItemCode, StringComparison.OrdinalIgnoreCase)) ||
+                         (string.IsNullOrEmpty(item.ItemCode) && string.Equals(li.Description, item.Description, StringComparison.OrdinalIgnoreCase)))
+                    );
+
+                    if (existingItem != null)
                     {
-                        Id = Guid.Empty,
-                        InvoiceId = existingInvoice.Id,
-                        DoctorId = item.DoctorId ?? request.AttendingDoctorId,
-                        DoctorName = item.DoctorName,
-                        ServiceItemId = item.ServiceItemId,
-                        ItemCode = item.ItemCode,
-                        Description = item.Description,
-                        Category = item.Category,
-                        UnitPrice = unitPrice,
-                        Quantity = qty,
-                        TotalPrice = totalPrice
-                    });
+                        existingItem.Quantity += qty;
+                        existingItem.TotalPrice = Math.Round(existingItem.UnitPrice * existingItem.Quantity, 2);
+                        if (string.IsNullOrWhiteSpace(existingItem.DoctorName) && !string.IsNullOrWhiteSpace(targetDoctorName))
+                        {
+                            existingItem.DoctorName = targetDoctorName;
+                        }
+                    }
+                    else
+                    {
+                        var totalPrice = Math.Round(unitPrice * qty, 2);
+                        existingInvoice.LineItems.Add(new InvoiceLineItem
+                        {
+                            Id = Guid.Empty,
+                            InvoiceId = existingInvoice.Id,
+                            DoctorId = targetDoctorId,
+                            DoctorName = targetDoctorName,
+                            ServiceItemId = item.ServiceItemId,
+                            ItemCode = item.ItemCode,
+                            Description = item.Description,
+                            Category = item.Category,
+                            UnitPrice = unitPrice,
+                            Quantity = qty,
+                            TotalPrice = totalPrice
+                        });
+                    }
                 }
 
                 if (!existingInvoice.ConsultationId.HasValue && request.ConsultationId.HasValue)
@@ -276,23 +298,43 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
             {
                 var qty = Math.Max(1, item.Quantity);
                 var unitPrice = Math.Max(0m, item.UnitPrice);
-                var totalPrice = Math.Round(unitPrice * qty, 2);
+                var targetDoctorId = item.DoctorId ?? request.AttendingDoctorId;
+                var targetDoctorName = item.DoctorName;
 
-                lineItems.Add(new InvoiceLineItem
+                var existing = lineItems.FirstOrDefault(li =>
+                    li.UnitPrice == unitPrice &&
+                    li.DoctorId == targetDoctorId &&
+                    ((!string.IsNullOrEmpty(item.ItemCode) && string.Equals(li.ItemCode, item.ItemCode, StringComparison.OrdinalIgnoreCase)) ||
+                     (string.IsNullOrEmpty(item.ItemCode) && string.Equals(li.Description, item.Description, StringComparison.OrdinalIgnoreCase)))
+                );
+
+                if (existing != null)
                 {
-                    DoctorId = item.DoctorId ?? request.AttendingDoctorId,
-                    DoctorName = item.DoctorName,
-                    ServiceItemId = item.ServiceItemId,
-                    ItemCode = item.ItemCode,
-                    Description = item.Description,
-                    Category = item.Category,
-                    UnitPrice = unitPrice,
-                    Quantity = qty,
-                    TotalPrice = totalPrice
-                });
-
-                grossAmountNew += totalPrice;
+                    existing.Quantity += qty;
+                    existing.TotalPrice = Math.Round(existing.UnitPrice * existing.Quantity, 2);
+                    if (string.IsNullOrWhiteSpace(existing.DoctorName) && !string.IsNullOrWhiteSpace(targetDoctorName))
+                    {
+                        existing.DoctorName = targetDoctorName;
+                    }
+                }
+                else
+                {
+                    var totalPrice = Math.Round(unitPrice * qty, 2);
+                    lineItems.Add(new InvoiceLineItem
+                    {
+                        DoctorId = targetDoctorId,
+                        DoctorName = targetDoctorName,
+                        ServiceItemId = item.ServiceItemId,
+                        ItemCode = item.ItemCode,
+                        Description = item.Description,
+                        Category = item.Category,
+                        UnitPrice = unitPrice,
+                        Quantity = qty,
+                        TotalPrice = totalPrice
+                    });
+                }
             }
+            grossAmountNew = lineItems.Sum(li => li.TotalPrice);
         }
         else
         {

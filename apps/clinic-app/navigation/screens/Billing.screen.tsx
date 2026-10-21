@@ -49,19 +49,15 @@ import {
   type InvoicePdfData,
   type ReceiptItem,
 } from '../../utils/printHelper';
+import {
+  type BillingLineItem,
+  consolidateLineItems,
+} from '../../utils/billingUtils';
+
+export type LineItemForm = BillingLineItem;
+export { consolidateLineItems };
 
 type BillingTab = 'active' | 'unsettled' | 'paid';
-
-interface LineItemForm {
-  id: string;
-  code: string;
-  name: string;
-  category: string;
-  price: number;
-  qty: number;
-  doctorId?: string;
-  doctorName?: string;
-}
 
 /** The patient being billed: either a queue entry or a patient opened from another screen. */
 interface BillingPatient {
@@ -322,7 +318,7 @@ export default function BillingScreen() {
         doctorId: l.doctorId,
         doctorName: l.doctorName,
       }));
-      setLineItems(initialItems);
+      setLineItems(consolidateLineItems(initialItems));
       setDiscountType(p.activeInvoice.discountType || 'None');
       setDiscountId(p.activeInvoice.discountIdNumber || '');
     } else {
@@ -436,7 +432,7 @@ export default function BillingScreen() {
       }
 
       if (addedCount > 0) {
-        setLineItems(updatedItems);
+        setLineItems(consolidateLineItems(updatedItems));
         notify.info(`Auto-populated ${addedCount} consultation & procedure service(s) for ${p.patientName}.`);
       }
     } catch {
@@ -504,19 +500,49 @@ export default function BillingScreen() {
       : patients;
 
   const handleAddService = (svc: ClinicServiceItem) => {
-    setLineItems(prev => [
-      ...prev,
-      {
-        id: `li-${Date.now()}-${Math.random()}`,
-        code: svc.code,
-        name: svc.name,
-        category: svc.category,
-        price: svc.standardPrice,
-        qty: 1,
-        doctorId: selectedPatient?.doctorId,
-        doctorName: selectedPatient?.doctorName || currentName,
+    const targetDoctorId = selectedPatient?.doctorId;
+    const targetDoctorName = selectedPatient?.doctorName || currentName;
+    const targetCode = (svc.code || '').trim().toLowerCase();
+    const targetName = svc.name.trim().toLowerCase();
+    const targetPrice = svc.standardPrice;
+
+    setLineItems((prev) => {
+      const existingIndex = prev.findIndex((item) => {
+        const itemCode = (item.code || '').trim().toLowerCase();
+        const itemName = item.name.trim().toLowerCase();
+        const itemDoctorId = (item.doctorId || '').trim();
+        const itemDoctorName = (item.doctorName || '').trim().toLowerCase();
+
+        const codeMatches = targetCode && itemCode ? itemCode === targetCode : itemName === targetName;
+        const priceMatches = Math.abs(item.price - targetPrice) < 0.001;
+        const doctorMatches = itemDoctorId && targetDoctorId
+          ? itemDoctorId === targetDoctorId
+          : itemDoctorId === (targetDoctorId || '') ||
+            (!itemDoctorId && !targetDoctorId && itemDoctorName === (targetDoctorName || '').trim().toLowerCase());
+
+        return codeMatches && priceMatches && doctorMatches;
+      });
+
+      if (existingIndex >= 0) {
+        return prev.map((item, idx) =>
+          idx === existingIndex ? { ...item, qty: item.qty + 1 } : item
+        );
       }
-    ]);
+
+      return [
+        ...prev,
+        {
+          id: `li-${Date.now()}-${Math.random()}`,
+          code: svc.code,
+          name: svc.name,
+          category: svc.category,
+          price: svc.standardPrice,
+          qty: 1,
+          doctorId: targetDoctorId,
+          doctorName: targetDoctorName,
+        }
+      ];
+    });
   };
 
   const handleUpdateQty = (itemId: string, newQty: number) => {
@@ -530,23 +556,50 @@ export default function BillingScreen() {
     const name = customItemName.trim();
     const price = parseFloat(customItemPrice) || 0;
     const qty = parseInt(customItemQty, 10) || 1;
+    const targetDoctorId = selectedPatient?.doctorId;
+    const targetDoctorName = customItemDoctorName.trim() || selectedPatient?.doctorName || currentName;
     if (!name) {
       notify.error('Item description is required.');
       return;
     }
-    setLineItems((prev) => [
-      ...prev,
-      {
-        id: `custom-${Date.now()}-${Math.random()}`,
-        code: `CUST-${Date.now().toString().slice(-4)}`,
-        name,
-        category: customItemCategory || 'Supply',
-        price,
-        qty: Math.max(1, qty),
-        doctorId: selectedPatient?.doctorId,
-        doctorName: customItemDoctorName.trim() || selectedPatient?.doctorName || currentName,
-      },
-    ]);
+
+    setLineItems((prev) => {
+      const targetName = name.toLowerCase();
+      const existingIndex = prev.findIndex((item) => {
+        const itemName = item.name.trim().toLowerCase();
+        const itemDoctorId = (item.doctorId || '').trim();
+        const itemDoctorName = (item.doctorName || '').trim().toLowerCase();
+
+        const nameMatches = itemName === targetName;
+        const priceMatches = Math.abs(item.price - price) < 0.001;
+        const doctorMatches = itemDoctorId && targetDoctorId
+          ? itemDoctorId === targetDoctorId
+          : itemDoctorId === (targetDoctorId || '') ||
+            (!itemDoctorId && !targetDoctorId && itemDoctorName === (targetDoctorName || '').trim().toLowerCase());
+
+        return nameMatches && priceMatches && doctorMatches;
+      });
+
+      if (existingIndex >= 0) {
+        return prev.map((item, idx) =>
+          idx === existingIndex ? { ...item, qty: item.qty + Math.max(1, qty) } : item
+        );
+      }
+
+      return [
+        ...prev,
+        {
+          id: `custom-${Date.now()}-${Math.random()}`,
+          code: `CUST-${Date.now().toString().slice(-4)}`,
+          name,
+          category: customItemCategory || 'Supply',
+          price,
+          qty: Math.max(1, qty),
+          doctorId: targetDoctorId,
+          doctorName: targetDoctorName,
+        },
+      ];
+    });
     setCustomItemName('');
     setCustomItemPrice('');
     setCustomItemQty('1');
@@ -678,8 +731,24 @@ export default function BillingScreen() {
     printThermalReceipt(lastReceipt, printLetterhead);
   };
 
+  const handlePrintOfficialReceiptPdf = (receipt?: ReceiptSummary | InvoiceRecord) => {
+    const target = receipt || lastReceipt;
+    if (!target) return;
+    const invId = 'invoiceId' in target ? target.invoiceId : ('id' in target ? target.id : undefined);
+    if (invId) {
+      openDocument(clinicService.getInvoicePdfUrl(invId));
+      return;
+    }
+    handlePrintProfessionalReceipt(target);
+  };
+
   const handlePrintProfessionalReceipt = (receipt?: ReceiptSummary | InvoiceRecord) => {
     if (receipt) {
+      const invId = 'invoiceId' in receipt ? receipt.invoiceId : ('id' in receipt ? receipt.id : undefined);
+      if (invId) {
+        openDocument(clinicService.getInvoicePdfUrl(invId));
+        return;
+      }
       if ('items' in receipt && Array.isArray((receipt as any).items)) {
         printProfessionalReceipt(receipt as ReceiptSummary, printLetterhead);
       } else {
@@ -1159,20 +1228,20 @@ export default function BillingScreen() {
                     size="sm"
                     variant="outline"
                     icon="print"
-                    title="Thermal POS"
+                    title="Print OR (Thermal Paper)"
                     onPress={() => handleReprintPaidThermal(inv)}
                   />
                   <Button
                     size="sm"
                     variant="outline"
-                    icon="print"
-                    title="OR (A4)"
-                    onPress={() => handlePrintProfessionalReceipt(inv)}
+                    icon="fileText"
+                    title="Print OR (PDF)"
+                    onPress={() => handlePrintOfficialReceiptPdf(inv)}
                   />
                   <Button
                     size="sm"
                     variant="ghost"
-                    icon="fileText"
+                    icon="receipt"
                     title="View SOA (PDF)"
                     onPress={() => openDocument(clinicService.getInvoicePdfUrl(inv.id))}
                   />
@@ -1268,20 +1337,20 @@ export default function BillingScreen() {
               size="md"
               icon="print"
               variant="primary"
-              title="Thermal Paper (POS)"
+              title="Print OR (Thermal Paper)"
               onPress={handlePrintThermalReceipt}
             />
             <Button
               size="md"
-              icon="print"
+              icon="fileText"
               variant="secondary"
-              title="Professional OR (A4)"
-              onPress={() => handlePrintProfessionalReceipt(lastReceipt || undefined)}
+              title="Print OR (PDF)"
+              onPress={() => handlePrintOfficialReceiptPdf(lastReceipt || undefined)}
             />
             <Button
               size="md"
               variant="outline"
-              icon="fileText"
+              icon="receipt"
               title="View SOA (PDF)"
               onPress={() => {
                 if (lastReceipt.invoiceId) {
@@ -1600,8 +1669,8 @@ export default function BillingScreen() {
           icon="check"
           title={
             activeInvoice
-              ? `Settle SOA (${formatPeso(netAmount)}) and issue receipt`
-              : `Collect ${formatPeso(netAmount)} and issue receipt`
+              ? `Settle SOA · ${formatPeso(netAmount)}`
+              : `Collect & Issue Receipt · ${formatPeso(netAmount)}`
           }
           loading={isProcessing}
           disabled={
@@ -1610,14 +1679,14 @@ export default function BillingScreen() {
             (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate)
           }
           onPress={handleSettlePayment}
-          style={styles.flexFill}
+          style={styles.settlePrimaryButton}
         />
         {selectedPatient && lineItems.length > 0 && (
           <Button
             variant="outline"
-            size="lg"
+            size="md"
             icon="clock"
-            title="Defer / Promissory Note"
+            title="Defer / Issue Promissory Note"
             disabled={isProcessing || isDeferring}
             onPress={() => {
               setDeferReason('');
@@ -1626,6 +1695,7 @@ export default function BillingScreen() {
               setDeferDueDate(defDate.toISOString().split('T')[0]);
               setDeferModalVisible(true);
             }}
+            style={styles.settleDeferButton}
           />
         )}
       </View>
@@ -2202,9 +2272,16 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
   },
   settleActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: theme.spacing.sm,
-    flexWrap: 'wrap',
+    marginTop: theme.spacing.xs,
+  },
+  settlePrimaryButton: {
+    width: '100%',
+    minHeight: 46,
+    justifyContent: 'center',
+  },
+  settleDeferButton: {
+    width: '100%',
+    justifyContent: 'center',
   },
 });

@@ -247,6 +247,9 @@ describe('Billing Receipt & SOA Review Feature Tests', () => {
       // Doctor must preview read-only charge slip, NOT Statement of Account (SOA)
       expect(consultSource).not.toContain('title="Review Statement of Account (SOA)"');
       expect(consultSource).not.toContain('title="Print SOA (PDF)"');
+      // Redundant top banner removed; consolidated note present
+      expect(consultSource).not.toContain('Clinical Charge Slip (Read-Only)');
+      expect(consultSource).toContain('Review clinical charges and procedures rendered during this encounter. This read-only charge slip will be posted to the Cashier');
     });
 
     test('4.4 Doctor encounter signing does NOT create an invoice (strictly posts charge slip to Cashier)', () => {
@@ -282,12 +285,39 @@ describe('Billing Receipt & SOA Review Feature Tests', () => {
       expect(billingSource).toContain('procsData');
     });
 
-    test('5.3 Billing screen offers Thermal Paper (POS) and View SOA (PDF) actions with Close button', () => {
-      expect(billingSource).toContain('title="Thermal Paper (POS)"');
+    test('5.3 Billing screen offers Print OR (Thermal Paper), Print OR (PDF), and View SOA (PDF) actions with Close button', () => {
+      expect(billingSource).toContain('title="Print OR (Thermal Paper)"');
+      expect(billingSource).toContain('title="Print OR (PDF)"');
       expect(billingSource).toContain('title="View SOA (PDF)"');
       expect(billingSource).toContain('title="Close"');
       expect(billingSource).not.toContain('Done (Call Next Patient)');
       expect(billingSource).not.toContain('title="Professional PDF"');
+    });
+
+    test('5.4 consolidateLineItems consolidates items with identical price, doctor, and item code', () => {
+      const { consolidateLineItems } = require('../utils/billingUtils');
+      const rawItems = [
+        { id: '1', code: 'CONSULT', name: 'General Consultation', category: 'Consultation', price: 500, qty: 1, doctorId: 'doc-1', doctorName: 'Dr. Wave Ambray' },
+        { id: '2', code: 'CONSULT', name: 'General Consultation', category: 'Consultation', price: 500, qty: 1, doctorId: 'doc-1', doctorName: 'Dr. Wave Ambray' },
+        { id: '3', code: 'CONSULT', name: 'General Consultation', category: 'Consultation', price: 500, qty: 1, doctorId: 'doc-2', doctorName: 'Dr. Allan Santos' },
+        { id: '4', code: 'CBC', name: 'Complete Blood Count', category: 'Laboratory', price: 250, qty: 2, doctorId: 'doc-1', doctorName: 'Dr. Wave Ambray' },
+        { id: '5', code: 'CBC', name: 'Complete Blood Count', category: 'Laboratory', price: 250, qty: 1, doctorId: 'doc-1', doctorName: 'Dr. Wave Ambray' },
+      ];
+      const consolidated = consolidateLineItems(rawItems);
+      expect(consolidated).toHaveLength(3);
+      const ambrayConsult = consolidated.find((i: any) => i.doctorId === 'doc-1' && i.code === 'CONSULT');
+      expect(ambrayConsult?.qty).toBe(2);
+      const santosConsult = consolidated.find((i: any) => i.doctorId === 'doc-2' && i.code === 'CONSULT');
+      expect(santosConsult?.qty).toBe(1);
+      const cbcItem = consolidated.find((i: any) => i.code === 'CBC');
+      expect(cbcItem?.qty).toBe(3);
+    });
+
+    test('5.5 Collect button and action row styling is sleek and non-wrapping', () => {
+      expect(billingSource).toContain('style={styles.settlePrimaryButton}');
+      expect(billingSource).toContain('style={styles.settleDeferButton}');
+      expect(billingSource).toContain('title="Print OR (PDF)"');
+      expect(billingSource).toContain('openDocument(clinicService.getInvoicePdfUrl');
     });
   });
 

@@ -91,31 +91,49 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
         if (request.LineItems != null && request.LineItems.Any())
         {
             invoice.LineItems.Clear();
-            decimal gross = 0m;
             foreach (var item in request.LineItems)
             {
                 var qty = Math.Max(1, item.Quantity);
                 var unitPrice = Math.Max(0m, item.UnitPrice);
-                var totalPrice = Math.Round(unitPrice * qty, 2);
+                var targetDoctorId = item.DoctorId;
+                var targetDoctorName = item.DoctorName;
 
-                invoice.LineItems.Add(new InvoiceLineItem
+                var existing = invoice.LineItems.FirstOrDefault(li =>
+                    li.UnitPrice == unitPrice &&
+                    li.DoctorId == targetDoctorId &&
+                    ((!string.IsNullOrEmpty(item.ItemCode) && string.Equals(li.ItemCode, item.ItemCode, StringComparison.OrdinalIgnoreCase)) ||
+                     (string.IsNullOrEmpty(item.ItemCode) && string.Equals(li.Description, item.Description, StringComparison.OrdinalIgnoreCase)))
+                );
+
+                if (existing != null)
                 {
-                    Id = Guid.Empty,
-                    InvoiceId = invoice.Id,
-                    DoctorId = item.DoctorId,
-                    DoctorName = item.DoctorName,
-                    ServiceItemId = item.ServiceItemId,
-                    ItemCode = item.ItemCode,
-                    Description = item.Description,
-                    Category = item.Category,
-                    UnitPrice = unitPrice,
-                    Quantity = qty,
-                    TotalPrice = totalPrice
-                });
-
-                gross += totalPrice;
+                    existing.Quantity += qty;
+                    existing.TotalPrice = Math.Round(existing.UnitPrice * existing.Quantity, 2);
+                    if (string.IsNullOrWhiteSpace(existing.DoctorName) && !string.IsNullOrWhiteSpace(targetDoctorName))
+                    {
+                        existing.DoctorName = targetDoctorName;
+                    }
+                }
+                else
+                {
+                    var totalPrice = Math.Round(unitPrice * qty, 2);
+                    invoice.LineItems.Add(new InvoiceLineItem
+                    {
+                        Id = Guid.Empty,
+                        InvoiceId = invoice.Id,
+                        DoctorId = targetDoctorId,
+                        DoctorName = targetDoctorName,
+                        ServiceItemId = item.ServiceItemId,
+                        ItemCode = item.ItemCode,
+                        Description = item.Description,
+                        Category = item.Category,
+                        UnitPrice = unitPrice,
+                        Quantity = qty,
+                        TotalPrice = totalPrice
+                    });
+                }
             }
-            invoice.GrossAmount = gross;
+            invoice.GrossAmount = invoice.LineItems.Sum(li => li.TotalPrice);
         }
 
         if (request.DiscountType.HasValue)

@@ -886,13 +886,15 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             : (invoice.LineItems.FirstOrDefault(li => !string.IsNullOrWhiteSpace(li.DoctorName))?.DoctorName ?? "Attending Clinician");
         var doctorPrc = doctor?.PrcLicenseNumber ?? "Registered Clinician";
 
-        var statusLabel = invoice.Status == Domain.Enums.InvoiceStatus.Paid ? "PAID OFFICIAL INVOICE" : "STATEMENT OF ACCOUNT";
-        var statusBadgeColor = invoice.Status == Domain.Enums.InvoiceStatus.Paid ? "#16A34A" : primaryColor;
+        var orPayment = invoice.Payments.OrderByDescending(p => p.PaymentDate).FirstOrDefault();
+        var isPaid = invoice.Status == Domain.Enums.InvoiceStatus.Paid;
+        var statusLabel = isPaid ? "OFFICIAL RECEIPT" : "STATEMENT OF ACCOUNT";
+        var statusBadgeColor = isPaid ? "#16A34A" : primaryColor;
 
         var issuedDateTime = invoice.CreatedAt != default ? invoice.CreatedAt : invoice.InvoiceDate;
         var digest = _securityService.ComputeDocumentDigest(
             invoice.TenantId ?? settings.TenantId,
-            "INVOICE-SOA",
+            isPaid ? "OFFICIAL-RECEIPT" : "INVOICE-SOA",
             invoice.InvoiceNumber,
             invoice.PatientId,
             doctorPrc,
@@ -900,7 +902,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
         var verifyUrl = _securityService.GenerateVerificationUrl(
             _verificationBaseUrl,
-            "invoice",
+            isPaid ? "receipt" : "invoice",
             invoice.InvoiceNumber,
             digest);
 
@@ -930,12 +932,15 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         r.RelativeItem().Column(titleCol =>
                         {
                             titleCol.Item().Text(statusLabel).FontSize(14).Bold().FontColor(statusBadgeColor);
-                            titleCol.Item().Text($"Document Ref: #{invoice.InvoiceNumber} • Issued: {invoice.InvoiceDate:MMMM dd, yyyy}").FontSize(8.5f).SemiBold().FontColor("#6B7280");
+                            var refText = isPaid && !string.IsNullOrWhiteSpace(orPayment?.PaymentNumber)
+                                ? $"Official Receipt: #{orPayment.PaymentNumber} • Invoice Ref: #{invoice.InvoiceNumber} • Issued: {invoice.InvoiceDate:MMMM dd, yyyy}"
+                                : $"Document Ref: #{invoice.InvoiceNumber} • Issued: {invoice.InvoiceDate:MMMM dd, yyyy}";
+                            titleCol.Item().Text(refText).FontSize(8.5f).SemiBold().FontColor("#6B7280");
                         });
 
                         r.ConstantItem(120).AlignRight().Column(badgeCol =>
                         {
-                            badgeCol.Item().Border(1).BorderColor(statusBadgeColor).Background(invoice.Status == Domain.Enums.InvoiceStatus.Paid ? "#F0FDF4" : "#F0FDFA").PaddingVertical(3).PaddingHorizontal(8).AlignCenter().Text(invoice.Status.ToString().ToUpperInvariant()).FontSize(9).Bold().FontColor(statusBadgeColor);
+                            badgeCol.Item().Border(1).BorderColor(statusBadgeColor).Background(isPaid ? "#F0FDF4" : "#F0FDFA").PaddingVertical(3).PaddingHorizontal(8).AlignCenter().Text(isPaid ? "OFFICIAL RECEIPT" : invoice.Status.ToString().ToUpperInvariant()).FontSize(9).Bold().FontColor(statusBadgeColor);
                         });
                     });
 
@@ -1096,7 +1101,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             Title = "Billing Officer / Cashier",
                             AlignCenter = true
                         },
-                        BottomComplianceNotice = "Official Clinic EZ Statement of Account & Billing Invoice • Valid for healthcare accounting under RA 8792 & RA 10173"
+                        BottomComplianceNotice = isPaid
+                            ? "Official Clinic EZ Official Receipt • BIR Compliant Healthcare Document under RA 8792 & RA 10173"
+                            : "Official Clinic EZ Statement of Account & Billing Invoice • Valid for healthcare accounting under RA 8792 & RA 10173"
                     });
                 });
 

@@ -5767,18 +5767,6 @@ export default function ConsultationsScreen() {
           maxWidth={620}
         >
           <View style={styles.soaModalContent}>
-            <View style={styles.soaHeaderNotice}>
-              <Icon name="billing" size={theme.sizes.iconMd} color={theme.colors.primary} />
-              <View style={styles.soaHeaderNoticeText}>
-                <ThemedText variant="bodyBold" color={theme.colors.text}>
-                  Clinical Charge Slip (Read-Only)
-                </ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                  Review clinical charges and procedures rendered during this encounter. Upon signing, this charge slip will be posted to the Cashier for compilation into the Statement of Account (SOA), statutory discount application, and payment collection.
-                </ThemedText>
-              </View>
-            </View>
-
             {/* Billable Items List */}
             <ThemedText variant="smallBold" color={theme.colors.textSecondary} style={styles.soaSectionTitle}>
               CLINICAL CHARGES ({chargeSlipItems.length})
@@ -5855,7 +5843,7 @@ export default function ConsultationsScreen() {
                 </ThemedText>
               </View>
               <ThemedText variant="caption" color={theme.colors.textMuted}>
-                This is a read-only clinical charge slip. The Cashier will compile the Statement of Account (SOA), apply statutory discounts (Senior Citizen / PWD / PhilHealth Konsulta), and record payment upon patient checkout.
+                Review clinical charges and procedures rendered during this encounter. This read-only charge slip will be posted to the Cashier for compilation into the Statement of Account (SOA), statutory discount application (Senior Citizen / PWD / PhilHealth Konsulta), and payment collection.
               </ThemedText>
             </View>
 

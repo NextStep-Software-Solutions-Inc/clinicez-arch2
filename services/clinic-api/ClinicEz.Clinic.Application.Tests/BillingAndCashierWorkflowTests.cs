@@ -219,6 +219,53 @@ public class BillingAndCashierWorkflowTests
     }
 
     [Fact]
+    public async Task Tier1_03b_DuplicateLineItem_ConsolidatesQuantityRatherThanNewItem()
+    {
+        // Line Item Consolidation: Same item (price, doctor, item code) must be consolidated rather than a new row
+        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var invoiceRepo = TestDbHelper.CreateRepository<Invoice>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
+        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(db, sieve);
+        var publisher = Substitute.For<IBillingRequestPublisher>();
+
+        var handler = new CreateInvoiceCommandHandler(invoiceRepo, patientRepo, encounterRepo, unitOfWork, _clinicContext, publisher);
+
+        var patientId = Guid.NewGuid();
+        var queueItemId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
+
+        // 1. Initial consultation line item
+        await handler.Handle(new CreateInvoiceCommand(
+            PatientId: patientId,
+            PatientName: "Rosanna Roces",
+            QueueItemId: queueItemId,
+            LineItems: new List<CreateInvoiceLineItemRequest>
+            {
+                CreateLineItem(doctorId, "Dr. Wave Ambray", null, "CONSULT", "General Medical Consultation", "Consultation", 500m, 1)
+            }
+        ), CancellationToken.None);
+
+        // 2. Second charge capture with identical item (same code, price, and clinician)
+        var mergedResult = await handler.Handle(new CreateInvoiceCommand(
+            PatientId: patientId,
+            PatientName: "Rosanna Roces",
+            QueueItemId: queueItemId,
+            LineItems: new List<CreateInvoiceLineItemRequest>
+            {
+                CreateLineItem(doctorId, "Dr. Wave Ambray", null, "CONSULT", "General Medical Consultation", "Consultation", 500m, 1)
+            }
+        ), CancellationToken.None);
+
+        // Must consolidate to 1 line item with Quantity = 2
+        mergedResult.LineItems.Should().HaveCount(1);
+        mergedResult.LineItems[0].Quantity.Should().Be(2);
+        mergedResult.LineItems[0].UnitPrice.Should().Be(500m);
+        mergedResult.LineItems[0].TotalPrice.Should().Be(1000m);
+        mergedResult.GrossAmount.Should().Be(1000m);
+        mergedResult.NetAmount.Should().Be(1000m);
+    }
+
+    [Fact]
     public async Task Tier1_04_PaidInvoice_StrictDuplicateBlocking_ThrowsConflictException()
     {
         // R1 Requirement: Strict duplicate blocking applies if existing invoice is Paid and AllowDuplicate is false
