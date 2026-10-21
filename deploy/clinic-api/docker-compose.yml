@@ -8,11 +8,11 @@ name: clinic-api
 
 services:
   clinic-api:
-    image: ${IMAGE_NAME:-clinic-api}:${IMAGE_TAG:-dev}
+    image: ${IMAGE_NAME:-clinic-api}:${IMAGE_TAG:-latest}
     container_name: ${CONTAINER_NAME:-clinic-api}
     labels:
       - "project=clinicez"
-      - "environment=dev"
+      - "environment=${ENVIRONMENT_LABEL:-prod}"
     expose:
       - "8080"
     networks:
@@ -30,11 +30,12 @@ services:
           cpus: '${CLINIC_CPUS_LIMIT:-0.95}'
           memory: ${CLINIC_MEM_LIMIT:-450M}
     environment:
-      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
       # Low-memory & 1 vCPU tuning for Production VPS (130.94.50.27)
       - DOTNET_GCHeapHardLimitPercent=75
       - DOTNET_gcServer=0
-      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING:?CONNECTION_STRING must be set}
+      - DbSchema=${DB_SCHEMA:-public}
       # Interop hub (the cell hub this clinic's outbox ships to and its inbox polls). No built-in fallback credentials.
       - Messaging__Transport=Hub
       - Messaging__Service=clinic
