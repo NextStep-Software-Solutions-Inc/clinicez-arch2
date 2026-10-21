@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
-import Icon from '../ui/Icon';
+import { IconSlot } from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import { StaffMember, ClinicRoom } from '../../services/clinicService';
 
@@ -64,14 +64,19 @@ export const QueueRoutingSelector: React.FC<QueueRoutingSelectorProps> = ({
             accessibilityLabel={anyDoctorLabel}
             onPress={() => handleDoctorClick('')}
             disabled={disabled}
-            style={[
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            style={({ pressed }) => [
               styles.chip,
               !selectedDoctorId && styles.chipSelected,
+              pressed && !disabled && !selectedDoctorId && styles.chipPressed,
             ]}
           >
+            {!selectedDoctorId && (
+              <IconSlot value="check" size={13} color={theme.colors.primaryDark} />
+            )}
             <ThemedText
               variant="smallBold"
-              color={!selectedDoctorId ? theme.colors.textInverted : theme.colors.text}
+              color={!selectedDoctorId ? theme.colors.primaryDark : theme.colors.text}
             >
               {anyDoctorLabel}
             </ThemedText>
@@ -92,14 +97,19 @@ export const QueueRoutingSelector: React.FC<QueueRoutingSelectorProps> = ({
                 accessibilityLabel={docLabel}
                 onPress={() => handleDoctorClick(doc.id)}
                 disabled={disabled}
-                style={[
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                style={({ pressed }) => [
                   styles.chip,
                   isSelected && styles.chipSelected,
+                  pressed && !disabled && !isSelected && styles.chipPressed,
                 ]}
               >
+                {isSelected && (
+                  <IconSlot value="check" size={13} color={theme.colors.primaryDark} />
+                )}
                 <ThemedText
                   variant="smallBold"
-                  color={isSelected ? theme.colors.textInverted : theme.colors.text}
+                  color={isSelected ? theme.colors.primaryDark : theme.colors.text}
                 >
                   {docLabel}
                 </ThemedText>
@@ -121,14 +131,19 @@ export const QueueRoutingSelector: React.FC<QueueRoutingSelectorProps> = ({
               accessibilityLabel={autoRoomLabel}
               onPress={() => !disabled && onSelectRoom('')}
               disabled={disabled}
-              style={[
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              style={({ pressed }) => [
                 styles.chip,
                 !selectedRoomId && styles.chipSelected,
+                pressed && !disabled && !selectedRoomId && styles.chipPressed,
               ]}
             >
+              {!selectedRoomId && (
+                <IconSlot value="check" size={13} color={theme.colors.primaryDark} />
+              )}
               <ThemedText
                 variant="smallBold"
-                color={!selectedRoomId ? theme.colors.textInverted : theme.colors.text}
+                color={!selectedRoomId ? theme.colors.primaryDark : theme.colors.text}
               >
                 {autoRoomLabel}
               </ThemedText>
@@ -156,14 +171,19 @@ export const QueueRoutingSelector: React.FC<QueueRoutingSelectorProps> = ({
                   accessibilityLabel={roomDisplay}
                   onPress={() => !disabled && onSelectRoom(room.id)}
                   disabled={disabled}
-                  style={[
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                  style={({ pressed }) => [
                     styles.chip,
                     isSelected && styles.chipSelected,
+                    pressed && !disabled && !isSelected && styles.chipPressed,
                   ]}
                 >
+                  {isSelected && (
+                    <IconSlot value="check" size={13} color={theme.colors.primaryDark} />
+                  )}
                   <ThemedText
                     variant="smallBold"
-                    color={isSelected ? theme.colors.textInverted : theme.colors.text}
+                    color={isSelected ? theme.colors.primaryDark : theme.colors.text}
                   >
                     {roomDisplay}
                   </ThemedText>
@@ -179,7 +199,7 @@ export const QueueRoutingSelector: React.FC<QueueRoutingSelectorProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
   section: {
     gap: theme.spacing.xs,
@@ -187,22 +207,27 @@ const styles = StyleSheet.create({
   chipGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
   },
   chip: {
-    minHeight: 44, // WCAG Touch Target Compliance
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: theme.radii.full,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.borderDark,
     backgroundColor: theme.colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   chipSelected: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
+    borderWidth: 1.5,
+  },
+  chipPressed: {
+    backgroundColor: theme.colors.surfaceSubtle,
   },
 });
 

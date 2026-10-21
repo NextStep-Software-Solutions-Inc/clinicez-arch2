@@ -901,7 +901,7 @@ export function EditPatientModal({
                         >
                           <ThemedText
                             variant="captionBold"
-                            color={isSelected ? theme.colors.onPrimary : theme.colors.textSecondary}
+                            color={isSelected ? theme.colors.primaryDark : theme.colors.textSecondary}
                           >
                             {rel.label}
                           </ThemedText>
@@ -1309,18 +1309,22 @@ const styles = StyleSheet.create({
   relationshipGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: theme.spacing.sm,
   },
   relationshipChip: {
+    minHeight: 34,
     paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: theme.colors.borderLight,
+    borderColor: theme.colors.borderDark,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   relationshipChip_selected: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
+    borderWidth: 1.5,
   },
 });

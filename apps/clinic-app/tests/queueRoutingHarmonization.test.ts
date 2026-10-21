@@ -4,9 +4,28 @@ import { describe, expect, test, mock } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ClinicRoom, StaffMember } from '../services/clinicService';
-import { QueueRoutingSelector } from '../components/queue/QueueRoutingSelector';
 
 (globalThis as any).__DEV__ = true;
+
+mock.module('react-native-svg', () => ({
+  Svg: 'Svg',
+  Path: 'Path',
+  Circle: 'Circle',
+  Rect: 'Rect',
+  Line: 'Line',
+  default: 'Svg',
+}));
+
+mock.module('@expo-google-fonts/geist', () => ({
+  useFonts: () => [true],
+}));
+mock.module('@expo-google-fonts/geist-mono', () => ({
+  useFonts: () => [true],
+}));
+mock.module('../constants/fonts', () => ({
+  applyFontFamily: (s: any) => s,
+  fontAssets: {},
+}));
 
 const createMockComponent = (name: string) => {
   const Comp = ({ children, accessibilityLabel, accessibilityRole, placeholder, onPress, disabled, style }: any) =>
@@ -31,10 +50,12 @@ mock.module('react-native', () => ({
   View: createMockComponent('View'),
   Pressable: createMockComponent('Pressable'),
   ScrollView: createMockComponent('ScrollView'),
+  RefreshControl: createMockComponent('RefreshControl'),
   TextInput: createMockComponent('TextInput'),
   Text: createMockComponent('Text'),
   ActivityIndicator: createMockComponent('ActivityIndicator'),
   Modal: createMockComponent('Modal'),
+  Alert: { alert: () => {} },
   KeyboardAvoidingView: createMockComponent('KeyboardAvoidingView'),
   FlatList: createMockComponent('FlatList'),
   SectionList: createMockComponent('SectionList'),
@@ -65,6 +86,8 @@ mock.module('react-native', () => ({
     spring: () => ({ start: (cb: any) => cb && cb() }),
   },
 }));
+
+const { QueueRoutingSelector } = await import('../components/queue/QueueRoutingSelector');
 
 const mockDoctors: StaffMember[] = [
   {
