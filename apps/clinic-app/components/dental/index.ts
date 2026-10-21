@@ -27,6 +27,7 @@ export {
   resolveToothEffectiveState,
   canApplyConditionToTooth,
   applyStagedConditionToTooth,
+  removeCurrentEncounterConditionFromTooth,
   getDominantToothStatus,
   getConditionDotColor,
   getSurfaceZoneColor,

@@ -1531,12 +1531,17 @@ export interface DentalToothRecord {
   surface?: string | null;
   activeSurface?: string | null;
   isCurrent?: boolean;
+  isCurrentEncounter?: boolean;
   supersededAt?: string | null;
   supersededByRecordId?: string | null;
   notes?: string | null;
   createdAt: string;
   updatedAt?: string | null;
   recordedBy?: string | null;
+  isVoided?: boolean;
+  voidedAt?: string | null;
+  voidedBy?: string | null;
+  voidReason?: string | null;
 }
 
 export interface DentalSummary {
@@ -3577,6 +3582,16 @@ export const clinicService = {
 
   async saveDentalChartBatch(patientId: string, payload: BatchSaveDentalChartPayload) {
     return this.batchSaveDentalChart(patientId, payload);
+  },
+
+  async voidDentalToothRecord(patientId: string, recordId: string, reason?: string) {
+    return clinicApiClient.post<DentalToothRecord>(`/dental/patients/${patientId}/teeth/${recordId}/void`, {
+      reason: reason || null,
+    });
+  },
+
+  async voidToothRecord(patientId: string, recordId: string, reason?: string) {
+    return this.voidDentalToothRecord(patientId, recordId, reason);
   },
 };
 

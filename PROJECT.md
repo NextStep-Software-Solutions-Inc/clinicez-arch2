@@ -4,6 +4,7 @@
 - **Layer 1: Shared Platform Standards (`packages/shared-dotnet`)**:
   - `TenantPrintoutConfig` with `TaxIdentificationNumber` and branding metadata.
   - `TenantLetterheadComponent` and `DocumentFooterComponent` with legal disclaimers, page numbering (`Page X of Y`), and cryptographic stamps.
+  - Standardized Signatory Layout System (`ClinicianSignatoryComponent`, `DualSignatoryComponent`, `DocumentLayoutExtensions`, `DocumentSpacingConstants`): Enforces `.ShowEntire().ExtendVertical().AlignBottom()` with a guaranteed 20pt buffer (12pt signatory bottom padding + 8pt footer top padding) ensuring signatures and verification seals never touch or kiss the footer divider line across all current and future PDF documents.
   - `IDocumentSecurityService` (HMAC-SHA256 canonical digest `SEC-SHA256-{hex}`) and `IQrCodeService` (PNG byte matrix).
 - **Layer 2: Clinic Backend Data & Query Engine (`services/clinic-api/ClinicEz.Clinic.Application` & `Infrastructure`)**:
   - Elimination of all mock fallbacks (dummy doctors, hardcoded diagnoses, static wait/consult times, fictitious invoices, hardcoded clinic names).

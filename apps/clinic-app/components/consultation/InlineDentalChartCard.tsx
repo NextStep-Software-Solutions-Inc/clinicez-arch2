@@ -39,6 +39,7 @@ import {
   getCurrentEncounterLockedState,
   canApplyConditionToTooth,
   applyStagedConditionToTooth,
+  removeCurrentEncounterConditionFromTooth,
   getDominantToothStatus,
   getConditionDotColor,
 } from '../dental';
@@ -242,9 +243,11 @@ export function InlineDentalChartCard({
   const activeRecord = useMemo(() => {
     if (selectedToothRecords.length === 0) return null;
     const currentNonHealthy = selectedToothRecords.filter(
-      (r) => r.status !== 'Healthy' && r.isCurrent !== false
+      (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent !== false
     );
-    if (currentNonHealthy.length > 0) return currentNonHealthy[0];
+    if (currentNonHealthy.length > 0) {
+      return currentNonHealthy[currentNonHealthy.length - 1];
+    }
     return null;
   }, [selectedToothRecords]);
 
@@ -253,21 +256,14 @@ export function InlineDentalChartCard({
     [selectedToothRecords, consultationId]
   );
 
-  // Default staged status to 'Decayed' when tooth is Healthy so clinician can immediately pick surfaces and save
+  // Default staged status to the tooth's most recent status (or 'Decayed' if Healthy)
+  // while keeping stagedSurfaces empty until the clinician explicitly toggles surfaces for the current encounter.
   const stagedStatus: ToothStatus =
     stagedStatusState ??
     (lockState.hasAnyCurrentEncounterRecord ? 'Decayed' : activeRecord?.status ?? 'Decayed');
   const isWholeToothStaged = isWholeToothStatus(stagedStatus);
-  const stagedSurfaces: string = isWholeToothStaged
-    ? ''
-    : stagedSurfacesState ??
-      (!lockState.hasAnyCurrentEncounterRecord &&
-      activeRecord &&
-      !isWholeToothStatus(activeRecord.status)
-        ? sortToothSurfaces(activeRecord.activeSurface ?? activeRecord.surface ?? '')
-        : '');
-  const stagedNotes: string =
-    stagedNotesState ?? (!lockState.hasAnyCurrentEncounterRecord ? activeRecord?.notes ?? '' : '');
+  const stagedSurfaces: string = isWholeToothStaged ? '' : stagedSurfacesState ?? '';
+  const stagedNotes: string = stagedNotesState ?? '';
 
   const saveCheck = useMemo(
     () =>
@@ -355,11 +351,11 @@ export function InlineDentalChartCard({
     if (disabled) return;
 
     const currentRecs = multiTeethRef.current[toothNumber] || [];
-    const filtered = currentRecs.filter(
-      (r) => r.id !== conditionIdOrStatus && r.status.toLowerCase() !== conditionIdOrStatus.toLowerCase()
+    const nextRecs = removeCurrentEncounterConditionFromTooth(
+      currentRecs,
+      conditionIdOrStatus,
+      consultationId
     );
-
-    const nextRecs = filtered;
 
     const nextMulti = {
       ...multiTeethRef.current,
@@ -370,14 +366,14 @@ export function InlineDentalChartCard({
     setLocalTeethOverride(nextMulti);
     onRemoveCondition?.(toothNumber, conditionIdOrStatus);
 
-    const activeRecs = nextRecs.filter((r) => r.isCurrent !== false);
+    const activeRecs = nextRecs.filter((r) => !r.isVoided && r.isCurrent !== false);
     const updatedToothState: DentalToothState = {
       toothNumber,
       status: getDominantToothStatus(activeRecs),
       surface: sortToothSurfaces(
         activeRecs.map((r) => r.activeSurface ?? r.surface ?? '').join('')
       ),
-      notes: activeRecs[0]?.notes || '',
+      notes: activeRecs[activeRecs.length - 1]?.notes || '',
     };
 
     notifyChange(updatedToothState, nextMulti);
@@ -533,7 +529,7 @@ export function InlineDentalChartCard({
 
   const renderToothButton = (toothNumber: number) => {
     const records = multiTeethMap[toothNumber] || [];
-    const activeRecords = records.filter((r) => r.isCurrent !== false);
+    const activeRecords = records.filter((r) => !r.isVoided && r.isCurrent !== false);
     const status = getDominantToothStatus(activeRecords);
     const combinedSurface = sortToothSurfaces(
       activeRecords.map((r) => r.activeSurface ?? r.surface ?? '').join('')
@@ -616,9 +612,9 @@ export function InlineDentalChartCard({
   const lowerRightTeeth = dentitionMode === 'Adult' ? ADULT_LOWER_RIGHT : CHILD_LOWER_RIGHT;
   const lowerLeftTeeth = dentitionMode === 'Adult' ? ADULT_LOWER_LEFT : CHILD_LOWER_LEFT;
 
-  // Active conditions for the Right Screen inspector list: ONLY current active non-healthy records (no historical records)
+  // Active conditions for the Right Screen inspector list: ONLY current active non-healthy records (no historical or voided records)
   const activeConditions = selectedToothRecords.filter(
-    (r) => r.status !== 'Healthy' && r.isCurrent !== false
+    (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent !== false
   );
 
   return (
@@ -910,18 +906,6 @@ export function InlineDentalChartCard({
                     </Pressable>
                   ) : null}
 
-                  {!disabled && activeConditions.length > 0 ? (
-                    <View style={styles.addConditionRow}>
-                      <Button
-                        title="Reset to Healthy"
-                        variant="ghost"
-                        size="sm"
-                        onPress={handleResetToHealthy}
-                        testID="reset-tooth-healthy-btn"
-                      />
-                    </View>
-                  ) : null}
-
                   {!disabled && effectiveOrderProcedure ? (
                     <View style={styles.actionsRow}>
                       <Button
@@ -940,7 +924,7 @@ export function InlineDentalChartCard({
               </View>
             </View>
 
-            {/* Recorded Conditions on Tooth #XX (Right Screen: Latest/Current Status Only) */}
+            {/* Recorded Conditions on Tooth #XX (Right Screen: Latest/Current Status Only; Prior Visit Records Untouchable) */}
             <View style={styles.sectionBlock} testID="recorded-conditions-section">
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
                 Recorded Conditions on Tooth #{selectedToothNumber}:
@@ -959,6 +943,13 @@ export function InlineDentalChartCard({
                       cond.activeSurface !== undefined && cond.activeSurface !== null
                         ? sortToothSurfaces(cond.activeSurface)
                         : origSurf;
+                    const isCurrentEncounterRecord =
+                      cond.isCurrentEncounter === true ||
+                      Boolean(
+                        consultationId &&
+                          cond.consultationId &&
+                          cond.consultationId === consultationId
+                      );
 
                     return (
                       <View
@@ -974,8 +965,8 @@ export function InlineDentalChartCard({
                               size="sm"
                             />
                             <Badge
-                              label="Current"
-                              variant="success"
+                              label={isCurrentEncounterRecord ? 'Current Visit' : 'Prior Visit'}
+                              variant={isCurrentEncounterRecord ? 'success' : 'neutral'}
                               size="sm"
                             />
                             <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -983,7 +974,7 @@ export function InlineDentalChartCard({
                             </ThemedText>
                           </View>
 
-                          {!disabled ? (
+                          {!disabled && isCurrentEncounterRecord ? (
                             <Pressable
                               accessibilityRole="button"
                               accessibilityLabel={`Remove ${getToothStatusLabel(cond.status)} from Tooth #${selectedToothNumber}`}

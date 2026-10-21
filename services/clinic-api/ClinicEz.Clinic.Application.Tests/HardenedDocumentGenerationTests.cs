@@ -1230,6 +1230,54 @@ public class HardenedDocumentGenerationTests
     }
 
     [Fact]
+    public void ClinicDocumentPdfService_StandardizedSignatoryLayout_Should_Generate_Valid_Pdfs_Across_All_Document_Classes()
+    {
+        var settings = CreateReportTestSettings();
+        var date = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc);
+
+        // 1. Invoice SOA with standardized bottom-anchored verification stamps
+        var invoice = new Invoice
+        {
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            InvoiceNumber = "SOA-2026-TEST",
+            InvoiceDate = date,
+            PatientId = Guid.NewGuid(),
+            PatientName = "Juanita Cruz",
+            AttendingDoctorName = "Dr. Roberto Santos, MD",
+            GrossAmount = 1500m,
+            NetAmount = 1500m,
+            BalanceDue = 1500m,
+            Status = Domain.Enums.InvoiceStatus.Draft,
+            BilledByStaffName = "Authorized Cashier",
+            LineItems = new List<InvoiceLineItem>
+            {
+                new() { Description = "Comprehensive Consultation", Category = "Consultation", TotalPrice = 1500m, Quantity = 1, UnitPrice = 1500m }
+            }
+        };
+        var invoicePdf = _pdfService.GenerateInvoicePdf(invoice, settings);
+        invoicePdf.Should().NotBeNull();
+        invoicePdf.Length.Should().BeGreaterThan(1000);
+        Encoding.ASCII.GetString(invoicePdf, 0, 10).Should().StartWith("%PDF-");
+
+        // 2. Daily EOD Report with standardized dual sign-off
+        var eodDto = new DailyEodReportDto(
+            date, settings.TenantId, settings.ClinicId, 5, 3, 2, 5, 0,
+            5000m, 500m, 200m, 200m, 1000m, 4500m, 4500m, 2000m, 0m,
+            new List<PaymentModeSummary>(), new List<DoctorWorkloadSummary>(), 1, 1, 1, 0);
+        var eodPdf = _pdfService.GenerateDailyEodReportPdf(eodDto, settings, "Maria Santos");
+        eodPdf.Should().NotBeNull();
+        eodPdf.Length.Should().BeGreaterThan(1000);
+        Encoding.ASCII.GetString(eodPdf, 0, 10).Should().StartWith("%PDF-");
+
+        // 3. Clinical Documents with clinician signature stamp
+        var medCertPdf = GenerateMedicalCertificate(CreateBaseSettings(DocumentPaperSize.Letter), SignatureMode.DigitalSealOnly);
+        medCertPdf.Should().NotBeNull();
+        medCertPdf.Length.Should().BeGreaterThan(1000);
+        Encoding.ASCII.GetString(medCertPdf, 0, 10).Should().StartWith("%PDF-");
+    }
+
+    [Fact]
     public async Task DocumentsController_VerifyDocument_Should_Resolve_By_Security_Digest()
     {
         var testDigest = "a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0";

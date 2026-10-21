@@ -1039,15 +1039,16 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.ToothNumber).IsRequired();
             entity.Property(e => e.Status)
                 .IsRequired()
-                .HasConversion(
-                    v => v.ToString(),
-                    v => ParseToothStatus(v))
+                .HasConversion<string>()
                 .HasMaxLength(50);
             entity.Property(e => e.Surface).HasMaxLength(20);
             entity.Property(e => e.ActiveSurface).HasMaxLength(20);
             entity.Property(e => e.IsCurrent).IsRequired().HasDefaultValue(true);
             entity.Property(e => e.RecordedBy).HasMaxLength(200);
             entity.Property(e => e.Notes).HasMaxLength(1000);
+            entity.Property(e => e.IsVoided).IsRequired().HasDefaultValue(false);
+            entity.Property(e => e.VoidedBy).HasMaxLength(200);
+            entity.Property(e => e.VoidReason).HasMaxLength(500);
 
             // Composite indexes for fast odontogram reads and tooth history
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
@@ -1062,23 +1063,6 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.ApplyWorkspaceProfileModel();
 
         base.OnModelCreating(modelBuilder);
-    }
-
-    private static ToothStatus ParseToothStatus(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return ToothStatus.Healthy;
-        }
-
-        return value.Trim() switch
-        {
-            "Decay" => ToothStatus.Decayed,
-            "Crown" => ToothStatus.Crowned,
-            "Extraction" => ToothStatus.ForExtraction,
-            var s when Enum.TryParse<ToothStatus>(s, ignoreCase: true, out var parsed) => parsed,
-            _ => ToothStatus.Healthy
-        };
     }
 
     private static readonly object _inMemoryUniqueLock = new();

@@ -668,16 +668,56 @@ public class UpsertDentalToothRecordCommandHandlerTests
         chartAfterVisit4.Summary.MissingCount.Should().Be(1);
         chartAfterVisit4.Summary.DmftIndex.Should().Be(1);
 
-        // Guard: Attempting to add Decay or Crown to a Missing tooth throws BadRequestException
-        var actInvalidOnMissing = async () => await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
+        // Guard: Same-encounter conflict on a tooth marked Missing in the SAME encounter throws BadRequestException
+        var actConflictSameEncounterOnMissing = async () => await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
             PatientId: patientId,
             ToothNumber: 16,
             Status: ToothStatus.Crowned,
-            Surface: "MODBL"
+            Surface: "MODBL",
+            ConsultationId: visit4Id
         ), CancellationToken.None);
 
-        await actInvalidOnMissing.Should().ThrowAsync<BadRequestException>()
-            .WithMessage("*currently marked as Missing*");
+        await actConflictSameEncounterOnMissing.Should().ThrowAsync<BadRequestException>()
+            .WithMessage("*already has*recorded in the current encounter*");
+
+        // Visit 5 (Subsequent Encounter): Dentist places Pontic / Implant on top of the Missing tooth without deleting Missing
+        var visit5Id = Guid.NewGuid();
+        var visit5Implant = await upsertHandler.Handle(new UpsertDentalToothRecordCommand(
+            PatientId: patientId,
+            ToothNumber: 16,
+            Status: ToothStatus.Implant,
+            Notes: "Titanium implant placed at edentulous site #16",
+            ConsultationId: visit5Id
+        ), CancellationToken.None);
+
+        visit5Implant.IsCurrent.Should().BeTrue();
+        visit5Implant.Status.Should().Be(ToothStatus.Implant);
+
+        var chartAfterVisit5 = await queryHandler.Handle(new GetPatientDentalChartQuery(patientId), CancellationToken.None);
+        chartAfterVisit5.Teeth.Should().HaveCount(5, "All 5 longitudinal visit records remain in the stack");
+        chartAfterVisit5.Teeth.Where(t => t.IsCurrent).Should().ContainSingle(t => t.Id == visit5Implant.Id && t.Status == ToothStatus.Implant);
+        chartAfterVisit5.Teeth.First(t => t.Id == visit4Missing.Id).IsCurrent.Should().BeFalse("Missing is superseded by Implant in Visit 5");
+
+        // Audit-Safe Void: Doctor voids Visit 5 Implant record -> Missing from Visit 4 is restored as Current
+        var voidSender = NSubstitute.Substitute.For<MediatR.ISender>();
+        voidSender.Send(NSubstitute.Arg.Any<GetPatientDentalChartQuery>(), NSubstitute.Arg.Any<CancellationToken>())
+            .Returns(callInfo => queryHandler.Handle(callInfo.Arg<GetPatientDentalChartQuery>(), CancellationToken.None));
+
+        var voidHandler = new VoidDentalToothRecordCommandHandler(toothRepo, uow, _clinicContext, voidSender);
+        var chartAfterVoid = await voidHandler.Handle(new VoidDentalToothRecordCommand(
+            PatientId: patientId,
+            RecordId: visit5Implant.Id,
+            Reason: "Recorded on wrong tooth number"
+        ), CancellationToken.None);
+
+        chartAfterVoid.Teeth.Should().HaveCount(5, "Voided record remains in the history stack for audit trail");
+        var voidedRec = chartAfterVoid.Teeth.First(t => t.Id == visit5Implant.Id);
+        voidedRec.IsVoided.Should().BeTrue();
+        voidedRec.IsCurrent.Should().BeFalse();
+        voidedRec.VoidReason.Should().Be("Recorded on wrong tooth number");
+
+        var restoredMissing = chartAfterVoid.Teeth.First(t => t.Id == visit4Missing.Id);
+        restoredMissing.IsCurrent.Should().BeTrue("Prior non-voided record on the stack is automatically restored as Current");
     }
 
     [Fact]

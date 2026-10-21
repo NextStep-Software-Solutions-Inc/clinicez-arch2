@@ -25,7 +25,11 @@ public sealed record DentalToothRecordDto(
     string? ActiveSurface = null,
     bool IsCurrent = true,
     DateTime? SupersededAt = null,
-    Guid? SupersededByRecordId = null
+    Guid? SupersededByRecordId = null,
+    bool IsVoided = false,
+    DateTime? VoidedAt = null,
+    string? VoidedBy = null,
+    string? VoidReason = null
 );
 
 /// <summary>

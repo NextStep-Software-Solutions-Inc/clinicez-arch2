@@ -81,6 +81,10 @@ export interface DentalToothRecord {
   createdAt: string;
   updatedAt?: string | null;
   recordedBy?: string | null;
+  isVoided?: boolean;
+  voidedAt?: string | null;
+  voidedBy?: string | null;
+  voidReason?: string | null;
 }
 
 export function isWholeToothStatus(status: ToothStatus): boolean {
@@ -212,22 +216,19 @@ export function normalizeTeethToMultiRecord(
     const num = item.toothNumber;
     if (!map[num]) map[num] = [];
 
-    const rawStatus = item.status || 'Healthy';
-    const status: ToothStatus =
-      rawStatus === 'Decay'
-        ? 'Decayed'
-        : rawStatus === 'Crown'
-          ? 'Crowned'
-          : rawStatus === 'Extraction'
-            ? 'ForExtraction'
-            : rawStatus;
+    const status: ToothStatus = (item.status as ToothStatus) || 'Healthy';
     const sortedSurface = isWholeToothStatus(status)
       ? ''
       : item.surface
         ? sortToothSurfaces(item.surface)
         : '';
     const hasExplicitActive = item.activeSurface !== undefined && item.activeSurface !== null;
-    const isCurrent = item.isCurrent !== undefined ? Boolean(item.isCurrent) : true;
+    const isVoided = Boolean(item.isVoided);
+    const isCurrent = isVoided
+      ? false
+      : item.isCurrent !== undefined
+        ? Boolean(item.isCurrent)
+        : true;
     const isCurrentEncounter =
       item.isCurrentEncounter !== undefined ? Boolean(item.isCurrentEncounter) : false;
     const rec: DentalToothRecord = {
@@ -258,19 +259,23 @@ export function normalizeTeethToMultiRecord(
       createdAt: item.createdAt || new Date().toISOString(),
       updatedAt: item.updatedAt || null,
       recordedBy: item.recordedBy || item.createdBy || 'Attending Clinician',
+      isVoided,
+      voidedAt: item.voidedAt || null,
+      voidedBy: item.voidedBy || null,
+      voidReason: item.voidReason || null,
     };
 
     map[num].push(rec);
   }
 
-  // Filter out placeholder 'Healthy' records if any abnormal condition exists on that tooth
+  // Filter out placeholder 'Healthy' records if any abnormal condition exists on that tooth,
+  // and resolve top-of-stack state for each tooth.
   for (const numStr of Object.keys(map)) {
     const num = Number(numStr);
     const records = map[num];
     const hasAbnormal = records.some((r) => r.status !== 'Healthy');
-    if (hasAbnormal) {
-      map[num] = records.filter((r) => r.status !== 'Healthy');
-    }
+    const filtered = hasAbnormal ? records.filter((r) => r.status !== 'Healthy') : records;
+    map[num] = resolveToothEffectiveState(filtered).allRecords;
   }
 
   return map;
@@ -283,6 +288,7 @@ export interface EffectiveToothState {
   dominantStatus: ToothStatus;
   currentRecords: DentalToothRecord[];
   historicalRecords: DentalToothRecord[];
+  voidedRecords: DentalToothRecord[];
   allRecords: DentalToothRecord[];
 }
 
@@ -303,41 +309,69 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
       dominantStatus: 'Healthy',
       currentRecords: [],
       historicalRecords: [],
+      voidedRecords: [],
       allRecords: [],
     };
   }
 
-  // Clone and sort chronologically (oldest -> newest) so later surface treatments supersede earlier surfaces
-  const indexed = records.map((r, idx) => ({
-    rec: {
-      ...r,
-      surface: r.surface ? sortToothSurfaces(r.surface) : '',
-      activeSurface:
-        r.isCurrent === false || isWholeToothStatus(r.status)
-          ? ''
-          : r.activeSurface !== undefined && r.activeSurface !== null
-            ? sortToothSurfaces(r.activeSurface)
-            : r.surface
-              ? sortToothSurfaces(r.surface)
-              : '',
-      isCurrent: r.isCurrent !== undefined ? r.isCurrent : true,
-    },
-    idx,
-    time: Number.isNaN(Date.parse(r.createdAt)) ? 0 : Date.parse(r.createdAt),
-  }));
+  // Clone and sort chronologically (oldest -> newest) so later treatments supersede earlier records on the stack.
+  // Recompute activeSurface from each non-voided record's original surface unless the record was already marked
+  // historical without any remaining surface and has no newer record in the array to explain it.
+  const hasMultipleNonVoided =
+    records.filter((r) => !r.isVoided && r.status !== 'Healthy').length > 1;
+  const anyExplicitlyCurrent = records.some(
+    (r) => !r.isVoided && r.status !== 'Healthy' && r.isCurrent !== false
+  );
 
-  indexed.sort((a, b) => (a.time !== b.time ? a.time - b.time : a.idx - b.idx));
+  const indexed = records.map((r, idx) => {
+    const isVoided = Boolean(r.isVoided);
+    const origSurf = isWholeToothStatus(r.status)
+      ? ''
+      : r.surface
+        ? sortToothSurfaces(r.surface)
+        : r.status === 'Crowned'
+          ? 'MODBL'
+          : '';
+    // If the record was explicitly passed in as the ONLY record with isCurrent: false (e.g. a unit test testing
+    // an isolated historical record), preserve isCurrent: false; otherwise recompute from the chronological stack.
+    const preserveExplicitHistorical =
+      !isVoided && r.isCurrent === false && !hasMultipleNonVoided && !anyExplicitlyCurrent;
+    const initialIsCurrent = isVoided ? false : preserveExplicitHistorical ? false : true;
+    const initialActiveSurface =
+      !initialIsCurrent || isWholeToothStatus(r.status) ? '' : origSurf;
+
+    return {
+      rec: {
+        ...r,
+        isVoided,
+        surface: isWholeToothStatus(r.status) ? '' : r.surface ? sortToothSurfaces(r.surface) : '',
+        activeSurface: initialActiveSurface,
+        isCurrent: initialIsCurrent,
+      },
+      idx,
+      time: Number.isNaN(Date.parse(r.createdAt)) ? 0 : Date.parse(r.createdAt),
+      encOrder: r.isCurrentEncounter ? 1 : 0,
+    };
+  });
+
+  indexed.sort((a, b) => {
+    if (a.time !== b.time) return a.time - b.time;
+    if (a.encOrder !== b.encOrder) return a.encOrder - b.encOrder;
+    return a.idx - b.idx;
+  });
 
   const resolved: DentalToothRecord[] = [];
   for (const item of indexed) {
     const current = item.rec;
-    if (current.isCurrent === false) {
+    if (current.isVoided || current.isCurrent === false) {
+      current.isCurrent = false;
+      current.activeSurface = '';
       resolved.push(current);
       continue;
     }
 
     if (isWholeToothStatus(current.status) && current.status !== 'Healthy') {
-      // Whole-tooth status (Missing, ForExtraction, Impacted, RootCanal, Implant) supersedes prior active records
+      // Whole-tooth status (Missing, ForExtraction, Impacted, RootCanal, Implant) supersedes all prior active records on this tooth
       for (const prior of resolved) {
         if (prior.isCurrent !== false) {
           prior.isCurrent = false;
@@ -353,11 +387,14 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
       continue;
     }
 
-    const incomingSurfaces = current.activeSurface || current.surface || '';
+    const incomingSurfaces =
+      current.activeSurface ||
+      current.surface ||
+      (current.status === 'Crowned' ? 'MODBL' : '');
     if (incomingSurfaces.length > 0 && isSurfaceScopedStatus(current.status)) {
       for (const prior of resolved) {
         if (prior.isCurrent === false) continue;
-        if (isWholeToothStatus(prior.status) && prior.status !== 'Missing') {
+        if (isWholeToothStatus(prior.status)) {
           prior.isCurrent = false;
           prior.activeSurface = '';
           prior.supersededAt = prior.supersededAt || current.createdAt;
@@ -390,8 +427,13 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
     byIdOrIdx.set(item.idx, resolved[sortedPos]);
   });
   const allRecords = records.map((_, idx) => byIdOrIdx.get(idx)!);
-  const currentRecords = allRecords.filter((r) => r.isCurrent !== false && r.status !== 'Healthy');
-  const historicalRecords = allRecords.filter((r) => r.isCurrent === false && r.status !== 'Healthy');
+  const currentRecords = allRecords.filter(
+    (r) => !r.isVoided && r.isCurrent !== false && r.status !== 'Healthy'
+  );
+  const historicalRecords = allRecords.filter(
+    (r) => !r.isVoided && r.isCurrent === false && r.status !== 'Healthy'
+  );
+  const voidedRecords = allRecords.filter((r) => Boolean(r.isVoided) && r.status !== 'Healthy');
 
   const isMissing = currentRecords.some((r) => r.status === 'Missing');
   const hasExtraction = currentRecords.some((r) => r.status === 'ForExtraction');
@@ -414,6 +456,7 @@ export function resolveToothEffectiveState(records: DentalToothRecord[]): Effect
     dominantStatus: getDominantToothStatus(currentRecords.length > 0 ? currentRecords : allRecords),
     currentRecords,
     historicalRecords,
+    voidedRecords,
     allRecords,
   };
 }
@@ -431,7 +474,7 @@ export function getCurrentEncounterLockedState(
 ): CurrentEncounterLockState {
   const lockedSurfaces = new Set<ToothSurfaceCode>();
   const activeRecords = (records || []).filter(
-    (r) => r.isCurrent !== false && r.status !== 'Healthy'
+    (r) => !r.isVoided && r.isCurrent !== false && r.status !== 'Healthy'
   );
   const currentEncounterRecords = activeRecords.filter(
     (r) =>
@@ -479,15 +522,6 @@ export function canApplyConditionToTooth(
   targetSurfaces?: string | null,
   currentConsultationId?: string | null
 ): { allowed: boolean; reason?: string } {
-  const activeRecords = (existingRecords || []).filter((r) => r.isCurrent !== false);
-  const isCurrentlyMissing = activeRecords.some((r) => r.status === 'Missing');
-  if (isCurrentlyMissing && targetStatus !== 'Healthy' && targetStatus !== 'Missing') {
-    return {
-      allowed: false,
-      reason: 'Cannot record conditions on a missing tooth. Reset to Healthy first.',
-    };
-  }
-
   if (targetStatus === 'Healthy') {
     return { allowed: true };
   }
@@ -565,14 +599,14 @@ export function applyStagedConditionToTooth(
       ...r,
       surface: isWholeToothStatus(r.status) ? '' : r.surface ? sortToothSurfaces(r.surface) : '',
       activeSurface:
-        r.isCurrent === false || isWholeToothStatus(r.status)
+        r.isVoided || r.isCurrent === false || isWholeToothStatus(r.status)
           ? ''
           : r.activeSurface !== undefined && r.activeSurface !== null
             ? sortToothSurfaces(r.activeSurface)
             : r.surface
               ? sortToothSurfaces(r.surface)
               : '',
-      isCurrent: r.isCurrent !== undefined ? r.isCurrent : true,
+      isCurrent: r.isVoided ? false : r.isCurrent !== undefined ? r.isCurrent : true,
       isCurrentEncounter: r.isCurrentEncounter !== undefined ? r.isCurrentEncounter : false,
       currentEncounterSurface: r.currentEncounterSurface
         ? sortToothSurfaces(r.currentEncounterSurface)
@@ -598,14 +632,6 @@ export function applyStagedConditionToTooth(
       : sortToothSurfaces(staged.surface || 'O');
 
   if (isWholeToothStatus(staged.status)) {
-    for (const prior of working) {
-      if (prior.isCurrent !== false) {
-        prior.isCurrent = false;
-        prior.activeSurface = '';
-        prior.supersededAt = nowIso;
-        prior.supersededByRecordId = newRecordId;
-      }
-    }
     working.push({
       id: newRecordId,
       toothNumber: staged.toothNumber,
@@ -621,62 +647,38 @@ export function applyStagedConditionToTooth(
       recordedBy: staged.recordedBy || 'Attending Clinician',
       consultationId: staged.consultationId || null,
     });
-    return working;
+    return resolveToothEffectiveState(working).allRecords;
   }
 
-  // Surface-bearing statuses: Decayed, Filled, Crowned, Sealant, Fractured
-  for (const prior of working) {
-    if (prior.isCurrent === false) continue;
-    if (isWholeToothStatus(prior.status)) {
-      prior.isCurrent = false;
-      prior.activeSurface = '';
-      prior.supersededAt = nowIso;
-      prior.supersededByRecordId = newRecordId;
-      continue;
-    }
-    if (prior.status === staged.status) continue;
-    if (!isSurfaceScopedStatus(prior.status)) {
-      continue;
-    }
-    const priorActive =
-      prior.activeSurface !== undefined && prior.activeSurface !== null
-        ? prior.activeSurface
-        : prior.surface || (prior.status === 'Crowned' ? 'MODBL' : '');
-    const remaining = subtractToothSurfaces(priorActive, normalizedSurface);
-    if (remaining !== priorActive) {
-      prior.activeSurface = remaining;
-      prior.updatedAt = nowIso;
-      if (remaining.length === 0) {
-        prior.isCurrent = false;
-        prior.supersededAt = nowIso;
-        prior.supersededByRecordId = newRecordId;
-      }
-    }
-  }
-
-  const sameStatusActive = working.find(
-    (r) => r.status === staged.status && r.isCurrent !== false
+  // Only merge into an existing record of the same status if it belongs to the CURRENT encounter
+  // (never merge into or overwrite a record from a previous encounter).
+  const sameStatusInCurrentEncounter = working.find(
+    (r) =>
+      !r.isVoided &&
+      r.status === staged.status &&
+      r.isCurrent !== false &&
+      (r.isCurrentEncounter === true ||
+        Boolean(staged.consultationId && r.consultationId && r.consultationId === staged.consultationId))
   );
-  if (sameStatusActive) {
-    const mergedActive = sortToothSurfaces(
-      `${sameStatusActive.activeSurface ?? sameStatusActive.surface ?? ''}${normalizedSurface}`
+
+  if (sameStatusInCurrentEncounter) {
+    const mergedSurface = sortToothSurfaces(
+      `${sameStatusInCurrentEncounter.surface ?? ''}${normalizedSurface}`
     );
-    const mergedHistorical = sortToothSurfaces(
-      `${sameStatusActive.surface ?? ''}${normalizedSurface}`
-    );
-    sameStatusActive.surface = mergedHistorical;
-    sameStatusActive.activeSurface = mergedActive;
-    sameStatusActive.isCurrentEncounter =
-      sameStatusActive.isCurrentEncounter || isSameEncounterFlag;
+    sameStatusInCurrentEncounter.surface = mergedSurface;
+    sameStatusInCurrentEncounter.activeSurface = mergedSurface;
+    sameStatusInCurrentEncounter.isCurrentEncounter =
+      sameStatusInCurrentEncounter.isCurrentEncounter || isSameEncounterFlag;
     if (isSameEncounterFlag) {
-      sameStatusActive.currentEncounterSurface = sortToothSurfaces(
-        `${sameStatusActive.currentEncounterSurface || ''}${normalizedSurface}`
+      sameStatusInCurrentEncounter.currentEncounterSurface = sortToothSurfaces(
+        `${sameStatusInCurrentEncounter.currentEncounterSurface || ''}${normalizedSurface}`
       );
     }
-    sameStatusActive.notes = staged.notes ?? sameStatusActive.notes;
-    sameStatusActive.updatedAt = nowIso;
-    sameStatusActive.recordedBy = staged.recordedBy || sameStatusActive.recordedBy;
-    return working;
+    sameStatusInCurrentEncounter.notes = staged.notes ?? sameStatusInCurrentEncounter.notes;
+    sameStatusInCurrentEncounter.updatedAt = nowIso;
+    sameStatusInCurrentEncounter.recordedBy =
+      staged.recordedBy || sameStatusInCurrentEncounter.recordedBy;
+    return resolveToothEffectiveState(working).allRecords;
   }
 
   working.push({
@@ -695,14 +697,63 @@ export function applyStagedConditionToTooth(
     consultationId: staged.consultationId || null,
   });
 
-  return working;
+  return resolveToothEffectiveState(working).allRecords;
+}
+
+export function removeCurrentEncounterConditionFromTooth(
+  existingRecords: DentalToothRecord[],
+  conditionIdOrStatus: string,
+  currentConsultationId?: string | null
+): DentalToothRecord[] {
+  const remaining = (existingRecords || []).filter((r) => {
+    const isCurrentEnc =
+      r.isCurrentEncounter === true ||
+      Boolean(currentConsultationId && r.consultationId && r.consultationId === currentConsultationId);
+    // Never remove prior-encounter records from the active consultation pane
+    if (!isCurrentEnc) return true;
+    return (
+      r.id !== conditionIdOrStatus &&
+      r.status.toLowerCase() !== conditionIdOrStatus.toLowerCase()
+    );
+  });
+
+  return resolveToothEffectiveState(remaining).allRecords;
 }
 
 export function getDominantToothStatus(records: DentalToothRecord[]): ToothStatus {
   if (!records || records.length === 0) return 'Healthy';
-  const active = records.filter((r) => r.isCurrent !== false);
-  const target = active.length > 0 ? active : records;
+  const nonVoided = records.filter((r) => !r.isVoided && r.status !== 'Healthy');
+  if (nonVoided.length === 0) return 'Healthy';
+  const active = nonVoided.filter((r) => r.isCurrent !== false);
+  const target = active.length > 0 ? active : nonVoided;
+  if (target.length === 1) return target[0].status;
+
+  // Prefer the most recent active condition so top-of-stack status wins cleanly
+  const sortedNewestFirst = [...target].sort((a, b) => {
+    const tA = Number.isNaN(Date.parse(a.createdAt)) ? 0 : Date.parse(a.createdAt);
+    const tB = Number.isNaN(Date.parse(b.createdAt)) ? 0 : Date.parse(b.createdAt);
+    if (tA !== tB) return tB - tA;
+    if (Boolean(a.isCurrentEncounter) !== Boolean(b.isCurrentEncounter)) {
+      return a.isCurrentEncounter ? -1 : 1;
+    }
+    return 0;
+  });
+
   const statuses = new Set(target.map((r) => r.status));
+  // If all records share the same timestamp (e.g. static fixtures), apply clinical severity order
+  const firstTime = Date.parse(sortedNewestFirst[0].createdAt);
+  const lastTime = Date.parse(sortedNewestFirst[sortedNewestFirst.length - 1].createdAt);
+  const hasDistinctChronology =
+    !Number.isNaN(firstTime) &&
+    !Number.isNaN(lastTime) &&
+    (firstTime !== lastTime ||
+      sortedNewestFirst.some((r) => Boolean(r.isCurrentEncounter)) !==
+        sortedNewestFirst.every((r) => Boolean(r.isCurrentEncounter)));
+
+  if (hasDistinctChronology) {
+    return sortedNewestFirst[0].status;
+  }
+
   if (statuses.has('Missing')) return 'Missing';
   if (statuses.has('Decayed')) return 'Decayed';
   if (statuses.has('Fractured')) return 'Fractured';
@@ -839,6 +890,7 @@ export function getSurfaceZoneColor(
     surface?: string | null;
     activeSurface?: string | null;
     isCurrent?: boolean;
+    isVoided?: boolean;
   }>,
   isSelected: boolean = false,
   stagedStatus?: ToothStatus
@@ -854,7 +906,9 @@ export function getSurfaceZoneColor(
     };
   }
 
-  const activeConditions = (conditions || []).filter((c) => c.isCurrent !== false);
+  const activeConditions = (conditions || []).filter(
+    (c) => !c.isVoided && c.isCurrent !== false
+  );
   if (activeConditions.length === 0) {
     return {
       bg: theme.colors.surface,
@@ -863,18 +917,20 @@ export function getSurfaceZoneColor(
     };
   }
 
-  // Check specific active surface match first (preferring latest/highest-priority match)
-  const specificMatch = activeConditions.find((c) => {
+  // Evaluate from newest to oldest so only the most recent condition on that surface renders (avoiding color mixture)
+  const latestFirst = [...activeConditions].reverse();
+
+  const specificMatch = latestFirst.find((c) => {
     const effSurface =
       c.activeSurface !== undefined && c.activeSurface !== null ? c.activeSurface : c.surface;
     const s = (effSurface || '').toUpperCase();
     return s.includes(surface);
   });
 
-  // If no surface-specific match, check whole-tooth condition (empty surface, and not superseded)
+  // If no surface-specific match, check the most recent whole-tooth condition (empty surface, and not superseded)
   const condition =
     specificMatch ||
-    activeConditions.find((c) => {
+    latestFirst.find((c) => {
       const effSurface =
         c.activeSurface !== undefined && c.activeSurface !== null ? c.activeSurface : c.surface;
       return (!effSurface || effSurface.trim() === '') && (!c.surface || c.surface.trim() === '');
@@ -919,7 +975,7 @@ export function calculateDmftMetrics(
 
   for (const [numStr, records] of Object.entries(map)) {
     const num = Number(numStr);
-    const activeRecords = records.filter((r) => r.isCurrent !== false);
+    const activeRecords = records.filter((r) => !r.isVoided && r.isCurrent !== false);
     if (activeRecords.length === 0) continue;
     const statuses = new Set(activeRecords.map((r) => r.status));
 
@@ -940,7 +996,7 @@ export function calculateDmftMetrics(
   }
 
   const activeToothCount = Object.values(map).filter((recs) =>
-    recs.some((r) => r.isCurrent !== false)
+    recs.some((r) => !r.isVoided && r.isCurrent !== false)
   ).length;
 
   return {

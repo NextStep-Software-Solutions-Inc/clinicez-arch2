@@ -1711,3 +1711,80 @@ Define the cross-service interop contracts in packages/shared-dotnet:
   - ClinicNotificationCenterModal filters appointment notifications.
 - [ ] cd apps/clinic-app && bun scripts/check-tokens.mjs --strict passes with 0 violations (no raw hex codes).
 - [ ] cd apps/clinic-app && bun run typecheck passes with 0 TypeScript errors.
+
+
+## 2026-10-21T00:05:08Z
+
+Implement the multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows in ClinicEZ, adhering strictly to real clinic practice and `@clinicez/design-tokens` standards.
+
+Working directory: `/Users/macuser/projects/github/nextstep/clinicez-arch2`
+Integrity mode: development
+
+## Core Engineering Principles
+- **No Backward-Compatibility Compromises**: The codebase is in active development. Do not carry deprecated properties, obsolete legacy columns, or backward-compatibility workarounds. Execute clean, principled domain models and database schemas.
+- **Automated EF Core Migrations**: Database migrations MUST NOT be hand-crafted or manually written. They must be generated directly using the EF Core CLI tools (`dotnet ef migrations add <MigrationName> --project services/clinic-api/ClinicEz.Clinic.Infrastructure --startup-project services/clinic-api/ClinicEz.Clinic.Api`) with `export DOTNET_ROOT="/Users/macuser/.dotnet"`.
+
+---
+
+## Requirements
+
+### R1. Multi-Doctor Charge Capture & Single Visit Draft SOA
+When doctors sign encounters or execute procedures for a patient visit, their charges must automatically populate or append into a single unified Draft Statement of Account (`INV-...`). If an encounter for that patient or queue item already has an active invoice in `Draft` or `PartiallyPaid`, incoming charges from another doctor or procedure must merge into the existing draft invoice rather than throwing a duplicate `ConflictException (409)`. Strict duplicate blocking must only apply if the existing invoice is already fully `Paid` and `AllowDuplicate` is false.
+
+### R2. Per-Item Clinician Attribution & Clean Invoice Bounding
+An invoice is a financial document belonging to the Clinic Facility (`ClinicId`, `TenantId`), while clinical responsibility belongs to individual practitioners.
+- Add `DoctorId` (Guid?) and `DoctorName` (string?) directly to `InvoiceLineItem` (and corresponding DTOs, request models, and print structures).
+- Remove reliance on a single/comma-separated `AttendingDoctorName` on `Invoice`. The invoice is bounded to the clinic; line items carry the clinician attribution.
+- Each line item on the invoice must clearly state which clinician charged it (e.g. `Consultation • Dr. Wave Ambray`, `Tooth Restoration • Dr. Allan Santos`).
+- Ensure `GetDoctorSharesReportQuery` computes doctor revenue share accurately based on line-item clinician attribution (`InvoiceLineItem.DoctorId` / `DoctorName`).
+
+### R3. Document Separation: Statement of Account vs. Official Receipt
+Clearly separate the Billing Statement from the Payment Receipt:
+- **Invoice / Statement of Account (`INV-YYYYMMDD-###`)**: Generated upon clinical charge capture; starts as `Draft` and transitions to `Paid` only upon settlement. Can be printed as a Statement of Account (SOA).
+- **Official Receipt (`OR-YYYYMMDD-###`)**: Generated strictly upon payment collection; carries its own official receipt number, cashier name, payment method breakdown (Cash/GCash/Maya/Card), tendered/change details, and BIR tax compliance notices. Can be printed as POS Thermal (58/80mm) or Professional A4 Official Receipt.
+
+### R4. Cashier Workstation UI/UX & Queue Lifecycle
+Update the Billing screen (`Billing.screen.tsx`) using `@clinicez/design-tokens` and clinical workstation UX guidelines:
+- **Tabbed Queue Navigation**: Provide tabs for `Active Queue`, `Unsettled / Promissory`, and `Billed & Paid Today`.
+- **Cross-Date Draft Retrieval**: Automatically fetch open draft SOAs across date boundaries so night-shift or yesterday's draft invoices are seamlessly linked when selecting a patient.
+- **Defensive Cashiering**: Cashiers can freely adjust quantities, delete items, add clinic supplies/meds with practitioner attribution, and apply statutory Senior/PWD discounts. Never dead-end the cashier with a blocking error alert.
+- **"Defer / Promissory Note" Action**: Allow cashiers to discharge patients who cannot pay today with an audit reason and due date, moving them to `Unsettled / Promissory` and updating the End-of-Day audit report's `TotalUnpaidBalances`.
+
+### R5. Encounter Signing UX Alignment
+In `Consultations.screen.tsx`, update the signing flow and feedback modals to reflect real clinic operations: the doctor signs the clinical chart and posts a **Charge Slip / Draft SOA** to the cashier. If another doctor has already signed for this visit, the charges merge smoothly without error.
+
+---
+
+## Acceptance Criteria
+
+### Backend Multi-Doctor & Invoice Logic
+- [ ] `InvoiceLineItem` entity, DTOs, and mappings include `DoctorId` (Guid?) and `DoctorName` (string?).
+- [ ] Database migration is generated cleanly via `dotnet ef migrations add AddDoctorToInvoiceLineItem --project services/clinic-api/ClinicEz.Clinic.Infrastructure --startup-project services/clinic-api/ClinicEz.Clinic.Api`.
+- [ ] Calling `CreateInvoiceCommand` on a queue item that already has a `Draft` or `PartiallyPaid` invoice appends the new line items into the existing draft and returns the updated invoice without throwing a 409 conflict.
+- [ ] Calling `CreateInvoiceCommand` on an already `Paid` invoice still throws `ConflictException` unless `AllowDuplicate: true`.
+- [ ] `GetDoctorSharesReportQuery` attributes revenue accurately to each doctor based on `InvoiceLineItem.DoctorId` / `DoctorName`.
+- [ ] `GetInvoicesQuery` supports fetching open `Draft` invoices across date boundaries when `Status == Draft` and `Date == null`.
+
+### Frontend Cashier Workstation & UX Standards
+- [ ] The Billing screen provides a 3-way tabbed view: `Active Queue`, `Unsettled / Promissory`, and `Billed & Paid Today`.
+- [ ] Selecting a patient in the queue automatically binds to their open Draft SOA, even if created on a previous date.
+- [ ] Each line item in the review list displays the charging physician's name and category badge.
+- [ ] Cashiers can add items, change quantities, remove items, and apply Senior/PWD 20% discounts with live subtotal updates.
+- [ ] Clicking "Collect & Issue Receipt" updates the draft invoice to `Paid` and generates a separate Official Receipt (`OR-...`).
+- [ ] The receipt completion modal offers distinct print actions: `Thermal POS (58/80mm)`, `Professional OR (A4)`, and `Statement of Account (PDF)`.
+- [ ] Clicking "Defer / Promissory Note" moves the patient from `Active Queue` to `Unsettled / Promissory`, leaves the invoice open, and logs the receivable.
+- [ ] No unhandled or dead-end alerts when collecting payment or managing queue encounters.
+
+### Verification Suite
+- [ ] Backend tests pass:
+  ```bash
+  export DOTNET_ROOT="/Users/macuser/.dotnet"
+  export PATH="/Users/macuser/.dotnet:/Users/macuser/.dotnet/tools:$PATH"
+  dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj --filter "FullyQualifiedName~Invoice"
+  ```
+- [ ] Frontend tests pass:
+  ```bash
+  export PATH="/Users/macuser/.bun/bin:$PATH"
+  bun test apps/clinic-app/tests/billingReceiptAndSoaReview.test.ts apps/clinic-app/tests/billing_and_cashier_mode.test.ts
+  ```
+- [ ] Type check passes with 0 errors: `cd apps/clinic-app && bun x tsc --noEmit`
