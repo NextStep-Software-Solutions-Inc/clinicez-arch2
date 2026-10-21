@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Stethoscope, CheckCircle2, ShieldCheck } from "lucide-react";
+import { CheckCircle2, ShieldCheck } from "lucide-react";
+import { ClinicEzLogo } from "@/components/ClinicEzLogo";
 import { CustomSignUpForm } from "../_components/CustomSignUpForm";
 import { SignUpTrialBadge } from "../_components/SignUpTrialBadge";
 
@@ -13,13 +14,8 @@ export default function SignUpPage() {
 
       {/* Top Header Logo */}
       <header className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between z-10">
-        <Link href="/" className="flex items-center gap-2.5 group shrink-0">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all group-hover:bg-primary group-hover:text-primary-foreground shadow-sm shrink-0">
-            <Stethoscope className="h-5 w-5" />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
-            Clinic EZ
-          </span>
+        <Link href="/" className="inline-flex items-center gap-2.5 group shrink-0">
+          <ClinicEzLogo markClassName="h-8 w-8" textClassName="text-xl font-bold tracking-tight text-foreground" />
         </Link>
         <Link 
           href="/sign-in" 
