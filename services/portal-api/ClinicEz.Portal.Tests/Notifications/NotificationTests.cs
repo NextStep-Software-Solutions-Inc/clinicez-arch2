@@ -326,6 +326,27 @@ public class EmailTemplateRendererTests
         Assert.Throws<EmailTemplateException>(() =>
             _renderer.Render(EmailTemplateKeys.PatientClaimInvitation, "Subject", model));
     }
+
+    [Fact]
+    public void ClinicStaffInvitation_RendersClinicDetailsAndInviteUrl()
+    {
+        var model = new Dictionary<string, string>
+        {
+            ["inviteeName"] = "Dr. Jose Rizal",
+            ["clinicName"] = "Manila Family Health Clinic",
+            ["role"] = "Doctor",
+            ["inviteUrl"] = "https://manila-family.clinic.clinicez.ph/invitations/abcdef1234567890abcdef1234567890"
+        };
+
+        var mail = _renderer.Render(EmailTemplateKeys.ClinicStaffInvitation, "Invitation to join Manila Family Health Clinic on Clinic EZ", model);
+
+        Assert.Contains("Dr. Jose Rizal", mail.Html);
+        Assert.Contains("Manila Family Health Clinic", mail.Html);
+        Assert.Contains("Doctor", mail.Html);
+        Assert.Contains("https://manila-family.clinic.clinicez.ph/invitations/abcdef1234567890abcdef1234567890", mail.Html);
+        Assert.Contains("Dr. Jose Rizal", mail.Text);
+        Assert.Contains("https://manila-family.clinic.clinicez.ph/invitations/abcdef1234567890abcdef1234567890", mail.Text);
+    }
 }
 
 public class StaffInvitationEmailTests : IDisposable
@@ -373,7 +394,7 @@ public class StaffInvitationEmailTests : IDisposable
 
         var result = await handler.Handle(new InviteStaffMemberCommand("metro", "biller@metro.ph", "Bob Biller", "Biller"), CancellationToken.None);
 
-        Assert.Equal("PendingInvitation", result.Status);
+        Assert.Equal("Invited", result.Status);
         Assert.Empty(TestSupport.Outbox(_context, InteropTypes.NotificationEmailRequested));
     }
 

@@ -46,6 +46,12 @@ internal static class TestSupport
             new FixedFrontendUrl(frontendUrl),
             NullLogger<StaffInvitationNotifier>.Instance);
 
+    public static IAdminInvitationNotifier AdminInvitationNotifier(ApplicationDbContext context, string? frontendUrl = "https://app.clinicez.test") =>
+        new AdminInvitationNotifier(
+            new NotificationService(new InteropPublisher(context)),
+            new FixedFrontendUrl(frontendUrl),
+            NullLogger<AdminInvitationNotifier>.Instance);
+
     public static CreateFacilityCommandHandler CreateFacilityHandler(
         ApplicationDbContext context,
         IEntitlementGuard guard,

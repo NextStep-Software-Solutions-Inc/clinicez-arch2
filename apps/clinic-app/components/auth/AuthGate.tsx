@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 import Button from '../ui/Button';
 import { theme } from '../../constants/theme';
 import { AuthProvider, useAuth } from '../../context/AuthContext';
@@ -12,8 +12,12 @@ import FirstAdminSetupScreen from './FirstAdminSetupScreen';
 import ChangePasswordScreen from './ChangePasswordScreen';
 import OfflineUnlockScreen from './OfflineUnlockScreen';
 import SetPinScreen from './SetPinScreen';
+import InvitationAcceptScreen from './InvitationAcceptScreen';
 
 const PIN_PROMPT_DISMISSED_KEY = 'clinicez.pinPromptDismissed';
+
+import { extractInviteToken } from '../../utils/inviteUrl';
+export { extractInviteToken };
 
 /**
  * Everything between "the facility is licensed" and "the workstation is usable":
@@ -31,6 +35,34 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 function AuthGateContent({ children }: { children: React.ReactNode }) {
   const { state, offline, user } = useAuth();
   const [pinPrompt, setPinPrompt] = useState(false);
+  const [inviteToken, setInviteToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined' && window.location?.pathname) {
+      return extractInviteToken(window.location.pathname);
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    let active = true;
+    Linking.getInitialURL().then((url) => {
+      if (active && url) {
+        const token = extractInviteToken(url);
+        if (token) setInviteToken(token);
+      }
+    });
+
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      if (active && url) {
+        const token = extractInviteToken(url);
+        if (token) setInviteToken(token);
+      }
+    });
+
+    return () => {
+      active = false;
+      sub.remove();
+    };
+  }, []);
 
   // Offer offline unlock once per device, right after an online sign-in on a phone/tablet.
   useEffect(() => {
@@ -48,6 +80,26 @@ function AuthGateContent({ children }: { children: React.ReactNode }) {
       active = false;
     };
   }, [state, offline, user?.id]);
+
+  if (state !== 'signedIn' && inviteToken) {
+    return (
+      <InvitationAcceptScreen
+        token={inviteToken}
+        onAccepted={() => {
+          setInviteToken(null);
+          if (typeof window !== 'undefined' && window.history?.pushState) {
+            window.history.pushState({}, '', '/');
+          }
+        }}
+        onCancel={() => {
+          setInviteToken(null);
+          if (typeof window !== 'undefined' && window.history?.pushState) {
+            window.history.pushState({}, '', '/');
+          }
+        }}
+      />
+    );
+  }
 
   switch (state) {
     case 'booting':

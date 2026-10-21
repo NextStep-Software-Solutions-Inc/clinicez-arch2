@@ -53,6 +53,7 @@ public class Milestone1AuditBoundaryStressTests
 
     private sealed class TestListLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
     {
+        private readonly object _lock = new();
         public readonly List<string> Messages = new();
         public readonly List<Exception> Exceptions = new();
 
@@ -67,8 +68,11 @@ public class Milestone1AuditBoundaryStressTests
             Func<TState, Exception?, string> formatter)
         {
             var msg = formatter(state, exception);
-            Messages.Add(msg);
-            if (exception != null) Exceptions.Add(exception);
+            lock (_lock)
+            {
+                Messages.Add(msg);
+                if (exception != null) Exceptions.Add(exception);
+            }
         }
     }
 
@@ -761,9 +765,12 @@ public class Milestone1AuditBoundaryStressTests
             scopeFactory,
             logger);
 
-        // Act: Start worker, let it run briefly, then stop/cancel
+        // Act: Start worker, let it run until drained or timeout, then stop/cancel
         await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(500);
+        for (var waitIdx = 0; waitIdx < 50 && queue.Count > 0; waitIdx++)
+        {
+            await Task.Delay(50);
+        }
 
         // Signal cancellation to simulate application shutdown
         await worker.StopAsync(CancellationToken.None);
@@ -845,7 +852,10 @@ public class Milestone1AuditBoundaryStressTests
 
         // Act: Start and stop worker under cancellation
         await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(500);
+        for (var waitIdx = 0; waitIdx < 50 && queue.Count > 0; waitIdx++)
+        {
+            await Task.Delay(50);
+        }
         await worker.StopAsync(CancellationToken.None);
         if (worker.ExecuteTask != null)
         {

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Features.Auth.DTOs;
 using ClinicEz.Clinic.Infrastructure.Auth;
 using ClinicEz.Clinic.Infrastructure.Context;
 using ClinicEz.Shared.Common;
@@ -72,6 +73,26 @@ public sealed class AuthController : ControllerBase
     public async Task<IActionResult> Bootstrap([FromBody] BootstrapRequest request, CancellationToken ct) =>
         ToResult(await _auth.BootstrapAsync(request with { Workspace = request.Workspace ?? WorkspaceHeader }, ct));
 
+    [HttpGet("invitations/{token}")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<ClinicStaffInvitationDetailsDto>>> GetInvitationDetails(string token, CancellationToken ct)
+    {
+        var details = await _auth.GetInvitationDetailsAsync(token, ct);
+        if (details == null)
+        {
+            return NotFound(ApiResponse<ClinicStaffInvitationDetailsDto>.Fail("Invitation was not found or is invalid."));
+        }
+        return Ok(ApiResponse<ClinicStaffInvitationDetailsDto>.Success(details));
+    }
+
+    [HttpPost("invitations/{token}/accept")]
+    [AllowAnonymous]
+    public async Task<IActionResult> AcceptInvitation(string token, [FromBody] AcceptClinicInvitationRequest request, CancellationToken ct)
+    {
+        var outcome = await _auth.AcceptInvitationAsync(token, request.Password, Request.Headers.UserAgent.ToString(), ct);
+        return ToResult(outcome);
+    }
+
     [HttpPost("change-password")]
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken ct)
@@ -122,3 +143,6 @@ public sealed class AuthController : ControllerBase
         return StatusCode(status, ApiResponse<object>.Fail(outcome.Message ?? "Request failed.", errors));
     }
 }
+
+public sealed record AcceptClinicInvitationRequest(string Password);
+

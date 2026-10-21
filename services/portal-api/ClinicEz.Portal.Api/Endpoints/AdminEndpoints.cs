@@ -396,27 +396,130 @@ public class AdminEndpoints : IEndpoint
         .WithName("GetAdminUsers")
         .WithTags("Admin");
 
-        group.MapPost("/users", async (AdminUser input, HttpContext httpContext, ISender sender) =>
+        group.MapPost("/users", async (InviteAdminUserRequest input, HttpContext httpContext, ISender sender) =>
         {
             var admin = await CheckPermissionAsync(Permissions.ManageAdmins, httpContext, sender);
             if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
 
             try
             {
-                var result = await sender.Send(new CreateAdminUserCommand(
+                var result = await sender.Send(new InviteAdminUserCommand(
                     input.Email,
                     input.FullName,
                     input.RoleId,
+                    input.DeliveryMode ?? "email",
                     admin.FullName
                 ));
-                return result != null ? Results.Created($"/admin/users/{result.Id}", result) : Results.BadRequest();
+                return Results.Created($"/admin/users/{result.Id}", result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
             }
             catch (Exception ex)
             {
-                return Results.BadRequest(ex.Message);
+                return Results.BadRequest(new { Message = ex.Message });
             }
         })
-        .WithName("CreateAdminUser")
+        .WithName("InviteAdminUser")
+        .WithTags("Admin");
+
+        group.MapPost("/users/{id:guid}/resend", async (Guid id, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageAdmins, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            try
+            {
+                var result = await sender.Send(new ResendAdminInvitationCommand(id, admin.FullName));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .WithName("ResendAdminInvitation")
+        .WithTags("Admin");
+
+        group.MapPost("/users/{id:guid}/revoke", async (Guid id, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageAdmins, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            try
+            {
+                var result = await sender.Send(new RevokeAdminInvitationCommand(id, admin.FullName));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .WithName("RevokeAdminInvitation")
+        .WithTags("Admin");
+
+        group.MapPost("/users/{id:guid}/suspend", async (Guid id, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageAdmins, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            try
+            {
+                var result = await sender.Send(new SuspendAdminUserCommand(id, admin.FullName, clerkUserId));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .WithName("SuspendAdminUser")
+        .WithTags("Admin");
+
+        group.MapPost("/users/{id:guid}/reactivate", async (Guid id, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageAdmins, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            try
+            {
+                var result = await sender.Send(new ReactivateAdminUserCommand(id, admin.FullName));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .WithName("ReactivateAdminUser")
         .WithTags("Admin");
 
         group.MapPut("/users/{id}", async (Guid id, AdminUser input, HttpContext httpContext, ISender sender) =>
@@ -618,6 +721,52 @@ public class AdminEndpoints : IEndpoint
         .WithName("UpdateTenantOverrides")
         .WithDescription("Updates custom per-workspace entitlement overrides, increments entitlement version, and re-stages facility licenses (SuperAdmin scope).")
         .WithTags("Admin");
+
+        // 22. Admin Invitation Public Verification & Acceptance Endpoints
+        app.MapGet("/admin/invitations/{token}", async (string token, ISender sender) =>
+        {
+            var result = await sender.Send(new GetAdminInvitationDetailsQuery(token));
+            return result != null ? Results.Ok(result) : Results.NotFound(new { Message = "Invitation not found." });
+        })
+        .AllowAnonymous()
+        .WithName("GetAdminInvitationDetails")
+        .WithDescription("Retrieves metadata, role, and expiration state for a platform admin invitation token.")
+        .WithTags("Admin");
+
+        app.MapPost("/admin/invitations/{token}/accept", async (string token, HttpContext httpContext, ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var email = httpContext.User.FindFirst("emails")?.Value 
+                        ?? httpContext.User.FindFirst(ClaimTypes.Email)?.Value 
+                        ?? httpContext.User.FindFirst("email")?.Value;
+
+            try
+            {
+                var result = await sender.Send(new AcceptAdminInvitationCommand(token, clerkUserId, email));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .RequireAuthorization()
+        .WithName("AcceptAdminInvitation")
+        .WithDescription("Accepts an admin invitation and links the authenticated Clerk user identity.")
+        .WithTags("Admin");
     }
 
     private static async Task<AdminMeResponse?> CheckPermissionAsync(
@@ -641,6 +790,13 @@ public class AdminEndpoints : IEndpoint
         return admin;
     }
 }
+
+public record InviteAdminUserRequest(
+    string Email,
+    string FullName,
+    Guid RoleId,
+    string? DeliveryMode = "email"
+);
 
 public record UpdateTenantUsageRequest(
     int FacilitiesCount, 

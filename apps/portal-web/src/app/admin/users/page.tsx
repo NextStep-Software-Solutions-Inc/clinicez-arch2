@@ -27,8 +27,29 @@ import {
   IconTrash, 
   IconCircleCheck, 
   IconAlertCircle, 
-  IconCircleX 
+  IconCircleX,
+  IconCopy,
+  IconMail,
+  IconMailForward,
+  IconBan,
+  IconPlayerPause,
+  IconPlayerPlay,
+  IconClock,
+  IconCheck
 } from "@tabler/icons-react";
+
+export const resolveAdminDisplayStatus = (u: {
+  status?: string;
+  displayStatus?: string;
+  invitationExpiresAt?: string | null;
+  isActive?: boolean;
+}): string => {
+  if (u.displayStatus) return u.displayStatus;
+  if (u.status === "Invited" && u.invitationExpiresAt && new Date(u.invitationExpiresAt) < new Date()) {
+    return "Expired";
+  }
+  return u.status || (u.isActive ? "Active" : "Suspended");
+};
 
 export default function AdminUsersPage() {
   const { hasPermission } = useAdmin();
@@ -41,12 +62,29 @@ export default function AdminUsersPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUserDto | null>(null);
   const [formLoading, setFormLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState<{
+    fullName: string;
+    email: string;
+    roleId: string;
+    isActive: boolean;
+    deliveryMode: "email" | "link";
+  }>({
     fullName: "",
     email: "",
     roleId: "",
-    isActive: true
+    isActive: true,
+    deliveryMode: "email"
   });
+
+  // Post-invite link success modal
+  const [createdInviteModal, setCreatedInviteModal] = useState<{
+    open: boolean;
+    fullName: string;
+    email: string;
+    role: string;
+    inviteUrl: string;
+  } | null>(null);
 
   const canManage = hasPermission(ADMIN_PERMISSIONS.MANAGE_ADMINS);
 
@@ -81,7 +119,8 @@ export default function AdminUsersPage() {
       fullName: "",
       email: "",
       roleId: roles[0]?.id || "",
-      isActive: true
+      isActive: true,
+      deliveryMode: "email"
     });
     setDialogOpen(true);
   };
@@ -92,7 +131,8 @@ export default function AdminUsersPage() {
       fullName: user.fullName,
       email: user.email,
       roleId: user.roleId,
-      isActive: user.isActive
+      isActive: user.isActive,
+      deliveryMode: "email"
     });
     setDialogOpen(true);
   };
@@ -107,23 +147,126 @@ export default function AdminUsersPage() {
     try {
       setFormLoading(true);
       if (editingUser) {
-        await adminService.updateUser(editingUser.id, formData);
+        await adminService.updateUser(editingUser.id, {
+          fullName: formData.fullName,
+          email: formData.email,
+          roleId: formData.roleId,
+          isActive: formData.isActive
+        });
         toast.success("Admin user account updated successfully!");
+        setDialogOpen(false);
+        loadData();
       } else {
-        await adminService.createUser(formData);
-        toast.success("Admin user invited successfully!");
+        const res = await adminService.inviteUser({
+          email: formData.email,
+          fullName: formData.fullName,
+          roleId: formData.roleId,
+          deliveryMode: formData.deliveryMode
+        });
+        toast.success("Admin invitation created successfully!");
+        setDialogOpen(false);
+        loadData();
+
+        const roleObj = roles.find(r => r.id === formData.roleId);
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const linkUrl = res.inviteUrl || (res.invitationToken ? `${origin}/admin/invitations/${res.invitationToken}` : "");
+
+        if (linkUrl) {
+          setCreatedInviteModal({
+            open: true,
+            fullName: res.fullName,
+            email: res.email,
+            role: roleObj?.name || "Admin",
+            inviteUrl: linkUrl
+          });
+        }
       }
-      setDialogOpen(false);
-      loadData();
     } catch (err: any) {
-      toast.error(err.message || "Failed to save admin user");
+      toast.error(err.response?.data?.message || err.message || "Failed to save admin user");
     } finally {
       setFormLoading(false);
     }
   };
 
+  const handleCopyLink = (u: AdminUserDto) => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const url = u.inviteUrl || (u.invitationToken ? `${origin}/admin/invitations/${u.invitationToken}` : "");
+    if (!url) {
+      toast.error("Invitation link is not available for this account.");
+      return;
+    }
+    navigator.clipboard.writeText(url);
+    toast.success("Invitation link copied to clipboard!");
+  };
+
+  const handleResend = async (u: AdminUserDto) => {
+    try {
+      setActionLoadingId(u.id);
+      const res = await adminService.resendInvitation(u.id);
+      toast.success(`Invitation resent to ${u.email}!`);
+      loadData();
+
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const linkUrl = res.inviteUrl || (res.invitationToken ? `${origin}/admin/invitations/${res.invitationToken}` : "");
+      if (linkUrl) {
+        setCreatedInviteModal({
+          open: true,
+          fullName: res.fullName,
+          email: res.email,
+          role: u.role?.name || "Admin",
+          inviteUrl: linkUrl
+        });
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || "Failed to resend invitation");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRevoke = async (u: AdminUserDto) => {
+    if (!confirm(`Are you sure you want to revoke the invitation for ${u.fullName}?`)) return;
+    try {
+      setActionLoadingId(u.id);
+      await adminService.revokeInvitation(u.id);
+      toast.success("Invitation revoked successfully.");
+      loadData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || "Failed to revoke invitation");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleSuspend = async (u: AdminUserDto) => {
+    if (!confirm(`Are you sure you want to suspend admin access for ${u.fullName}?`)) return;
+    try {
+      setActionLoadingId(u.id);
+      await adminService.suspendUser(u.id);
+      toast.success("Admin user suspended.");
+      loadData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || "Failed to suspend admin user");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleReactivate = async (u: AdminUserDto) => {
+    try {
+      setActionLoadingId(u.id);
+      await adminService.reactivateUser(u.id);
+      toast.success("Admin user reactivated.");
+      loadData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || "Failed to reactivate admin user");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const handleDelete = async (user: AdminUserDto) => {
-    if (!confirm(`Are you sure you want to delete administrative account for ${user.fullName}?`)) return;
+    if (!confirm(`Are you sure you want to permanently delete administrative account for ${user.fullName}?`)) return;
 
     try {
       await adminService.deleteUser(user.id);
@@ -131,6 +274,54 @@ export default function AdminUsersPage() {
       setUsers(prev => prev.filter(u => u.id !== user.id));
     } catch (err: any) {
       toast.error(err.message || "Failed to delete admin user");
+    }
+  };
+
+  const renderStatusBadge = (user: AdminUserDto) => {
+    const status = resolveAdminDisplayStatus(user);
+
+    switch (status) {
+      case "Active":
+        return (
+          <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/40 rounded-full flex items-center gap-1 w-fit font-bold text-[10px]">
+            <IconCircleCheck className="h-3.5 w-3.5" />
+            Active
+          </Badge>
+        );
+      case "Invited":
+        return (
+          <Badge variant="outline" className="text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/40 rounded-full flex items-center gap-1 w-fit font-bold text-[10px]">
+            <IconClock className="h-3.5 w-3.5" />
+            Invited
+          </Badge>
+        );
+      case "Expired":
+        return (
+          <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/40 rounded-full flex items-center gap-1 w-fit font-bold text-[10px]">
+            <IconAlertCircle className="h-3.5 w-3.5" />
+            Expired
+          </Badge>
+        );
+      case "Suspended":
+        return (
+          <Badge variant="outline" className="text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/40 rounded-full flex items-center gap-1 w-fit font-bold text-[10px]">
+            <IconCircleX className="h-3.5 w-3.5" />
+            Suspended
+          </Badge>
+        );
+      case "Revoked":
+        return (
+          <Badge variant="outline" className="text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/40 rounded-full flex items-center gap-1 w-fit font-bold text-[10px]">
+            <IconBan className="h-3.5 w-3.5" />
+            Revoked
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="outline" className="rounded-full text-[10px]">
+            {status}
+          </Badge>
+        );
     }
   };
 
@@ -163,19 +354,19 @@ export default function AdminUsersPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Admin User Accounts</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Invite and manage operational administrators and support staff profiles.
+            Invite and manage operational administrators, governance roles, and support staff profiles.
           </p>
         </div>
         {canManage && (
-          <Button onClick={handleOpenCreate} className="rounded-full shadow-md">
-            <IconPlus className="h-4.5 w-4.5 mr-1" />
-            Invite Admin User
+          <Button onClick={handleOpenCreate} className="rounded-full shadow-md gap-1.5">
+            <IconPlus className="h-4.5 w-4.5" />
+            <span>Invite Admin User</span>
           </Button>
         )}
       </div>
 
       {/* Main Table */}
-      <Card className="rounded-3xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+      <Card className="rounded-3xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader className="bg-slate-50/50 dark:bg-slate-900/50">
@@ -189,68 +380,168 @@ export default function AdminUsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((u) => (
-                <TableRow key={u.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-800/20 transition-colors">
-                  <td className="pl-6 py-4 font-bold text-sm text-slate-800 dark:text-slate-200">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-slate-600 dark:text-slate-400">
-                        {u.fullName.split(" ").map(w => w[0]).join("")}
+              {users.map((u) => {
+                const status = resolveAdminDisplayStatus(u);
+                const isBusy = actionLoadingId === u.id;
+
+                return (
+                  <TableRow key={u.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-800/20 transition-colors">
+                    <td className="pl-6 py-4 font-bold text-sm text-slate-800 dark:text-slate-200">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-slate-600 dark:text-slate-400">
+                          {u.fullName.split(" ").map(w => w[0]).join("")}
+                        </div>
+                        <div>
+                          <div>{u.fullName}</div>
+                          {u.clerkUserId && (
+                            <div className="text-[10px] text-muted-foreground font-mono font-normal">
+                              Linked: {u.clerkUserId.substring(0, 12)}...
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      {u.fullName}
-                    </div>
-                  </td>
-                  <td className="py-4 text-xs font-mono text-muted-foreground">
-                    {u.email}
-                  </td>
-                  <td className="py-4">
-                    <Badge className="font-bold text-[10px] uppercase rounded-full">
-                      {u.role?.name || "No Role"}
-                    </Badge>
-                  </td>
-                  <td className="py-4">
-                    {u.isActive ? (
-                      <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50/50 rounded-full flex items-center gap-1 w-fit font-bold text-[10px]">
-                        <IconCircleCheck className="h-3.5 w-3.5" />
-                        Active
+                    </td>
+                    <td className="py-4 text-xs font-mono text-muted-foreground">
+                      {u.email}
+                    </td>
+                    <td className="py-4">
+                      <Badge className="font-bold text-[10px] uppercase rounded-full">
+                        {u.role?.name || "No Role"}
                       </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-red-600 border-red-200 bg-red-50/50 rounded-full flex items-center gap-1 w-fit font-bold text-[10px]">
-                        <IconCircleX className="h-3.5 w-3.5" />
-                        Suspended
-                      </Badge>
-                    )}
-                  </td>
-                  <td className="py-4 text-xs text-muted-foreground font-semibold">
-                    {new Date(u.createdAt).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric"
-                    })}
-                  </td>
-                  <td className="pr-6 py-4 text-right">
-                    {canManage && (
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleOpenEdit(u)}
-                          className="h-8 w-8 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100"
-                        >
-                          <IconEdit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(u)}
-                          className="h-8 w-8 rounded-xl text-red-500 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <IconTrash className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </td>
-                </TableRow>
-              ))}
+                    </td>
+                    <td className="py-4">
+                      {renderStatusBadge(u)}
+                    </td>
+                    <td className="py-4 text-xs text-muted-foreground font-semibold">
+                      {new Date(u.createdAt).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric"
+                      })}
+                    </td>
+                    <td className="pr-6 py-4 text-right">
+                      {canManage && (
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Status-aware Actions */}
+                          {status === "Invited" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCopyLink(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1"
+                                title="Copy Invitation Link"
+                              >
+                                <IconCopy className="h-3.5 w-3.5" />
+                                <span>Copy Link</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleResend(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-sky-600 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/30"
+                                title="Resend Invitation Email"
+                              >
+                                <IconMailForward className="h-3.5 w-3.5" />
+                                <span>Resend</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleRevoke(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                title="Revoke Invitation"
+                              >
+                                <IconBan className="h-3.5 w-3.5" />
+                                <span>Revoke</span>
+                              </Button>
+                            </>
+                          )}
+
+                          {status === "Expired" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleResend(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                                title="Renew Token & Resend Invitation"
+                              >
+                                <IconMailForward className="h-3.5 w-3.5" />
+                                <span>Resend</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleRevoke(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50"
+                                title="Revoke Expired Invitation"
+                              >
+                                <IconBan className="h-3.5 w-3.5" />
+                                <span>Revoke</span>
+                              </Button>
+                            </>
+                          )}
+
+                          {status === "Active" && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleOpenEdit(u)}
+                                className="h-8 w-8 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+                                title="Edit Details"
+                              >
+                                <IconEdit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleSuspend(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                title="Suspend Account"
+                              >
+                                <IconPlayerPause className="h-3.5 w-3.5" />
+                                <span>Suspend</span>
+                              </Button>
+                            </>
+                          )}
+
+                          {status === "Suspended" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={isBusy}
+                              onClick={() => handleReactivate(u)}
+                              className="h-7 px-2 text-xs rounded-lg gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                              title="Reactivate Account"
+                            >
+                              <IconPlayerPlay className="h-3.5 w-3.5" />
+                              <span>Reactivate</span>
+                            </Button>
+                          )}
+
+                          {/* Delete Action */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(u)}
+                            className="h-8 w-8 rounded-xl text-slate-400 hover:text-red-700 hover:bg-red-50"
+                            title="Delete Admin Profile"
+                          >
+                            <IconTrash className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -307,6 +598,46 @@ export default function AdminUsersPage() {
                 </select>
               </div>
 
+              {/* Delivery Mode Choice (Only when inviting) */}
+              {!editingUser && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Delivery Method</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, deliveryMode: "email" }))}
+                      className={`p-3 rounded-2xl border text-left transition-all ${
+                        formData.deliveryMode === "email"
+                          ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                          : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1 font-semibold text-xs">
+                        <IconMail className="h-4 w-4" />
+                        <span>Send Email</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-normal">Dispatches invitation email automatically via Interop.</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, deliveryMode: "link" }))}
+                      className={`p-3 rounded-2xl border text-left transition-all ${
+                        formData.deliveryMode === "link"
+                          ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                          : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1 font-semibold text-xs">
+                        <IconCopy className="h-4 w-4" />
+                        <span>Copy Link Only</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground font-normal">Generates secure 7-day token for manual sharing.</p>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Active Toggle (Only when editing) */}
               {editingUser && (
                 <div className="flex items-center justify-between p-3 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/20">
@@ -335,6 +666,65 @@ export default function AdminUsersPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Post-Invite Link Success Dialog */}
+      <Dialog open={!!createdInviteModal?.open} onOpenChange={(open) => !open && setCreatedInviteModal(null)}>
+        <DialogContent className="sm:max-w-lg rounded-3xl">
+          <DialogHeader className="flex flex-col items-center text-center sm:items-center sm:text-center">
+            <div className="size-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-1">
+              <IconCheck className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 text-center">
+              Admin Invitation Created!
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 text-center max-w-sm">
+              <strong>{createdInviteModal?.fullName}</strong> ({createdInviteModal?.email}) has been invited as <strong>{createdInviteModal?.role}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              The invitation link has been generated. You can share this link directly via Slack, WhatsApp, or email:
+            </p>
+
+            <div className="flex items-center gap-2">
+              <Input
+                readOnly
+                value={createdInviteModal?.inviteUrl || ""}
+                className="h-9 text-xs font-mono rounded-xl bg-slate-50 dark:bg-slate-900 select-all"
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (createdInviteModal?.inviteUrl) {
+                    navigator.clipboard.writeText(createdInviteModal.inviteUrl);
+                    toast.success("Link copied to clipboard!");
+                  }
+                }}
+                className="h-9 px-3 text-xs font-semibold rounded-xl gap-1.5 shrink-0"
+              >
+                <IconCopy className="h-3.5 w-3.5" />
+                <span>Copy</span>
+              </Button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500">
+              &bull; This invitation token is valid for <strong>7 days</strong>.<br />
+              &bull; The invitee can sign in or create their personal account to immediately activate their administrative profile.
+            </div>
+          </div>
+
+          <DialogFooter className="pt-2 sm:justify-end">
+            <Button
+              type="button"
+              onClick={() => setCreatedInviteModal(null)}
+              className="w-full sm:w-auto rounded-xl text-xs font-semibold"
+            >
+              Done
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

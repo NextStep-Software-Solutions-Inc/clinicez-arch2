@@ -267,6 +267,10 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             AssignedRoomIds: staff.GetAssignedRoomIds(),
             AssignedRoomNames: assignedRoomNames,
             SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode);
+            DefaultSignatureMode: staff.DefaultSignatureMode,
+            Status: staff.Status,
+            InvitationToken: staff.InvitationToken,
+            InvitationExpiresAt: staff.InvitationExpiresAt,
+            InviteAcceptedAt: staff.InviteAcceptedAt);
     }
 }

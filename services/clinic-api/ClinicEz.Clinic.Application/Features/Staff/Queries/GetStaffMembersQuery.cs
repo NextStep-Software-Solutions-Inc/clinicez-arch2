@@ -90,7 +90,11 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
                 AssignedRoomIds: roomIds,
                 AssignedRoomNames: roomNames,
                 SignatureSpecimen: staff.SignatureSpecimen,
-                DefaultSignatureMode: staff.DefaultSignatureMode
+                DefaultSignatureMode: staff.DefaultSignatureMode,
+                Status: staff.Status,
+                InvitationToken: staff.InvitationToken,
+                InvitationExpiresAt: staff.InvitationExpiresAt,
+                InviteAcceptedAt: staff.InviteAcceptedAt
             );
         }).ToList();
     }
@@ -161,6 +165,10 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
             AssignedRoomIds: roomIds,
             AssignedRoomNames: roomNames,
             SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode);
+            DefaultSignatureMode: staff.DefaultSignatureMode,
+            Status: staff.Status,
+            InvitationToken: staff.InvitationToken,
+            InvitationExpiresAt: staff.InvitationExpiresAt,
+            InviteAcceptedAt: staff.InviteAcceptedAt);
     }
 }

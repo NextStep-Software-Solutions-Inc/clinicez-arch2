@@ -10,6 +10,8 @@ public static class EmailTemplateKeys
     public const string StaffInvitation = "staff.invitation";
     public const string ContactMessage = "contact.message";
     public const string PatientClaimInvitation = "patient.claim.invitation";
+    public const string AdminInvitation = "admin.invitation";
+    public const string ClinicStaffInvitation = "clinic.staff.invitation";
 }
 
 /// <param name="ReplyTo">Where a reply should go, when the template knows (for example the visitor of the contact form).</param>
@@ -47,6 +49,8 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
             EmailTemplateKeys.StaffInvitation => RenderStaffInvitation(subject, model),
             EmailTemplateKeys.ContactMessage => RenderContactMessage(subject, model),
             EmailTemplateKeys.PatientClaimInvitation => RenderPatientClaimInvitation(subject, model),
+            EmailTemplateKeys.AdminInvitation => RenderAdminInvitation(subject, model),
+            EmailTemplateKeys.ClinicStaffInvitation => RenderClinicStaffInvitation(subject, model),
             _ => throw new EmailTemplateException($"Unknown email template '{templateKey}'.")
         };
     }
@@ -316,6 +320,224 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
               <td style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
                 <p style="font-size: 11px; color: #94a3b8; margin: 0;">
                   If you did not register at {{facilityName}}, you can safely ignore this email.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        """;
+
+    private static RenderedEmail RenderAdminInvitation(string subject, IReadOnlyDictionary<string, string> model)
+    {
+        var inviteeName = Required(model, "inviteeName");
+        var role = Required(model, "role");
+        var inviteUrl = RequiredHttpUrl(model, "inviteUrl");
+        var inviterName = Optional(model, "inviterName");
+
+        var inviterNote = inviterName is null
+            ? "The platform administration"
+            : Encode(inviterName);
+
+        var html = Fill(AdminInvitationHtml, new Dictionary<string, string>
+        {
+            ["subject"] = Encode(subject),
+            ["inviteeName"] = Encode(inviteeName),
+            ["role"] = Encode(role),
+            ["inviterNote"] = inviterNote,
+            ["inviteUrl"] = Encode(inviteUrl)
+        });
+
+        var text = $"""
+            Hello {inviteeName},
+
+            You have been invited by {inviterNote} to join the Clinic EZ Platform Administration as {role}.
+
+            Accept your invitation by visiting:
+            {inviteUrl}
+
+            This invitation will expire in 7 days.
+            """;
+
+        return new RenderedEmail(html, text);
+    }
+
+    private const string AdminInvitationHtml = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>{{subject}}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <!-- Teal Header -->
+            <tr>
+              <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #0D6963 0%, #084c47 100%); text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Clinic EZ</h1>
+                <p style="color: #ccfbf1; margin: 6px 0 0 0; font-size: 13px; font-weight: 500;">Platform Administration &amp; Governance</p>
+              </td>
+            </tr>
+
+            <!-- Content Body -->
+            <tr>
+              <td style="padding: 32px;">
+                <h2 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0;">
+                  Hello {{inviteeName}},
+                </h2>
+                <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
+                  You have been invited by {{inviterNote}} to join the <strong>Clinic EZ Platform Administration</strong> team.
+                </p>
+
+                <!-- Details Card -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background: #f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                  <tr>
+                    <td>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Target Domain:</strong> Clinic EZ Main Portal</p>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Administrative Role:</strong> {{role}}</p>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="font-size: 14px; line-height: 22px; color: #475569; margin: 0 0 28px 0;">
+                  Click the button below to accept your invitation and activate your administrative console access. You can sign in with your existing account or create a new one.
+                </p>
+
+                <!-- CTA Button -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td align="center">
+                      <a href="{{inviteUrl}}" target="_blank" style="display: inline-block; background-color: #0D6963; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 10px; box-shadow: 0 2px 4px rgba(13, 105, 99, 0.3);">
+                        Accept Admin Invitation &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Link Fallback -->
+                <p style="font-size: 12px; color: #94a3b8; line-height: 18px; margin: 32px 0 0 0; word-break: break-all;">
+                  Or copy and paste this link into your browser:<br />
+                  <a href="{{inviteUrl}}" style="color: #0D6963; text-decoration: underline;">{{inviteUrl}}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
+                <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">
+                  This invitation expires in <strong>7 days</strong>.
+                </p>
+                <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                  If you did not expect this invitation, you can safely ignore this email.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        """;
+
+    private static RenderedEmail RenderClinicStaffInvitation(string subject, IReadOnlyDictionary<string, string> model)
+    {
+        var inviteeName = Required(model, "inviteeName");
+        var clinicName = Optional(model, "clinicName") ?? Optional(model, "workspaceName") ?? Optional(model, "facilityName") ?? "Clinic EZ";
+        var role = Required(model, "role");
+        var inviteUrl = RequiredHttpUrl(model, "inviteUrl");
+
+        var html = Fill(ClinicStaffInvitationHtml, new Dictionary<string, string>
+        {
+            ["subject"] = Encode(subject),
+            ["inviteeName"] = Encode(inviteeName),
+            ["clinicName"] = Encode(clinicName),
+            ["role"] = Encode(role),
+            ["inviteUrl"] = Encode(inviteUrl)
+        });
+
+        var text = $"""
+            Hello {inviteeName},
+
+            You have been invited by {clinicName} to join their clinical team on Clinic EZ as {role}.
+
+            Accept your invitation and set up your workstation password by visiting:
+            {inviteUrl}
+
+            This invitation will expire in 7 days.
+            """;
+
+        return new RenderedEmail(html, text);
+    }
+
+    private const string ClinicStaffInvitationHtml = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>{{subject}}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <!-- Teal Header -->
+            <tr>
+              <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #0D6963 0%, #084c47 100%); text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Clinic EZ</h1>
+                <p style="color: #ccfbf1; margin: 6px 0 0 0; font-size: 13px; font-weight: 500;">Clinical Operations &amp; Practice Management</p>
+              </td>
+            </tr>
+
+            <!-- Content Body -->
+            <tr>
+              <td style="padding: 32px;">
+                <h2 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0;">
+                  Hello {{inviteeName}},
+                </h2>
+                <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
+                  You have been invited by <strong>{{clinicName}}</strong> to join their clinical team on Clinic EZ as a <strong>{{role}}</strong>.
+                </p>
+
+                <!-- Details Card -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background: #f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                  <tr>
+                    <td>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Clinic / Healthcare Facility:</strong> {{clinicName}}</p>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Assigned Role:</strong> {{role}}</p>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="font-size: 14px; line-height: 22px; color: #475569; margin: 0 0 28px 0;">
+                  Click the button below to accept your invitation, review your facility details, and create your workstation password.
+                </p>
+
+                <!-- CTA Button -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td align="center">
+                      <a href="{{inviteUrl}}" target="_blank" style="display: inline-block; background-color: #0D6963; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 10px; box-shadow: 0 2px 4px rgba(13, 105, 99, 0.3);">
+                        Accept Invitation &amp; Set Password &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Link Fallback -->
+                <p style="font-size: 12px; color: #94a3b8; line-height: 18px; margin: 32px 0 0 0; word-break: break-all;">
+                  Or copy and paste this link into your browser:<br />
+                  <a href="{{inviteUrl}}" style="color: #0D6963; text-decoration: underline;">{{inviteUrl}}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
+                <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">
+                  This invitation expires in <strong>7 days</strong>.
+                </p>
+                <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                  If you did not expect this invitation, you can safely ignore this email.
                 </p>
               </td>
             </tr>

@@ -1,3 +1,4 @@
+using ClinicEz.Portal.Application.Common;
 using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Features.Staff.Queries;
@@ -19,7 +20,8 @@ public record InviteStaffMemberCommand(
     string Email,
     string FullName,
     string Role,
-    Guid? FacilityId = null
+    Guid? FacilityId = null,
+    bool SendEmail = true
 ) : IRequest<StaffMemberDto>;
 
 public class InviteStaffMemberCommandValidator : AbstractValidator<InviteStaffMemberCommand>
@@ -71,12 +73,7 @@ public class InviteStaffMemberCommandHandler(
                 $"Invitations are limited to these email domains: {string.Join(", ", InviteDomains.Parse(allowedDomains))}.");
         }
         var existing = await context.WorkspaceMembers
-            .AnyAsync(m => m.TenantId == tenant.Id && m.Email.ToLower() == emailLower, cancellationToken);
-
-        if (existing)
-        {
-            throw new InvalidOperationException($"A team member with email '{request.Email}' already exists or has an active invitation in this workspace.");
-        }
+            .FirstOrDefaultAsync(m => m.TenantId == tenant.Id && m.Email.ToLower() == emailLower, cancellationToken);
 
         string? facilityName = null;
         if (request.FacilityId.HasValue)
@@ -91,6 +88,62 @@ public class InviteStaffMemberCommandHandler(
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
+
+        if (existing != null)
+        {
+            if (existing.Status == MemberStatus.Revoked)
+            {
+                // Reactivate / re-invite revoked member with fresh token and 7-day expiry
+                existing.FullName = request.FullName.Trim();
+                existing.Role = StaffMemberMapping.WorkspaceRoleFor(request.Role);
+                existing.Status = MemberStatus.Invited;
+                existing.InvitationToken = TokenGenerator.GenerateSecureToken();
+                existing.InvitationExpiresAt = now.AddDays(7);
+                existing.JoinedAt = null;
+
+                StaffMember? existingProfile = await context.StaffMembers
+                    .FirstOrDefaultAsync(s => s.WorkspaceMemberId == existing.Id, cancellationToken);
+
+                if (StaffMemberMapping.NeedsProfile(request.Role, request.FacilityId))
+                {
+                    if (existingProfile != null)
+                    {
+                        existingProfile.FacilityId = request.FacilityId;
+                        existingProfile.Role = request.Role;
+                    }
+                    else
+                    {
+                        existingProfile = new StaffMember
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = tenant.Id,
+                            WorkspaceMemberId = existing.Id,
+                            FacilityId = request.FacilityId,
+                            Role = request.Role,
+                            CreatedAt = now,
+                            CreatedBy = tenant.OwnerId
+                        };
+                        context.StaffMembers.Add(existingProfile);
+                    }
+                }
+                else if (existingProfile != null)
+                {
+                    context.StaffMembers.Remove(existingProfile);
+                    existingProfile = null;
+                }
+
+                if (request.SendEmail)
+                {
+                    invitationNotifier.RequestInvitation(tenant, existing, StaffMemberMapping.RoleName(existing, existingProfile), facilityName);
+                }
+
+                await context.SaveChangesAsync(cancellationToken);
+                return StaffMemberMapping.ToDto(existing, existingProfile, facilityName, now);
+            }
+
+            throw new InvalidOperationException($"A team member with email '{request.Email}' already exists or has an active invitation in this workspace.");
+        }
+
         var newMember = new WorkspaceMember
         {
             Id = Guid.NewGuid(),
@@ -99,7 +152,7 @@ public class InviteStaffMemberCommandHandler(
             FullName = request.FullName.Trim(),
             Role = StaffMemberMapping.WorkspaceRoleFor(request.Role),
             Status = MemberStatus.Invited,
-            InvitationToken = Guid.NewGuid().ToString("N"),
+            InvitationToken = TokenGenerator.GenerateSecureToken(),
             InvitationExpiresAt = now.AddDays(7),
             CreatedAt = now,
             CreatedBy = tenant.OwnerId
@@ -122,14 +175,16 @@ public class InviteStaffMemberCommandHandler(
             context.StaffMembers.Add(profile);
         }
 
-        var currentMemberCount = await context.WorkspaceMembers.CountAsync(m => m.TenantId == tenant.Id, cancellationToken);
+        var currentMemberCount = await context.WorkspaceMembers.CountAsync(m => m.TenantId == tenant.Id && m.Status != MemberStatus.Revoked && m.Status != MemberStatus.Suspended, cancellationToken);
         tenant.StaffAccountsCount = currentMemberCount + 1;
 
-        // The email request commits atomically with the invitation; delivery happens later and is retried.
-        invitationNotifier.RequestInvitation(tenant, newMember, StaffMemberMapping.RoleName(newMember, profile), facilityName);
+        if (request.SendEmail)
+        {
+            invitationNotifier.RequestInvitation(tenant, newMember, StaffMemberMapping.RoleName(newMember, profile), facilityName);
+        }
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return StaffMemberMapping.ToDto(newMember, profile, facilityName);
+        return StaffMemberMapping.ToDto(newMember, profile, facilityName, now);
     }
 }

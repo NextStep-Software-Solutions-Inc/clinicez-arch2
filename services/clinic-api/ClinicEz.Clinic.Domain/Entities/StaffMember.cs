@@ -92,6 +92,10 @@ public sealed class StaffMember : BaseEntity
     public SignatureMode DefaultSignatureMode { get; set; } = SignatureMode.ESignatureSpecimen;
 
     public bool IsActive { get; set; } = true;
+    public StaffAccountStatus Status { get; set; } = StaffAccountStatus.Invited;
+    public string? InvitationToken { get; set; }
+    public DateTime? InvitationExpiresAt { get; set; }
+    public DateTime? InviteAcceptedAt { get; set; }
 
     // Facility-local credentials (no external identity provider; works fully offline on a LAN)
     public string? PasswordHash { get; set; }

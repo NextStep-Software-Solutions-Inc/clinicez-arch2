@@ -138,6 +138,7 @@ public static class DependencyInjection
         services.AddScoped<ILabResultFileStore, LabResultFileStore>();
         services.AddScoped<ILabResultIntake, LabResultIntake>();
         services.AddScoped<IPatientDocumentPublisher, PatientDocumentPublisher>();
+        services.AddScoped<IClinicStaffInvitationNotifier, ClinicStaffInvitationNotifier>();
         services.AddScoped<IClaimSlipService, ClaimSlipService>();
         services.AddScoped<IBillingRequestPublisher, BillingRequestPublisher>();
         services.AddScoped<IPatientRecordGateway, PatientRecordGateway>();

@@ -16,6 +16,8 @@ using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Documents.Configuration;
+using System.Security.Cryptography;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
@@ -70,6 +72,14 @@ public sealed class CreateStaffMemberCommandValidator : AbstractValidator<Create
                 .MinimumLength(8)
                 .WithMessage("Temporary password must be at least 8 characters.");
         });
+
+        When(x => x.SendInviteEmail, () =>
+        {
+            RuleFor(x => x.Email)
+                .NotEmpty()
+                .EmailAddress()
+                .WithMessage("A valid email address is required when sending an invitation email.");
+        });
     }
 }
 
@@ -83,6 +93,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
     private readonly IClinicContext _clinicContext;
     private readonly IFacilityPasswordHasher _passwordHasher;
     private readonly IRepository<ClinicRoom>? _roomRepository;
+    private readonly IClinicStaffInvitationNotifier? _invitationNotifier;
 
     public CreateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
@@ -92,7 +103,8 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IFacilityPasswordHasher? passwordHasher = null,
-        IRepository<ClinicRoom>? roomRepository = null)
+        IRepository<ClinicRoom>? roomRepository = null,
+        IClinicStaffInvitationNotifier? invitationNotifier = null)
     {
         _staffRepository = staffRepository;
         _roleRepository = roleRepository;
@@ -102,6 +114,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         _clinicContext = clinicContext;
         _passwordHasher = passwordHasher ?? new FacilityPasswordHasher();
         _roomRepository = roomRepository;
+        _invitationNotifier = invitationNotifier;
     }
 
     public async Task<StaffMemberDto> Handle(CreateStaffMemberCommand request, CancellationToken cancellationToken)
@@ -237,6 +250,24 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             returnedTempPassword = request.InitialPassword;
         }
 
+        StaffAccountStatus status;
+        string? invitationToken = null;
+        DateTime? invitationExpiresAt = null;
+        DateTime? inviteAcceptedAt = null;
+        string? inviteUrl = null;
+
+        if (!string.IsNullOrWhiteSpace(request.InitialPassword))
+        {
+            status = StaffAccountStatus.Active;
+            inviteAcceptedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            status = StaffAccountStatus.Invited;
+            invitationToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+            invitationExpiresAt = DateTime.UtcNow.AddDays(7);
+        }
+
         var staff = new StaffMember
         {
             Id = Guid.NewGuid(),
@@ -258,6 +289,10 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             SignatureSpecimen = request.SignatureSpecimen,
             DefaultSignatureMode = request.DefaultSignatureMode ?? SignatureMode.ESignatureSpecimen,
             IsActive = true,
+            Status = status,
+            InvitationToken = invitationToken,
+            InvitationExpiresAt = invitationExpiresAt,
+            InviteAcceptedAt = inviteAcceptedAt,
             PasswordHash = passwordHash,
             MustChangePassword = mustChangePassword,
             TokenVersion = passwordHash != null ? 1 : 0,
@@ -265,6 +300,22 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin"
         };
         staff.SetAssignedRoomIds(validRoomIds);
+
+        if (status == StaffAccountStatus.Invited && invitationToken != null)
+        {
+            inviteUrl = _invitationNotifier?.BuildInviteUrl(invitationToken, settings?.TenantSlug, settings?.FacilitySlug);
+            if (request.SendInviteEmail)
+            {
+                _invitationNotifier?.EnqueueInvitationEmail(
+                    _clinicContext.TenantId,
+                    _clinicContext.ClinicId,
+                    settings?.ClinicName ?? "Clinic EZ",
+                    settings?.TenantSlug,
+                    settings?.FacilitySlug,
+                    staff,
+                    invitationToken);
+            }
+        }
 
         await _staffRepository.AddAsync(staff, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -295,6 +346,11 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             AssignedRoomIds: staff.GetAssignedRoomIds(),
             AssignedRoomNames: assignedRoomNames,
             SignatureSpecimen: staff.SignatureSpecimen,
-            DefaultSignatureMode: staff.DefaultSignatureMode);
+            DefaultSignatureMode: staff.DefaultSignatureMode,
+            Status: staff.Status,
+            InvitationToken: staff.InvitationToken,
+            InvitationExpiresAt: staff.InvitationExpiresAt,
+            InviteAcceptedAt: staff.InviteAcceptedAt,
+            InviteUrl: inviteUrl);
     }
 }

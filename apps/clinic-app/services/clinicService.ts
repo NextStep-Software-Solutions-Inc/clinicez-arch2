@@ -60,6 +60,8 @@ export interface ClinicRole {
 
 export type SignatureMode = 'ESignatureSpecimen' | 'DigitalSealOnly' | 'WetSignature';
 
+export type StaffAccountStatus = 'Invited' | 'Active' | 'Suspended' | 'Revoked';
+
 export interface StaffMember {
   id: string;
   tenantId: string;
@@ -85,6 +87,12 @@ export interface StaffMember {
   signatureSpecimen?: string | null;
   defaultSignatureMode?: SignatureMode;
   isActive: boolean;
+  status?: StaffAccountStatus;
+  invitationToken?: string | null;
+  invitationExpiresAt?: string | null;
+  inviteAcceptedAt?: string | null;
+  inviteUrl?: string | null;
+  isExpired?: boolean;
   createdAt: string;
   hasCredentials?: boolean;
   mustChangePassword?: boolean;
@@ -2849,7 +2857,19 @@ export const clinicService = {
   },
 
   async reactivateStaff(id: string) {
-    return this.activateStaff(id);
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/reactivate`, {});
+  },
+
+  async resendStaffInvitation(id: string, sendInviteEmail = true) {
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/resend-invite`, { sendInviteEmail });
+  },
+
+  async revokeStaffInvitation(id: string) {
+    return clinicApiClient.post<boolean>(`/staff/${id}/revoke-invite`, {});
+  },
+
+  async suspendStaffMember(id: string) {
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/suspend`, {});
   },
 
   /** Sets or auto-generates a temporary password; the staff member must change it at next sign-in. Requires `staff:manage`. */

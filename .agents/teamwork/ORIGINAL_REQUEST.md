@@ -1790,6 +1790,79 @@ In `Consultations.screen.tsx`, update the signing flow and feedback modals to re
 - [ ] Type check passes with 0 errors: `cd apps/clinic-app && bun x tsc --noEmit`
 
 
+## 2026-10-21T03:40:35Z
+
+Rework user and staff invitations across all three operational tiers of Clinic EZ (Platform Users, Tenant Workspace Team, and Clinic Staff). Use Clinic EZ's built-in email sender (Interop Hub notification.email.requested -> SMTP/Resend, not Clerk) to send invitations containing secure, unique tokens with 7-day expirations, provide administrators with the choice to Send Email or Copy Link, implement dedicated accept pages on the appropriate domains (Portal domain for Platform & Workspace; Clinic domain with local JWT auth for Clinic Staff), and enforce full invitation and account status tracking (Invited, Expired, Active, Suspended, Revoked).
+
+Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Platform User Invites (Portal Domain & Portal Identity)
+- Enable platform administrators in `apps/portal-web` (`/admin/users`) to invite platform administrators, support staff, and content writers.
+- Support invitation options: "Send Invitation Email" (enqueues `notification.email.requested` via `portal-api`) or "Copy Invite Link Only".
+- Generate a cryptographically secure token with a 7-day expiration date, stored on `AdminUser`.
+- Implement a public, branded accept page on the portal domain at `/admin/invitations/[token]`, whitelisted in proxy middleware and bypassing admin dashboard layout wrappers.
+- Support invitees with or without an existing Clinic EZ portal account (provide Sign In and Sign Up actions with redirect back to the invitation page).
+- When accepted with authenticated Bearer credentials, link `ClerkUserId`, mark `Status = Active`, record `JoinedAt = UtcNow`, and redirect the user to `/admin`.
+
+### R2. Tenant Workspace Team Invites (Portal Domain & Portal Identity)
+- Enable tenant owners and workspace administrators in `apps/portal-web` (`/[tenant]/dashboard/team`) to invite workspace governance roles (Workspace Admins, Facility Administrators, Billers/Finance, Viewers/Analysts).
+- Provide invitation delivery choices: "Send Invitation Email" or "Copy Invite Link Only".
+- Dispatch invitation emails strictly through Clinic EZ's platform email sender (not Clerk).
+- Generate a secure token with 7-day expiration, stored on `WorkspaceMember`.
+- Maintain public accept page at `/invitations/[token]` supporting invitees with or without an account.
+- When accepted with authenticated Bearer credentials, activate workspace membership, synchronize Clerk public metadata, and redirect to `/{tenantSlug}/dashboard/overview`.
+
+### R3. Clinic Staff Invites (Clinic Domain & Facility-Local JWT Auth)
+- Enable clinic administrators in `apps/clinic-app` (Settings > Staff Management) to invite clinical practitioners (Doctors, Nurses, Receptionists, Cashiers, Medical Technologists).
+- Provide invitation delivery choices: "Send Invitation Email" or "Copy Invite Link Only".
+- Dispatch emails via `clinic-api` by publishing `notification.email.requested` to Interop Hub (addressed to Portal), which renders the `clinic.staff.invitation` email template pointing to the **clinic domain**: `https://{clinicDomain}/invitations/{token}`.
+- Host the clinic staff accept page exclusively on the **clinic domain** in `apps/clinic-app` (`clinic-web`).
+- Allow the invited practitioner to review their assigned role/clinic details and set their facility workstation password.
+- Upon password submission, `clinic-api` validates password complexity, stores password hash via `IFacilityPasswordHasher`, sets `MustChangePassword = false`, marks `Status = Active`, and returns facility-local JWT access & refresh tokens, logging the practitioner directly into the Clinic Workstation Dashboard.
+
+### R4. Standardized Invitation & Account Status Tracking Across All Domains
+- Implement consistent status tracking across all three domains:
+  - Platform Users: `AdminUserStatus { Invited, Active, Suspended, Revoked }`
+  - Tenant Workspace Members: `MemberStatus { Invited, Active, Suspended, Revoked }`
+  - Clinic Staff: `StaffAccountStatus { Invited, Active, Suspended, Revoked }`
+- Support dynamic resolution of `Expired` state when `Status == Invited` and `ExpirationDate < UtcNow`.
+- Persist lifecycle audit timestamps across all entities: `CreatedAt`, `CreatedBy`, `InvitationExpiresAt`, and `JoinedAt` / `InviteAcceptedAt`.
+- Provide status-aware management actions in all administration tables:
+  - For `Invited`: Copy Link, Resend Email, Revoke.
+  - For `Expired`: Resend Email (generates new token & resets 7-day expiry), Revoke.
+  - For `Active`: Edit Details, Suspend / Deactivate.
+  - For `Suspended`: Reactivate.
+
+## Acceptance Criteria
+
+### Automated Test Verification
+- [ ] .NET test suite for `ClinicEz.Portal.Tests` passes cleanly:
+  `dotnet test services/portal-api/ClinicEz.Portal.Tests/`
+- [ ] .NET test suite for `ClinicEz.Clinic.Application.Tests` passes cleanly:
+  `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/`
+- [ ] Frontend test suites for `portal-web` and `clinic-app` pass cleanly:
+  `cd apps/portal-web && bun test`
+  `cd apps/clinic-app && bun test`
+- [ ] Unit tests cover all key transitions for Platform, Workspace, and Clinic Staff:
+  - Inviting with email enqueues email and sets `Invited` status.
+  - Inviting without email generates token/expiry without emailing.
+  - Expired tokens cannot be accepted and return validation errors.
+  - Revoked tokens cannot be accepted.
+  - Resending refreshes token, resets expiry to 7 days, and dispatches email.
+  - Accepting platform invite links Clerk user ID and redirects to `/admin`.
+  - Accepting workspace invite activates member and redirects to `/{tenantSlug}/dashboard/overview`.
+  - Accepting clinic staff invite hashes password, sets `MustChangePassword = false`, and issues facility-local JWT.
+
+### Functional & Behavioral Verification
+- [ ] Platform User invite flow works via `/admin/users` with modal copy-link and email dispatch; accept page `/admin/invitations/[token]` is publicly accessible.
+- [ ] Tenant Workspace invite flow works via `/[tenant]/dashboard/team` with modal copy-link and email dispatch; accept page `/invitations/[token]` redirects to workspace overview.
+- [ ] Clinic Staff invite flow works via Clinic App Settings with modal copy-link and email dispatch; accept page is hosted on the clinic domain, sets local password, and enters the clinic workstation dashboard.
+- [ ] Status badges (`Active`, `Invited`, `Expired`, `Suspended`, `Revoked`) render accurately across Platform Users, Tenant Team Members, and Clinic Staff tables.
+
+
 ## 2026-10-21T08:13:16Z
 
 Independent architectural review, security validation, and deployment confirmation of the Clinic File Storage migration to S3-compatible object storage (supporting both Cloudflare R2 and private subscriber on-premise servers such as MinIO and Ceph) across clinic-api.

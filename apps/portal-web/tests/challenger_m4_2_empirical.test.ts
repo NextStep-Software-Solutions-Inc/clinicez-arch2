@@ -117,6 +117,7 @@ describe("Challenger M4-2: Empirical Verification & Adversarial Stress Suite", (
           close: () => {},
         },
       }
+      const hadWindow = typeof (globalThis as any).window !== "undefined"
       const originalWindowOpen = globalThis.window?.open
       globalThis.window = {
         ...globalThis.window,
@@ -126,7 +127,9 @@ describe("Challenger M4-2: Empirical Verification & Adversarial Stress Suite", (
       try {
         fn()
       } finally {
-        if (originalWindowOpen) {
+        if (!hadWindow) {
+          delete (globalThis as any).window
+        } else if (originalWindowOpen) {
           globalThis.window.open = originalWindowOpen
         }
       }
