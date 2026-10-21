@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSignUp } from "@clerk/nextjs";
@@ -10,17 +10,19 @@ import {
   Eye, 
   EyeOff, 
   User,
+  AtSign,
   ArrowRight, 
   Loader2, 
   AlertCircle, 
   CheckCircle2, 
   KeyRound, 
   ArrowLeft,
-  RotateCw
+  RotateCw,
+  Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type SignUpStep = "sign-up" | "verify-email";
+type SignUpStep = "sign-up" | "verify-email" | "complete-requirements";
 
 export function CustomSignUpForm() {
   const router = useRouter();
@@ -32,6 +34,7 @@ export function CustomSignUpForm() {
   const [step, setStep] = useState<SignUpStep>("sign-up");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -45,13 +48,28 @@ export function CustomSignUpForm() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Check if sign-up is already in progress and missing requirements (e.g. after Google OAuth)
+  useEffect(() => {
+    if (isLoaded && signUp) {
+      if (signUp.status === "missing_requirements") {
+        setStep("complete-requirements");
+      }
+    }
+  }, [isLoaded, signUp]);
+
   const getErrorMessage = (err: any): string => {
     if (err?.errors && err.errors.length > 0) {
       const code = err.errors[0]?.code;
       const message = err.errors[0]?.longMessage || err.errors[0]?.message;
 
-      if (code === "form_identifier_exists") {
-        return "An account with this email already exists. Please sign in instead.";
+      if (code === "form_identifier_exists" || code === "form_username_exists") {
+        return "An account with this email or username already exists. Please choose a different one or sign in.";
+      }
+      if (code === "form_username_invalid_character") {
+        return "Username may only contain lowercase letters, numbers, underscores, and periods.";
+      }
+      if (code === "form_username_invalid_length") {
+        return "Username must be between 3 and 30 characters long.";
       }
       if (code === "form_password_length_too_short") {
         return "Password must be at least 8 characters long.";
@@ -95,6 +113,10 @@ export function CustomSignUpForm() {
       setError("Please enter your first name.");
       return;
     }
+    if (!username.trim() || username.trim().length < 3) {
+      setError("Please choose a username with at least 3 characters.");
+      return;
+    }
     if (!emailAddress.trim()) {
       setError("Please enter your email address.");
       return;
@@ -109,6 +131,7 @@ export function CustomSignUpForm() {
 
     try {
       await signUp.create({
+        username: username.trim().toLowerCase(),
         firstName: firstName.trim(),
         lastName: lastName.trim() || undefined,
         emailAddress: emailAddress.trim(),
@@ -148,8 +171,44 @@ export function CustomSignUpForm() {
       if (completeSignUp.status === "complete") {
         await setActive({ session: completeSignUp.createdSessionId });
         router.push(redirectUrl);
+      } else if (completeSignUp.status === "missing_requirements") {
+        setStep("complete-requirements");
+        if (completeSignUp.missingFields?.includes("username")) {
+          setError("A username is required to complete your registration.");
+        }
       } else {
         setError(`Registration status: ${completeSignUp.status}. Additional information required.`);
+      }
+    } catch (err: any) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Complete missing requirements (e.g. setting username)
+  const handleCompleteRequirements = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isLoaded || !signUp) return;
+
+    if (!username.trim() || username.trim().length < 3) {
+      setError("Please choose a username with at least 3 characters.");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const updatedSignUp = await signUp.update({
+        username: username.trim().toLowerCase(),
+      });
+
+      if (updatedSignUp.status === "complete") {
+        await setActive({ session: updatedSignUp.createdSessionId });
+        router.push(redirectUrl);
+      } else {
+        setError(`Status: ${updatedSignUp.status}. Additional requirements still pending.`);
       }
     } catch (err: any) {
       setError(getErrorMessage(err));
@@ -280,6 +339,26 @@ export function CustomSignUpForm() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Username Field */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Username
+              </label>
+              <div className="relative">
+                <AtSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
+                  placeholder="janesmith"
+                  className="w-full rounded-xl border border-input bg-background/80 px-3.5 py-2 pl-9 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                  required
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">Min. 3 characters (letters, numbers, underscores).</p>
             </div>
 
             {/* Email Field */}
@@ -429,6 +508,62 @@ export function CustomSignUpForm() {
               <span>Resend verification code</span>
             </button>
           </div>
+        </div>
+      )}
+
+      {/* STEP 3: Complete Requirements (e.g. Setting Username) */}
+      {step === "complete-requirements" && (
+        <div className="space-y-5 animate-in fade-in duration-300">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-2">
+              <Sparkles className="h-3.5 w-3.5" />
+              Final Step
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">
+              Choose your username
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Clinic EZ requires a unique username for your practitioner profile.
+            </p>
+          </div>
+
+          <form onSubmit={handleCompleteRequirements} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Username
+              </label>
+              <div className="relative">
+                <AtSign className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
+                  placeholder="janesmith"
+                  className="w-full rounded-xl border border-input bg-background/80 px-4 py-2.5 pl-10 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                  required
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                At least 3 characters. Only letters, numbers, underscores, or periods.
+              </p>
+            </div>
+
+            <Button
+              type="submit"
+              disabled={isLoading || !username.trim()}
+              className="w-full h-11 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm shadow-md shadow-primary/25 transition-all mt-2 cursor-pointer"
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Finalizing account...</span>
+                </div>
+              ) : (
+                <span>Complete Registration</span>
+              )}
+            </Button>
+          </form>
         </div>
       )}
     </div>

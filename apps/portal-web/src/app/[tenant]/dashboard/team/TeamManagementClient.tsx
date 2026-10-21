@@ -20,7 +20,10 @@ import {
     IconUser,
     IconCopy,
     IconLink,
-    IconRefresh
+    IconRefresh,
+    IconPencil,
+    IconPlayerPause,
+    IconPlayerPlay
 } from "@tabler/icons-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -115,8 +118,20 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
     const [email, setEmail] = useState("");
     const [role, setRole] = useState("Admin");
     const [facilityId, setFacilityId] = useState("");
+    const [sendEmail, setSendEmail] = useState(true);
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [submittingInvite, setSubmittingInvite] = useState(false);
+
+    // Edit Staff Modal state
+    const [editTarget, setEditTarget] = useState<StaffMemberDto | null>(null);
+    const [editFullName, setEditFullName] = useState("");
+    const [editRole, setEditRole] = useState("Admin");
+    const [editFacilityId, setEditFacilityId] = useState("");
+    const [editError, setEditError] = useState<string | null>(null);
+    const [submittingEdit, setSubmittingEdit] = useState(false);
+
+    // Action loading indicator for suspend / reactivate
+    const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
     // Created Invite Success Modal
     const [createdInviteModal, setCreatedInviteModal] = useState<{
@@ -125,6 +140,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
         email: string;
         role: string;
         inviteUrl: string;
+        sentEmail: boolean;
     } | null>(null);
 
     // Resending state
@@ -215,6 +231,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                 email: email.trim(),
                 role,
                 facilityId: facilityId || undefined,
+                sendEmail,
             });
 
             const inviteUrl = created.invitationToken
@@ -226,6 +243,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             setEmail("");
             setRole("Admin");
             setFacilityId("");
+            setSendEmail(true);
 
             if (inviteUrl) {
                 setCreatedInviteModal({
@@ -233,7 +251,8 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                     fullName: created.fullName,
                     email: created.email,
                     role: created.role,
-                    inviteUrl
+                    inviteUrl,
+                    sentEmail: sendEmail,
                 });
             } else {
                 toast.success(`Invitation sent successfully to ${email}`);
@@ -244,6 +263,73 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             setInviteError(apiErrorMessage(err, "Failed to send staff invitation."));
         } finally {
             setSubmittingInvite(false);
+        }
+    };
+
+    const handleOpenEdit = (member: StaffMemberDto) => {
+        setEditTarget(member);
+        setEditFullName(member.fullName);
+        setEditRole(member.role);
+        setEditFacilityId(member.facilityId || "");
+        setEditError(null);
+    };
+
+    const handleEditSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editTarget) return;
+        setEditError(null);
+
+        if (!editFullName.trim()) {
+            setEditError("Please enter the full name.");
+            return;
+        }
+
+        if (editRole === "Facility Administrator" && !editFacilityId) {
+            setEditError("Please select a branch / facility for the Facility Administrator.");
+            return;
+        }
+
+        setSubmittingEdit(true);
+        try {
+            await staffService.updateStaffMember(editTarget.id, tenantSlug, {
+                fullName: editFullName.trim(),
+                role: editRole,
+                facilityId: editFacilityId || null,
+            });
+
+            toast.success(`Updated details for ${editFullName}`);
+            setEditTarget(null);
+            await loadData();
+        } catch (err: unknown) {
+            setEditError(apiErrorMessage(err, "Failed to update staff member."));
+        } finally {
+            setSubmittingEdit(false);
+        }
+    };
+
+    const handleSuspend = async (member: StaffMemberDto) => {
+        try {
+            setActionLoadingId(member.id);
+            await staffService.suspendStaffMember(member.id, tenantSlug);
+            toast.success(`Suspended access for ${member.fullName}`);
+            await loadData();
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to suspend staff member", tenantSlug);
+        } finally {
+            setActionLoadingId(null);
+        }
+    };
+
+    const handleReactivate = async (member: StaffMemberDto) => {
+        try {
+            setActionLoadingId(member.id);
+            await staffService.reactivateStaffMember(member.id, tenantSlug);
+            toast.success(`Reactivated access for ${member.fullName}`);
+            await loadData();
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to reactivate staff member", tenantSlug);
+        } finally {
+            setActionLoadingId(null);
         }
     };
 
@@ -436,7 +522,11 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                     {members.map((member) => {
                                         const roleMeta = ROLE_DETAILS[member.role] || ROLE_DETAILS.Viewer;
                                         const isOwner = member.role === "Owner";
-                                        const isPending = member.status === "PendingInvitation";
+                                        const isPending = member.status === "Invited";
+                                        const isExpired = member.status === "Expired";
+                                        const isSuspended = member.status === "Suspended";
+                                        const isRevoked = member.status === "Revoked";
+                                        const isActive = member.status === "Active";
 
                                         // Initials for avatar
                                         const initials = member.fullName
@@ -488,11 +578,11 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                     )}
                                                 </td>
                                                 <td className="py-3.5 px-4">
-                                                    {isPending ? (
+                                                    {isPending && (
                                                         <div className="flex flex-col gap-0.5">
-                                                            <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-800 w-fit">
+                                                            <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border-blue-200 dark:border-blue-800 w-fit">
                                                                 <IconClock className="h-3 w-3" />
-                                                                Pending Invite
+                                                                Invited
                                                             </Badge>
                                                             {member.invitationExpiresAt && (
                                                                 <span className="text-[10px] text-slate-400">
@@ -502,8 +592,30 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                 </span>
                                                             )}
                                                         </div>
-                                                    ) : (
-                                                        <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+                                                    )}
+                                                    {isExpired && (
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-800 w-fit">
+                                                                <IconAlertCircle className="h-3 w-3" />
+                                                                Expired
+                                                            </Badge>
+                                                            <span className="text-[10px] text-slate-400">Token Expired</span>
+                                                        </div>
+                                                    )}
+                                                    {isSuspended && (
+                                                        <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700 w-fit">
+                                                            <IconPlayerPause className="h-3 w-3" />
+                                                            Suspended
+                                                        </Badge>
+                                                    )}
+                                                    {isRevoked && (
+                                                        <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200 dark:border-rose-800 w-fit">
+                                                            <IconTrash className="h-3 w-3" />
+                                                            Revoked
+                                                        </Badge>
+                                                    )}
+                                                    {isActive && (
+                                                        <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 w-fit">
                                                             <IconCheck className="h-3 w-3" />
                                                             Active
                                                         </Badge>
@@ -523,24 +635,26 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                         </span>
                                                     ) : (
                                                         <div className="flex items-center justify-end gap-1.5">
-                                                            {isPending && member.invitationToken && (
+                                                            {isPending && (
                                                                 <>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() => handleCopyInviteLink(member.invitationToken)}
-                                                                        title="Copy direct invitation link"
-                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
-                                                                    >
-                                                                        <IconCopy className="h-3.5 w-3.5" />
-                                                                        <span className="hidden lg:inline">Copy Link</span>
-                                                                    </Button>
+                                                                    {member.invitationToken && (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="outline"
+                                                                            onClick={() => handleCopyInviteLink(member.invitationToken)}
+                                                                            title="Copy direct invitation link"
+                                                                            className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
+                                                                        >
+                                                                            <IconCopy className="h-3.5 w-3.5" />
+                                                                            <span className="hidden lg:inline">Copy Link</span>
+                                                                        </Button>
+                                                                    )}
                                                                     <Button
                                                                         size="sm"
                                                                         variant="outline"
                                                                         disabled={resendingId === member.id}
                                                                         onClick={() => handleResendInvite(member)}
-                                                                        title="Refresh token and extend validity"
+                                                                        title="Resend invitation"
                                                                         className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
                                                                     >
                                                                         {resendingId === member.id ? (
@@ -550,17 +664,98 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                         )}
                                                                         <span className="hidden lg:inline">Resend</span>
                                                                     </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => setRevokeTarget(member)}
+                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    >
+                                                                        <IconTrash className="h-3.5 w-3.5" />
+                                                                        <span className="hidden sm:inline">Revoke</span>
+                                                                    </Button>
                                                                 </>
                                                             )}
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                onClick={() => setRevokeTarget(member)}
-                                                                className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
-                                                            >
-                                                                <IconTrash className="h-3.5 w-3.5" />
-                                                                <span className="hidden sm:inline">Revoke</span>
-                                                            </Button>
+
+                                                            {isExpired && (
+                                                                <>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        disabled={resendingId === member.id}
+                                                                        onClick={() => handleResendInvite(member)}
+                                                                        title="Resend fresh invitation email"
+                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
+                                                                    >
+                                                                        {resendingId === member.id ? (
+                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                                        ) : (
+                                                                            <IconRefresh className="h-3.5 w-3.5" />
+                                                                        )}
+                                                                        <span className="hidden lg:inline">Resend</span>
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => setRevokeTarget(member)}
+                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    >
+                                                                        <IconTrash className="h-3.5 w-3.5" />
+                                                                        <span className="hidden sm:inline">Revoke</span>
+                                                                    </Button>
+                                                                </>
+                                                            )}
+
+                                                            {isActive && (
+                                                                <>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        onClick={() => handleOpenEdit(member)}
+                                                                        title="Edit Details"
+                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
+                                                                    >
+                                                                        <IconPencil className="h-3.5 w-3.5" />
+                                                                        <span className="hidden lg:inline">Edit Details</span>
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        disabled={actionLoadingId === member.id}
+                                                                        onClick={() => handleSuspend(member)}
+                                                                        title="Suspend Account"
+                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    >
+                                                                        {actionLoadingId === member.id ? (
+                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                                        ) : (
+                                                                            <IconPlayerPause className="h-3.5 w-3.5" />
+                                                                        )}
+                                                                        <span className="hidden sm:inline">Suspend</span>
+                                                                    </Button>
+                                                                </>
+                                                            )}
+
+                                                            {isSuspended && (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    disabled={actionLoadingId === member.id}
+                                                                    onClick={() => handleReactivate(member)}
+                                                                    title="Reactivate Account"
+                                                                    className="h-8 px-2.5 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg text-xs font-semibold gap-1.5"
+                                                                >
+                                                                    {actionLoadingId === member.id ? (
+                                                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                                    ) : (
+                                                                        <IconPlayerPlay className="h-3.5 w-3.5" />
+                                                                    )}
+                                                                    <span>Reactivate</span>
+                                                                </Button>
+                                                            )}
+
+                                                            {isRevoked && (
+                                                                <span className="text-[11px] text-slate-400 italic">Revoked</span>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </td>
@@ -675,6 +870,50 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             </div>
                         )}
 
+                        {/* Delivery Method Choice */}
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                Delivery Method
+                            </Label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setSendEmail(true)}
+                                    className={`p-3 rounded-xl border text-left transition-all ${
+                                        sendEmail
+                                            ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                                            : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-1.5 mb-1 font-semibold text-xs">
+                                        <IconMail className="h-4 w-4" />
+                                        <span>Send Invitation Email</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 font-normal">
+                                        Dispatches invitation email automatically.
+                                    </p>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setSendEmail(false)}
+                                    className={`p-3 rounded-xl border text-left transition-all ${
+                                        !sendEmail
+                                            ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                                            : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-1.5 mb-1 font-semibold text-xs">
+                                        <IconCopy className="h-4 w-4" />
+                                        <span>Copy Invite Link Only</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 font-normal">
+                                        Generates secure link for manual sharing.
+                                    </p>
+                                </button>
+                            </div>
+                        </div>
+
                         <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-start gap-2.5">
                             <IconAlertCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                             <span className="leading-relaxed">
@@ -714,7 +953,119 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                 </DialogContent>
             </Dialog>
 
-            {/* 5. Revoke Staff Confirmation Dialog */}
+            {/* 5. Edit Staff Member Dialog */}
+            <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
+                <DialogContent className="sm:max-w-md rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                            <IconPencil className="h-5 w-5 text-primary" />
+                            Edit Staff Member
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500">
+                            Update workspace details and clinical branch assignment for {editTarget?.fullName}.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {editError && (
+                        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
+                            <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <span>{editError}</span>
+                        </div>
+                    )}
+
+                    <form onSubmit={handleEditSubmit} className="space-y-4 pt-1">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="editFullName" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                Full Name <span className="text-rose-500">*</span>
+                            </Label>
+                            <Input
+                                id="editFullName"
+                                placeholder="e.g. Alex Morgan"
+                                value={editFullName}
+                                onChange={(e) => setEditFullName(e.target.value)}
+                                className="h-9 text-xs rounded-xl"
+                                required
+                            />
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label htmlFor="editRole" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                Workspace Role <span className="text-rose-500">*</span>
+                            </Label>
+                            <select
+                                id="editRole"
+                                value={editRole}
+                                onChange={(e) => {
+                                    const newRole = e.target.value;
+                                    setEditRole(newRole);
+                                    if (newRole !== "Facility Administrator") {
+                                        setEditFacilityId("");
+                                    }
+                                }}
+                                className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            >
+                                <option value="Admin">Tenant Administrator (Manage branches, invites, &amp; tenancy settings)</option>
+                                <option value="Facility Administrator">Facility Administrator (Branch clinical operations &amp; local settings)</option>
+                                <option value="Biller">Biller / Finance (Manage subscriptions, checkout sessions, &amp; invoices)</option>
+                                <option value="Viewer">Viewer / Analyst (Read-only access to tenancy health &amp; branch stats)</option>
+                            </select>
+                        </div>
+
+                        {editRole === "Facility Administrator" && (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="editFacilityId" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                    Assigned Branch / Facility <span className="text-rose-500">*</span>
+                                </Label>
+                                <select
+                                    id="editFacilityId"
+                                    value={editFacilityId}
+                                    onChange={(e) => setEditFacilityId(e.target.value)}
+                                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    required
+                                >
+                                    <option value="">Select a branch / facility...</option>
+                                    {facilities.map((fac) => (
+                                        <option key={fac.id} value={fac.id}>
+                                            {fac.name} ({fac.facilityType})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        <DialogFooter className="gap-2 pt-2 sm:justify-end">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setEditTarget(null)}
+                                disabled={submittingEdit}
+                                className="rounded-xl text-xs"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                disabled={submittingEdit}
+                                className="rounded-xl text-xs font-semibold gap-1.5"
+                            >
+                                {submittingEdit ? (
+                                    <>
+                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                        <span>Saving Changes...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <IconCheck className="h-3.5 w-3.5" />
+                                        <span>Save Changes</span>
+                                    </>
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* 6. Revoke Staff Confirmation Dialog */}
             <Dialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
                 <DialogContent className="sm:max-w-md rounded-2xl">
                     <DialogHeader>
@@ -781,7 +1132,9 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
 
                     <div className="space-y-3 py-2">
                         <p className="text-xs text-slate-600 dark:text-slate-400">
-                            An invitation email has been sent. You can also directly copy and share this link via WhatsApp, Slack, or SMS:
+                            {createdInviteModal?.sentEmail
+                                ? "An invitation email has been sent. You can also directly copy and share this link via WhatsApp, Slack, or SMS:"
+                                : "Invitation link generated (no email was sent). You can directly copy and share this link via WhatsApp, Slack, or SMS:"}
                         </p>
 
                         <div className="flex items-center gap-2">

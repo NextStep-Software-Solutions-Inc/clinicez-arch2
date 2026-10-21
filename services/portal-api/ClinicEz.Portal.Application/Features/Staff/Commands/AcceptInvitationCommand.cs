@@ -65,15 +65,25 @@ public class AcceptInvitationCommandHandler(
             return result;
         }
 
-        if (member.Status != MemberStatus.Invited)
+        if (member.Status == MemberStatus.Revoked)
         {
-            throw new InvalidOperationException("This invitation is no longer active or has already been used.");
+            throw new InvalidOperationException("This invitation has been revoked.");
+        }
+
+        if (member.Status == MemberStatus.Suspended)
+        {
+            throw new InvalidOperationException("This account is suspended.");
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         if (member.InvitationExpiresAt.HasValue && member.InvitationExpiresAt.Value < now)
         {
             throw new InvalidOperationException("This invitation has expired. Please ask your clinic administrator to resend the invitation.");
+        }
+
+        if (member.Status != MemberStatus.Invited)
+        {
+            throw new InvalidOperationException("This invitation is no longer active or has already been used.");
         }
 
         // The allow-list may have been tightened after this invitation was sent; check both the invited

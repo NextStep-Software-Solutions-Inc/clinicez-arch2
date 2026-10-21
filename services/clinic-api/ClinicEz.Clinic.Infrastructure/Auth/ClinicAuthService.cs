@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Features.Auth.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Infrastructure.Context;
@@ -39,6 +40,10 @@ public interface IClinicAuthService
     Task<bool> RevokeSessionsAsync(Guid staffId, CancellationToken ct = default);
 
     Task<AuthUserDto?> GetCurrentUserAsync(Guid staffId, CancellationToken ct = default);
+
+    Task<ClinicStaffInvitationDetailsDto?> GetInvitationDetailsAsync(string token, CancellationToken ct = default);
+
+    Task<AuthOutcome> AcceptInvitationAsync(string token, string password, string? deviceLabel = null, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -463,7 +468,113 @@ public sealed class ClinicAuthService : IClinicAuthService
         return ToUser(staff, resolved?.Settings.ClinicName ?? string.Empty);
     }
 
-    // â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    public async Task<ClinicStaffInvitationDetailsDto?> GetInvitationDetailsAsync(string token, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return null;
+
+        var staff = await _db.StaffMembers.IgnoreQueryFilters()
+            .Include(s => s.ClinicRole)
+            .FirstOrDefaultAsync(s => s.InvitationToken == token.Trim() && !s.IsDeleted, ct);
+
+        if (staff is null) return null;
+
+        var resolved = await ResolveByClinicAsync(staff.ClinicId, ct);
+
+        var now = DateTime.UtcNow;
+        var isExpired = staff.Status == StaffAccountStatus.Invited && staff.InvitationExpiresAt.HasValue && staff.InvitationExpiresAt.Value < now;
+        var isAlreadyAccepted = staff.Status == StaffAccountStatus.Active && !string.IsNullOrEmpty(staff.PasswordHash);
+        var isRevoked = staff.Status == StaffAccountStatus.Revoked;
+        var isSuspended = staff.Status == StaffAccountStatus.Suspended;
+
+        return new ClinicStaffInvitationDetailsDto(
+            staff.Id,
+            resolved?.Settings.ClinicName ?? "Clinic EZ",
+            resolved?.Settings.FacilitySlug ?? resolved?.TenantId ?? "",
+            $"{staff.FirstName} {staff.LastName}".Trim(),
+            staff.Email ?? "",
+            staff.ClinicRole?.Name ?? staff.Role.ToString(),
+            isExpired,
+            isAlreadyAccepted,
+            staff.InvitationExpiresAt,
+            isRevoked,
+            isSuspended
+        );
+    }
+
+    public async Task<AuthOutcome> AcceptInvitationAsync(string token, string password, string? deviceLabel = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "Invitation token is required.");
+
+        if (string.IsNullOrWhiteSpace(password))
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "Password is required.");
+
+        var staff = await _db.StaffMembers.IgnoreQueryFilters()
+            .Include(s => s.ClinicRole)
+            .FirstOrDefaultAsync(s => s.InvitationToken == token.Trim() && !s.IsDeleted, ct);
+
+        if (staff is null)
+            return AuthOutcome.Fail(AuthFailure.NotFound, "Invitation was not found or is invalid.");
+
+        if (staff.Status == StaffAccountStatus.Revoked)
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "This invitation has been revoked.");
+
+        if (staff.Status == StaffAccountStatus.Suspended)
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "This account is suspended.");
+
+        var now = DateTime.UtcNow;
+        if (staff.InvitationExpiresAt.HasValue && staff.InvitationExpiresAt.Value < now)
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "This invitation has expired. Please ask your clinic administrator to resend the invitation.");
+
+        if (staff.Status == StaffAccountStatus.Active && !string.IsNullOrEmpty(staff.PasswordHash))
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "This invitation has already been accepted. Sign in instead.");
+
+        if (staff.Status != StaffAccountStatus.Invited && staff.Status != StaffAccountStatus.Active)
+            return AuthOutcome.Fail(AuthFailure.InvalidRequest, "This invitation is no longer active.");
+
+        var problems = _hasher.ValidateStrength(password, Options.MinPasswordLength);
+        if (problems.Count > 0)
+            return AuthOutcome.Fail(AuthFailure.WeakPassword, problems[0], problems);
+
+        var email = NormalizeEmail(staff.Email);
+        if (email is not null)
+        {
+            var duplicate = await _db.StaffMembers.IgnoreQueryFilters().AnyAsync(
+                s => s.Id != staff.Id && s.ClinicId == staff.ClinicId && s.Email != null && s.Email.ToLower() == email && s.PasswordHash != null, ct);
+            if (duplicate)
+                return AuthOutcome.Fail(AuthFailure.InvalidRequest, "Another staff member with this email already has sign-in credentials.");
+        }
+
+        var resolved = await ResolveByClinicAsync(staff.ClinicId, ct);
+        if (resolved is null)
+            return AuthOutcome.Fail(AuthFailure.WorkspaceNotFound, "Workspace was not found or is not activated.");
+
+        var gate = CheckLicense(resolved);
+        if (gate is not null) return gate;
+
+        staff.PasswordHash = _hasher.Hash(password);
+        staff.MustChangePassword = false;
+        staff.Status = StaffAccountStatus.Active;
+        staff.IsActive = true;
+        staff.InviteAcceptedAt = now;
+        staff.FailedLoginCount = 0;
+        staff.LockoutEnd = null;
+        staff.LastLoginAt = now;
+        staff.TokenVersion++;
+        staff.UpdatedAt = now;
+        staff.UpdatedBy = "System:InviteAccept";
+
+        await _db.SaveChangesAsync(ct);
+        _accessCache.Invalidate(staff.Id);
+
+        _logger.LogInformation("[Auth] Staff member {StaffId} ({Email}) accepted invitation for clinic {ClinicId}.", staff.Id, staff.Email, staff.ClinicId);
+
+        var tokens = await IssueTokensAsync(staff, resolved, Guid.NewGuid(), deviceLabel ?? "invite-accept", ct);
+        return AuthOutcome.Success(tokens);
+    }
+
+    // ── helpers ─────────────────────────────────────────────────────────────────────────
+
 
     private AuthOutcome? CheckLicense(ResolvedWorkspace resolved)
     {

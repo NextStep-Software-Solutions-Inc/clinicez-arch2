@@ -143,7 +143,19 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
         base.OnModelCreating(modelBuilder);
     }
 
+    public override int SaveChanges()
+    {
+        OnBeforeSaveChanges();
+        return base.SaveChanges();
+    }
+
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        OnBeforeSaveChanges();
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void OnBeforeSaveChanges()
     {
         var utcNow = DateTime.UtcNow;
         var actor = _currentUserService?.UserId ?? "system";
@@ -164,8 +176,6 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
                     break;
             }
         }
-
-        return await base.SaveChangesAsync(cancellationToken);
     }
 }
 

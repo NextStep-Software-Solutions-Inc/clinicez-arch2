@@ -314,3 +314,46 @@ export function hasPermission(permissions: readonly string[] | undefined, permis
   if (!permissions) return false;
   return permissions.includes('*') || permissions.some((p) => p.toLowerCase() === permission.toLowerCase());
 }
+
+export interface ClinicInvitationDetails {
+  id: string;
+  clinicName: string;
+  facilitySlug: string;
+  inviteeFullName: string;
+  inviteeEmail: string;
+  role: string;
+  isExpired: boolean;
+  isAlreadyAccepted: boolean;
+  expiresAt?: string | null;
+  isRevoked: boolean;
+  isSuspended: boolean;
+}
+
+export async function getInvitationDetails(token: string): Promise<AuthResult<ClinicInvitationDetails>> {
+  try {
+    const response = await axios.get<ApiResponse<ClinicInvitationDetails>>(
+      `${apiRoot()}/auth/invitations/${encodeURIComponent(token.trim())}`,
+      {
+        timeout: 10000,
+        headers: tenantHeaders(),
+      }
+    );
+    return [response.data?.data ?? null, null];
+  } catch (error) {
+    return [null, toApiError(error)];
+  }
+}
+
+export async function acceptInvitation(token: string, password: string): Promise<AuthResult<AuthTokens>> {
+  const [tokens, error] = await post<AuthTokens>(
+    `/auth/invitations/${encodeURIComponent(token.trim())}/accept`,
+    {
+      password,
+      deviceLabel: deviceLabel(),
+    }
+  );
+  if (error || !tokens) return [null, error ?? new ApiError('Accept invitation failed.', 0)];
+  await persist(tokens);
+  return [tokens, null];
+}
+

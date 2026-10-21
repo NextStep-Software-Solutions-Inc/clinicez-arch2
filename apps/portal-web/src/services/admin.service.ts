@@ -109,13 +109,34 @@ export interface AdminRoleDto {
 
 export interface AdminUserDto {
   id: string;
-  clerkUserId: string;
+  clerkUserId?: string | null;
   email: string;
   fullName: string;
   roleId: string;
   role?: AdminRoleDto;
   isActive: boolean;
+  status: "Invited" | "Active" | "Suspended" | "Revoked";
+  displayStatus?: string;
+  invitationToken?: string | null;
+  invitationExpiresAt?: string | null;
+  joinedAt?: string | null;
   createdAt: string;
+  createdBy?: string;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+  inviteUrl?: string | null;
+}
+
+export interface AdminInvitationDetailsDto {
+  email: string;
+  fullName: string;
+  roleName: string;
+  roleDescription: string;
+  expiresAt?: string | null;
+  isExpired: boolean;
+  isAlreadyAccepted: boolean;
+  isRevoked: boolean;
+  isSuspended?: boolean;
 }
 
 export interface AdminSystemSettingDto {
@@ -368,6 +389,46 @@ export const adminService = {
 
   createUser: async (user: Omit<AdminUserDto, "id" | "createdAt" | "clerkUserId" | "isActive">): Promise<AdminUserDto> => {
     const res = await apiClient.post<AdminUserDto>("/admin/users", user);
+    return res.data;
+  },
+
+  inviteUser: async (user: {
+    email: string;
+    fullName: string;
+    roleId: string;
+    deliveryMode?: "email" | "link";
+  }): Promise<AdminUserDto> => {
+    const res = await apiClient.post<AdminUserDto>("/admin/users", user);
+    return res.data;
+  },
+
+  resendInvitation: async (id: string): Promise<AdminUserDto> => {
+    const res = await apiClient.post<AdminUserDto>(`/admin/users/${id}/resend`);
+    return res.data;
+  },
+
+  revokeInvitation: async (id: string): Promise<AdminUserDto> => {
+    const res = await apiClient.post<AdminUserDto>(`/admin/users/${id}/revoke`);
+    return res.data;
+  },
+
+  suspendUser: async (id: string): Promise<AdminUserDto> => {
+    const res = await apiClient.post<AdminUserDto>(`/admin/users/${id}/suspend`);
+    return res.data;
+  },
+
+  reactivateUser: async (id: string): Promise<AdminUserDto> => {
+    const res = await apiClient.post<AdminUserDto>(`/admin/users/${id}/reactivate`);
+    return res.data;
+  },
+
+  getInvitationDetails: async (token: string): Promise<AdminInvitationDetailsDto> => {
+    const res = await apiClient.get<AdminInvitationDetailsDto>(`/admin/invitations/${token}`);
+    return res.data;
+  },
+
+  acceptInvitation: async (token: string): Promise<AdminUserDto> => {
+    const res = await apiClient.post<AdminUserDto>(`/admin/invitations/${token}/accept`);
     return res.data;
   },
 

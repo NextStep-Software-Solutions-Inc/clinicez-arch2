@@ -38,6 +38,8 @@ import { useStaff } from '../../context/StaffContext';
 import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { DoctorRosterCalendarModal } from '../roster/DoctorRosterCalendarModal';
+import { resolveStaffBadge, getAvailableStaffActions } from '../../utils/staffStatus';
+import { buildStaffCreationPayload } from '../../utils/staffManagement';
 
 interface StaffManagementTabProps {
   staff: StaffMember[];
@@ -117,7 +119,7 @@ export default function StaffManagementTab({
   const [stampModalStaff, setStampModalStaff] = useState<StaffMember | null>(null);
   const [specialty, setSpecialty] = useState('');
   const [assignedRoomIds, setAssignedRoomIds] = useState<string[]>([]);
-  const [provisionLogin, setProvisionLogin] = useState(true);
+  const [inviteDeliveryMode, setInviteDeliveryMode] = useState<'email' | 'link' | 'password' | 'none'>('email');
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [addingStaff, setAddingStaff] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
@@ -129,6 +131,16 @@ export default function StaffManagementTab({
     email: string;
     role: string;
     temporaryPassword: string;
+  } | null>(null);
+
+  // Success Invite Modal State
+  const [inviteModal, setInviteModal] = useState<{
+    visible: boolean;
+    name: string;
+    email?: string;
+    role: string;
+    inviteUrl: string;
+    sentEmail: boolean;
   } | null>(null);
 
   // Password Reset Modal State
@@ -237,7 +249,7 @@ export default function StaffManagementTab({
     setPan('');
     setSpecialty('');
     setAssignedRoomIds([]);
-    setProvisionLogin(true);
+    setInviteDeliveryMode('email');
     setTemporaryPassword(generateRandomPassword());
     setSignatureSpecimen(null);
     setDefaultSignatureMode('ESignatureSpecimen');
@@ -376,15 +388,12 @@ export default function StaffManagementTab({
       return;
     }
 
-    if (provisionLogin) {
-      if (!email.trim()) {
-        setAddError('A valid email address is required when provisioning login credentials.');
-        return;
-      }
-      if (!temporaryPassword || temporaryPassword.length < 8) {
-        setAddError('Temporary password must be at least 8 characters.');
-        return;
-      }
+    let deliveryPayload: ReturnType<typeof buildStaffCreationPayload>;
+    try {
+      deliveryPayload = buildStaffCreationPayload(inviteDeliveryMode, email, temporaryPassword);
+    } catch (err: any) {
+      setAddError(err.message || 'Invalid staff invitation settings.');
+      return;
     }
 
     setAddingStaff(true);
@@ -401,7 +410,7 @@ export default function StaffManagementTab({
       title: title.trim() || undefined,
       role,
       clinicRoleId: clinicRoleId || undefined,
-      email: email.trim() || undefined,
+      email: deliveryPayload.email,
       phoneNumber: phone.trim() || undefined,
       prcLicenseNumber: role === 'Doctor' ? prc.trim() : undefined,
       ptrNumber: role === 'Doctor' ? ptr.trim() || undefined : undefined,
@@ -411,8 +420,8 @@ export default function StaffManagementTab({
       signatureSpecimen: role === 'Doctor' ? signatureSpecimen : undefined,
       defaultSignatureMode: role === 'Doctor' ? defaultSignatureMode : undefined,
       assignedRoomIds: canHaveRoom && assignedRoomIds.length > 0 ? assignedRoomIds : undefined,
-      initialPassword: provisionLogin ? temporaryPassword : undefined,
-      sendInviteEmail: false,
+      initialPassword: deliveryPayload.initialPassword,
+      sendInviteEmail: deliveryPayload.sendInviteEmail,
     });
 
     setAddingStaff(false);
@@ -426,7 +435,23 @@ export default function StaffManagementTab({
     setShowAddModal(false);
     await Promise.all([onStaffAdded(), refreshRooms(), refreshGlobalStaff()]);
 
-    if (provisionLogin && temporaryPassword) {
+    if (inviteDeliveryMode === 'email' || inviteDeliveryMode === 'link') {
+      const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+      const inviteUrl =
+        created.inviteUrl ||
+        (created.invitationToken
+          ? (origin ? `${origin}/invitations/${created.invitationToken}` : `/invitations/${created.invitationToken}`)
+          : '');
+
+      setInviteModal({
+        visible: true,
+        name: `${created.firstName} ${created.lastName}`.trim(),
+        email: created.email || email.trim(),
+        role: created.roleName || created.role,
+        inviteUrl,
+        sentEmail: inviteDeliveryMode === 'email',
+      });
+    } else if (inviteDeliveryMode === 'password' && temporaryPassword) {
       setCredentialsModal({
         visible: true,
         name: `${created.firstName} ${created.lastName}`.trim(),
@@ -514,12 +539,91 @@ export default function StaffManagementTab({
     }
   };
 
-  const copyToClipboard = async (text: string) => {
+  const handleResendInvite = async (staffMember: StaffMember) => {
+    const [updated, err] = await clinicService.resendStaffInvitation(staffMember.id, true);
+    if (err || !updated) {
+      notify.error(err?.message || 'Could not resend invitation email.');
+      return;
+    }
+    setStaff((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    notify.success(`Invitation email resent to ${updated.email || staffMember.email}.`);
+    await onRefreshStaff();
+  };
+
+  const handleRevokeInvite = (staffMember: StaffMember) => {
+    Alert.alert(
+      'Revoke Invitation',
+      `Are you sure you want to revoke the invitation for ${staffMember.firstName} ${staffMember.lastName}? The invitation link will be immediately invalidated.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Revoke',
+          style: 'destructive',
+          onPress: async () => {
+            const [ok, err] = await clinicService.revokeStaffInvitation(staffMember.id);
+            if (err || !ok) {
+              notify.error(err?.message || 'Could not revoke invitation.');
+              return;
+            }
+            setStaff((prev) =>
+              prev.map((item) =>
+                item.id === staffMember.id ? { ...item, status: 'Revoked', isActive: false } : item
+              )
+            );
+            notify.success(`Invitation for ${staffMember.firstName} ${staffMember.lastName} revoked.`);
+            await onRefreshStaff();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSuspendStaff = (staffMember: StaffMember) => {
+    if (isSystemAdminStaff(staffMember) && activeSystemAdmins.length <= 1) {
+      notify.error('Cannot suspend the only active Clinic Administrator.');
+      return;
+    }
+
+    Alert.alert(
+      'Suspend Staff Member',
+      `Are you sure you want to suspend ${staffMember.firstName} ${staffMember.lastName}? They will immediately be signed out of all devices.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Suspend',
+          style: 'destructive',
+          onPress: async () => {
+            const [updated, err] = await clinicService.suspendStaffMember(staffMember.id);
+            if (err || !updated) {
+              notify.error(err?.message || 'Could not suspend staff member.');
+              return;
+            }
+            setStaff((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+            notify.success(`${staffMember.firstName} ${staffMember.lastName} suspended.`);
+            await Promise.all([onRefreshStaff(), refreshGlobalStaff()]);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReactivateStaff = async (staffMember: StaffMember) => {
+    const [updated, err] = await clinicService.reactivateStaff(staffMember.id);
+    if (err || !updated) {
+      notify.error(err?.message || 'Could not reactivate staff member. Check facility seats and license.');
+      return;
+    }
+    setStaff((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    notify.success(`${staffMember.firstName} ${staffMember.lastName} reactivated.`);
+    await Promise.all([onRefreshStaff(), refreshGlobalStaff()]);
+  };
+
+  const copyToClipboard = async (text: string, successMsg = 'Login credentials copied to clipboard!') => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       await navigator.clipboard.writeText(text);
-      notify.success('Login credentials copied to clipboard!');
+      notify.success(successMsg);
     } else {
-      notify.info('Select and copy the credentials from the screen.');
+      notify.info('Select and copy from the screen.');
     }
   };
 
@@ -575,6 +679,22 @@ export default function StaffManagementTab({
               {staff.map((s) => {
                 const fullName = `${s.title ? `${s.title} ` : ''}${s.firstName} ${s.lastName}`.trim();
                 const isSelfRow = isSelf(s);
+                const isExpired =
+                  s.isExpired ||
+                  (s.status === 'Invited' &&
+                    !!s.invitationExpiresAt &&
+                    new Date(s.invitationExpiresAt).getTime() < Date.now());
+                const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+                const inviteUrl =
+                  s.inviteUrl ||
+                  (s.invitationToken
+                    ? (origin ? `${origin}/invitations/${s.invitationToken}` : `/invitations/${s.invitationToken}`)
+                    : '');
+                const staffBadge = resolveStaffBadge(s);
+                const actions = getAvailableStaffActions(
+                  { ...s, inviteUrl: inviteUrl || s.inviteUrl },
+                  { isSelf: isSelfRow }
+                );
 
                 return (
                   <View key={s.id} style={styles.staffItem}>
@@ -601,17 +721,12 @@ export default function StaffManagementTab({
                         {s.roleName && s.roleName !== s.role ? (
                           <Badge label={s.roleName} variant="purple" size="sm" />
                         ) : null}
-                        {!s.isActive ? (
-                          <Badge label="Inactive" variant="emergency" size="sm" />
-                        ) : s.hasCredentials ? (
-                          s.mustChangePassword ? (
-                            <Badge label="Password Reset Pending" variant="warning" size="sm" />
-                          ) : (
-                            <Badge label="Login Active" variant="success" size="sm" />
-                          )
-                        ) : (
-                          <Badge label="No Login" variant="neutral" size="sm" />
-                        )}
+                        <Badge
+                          label={staffBadge.label}
+                          variant={staffBadge.variant}
+                          size="sm"
+                          icon={staffBadge.icon}
+                        />
                       </View>
 
                       <ThemedText variant="caption" color={theme.colors.textMuted}>
@@ -630,66 +745,126 @@ export default function StaffManagementTab({
                     </View>
 
                     <View style={[styles.staffActionsCol, isCompact && styles.staffActionsColMobile]}>
-                      <Button
-                        title="Edit"
-                        icon="edit"
-                        variant="ghost"
-                        size="sm"
-                        style={isCompact ? styles.flexBtn : undefined}
-                        onPress={() => handleOpenEditModal(s)}
-                      />
-                      <ActionMenu
-                        align="right"
-                        triggerAriaLabel={`More actions for ${fullName}`}
-                        items={[
-                          ...(s.role === 'Doctor'
-                            ? [
-                                {
-                                  id: 'roster',
-                                  label: 'Roster & Schedule',
-                                  icon: 'calendar' as const,
-                                  hint: 'Configure weekly shifts & leaves',
-                                  onPress: () => {
-                                    setRosterDoctorId(s.id);
-                                    setRosterModalVisible(true);
+                      {actions.includes('edit') ? (
+                        <Button
+                          title="Edit"
+                          icon="edit"
+                          variant="ghost"
+                          size="sm"
+                          style={isCompact ? styles.flexBtn : undefined}
+                          onPress={() => handleOpenEditModal(s)}
+                        />
+                      ) : null}
+                      {s.status === 'Revoked' ? (
+                        <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.revokedText}>
+                          Revoked
+                        </ThemedText>
+                      ) : (
+                        <ActionMenu
+                          align="right"
+                          triggerAriaLabel={`More actions for ${fullName}`}
+                          items={[
+                            ...(s.role === 'Doctor' && actions.includes('edit')
+                              ? [
+                                  {
+                                    id: 'roster',
+                                    label: 'Roster & Schedule',
+                                    icon: 'calendar' as const,
+                                    hint: 'Configure weekly shifts & leaves',
+                                    onPress: () => {
+                                      setRosterDoctorId(s.id);
+                                      setRosterModalVisible(true);
+                                    },
                                   },
-                                },
-                                {
-                                  id: 'stamp',
-                                  label: 'View Doctor Stamp',
-                                  icon: 'eye' as const,
-                                  hint: 'Preview credentials & signature imprint',
-                                  onPress: () => setStampModalStaff(s),
-                                },
-                              ]
-                            : []),
-                          {
-                            id: 'reset-pwd',
-                            label: 'Reset Password',
-                            icon: 'key' as const,
-                            hint: 'Issue temporary credentials',
-                            dividerBefore: s.role === 'Doctor',
-                            onPress: () => {
-                              setResetModalStaff(s);
-                              setCustomResetPassword(generateRandomPassword());
-                              setResetError(null);
-                            },
-                          },
-                          ...(!isSelfRow
-                            ? [
-                                {
-                                  id: 'toggle-active',
-                                  label: s.isActive ? 'Deactivate Staff Member' : 'Activate Staff Member',
-                                  icon: (s.isActive ? 'close' : 'checkCircle') as IconName,
-                                  hint: s.isActive ? 'Revoke login and seat access' : 'Restore staff login access',
-                                  destructive: s.isActive,
-                                  dividerBefore: true,
-                                  onPress: () => handleToggleActive(s),
-                                },
-                              ]
-                            : []),
-                        ]}
-                      />
+                                  {
+                                    id: 'stamp',
+                                    label: 'View Doctor Stamp',
+                                    icon: 'eye' as const,
+                                    hint: 'Preview credentials & signature imprint',
+                                    onPress: () => setStampModalStaff(s),
+                                  },
+                                ]
+                              : []),
+                            ...(actions.includes('copy-invite') && inviteUrl
+                              ? [
+                                  {
+                                    id: 'copy-invite',
+                                    label: 'Copy Invite Link',
+                                    icon: 'copy' as const,
+                                    hint: 'Copy direct invitation link',
+                                    onPress: () =>
+                                      copyToClipboard(inviteUrl, 'Invitation link copied to clipboard!'),
+                                  },
+                                ]
+                              : []),
+                            ...(actions.includes('resend-invite')
+                              ? [
+                                  {
+                                    id: 'resend-invite',
+                                    label: 'Resend Invitation Email',
+                                    icon: 'mail' as const,
+                                    hint: 'Generate new token & send email',
+                                    onPress: () => handleResendInvite(s),
+                                  },
+                                ]
+                              : []),
+                            ...(actions.includes('revoke-invite')
+                              ? [
+                                  {
+                                    id: 'revoke-invite',
+                                    label: 'Revoke Invitation',
+                                    icon: 'close' as const,
+                                    hint: 'Cancel invitation permanently',
+                                    destructive: true,
+                                    dividerBefore: true,
+                                    onPress: () => handleRevokeInvite(s),
+                                  },
+                                ]
+                              : []),
+                            ...(actions.includes('reset-pwd')
+                              ? [
+                                  {
+                                    id: 'reset-pwd',
+                                    label: 'Reset Password',
+                                    icon: 'key' as const,
+                                    hint: 'Issue temporary credentials',
+                                    dividerBefore: s.role === 'Doctor',
+                                    onPress: () => {
+                                      setResetModalStaff(s);
+                                      setCustomResetPassword(generateRandomPassword());
+                                      setResetError(null);
+                                    },
+                                  },
+                                ]
+                              : []),
+                            ...(actions.includes('suspend-staff')
+                              ? [
+                                  {
+                                    id: 'suspend-staff',
+                                    label: 'Suspend Staff Member',
+                                    icon: 'alert' as const,
+                                    hint: 'Revoke access and active sessions',
+                                    destructive: true,
+                                    dividerBefore: true,
+                                    onPress: () => handleSuspendStaff(s),
+                                  },
+                                ]
+                              : []),
+                            ...(actions.includes('reactivate-staff')
+                              ? [
+                                  {
+                                    id: 'reactivate-staff',
+                                    label: 'Reactivate Staff Member',
+                                    icon: 'checkCircle' as const,
+                                    hint: 'Restore staff login access',
+                                    dividerBefore: s.role === 'Doctor',
+                                    onPress: () => handleReactivateStaff(s),
+                                  },
+                                ]
+                              : []),
+                          ]}
+                        />
+                      )}
                     </View>
                   </View>
                 );
@@ -711,7 +886,19 @@ export default function StaffManagementTab({
         footer={
           <View style={styles.modalFooter}>
             <Button title="Cancel" variant="ghost" onPress={() => setShowAddModal(false)} disabled={addingStaff} />
-            <Button title="Create & Provision" onPress={handleCreateStaff} loading={addingStaff} />
+            <Button
+              title={
+                inviteDeliveryMode === 'email'
+                  ? 'Send Invitation Email'
+                  : inviteDeliveryMode === 'link'
+                  ? 'Generate Invite Link'
+                  : inviteDeliveryMode === 'password'
+                  ? 'Create & Provision'
+                  : 'Add Staff Member'
+              }
+              onPress={handleCreateStaff}
+              loading={addingStaff}
+            />
           </View>
         }
       >
@@ -1077,23 +1264,53 @@ export default function StaffManagementTab({
           </FieldGroup>
         ) : null}
 
-        {/* Credentials provisioning section */}
+        {/* Workstation Account & Delivery Mode */}
         <View style={styles.credentialSection}>
           <View style={styles.credentialHeaderRow}>
             <ThemedText variant="smallBold" color={theme.colors.text}>
-              Workstation Login Account
+              Workstation Login & Invitation Mode
             </ThemedText>
-            <Pressable
-              onPress={() => setProvisionLogin((p) => !p)}
-              style={styles.toggleBtn}
-            >
-              <ThemedText variant="captionBold" color={theme.colors.primary}>
-                {provisionLogin ? 'Disable Login' : 'Enable Login'}
-              </ThemedText>
-            </Pressable>
           </View>
 
-          {provisionLogin ? (
+          <View style={{ marginVertical: theme.spacing.xs }}>
+            <SegmentedControl<'email' | 'link' | 'password' | 'none'>
+              value={inviteDeliveryMode}
+              onChange={setInviteDeliveryMode}
+              options={[
+                { value: 'email', label: 'Email Invite' },
+                { value: 'link', label: 'Copy Link' },
+                { value: 'password', label: 'Direct Password' },
+                { value: 'none', label: 'No Login' },
+              ]}
+            />
+          </View>
+
+          {inviteDeliveryMode === 'email' ? (
+            <>
+              <Input
+                label="Sign-in email address"
+                required
+                value={email}
+                onChangeText={setEmail}
+                placeholder="doctor@clinic.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                helperText="An invitation email with a secure setup link will be sent to this address (valid for 7 days)."
+              />
+            </>
+          ) : inviteDeliveryMode === 'link' ? (
+            <>
+              <Input
+                label="Sign-in email address (Optional)"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="doctor@clinic.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                helperText="A shareable invitation link will be created. You can copy and share it via chat or SMS."
+              />
+            </>
+          ) : inviteDeliveryMode === 'password' ? (
             <>
               <Input
                 label="Sign-in email address"
@@ -1643,6 +1860,76 @@ export default function StaffManagementTab({
         </Modal>
       ) : null}
 
+      {/* Staff Invitation Link & Delivery Modal */}
+      {inviteModal?.visible ? (
+        <Modal
+          visible
+          onClose={() => setInviteModal(null)}
+          title="Staff Invitation Ready"
+          subtitle={
+            inviteModal.sentEmail
+              ? 'An invitation email has been sent and the direct link is ready.'
+              : 'Share the invitation link with the staff member to complete account setup.'
+          }
+          maxWidth={480}
+          footer={
+            <View style={styles.modalFooter}>
+              <Button
+                title="Done"
+                variant="primary"
+                onPress={() => setInviteModal(null)}
+              />
+            </View>
+          }
+        >
+          <View style={styles.credSummaryCard}>
+            <View style={styles.credRow}>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>Staff Member</ThemedText>
+              <ThemedText variant="bodyBold">{inviteModal.name}</ThemedText>
+            </View>
+            <View style={styles.credRow}>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>Role</ThemedText>
+              <ThemedText variant="bodyBold">{inviteModal.role}</ThemedText>
+            </View>
+            {inviteModal.email ? (
+              <View style={styles.credRow}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>Email Address</ThemedText>
+                <ThemedText variant="bodyBold">{inviteModal.email}</ThemedText>
+              </View>
+            ) : null}
+            <View style={styles.credRow}>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>Invitation Link (Valid for 7 days)</ThemedText>
+              <ThemedText variant="captionBold" color={theme.colors.primary} numberOfLines={2} selectable>
+                {inviteModal.inviteUrl}
+              </ThemedText>
+            </View>
+          </View>
+
+          {inviteModal.sentEmail ? (
+            <View style={styles.inviteNoticeBox}>
+              <Icon name="mail" size={theme.sizes.iconSm} color={theme.colors.primary} />
+              <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.flex1}>
+                An invitation email was sent to {inviteModal.email || 'the provided address'}. They can also use this direct link to set their password.
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.inviteNoticeBox}>
+              <Icon name="copy" size={theme.sizes.iconSm} color={theme.colors.primary} />
+              <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.flex1}>
+                Copy this link and send it directly to the staff member via chat or messaging.
+              </ThemedText>
+            </View>
+          )}
+
+          <Button
+            title="Copy Invitation Link"
+            icon="copy"
+            variant="outline"
+            onPress={() => copyToClipboard(inviteModal.inviteUrl, 'Invitation link copied to clipboard!')}
+          />
+        </Modal>
+      ) : null}
+
       {/* Newly Provisioned Credentials Modal */}
       {credentialsModal?.visible ? (
         <Modal
@@ -1880,6 +2167,11 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
+  revokedText: {
+    fontStyle: 'italic',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
   modalFooter: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -2017,6 +2309,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceSubtle,
     borderRadius: theme.radii.md,
     gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  inviteNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.sm,
     marginBottom: theme.spacing.md,
   },
   credRow: {

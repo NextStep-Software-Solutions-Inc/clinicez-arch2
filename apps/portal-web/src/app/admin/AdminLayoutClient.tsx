@@ -88,6 +88,7 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
 
   // Auth and Admin profile resolution
   useEffect(() => {
+    if (pathname?.startsWith("/admin/invitations")) return;
     if (!isLoaded) return;
 
     if (!userId) {
@@ -96,12 +97,16 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
     }
 
     fetchAdminProfile();
-  }, [isLoaded, userId, router, fetchAdminProfile]);
+  }, [isLoaded, userId, router, fetchAdminProfile, pathname]);
 
   const hasPermission = (permission: string) => {
     if (!admin) return false;
     return admin.permissions?.includes(permission) ?? false;
   };
+
+  if (pathname?.startsWith("/admin/invitations")) {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (

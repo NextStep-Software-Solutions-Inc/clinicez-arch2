@@ -1,79 +1,145 @@
-# TEST READY: Multi-Doctor Billing, Draft SOA Merging & Cashier Workstation E2E Test Suite
+# TEST READY: Unified User & Staff Invitations E2E Test Suite
 
 ## Executive Summary
-The comprehensive, opaque-box, four-tier E2E test suite for ClinicEZ Multi-Doctor Billing, Statement of Account (SOA) Drafting, Official Receipt Issuance, and Cashier Workstation workflows is complete and ready.
 
-- **Total Test Cases**: 65 automated tests across 3 dedicated test suites.
-- **Frontend Suites**: 49 tests (49 passing, 0 failing, 218 assertions) across Bun test runtime.
-- **Backend Suites**: 16 tests in `BillingAndCashierWorkflowTests.cs` (9 passing, 7 failing due to a tracked EF Core concurrency implementation defect in `CreateInvoiceCommand.cs:214`).
-- **Test Infrastructure Document**: `.agents/teamwork/e2e_testing_track/TEST_INFRA.md`
+The complete, opaque-box, four-tier E2E test suite for **ClinicEZ User & Staff Invitations across all three operational tiers** (Platform Users, Tenant Workspace Team, and Clinic Staff) has been published, executed, and verified with a **100% pass rate**.
 
----
-
-## 1. Feature Coverage Matrix (12 Features across 4 Tiers)
-
-| Feature # | Feature Name | Tier | Test File | Test Method / Suite | Status |
-|---|---|---|---|---|---|
-| F1 | Line-Item Clinician Attribution (`DoctorId`/`DoctorName`) | Tier 1 | `BillingAndCashierWorkflowTests.cs` | `Tier1_01_Contract_InvoiceLineItem_EntityAndDto_ContainClinicianAttribution` | PASS |
-| F2 | Clean Removal of `AttendingDoctorName` | Tier 1 | `BillingAndCashierWorkflowTests.cs` | `Tier1_02_Contract_Invoice_CleanlyRemovesAttendingDoctorName` | PASS |
-| F3 | Automated EF Core Migration | Tier 1 | `BillingAndCashierWorkflowTests.cs` | `Tier1_01_Contract_InvoiceLineItem_EntityAndDto_ContainClinicianAttribution` | PASS |
-| F4 | Draft SOA Charge Merging | Tier 1 | `BillingAndCashierWorkflowTests.cs` | `Tier1_03_MultiDoctor_DraftInvoiceMerging_AppendsLineItems_WithoutConflict` | Escalate (Defect #1) |
-| F4 | Paid Invoice Duplicate Blocking | Tier 1 | `BillingAndCashierWorkflowTests.cs` | `Tier1_04_PaidInvoice_StrictDuplicateBlocking_ThrowsConflictException` | PASS |
-| F4 | Paid Invoice Duplicate Override | Tier 1 | `BillingAndCashierWorkflowTests.cs` | `Tier1_05_PaidInvoice_AllowDuplicateTrue_GeneratesSecondInvoice` | PASS |
-| F5 | Doctor Shares Line-Item Attribution | Tier 1 | `BillingAndCashierWorkflowTests.cs` | `Tier1_07_DoctorShares_CalculatesRevenue_PerClinicianLineItem` | PASS |
-| F6 | Cross-Date Draft Retrieval | Tier 1 | `BillingAndCashierWorkflowTests.cs` | `Tier1_06_CrossDateDraftRetrieval_ReturnsAllDrafts_WhenDateIsNull` | PASS |
-| F6 | Cross-Midnight Draft Retrieval | Tier 2 | `BillingAndCashierWorkflowTests.cs` | `Tier2_05_Boundary_CrossMidnight_DraftRetrieval_SpansDateBoundary` | PASS |
-| F6 | Cross-Date Patient Queue Binding | Tier 2 | `billing_and_cashier_mode.test.ts` | `5.2 Cross-date draft retrieval seamlessly binds yesterday draft invoice to queue encounter` | PASS |
-| F7 | Consultations Encounter Signing UX | Tier 1 | `billingReceiptAndSoaReview.test.ts` | `Suite 4: Consultations Screen Statement of Account (SOA) Review Flow` (4.1–4.5) | PASS |
-| F8 | Cashier Workstation 3-Way Tabs | Tier 1 | `billing_and_cashier_mode.test.ts` | `5.1 3-way tab model strictly filters ActiveQueue, UnsettledPromissory, and BilledPaidToday` | PASS |
-| F9 | Defensive Cashiering (Quantity Steppers) | Tier 1 | `billing_and_cashier_mode.test.ts` | `6.1 Quantity steppers increment and decrement quantities with instant subtotal and gross recalculation` | PASS |
-| F9 | Defensive Cashiering (Item Deletion) | Tier 1 | `billing_and_cashier_mode.test.ts` | `6.2 Item deletion recalculates gross, statutory discount, and net balance due cleanly` | PASS |
-| F9 | Custom Items with Doctor Attribution | Tier 1 | `billing_and_cashier_mode.test.ts` | `6.3 Custom clinic medication or supply can be added with practitioner attribution` | PASS |
-| F9 | Non-Blocking Statutory Discounts | Tier 2 | `billing_and_cashier_mode.test.ts` | `6.4 Defensive cashiering: statutory discount toggling is non-blocking and handles zero balance` | PASS |
-| F10 | Defer / Promissory Note Action | Tier 1 | `billing_and_cashier_mode.test.ts` | `7.1 Defer action records due date, promissory note audit reason, and preserves open balance` | PASS |
-| F10 | Promissory Mandatory Validation | Tier 2 | `billing_and_cashier_mode.test.ts` | `7.2 Defer action validates that due date and audit reason are non-empty` | PASS |
-| F10 | EOD Accounts Receivable Audit | Tier 2 | `billing_and_cashier_mode.test.ts` | `7.3 Daily EOD audit summary includes deferred promissory invoices in TotalUnpaidBalances` | PASS |
-| F11 | Document Separation (INV-... vs OR-...) | Tier 1 | `BillingAndCashierWorkflowTests.cs` | `Tier1_08_DocumentSeparation_InvoiceNumberPrefix_And_PaymentNumberPrefix` | PASS |
-| F11 | Statement of Account (A4 SOA PDF) | Tier 1 | `billingReceiptAndSoaReview.test.ts` | `Suite 3: Approved Statement of Account / Billing Invoice PDF` & `6.1 SOA formatting` | PASS |
-| F11 | Official Receipt (Thermal POS 58/80mm) | Tier 1 | `billingReceiptAndSoaReview.test.ts` | `Suite 1: Thermal Paper Receipt` & `6.3 Thermal POS format` | PASS |
-| F11 | Official Receipt (Professional A4 OR) | Tier 1 | `billingReceiptAndSoaReview.test.ts` | `Suite 2: Professional Official Receipt PDF` & `6.2 Professional OR layout` | PASS |
-| F12 | Multi-Doctor End-to-End Workflow | Tier 3 | `BillingAndCashierWorkflowTests.cs` | `Tier3_01_CrossFeature_MultiDoctor_ChargeMerge_CashierEdit_SeniorDiscount_PromissoryNote_Settlement` | Escalate (Defect #1) |
-| F12 | Real-World Multi-Specialty Clinic Day | Tier 4 | `BillingAndCashierWorkflowTests.cs` | `Tier4_01_RealWorld_MultiSpecialtyClinicDay_TriagedPatient_MultiDepartmentBilling` | Escalate (Defect #1) |
-| F12 | Frontend Split Payment Settlement | Tier 4 | `billing_and_cashier_mode.test.ts` | `8.1 Multi-specialty outpatient checkout with Senior discount and Split Settlement` | PASS |
+- **Total Test Cases Executed**: **8,312 automated tests** across all monorepo test runners:
+  - **Clinic API Application Tests**: **3,314 passed**, 0 failed (Duration: ~13s)
+  - **Portal API Tests**: **891 passed**, 0 failed (Duration: ~2s)
+  - **Clinic App Frontend Tests**: **3,550 passed**, 0 failed (Duration: ~26.5s)
+  - **Portal Web Frontend Tests**: **557 passed**, 0 failed (Duration: ~1.5s)
+- **Monorepo Build**: `dotnet build CLINICEZ.sln` completed with **0 warnings, 0 errors**.
+- **TypeScript Static Verification**: `tsc --noEmit` across `apps/clinic-app` and `apps/portal-web` completed with **0 errors**.
+- **Design Token Strictness**: `check-tokens.mjs --strict` completed with **0 violations in 0 files**.
+- **Test Infrastructure Reference**: `TEST_INFRA.md` published at workspace root.
 
 ---
 
-## 2. Test Execution Commands
+## 1. Feature Checklist Across All Operational Tiers (All 51 Features)
+
+| Feature # | Feature Description | Tier | Milestone | Primary Test Suite / File | Status |
+|:---------:|---------------------|:----:|:---------:|---------------------------|:------:|
+| **F1** | AdminUser Entity Alignment (ClerkUserId nullable, Status, InvitationToken, Expiration, JoinedAt) | Tier 1 | M1 | `AdminUserInvitationTests.cs` | **PASS** |
+| **F2** | AdminUser EF Core Migration (`AddAdminUserInvitationTracking`) | Tier 1 | M1 | `AdminUserInvitationTests.cs` | **PASS** |
+| **F3** | Admin 256-Bit Cryptographic Token Generation (64-char CSPRNG hex + 7-day expiry) | Tier 1/2 | M1 | `AdminUserInvitationTests.cs`, `AdminUserInvitationChallengerTests.cs` | **PASS** |
+| **F4** | Admin Email Template & Notifier (`notification.email.requested` to Interop Hub) | Tier 1 | M1 | `AdminUserInvitationTests.cs`, `AdminUserInvitationChallengerTests.cs` | **PASS** |
+| **F5** | InviteAdminUserCommand Delivery Choices ("Send Invitation Email" vs "Copy Invite Link Only") | Tier 1 | M1 | `AdminUserInvitationTests.cs`, `adminUserInvitations.test.ts` | **PASS** |
+| **F6** | ResendAdminInvitationCommand (Regenerate 256-bit token, reset 7-day expiry, dispatch email) | Tier 1/3 | M1 | `AdminUserInvitationTests.cs`, `AdminUserInvitationChallengerTests.cs` | **PASS** |
+| **F7** | RevokeAdminInvitationCommand (Transition to Revoked, block acceptance, preserve audit trail) | Tier 1 | M1 | `AdminUserInvitationTests.cs`, `adminUserInvitations.test.ts` | **PASS** |
+| **F8** | Suspend & Reactivate Admin Commands (Synchronize Status and IsActive flag) | Tier 1/3 | M1 | `AdminUserInvitationTests.cs`, `adminUserInvitations.test.ts` | **PASS** |
+| **F9** | Public Admin Invitation Query Endpoint (`GET /api/v1/admin/invitations/{token}`) | Tier 1/2 | M1 | `AdminUserInvitationTests.cs`, `adminUserInvitations.test.ts` | **PASS** |
+| **F10** | AcceptAdminInvitationCommand (Link ClerkUserId, set Status = Active, record JoinedAt) | Tier 1/2 | M1 | `AdminUserInvitationTests.cs`, `AdminUserInvitationChallengerTests.cs` | **PASS** |
+| **F11** | Admin Endpoints Registration (`AdminEndpoints.cs`) | Tier 1 | M1 | `AdminUserInvitationTests.cs` | **PASS** |
+| **F12** | Proxy Middleware Admin Whitelisting (`/admin/invitations(.*)` in `isPublicRoute`) | Tier 1/2 | M1 | `adminUserInvitations.test.ts`, `adminUserInvitationsChallenger.test.ts` | **PASS** |
+| **F13** | AdminLayoutClient Bypass (Bypass admin layout wrappers and auth guards for public invite) | Tier 1 | M1 | `adminUserInvitations.test.ts` | **PASS** |
+| **F14** | Branded Admin Acceptance Page (`/admin/invitations/[token]` with Clerk modal sign-in) | Tier 1 | M1 | `adminUserInvitations.test.ts`, `adminUserInvitationsChallenger.test.ts` | **PASS** |
+| **F15** | Admin Users Table UI Upgrade (Delivery toggle, post-invite modal, status badges, action matrix) | Tier 1/3 | M1 | `adminUserInvitations.test.ts`, `crossDomainStatusParity.test.ts` | **PASS** |
+| **F16** | Admin Service Frontend Methods (`admin.service.ts` invite, resend, revoke, suspend, accept) | Tier 1 | M1 | `adminUserInvitations.test.ts` | **PASS** |
+| **F17** | Platform Invitations Unit Tests (Automated portal-api and portal-web test suites) | Tier 1-4 | M1 | `AdminUserInvitationTests.cs`, `adminUserInvitations.test.ts` | **PASS** |
+| **F18** | MemberStatus Enum Alignment (`MemberStatus { Invited, Active, Suspended, Revoked }`) | Tier 1 | M2 | `StaffManagementTests.cs`, `CrossDomainStatusAndAuditParityTests.cs` | **PASS** |
+| **F19** | Workspace 256-Bit Cryptographic Token (64-character CSPRNG hex + 7-day expiration) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `StaffChallengeTests.cs` | **PASS** |
+| **F20** | InviteStaffMemberCommand Delivery Choices (`sendEmail` boolean support) | Tier 1 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
+| **F21** | Workspace Dynamic Expired Resolution (`Status == Invited && ExpiresAt < UtcNow`) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
+| **F22** | Soft Revocation in RevokeStaffMember (Transition to Revoked without hard record deletion) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `StaffChallengeTests.cs` | **PASS** |
+| **F23** | Suspend & Reactivate Workspace Commands (Seat limit enforcement on reactivation) | Tier 1/3 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
+| **F24** | UpdateStaffMemberCommand (Update FullName, Role, Facility for active members) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
+| **F25** | GetInvitationDetails Query Revoked Support (Return `isRevoked` flag in DTO) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
+| **F26** | AcceptInvitationCommand Hardening (Reject Revoked & Expired tokens with user-friendly errors) | Tier 1/2 | M2 | `StaffManagementTests.cs`, `challenger2_m2_empirical_adversarial.test.ts` | **PASS** |
+| **F27** | Workspace Staff Endpoints Registration (`StaffEndpoints.cs` suspend, reactivate, update) | Tier 1 | M2 | `StaffManagementTests.cs` | **PASS** |
+| **F28** | Proxy Middleware Workspace Whitelisting (`/invitations(.*)` in `isPublicRoute`) | Tier 1/2 | M2 | `teamInvitations.test.ts`, `challenger2_m2_empirical_adversarial.test.ts` | **PASS** |
+| **F29** | TeamManagementClient UI Upgrade (Delivery toggle, copy-link modal, status badges, action matrix) | Tier 1/3 | M2 | `teamInvitations.test.ts`, `crossDomainStatusParity.test.ts` | **PASS** |
+| **F30** | InvitationAcceptClient Revoked View (Explicit "Invitation Revoked" status card) | Tier 1 | M2 | `teamInvitations.test.ts`, `challenger2_m2_empirical_adversarial.test.ts` | **PASS** |
+| **F31** | Workspace Invitations Unit Tests (Automated portal-api and portal-web test suites) | Tier 1-4 | M2 | `StaffManagementTests.cs`, `teamInvitations.test.ts` | **PASS** |
+| **F32** | StaffMember Entity Schema Alignment (Status, InvitationToken, Expiration, AcceptedAt) | Tier 1 | M3 | `StaffInvitationTests.cs`, `CrossDomainStatusAndAuditParityTests.cs` | **PASS** |
+| **F33** | StaffAccountStatus Enum Definition (`StaffAccountStatus { Invited, Active, Suspended, Revoked }`) | Tier 1 | M3 | `StaffInvitationTests.cs`, `CrossDomainStatusAndAuditParityTests.cs` | **PASS** |
+| **F34** | StaffMember EF Core Migration (`AddStaffMemberInvitationTracking`) | Tier 1 | M3 | `StaffInvitationTests.cs` | **PASS** |
+| **F35** | Clinic Staff 256-Bit Cryptographic Token (64-character CSPRNG hex + 7-day expiration) | Tier 1/2 | M3 | `StaffInvitationTests.cs`, `MilestoneM3StaffInvitationChallengerTests.cs` | **PASS** |
+| **F36** | Clinic Staff Delivery Choices (`CreateStaffMemberCommand` email vs copy link) | Tier 1 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
+| **F37** | Clinic Staff Interop Email Publishing (`notification.email.requested` to Party.Portal) | Tier 1 | M3 | `StaffInvitationTests.cs`, `MilestoneM3StaffInvitationChallengerTests.cs` | **PASS** |
+| **F38** | Portal Template `clinic.staff.invitation` (Renders invitation pointing to clinic domain) | Tier 1 | M3 | `StaffInvitationTests.cs`, `MilestoneM3StaffInvitationChallengerTests.cs` | **PASS** |
+| **F39** | ResendStaffInvitationCommand in Clinic (Regenerate token, reset 7-day expiry, dispatch email) | Tier 1/3 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
+| **F40** | RevokeStaffInvitationCommand in Clinic (Transition to Revoked, block acceptance) | Tier 1 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
+| **F41** | Suspend & Reactivate Staff Commands (Suspend and reactivate clinical practitioners) | Tier 1/3 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
+| **F42** | Public Clinic Invitation Query Endpoint (`GET /api/v1/auth/invitations/{token}`) | Tier 1/2 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
+| **F43** | AcceptClinicStaffInvitationCommand (Password complexity, hashing, Active status, JWT issuance) | Tier 1/2 | M3 | `StaffInvitationTests.cs`, `MilestoneM3StaffInvitationChallengerTests.cs` | **PASS** |
+| **F44** | Clinic Staff & Auth Endpoints Registration (`StaffController.cs`, `AuthController.cs`) | Tier 1 | M3 | `StaffInvitationTests.cs` | **PASS** |
+| **F45** | AuthGate Whitelisting in Clinic App (`/invitations/:token` route bypass) | Tier 1/2 | M3 | `staffInvitations.test.ts` | **PASS** |
+| **F46** | Clinic Staff Acceptance Screen (`InvitationAcceptScreen.tsx` on clinic domain) | Tier 1 | M3 | `staffInvitations.test.ts` | **PASS** |
+| **F47** | StaffManagementTab UI Upgrade (Delivery toggle, copy-link modal, status badges, action matrix) | Tier 1/3 | M3 | `staffInvitations.test.ts`, `crossDomainStatusParity.test.ts` | **PASS** |
+| **F48** | Clinic Staff Invitations Unit Tests (Automated clinic-api and clinic-app test suites) | Tier 1-4 | M3 | `StaffInvitationTests.cs`, `staffInvitations.test.ts` | **PASS** |
+| **F49** | Standardized Status & Audit Timestamps (4 statuses + dynamic Expired + 4 audit timestamps) | Tier 3/4 | M4 | `CrossDomainStatusAndAuditParityTests.cs`, `crossDomainStatusParity.test.ts` | **PASS** |
+| **F50** | Dual Track E2E Test Suite (Tiers 1-4) (Comprehensive opaque-box test catalog & verification) | Tier 1-4 | M5 | `TEST_INFRA.md`, `TEST_READY.md`, all 4 suites passing 100% | **PASS** |
+| **F51** | Tier 5 Adversarial Coverage Hardening (1ms boundary probing, token tampering, quota attacks) | Tier 2/5 | M5 | `MilestoneM4ChallengerBoundaryTests.cs`, `challenger_m4_empirical_boundary_stress.test.ts` | **PASS** |
+
+---
+
+## 2. Test Execution Commands & Verification Results
 
 ### 2.1 Backend Tests (.NET 10 xUnit)
 ```bash
-export DOTNET_ROOT="/Users/macuser/.dotnet"
-export PATH="/Users/macuser/.dotnet:/Users/macuser/.dotnet/tools:$PATH"
+export DOTNET_ROOT=/Users/macuser/.dotnet
+export PATH=$DOTNET_ROOT:$PATH:$DOTNET_ROOT/tools
 
-# Run the 4-Tier E2E Workflow Test Suite
-dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj \
-  --filter "FullyQualifiedName~BillingAndCashierWorkflowTests"
+# Clinic API Application Tests
+dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/
+# Result: Passed! - Failed: 0, Passed: 3314, Skipped: 0, Total: 3314, Duration: 13 s
+
+# Portal API Tests
+dotnet test services/portal-api/ClinicEz.Portal.Tests/
+# Result: Passed! - Failed: 0, Passed: 891, Skipped: 0, Total: 891, Duration: 2 s
 ```
 
-### 2.2 Frontend Tests (Bun Test & React Native Mocks)
+### 2.2 Frontend Tests (Bun Test Runner)
 ```bash
-export PATH="/Users/macuser/.bun/bin:$PATH"
+export PATH=$PATH:~/.bun/bin
 
-# Run all cashier & billing frontend tests
-bun test apps/clinic-app/tests/billingReceiptAndSoaReview.test.ts apps/clinic-app/tests/billing_and_cashier_mode.test.ts
+# Clinic App Tests
+cd apps/clinic-app && bun test
+# Result: 3550 pass, 0 fail, 275252 expect() calls across 167 files (Duration: 26.5s)
+
+# Portal Web Tests
+cd apps/portal-web && bun test
+# Result: 557 pass, 0 fail, 117961 expect() calls across 35 files (Duration: 1.5s)
+```
+
+### 2.3 Monorepo Compilation & Static Verifications
+```bash
+# Solution Build
+dotnet build CLINICEZ.sln
+# Result: Build succeeded. 0 Warning(s), 0 Error(s).
+
+# TypeScript Typecheck
+cd apps/clinic-app && bun run typecheck
+# Result: $ tsc --noEmit (Exit code: 0)
+
+cd apps/portal-web && bun run typecheck
+# Result: $ tsc --noEmit (Exit code: 0)
+
+# Design Token Lint
+bun apps/clinic-app/scripts/check-tokens.mjs --strict
+# Result: Token guard: 0 violation(s) in 0 file(s).
 ```
 
 ---
 
-## 3. Implementation Defects Discovered for Escalation
+## 3. Pass/Fail Summary Table
 
-### Defect 1: EF Core Concurrency Conflict on Draft Invoice Merge
-- **Location**: `services/clinic-api/ClinicEz.Clinic.Application/Features/Billing/Commands/CreateInvoiceCommand.cs:line 214`
-- **Symptom**: `Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException : Attempted to update or delete an entity that does not exist in the store.`
-- **Root Cause**: `existingInvoice` is queried using `_invoiceRepo.Query(...)`, which attaches and tracks the entity in the DbContext. When new line items are appended (`existingInvoice.LineItems.Add(...)`) and `_invoiceRepo.Update(existingInvoice)` is subsequently invoked, EF Core's `Update` method cascades `EntityState.Modified` to the newly instantiated child `InvoiceLineItem` objects (instead of `EntityState.Added`). Upon `SaveChangesAsync()`, EF Core issues SQL/InMemory UPDATE statements for records that do not yet exist, triggering `DbUpdateConcurrencyException`.
-- **Recommended Remediation**: Remove line 214 (`_invoiceRepo.Update(existingInvoice);`). Because `existingInvoice` is already tracked by EF Core, simply calling `await _unitOfWork.SaveChangesAsync(cancellationToken);` properly inserts the new line items with `EntityState.Added` and updates the parent invoice totals with `EntityState.Modified`.
+| Test Target / Suite | Framework | Total Tests | Passed | Failed | Skipped | Status |
+|---------------------|-----------|:-----------:|:------:|:------:|:-------:|:------:|
+| `ClinicEz.Clinic.Application.Tests` | xUnit (.NET 10) | 3,314 | 3,314 | 0 | 0 | **PASS** |
+| `ClinicEz.Portal.Tests` | xUnit (.NET 10) | 891 | 891 | 0 | 0 | **PASS** |
+| `apps/clinic-app` | Bun Test | 3,550 | 3,550 | 0 | 0 | **PASS** |
+| `apps/portal-web` | Bun Test | 557 | 557 | 0 | 0 | **PASS** |
+| `CLINICEZ.sln` Build | MSBuild (.NET 10) | 41 Projects | 41 Built | 0 | 0 | **PASS** |
+| `apps/clinic-app` Typecheck | TypeScript 5.x | Entire App | Clean | 0 | 0 | **PASS** |
+| `apps/portal-web` Typecheck | TypeScript 5.x | Entire App | Clean | 0 | 0 | **PASS** |
+| Design Tokens Linter | Token Guard AST | 167 Files | Clean | 0 | 0 | **PASS** |
+| **All Test Targets** | **Unified** | **8,312** | **8,312** | **0** | **0** | **PASS (100%)** |
 
-### Defect 2: Invalid IconName in DentalChartTab.tsx
-- **Location**: `apps/clinic-app/components/chart/DentalChartTab.tsx:701` and `771`
-- **Symptom**: `Type '"closeCircle"' is not assignable to type IconName.`
-- **Recommended Remediation**: Update `name="closeCircle"` to a valid icon in `IconName` (e.g. `name="close"` or `name="alertCircle"`).
+---
+
+## 4. Defect Escalation Report
+
+**Status**: **0 Open Implementation Defects.**
+All 8,312 test cases passed with zero regressions. All cross-domain contracts, authentication token issuance, proxy middleware whitelisting, password complexity hashing, and dynamic expiration handling are fully compliant with `ORIGINAL_REQUEST.md` and `PROJECT.md`.

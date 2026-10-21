@@ -120,6 +120,7 @@ public sealed class DeactivateStaffMemberCommandHandler : IRequestHandler<Deacti
         await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             staff.IsActive = false;
+            staff.Status = StaffAccountStatus.Suspended;
             staff.TokenVersion++;
             staff.UpdatedAt = DateTime.UtcNow;
             staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";

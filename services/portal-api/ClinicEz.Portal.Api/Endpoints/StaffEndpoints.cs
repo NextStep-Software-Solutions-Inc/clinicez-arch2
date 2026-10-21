@@ -289,5 +289,223 @@ public class StaffEndpoints : IEndpoint
         .WithName("ResendStaffInvitation")
         .WithDescription("Refreshes the cryptographic invitation token and resets expiration for a pending staff invite.")
         .WithTags("Staff");
+
+        // 6b. Resend alias: POST /staff/{id:guid}/resend
+        app.MapPost("/staff/{id:guid}/resend", async (
+            Guid id,
+            string tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower());
+
+            if (tenant == null)
+            {
+                return Results.NotFound(new { Message = "Workspace not found." });
+            }
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+
+            if (!isOwner && !isAdmin)
+            {
+                return Results.Forbid();
+            }
+
+            try
+            {
+                var result = await sender.Send(new ResendStaffInvitationCommand(tenantSlug, id));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex) when (ex is not EntitlementException)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .RequireAuthorization()
+        .WithName("ResendStaffInvitationAlias")
+        .WithTags("Staff");
+
+        // 7. Suspend a staff member
+        app.MapPost("/staff/{id:guid}/suspend", async (
+            Guid id,
+            string tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower());
+
+            if (tenant == null)
+            {
+                return Results.NotFound(new { Message = "Workspace not found." });
+            }
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+
+            if (!isOwner && !isAdmin)
+            {
+                return Results.Forbid();
+            }
+
+            try
+            {
+                var result = await sender.Send(new SuspendStaffMemberCommand(tenantSlug, id));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .RequireAuthorization()
+        .WithName("SuspendStaffMember")
+        .WithDescription("Suspends a staff member account in the workspace.")
+        .WithTags("Staff");
+
+        // 8. Reactivate a suspended staff member
+        app.MapPost("/staff/{id:guid}/reactivate", async (
+            Guid id,
+            string tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower());
+
+            if (tenant == null)
+            {
+                return Results.NotFound(new { Message = "Workspace not found." });
+            }
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+
+            if (!isOwner && !isAdmin)
+            {
+                return Results.Forbid();
+            }
+
+            try
+            {
+                var result = await sender.Send(new ReactivateStaffMemberCommand(tenantSlug, id));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .RequireAuthorization()
+        .WithName("ReactivateStaffMember")
+        .WithDescription("Reactivates a suspended staff member account subject to subscription quotas.")
+        .WithTags("Staff");
+
+        // 9. Update staff member details
+        app.MapPut("/staff/{id:guid}", async (
+            Guid id,
+            string tenantSlug,
+            UpdateStaffMemberRequest request,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower());
+
+            if (tenant == null)
+            {
+                return Results.NotFound(new { Message = "Workspace not found." });
+            }
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+
+            if (!isOwner && !isAdmin)
+            {
+                return Results.Forbid();
+            }
+
+            try
+            {
+                var result = await sender.Send(new UpdateStaffMemberCommand(tenantSlug, id, request.FullName, request.Role, request.FacilityId));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .RequireAuthorization()
+        .WithName("UpdateStaffMember")
+        .WithDescription("Updates staff member details including full name, role, and facility assignment.")
+        .WithTags("Staff");
     }
 }
+
+public record UpdateStaffMemberRequest(string FullName, string Role, Guid? FacilityId = null);

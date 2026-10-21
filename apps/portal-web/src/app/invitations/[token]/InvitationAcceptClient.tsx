@@ -41,6 +41,12 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
     const [accepting, setAccepting] = useState(false);
 
     useEffect(() => {
+        if (!token || !token.trim()) {
+            setError("Invitation token is missing or invalid.");
+            setLoading(false);
+            return;
+        }
+
         const fetchDetails = async () => {
             try {
                 const data = await staffService.getInvitationDetails(token);
@@ -52,9 +58,7 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
             }
         };
 
-        if (token) {
-            fetchDetails();
-        }
+        fetchDetails();
     }, [token]);
 
     const handleAccept = async () => {
@@ -119,6 +123,44 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
                 <h2 className="text-lg font-bold text-foreground">Invalid Invitation Link</h2>
                 <p className="text-xs text-muted-foreground mt-1 mb-6 leading-relaxed">
                     {error || "This invitation link is invalid or has expired."}
+                </p>
+                <Link href="/">
+                    <Button variant="outline" className="rounded-xl text-xs font-semibold">
+                        Return to Homepage
+                    </Button>
+                </Link>
+            </Card>
+        );
+    }
+
+    if (invite.isRevoked) {
+        return renderShell(
+            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-rose-200 dark:border-rose-900 shadow-sm bg-rose-50/30 dark:bg-rose-950/20">
+                <div className="size-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-3">
+                    <IconAlertCircle className="h-6 w-6" />
+                </div>
+                <h2 className="text-lg font-bold text-foreground">Invitation Revoked</h2>
+                <p className="text-xs text-muted-foreground mt-2 mb-6 leading-relaxed">
+                    This invitation to join <strong>{invite.tenantName}</strong> has been revoked by a workspace administrator. Please contact your clinic administrator if you believe this was an error.
+                </p>
+                <Link href="/">
+                    <Button variant="outline" className="rounded-xl text-xs font-semibold">
+                        Return to Homepage
+                    </Button>
+                </Link>
+            </Card>
+        );
+    }
+
+    if (invite.isSuspended) {
+        return renderShell(
+            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm bg-slate-50/30 dark:bg-slate-900/20">
+                <div className="size-12 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center mx-auto mb-3">
+                    <IconAlertCircle className="h-6 w-6" />
+                </div>
+                <h2 className="text-lg font-bold text-foreground">Account Suspended</h2>
+                <p className="text-xs text-muted-foreground mt-2 mb-6 leading-relaxed">
+                    This account or membership in <strong>{invite.tenantName}</strong> is currently suspended. Please contact your workspace administrator to reactivate your access.
                 </p>
                 <Link href="/">
                     <Button variant="outline" className="rounded-xl text-xs font-semibold">

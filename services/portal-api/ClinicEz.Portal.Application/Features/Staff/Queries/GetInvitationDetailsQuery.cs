@@ -19,7 +19,9 @@ public record InvitationDetailsDto(
     string? FacilityName,
     bool IsExpired,
     bool IsAlreadyAccepted,
-    DateTime? ExpiresAt
+    DateTime? ExpiresAt,
+    bool IsRevoked = false,
+    bool IsSuspended = false
 );
 
 public record GetInvitationDetailsQuery(string Token) : IRequest<InvitationDetailsDto>;
@@ -44,6 +46,8 @@ public class GetInvitationDetailsQueryHandler(IApplicationDbContext context) : I
 
         var isExpired = member.InvitationExpiresAt.HasValue && member.InvitationExpiresAt.Value < DateTime.UtcNow;
         var isAlreadyAccepted = member.Status == MemberStatus.Active;
+        var isRevoked = member.Status == MemberStatus.Revoked;
+        var isSuspended = member.Status == MemberStatus.Suspended;
 
         return new InvitationDetailsDto(
             member.Id,
@@ -55,7 +59,9 @@ public class GetInvitationDetailsQueryHandler(IApplicationDbContext context) : I
             profile?.Facility?.Name,
             isExpired,
             isAlreadyAccepted,
-            member.InvitationExpiresAt
+            member.InvitationExpiresAt,
+            isRevoked,
+            isSuspended
         );
     }
 }

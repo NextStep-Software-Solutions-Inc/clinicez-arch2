@@ -48,6 +48,31 @@ public sealed class LocalClinicStorageService : IClinicStorageService
         return storageKey;
     }
 
+    public async Task<string> SaveEncryptedStreamAsync(
+        string storageKey,
+        Stream ciphertextStream,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
+        ArgumentNullException.ThrowIfNull(ciphertextStream);
+
+        var safeRelativePath = storageKey.Replace('/', Path.DirectorySeparatorChar)
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .TrimStart(Path.DirectorySeparatorChar);
+
+        var fullPath = Path.Combine(_storageRoot, safeRelativePath);
+        var dir = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        await using var fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+        await ciphertextStream.CopyToAsync(fileStream, cancellationToken);
+        _logger.LogInformation("Saved encrypted record stream to {Key}", storageKey);
+        return storageKey;
+    }
+
     public async Task<byte[]> ReadEncryptedFileAsync(
         string storageKey,
         CancellationToken cancellationToken = default)
@@ -65,6 +90,26 @@ public sealed class LocalClinicStorageService : IClinicStorageService
         }
 
         return await File.ReadAllBytesAsync(fullPath, cancellationToken);
+    }
+
+    public Task<Stream> OpenReadEncryptedStreamAsync(
+        string storageKey,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageKey);
+
+        var safeRelativePath = storageKey.Replace('/', Path.DirectorySeparatorChar)
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .TrimStart(Path.DirectorySeparatorChar);
+
+        var fullPath = Path.Combine(_storageRoot, safeRelativePath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException($"Encrypted record not found at storage key: {storageKey}", fullPath);
+        }
+
+        Stream stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+        return Task.FromResult(stream);
     }
 
     public Task DeleteEncryptedFileAsync(

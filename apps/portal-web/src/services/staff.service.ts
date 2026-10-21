@@ -1,7 +1,6 @@
 import { apiClient } from "@/transport/apiClient";
 
-/** Display labels of `StaffMemberMapping.StatusName`; an invited member is "PendingInvitation", not the enum name. */
-export type StaffMemberStatus = "Active" | "PendingInvitation" | "Suspended";
+export type StaffMemberStatus = "Active" | "Invited" | "Expired" | "Suspended" | "Revoked";
 
 export interface StaffMemberDto {
   id: string;
@@ -37,6 +36,13 @@ export interface InviteStaffRequest {
   fullName: string;
   role: string;
   facilityId?: string;
+  sendEmail?: boolean;
+}
+
+export interface UpdateStaffRequest {
+  fullName: string;
+  role: string;
+  facilityId?: string | null;
 }
 
 export interface InvitationDetailsDto {
@@ -50,6 +56,8 @@ export interface InvitationDetailsDto {
   isExpired: boolean;
   isAlreadyAccepted: boolean;
   expiresAt?: string | null;
+  isRevoked?: boolean;
+  isSuspended?: boolean;
 }
 
 export interface AcceptInvitationResultDto {
@@ -77,6 +85,21 @@ export const staffService = {
 
   resendInvitation: async (id: string, tenantSlug: string): Promise<StaffMemberDto> => {
     const res = await apiClient.post<StaffMemberDto>(`/staff/invitations/${id}/resend?tenantSlug=${tenantSlug}`);
+    return res.data;
+  },
+
+  suspendStaffMember: async (id: string, tenantSlug: string): Promise<StaffMemberDto> => {
+    const res = await apiClient.post<StaffMemberDto>(`/staff/${id}/suspend?tenantSlug=${tenantSlug}`);
+    return res.data;
+  },
+
+  reactivateStaffMember: async (id: string, tenantSlug: string): Promise<StaffMemberDto> => {
+    const res = await apiClient.post<StaffMemberDto>(`/staff/${id}/reactivate?tenantSlug=${tenantSlug}`);
+    return res.data;
+  },
+
+  updateStaffMember: async (id: string, tenantSlug: string, payload: UpdateStaffRequest): Promise<StaffMemberDto> => {
+    const res = await apiClient.put<StaffMemberDto>(`/staff/${id}?tenantSlug=${tenantSlug}`, payload);
     return res.data;
   },
 

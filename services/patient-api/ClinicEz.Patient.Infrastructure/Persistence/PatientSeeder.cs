@@ -26,6 +26,7 @@ public class PatientSeeder : IDataSeeder
                 var patient = new Patient
                 {
                     ClientId = patientId,
+                    ClinicEzId = ClinicEz.Patient.Domain.Common.ClinicEzIdGenerator.Generate(),
                     ClerkUserId = testClerkUserId,
                     FirstName = "Demo",
                     LastName = "Patient",

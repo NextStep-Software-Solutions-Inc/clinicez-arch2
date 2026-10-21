@@ -53,6 +53,10 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
             InputStream = stream,
             ContentType = contentType,
             AutoCloseStream = false,
+            // Cloudflare R2 streaming compatibility: disable chunked trailer payload signing
+            DisablePayloadSigning = true,
+            UseChunkEncoding = false,
+            DisableDefaultChecksumValidation = true,
         };
 
         await S3Client.PutObjectAsync(request, cancellationToken);

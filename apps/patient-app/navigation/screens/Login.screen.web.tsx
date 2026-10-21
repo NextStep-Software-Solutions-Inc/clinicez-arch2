@@ -1,36 +1,45 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Pressable, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useSignIn } from '@clerk/expo';
+import { useSignIn, useSSO } from '@clerk/expo';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import Card from '@ui/Card';
 import Input from '@ui/Input';
-import ClinicEzMark from '@ui/ClinicEzMark';
+import { AppIcon } from '@ui/Icon';
+import ClinicEzLogo from '@ui/ClinicEzLogo';
+import GoogleSignInButton from '@ui/GoogleSignInButton';
 
 export default function LoginScreenWeb() {
   const navigation = useNavigation<any>();
   const { signIn, errors, fetchStatus } = useSignIn();
+  const { startSSOFlow } = useSSO();
   const { unlock } = useAuth();
   const { colors, spacing, radii, sizes } = useAppTheme();
 
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSocialLoading, setIsSocialLoading] = useState(false);
 
   const isLoading = fetchStatus === 'fetching';
   const hasPasswordError = errors?.fields?.password?.message;
-  const hasEmailError = errors?.fields?.identifier?.message;
+  const hasIdentifierError = errors?.fields?.identifier?.message;
 
   const handleSignIn = async () => {
-    if (!email.trim() || !password || isLoading) return;
+    if (!identifier.trim() || !password || isLoading) return;
     setErrorMessage(null);
 
-    const { error } = await signIn.password({ emailAddress: email.trim(), password });
+    const { error } = await signIn.password({
+      identifier: identifier.trim(),
+      password,
+    });
+
     if (error) {
-      setErrorMessage(error.message || 'Invalid email or password.');
+      setErrorMessage(error.message || 'Invalid email/username or password.');
       return;
     }
 
@@ -52,6 +61,30 @@ export default function LoginScreenWeb() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsSocialLoading(true);
+      setErrorMessage(null);
+
+      const { createdSessionId, setActive, signUp: ssoSignUp } = await startSSOFlow({
+        strategy: 'oauth_google',
+      });
+
+      if (createdSessionId) {
+        await setActive!({ session: createdSessionId });
+        unlock();
+      } else if (ssoSignUp?.status === 'missing_requirements') {
+        navigation.navigate('Auth', { screen: 'Verify' });
+      }
+    } catch (err: any) {
+      if (err?.code !== 'ERR_REQUEST_CANCELED') {
+        setErrorMessage(err?.message || 'Google sign-in was canceled or failed.');
+      }
+    } finally {
+      setIsSocialLoading(false);
+    }
+  };
+
   return (
     <ScrollView
       style={[styles.root, { backgroundColor: colors.background }]}
@@ -65,30 +98,15 @@ export default function LoginScreenWeb() {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <View style={[styles.cardContainer, { maxWidth: sizes.dialogWidth, gap: spacing.xl }]}>
+      <View style={[styles.cardContainer, { maxWidth: sizes.dialogWidth, gap: spacing.lg }]}>
         {/* Brand Header */}
-        <View style={[styles.brandHeader, { gap: spacing.sm }]}>
-          <ClinicEzMark size={52} variant="inverted" />
-          <View
-            style={[
-              styles.logoBadge,
-              {
-                backgroundColor: colors.primary,
-                borderRadius: radii.sm,
-                paddingHorizontal: spacing.md,
-                paddingVertical: spacing.xs,
-              },
-            ]}
-          >
-            <ThemedText variant="smallBold" color="onPrimary" style={styles.logoText}>
-              CLINIC EZ
-            </ThemedText>
-          </View>
-          <ThemedText variant="h1" style={{ textAlign: 'center' }}>
+        <View style={[styles.brandHeader, { gap: spacing.xs }]}>
+          <ClinicEzLogo size={52} subtitle="Patient Portal" />
+          <ThemedText variant="h1" style={{ textAlign: 'center', marginTop: spacing.xs }}>
             Welcome back
           </ThemedText>
           <ThemedText variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
-            Sign in to your patient portal to access records and appointments.
+            Sign in to access your appointments, medical records, and digital care.
           </ThemedText>
         </View>
 
@@ -111,20 +129,41 @@ export default function LoginScreenWeb() {
           </View>
         ) : null}
 
+        {/* Social Sign In (Google) */}
+        <GoogleSignInButton
+          onPress={handleGoogleSignIn}
+          loading={isSocialLoading}
+          disabled={isLoading}
+          label="Continue with Google"
+        />
+
+        {/* Divider */}
+        <View style={styles.dividerRow}>
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+          <ThemedText
+            variant="captionBold"
+            color="textMuted"
+            style={[styles.dividerBadge, { backgroundColor: colors.background, paddingHorizontal: spacing.sm }]}
+          >
+            OR SIGN IN WITH CREDENTIALS
+          </ThemedText>
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+        </View>
+
         {/* Form Card */}
         <Card padding="lg" elevation="sm" style={[styles.card, { gap: spacing.lg }]}>
           <Input
-            label="Email Address"
-            value={email}
+            label="Email or Username"
+            value={identifier}
             onChangeText={(text) => {
-              setEmail(text);
+              setIdentifier(text);
               if (errorMessage) setErrorMessage(null);
             }}
-            keyboardType="email-address"
             autoCapitalize="none"
-            autoComplete="email"
-            placeholder="you@example.com"
-            error={hasEmailError}
+            autoComplete="username"
+            placeholder="you@example.com or username"
+            leftIcon="user"
+            error={hasIdentifierError}
             returnKeyType="next"
             containerStyle={{ marginBottom: 0 }}
           />
@@ -149,10 +188,25 @@ export default function LoginScreenWeb() {
                 setPassword(text);
                 if (errorMessage) setErrorMessage(null);
               }}
-              secureTextEntry
+              secureTextEntry={!showPassword}
               autoComplete="current-password"
               autoCapitalize="none"
               placeholder="••••••••"
+              leftIcon="lock"
+              right={
+                <Pressable
+                  onPress={() => setShowPassword(!showPassword)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <AppIcon
+                    name={showPassword ? 'eyeOff' : 'eye'}
+                    size={sizes.iconMd}
+                    color="textMuted"
+                  />
+                </Pressable>
+              }
               error={hasPasswordError}
               returnKeyType="done"
               onSubmitEditing={handleSignIn}
@@ -166,7 +220,7 @@ export default function LoginScreenWeb() {
             size="lg"
             fullWidth
             loading={isLoading}
-            disabled={!email.trim() || !password || isLoading}
+            disabled={!identifier.trim() || !password || isLoading || isSocialLoading}
             onPress={handleSignIn}
           />
         </Card>
@@ -184,6 +238,14 @@ export default function LoginScreenWeb() {
               Create account
             </ThemedText>
           </Pressable>
+        </View>
+
+        {/* Security Reassurance */}
+        <View style={[styles.trustRow, { gap: spacing.xs }]}>
+          <AppIcon name="shield" size={14} color="textMuted" />
+          <ThemedText variant="caption" color="textMuted">
+            Protected by end-to-end encryption & HIPAA security safeguards
+          </ThemedText>
         </View>
 
         {/* Back to Landing Page */}
@@ -217,9 +279,18 @@ const styles = StyleSheet.create({
   brandHeader: {
     alignItems: 'center',
   },
-  logoBadge: {},
-  logoText: {
-    letterSpacing: 1.5,
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 2,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerBadge: {
+    letterSpacing: 0.8,
   },
   errorBanner: {
     borderWidth: 1,
@@ -233,6 +304,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trustRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',

@@ -31,8 +31,14 @@ public sealed record StaffMemberDto(
     IReadOnlyList<Guid>? AssignedRoomIds = null,
     IReadOnlyList<string>? AssignedRoomNames = null,
     string? SignatureSpecimen = null,
-    SignatureMode DefaultSignatureMode = SignatureMode.ESignatureSpecimen)
+    SignatureMode DefaultSignatureMode = SignatureMode.ESignatureSpecimen,
+    StaffAccountStatus Status = StaffAccountStatus.Active,
+    string? InvitationToken = null,
+    DateTime? InvitationExpiresAt = null,
+    DateTime? InviteAcceptedAt = null,
+    string? InviteUrl = null)
 {
+    public bool IsExpired => Status == StaffAccountStatus.Invited && InvitationExpiresAt.HasValue && InvitationExpiresAt.Value < DateTime.UtcNow;
     public StaffMemberDto(
         Guid Id,
         Guid ClinicId,

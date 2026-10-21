@@ -1788,3 +1788,164 @@ In `Consultations.screen.tsx`, update the signing flow and feedback modals to re
   bun test apps/clinic-app/tests/billingReceiptAndSoaReview.test.ts apps/clinic-app/tests/billing_and_cashier_mode.test.ts
   ```
 - [ ] Type check passes with 0 errors: `cd apps/clinic-app && bun x tsc --noEmit`
+
+
+## 2026-10-21T03:40:35Z
+
+Rework user and staff invitations across all three operational tiers of Clinic EZ (Platform Users, Tenant Workspace Team, and Clinic Staff). Use Clinic EZ's built-in email sender (Interop Hub notification.email.requested -> SMTP/Resend, not Clerk) to send invitations containing secure, unique tokens with 7-day expirations, provide administrators with the choice to Send Email or Copy Link, implement dedicated accept pages on the appropriate domains (Portal domain for Platform & Workspace; Clinic domain with local JWT auth for Clinic Staff), and enforce full invitation and account status tracking (Invited, Expired, Active, Suspended, Revoked).
+
+Working directory: /Users/macuser/projects/github/nextstep/clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Platform User Invites (Portal Domain & Portal Identity)
+- Enable platform administrators in `apps/portal-web` (`/admin/users`) to invite platform administrators, support staff, and content writers.
+- Support invitation options: "Send Invitation Email" (enqueues `notification.email.requested` via `portal-api`) or "Copy Invite Link Only".
+- Generate a cryptographically secure token with a 7-day expiration date, stored on `AdminUser`.
+- Implement a public, branded accept page on the portal domain at `/admin/invitations/[token]`, whitelisted in proxy middleware and bypassing admin dashboard layout wrappers.
+- Support invitees with or without an existing Clinic EZ portal account (provide Sign In and Sign Up actions with redirect back to the invitation page).
+- When accepted with authenticated Bearer credentials, link `ClerkUserId`, mark `Status = Active`, record `JoinedAt = UtcNow`, and redirect the user to `/admin`.
+
+### R2. Tenant Workspace Team Invites (Portal Domain & Portal Identity)
+- Enable tenant owners and workspace administrators in `apps/portal-web` (`/[tenant]/dashboard/team`) to invite workspace governance roles (Workspace Admins, Facility Administrators, Billers/Finance, Viewers/Analysts).
+- Provide invitation delivery choices: "Send Invitation Email" or "Copy Invite Link Only".
+- Dispatch invitation emails strictly through Clinic EZ's platform email sender (not Clerk).
+- Generate a secure token with 7-day expiration, stored on `WorkspaceMember`.
+- Maintain public accept page at `/invitations/[token]` supporting invitees with or without an account.
+- When accepted with authenticated Bearer credentials, activate workspace membership, synchronize Clerk public metadata, and redirect to `/{tenantSlug}/dashboard/overview`.
+
+### R3. Clinic Staff Invites (Clinic Domain & Facility-Local JWT Auth)
+- Enable clinic administrators in `apps/clinic-app` (Settings > Staff Management) to invite clinical practitioners (Doctors, Nurses, Receptionists, Cashiers, Medical Technologists).
+- Provide invitation delivery choices: "Send Invitation Email" or "Copy Invite Link Only".
+- Dispatch emails via `clinic-api` by publishing `notification.email.requested` to Interop Hub (addressed to Portal), which renders the `clinic.staff.invitation` email template pointing to the **clinic domain**: `https://{clinicDomain}/invitations/{token}`.
+- Host the clinic staff accept page exclusively on the **clinic domain** in `apps/clinic-app` (`clinic-web`).
+- Allow the invited practitioner to review their assigned role/clinic details and set their facility workstation password.
+- Upon password submission, `clinic-api` validates password complexity, stores password hash via `IFacilityPasswordHasher`, sets `MustChangePassword = false`, marks `Status = Active`, and returns facility-local JWT access & refresh tokens, logging the practitioner directly into the Clinic Workstation Dashboard.
+
+### R4. Standardized Invitation & Account Status Tracking Across All Domains
+- Implement consistent status tracking across all three domains:
+  - Platform Users: `AdminUserStatus { Invited, Active, Suspended, Revoked }`
+  - Tenant Workspace Members: `MemberStatus { Invited, Active, Suspended, Revoked }`
+  - Clinic Staff: `StaffAccountStatus { Invited, Active, Suspended, Revoked }`
+- Support dynamic resolution of `Expired` state when `Status == Invited` and `ExpirationDate < UtcNow`.
+- Persist lifecycle audit timestamps across all entities: `CreatedAt`, `CreatedBy`, `InvitationExpiresAt`, and `JoinedAt` / `InviteAcceptedAt`.
+- Provide status-aware management actions in all administration tables:
+  - For `Invited`: Copy Link, Resend Email, Revoke.
+  - For `Expired`: Resend Email (generates new token & resets 7-day expiry), Revoke.
+  - For `Active`: Edit Details, Suspend / Deactivate.
+  - For `Suspended`: Reactivate.
+
+## Acceptance Criteria
+
+### Automated Test Verification
+- [ ] .NET test suite for `ClinicEz.Portal.Tests` passes cleanly:
+  `dotnet test services/portal-api/ClinicEz.Portal.Tests/`
+- [ ] .NET test suite for `ClinicEz.Clinic.Application.Tests` passes cleanly:
+  `dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/`
+- [ ] Frontend test suites for `portal-web` and `clinic-app` pass cleanly:
+  `cd apps/portal-web && bun test`
+  `cd apps/clinic-app && bun test`
+- [ ] Unit tests cover all key transitions for Platform, Workspace, and Clinic Staff:
+  - Inviting with email enqueues email and sets `Invited` status.
+  - Inviting without email generates token/expiry without emailing.
+  - Expired tokens cannot be accepted and return validation errors.
+  - Revoked tokens cannot be accepted.
+  - Resending refreshes token, resets expiry to 7 days, and dispatches email.
+  - Accepting platform invite links Clerk user ID and redirects to `/admin`.
+  - Accepting workspace invite activates member and redirects to `/{tenantSlug}/dashboard/overview`.
+  - Accepting clinic staff invite hashes password, sets `MustChangePassword = false`, and issues facility-local JWT.
+
+### Functional & Behavioral Verification
+- [ ] Platform User invite flow works via `/admin/users` with modal copy-link and email dispatch; accept page `/admin/invitations/[token]` is publicly accessible.
+- [ ] Tenant Workspace invite flow works via `/[tenant]/dashboard/team` with modal copy-link and email dispatch; accept page `/invitations/[token]` redirects to workspace overview.
+- [ ] Clinic Staff invite flow works via Clinic App Settings with modal copy-link and email dispatch; accept page is hosted on the clinic domain, sets local password, and enters the clinic workstation dashboard.
+- [ ] Status badges (`Active`, `Invited`, `Expired`, `Suspended`, `Revoked`) render accurately across Platform Users, Tenant Team Members, and Clinic Staff tables.
+
+
+## 2026-10-21T08:13:16Z
+
+Independent architectural review, security validation, and deployment confirmation of the Clinic File Storage migration to S3-compatible object storage (supporting both Cloudflare R2 and private subscriber on-premise servers such as MinIO and Ceph) across clinic-api.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Architecture & Provider Abstraction Review
+Review the storage abstraction and DI wiring in services/clinic-api/ClinicEz.Clinic.Infrastructure:
+- IClinicStorageService contract supporting byte array and stream overloads (SaveEncryptedStreamAsync, OpenReadEncryptedStreamAsync).
+- S3ClinicStorageAdapter: Generalized S3 client supporting custom on-premise endpoints (S3:ServiceUrl), path-style addressing (ForcePathStyle), and Cloudflare R2 fallback resolution.
+- R2ClinicStorageService: Clean specialization for Cloudflare R2.
+- FallbackClinicStorageService: Read fallback bridge ensuring zero downtime during migration.
+- DependencyInjection.cs: Storage provider configuration resolving "S3", "R2", and "Local".
+
+### R2. Cryptographic Security & Multi-Tenancy Boundary Audit
+Audit the encryption pipeline against zero-knowledge Clinic Master Key (CMK) requirements:
+- Ensure files are encrypted with AES-256-GCM via ClinicEncryptionService using per-file DEKs wrapped with HKDF-derived CMK before reaching storage.
+- Confirm that the S3 storage bucket contains solely opaque .cez ciphertexts with zero plaintext patient data or PHI in object keys or metadata.
+- Verify strict folder partitioning per tenant and clinic (tenants/{tenantId}/clinics/{clinicId}/records/{attachmentId}.cez and tenants/{tenantId}/clinics/{clinicId}/lab-results/{resultId}.cez).
+- Confirm that cross-tenant decryption attempts fail authentication tag verification.
+
+### R3. On-Premise Subscriber & Cloud S3 Compatibility
+Verify that on-premise subscribers hosting their own storage servers (e.g., MinIO, Ceph, Wasabi, Dell EMC ECS) can configure S3:ServiceUrl and authentication credentials seamlessly, while cloud instances default to Cloudflare R2.
+
+### R4. Deployment & Migration Runbook Verification
+Audit deployment configs and one-time migration tooling:
+- deploy/clinic-api/docker-compose.yml: Correct environment variable mapping (Storage__*, S3__*, R2__*) and volume retention.
+- .github/workflows/deploy-clinic-api-dev.yml: GitHub secrets mapping and validation logic.
+- scripts/migrate-clinic-storage-to-r2.sh and scripts/migrate-clinic-storage-to-r2.ps1: Idempotent migration script supporting dry-run and custom S3 endpoints.
+- Documentation in docs/architecture/data-ownership.md and docs/deployment-configuration.md.
+
+## Verification Resources
+
+- Test suite: services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj
+- S3 & Fallback Unit Tests: R2ClinicStorageServiceTests.cs, FallbackClinicStorageServiceTests.cs
+- Cryptographic Round-Trip & Boundary Tests: ClinicStorageEncryptionIntegrationTests.cs
+- Architecture Reference: clinic-file-storage-migration-plan.md
+
+## Acceptance Criteria
+
+### Security & Functional Criteria
+- [ ] Zero unencrypted data or PHI is stored in S3 object keys or S3 custom metadata headers.
+- [ ] Storage keys strictly adhere to tenants/{tenantId}/clinics/{clinicId}/records/{id}.cez and tenants/{tenantId}/clinics/{clinicId}/lab-results/{id}.cez.
+- [ ] Attempting to decrypt Tenant A's ciphertext using Tenant B's credentials throws CryptographicException.
+- [ ] All unit and integration tests pass with zero failures: dotnet test services/clinic-api/ClinicEz.Clinic.Application.Tests/ClinicEz.Clinic.Application.Tests.csproj.
+- [ ] Solution compiles cleanly with zero warnings or errors: dotnet build services/clinic-api/ClinicEz.Clinic.Infrastructure/ClinicEz.Clinic.Infrastructure.csproj.
+- [ ] Migration scripts (.sh and .ps1) operate idempotently without modifying source ciphertext or re-uploading identical existing keys.
+
+
+## 2026-10-21T11:26:25Z
+
+Full multi-agent team.
+
+Add Cloudflare Turnstile bot challenge protection across all ClinicEZ public entry point forms (Contact Us, Newsletter subscription, and Patient Self-Intake Join) with defense-in-depth verification enforced across both the Next.js BFF route handlers and ASP.NET Core portal-api endpoints, while relying on Clerk Attack Protection for authentication entry points.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Client-Side Challenge Integration
+Integrate non-intrusive bot challenge execution into public entry point forms in @clinicez/portal-web (Contact Us, Newsletter subscription, and Patient Self-Intake Join), ensuring challenge tokens are automatically acquired on interaction/submission and attached to request payloads.
+
+### R2. BFF Route Handler Verification
+Enforce server-side verification of incoming challenge tokens in Next.js App Router public API routes (/api/v1/public/contact, /api/v1/public/newsletter, /api/v1/public/join) using Cloudflare's siteverify endpoint before proxying requests to upstream microservices. Reject invalid, expired, or missing tokens with 403 Forbidden.
+
+### R3. Backend Core API Defense-in-Depth
+Validate challenge tokens within the ASP.NET Core portal-api endpoints (/contact, /public/newsletter, /public/join) so that direct API invocations cannot bypass client-side verification.
+
+### R4. Development and Testing Compatibility
+Provide automatic fallback to official Cloudflare test keys (1x00000000000000000000AA / 1x0000000000000000000000000000000AA) when environment credentials are not supplied, ensuring local development and CI pipelines run without external friction.
+
+## Acceptance Criteria
+
+### Automated Token Verification
+- [ ] Requests to /api/v1/public/contact, /api/v1/public/newsletter, and /api/v1/public/join without a challenge token or with an invalid token receive a 400 or 403 response.
+- [ ] Requests with a valid challenge token succeed and proceed to normal processing.
+- [ ] services/portal-api rejects direct invalid submissions when bot protection is active.
+
+### Build and Test Integrity
+- [ ] dotnet test services/portal-api/ClinicEz.Portal.Tests passes with new test coverage for token validation.
+- [ ] Next.js unit and integration tests pass for the new verification helper and route handlers.
+- [ ] Full workspace build and typecheck (bun run typecheck, bun run lint) complete without errors.
