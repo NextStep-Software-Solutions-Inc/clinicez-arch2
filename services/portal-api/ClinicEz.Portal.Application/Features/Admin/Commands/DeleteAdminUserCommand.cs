@@ -1,5 +1,6 @@
 using MediatR;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Threading;
@@ -17,9 +18,14 @@ public class DeleteAdminUserCommandHandler(IApplicationDbContext context) : IReq
         if (user == null) return false;
 
         // Block self-deletion
-        if (user.ClerkUserId == request.CurrentClerkUserId)
+        if (!string.IsNullOrEmpty(request.CurrentClerkUserId) && user.ClerkUserId == request.CurrentClerkUserId)
         {
-            throw new Exception("You cannot delete your own admin account.");
+            throw new InvalidOperationException("You cannot delete your own admin account.");
+        }
+
+        if (user.Status != AdminUserStatus.Revoked)
+        {
+            throw new InvalidOperationException("Only revoked admin accounts can be permanently removed. Please revoke their access first.");
         }
 
         context.AdminUsers.Remove(user);

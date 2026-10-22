@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Portal.Application.Features.Admin.Commands;
 
-public record RevokeAdminInvitationCommand(Guid Id, string CurrentUser) : IRequest<AdminUserDto>;
+public record RevokeAdminInvitationCommand(Guid Id, string CurrentUser, string? CurrentClerkUserId = null) : IRequest<AdminUserDto>;
 
 public class RevokeAdminInvitationCommandHandler(
     IApplicationDbContext context,
@@ -26,8 +26,14 @@ public class RevokeAdminInvitationCommandHandler(
             .FirstOrDefaultAsync(u => u.Id == request.Id, cancellationToken)
             ?? throw new KeyNotFoundException($"Admin user with ID '{request.Id}' not found.");
 
+        if (!string.IsNullOrEmpty(request.CurrentClerkUserId) && user.ClerkUserId == request.CurrentClerkUserId)
+        {
+            throw new InvalidOperationException("You cannot revoke your own admin account.");
+        }
+
         var now = timeProvider.GetUtcNow().UtcDateTime;
         user.Status = AdminUserStatus.Revoked;
+        user.IsActive = false;
         user.UpdatedAt = now;
         user.UpdatedBy = request.CurrentUser;
 

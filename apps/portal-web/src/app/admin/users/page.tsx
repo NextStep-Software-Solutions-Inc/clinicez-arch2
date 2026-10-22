@@ -88,6 +88,12 @@ export default function AdminUsersPage() {
     inviteUrl: string;
   } | null>(null);
 
+  // Revoke & Delete confirmation modals
+  const [revokeTarget, setRevokeTarget] = useState<AdminUserDto | null>(null);
+  const [submittingRevoke, setSubmittingRevoke] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserDto | null>(null);
+  const [submittingDelete, setSubmittingDelete] = useState(false);
+
   // Reset Password Modal state
   const [resetTarget, setResetTarget] = useState<AdminUserDto | null>(null);
   const [resetMode, setResetMode] = useState<"email" | "link" | "password">("email");
@@ -241,21 +247,28 @@ export default function AdminUsersPage() {
     }
   };
 
-  const handleRevoke = async (u: AdminUserDto) => {
-    const status = resolveAdminDisplayStatus(u);
-    const msg =
-      status === "Invited" || status === "Expired"
-        ? `Are you sure you want to revoke the pending invitation for ${u.fullName}?`
-        : `Are you sure you want to revoke admin access for ${u.fullName}? Their status will be marked as Revoked.`;
-    if (!confirm(msg)) return;
+  const handleRevoke = (u: AdminUserDto) => {
+    setRevokeTarget(u);
+  };
+
+  const handleRevokeConfirm = async () => {
+    if (!revokeTarget) return;
     try {
-      setActionLoadingId(u.id);
-      await adminService.revokeInvitation(u.id);
-      toast.success("Admin access / invitation revoked.");
+      setSubmittingRevoke(true);
+      setActionLoadingId(revokeTarget.id);
+      await adminService.revokeInvitation(revokeTarget.id);
+      const status = resolveAdminDisplayStatus(revokeTarget);
+      toast.success(
+        status === "Invited" || status === "Expired"
+          ? `Revoked invitation for ${revokeTarget.fullName}`
+          : `Revoked admin access for ${revokeTarget.fullName}`
+      );
+      setRevokeTarget(null);
       loadData();
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || "Failed to revoke invitation");
     } finally {
+      setSubmittingRevoke(false);
       setActionLoadingId(null);
     }
   };
@@ -325,15 +338,24 @@ export default function AdminUsersPage() {
     }
   };
 
-  const handleDelete = async (user: AdminUserDto) => {
-    if (!confirm(`Are you sure you want to permanently delete administrative account for ${user.fullName}?`)) return;
+  const handleDelete = (user: AdminUserDto) => {
+    setDeleteTarget(user);
+  };
 
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
     try {
-      await adminService.deleteUser(user.id);
-      toast.success("Admin user deleted successfully.");
-      setUsers(prev => prev.filter(u => u.id !== user.id));
+      setSubmittingDelete(true);
+      setActionLoadingId(deleteTarget.id);
+      await adminService.deleteUser(deleteTarget.id);
+      toast.success(`Permanently removed ${deleteTarget.fullName} from platform admins.`);
+      setUsers(prev => prev.filter(u => u.id !== deleteTarget.id));
+      setDeleteTarget(null);
     } catch (err: any) {
-      toast.error(err.message || "Failed to delete admin user");
+      toast.error(err.response?.data?.message || err.message || "Failed to delete admin user");
+    } finally {
+      setSubmittingDelete(false);
+      setActionLoadingId(null);
     }
   };
 
@@ -1220,6 +1242,118 @@ export default function AdminUsersPage() {
               className="w-full sm:w-auto rounded-xl text-xs font-semibold"
             >
               Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revoke Admin Invitation / Access Confirmation Dialog */}
+      <Dialog open={!!revokeTarget} onOpenChange={(open) => !open && setRevokeTarget(null)}>
+        <DialogContent className="sm:max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+              <IconBan className="h-5 w-5" />
+              {revokeTarget && (resolveAdminDisplayStatus(revokeTarget) === "Invited" || resolveAdminDisplayStatus(revokeTarget) === "Expired")
+                ? "Revoke Invitation"
+                : "Revoke Admin Access"}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              {revokeTarget && (resolveAdminDisplayStatus(revokeTarget) === "Invited" || resolveAdminDisplayStatus(revokeTarget) === "Expired") ? (
+                <>
+                  Are you sure you want to revoke the pending invitation for <strong>{revokeTarget?.fullName}</strong> ({revokeTarget?.email})?
+                </>
+              ) : (
+                <>
+                  Are you sure you want to revoke platform administrative access for <strong>{revokeTarget?.fullName}</strong> ({revokeTarget?.email})?
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300">
+            {revokeTarget && (resolveAdminDisplayStatus(revokeTarget) === "Invited" || resolveAdminDisplayStatus(revokeTarget) === "Expired")
+              ? "This will invalidate their invitation link and mark the record as Revoked. You can re-invite or permanently remove them afterwards."
+              : "This will immediately terminate their platform administrative access and keep the record in Revoked state for audit history. You can re-invite or permanently remove them afterwards."}
+          </div>
+
+          <DialogFooter className="gap-2 pt-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRevokeTarget(null)}
+              disabled={submittingRevoke}
+              className="rounded-full text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleRevokeConfirm}
+              disabled={submittingRevoke}
+              className="rounded-full text-xs font-semibold gap-1.5"
+            >
+              {submittingRevoke ? (
+                <>
+                  <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                  <span>Revoking...</span>
+                </>
+              ) : (
+                <>
+                  <IconBan className="h-3.5 w-3.5" />
+                  <span>Confirm Revoke</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permanently Remove Admin User Dialog (from Revoked state) */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+              <IconTrash className="h-5 w-5" />
+              Remove from Platform Admins
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Are you sure you want to permanently remove <strong>{deleteTarget?.fullName}</strong> ({deleteTarget?.email}) from the platform administrator directory?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300">
+            This will permanently delete the revoked administrator record from the platform directory.
+          </div>
+
+          <DialogFooter className="gap-2 pt-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={submittingDelete}
+              className="rounded-full text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={submittingDelete}
+              className="rounded-full text-xs font-semibold gap-1.5"
+            >
+              {submittingDelete ? (
+                <>
+                  <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                  <span>Removing...</span>
+                </>
+              ) : (
+                <>
+                  <IconTrash className="h-3.5 w-3.5" />
+                  <span>Permanently Remove</span>
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

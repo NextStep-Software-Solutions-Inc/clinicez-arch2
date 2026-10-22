@@ -795,4 +795,47 @@ public class AdminUserInvitationTests : IDisposable
         Assert.NotEqual("old-revoked-token", result.InvitationToken);
         Assert.True(result.InvitationExpiresAt > DateTime.UtcNow.AddDays(6));
     }
+
+    [Fact]
+    public async Task RevokeAndDeleteAdminUser_Lifecycle_EnforcesRevokedBeforeDelete()
+    {
+        var activeAdmin = new AdminUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "active_to_remove@clinicez.com",
+            FullName = "Active To Remove",
+            RoleId = _roleId,
+            ClerkUserId = "user_clerk_active_remove",
+            Status = AdminUserStatus.Active,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.AdminUsers.Add(activeAdmin);
+        await _context.SaveChangesAsync();
+
+        var deleteHandler = new DeleteAdminUserCommandHandler(_context);
+
+        // 1. Attempting to permanently delete an Active admin must fail until revoked
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            deleteHandler.Handle(new DeleteAdminUserCommand(activeAdmin.Id, "user_clerk_caller"), CancellationToken.None)
+        );
+        Assert.Contains("revoked", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        // 2. Revoking the Active admin sets Status = Revoked and IsActive = false
+        var revokeHandler = new RevokeAdminInvitationCommandHandler(_context, UrlProvider, TimeProvider.System);
+        var revokedDto = await revokeHandler.Handle(
+            new RevokeAdminInvitationCommand(activeAdmin.Id, "Super Admin", "user_clerk_caller"),
+            CancellationToken.None
+        );
+        Assert.Equal(AdminUserStatus.Revoked, revokedDto.Status);
+        Assert.False(revokedDto.IsActive);
+
+        // 3. Once Revoked, permanent deletion succeeds
+        var deleted = await deleteHandler.Handle(
+            new DeleteAdminUserCommand(activeAdmin.Id, "user_clerk_caller"),
+            CancellationToken.None
+        );
+        Assert.True(deleted);
+        Assert.Null(await _context.AdminUsers.FindAsync(activeAdmin.Id));
+    }
 }

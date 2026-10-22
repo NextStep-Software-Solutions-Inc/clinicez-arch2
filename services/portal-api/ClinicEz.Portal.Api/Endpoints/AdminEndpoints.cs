@@ -455,14 +455,20 @@ public class AdminEndpoints : IEndpoint
             var admin = await CheckPermissionAsync(Permissions.ManageAdmins, httpContext, sender);
             if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
 
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
             try
             {
-                var result = await sender.Send(new RevokeAdminInvitationCommand(id, admin.FullName));
+                var result = await sender.Send(new RevokeAdminInvitationCommand(id, admin.FullName, clerkUserId));
                 return Results.Ok(result);
             }
             catch (KeyNotFoundException ex)
             {
                 return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
             }
             catch (Exception ex)
             {
