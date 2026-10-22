@@ -40,15 +40,21 @@ internal static class TestSupport
     public static IFacilityProvisioningPublisher ProvisioningPublisher(ApplicationDbContext context) =>
         new FacilityProvisioningPublisher(context, new InteropPublisher(context));
 
-    public static IStaffInvitationNotifier InvitationNotifier(ApplicationDbContext context, string? frontendUrl = "https://app.clinicez.test") =>
+    public static IStaffInvitationNotifier InvitationNotifier(
+        ApplicationDbContext context,
+        string? frontendUrl = "https://app.clinicez.test",
+        IEmailSender? emailSender = null) =>
         new StaffInvitationNotifier(
-            new NotificationService(new InteropPublisher(context)),
+            new NotificationService(new EmailTemplateRenderer(), emailSender ?? new RecordingEmailSender(), NullLogger<NotificationService>.Instance),
             new FixedFrontendUrl(frontendUrl),
             NullLogger<StaffInvitationNotifier>.Instance);
 
-    public static IAdminInvitationNotifier AdminInvitationNotifier(ApplicationDbContext context, string? frontendUrl = "https://app.clinicez.test") =>
+    public static IAdminInvitationNotifier AdminInvitationNotifier(
+        ApplicationDbContext context,
+        string? frontendUrl = "https://app.clinicez.test",
+        IEmailSender? emailSender = null) =>
         new AdminInvitationNotifier(
-            new NotificationService(new InteropPublisher(context)),
+            new NotificationService(new EmailTemplateRenderer(), emailSender ?? new RecordingEmailSender(), NullLogger<NotificationService>.Instance),
             new FixedFrontendUrl(frontendUrl),
             NullLogger<AdminInvitationNotifier>.Instance);
 
@@ -226,5 +232,18 @@ internal sealed class FakeHubAdminClient : IHubAdminClient
     private void ThrowIfFailing()
     {
         if (FailWith is not null) throw FailWith;
+    }
+}
+
+public sealed class RecordingEmailSender : IEmailSender
+{
+    public List<EmailMessage> Sent { get; } = [];
+    public Exception? FailWith { get; set; }
+
+    public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+    {
+        if (FailWith is not null) throw FailWith;
+        Sent.Add(message);
+        return Task.CompletedTask;
     }
 }

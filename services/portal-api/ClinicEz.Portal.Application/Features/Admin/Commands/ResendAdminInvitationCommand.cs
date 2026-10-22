@@ -55,9 +55,9 @@ public class ResendAdminInvitationCommandHandler(
         user.UpdatedAt = now;
         user.UpdatedBy = request.CurrentUser;
 
-        invitationNotifier.RequestInvitation(user, user.Role?.Name ?? "Admin", request.CurrentUser);
-
         await context.SaveChangesAsync(cancellationToken);
+
+        await invitationNotifier.RequestInvitationAsync(user, user.Role?.Name ?? "Admin", request.CurrentUser, cancellationToken);
 
         var baseUrl = frontendUrlProvider.GetBaseUrl();
         return AdminUserMapping.ToDto(user, timeProvider, baseUrl);
