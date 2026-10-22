@@ -14,7 +14,7 @@ import { billingService, type BillingPlan } from "@/services/billing.service";
 import { branchService } from "@/services/branch.service";
 import { ENTITLEMENT_KEYS, formatLimit, isUnlimited, type WorkspaceEntitlements } from "@/services/entitlement.service";
 import { facilityService } from "@/services/facility.service";
-import { staffService } from "@/services/staff.service";
+import { staffService, type StaffMemberDto } from "@/services/staff.service";
 import { AllocationEditor } from "./AllocationEditor";
 import { UsageBar } from "./UsageBar";
 
@@ -56,13 +56,30 @@ function featureLabel(key: string): string {
   );
 }
 
-interface WorkspaceUsage {
+export interface WorkspaceUsage {
   facilitiesByType: Record<string, number>;
   branches: number | undefined;
   members: number | undefined;
+  activeStaff: number | undefined;
   patients: number | undefined;
   apiRequests: number | undefined;
   plans: BillingPlan[];
+}
+
+/**
+ * Counts active/invited operational staff members who occupy a staff seat across facilities.
+ * Workspace-only administrative accounts (Owner/Admin/Billing without a facility profile)
+ * and suspended/revoked/expired records do not consume a facility staff seat.
+ */
+export function countActiveStaff(members: StaffMemberDto[] | undefined): number | undefined {
+  if (!members) return undefined;
+  return members.filter(
+    (m) =>
+      (Boolean(m.facilityId) || (m.role !== "Owner" && m.role !== "Admin" && m.role !== "Billing")) &&
+      m.status !== "Suspended" &&
+      m.status !== "Revoked" &&
+      m.status !== "Expired",
+  ).length;
 }
 
 /** Optional figures: anything the viewer may not read simply shows without usage. */
@@ -79,14 +96,19 @@ async function loadUsage(tenantSlug: string): Promise<WorkspaceUsage> {
   return {
     facilitiesByType,
     branches: branches?.length,
-    members: staff?.members.length,
+    members: staff ? (staff.quota?.currentCount ?? staff.members.length) : undefined,
+    activeStaff: countActiveStaff(staff?.members),
     patients: billing?.usage?.activePatientRecordsCount,
     apiRequests: billing?.usage?.monthlyApiQuotaUsed,
     plans,
   };
 }
 
-function usageFor(key: string, usage: WorkspaceUsage | undefined, entitlements: WorkspaceEntitlements): number | undefined {
+export function usageFor(
+  key: string,
+  usage: WorkspaceUsage | undefined,
+  _entitlements?: WorkspaceEntitlements,
+): number | undefined {
   if (!usage) return undefined;
   switch (key) {
     case ENTITLEMENT_KEYS.clinics:
@@ -101,17 +123,65 @@ function usageFor(key: string, usage: WorkspaceUsage | undefined, entitlements: 
       return usage.branches;
     case ENTITLEMENT_KEYS.members:
       return usage.members;
+    case ENTITLEMENT_KEYS.staff:
+      return usage.activeStaff;
     case ENTITLEMENT_KEYS.patients:
       return usage.patients;
     case ENTITLEMENT_KEYS.apiRequestsMonthly:
       return usage.apiRequests;
-    case ENTITLEMENT_KEYS.staff:
-      return entitlements.facilities.reduce((sum, f) => sum + f.maxStaff, 0);
     case ENTITLEMENT_KEYS.terminals:
-      return entitlements.facilities.reduce((sum, f) => sum + f.concurrentTerminals, 0);
+    case ENTITLEMENT_KEYS.storageGb:
     default:
       return undefined;
   }
+}
+
+export function poolAllocationHint(
+  key: string,
+  defaultHint: string | undefined,
+  entitlements: WorkspaceEntitlements,
+): string | undefined {
+  const count = entitlements.facilities.length;
+  if (
+    key !== ENTITLEMENT_KEYS.staff &&
+    key !== ENTITLEMENT_KEYS.terminals &&
+    key !== ENTITLEMENT_KEYS.storageGb
+  ) {
+    return defaultHint;
+  }
+  if (count === 0) {
+    return "Pool shared by your facilities (no facilities created yet)";
+  }
+  const facilityLabel = count === 1 ? "1 facility" : `${count} facilities`;
+  if (key === ENTITLEMENT_KEYS.staff) {
+    if (isUnlimited(entitlements.pools.staff) || entitlements.facilities.some((f) => isUnlimited(f.maxStaff))) {
+      return `Pool shared by your facilities · Unlimited capacity allocated across ${facilityLabel}`;
+    }
+    const allocated = entitlements.facilities.reduce((sum, f) => sum + f.maxStaff, 0);
+    return `Pool shared by your facilities · ${allocated.toLocaleString()} seats allocated across ${facilityLabel}`;
+  }
+  if (key === ENTITLEMENT_KEYS.terminals) {
+    if (
+      isUnlimited(entitlements.pools.terminals) ||
+      entitlements.facilities.some((f) => isUnlimited(f.concurrentTerminals))
+    ) {
+      return `Pool shared by your facilities · Unlimited capacity allocated across ${facilityLabel}`;
+    }
+    const allocated = entitlements.facilities.reduce((sum, f) => sum + f.concurrentTerminals, 0);
+    return `Pool shared by your facilities · ${allocated.toLocaleString()} terminals allocated across ${facilityLabel}`;
+  }
+  if (key === ENTITLEMENT_KEYS.storageGb) {
+    if (
+      isUnlimited(entitlements.pools.storageMb) ||
+      entitlements.facilities.some((f) => isUnlimited(f.maxStorageMb))
+    ) {
+      return `Pool shared by your facilities · Unlimited capacity allocated across ${facilityLabel}`;
+    }
+    const allocatedMb = entitlements.facilities.reduce((sum, f) => sum + f.maxStorageMb, 0);
+    const allocatedGb = Number((allocatedMb / 1024).toFixed(1));
+    return `Pool shared by your facilities · ${allocatedGb.toLocaleString()} GB allocated across ${facilityLabel}`;
+  }
+  return defaultHint;
 }
 
 function statusTone(status: EntitlementStatus): string {
@@ -219,6 +289,7 @@ export default function PlanClient({ tenantSlug }: PlanClientProps) {
                 {LIMIT_ROWS.filter((row) => row.key in entitlements.limits).map((row) => {
                   const limit = entitlements.limits[row.key];
                   const used = usageFor(row.key, usage, entitlements);
+                  const hint = poolAllocationHint(row.key, row.hint, entitlements);
                   return (
                     <div key={row.key} className="space-y-1.5">
                       <div className="flex items-baseline justify-between gap-2">
@@ -230,7 +301,7 @@ export default function PlanClient({ tenantSlug }: PlanClientProps) {
                         </span>
                       </div>
                       <UsageBar used={used} limit={limit} label={row.label} />
-                      {row.hint && <p className="text-[11px] text-slate-400">{row.hint}</p>}
+                      {hint && <p className="text-[11px] text-slate-400">{hint}</p>}
                       {used !== undefined && !isUnlimited(limit) && limit !== null && used >= limit && (
                         <p className="text-[11px] font-semibold text-rose-600">
                           Limit reached.{" "}
