@@ -28,7 +28,7 @@ const MainBottomTabsWeb = createBottomTabNavigator({
     FilesScreen: createBottomTabScreen({
       screen: FilesStack,
       options: {
-        title: 'My Files',
+        title: 'Records',
       },
     }),
     ProfileScreen: createBottomTabScreen({

@@ -48,7 +48,7 @@ const MainBottomTabs = createBottomTabNavigator({
     FilesScreen: createBottomTabScreen({
       screen: FilesStack,
       options: {
-        title: 'My Files',
+        title: 'Records',
         tabBarIcon: getTabIcon('files', 'doc.fill', 'files'),
       },
     }),

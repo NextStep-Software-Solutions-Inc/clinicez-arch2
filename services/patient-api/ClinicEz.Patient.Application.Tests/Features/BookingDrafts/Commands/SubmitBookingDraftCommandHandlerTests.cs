@@ -353,6 +353,7 @@ public sealed class SubmitBookingDraftCommandHandlerTests
     {
         Id = id,
         PatientId = _patientId,
+        Title = "Chest X-Ray",
         FileName = "chest_xray.pdf",
         MimeType = "application/pdf",
         SizeBytes = size,
@@ -392,19 +393,74 @@ public sealed class SubmitBookingDraftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_KeepsEncryptedAndOversizedAttachmentsOutOfTheSharedFiles()
+    public async Task Handle_SharesServerEncryptedAttachmentWithTheClinicByReference()
     {
         var encryptedId = Guid.NewGuid();
         var hugeId = Guid.NewGuid();
         ArrangeDraft(attachedFileIdsJson: System.Text.Json.JsonSerializer.Serialize(new[] { encryptedId, hugeId }));
-        _fileRepo.GetByIdAsync(encryptedId, Arg.Any<CancellationToken>()).Returns(Attachment(encryptedId, encryptionKeyId: "key-1"));
+        _fileRepo.GetByIdAsync(encryptedId, Arg.Any<CancellationToken>()).Returns(Attachment(encryptedId, encryptionKeyId: "pmk-1"));
         _fileRepo.GetByIdAsync(hugeId, Arg.Any<CancellationToken>()).Returns(Attachment(hugeId, size: 10 * 1024 * 1024 + 1));
+        _storage.GeneratePresignedDownloadUrlAsync(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns("https://files.example.test/signed");
 
         await CreateHandler().Handle(new SubmitBookingDraftCommand(_patientId, _draftId), CancellationToken.None);
 
-        _publisher.DidNotReceive().Enqueue(
+        _publisher.Received(1).Enqueue(
             InteropTypes.PatientRecordShared, Arg.Any<Party>(), Arg.Any<Party>(), Arg.Any<Guid>(),
-            Arg.Any<PatientRecordSharedPayload>(), Arg.Any<int>(), Arg.Any<TimeSpan?>());
+            Arg.Is<PatientRecordSharedPayload>(p => p.FileId == encryptedId), Arg.Any<int>(), Arg.Any<TimeSpan?>());
         _published!.AttachedFiles.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Handle_SharesAttachmentWithDecryptedFileBase64()
+    {
+        var fileId = Guid.NewGuid();
+        var storageKey = $"patients/{_patientId}/records/{fileId}.cez";
+        var fakePlaintext = "Plaintext Lab Data"u8.ToArray();
+        var fakeCiphertext = "Ciphertext"u8.ToArray();
+
+        var record = new FileRecord
+        {
+            Id = fileId,
+            PatientId = _patientId,
+            FileName = "lab_report.pdf",
+            MimeType = "application/pdf",
+            SizeBytes = fakePlaintext.Length,
+            StorageKey = storageKey,
+            EncryptionIvBase64 = "ivBase64==",
+            EncryptionTagBase64 = "tagBase64==",
+            WrappedKeyJson = "{\"kid\":\"key-1\"}"
+        };
+
+        ArrangeDraft(attachedFileIdsJson: System.Text.Json.JsonSerializer.Serialize(new[] { fileId }));
+        _fileRepo.GetByIdAsync(fileId, Arg.Any<CancellationToken>()).Returns(record);
+        _storage.GeneratePresignedDownloadUrlAsync(storageKey, Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns("https://files.example.test/signed");
+        _storage.DownloadAsync(storageKey, Arg.Any<CancellationToken>())
+            .Returns(fakeCiphertext);
+
+        var encryption = Substitute.For<IPatientEncryptionService>();
+        encryption.DecryptAsync(fakeCiphertext, "ivBase64==", "tagBase64==", "{\"kid\":\"key-1\"}", _patientId, Arg.Any<CancellationToken>())
+            .Returns(fakePlaintext);
+
+        var handler = new SubmitBookingDraftCommandHandler(
+            _draftRepo, _clinicRepo, _uow, _membershipRepo, _publisher, _patientRepo, _accessRepo, _storage,
+            Microsoft.Extensions.Options.Options.Create(new SharingOptions { BookingGrantDays = 30 }),
+            new PatientShareSnapshotBuilder(_patientRepo, Substitute.For<IPatientDocumentRepository>()),
+            _fileRepo,
+            encryption);
+
+        await handler.Handle(new SubmitBookingDraftCommand(_patientId, _draftId), CancellationToken.None);
+
+        _publisher.Received(1).Enqueue(
+            InteropTypes.PatientRecordShared,
+            Arg.Any<Party>(),
+            Arg.Any<Party>(),
+            _draftId,
+            Arg.Is<PatientRecordSharedPayload>(p =>
+                p.FileId == fileId &&
+                p.FileBase64 == Convert.ToBase64String(fakePlaintext)),
+            Arg.Any<int>(),
+            Arg.Any<TimeSpan?>());
     }
 }

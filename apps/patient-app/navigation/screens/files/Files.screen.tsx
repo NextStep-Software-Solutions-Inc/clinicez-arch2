@@ -1,6 +1,5 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
@@ -14,6 +13,7 @@ import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useAuth as useAppAuth } from 'contexts/AuthContext';
 import * as Sharing from 'expo-sharing';
 import EmptyState from '@ui/EmptyState';
+import Button from '@ui/Button';
 import ThemedText from '@ui/ThemedText';
 import { AppIcon } from '@ui/Icon';
 import RenameModal from '../../../components/ui/RenameModal';
@@ -21,25 +21,27 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useContentInsets } from '../../../hooks/useContentInsets';
 import {
   FileBrowserFile,
-  FileBrowserFolder,
-  FileItemKind,
   deleteItem,
   syncPendingFiles,
   preparePreviewFile,
   renameFile,
-  renameFolder,
   listFolderContents,
 } from '../../../services/files';
+import { resetAndRetryFailedUploads } from '../../../services/sync/uploadQueueService';
 import type { FilesScreenProps } from './navigationTypes';
-import { useFilesBrowser, useFrkCheck } from '../../../hooks/useFilesBrowser';
+import { useFilesBrowser } from '../../../hooks/useFilesBrowser';
 import { FileRow } from '../../../components/files/FileRow';
 import { FilesHeader } from '../../../components/files/FilesHeader';
+import { CategoryPillBar } from '../../../components/records/CategoryPillBar';
+import { RecordSkeletonList } from '../../../components/records/RecordSkeletonList';
+import {
+  CATEGORY_FILTERS,
+  filterAndSearchRecords,
+  matchesCategoryFilter,
+  type CategoryFilterId,
+} from '../../../services/records/categories';
 import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../../../contexts/ThemeContext';
-
-type BrowserItem = FileBrowserFolder | FileBrowserFile;
-type SectionHeader = { kind: 'section'; title: string; id: string };
-type ListEntry = BrowserItem | SectionHeader;
 
 export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScreen'>) {
   const { colors, spacing, radii, sizes, typography, shadows } = useAppTheme();
@@ -48,32 +50,24 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
   const { getToken } = useClerkAuth();
   const contentInsets = useContentInsets();
   const { runWithAutoLockPaused } = useAppAuth();
-  const folderId = route.params?.folderId;
 
-  const [fabOpen, setFabOpen] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<{ kind: 'file' | 'folder'; id: string; initialName: string } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ id: string; initialName: string } | null>(null);
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<CategoryFilterId>('all');
 
-  // Hook checks and browser state
-  useFrkCheck(patientId);
-  const { contents, isLoading, isRefreshing, refresh, mutate } = useFilesBrowser(patientId, folderId ?? null, query);
+  // Browser state
+  const { contents, isLoading, isRefreshing, error, refresh, mutate } = useFilesBrowser(patientId, null, '');
 
-  const folderName = folderId
-    ? (contents?.breadcrumbs?.length ? contents.breadcrumbs[contents.breadcrumbs.length - 1].name : 'Folder')
-    : 'My Files';
+  const headerTitleText = 'Health Records & Documents';
 
   const handleRenameSave = async (newName: string) => {
     if (!renameTarget) return;
     try {
-      if (renameTarget.kind === 'folder') {
-        await renameFolder(patientId, renameTarget.id, newName);
-      } else {
-        await renameFile(patientId, renameTarget.id, newName);
-      }
+      await renameFile(patientId, renameTarget.id, newName);
       setRenameTarget(null);
-      const newContents = await listFolderContents(patientId, folderId ?? null, query, getToken);
+      const newContents = await listFolderContents(patientId, null, query, getToken);
       await mutate(newContents, { revalidate: false });
       syncPendingFiles(patientId, getToken).then(() => mutate()).catch(console.error);
     } catch (e) {
@@ -89,7 +83,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search files and folders…"
+            placeholder="Search records, facility, notes…"
             placeholderTextColor={colors.textLight}
             autoFocus
             style={[
@@ -106,7 +100,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
             ]}
           />
         </View>
-      ) : folderName,
+      ) : headerTitleText,
       headerRight: () => (
         <View style={[styles.headerRightWrap, { gap: spacing.xs }]}>
           <Pressable
@@ -119,57 +113,58 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
               }
             }}
             accessibilityRole="button"
-            accessibilityLabel={isSearching ? 'Close search' : 'Search files'}
+            accessibilityLabel={isSearching ? 'Close search' : 'Search records'}
             style={({ pressed }) => [{ padding: spacing.sm, opacity: pressed ? 0.7 : 1 }]}
           >
             <AppIcon name={isSearching ? 'close' : 'search'} color="text" size={sizes.iconLg} />
           </Pressable>
-          {!isSearching && (
-            <Pressable
-              onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
-              accessibilityRole="button"
-              accessibilityLabel="Storage overview"
-              style={({ pressed }) => [{ padding: spacing.sm, opacity: pressed ? 0.7 : 1 }]}
-            >
-              <AppIcon name="cloud" color="primary" size={sizes.iconLg} />
-            </Pressable>
-          )}
         </View>
       ),
     });
-  }, [navigation, folderName, folderId, colors, isSearching, query, radii, sizes, spacing, typography]);
+  }, [navigation, headerTitleText, colors, isSearching, query, radii, sizes, spacing, typography]);
 
-  const items = useMemo<ListEntry[]>(() => {
-    const folders = contents?.folders ?? [];
-    const files = contents?.files ?? [];
-    const result: ListEntry[] = [];
-    if (folders.length > 0) {
-      result.push({ kind: 'section', title: 'Folders', id: '__folders__' });
-      result.push(...folders);
+  // Derive counts per category pill
+  const categoryCounts = useMemo(() => {
+    const allFiles = contents?.files ?? [];
+    const counts: Partial<Record<CategoryFilterId, number>> = {
+      all: allFiles.length,
+    };
+    for (const file of allFiles) {
+      for (const filter of CATEGORY_FILTERS) {
+        if (filter.id !== 'all' && matchesCategoryFilter(file, filter.id)) {
+          counts[filter.id] = (counts[filter.id] ?? 0) + 1;
+        }
+      }
     }
-    if (files.length > 0) {
-      result.push({ kind: 'section', title: 'Files', id: '__files__' });
-      result.push(...files);
-    }
-    return result;
-  }, [contents]);
+    return counts;
+  }, [contents?.files]);
 
-  const handleDelete = async (kind: FileItemKind, id: string) => {
+  // Client-side multi-field filter and search
+  const filteredRecords = useMemo(() => {
+    return filterAndSearchRecords(contents?.files ?? [], activeCategory, query);
+  }, [contents?.files, activeCategory, query]);
+
+  // Count failed uploads for retry alert
+  const failedCount = useMemo(() => {
+    return (contents?.files ?? []).filter((f) => f.syncStatus === 'failed').length;
+  }, [contents?.files]);
+
+  const handleDelete = async (id: string) => {
     const confirmed = await dialog.confirm({
-      title: 'Delete item?',
-      message: 'This item will be deleted.',
+      title: 'Delete record?',
+      message: 'This health record will be permanently deleted.',
       confirmLabel: 'Delete',
       destructive: true,
     });
     if (!confirmed) return;
 
     try {
-      await deleteItem(patientId, kind, id);
-      const newContents = await listFolderContents(patientId, folderId ?? null, query, getToken);
+      await deleteItem(patientId, id, getToken);
+      const newContents = await listFolderContents(patientId, null, query, getToken);
       await mutate(newContents, { revalidate: false });
       syncPendingFiles(patientId, getToken).then(() => mutate()).catch(console.error);
-    } catch (error) {
-      dialog.alert('Could not delete', error instanceof Error ? error.message : 'Unable to delete this item.');
+    } catch (err) {
+      dialog.alert('Could not delete', err instanceof Error ? err.message : 'Unable to delete this item.');
     }
   };
 
@@ -178,17 +173,29 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
     try {
       const result = await syncPendingFiles(patientId, getToken);
       if (result.skipped) {
-        dialog.alert('Backup waiting', result.reason ?? 'Files will back up when connected.');
+        dialog.alert('Backup waiting', result.reason ?? 'Records will sync when internet is connected.');
       } else if (result.failed > 0) {
-        dialog.alert('Backup needs attention', `${result.synced} backed up, ${result.failed} failed.`);
+        dialog.alert('Sync needs attention', `${result.synced} synced, ${result.failed} failed.`);
       }
       refresh();
-    } catch (error) {
-      dialog.alert('Backup failed', error instanceof Error ? error.message : 'Unable to back up.');
+    } catch (err) {
+      dialog.alert('Sync failed', err instanceof Error ? err.message : 'Unable to sync records.');
     } finally {
       setIsSyncing(false);
     }
   }, [getToken, patientId, refresh]);
+
+  const handleRetryFailed = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      await resetAndRetryFailedUploads(patientId, getToken);
+      await refresh();
+    } catch (err) {
+      dialog.alert('Retry failed', err instanceof Error ? err.message : 'Unable to retry uploads.');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [patientId, getToken, refresh]);
 
   const shareFile = useCallback(
     async (fileId: string) => {
@@ -202,47 +209,45 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         await runWithAutoLockPaused(() =>
           Sharing.shareAsync(preview.uri, { mimeType: preview.mimeType, dialogTitle: preview.name })
         );
-      } catch (error) {
-        dialog.alert('Could not share file', error instanceof Error ? error.message : 'Unable to share this file.');
+      } catch (err) {
+        dialog.alert('Could not share file', err instanceof Error ? err.message : 'Unable to share this file.');
       }
     },
     [patientId, runWithAutoLockPaused, getToken]
   );
 
   const openUpload = useCallback(() => {
-    navigation.navigate('FilesUploadScreen', { folderId: folderId ?? null });
-  }, [folderId, navigation]);
-
-  const createFolder = useCallback(() => {
-    navigation.navigate('FileFolderFormScreen', { parentId: folderId ?? null });
-  }, [folderId, navigation]);
-
-  const openRoot = useCallback(() => {
-    navigation.navigate('FilesBrowserScreen');
+    navigation.navigate('FilesUploadScreen');
   }, [navigation]);
 
-  const openFolder = useCallback(
-    (id: string) => {
-      navigation.navigate('FilesBrowserScreen', { folderId: id });
-    },
-    [navigation]
-  );
-
+  // 1. Loading State (pulse skeleton cards)
   if (isLoading && !contents) {
     return (
-      <View style={[styles.center, { backgroundColor: colors.background, gap: spacing.md }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <ThemedText variant="body" color="textMuted">
-          Loading your files…
-        </ThemedText>
+      <View style={[styles.flex, { backgroundColor: colors.background }]}>
+        <RecordSkeletonList count={4} />
       </View>
     );
   }
 
+  // 2. Error State
+  if (error && !contents) {
+    return (
+      <View style={[styles.center, { backgroundColor: colors.background, padding: spacing.xl, gap: spacing.md }]}>
+        <AppIcon name="alert" size={sizes.avatarMd} color="emergency" />
+        <ThemedText variant="h3">Unable to load records</ThemedText>
+        <ThemedText variant="body" color="textMuted" style={{ textAlign: 'center' }}>
+          {error.message || 'An unexpected error occurred while loading your health records.'}
+        </ThemedText>
+        <Button label="Try Again" variant="outline" onPress={refresh} />
+      </View>
+    );
+  }
+
+  // 3 & 4. Content and Empty States
   return (
     <View style={[styles.flex, { backgroundColor: colors.background }]}>
-      <FlatList<ListEntry>
-        data={items}
+      <FlatList<FileBrowserFile>
+        data={filteredRecords}
         keyExtractor={(item) => item.id}
         contentInsetAdjustmentBehavior="automatic"
         refreshControl={
@@ -261,91 +266,65 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
             paddingBottom: contentInsets.bottom + spacing['3xl'],
           },
         ]}
-        ItemSeparatorComponent={({ leadingItem }) =>
-          (leadingItem as ListEntry).kind === 'section' ? null : <View style={{ height: spacing.sm }} />
-        }
+        ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         ListHeaderComponent={
-          <FilesHeader
-            contents={contents ?? null}
-            folderId={folderId}
-            isSyncing={isSyncing}
-            onCreateFolder={createFolder}
-            onOpenFolder={openFolder}
-            onOpenRoot={openRoot}
-            onOpenUpload={openUpload}
-            onSync={handleSync}
-          />
+          <View style={{ gap: spacing.sm, marginBottom: spacing.sm }}>
+            <CategoryPillBar
+              selectedCategory={activeCategory}
+              onSelectCategory={setActiveCategory}
+              counts={categoryCounts}
+            />
+            <FilesHeader
+              contents={contents ?? null}
+              failedCount={failedCount}
+              isSyncing={isSyncing}
+              onSync={handleSync}
+              onRetryFailed={handleRetryFailed}
+              patientId={patientId}
+            />
+          </View>
         }
         ListEmptyComponent={
           <EmptyState
-            title={query ? 'No matching files' : 'No files yet'}
+            title={query || activeCategory !== 'all' ? 'No matching records' : 'No health records yet'}
             message={
-              query
-                ? 'Try a different search term.'
-                : 'Add health documents or create folders to stay organized.'
+              query || activeCategory !== 'all'
+                ? 'Try searching with another keyword or select a different category.'
+                : 'Add diagnostic lab results, prescriptions, and certificates to access them offline anytime.'
             }
-            actionLabel={query ? undefined : 'Add a file'}
-            onActionPress={query ? undefined : openUpload}
+            actionLabel={query || activeCategory !== 'all' ? 'Reset Filters' : 'Add Record'}
+            onActionPress={
+              query || activeCategory !== 'all'
+                ? () => {
+                    setQuery('');
+                    setActiveCategory('all');
+                  }
+                : openUpload
+            }
           />
         }
-        renderItem={({ item }) => {
-          if (item.kind === 'section') {
-            return (
-              <ThemedText
-                variant="captionBold"
-                color="textMuted"
-                style={[
-                  styles.sectionHead,
-                  {
-                    marginTop: spacing.md,
-                    marginBottom: spacing.xs,
-                    marginLeft: spacing.xs,
-                  },
-                ]}
-              >
-                {item.title}
-              </ThemedText>
-            );
-          }
-          const bItem = item;
-          return (
-            <FileRow
-              item={bItem}
-              onPress={() => {
-                if (bItem.kind === 'folder') {
-                  navigation.push('FilesBrowserScreen', { folderId: bItem.id });
-                } else {
-                  navigation.navigate('FileViewerScreen', { fileId: bItem.id });
-                }
-              }}
-              onErrorPress={() => {
-                dialog.alert(
-                  'Upload Failed',
-                  (bItem as FileBrowserFile).syncError ?? 'This file failed to upload to the cloud.'
-                );
-              }}
-              onRename={() => {
-                setRenameTarget({
-                  kind: bItem.kind as 'file' | 'folder',
-                  id: bItem.id,
-                  initialName: bItem.name,
-                });
-              }}
-              onMove={() =>
-                navigation.navigate('FileMoveScreen', {
-                  itemKind: bItem.kind,
-                  itemId: bItem.id,
-                  currentFolderId:
-                    bItem.kind === 'folder'
-                      ? (bItem as FileBrowserFolder).parentId
-                      : (bItem as FileBrowserFile).folderId,
-                })
-              }
-              onDelete={() => handleDelete(bItem.kind, bItem.id)}
-              onShare={() => shareFile(bItem.id)}
-            />
-          );
-        }}
+        renderItem={({ item }) => (
+          <FileRow
+            item={item}
+            onPress={() => {
+              navigation.navigate('FileViewerScreen', { fileId: item.id });
+            }}
+            onErrorPress={() => {
+              dialog.alert(
+                'Upload Failed',
+                item.syncError || item.lastSyncError || 'This record failed to upload to the cloud.'
+              );
+            }}
+            onRename={() => {
+              setRenameTarget({
+                id: item.id,
+                initialName: item.name,
+              });
+            }}
+            onDelete={() => handleDelete(item.id)}
+            onShare={() => shareFile(item.id)}
+          />
+        )}
       />
 
       {/* Floating Action Button */}
@@ -353,65 +332,10 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         style={[styles.fabWrap, { right: spacing.xl, bottom: contentInsets.bottom + spacing.md }]}
         pointerEvents="box-none"
       >
-        {fabOpen && (
-          <View style={[styles.fabMenu, { marginBottom: spacing.sm, gap: spacing.sm }]}>
-            <Pressable
-              onPress={() => {
-                setFabOpen(false);
-                createFolder();
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="New folder"
-              style={({ pressed }) => [
-                styles.fabItem,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                  borderWidth: sizes.borderWidth,
-                  borderRadius: radii.lg,
-                  paddingHorizontal: spacing.lg,
-                  paddingVertical: spacing.md,
-                  gap: spacing.md,
-                  opacity: pressed ? 0.8 : 1,
-                },
-                shadows.md,
-              ]}
-            >
-              <AppIcon name="folderPlus" color="primary" size={sizes.iconMd} />
-              <ThemedText variant="bodyBold">New folder</ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => {
-                setFabOpen(false);
-                openUpload();
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Upload file"
-              style={({ pressed }) => [
-                styles.fabItem,
-                {
-                  backgroundColor: colors.primary,
-                  borderRadius: radii.lg,
-                  paddingHorizontal: spacing.lg,
-                  paddingVertical: spacing.md,
-                  gap: spacing.md,
-                  opacity: pressed ? 0.85 : 1,
-                },
-                shadows.md,
-              ]}
-            >
-              <AppIcon name="upload" color={colors.onPrimary} size={sizes.iconMd} />
-              <ThemedText variant="bodyBold" color={colors.onPrimary}>
-                Upload file
-              </ThemedText>
-            </Pressable>
-          </View>
-        )}
         <Pressable
-          onPress={() => setFabOpen((s) => !s)}
+          onPress={openUpload}
           accessibilityRole="button"
-          accessibilityLabel={fabOpen ? 'Close menu' : 'Add files or folders'}
+          accessibilityLabel="Add health record"
           style={({ pressed }) => [
             styles.fab,
             {
@@ -425,7 +349,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
           ]}
         >
           <AppIcon
-            name={fabOpen ? 'close' : 'plus'}
+            name="plus"
             color={colors.onPrimary}
             size={sizes.iconLg}
           />
@@ -437,7 +361,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         onClose={() => setRenameTarget(null)}
         initialName={renameTarget?.initialName ?? ''}
         onSave={handleRenameSave}
-        title={renameTarget?.kind === 'folder' ? 'Rename folder' : 'Rename file'}
+        title="Rename record"
       />
     </View>
   );
@@ -447,10 +371,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   listContent: {},
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  sectionHead: {
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
   searchHeaderWrap: {
     flex: 1,
     flexDirection: 'row',
@@ -472,13 +392,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'flex-end',
     zIndex: 9999,
-  },
-  fabMenu: {
-    alignItems: 'flex-end',
-  },
-  fabItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   fab: {
     alignItems: 'center',

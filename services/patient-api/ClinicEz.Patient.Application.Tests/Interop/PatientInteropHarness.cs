@@ -6,6 +6,7 @@ using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Patient.Infrastructure;
 using ClinicEz.Patient.Infrastructure.Persistence;
 using ClinicEz.Patient.Infrastructure.Persistence.Repositories;
+using ClinicEz.Patient.Infrastructure.Services.Encryption;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Background;
@@ -42,10 +43,12 @@ internal sealed class PatientInteropHarness : IDisposable
         {
             ["Messaging:Transport"] = "InProcess",
             ["Messaging:Service"] = InteropServices.Patient,
-            ["Messaging:Enabled"] = "false"
+            ["Messaging:Enabled"] = "false",
+            ["PatientEncryption:MasterSecret"] = "patient-test-encryption-master-secret-at-least-32-chars-long!"
         }).Build();
 
         Storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<string>(1));
+        Storage.SaveEncryptedAsync(Arg.Any<string>(), Arg.Any<byte[]>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<string>(0));
         Storage.GeneratePresignedDownloadUrlAsync(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(call => $"https://files.example.test/{call.ArgAt<string>(0)}");
 
@@ -68,6 +71,8 @@ internal sealed class PatientInteropHarness : IDisposable
         services.AddScoped<IDeviceSessionRepository, DeviceSessionRepository>();
         services.AddSingleton<IPushNotificationService>(Substitute.For<IPushNotificationService>());
         services.AddSingleton(Storage);
+        services.AddSingleton(sp => PatientEncryptionKeyRing.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddScoped<IPatientEncryptionService, PatientEncryptionService>();
         services.Configure<SharingOptions>(o => o.SigningKey = SigningKey);
         services.AddApplicationServices();
         services.AddScoped<SubmitBookingDraftCommandHandler>();

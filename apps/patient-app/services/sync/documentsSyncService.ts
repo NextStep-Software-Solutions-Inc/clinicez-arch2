@@ -16,6 +16,7 @@ import {
   toPrescriptionRow,
 } from './documentMappers';
 import { pageHasDocumentChanges, pullAllChanges } from './pullChanges';
+import { preCacheUncachedDocuments } from './preCachingService';
 
 export const DOCUMENTS_SYNCED_EVENT = 'documents-synced';
 
@@ -83,7 +84,10 @@ async function runPull(patientId: string, getToken: GetToken): Promise<boolean> 
     },
   });
   await flushDatabaseSnapshot();
-  if (changed) DeviceEventEmitter.emit(DOCUMENTS_SYNCED_EVENT, { patientId });
+  if (changed) {
+    DeviceEventEmitter.emit(DOCUMENTS_SYNCED_EVENT, { patientId });
+    void preCacheUncachedDocuments(patientId, getToken).catch(() => {});
+  }
   return changed;
 }
 

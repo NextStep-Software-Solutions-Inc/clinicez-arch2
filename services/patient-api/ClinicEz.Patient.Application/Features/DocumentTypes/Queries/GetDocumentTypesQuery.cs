@@ -1,6 +1,6 @@
 using System.Text.Json;
 using MediatR;
-using ClinicEz.Patient.Application.Features.Files.Queries.GetFileConfig;
+using ClinicEz.Patient.Application.Features.DocumentTypes.DTOs;
 using ClinicEz.Patient.Domain.Interfaces;
 
 namespace ClinicEz.Patient.Application.Features.DocumentTypes.Queries;

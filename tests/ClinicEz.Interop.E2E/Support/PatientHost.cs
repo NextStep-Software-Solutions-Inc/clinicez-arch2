@@ -5,6 +5,7 @@ using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Patient.Infrastructure;
 using ClinicEz.Patient.Infrastructure.Persistence;
 using ClinicEz.Patient.Infrastructure.Persistence.Repositories;
+using ClinicEz.Patient.Infrastructure.Services.Encryption;
 using ClinicEz.Shared.Interop;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,7 @@ public sealed class PatientHost : ServiceHostBase
     {
         var settings = BaseConfig(InteropServices.Patient, "public");
         settings["Sharing:SigningKey"] = SigningKey;
+        settings["PatientEncryption:MasterSecret"] = "e2e-patient-encryption-master-secret-at-least-32-chars!";
         var config = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 
         var dbName = $"e2e-patient-{Guid.NewGuid():N}";
@@ -45,6 +47,8 @@ public sealed class PatientHost : ServiceHostBase
         services.AddScoped<IPatientDocumentRepository, PatientDocumentRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddSingleton<IStorageService>(new InMemoryStorage());
+        services.AddSingleton(sp => PatientEncryptionKeyRing.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddScoped<IPatientEncryptionService, PatientEncryptionService>();
         services.Configure<SharingOptions>(o => o.SigningKey = SigningKey);
         services.AddApplicationServices();
         services.AddPatientInterop(config);
@@ -77,6 +81,34 @@ public sealed class PatientHost : ServiceHostBase
             await stream.CopyToAsync(buffer, cancellationToken);
             _blobs[key] = buffer.ToArray();
             return key;
+        }
+
+        public Task<string> SaveEncryptedAsync(string key, byte[] ciphertext, CancellationToken cancellationToken = default)
+        {
+            _blobs[key] = ciphertext;
+            return Task.FromResult(key);
+        }
+
+        public async Task<string> SaveEncryptedStreamAsync(string key, Stream ciphertextStream, CancellationToken cancellationToken = default)
+        {
+            using var buffer = new MemoryStream();
+            await ciphertextStream.CopyToAsync(buffer, cancellationToken);
+            _blobs[key] = buffer.ToArray();
+            return key;
+        }
+
+        public Task<byte[]> DownloadAsync(string key, CancellationToken cancellationToken = default)
+        {
+            if (_blobs.TryGetValue(key, out var bytes))
+                return Task.FromResult(bytes);
+            throw new FileNotFoundException($"Object with key '{key}' not found in InMemoryStorage.");
+        }
+
+        public Task<Stream> OpenReadStreamAsync(string key, CancellationToken cancellationToken = default)
+        {
+            if (_blobs.TryGetValue(key, out var bytes))
+                return Task.FromResult<Stream>(new MemoryStream(bytes));
+            throw new FileNotFoundException($"Object with key '{key}' not found in InMemoryStorage.");
         }
 
         public Task DeleteAsync(string key, CancellationToken cancellationToken = default)

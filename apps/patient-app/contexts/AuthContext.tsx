@@ -273,9 +273,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       PIN_KEY,
       PIN_SALT_KEY,
       HAS_PIN_KEY,
-      ...(currentPatientId
-        ? [`patient_mak_key_${currentPatientId}`, `patient_frk_key_${currentPatientId}`]
-        : []),
     ];
     await Promise.all(keysToDelete.map((key) => SecureStore.deleteItemAsync(key).catch(() => {})));
     setHasPIN(false);

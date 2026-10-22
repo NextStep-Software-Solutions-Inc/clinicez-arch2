@@ -33,7 +33,6 @@ public static class SyncableEntityTypes
 
     // ── Files & folders ──────────────────────────────────────────────────────
     public const string FileRecord   = "file";
-    public const string FileFolder   = "file_folder";
 
     // ── Memberships & drafts ─────────────────────────────────────────────────
     public const string ClinicMembership        = "clinic_memberships";
@@ -51,7 +50,7 @@ public static class SyncableEntityTypes
         PatientOccupation, PatientTravelHistory, PatientContraceptiveHistory,
         PatientPregnancy, PatientMaleReproductive, PatientDentalVision,
         PatientNcdQuestionnaire,
-        FileRecord, FileFolder,
+        FileRecord,
         ClinicMembership, OrganizationMembership, BookingDraft, NotificationPreferences,
     ];
 }

@@ -26,7 +26,7 @@ export interface WebNavItem {
 export const WEB_PRIMARY_NAV: WebNavItem[] = [
   { key: 'HomeScreen', label: 'Home', icon: 'home', shortcut: 'H' },
   { key: 'AppointmentsScreen', label: 'Appointments', icon: 'appointments', shortcut: 'A' },
-  { key: 'FilesScreen', label: 'My Files', icon: 'files', shortcut: 'F' },
+  { key: 'FilesScreen', label: 'Records', icon: 'files', shortcut: 'F' },
   { key: 'ProfileScreen', label: 'My Profile', icon: 'profile', shortcut: 'P' },
 ];
 

@@ -16,6 +16,9 @@ import { cleanupPreviewCache, preparePreviewFile, getFileById, deleteItem, renam
 import type { PreparedPreviewFile } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import RenameModal from '../../../components/ui/RenameModal';
+import Badge from '../../../components/ui/Badge';
+import { ProvenanceBadge } from '../../../components/records/ProvenanceBadge';
+import { ClinicalUrgencyBadge } from '../../../components/records/ClinicalUrgencyBadge';
 import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 
@@ -86,21 +89,14 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     if (!confirmed) return;
 
     try {
-      await deleteItem(patientId, 'file', fileId);
+      await deleteItem(patientId, fileId, getToken);
       navigation.goBack();
     } catch (err) {
       dialog.alert('Could not delete', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
-  const handleMove = () => {
-    if (!fileMetadata) return;
-    navigation.navigate('FileMoveScreen', {
-      itemKind: 'file',
-      itemId: fileId,
-      currentFolderId: fileMetadata.folderId,
-    });
-  };
+
 
   const handleRename = async (newName: string) => {
     try {
@@ -138,6 +134,84 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
 
   return (
     <View style={[styles.viewer, { backgroundColor: colors.background }]}>
+      {/* Top Clinical Header Bar */}
+      <View
+        style={[
+          styles.clinicalHeaderCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderBottomWidth: sizes.borderWidth,
+            padding: spacing.md,
+            gap: spacing.xs,
+          },
+          shadows.sm,
+        ]}
+      >
+        <View style={styles.headerTitleRow}>
+          <ThemedText variant="bodyBold" numberOfLines={1} style={styles.headerTitleText}>
+            {fileMetadata?.title || fileMetadata?.name || preview?.name}
+          </ThemedText>
+          <View style={styles.headerBadgesRow}>
+            {fileMetadata?.type ? (
+              <Badge label={fileMetadata.type} tone="neutral" size="sm" />
+            ) : null}
+            <ClinicalUrgencyBadge
+              urgency={fileMetadata?.urgency}
+              isCritical={fileMetadata?.isCritical}
+            />
+            <ProvenanceBadge
+              provenance={fileMetadata?.provenance}
+              clinicId={fileMetadata?.clinicId}
+              facilityName={fileMetadata?.facilityName}
+              compact
+            />
+          </View>
+        </View>
+
+        <View style={styles.headerMetaRow}>
+          {fileMetadata?.facilityName ? (
+            <View style={styles.metaItem}>
+              <AppIcon name="hospital" size={sizes.iconSm} color="textMuted" />
+              <ThemedText variant="caption" color="textMuted">
+                {fileMetadata.facilityName}
+              </ThemedText>
+            </View>
+          ) : null}
+          {(fileMetadata?.documentDate || fileMetadata?.createdAt) ? (
+            <View style={styles.metaItem}>
+              <AppIcon name="calendar" size={sizes.iconSm} color="textMuted" />
+              <ThemedText variant="caption" color="textMuted">
+                {fileMetadata.documentDate ||
+                  new Date(fileMetadata.createdAt).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
+
+        {fileMetadata?.notes ? (
+          <View
+            style={[
+              styles.notesWrap,
+              {
+                backgroundColor: colors.surfaceSubtle,
+                borderRadius: radii.md,
+                paddingHorizontal: spacing.sm,
+                paddingVertical: spacing.xs,
+              },
+            ]}
+          >
+            <ThemedText variant="caption" color="textSecondary" numberOfLines={2}>
+              {fileMetadata.notes}
+            </ThemedText>
+          </View>
+        ) : null}
+      </View>
+
       <View style={styles.previewSurface}>
         {preview.previewKind === 'image' ? (
           <ZoomableImage uri={preview.uri} />
@@ -202,17 +276,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
             </ThemedText>
           </Pressable>
 
-          <Pressable
-            onPress={handleMove}
-            accessibilityRole="button"
-            accessibilityLabel="Move"
-            style={styles.toolbarBtn}
-          >
-            <AppIcon name="folderMove" color="text" size={sizes.iconMd} />
-            <ThemedText variant="captionBold" color="text">
-              Move
-            </ThemedText>
-          </Pressable>
+
 
           <Pressable
             onPress={() => setRenameModalOpen(true)}
@@ -331,5 +395,36 @@ const styles = StyleSheet.create({
   closeOverlayBtn: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  clinicalHeaderCard: {
+    width: '100%',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  headerTitleText: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  headerBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  notesWrap: {
+    marginTop: 2,
   },
 });
