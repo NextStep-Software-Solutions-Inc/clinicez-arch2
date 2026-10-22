@@ -40,6 +40,9 @@ import {
   ClinicPatient,
   ClinicCustomFieldDefinition,
   GetAppointmentsOptions,
+  formatClinicDate,
+  formatClinicTime,
+  getClinicTodayStr,
 } from '../../services/clinicService';
 import { SlotPicker } from '../../components/roster/SlotPicker';
 import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
@@ -109,14 +112,14 @@ export function formatTime(isoString?: string): string {
   if (!isoString) return '--';
   const d = new Date(isoString);
   if (isNaN(d.getTime())) return '--';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  return formatClinicTime(d, { fallback: '--' });
 }
 
 export function formatDay(isoString?: string): string {
   if (!isoString) return '';
   const d = new Date(isoString);
   if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return formatClinicDate(d, { fallback: '' });
 }
 
 function pad(n: number): string {
@@ -127,7 +130,7 @@ function pad(n: number): string {
 export function defaultSlot(): { date: string; time: string } {
   const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
   return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    date: getClinicTodayStr(d),
     time: `${pad(d.getHours())}:00`,
   };
 }
@@ -684,6 +687,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         roomOrStation: chosenRoom?.name,
         priority: isUrgent ? 'Urgent' : 'Routine',
         chiefComplaint: item.reason ?? 'General Consultation',
+        queueDate: getManilaTodayStr(),
       });
 
       if (err) {

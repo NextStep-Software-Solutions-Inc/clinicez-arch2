@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
@@ -183,6 +183,24 @@ public sealed class ClinicSettings : BaseEntity
     /// Optional clinic-specific Cloudflare Turnstile Site Key. If not set, falls back to environment or default test key.
     /// </summary>
     public string? TurnstileSiteKey { get; set; }
+
+    /// Optional clinic-level IANA timezone override (e.g. "Asia/Manila", "Asia/Singapore", "America/New_York").
+    /// When null or empty, inherits from <c>WorkspaceProfile.TimeZoneId</c> (defaulting to "Asia/Manila").
+    /// </summary>
+    public string? TimeZoneId { get; set; }
+
+    /// <summary>
+    /// Optional clinic-level date format override (e.g. "MMM d, yyyy", "d MMM yyyy", "dd/MM/yyyy", "MM/dd/yyyy", "yyyy-MM-dd").
+    /// When null or empty, inherits from <c>WorkspaceProfile.DateFormat</c> (defaulting to "MMM d, yyyy").
+    /// </summary>
+    public string? DateFormat { get; set; }
+
+    /// <summary>
+    /// Optional clinic-level time format override ("12h" or "24h").
+    /// When null or empty, defaults to "12h" (12-hour AM/PM clock).
+    /// </summary>
+    public string? TimeFormat { get; set; }
+
 }
 
 /// <summary>

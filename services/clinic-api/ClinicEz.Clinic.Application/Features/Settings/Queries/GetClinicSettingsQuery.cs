@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
@@ -130,6 +130,9 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             TurnstileEnabled: effectiveTurnstile,
             TurnstileSiteKey: effectiveSiteKey,
             IsTurnstileOverriddenByEnv: isOverridden,
-            TurnstileEnvOverrideValue: overrideVal);
+            TurnstileEnvOverrideValue: overrideVal,
+            TimeZoneId: settings.TimeZoneId,
+            DateFormat: settings.DateFormat,
+            TimeFormat: settings.TimeFormat);
     }
 }

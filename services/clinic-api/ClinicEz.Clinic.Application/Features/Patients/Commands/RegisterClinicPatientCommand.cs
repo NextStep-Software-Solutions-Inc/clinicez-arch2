@@ -10,6 +10,7 @@ using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Workspace;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,7 +51,8 @@ public sealed record RegisterClinicPatientCommand(
     Guid? DoctorId = null,
     string? DoctorName = null,
     Guid? RoomId = null,
-    string? RoomOrStation = null) : IRequest<ClinicPatientDto>;
+    string? RoomOrStation = null,
+    DateOnly? QueueDate = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
@@ -63,6 +65,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     private readonly IPatientCodeGenerator _codeGenerator;
     private readonly IRepository<StaffMember>? _staffRepo;
     private readonly IRepository<ClinicRoom>? _roomRepo;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<ClinicSettings>? _settingsRepo;
 
     public RegisterClinicPatientCommandHandler(
         IRepository<ClinicPatient> patientRepo,
@@ -73,7 +77,9 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         IRepository<PatientPastMedicalHistory>? medicalRepo = null,
         IPatientCodeGenerator? codeGenerator = null,
         IRepository<StaffMember>? staffRepo = null,
-        IRepository<ClinicRoom>? roomRepo = null)
+        IRepository<ClinicRoom>? roomRepo = null,
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<ClinicSettings>? settingsRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
@@ -84,6 +90,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         _codeGenerator = codeGenerator ?? ResolveFallbackCodeGenerator(patientRepo, unitOfWork);
         _staffRepo = staffRepo;
         _roomRepo = roomRepo;
+        _workspaceProfiles = workspaceProfiles;
+        _settingsRepo = settingsRepo;
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
@@ -256,7 +264,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         QueueItem? queueItem = null;
         if (request.SendToTriage && _queueRepo != null)
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = request.QueueDate
+                ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, ct, _settingsRepo);
             var lastSequence = await _queueRepo.Query(q =>
                 q.ClinicId == _clinicContext.ClinicId &&
                 q.QueueDate == today)

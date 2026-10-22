@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace ClinicEz.Clinic.Application.Features.Settings.DTOs;
 
@@ -63,4 +63,7 @@ public sealed record ClinicSettingsDto(
     bool TurnstileEnabled = false,
     string? TurnstileSiteKey = null,
     bool IsTurnstileOverriddenByEnv = false,
-    bool? TurnstileEnvOverrideValue = null);
+    bool? TurnstileEnvOverrideValue = null,
+    string? TimeZoneId = null,
+    string? DateFormat = null,
+    string? TimeFormat = null);

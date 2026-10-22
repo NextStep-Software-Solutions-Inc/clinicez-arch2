@@ -1358,6 +1358,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("DateFormat")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<string>("DefaultApproverName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -1557,6 +1561,14 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("TenantSlug")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TimeFormat")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TimeZoneId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
@@ -4979,7 +4991,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
-                        .HasDefaultValue("Invited");
+                        .HasDefaultValue("Active");
 
                     b.Property<string>("TenantId")
                         .IsRequired()

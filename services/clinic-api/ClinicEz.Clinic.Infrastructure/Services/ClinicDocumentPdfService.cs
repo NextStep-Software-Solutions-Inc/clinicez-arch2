@@ -1062,13 +1062,42 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                             r.RelativeItem().AlignRight().Text($"₱{invoice.NetAmount:N2}").FontSize(11.5f).Bold().FontColor(primaryColor);
                         });
 
-                        if (invoice.AmountPaid > 0)
+                        if (invoice.Payments.Any())
+                        {
+                            foreach (var payRecord in invoice.Payments.OrderBy(p => p.PaymentDate))
+                            {
+                                totals.Item().PaddingTop(2).Row(r =>
+                                {
+                                    var refText = !string.IsNullOrWhiteSpace(payRecord.ReferenceNumber) ? $" (Ref: {payRecord.ReferenceNumber})" : "";
+                                    var payDesc = $"Paid ({payRecord.Method} - OR #{payRecord.PaymentNumber}{refText}):";
+                                    r.RelativeItem().Text(payDesc).FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                    r.RelativeItem().AlignRight().Text($"₱{payRecord.Amount:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                                });
+                            }
+
+                            if (invoice.Payments.Count > 1)
+                            {
+                                totals.Item().PaddingTop(1).Row(r =>
+                                {
+                                    r.RelativeItem().Text("Total Amount Paid:").FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                    r.RelativeItem().AlignRight().Text($"₱{invoice.AmountPaid:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
+                                });
+                            }
+
+                            if (invoice.BalanceDue > 0)
+                            {
+                                totals.Item().PaddingTop(2).Row(r =>
+                                {
+                                    r.RelativeItem().Text("Balance Due:").FontSize(8.5f).Bold().FontColor("#DC2626");
+                                    r.RelativeItem().AlignRight().Text($"₱{invoice.BalanceDue:N2}").FontSize(8.5f).Bold().FontColor("#DC2626");
+                                });
+                            }
+                        }
+                        else if (invoice.AmountPaid > 0)
                         {
                             totals.Item().PaddingTop(2).Row(r =>
                             {
-                                var payRecord = invoice.Payments.FirstOrDefault();
-                                var payDesc = payRecord != null ? $"Paid ({payRecord.Method} - OR #{payRecord.PaymentNumber}):" : "Amount Paid:";
-                                r.RelativeItem().Text(payDesc).FontSize(8.5f).SemiBold().FontColor("#16A34A");
+                                r.RelativeItem().Text("Amount Paid:").FontSize(8.5f).SemiBold().FontColor("#16A34A");
                                 r.RelativeItem().AlignRight().Text($"₱{invoice.AmountPaid:N2}").FontSize(8.5f).Bold().FontColor("#16A34A");
                             });
 
@@ -2231,6 +2260,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     private TenantPrintoutConfig MapToTenantConfig(ClinicSettings settings)
     {
+        var workspaceProfile = _workspaceProfiles?.TryGetCached(settings.TenantId.ToString());
         return new TenantPrintoutConfig
         {
             FacilityName = settings.LetterheadHeader ?? settings.ClinicName,
@@ -2248,6 +2278,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 "a5" => DocumentPaperSize.A5,
                 _ => DocumentPaperSize.Letter
             },
+            TimeZoneId = ClinicEz.Clinic.Application.Common.Helpers.ClinicTimeZoneResolver.ResolveEffectiveTimeZoneId(settings, workspaceProfile),
+            DateFormat = ClinicEz.Clinic.Application.Common.Helpers.ClinicTimeZoneResolver.ResolveEffectiveDateFormat(settings, workspaceProfile),
+            TimeFormat = ClinicEz.Clinic.Application.Common.Helpers.ClinicTimeZoneResolver.ResolveEffectiveTimeFormat(settings),
             CustomDisclaimerText = settings.LetterheadFooter ?? "Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173."
         };
     }

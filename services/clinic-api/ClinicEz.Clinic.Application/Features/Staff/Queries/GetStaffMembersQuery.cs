@@ -65,6 +65,14 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
             var roomIds = staff.GetAssignedRoomIds();
             var roomNames = roomIds.Where(id => roomMap.ContainsKey(id)).Select(id => roomMap[id]).ToList();
 
+            var effectiveStatus = staff.Status;
+            // Healing fallback: Accounts with established credentials or lacking invitation tokens
+            // are active clinical members (or suspended), never pending invitations.
+            if (effectiveStatus == StaffAccountStatus.Invited && (!string.IsNullOrEmpty(staff.PasswordHash) || staff.InvitationToken == null))
+            {
+                effectiveStatus = staff.IsActive ? StaffAccountStatus.Active : StaffAccountStatus.Suspended;
+            }
+
             return new StaffMemberDto(
                 staff.Id,
                 staff.TenantId,
@@ -91,7 +99,7 @@ public sealed class GetStaffMembersQueryHandler : IRequestHandler<GetStaffMember
                 AssignedRoomNames: roomNames,
                 SignatureSpecimen: staff.SignatureSpecimen,
                 DefaultSignatureMode: staff.DefaultSignatureMode,
-                Status: staff.Status,
+                Status: effectiveStatus,
                 InvitationToken: staff.InvitationToken,
                 InvitationExpiresAt: staff.InvitationExpiresAt,
                 InviteAcceptedAt: staff.InviteAcceptedAt
@@ -140,6 +148,12 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
             roomNames = roomIds.Where(id => roomMap.ContainsKey(id)).Select(id => roomMap[id]).ToList();
         }
 
+        var effectiveStatus = staff.Status;
+        if (effectiveStatus == StaffAccountStatus.Invited && (!string.IsNullOrEmpty(staff.PasswordHash) || staff.InvitationToken == null))
+        {
+            effectiveStatus = staff.IsActive ? StaffAccountStatus.Active : StaffAccountStatus.Suspended;
+        }
+
         return new StaffMemberDto(
             staff.Id,
             staff.TenantId,
@@ -166,7 +180,7 @@ public sealed class GetStaffMemberByIdQueryHandler : IRequestHandler<GetStaffMem
             AssignedRoomNames: roomNames,
             SignatureSpecimen: staff.SignatureSpecimen,
             DefaultSignatureMode: staff.DefaultSignatureMode,
-            Status: staff.Status,
+            Status: effectiveStatus,
             InvitationToken: staff.InvitationToken,
             InvitationExpiresAt: staff.InvitationExpiresAt,
             InviteAcceptedAt: staff.InviteAcceptedAt);

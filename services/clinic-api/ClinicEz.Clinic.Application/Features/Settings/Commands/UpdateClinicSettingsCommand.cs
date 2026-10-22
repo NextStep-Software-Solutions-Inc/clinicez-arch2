@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -62,7 +62,10 @@ public sealed record UpdateClinicSettingsCommand(
     bool? AppointmentReminder2hEnabled = null,
     bool? EnableStaffAppointmentNotifications = null,
     bool? TurnstileEnabled = null,
-    string? TurnstileSiteKey = null) : IRequest<ClinicSettingsDto>;
+    string? TurnstileSiteKey = null,
+    string? TimeZoneId = null,
+    string? DateFormat = null,
+    string? TimeFormat = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -272,6 +275,31 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.TurnstileSiteKey != null)
             settings.TurnstileSiteKey = string.IsNullOrWhiteSpace(request.TurnstileSiteKey) ? null : request.TurnstileSiteKey.Trim();
 
+        if (request.TimeZoneId != null)
+        {
+            var trimmed = request.TimeZoneId.Trim();
+            settings.TimeZoneId = string.IsNullOrEmpty(trimmed) || trimmed.Equals("inherit", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : trimmed;
+        }
+
+        if (request.DateFormat != null)
+        {
+            var trimmed = request.DateFormat.Trim();
+            settings.DateFormat = string.IsNullOrEmpty(trimmed) || trimmed.Equals("inherit", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : trimmed;
+        }
+
+        if (request.TimeFormat != null)
+        {
+            var trimmed = request.TimeFormat.Trim();
+            settings.TimeFormat = string.IsNullOrEmpty(trimmed) || trimmed.Equals("inherit", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : trimmed;
+        }
+
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -342,7 +370,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             TurnstileEnabled: effectiveTurnstile,
             TurnstileSiteKey: effectiveSiteKey,
             IsTurnstileOverriddenByEnv: isOverridden,
-            TurnstileEnvOverrideValue: overrideVal);
+            TurnstileEnvOverrideValue: overrideVal,
+            TimeZoneId: settings.TimeZoneId,
+            DateFormat: settings.DateFormat,
+            TimeFormat: settings.TimeFormat);
     }
 
     private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)

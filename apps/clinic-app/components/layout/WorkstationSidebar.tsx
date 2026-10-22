@@ -133,6 +133,7 @@ export default function WorkstationSidebar({
       style={[
         styles.container,
         { width: resolvedWidth },
+        isIconMode && styles.containerIconMode,
         Platform.select({
           web: {
             transition: 'width 250ms cubic-bezier(0.4, 0, 0.2, 1)',
@@ -354,6 +355,10 @@ const styles = StyleSheet.create({
     borderRightColor: theme.colors.border,
     flexDirection: 'column',
     overflow: 'hidden',
+    zIndex: 100,
+  },
+  containerIconMode: {
+    overflow: 'visible',
   },
   brandHeader: {
     flexDirection: 'row',
@@ -519,7 +524,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    zIndex: 99999,
+    zIndex: 999999,
     shadowColor: theme.colors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,

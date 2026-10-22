@@ -128,6 +128,16 @@ describe('Milestone 4: Cross-Domain Status & Action Matrix Alignment (Clinic App
       expect(actions).toEqual(['edit', 'reset-pwd', 'suspend-staff']);
     });
 
+    it('Credentialed staff member with status Invited provides Edit Details, Reset Password, and Suspend', () => {
+      const actions = getAvailableStaffActions({
+        status: 'Invited',
+        hasCredentials: true,
+        isActive: true,
+      });
+
+      expect(actions).toEqual(['edit', 'reset-pwd', 'suspend-staff']);
+    });
+
     it('Suspended status provides Reactivate only (excludes Edit and Suspend)', () => {
       const actions = getAvailableStaffActions({
         status: 'Suspended',

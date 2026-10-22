@@ -39,6 +39,9 @@ import {
   InvoiceRecord,
   ClinicSettingsRecord,
   ClinicPatient,
+  getManilaTodayStr,
+  formatClinicDateTime,
+  formatClinicTime,
 } from '../../services/clinicService';
 import {
   printReceiptDialog,
@@ -121,14 +124,6 @@ function formatPeso(value?: number | null): string {
   return `₱${(value ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function getManilaTodayStr(): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
-  } catch {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-}
 
 function toBillingPatient(
   item: PatientQueueItem,
@@ -189,6 +184,8 @@ export default function BillingScreen() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
   const [cashTendered, setCashTendered] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
+  const [isPartialPayment, setIsPartialPayment] = useState(false);
+  const [partialAmount, setPartialAmount] = useState('');
 
   // Status
   const [isProcessing, setIsProcessing] = useState(false);
@@ -225,13 +222,15 @@ export default function BillingScreen() {
       [eodData, eodErr],
       [invoicesTodayData, invErr],
       [openDraftsData, draftErr],
+      [openPartialData],
       [settingsData],
     ] = await Promise.all([
       clinicService.getServices(),
-      clinicService.getQueue({ view: 'All' }),
-      clinicService.getDailyEodReport(),
+      clinicService.getQueue({ date: todayStr, view: 'All' }),
+      clinicService.getDailyEodReport(todayStr),
       clinicService.getInvoices(todayStr),
       clinicService.getInvoices(undefined, undefined, 'Draft'),
+      clinicService.getInvoices(undefined, undefined, 'PartiallyPaid'),
       clinicService.getSettings(),
     ]);
 
@@ -250,6 +249,7 @@ export default function BillingScreen() {
     const invoiceMap = new Map<string, InvoiceRecord>();
     for (const inv of (invoicesTodayData ?? [])) invoiceMap.set(inv.id, inv);
     for (const inv of (openDraftsData ?? [])) invoiceMap.set(inv.id, inv);
+    for (const inv of (openPartialData ?? [])) invoiceMap.set(inv.id, inv);
     const allInvoices = Array.from(invoiceMap.values());
     setInvoices(allInvoices);
     if (settingsData) setClinicSettings(settingsData);
@@ -303,6 +303,10 @@ export default function BillingScreen() {
     setSelectedPatient(p);
     setLastReceipt(null);
     setAllowDuplicate(false);
+    setIsPartialPayment(false);
+    setPartialAmount('');
+    setCashTendered('');
+    setReferenceNumber('');
 
     let initialItems: LineItemForm[] = [];
 
@@ -440,9 +444,38 @@ export default function BillingScreen() {
     }
   }, [services, clinicSettings, invoices]);
 
+  const handleSelectUnsettledInvoice = useCallback((inv: InvoiceRecord) => {
+    const isPromissory = Boolean(
+      inv.notes?.includes('[PROMISSORY NOTE]') ||
+      inv.notes?.toLowerCase().includes('promissory') ||
+      (inv as any).isDeferred
+    );
+    const p: BillingPatient = {
+      key: `unsettled-${inv.id}`,
+      patientId: inv.patientId,
+      patientName: inv.patientName,
+      queueItemId: inv.queueItemId,
+      hasOpenSoa: true,
+      activeInvoice: inv,
+      isAlreadyBilled: false,
+      existingInvoiceNumber: inv.invoiceNumber,
+      isPromissory,
+    };
+    handleSelectPatient(p);
+    setActiveTab('active');
+  }, [handleSelectPatient]);
+
   useEffect(() => {
     if (loading) return;
-    const params = route.params as { patientId?: string; patientName?: string } | undefined;
+    const params = route.params as { patientId?: string; patientName?: string; invoiceId?: string } | undefined;
+    if (params?.invoiceId && handledParamPatientRef.current !== params.invoiceId) {
+      handledParamPatientRef.current = params.invoiceId;
+      const matchedInv = invoices.find((x) => x.id === params.invoiceId);
+      if (matchedInv) {
+        handleSelectUnsettledInvoice(matchedInv);
+        return;
+      }
+    }
     if (params?.patientId && handledParamPatientRef.current !== params.patientId) {
       handledParamPatientRef.current = params.patientId;
       const p = patients.find((x) => x.patientId === params.patientId);
@@ -467,7 +500,7 @@ export default function BillingScreen() {
         handleSelectPatient(newP);
       }
     }
-  }, [route.params, patients, loading, invoices, handleSelectPatient]);
+  }, [route.params, patients, loading, invoices, handleSelectPatient, handleSelectUnsettledInvoice]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -490,9 +523,17 @@ export default function BillingScreen() {
   }
   const discountAmount = Math.round(grossAmount * (discountPercentage / 100));
   const netAmount = Math.max(0, grossAmount - discountAmount);
+  const previousPayments = activeInvoice?.amountPaid ?? 0;
+  const balanceDue = Math.max(0, netAmount - previousPayments);
+
+  const parsedPartial = parseFloat(partialAmount);
+  const amountToCollect =
+    isPartialPayment && !isNaN(parsedPartial) && parsedPartial > 0
+      ? Math.min(balanceDue, parsedPartial)
+      : balanceDue;
 
   const tenderedVal = parseFloat(cashTendered) || 0;
-  const changeDue = paymentMethod === 'Cash' ? Math.max(0, tenderedVal - netAmount) : 0;
+  const changeDue = paymentMethod === 'Cash' ? Math.max(0, tenderedVal - amountToCollect) : 0;
 
   const patientChoices =
     selectedPatient && !patients.some((p) => p.key === selectedPatient.key)
@@ -605,22 +646,6 @@ export default function BillingScreen() {
     setCustomItemQty('1');
     setCustomItemModalVisible(false);
     notify.success(`Added ${name} with clinician attribution.`);
-  };
-
-  const handleSelectUnsettledInvoice = (inv: InvoiceRecord) => {
-    const p: BillingPatient = {
-      key: `unsettled-${inv.id}`,
-      patientId: inv.patientId,
-      patientName: inv.patientName,
-      queueItemId: inv.queueItemId,
-      hasOpenSoa: true,
-      activeInvoice: inv,
-      isAlreadyBilled: false,
-      existingInvoiceNumber: inv.invoiceNumber,
-      isPromissory: true,
-    };
-    handleSelectPatient(p);
-    setActiveTab('active');
   };
 
   const handleDeferPayment = async () => {
@@ -761,8 +786,8 @@ export default function BillingScreen() {
           patientId: inv.patientId,
           cashierName: payment?.receivedByStaffName || inv.billedByStaffName || currentName,
           paidAt: payment?.paymentDate
-            ? new Date(payment.paymentDate).toLocaleString('en-PH')
-            : new Date(inv.invoiceDate).toLocaleString('en-PH'),
+            ? formatClinicDateTime(payment.paymentDate)
+            : formatClinicDateTime(inv.invoiceDate),
           paymentMethod: payment?.method || 'Cash',
           referenceNumber: payment?.referenceNumber,
           grossAmount: inv.grossAmount,
@@ -799,8 +824,8 @@ export default function BillingScreen() {
       patientId: inv.patientId,
       cashierName: payment?.receivedByStaffName || inv.billedByStaffName || currentName,
       paidAt: payment?.paymentDate
-        ? new Date(payment.paymentDate).toLocaleString('en-PH')
-        : new Date(inv.invoiceDate).toLocaleString('en-PH'),
+        ? formatClinicDateTime(payment.paymentDate)
+        : formatClinicDateTime(inv.invoiceDate),
       paymentMethod: payment?.method || 'Cash',
       referenceNumber: payment?.referenceNumber,
       grossAmount: inv.grossAmount,
@@ -890,8 +915,13 @@ export default function BillingScreen() {
       return;
     }
 
-    if (paymentMethod === 'Cash' && tenderedVal < netAmount) {
-      notify.error(`Insufficient cash tendered. Net amount is ${formatPeso(netAmount)}.`);
+    if (amountToCollect <= 0) {
+      notify.error('No outstanding balance to collect.');
+      return;
+    }
+
+    if (paymentMethod === 'Cash' && tenderedVal < amountToCollect) {
+      notify.error(`Insufficient cash tendered. Amount to collect is ${formatPeso(amountToCollect)}.`);
       return;
     }
 
@@ -907,7 +937,9 @@ export default function BillingScreen() {
       const [updatedInvoice, updateErr] = await clinicService.updateInvoice(activeInvoice.id, {
         discountType,
         discountIdNumber: discountId,
-        notes: `Settled via ${paymentMethod}`,
+        notes: isPartialPayment && amountToCollect < balanceDue
+          ? `Partial payment via ${paymentMethod}`
+          : `Settled via ${paymentMethod}`,
         lineItems: lineItems.map(l => ({
           itemCode: l.code,
           description: l.name,
@@ -941,7 +973,9 @@ export default function BillingScreen() {
         attendingDoctorId: selectedPatient.doctorId,
         discountType,
         discountIdNumber: discountId,
-        notes: `Settled via ${paymentMethod}`,
+        notes: isPartialPayment && amountToCollect < balanceDue
+          ? `Partial payment via ${paymentMethod}`
+          : `Settled via ${paymentMethod}`,
         allowDuplicate,
         lineItems: lineItems.map(l => ({
           serviceItemId: undefined,
@@ -967,12 +1001,15 @@ export default function BillingScreen() {
       orNumber = invoice.invoiceNumber;
     }
 
-    if (netAmount > 0) {
+    if (amountToCollect > 0) {
+      const isPartial = isPartialPayment && amountToCollect < balanceDue;
       const [paidInvoice, payErr] = await clinicService.recordPayment(invoiceToPayId, {
-        amount: netAmount,
+        amount: amountToCollect,
         method: paymentMethod,
         referenceNumber: referenceNumber || undefined,
-        notes: `Received from ${selectedPatient.patientName} by ${currentName}`,
+        notes: isPartial
+          ? `Partial payment received from ${selectedPatient.patientName} by ${currentName}`
+          : `Received from ${selectedPatient.patientName} by ${currentName}`,
       });
 
       if (payErr || !paidInvoice) {
@@ -1012,19 +1049,26 @@ export default function BillingScreen() {
       patientName: selectedPatient.patientName,
       patientId: selectedPatient.patientId,
       cashierName: currentName,
-      paidAt: new Date().toLocaleString('en-PH'),
+      paidAt: formatClinicDateTime(new Date()),
       paymentMethod,
       referenceNumber: referenceNumber || undefined,
       grossAmount,
       discountType,
       discountIdNumber: discountId,
       discountAmount,
-      netAmount,
+      netAmount: amountToCollect,
       cashTendered: paymentMethod === 'Cash' ? tenderedVal : undefined,
       change: changeDue,
       items: receiptItems,
     });
     setReceiptModalVisible(true);
+
+    if (isPartialPayment && amountToCollect < balanceDue) {
+      const remaining = Math.max(0, balanceDue - amountToCollect);
+      notify.success(`Partial payment of ${formatPeso(amountToCollect)} recorded. Remaining balance: ${formatPeso(remaining)}.`);
+    } else {
+      notify.success(`Payment of ${formatPeso(amountToCollect)} recorded. Invoice settled.`);
+    }
 
     // Persist Senior Citizen / PWD ID to patient profile in background if updated
     if (currentPatientProfile && selectedPatient) {
@@ -1145,15 +1189,11 @@ export default function BillingScreen() {
     ? [selectedPatient, ...activePatients]
     : activePatients;
   const paidInvoicesToday = invoices.filter((i) => i.status === 'Paid');
-  const unsettledInvoices = invoices.filter(
-    (i) =>
-      i.status !== 'Paid' &&
-      i.status !== 'Voided' &&
-      (Boolean(i.notes?.includes('[PROMISSORY NOTE]')) ||
-        Boolean(i.notes?.toLowerCase().includes('promissory')) ||
-        Boolean((i as any).isDeferred) ||
-        patientChoices.some((p) => p.isPromissory && (p.activeInvoice?.id === i.id || p.patientId === i.patientId))),
-  );
+  const unsettledInvoices = invoices.filter((i) => {
+    if (i.status === 'Paid' || i.status === 'Voided') return false;
+    const balance = i.balanceDue ?? Math.max(0, i.netAmount - (i.amountPaid ?? 0));
+    return balance > 0;
+  });
 
   const renderPatientSelector = () => (
     <Card>
@@ -1207,8 +1247,8 @@ export default function BillingScreen() {
             const payment = inv.payments?.[0];
             const receiptOr = payment?.paymentNumber || inv.invoiceNumber;
             const payTime = payment?.paymentDate
-              ? new Date(payment.paymentDate).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
-              : new Date(inv.invoiceDate).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+              ? formatClinicTime(payment.paymentDate)
+              : formatClinicTime(inv.invoiceDate);
             return (
               <View key={inv.id} style={styles.billedRow}>
                 <View style={styles.flexFill}>
@@ -1588,10 +1628,58 @@ export default function BillingScreen() {
 
       {paymentMethod === 'Cash' ? (
         <>
+          {balanceDue > 0 && (
+            <View style={styles.paymentModeSegment}>
+              <Pressable
+                style={[styles.paymentModeTab, !isPartialPayment && styles.paymentModeTabActive]}
+                onPress={() => {
+                  setIsPartialPayment(false);
+                  setPartialAmount('');
+                }}
+              >
+                <ThemedText
+                  variant={!isPartialPayment ? 'bodyBold' : 'body'}
+                  color={!isPartialPayment ? theme.colors.primary : theme.colors.textSecondary}
+                >
+                  Full Payment ({formatPeso(balanceDue)})
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.paymentModeTab, isPartialPayment && styles.paymentModeTabActive]}
+                onPress={() => {
+                  setIsPartialPayment(true);
+                  setPartialAmount((balanceDue / 2).toFixed(2));
+                }}
+              >
+                <ThemedText
+                  variant={isPartialPayment ? 'bodyBold' : 'body'}
+                  color={isPartialPayment ? theme.colors.primary : theme.colors.textSecondary}
+                >
+                  Partial Payment
+                </ThemedText>
+              </Pressable>
+            </View>
+          )}
+
+          {isPartialPayment && (
+            <View style={styles.partialPayBox}>
+              <Input
+                label="Partial amount to collect now"
+                keyboardType="numeric"
+                placeholder={balanceDue.toFixed(2)}
+                value={partialAmount}
+                onChangeText={setPartialAmount}
+              />
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Remaining balance after this payment: {formatPeso(Math.max(0, balanceDue - amountToCollect))}
+              </ThemedText>
+            </View>
+          )}
+
           <Input
             label="Cash tendered"
             keyboardType="numeric"
-            placeholder={netAmount.toFixed(2)}
+            placeholder={amountToCollect.toFixed(2)}
             value={cashTendered}
             onChangeText={setCashTendered}
           />
@@ -1605,12 +1693,62 @@ export default function BillingScreen() {
           </View>
         </>
       ) : (
-        <Input
-          label="Transaction or reference number"
-          placeholder="Reference or approval number"
-          value={referenceNumber}
-          onChangeText={setReferenceNumber}
-        />
+        <>
+          {balanceDue > 0 && (
+            <View style={styles.paymentModeSegment}>
+              <Pressable
+                style={[styles.paymentModeTab, !isPartialPayment && styles.paymentModeTabActive]}
+                onPress={() => {
+                  setIsPartialPayment(false);
+                  setPartialAmount('');
+                }}
+              >
+                <ThemedText
+                  variant={!isPartialPayment ? 'bodyBold' : 'body'}
+                  color={!isPartialPayment ? theme.colors.primary : theme.colors.textSecondary}
+                >
+                  Full Payment ({formatPeso(balanceDue)})
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.paymentModeTab, isPartialPayment && styles.paymentModeTabActive]}
+                onPress={() => {
+                  setIsPartialPayment(true);
+                  setPartialAmount((balanceDue / 2).toFixed(2));
+                }}
+              >
+                <ThemedText
+                  variant={isPartialPayment ? 'bodyBold' : 'body'}
+                  color={isPartialPayment ? theme.colors.primary : theme.colors.textSecondary}
+                >
+                  Partial Payment
+                </ThemedText>
+              </Pressable>
+            </View>
+          )}
+
+          {isPartialPayment && (
+            <View style={styles.partialPayBox}>
+              <Input
+                label="Partial amount to collect now"
+                keyboardType="numeric"
+                placeholder={balanceDue.toFixed(2)}
+                value={partialAmount}
+                onChangeText={setPartialAmount}
+              />
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Remaining balance after this payment: {formatPeso(Math.max(0, balanceDue - amountToCollect))}
+              </ThemedText>
+            </View>
+          )}
+
+          <Input
+            label="Transaction or reference number"
+            placeholder="Reference or approval number"
+            value={referenceNumber}
+            onChangeText={setReferenceNumber}
+          />
+        </>
       )}
     </Card>
   );
@@ -1639,6 +1777,24 @@ export default function BillingScreen() {
           {formatPeso(netAmount)}
         </ThemedText>
       </View>
+      {previousPayments > 0 && (
+        <>
+          <View style={styles.summaryRow}>
+            <ThemedText variant="body" color={theme.colors.successText}>
+              Previously paid
+            </ThemedText>
+            <ThemedText variant="bodyBold" color={theme.colors.successText}>
+              -{formatPeso(previousPayments)}
+            </ThemedText>
+          </View>
+          <View style={[styles.summaryRow, styles.netRow]}>
+            <ThemedText variant="h3">Remaining balance due</ThemedText>
+            <ThemedText variant="title" color={theme.colors.emergencyText}>
+              {formatPeso(balanceDue)}
+            </ThemedText>
+          </View>
+        </>
+      )}
 
       {selectedPatient?.isAlreadyBilled && !activeInvoice && (
         <View style={styles.duplicateWarningBox}>
@@ -1668,14 +1824,17 @@ export default function BillingScreen() {
           size="lg"
           icon="check"
           title={
-            activeInvoice
-              ? `Settle SOA · ${formatPeso(netAmount)}`
-              : `Collect & Issue Receipt · ${formatPeso(netAmount)}`
+            isPartialPayment && amountToCollect < balanceDue
+              ? `Collect Partial · ${formatPeso(amountToCollect)}`
+              : activeInvoice
+              ? `Settle Balance · ${formatPeso(amountToCollect)}`
+              : `Collect & Issue Receipt · ${formatPeso(amountToCollect)}`
           }
           loading={isProcessing}
           disabled={
             !selectedPatient ||
             lineItems.length === 0 ||
+            amountToCollect <= 0 ||
             (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate)
           }
           onPress={handleSettlePayment}
@@ -1789,7 +1948,7 @@ export default function BillingScreen() {
         <EmptyState
           icon="checkCircle"
           title="No unsettled or promissory accounts"
-          description="Patients with deferred payments or promissory notes will appear here for collection."
+          description="Patients with open balances, deferred payments, or promissory notes will appear here for collection."
         />
       ) : (
         <View style={styles.unsettledList}>
@@ -1797,6 +1956,11 @@ export default function BillingScreen() {
             const dueDateMatch = inv.notes?.match(/due on ([^.]+)\./i);
             const dueDate = dueDateMatch?.[1];
             const balance = inv.balanceDue ?? Math.max(0, inv.netAmount - (inv.amountPaid ?? 0));
+            const isPromissory = Boolean(
+              inv.notes?.includes('[PROMISSORY NOTE]') ||
+              inv.notes?.toLowerCase().includes('promissory') ||
+              (inv as any).isDeferred
+            );
             return (
               <View key={inv.id} style={styles.unsettledRow}>
                 <View style={styles.flexFill}>
@@ -1805,6 +1969,13 @@ export default function BillingScreen() {
                       {inv.patientName}
                     </ThemedText>
                     <Badge label={`SOA #${inv.invoiceNumber}`} variant="warning" size="sm" />
+                    {isPromissory ? (
+                      <Badge label="Promissory" variant="emergency" size="sm" />
+                    ) : inv.status === 'PartiallyPaid' ? (
+                      <Badge label="Partially Paid" variant="warning" size="sm" />
+                    ) : (
+                      <Badge label="Unsettled SOA" variant="neutral" size="sm" />
+                    )}
                     {dueDate && (
                       <Badge label={`Due: ${dueDate}`} variant="emergency" size="sm" />
                     )}
@@ -2208,6 +2379,31 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceMuted,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderLight,
+  },
+  paymentModeSegment: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceMuted,
+    padding: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    marginBottom: theme.spacing.sm,
+  },
+  paymentModeTab: {
+    flex: 1,
+    paddingVertical: theme.spacing.xs,
+    alignItems: 'center',
+    borderRadius: theme.radii.xs,
+  },
+  paymentModeTabActive: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+  },
+  partialPayBox: {
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
   },
   qtyStepperRow: {
     flexDirection: 'row',

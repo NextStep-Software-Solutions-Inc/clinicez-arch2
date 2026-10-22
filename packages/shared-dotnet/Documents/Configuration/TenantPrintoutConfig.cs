@@ -53,6 +53,12 @@ public sealed class TenantPrintoutConfig
         "This is an official electronic clinical document generated in compliance with Philippine Health Regulations (RA 8792 & RA 10173). Not valid for medico-legal purposes without authorized seal.";
     public bool ShowSecurityQrCode { get; set; } = true;
 
+    // Regional Formatting (TimeZone, Date Format, Time Format)
+    public string? TimeZoneId { get; set; }
+    public string? DateFormat { get; set; }
+    public string? TimeFormat { get; set; }
+
+
     /// <summary>
     /// Validates and normalizes hex color code or returns fallback.
     /// </summary>

@@ -40,12 +40,20 @@ public sealed class BillingSearchProvider : ISearchProvider
         var term = query.Trim().ToLowerInvariant();
         var boundedLimit = limit <= 0 ? 10 : Math.Min(limit, 50);
 
+        var isUnpaidStatusSearch = term is "unpaid" or "unsettled" or "balance" or "bal" or "due" or "draft" or "soa" or "open";
+        var isPromissorySearch = term is "promissory" or "promi" or "defer" or "deferred";
+
         var invoices = await _invoiceRepo.Query(e => !e.IsDeleted && e.ClinicId == tenantId, ignoreQueryFilters: true)
             .Include(inv => inv.LineItems)
             .AsNoTracking()
             .Where(inv =>
                 inv.InvoiceNumber.ToLower().Contains(term) ||
                 inv.PatientName.ToLower().Contains(term) ||
+                (inv.Notes != null && inv.Notes.ToLower().Contains(term)) ||
+                (isUnpaidStatusSearch && inv.BalanceDue > 0 && inv.Status != InvoiceStatus.Paid && inv.Status != InvoiceStatus.Voided) ||
+                (isPromissorySearch && inv.BalanceDue > 0 && (
+                    (inv.Notes != null && (inv.Notes.ToLower().Contains("promissory") || inv.Notes.Contains("[PROMISSORY NOTE]"))) ||
+                    inv.Status == InvoiceStatus.PartiallyPaid)) ||
                 inv.LineItems.Any(li => (li.DoctorName != null && li.DoctorName.ToLower().Contains(term)) || li.Description.ToLower().Contains(term)))
             .OrderByDescending(inv => inv.InvoiceDate)
             .Take(boundedLimit)
@@ -65,7 +73,8 @@ public sealed class BillingSearchProvider : ISearchProvider
                 targetRoute: "Billing",
                 routeParams: new Dictionary<string, string>
                 {
-                    { "invoiceId", inv.Id.ToString() }
+                    { "invoiceId", inv.Id.ToString() },
+                    { "patientId", inv.PatientId.ToString() }
                 }
             );
         }).ToList();

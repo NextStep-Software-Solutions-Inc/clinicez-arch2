@@ -32,6 +32,7 @@ import { pickClinicLogo } from '../../utils/logoUploader';
 import { Alert, notify } from '../../utils/feedback';
 import LogoCropModal from './LogoCropModal';
 import ColorBrandingSection from './ColorBrandingSection';
+import RegionalDateTimeSettingsCard from './RegionalDateTimeSettingsCard';
 import DevDataSeederCard from './DevDataSeederCard';
 import CashierStationSettingsCard, {
   CASHIER_MODE_OPTIONS,
@@ -414,6 +415,12 @@ export default function GeneralSettingsTab({
           )}
         </CardContent>
       </Card>
+
+      {/* Regional Timezone, Date & Time Format (Portal Workspace Auto-Inheritance & Clinic Override) */}
+      <RegionalDateTimeSettingsCard
+        showSkeletons={showSkeletons}
+        onSaved={() => onSettingsUpdated?.(settings!)}
+      />
 
       {/* Clinic Branding & Logo */}
       <Card>

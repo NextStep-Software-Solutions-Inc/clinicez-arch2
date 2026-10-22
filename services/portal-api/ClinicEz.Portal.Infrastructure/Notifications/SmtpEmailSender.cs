@@ -27,23 +27,14 @@ public enum SmtpSecurity
     SslOnConnect
 }
 
-/// <summary>The unified mail server, configured under <c>Smtp</c>. Credentials come from secrets or environment, never from source.</summary>
+/// <summary>SMTP secrets and execution mode configured under <c>Smtp</c>. All non-secret mail server parameters (Host, Port, Security, FromEmail, FromName, ReplyTo) are managed exclusively in Platform Settings (SystemSettings) in the database.</summary>
 public sealed class SmtpOptions
 {
     public const string SectionName = "Smtp";
 
     public SmtpMode Mode { get; set; } = SmtpMode.Smtp;
-    public string Host { get; set; } = string.Empty;
-    public int Port { get; set; } = 587;
-    public SmtpSecurity Security { get; set; } = SmtpSecurity.Auto;
     public string User { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
-
-    /// <summary>Sender address. The only address mail is ever sent from.</summary>
-    public string FromEmail { get; set; } = string.Empty;
-
-    public string FromName { get; set; } = "Clinic EZ";
-    public string? ReplyTo { get; set; }
 
     public string? FindProblem(bool isDevelopment)
     {
@@ -52,9 +43,6 @@ public sealed class SmtpOptions
             return isDevelopment ? null : "Smtp:Mode 'Log' is only allowed in the Development environment.";
         }
 
-        if (string.IsNullOrWhiteSpace(Host)) return "Smtp:Host is required when Smtp:Mode is 'Smtp'.";
-        if (string.IsNullOrWhiteSpace(FromEmail)) return "Smtp:FromEmail is required when Smtp:Mode is 'Smtp'.";
-        if (Port is < 1 or > 65535) return "Smtp:Port must be between 1 and 65535.";
         return null;
     }
 }
@@ -70,23 +58,38 @@ internal sealed class SmtpOptionsValidator(IHostEnvironment environment) : IVali
 
 public sealed class SmtpEmailSender(
     IOptions<SmtpOptions> options,
-    ClinicEz.Portal.Application.Interfaces.ISystemSettingsService? settingsService = null) : IEmailSender
+    ClinicEz.Portal.Application.Interfaces.ISystemSettingsService settingsService,
+    ILogger<SmtpEmailSender>? logger = null) : IEmailSender
 {
     public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
         var smtp = options.Value;
-        var host = smtp.Host;
-        var port = smtp.Port;
-        var fromEmail = smtp.FromEmail;
-        var fromName = smtp.FromName;
-        var defaultReplyTo = smtp.ReplyTo;
 
-        if (settingsService is not null)
+        // Platform Settings (SystemSettings) in the database is the exclusive source of truth for all non-secret mailer parameters.
+        var host = (await settingsService.GetSettingValueAsync("Mailer:SmtpHost", string.Empty, cancellationToken))?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(host))
         {
-            fromEmail = await settingsService.GetSettingValueAsync("Mailer:SmtpFromEmail", fromEmail, cancellationToken);
-            fromName = await settingsService.GetSettingValueAsync("Mailer:SmtpFromName", fromName, cancellationToken);
-            defaultReplyTo = await settingsService.GetSettingValueAsync("Mailer:SmtpReplyTo", defaultReplyTo ?? string.Empty, cancellationToken);
+            throw new InvalidOperationException(
+                "SMTP host is not configured. Please configure 'Mailer:SmtpHost' in Platform Settings (/admin/settings).");
         }
+
+        var fromEmail = (await settingsService.GetSettingValueAsync("Mailer:SmtpFromEmail", string.Empty, cancellationToken))?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(fromEmail))
+        {
+            throw new InvalidOperationException(
+                "SMTP sender email is not configured. Please configure 'Mailer:SmtpFromEmail' in Platform Settings (/admin/settings).");
+        }
+
+        var dbPort = await settingsService.GetSettingValueAsync("Mailer:SmtpPort", "587", cancellationToken);
+        var port = int.TryParse(dbPort, out var parsedPort) && parsedPort > 0 ? parsedPort : 587;
+
+        var dbSec = await settingsService.GetSettingValueAsync("Mailer:SmtpSecurity", "StartTls", cancellationToken);
+        var security = Enum.TryParse<SmtpSecurity>(dbSec, true, out var parsedSec) ? parsedSec : SmtpSecurity.StartTls;
+
+        var fromName = (await settingsService.GetSettingValueAsync("Mailer:SmtpFromName", "Clinic EZ Support", cancellationToken))?.Trim();
+        if (string.IsNullOrWhiteSpace(fromName)) fromName = "Clinic EZ Support";
+
+        var defaultReplyTo = (await settingsService.GetSettingValueAsync("Mailer:SmtpReplyTo", string.Empty, cancellationToken))?.Trim();
 
         var mime = new MimeMessage();
         mime.From.Add(new MailboxAddress(DisplayName(fromName, message), fromEmail));
@@ -100,25 +103,38 @@ public sealed class SmtpEmailSender(
 
         using var client = new SmtpClient();
         client.CheckCertificateRevocation = false;
-        await client.ConnectAsync(host, port, SocketOptions(smtp), cancellationToken);
-        if (!string.IsNullOrEmpty(smtp.User))
-        {
-            await client.AuthenticateAsync(smtp.User, smtp.Password, cancellationToken);
-        }
 
-        await client.SendAsync(mime, cancellationToken);
-        await client.DisconnectAsync(true, cancellationToken);
+        try
+        {
+            logger?.LogInformation("Connecting to SMTP host {Host}:{Port} (Security: {Security}) to send email to {To}...",
+                host, port, security, message.To);
+            await client.ConnectAsync(host, port, SocketOptions(security, port), cancellationToken);
+            if (!string.IsNullOrEmpty(smtp.User))
+            {
+                await client.AuthenticateAsync(smtp.User, smtp.Password, cancellationToken);
+            }
+
+            await client.SendAsync(mime, cancellationToken);
+            await client.DisconnectAsync(true, cancellationToken);
+            logger?.LogInformation("Successfully dispatched email to {To} via SMTP host {Host}.", message.To, host);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError(ex, "Failed to send email to {To} via SMTP host {Host}:{Port}: {ErrorMessage}",
+                message.To, host, port, ex.Message);
+            throw;
+        }
     }
 
     private static string DisplayName(string fromName, EmailMessage message) =>
         string.IsNullOrWhiteSpace(message.FromDisplayName) ? fromName : $"{message.FromDisplayName} (via {fromName})";
 
-    private static SecureSocketOptions SocketOptions(SmtpOptions smtp) => smtp.Security switch
+    private static SecureSocketOptions SocketOptions(SmtpSecurity security, int port) => security switch
     {
         SmtpSecurity.None => SecureSocketOptions.None,
         SmtpSecurity.StartTls => SecureSocketOptions.StartTls,
         SmtpSecurity.SslOnConnect => SecureSocketOptions.SslOnConnect,
-        _ => smtp.Port == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable
+        _ => port == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable
     };
 }
 

@@ -5,7 +5,13 @@ import { Modal, Button, Badge, Icon, ThemedText, SegmentedControl, type Segmente
 import { Alert } from '@utils/feedback';
 import { useClinic } from '../context/ClinicContext';
 import { useStaff } from '../context/StaffContext';
-import { PrescriptionSlipData, clinicService, StaffMember } from '../services/clinicService';
+import {
+  PrescriptionSlipData,
+  clinicService,
+  StaffMember,
+  formatClinicDate,
+  formatClinicDateTime,
+} from '../services/clinicService';
 import { openPrintableUrl } from '../utils/printHelper';
 import { RxStageChip } from './interop/InteropBadges';
 
@@ -194,7 +200,7 @@ export default function PrescriptionSlipModal({
             </ThemedText>
           </ThemedText>
           <ThemedText variant="smallBold" color={theme.colors.textMuted}>
-            Date: {new Date(slip.issuedAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}
+            Date: {formatClinicDate(slip.issuedAt)}
           </ThemedText>
         </View>
       </View>
@@ -369,7 +375,7 @@ export default function PrescriptionSlipModal({
             </ThemedText>
             <ThemedText variant="caption" color={theme.colors.textSecondary}>
               Dispensed by {slip.dispensedPharmacyName || 'a partner pharmacy'} on{' '}
-              {slip.dispensedAt ? new Date(slip.dispensedAt).toLocaleString() : 'N/A'}.
+              {slip.dispensedAt ? formatClinicDateTime(slip.dispensedAt) : 'N/A'}.
             </ThemedText>
             {slip.dispensedReceiptNumber ? (
               <ThemedText variant="captionBold" color={theme.colors.successText}>
@@ -392,7 +398,7 @@ export default function PrescriptionSlipModal({
             </ThemedText>
             {slip.dispensedAt ? (
               <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                Date: {new Date(slip.dispensedAt).toLocaleDateString()}
+                Date: {formatClinicDate(slip.dispensedAt)}
               </ThemedText>
             ) : null}
             {slip.dispenseNotes ? (

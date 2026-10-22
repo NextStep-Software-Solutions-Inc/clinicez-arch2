@@ -248,6 +248,18 @@ describe('Staff Invitations & Facility Auth Suite', () => {
       expect(badge.icon).toBe('check');
     });
 
+    it('resolves credentialed staff member with status Invited to Login Active (healing migration anomaly)', () => {
+      const badge = resolveStaffBadge({
+        status: 'Invited',
+        isActive: true,
+        hasCredentials: true,
+        mustChangePassword: false,
+      });
+      expect(badge.label).toBe('Login Active');
+      expect(badge.variant).toBe('success');
+      expect(badge.icon).toBe('check');
+    });
+
     it('resolves staff without login credentials to No Login neutral badge', () => {
       const badge = resolveStaffBadge({
         isActive: true,
