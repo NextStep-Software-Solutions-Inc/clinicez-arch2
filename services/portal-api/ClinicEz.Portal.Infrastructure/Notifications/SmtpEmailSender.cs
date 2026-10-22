@@ -109,9 +109,14 @@ public sealed class SmtpEmailSender(
             logger?.LogInformation("Connecting to SMTP host {Host}:{Port} (Security: {Security}) to send email to {To}...",
                 host, port, security, message.To);
             await client.ConnectAsync(host, port, SocketOptions(security, port), cancellationToken);
-            if (!string.IsNullOrEmpty(smtp.User))
+
+            var smtpUser = !string.IsNullOrWhiteSpace(smtp.User)
+                ? smtp.User.Trim()
+                : (!string.IsNullOrWhiteSpace(smtp.Password) && host.Contains("resend", StringComparison.OrdinalIgnoreCase) ? "resend" : string.Empty);
+
+            if (!string.IsNullOrEmpty(smtpUser))
             {
-                await client.AuthenticateAsync(smtp.User, smtp.Password, cancellationToken);
+                await client.AuthenticateAsync(smtpUser, smtp.Password, cancellationToken);
             }
 
             await client.SendAsync(mime, cancellationToken);
