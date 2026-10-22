@@ -246,7 +246,7 @@ export default function RegionalDateTimeSettingsCard({
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
                   LIVE CLINIC TIMESTAMP PREVIEW
                 </ThemedText>
-                <ThemedText variant="subtitle" color={theme.colors.primaryDark}>
+                <ThemedText variant="h3" color={theme.colors.primaryDark}>
                   {previewDateTime}
                 </ThemedText>
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
@@ -424,12 +424,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   infoBannerInherited: {
-    backgroundColor: theme.colors.successSoft,
-    borderColor: theme.colors.success,
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
   },
   infoBannerOverride: {
-    backgroundColor: theme.colors.warningSoft,
-    borderColor: theme.colors.warning,
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
   },
   infoBannerIcon: {
     width: 28,
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   },
   chipSelected: {
     borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primarySoft,
+    backgroundColor: theme.colors.primarySubtle,
   },
   optionsGrid: {
     flexDirection: 'row',
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
   },
   formatCardSelected: {
     borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primarySoft,
+    backgroundColor: theme.colors.primarySubtle,
   },
   formatCardTop: {
     flexDirection: 'row',
@@ -539,9 +539,9 @@ const styles = StyleSheet.create({
   radioOuter: {
     width: 18,
     height: 18,
-    borderRadius: 9,
+    borderRadius: theme.radii.full,
     borderWidth: 2,
-    borderColor: theme.colors.borderStrong,
+    borderColor: theme.colors.borderDark,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
   radioInner: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: theme.radii.full,
     backgroundColor: theme.colors.primary,
   },
   actionsEnd: {

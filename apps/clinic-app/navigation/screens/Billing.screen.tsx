@@ -1069,13 +1069,6 @@ export default function BillingScreen() {
     } else {
       notify.success(`Payment of ${formatPeso(amountToCollect)} recorded. Invoice settled.`);
     }
-      discountAmount,
-      netAmount,
-      cashTendered: paymentMethod === 'Cash' ? tenderedVal : undefined,
-      change: changeDue,
-      items: receiptItems,
-    });
-    setReceiptModalVisible(true);
 
     // Persist Senior Citizen / PWD ID to patient profile in background if updated
     if (currentPatientProfile && selectedPatient) {
