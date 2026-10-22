@@ -377,6 +377,26 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
       });
       expect(created?.philHealthCode).toBe('D7140');
     });
+
+    test('1.9 clinicService.updateService supports updating and clearing philHealthCode across categories', async () => {
+      const { clinicService } = await import('../services/clinicService');
+      const [updated, err] = await clinicService.updateService('svc-1', {
+        name: 'Dental Extraction',
+        category: 'Dental',
+        standardPrice: 1100,
+        isActive: true,
+        philHealthCode: undefined,
+        philHealthDescription: undefined,
+        isPhilHealthFormulary: false,
+      });
+
+      expect(err).toBeNull();
+      expect(lastApiClientCall.method).toBe('PUT');
+      expect(lastApiClientCall.url).toBe('/services/svc-1');
+      expect(lastApiClientCall.data.philHealthCode).toBeUndefined();
+      expect(lastApiClientCall.data.isPhilHealthFormulary).toBe(false);
+      expect(updated?.philHealthCode).toBeUndefined();
+    });
   });
 
   // -------------------------------------------------------------------------

@@ -81,7 +81,7 @@ export default function ServicesCatalogTab({
   const handleOpenAdd = () => {
     setItemCode(`SVC-${Math.floor(1000 + Math.random() * 9000)}`);
     setItemName('');
-    setItemCategory('Consultation');
+    setItemCategory(selectedCategory !== 'All' ? selectedCategory : 'Consultation');
     setItemPrice('500');
     setItemDescription('');
     setItemPhilHealthCode('');
@@ -152,13 +152,21 @@ export default function ServicesCatalogTab({
     setSavingEdit(true);
     setEditError(null);
 
+    const trimmedPhilHealthCode = editPhilHealthCode.trim() || undefined;
+    const preservePhilHealthDescription =
+      trimmedPhilHealthCode && trimmedPhilHealthCode === editingItem.philHealthCode?.trim()
+        ? editingItem.philHealthDescription
+        : undefined;
+
     const [updated, err] = await clinicService.updateService(editingItem.id, {
       name: editName.trim(),
       category: editCategory,
       standardPrice: priceNum,
       description: editDescription.trim() || undefined,
       isActive: editIsActive,
-      philHealthCode: editPhilHealthCode.trim() || undefined,
+      philHealthCode: trimmedPhilHealthCode,
+      philHealthDescription: preservePhilHealthDescription,
+      isPhilHealthFormulary: Boolean(trimmedPhilHealthCode),
     });
 
     setSavingEdit(false);
@@ -182,6 +190,8 @@ export default function ServicesCatalogTab({
       description: item.description,
       isActive: nextActive,
       philHealthCode: item.philHealthCode,
+      philHealthDescription: item.philHealthDescription,
+      isPhilHealthFormulary: item.isPhilHealthFormulary,
     });
     if (err || !updated) {
       notify.error(err?.message || 'Could not update service status.');
