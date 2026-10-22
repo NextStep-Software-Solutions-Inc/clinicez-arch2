@@ -70,7 +70,7 @@ public sealed class PatientOwnershipTests : IAsyncLifetime
 
     [Theory]
     [InlineData("/api/v1/patients/{0}/appointments")]
-    [InlineData("/api/v1/patients/{0}/files/config")]
+    [InlineData("/api/v1/patients/{0}/records")]
     public async Task PatientIdInRoute_ForAnotherUser_IsForbidden(string template)
     {
         var path = string.Format(template, _patientId);

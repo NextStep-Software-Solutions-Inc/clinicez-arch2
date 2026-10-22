@@ -1,6 +1,5 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { clinics } from './clinics';
-import { fileFolders } from './fileFolders';
 import { documentTypes } from './documentTypes';
 import { patients } from './patients';
 
@@ -9,17 +8,19 @@ export const filesMetadata = sqliteTable('files_metadata', {
   id: text('id').primaryKey(),
   patientId: text('patient_id').references(() => patients.id, { onDelete: 'cascade' }),
   clinicId: text('clinic_id').references(() => clinics.id),
-  folderId: text('folder_id').references(() => fileFolders.id),
   documentTypeId: text('document_type_id').references(() => documentTypes.id).notNull(),
   name: text('name').notNull(),
+  title: text('title'),
   type: text('type'),
   mimeType: text('mime_type'),
   extension: text('extension'),
   sizeBytes: integer('size_bytes'),
-  encryptedSizeBytes: integer('encrypted_size_bytes'),
+  documentDate: text('document_date'),
+  facilityName: text('facility_name'),
+  notes: text('notes'),
   serverUrl: text('server_url'),
   localPath: text('local_path'),
-  localEncryptedPath: text('local_encrypted_path'),
+  isCached: integer('is_cached', { mode: 'boolean' }).notNull().default(false),
   cloudObjectKey: text('cloud_object_key'),
   syncStatus: text('sync_status', {
     enum: ['local', 'queued', 'syncing', 'synced', 'failed', 'deleted'],
@@ -32,12 +33,8 @@ export const filesMetadata = sqliteTable('files_metadata', {
     .notNull()
     .default('insert'),
   syncError: text('sync_error'),
-  encryptionAlgorithm: text('encryption_algorithm').notNull().default('AES-256-GCM'),
-  encryptionKeyId: text('encryption_key_id'),
-  encryptionIvBase64: text('encryption_iv_base64'),
-  encryptionTagBase64: text('encryption_tag_base64'),
-  encryptedHash: text('encrypted_hash'),
-  serverWrappedKeyJson: text('server_wrapped_key_json'),
+  lastSyncError: text('last_sync_error'),
+  retryCount: integer('retry_count').notNull().default(0),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
   deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),

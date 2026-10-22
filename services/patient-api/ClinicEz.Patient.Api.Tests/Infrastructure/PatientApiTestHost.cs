@@ -56,6 +56,7 @@ public sealed class PatientApiTestHost : IAsyncDisposable
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Configuration["Cors:AllowedOrigins:0"] = "https://app.test";
+        builder.Configuration["PatientEncryption:MasterSecret"] = "test-patient-encryption-master-secret-32chars-min-ok!";
         builder.Services.AddApiServices(builder.Configuration, builder.Environment);
         builder.Services.ConfigureHttpJsonOptions(o => ApiJson.Configure(o.SerializerOptions));
         builder.Services.AddHttpContextAccessor();

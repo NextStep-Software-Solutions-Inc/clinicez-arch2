@@ -25,7 +25,7 @@ namespace ClinicEz.Clinic.Infrastructure.Messaging;
 public sealed class PatientRecordSharedHandler : IInteropHandler<PatientRecordSharedPayload>
 {
     internal const long MaxFileBytes = 25L * 1024 * 1024;
-    internal const string HttpClientName = "patient-record-download";
+    public const string HttpClientName = "patient-record-download";
 
     private readonly ApplicationDbContext _dbContext;
     private readonly ClinicRecipientResolver _recipient;
@@ -74,11 +74,19 @@ public sealed class PatientRecordSharedHandler : IInteropHandler<PatientRecordSh
             return;
         }
 
-        if (!Uri.TryCreate(message.DownloadUrl, UriKind.Absolute, out var downloadUri)
-            || (downloadUri.Scheme != Uri.UriSchemeHttps && downloadUri.Scheme != Uri.UriSchemeHttp))
+        Uri? downloadUri = null;
+        if (string.IsNullOrWhiteSpace(message.FileBase64))
         {
-            Ignore(context, "the download link is not an http(s) URL");
-            return;
+            if (!Uri.TryCreate(message.DownloadUrl, UriKind.Absolute, out downloadUri)
+                || (downloadUri.Scheme != Uri.UriSchemeHttps && downloadUri.Scheme != Uri.UriSchemeHttp))
+            {
+                Ignore(context, "the download link is not an http(s) URL");
+                return;
+            }
+        }
+        else
+        {
+            _ = Uri.TryCreate(message.DownloadUrl, UriKind.Absolute, out downloadUri);
         }
 
         var patient = await _dbContext.Patients
@@ -108,13 +116,33 @@ public sealed class PatientRecordSharedHandler : IInteropHandler<PatientRecordSh
             return;
         }
 
-        if (message.ExpiresAtUtc <= DateTime.UtcNow)
+        byte[]? content = null;
+        if (!string.IsNullOrWhiteSpace(message.FileBase64))
         {
-            _logger.LogWarning("[ClinicEz.Clinic] The download link for file {FileId} has expired. Dropping.", message.FileId);
-            return;
+            try
+            {
+                content = Convert.FromBase64String(message.FileBase64);
+            }
+            catch (FormatException)
+            {
+                Ignore(context, "invalid base64 content in FileBase64");
+                return;
+            }
+        }
+        else
+        {
+            if (message.ExpiresAtUtc <= DateTime.UtcNow)
+            {
+                _logger.LogWarning("[ClinicEz.Clinic] The download link for file {FileId} has expired. Dropping.", message.FileId);
+                return;
+            }
+
+            if (downloadUri != null)
+            {
+                content = await DownloadAsync(downloadUri, message.FileId, ct);
+            }
         }
 
-        var content = await DownloadAsync(downloadUri, message.FileId, ct);
         if (content == null) return;
 
         var encrypted = await _encryption.EncryptAsync(content, clinic.TenantId, clinic.ClinicId, ct);

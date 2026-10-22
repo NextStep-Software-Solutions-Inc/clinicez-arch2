@@ -1,42 +1,71 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, DeviceEventEmitter, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import useSWR from 'swr';
+import React, { useRef, useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import Input from '@ui/Input';
 import Card from '@ui/Card';
-import Badge from '@ui/Badge';
 import { AppIcon, type IconName } from '@ui/Icon';
-import { ProgressBar } from '@ui/Primitives';
 import Screen from '../../../components/layout/Screen';
+import ProfileDatePicker from '../../../components/profile/ProfileDatePicker';
 import { usePatientId } from 'hooks/usePatientId';
 import {
   formatBytes,
-  getFileConfig,
-  getTypeExtensions,
-  importFiles,
-  listAllFolders,
-  refreshDocumentTypes,
-} from '../../../services/files';
-import type { PickedFileInput, WebPickedFile } from '../../../services/files';
+  validateUploadFile,
+  UPLOAD_ALLOWED_MIME_TYPES,
+} from '../../../services/documents/uploadRules';
+import { enqueueOfflineRecordUpload } from '../../../services/sync/uploadQueueService';
+import type { HealthRecordCategory } from '../../../db/schema/localHealthRecords';
 import type { FilesScreenProps } from './navigationTypes';
-import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import type { ColorToken } from '../../../constants/theme';
 
-type TMeta = { colorToken: ColorToken; icon: IconName };
-const TYPE_META: Record<string, TMeta> = {
-  'file-type-xray': { colorToken: 'info', icon: 'activity' },
-  'file-type-lab-result': { colorToken: 'success', icon: 'lab' },
-  'file-type-medical-certificate': { colorToken: 'warning', icon: 'document' },
-  'file-type-prescription': { colorToken: 'emergency', icon: 'pill' },
-  'file-type-id': { colorToken: 'purple', icon: 'badge' },
-};
-const DEFAULT_TYPE: TMeta = { colorToken: 'textSecondary', icon: 'document' };
-function typeMeta(id: string): TMeta {
-  return TYPE_META[id] ?? DEFAULT_TYPE;
+interface CategoryOption {
+  id: HealthRecordCategory;
+  label: string;
+  icon: IconName;
+  colorToken: ColorToken;
+}
+
+const CATEGORIES: CategoryOption[] = [
+  { id: 'lab_result', label: 'Lab Result', icon: 'lab', colorToken: 'success' },
+  { id: 'imaging', label: 'Imaging / X-Ray', icon: 'activity', colorToken: 'info' },
+  { id: 'prescription', label: 'Prescription', icon: 'pill', colorToken: 'emergency' },
+  { id: 'vaccine_card', label: 'Vaccine Card', icon: 'badge', colorToken: 'purple' },
+  { id: 'certificate', label: 'Certificate', icon: 'document', colorToken: 'warning' },
+  { id: 'other', label: 'Other', icon: 'folder', colorToken: 'textSecondary' },
+];
+
+export function sanitizeTitleFromFileName(fileName: string): string {
+  const baseName = fileName.replace(/\.[^/.]+$/, '');
+  const withSpaces = baseName.replace(/[_\-.]+/g, ' ');
+  return withSpaces.trim().replace(/\s+/g, ' ').slice(0, 200) || 'Medical Record';
+}
+
+function inferCategoryFromName(fileName: string): HealthRecordCategory | null {
+  const lower = fileName.toLowerCase();
+  if (lower.includes('cbc') || lower.includes('urinalysis') || lower.includes('blood') || lower.includes('lab')) {
+    return 'lab_result';
+  }
+  if (lower.includes('xray') || lower.includes('cxr') || lower.includes('mri') || lower.includes('scan') || lower.includes('ultrasound')) {
+    return 'imaging';
+  }
+  if (lower.includes('rx') || lower.includes('prescription')) {
+    return 'prescription';
+  }
+  if (lower.includes('vaccine') || lower.includes('immunization') || lower.includes('vax')) {
+    return 'vaccine_card';
+  }
+  if (lower.includes('cert') || lower.includes('clearance') || lower.includes('fit-to-work')) {
+    return 'certificate';
+  }
+  return null;
 }
 
 export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesUploadScreen'>) {
@@ -44,74 +73,55 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
-  const initialFolderId = route.params?.folderId ?? null;
 
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(initialFolderId);
-  const [pickedFiles, setPickedFiles] = useState<PickedFileInput[]>([]);
-  const [documentTypes, setDocumentTypes] = useState<Awaited<ReturnType<typeof refreshDocumentTypes>>>([]);
-  const [config, setConfig] = useState<Awaited<ReturnType<typeof getFileConfig>> | null>(null);
-  const [folders, setFolders] = useState<Awaited<ReturnType<typeof listAllFolders>>>([]);
-  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
+  const [pickedFile, setPickedFile] = useState<{
+    file: File | Blob;
+    name: string;
+    mimeType: string;
+    size: number;
+  } | null>(null);
+
+  const [category, setCategory] = useState<HealthRecordCategory>('lab_result');
+  const [title, setTitle] = useState('');
+  const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [facilityName, setFacilityName] = useState('');
+  const [notes, setNotes] = useState('');
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { data: uploadConfig, error: uploadError } = useSWR(
-    ['files-upload-config', patientId],
-    async () => {
-      const [types, value, folderList] = await Promise.all([
-        refreshDocumentTypes(patientId, getToken),
-        getFileConfig(patientId, getToken),
-        listAllFolders(patientId),
-      ]);
-      return { types, config: value, folders: folderList };
-    },
-    { revalidateOnFocus: false }
-  );
+  const handleSelectedFile = (file: File) => {
+    setErrorBanner(null);
+    const mimeType = file.type || 'application/octet-stream';
+    const validationError = validateUploadFile({ mimeType, size: file.size });
 
-  useEffect(() => {
-    if (uploadConfig) {
-      setDocumentTypes(uploadConfig.types);
-      setConfig(uploadConfig.config);
-      setFolders(uploadConfig.folders);
-      setSelectedTypeId((current) => current ?? uploadConfig.types[0]?.id ?? null);
+    if (validationError) {
+      setErrorBanner(validationError);
+      return;
     }
-  }, [uploadConfig]);
 
-  useEffect(() => {
-    if (uploadError) {
-      dialog.alert('Files not ready', uploadError instanceof Error ? uploadError.message : 'Unable to prepare your files.');
-    }
-  }, [uploadError]);
-
-  useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('file-sync-progress', ({ fileId, progress }) => {
-      setProgressMap((prev) => ({ ...prev, [fileId]: progress }));
-    });
-    return () => sub.remove();
-  }, []);
-
-  const totalSize = useMemo(
-    () => pickedFiles.reduce((sum, item) => sum + (item.sizeBytes ?? (item.file as WebPickedFile).size ?? 0), 0),
-    [pickedFiles]
-  );
-
-  const addBrowserFiles = (fileList: FileList | File[]) => {
-    const newItems: PickedFileInput[] = Array.from(fileList).map((file) => ({
+    setPickedFile({
       file,
       name: file.name,
-      mimeType: file.type || 'application/octet-stream',
-      sizeBytes: file.size,
-    }));
-    setPickedFiles((current) => [...current, ...newItems]);
+      mimeType,
+      size: file.size,
+    });
+
+    if (!title) {
+      setTitle(sanitizeTitleFromFileName(file.name));
+    }
+    const inferred = inferCategoryFromName(file.name);
+    if (inferred) {
+      setCategory(inferred);
+    }
   };
 
   const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
-      addBrowserFiles(event.target.files);
+      handleSelectedFile(event.target.files[0]);
       event.target.value = '';
     }
   };
@@ -124,77 +134,51 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
     cameraInputRef.current?.click();
   };
 
-  const updateFileName = (index: number, newName: string) => {
-    setPickedFiles((current) => {
-      const next = [...current];
-      next[index] = { ...next[index], name: newName };
-      return next;
-    });
-  };
-
-  const removeFile = (index: number) => {
-    setPickedFiles((current) => current.filter((_, i) => i !== index));
-  };
-
-  const handleImport = async () => {
-    if (!pickedFiles.length) return;
-
-    if (typeof window !== 'undefined' && window.isSecureContext === false && window.location.hostname !== 'localhost') {
-      dialog.alert('HTTPS Required', 'Client-side encryption requires a secure HTTPS connection.');
+  const handleSave = async () => {
+    if (!pickedFile) {
+      setErrorBanner('Please select a file to upload.');
+      return;
+    }
+    if (!title.trim()) {
+      setErrorBanner('Please enter a record title.');
       return;
     }
 
     setIsSaving(true);
-    try {
-      const finalFiles = pickedFiles.map((f) => ({
-        ...f,
-        name: f.name?.trim() || (f.file as WebPickedFile).name,
-      }));
+    setErrorBanner(null);
 
-      await importFiles({
-        patientId,
-        folderId: selectedFolderId,
-        documentTypeId: selectedTypeId,
-        files: finalFiles,
-        getToken,
-      });
+    try {
+      await enqueueOfflineRecordUpload(
+        {
+          patientId,
+          documentTypeId: category,
+          category,
+          title: title.trim(),
+          fileName: pickedFile.name,
+          mimeType: pickedFile.mimeType,
+          sizeBytes: pickedFile.size,
+          documentDate: documentDate || undefined,
+          facilityName: facilityName.trim() || undefined,
+          notes: notes.trim() || undefined,
+          fileBlob: pickedFile.file,
+        },
+        getToken
+      );
 
       navigation.goBack();
     } catch (error: any) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.toLowerCase().includes('recovery key') || msg.toLowerCase().includes('mak')) {
-        dialog.alert('Recovery Key Needed', 'Enter your File Recovery Key before uploading files.', [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Enter Key',
-            onPress: () =>
-              navigation.navigate('FRKEntryScreen', {
-                encryptedMAK: config?.encryptedMAK ?? '',
-              }),
-          },
-        ]);
-      } else {
-        dialog.alert('Upload Failed', msg);
-      }
-    } finally {
+      setErrorBanner(msg || 'Unable to save record.');
       setIsSaving(false);
     }
   };
 
-  const selectedFolderName = useMemo(() => {
-    if (!selectedFolderId) return 'All files (root)';
-    const match = folders.find((f) => f.id === selectedFolderId);
-    return match ? match.name : 'Selected folder';
-  }, [folders, selectedFolderId]);
-
-  const usedPct = config && config.quotaBytes > 0 ? Math.min(1, config.usedStorageBytes / config.quotaBytes) : 0;
-
   return (
     <Screen width="form" scroll={true}>
-      {/* Hidden input elements */}
+      {/* Hidden file inputs */}
       {React.createElement('input', {
         type: 'file',
-        multiple: true,
+        accept: UPLOAD_ALLOWED_MIME_TYPES.join(','),
         style: { display: 'none' },
         ref: fileInputRef,
         onChange: handleFileInputChange,
@@ -208,217 +192,175 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
         onChange: handleFileInputChange,
       })}
 
-      <View style={{ gap: spacing.xl }}>
-        {/* Destination folder & Quota banner */}
-        <Card padding="md" elevation="sm">
-          <View style={[styles.destCard, { gap: spacing.md }]}>
+      <View style={{ gap: spacing.xl, paddingVertical: spacing.md }}>
+        <ThemedText variant="h2" color="primary">
+          Add Health Record
+        </ThemedText>
+
+        {/* Error banner */}
+        {errorBanner ? (
+          <Card
+            padding="md"
+            style={{
+              backgroundColor: colors.emergencyBg,
+              borderColor: colors.emergencyBorder,
+              borderWidth: sizes.borderWidth,
+            }}
+          >
+            <View style={[styles.errorRow, { gap: spacing.sm }]}>
+              <AppIcon name="alert" color="emergencyText" size={sizes.iconMd} />
+              <ThemedText variant="bodyBold" color="emergencyText" style={styles.flex}>
+                {errorBanner}
+              </ThemedText>
+            </View>
+          </Card>
+        ) : null}
+
+        {/* Attachment Card / Drag & Drop Zone */}
+        {pickedFile ? (
+          <Card padding="md">
+            <View style={[styles.selectedRow, { gap: spacing.md }]}>
+              <View
+                style={[
+                  styles.selectedIcon,
+                  {
+                    width: sizes.controlLg,
+                    height: sizes.controlLg,
+                    borderRadius: radii.md,
+                    backgroundColor: colors.surfaceSubtle,
+                  },
+                ]}
+              >
+                <AppIcon
+                  name={pickedFile.mimeType === 'application/pdf' ? 'pdf' : 'image'}
+                  color={pickedFile.mimeType === 'application/pdf' ? 'emergency' : 'purple'}
+                  size={sizes.iconLg}
+                />
+              </View>
+              <View style={styles.flex}>
+                <ThemedText variant="bodyBold" numberOfLines={1}>
+                  {pickedFile.name}
+                </ThemedText>
+                <ThemedText variant="caption" color="textMuted">
+                  {formatBytes(pickedFile.size)} · {pickedFile.mimeType}
+                </ThemedText>
+              </View>
+              <Pressable
+                onPress={() => setPickedFile(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Remove file"
+                style={{ padding: spacing.xs }}
+              >
+                <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
+              </Pressable>
+            </View>
+          </Card>
+        ) : (
+          <View
+            {...({
+              onDragOver: (e: any) => {
+                e.preventDefault();
+                setIsDragging(true);
+              },
+              onDragLeave: () => {
+                setIsDragging(false);
+              },
+              onDrop: (e: any) => {
+                e.preventDefault();
+                setIsDragging(false);
+                if (e.dataTransfer?.files?.length) {
+                  handleSelectedFile(e.dataTransfer.files[0]);
+                }
+              },
+            } as any)}
+            style={[
+              styles.dropZone,
+              {
+                backgroundColor: isDragging ? colors.surfaceHighlight : colors.card,
+                borderColor: isDragging ? colors.primary : colors.border,
+                borderWidth: 2,
+                borderStyle: 'dashed',
+                borderRadius: radii.xl,
+                padding: spacing.xl,
+                gap: spacing.md,
+              },
+              shadows.sm,
+            ]}
+          >
             <View
               style={[
-                styles.destIcon,
+                styles.dropIconWrap,
                 {
-                  width: sizes.controlLg,
-                  height: sizes.controlLg,
-                  borderRadius: radii.md,
-                  backgroundColor: colors.primaryLight,
+                  width: sizes.avatarLg,
+                  height: sizes.avatarLg,
+                  borderRadius: radii.full,
+                  backgroundColor: isDragging ? colors.primaryLight : colors.surfaceSubtle,
                 },
               ]}
             >
-              <AppIcon name="folder" color="primary" size={sizes.iconMd} />
+              <AppIcon name="upload" size={sizes.iconXl} color={isDragging ? 'primary' : 'textMuted'} />
             </View>
-            <View style={styles.flex}>
-              <ThemedText variant="captionBold" color="textMuted">
-                SAVING TO FOLDER
+
+            <View style={{ alignItems: 'center', gap: spacing.xs }}>
+              <ThemedText variant="h3" style={{ textAlign: 'center' }}>
+                Drag & drop health record here
               </ThemedText>
-              <ThemedText variant="bodyBold" color="primary" style={{ marginTop: spacing.xxs }}>
-                {selectedFolderName}
+              <ThemedText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
+                Supports PDF, JPEG, PNG, WEBP, HEIC up to 25 MB
               </ThemedText>
             </View>
-            {config ? (
-              <View style={{ alignItems: 'flex-end', width: 120 }}>
-                <ThemedText variant="captionBold" color="textMuted">
-                  {formatBytes(config.quotaBytes - config.usedStorageBytes)} free
-                </ThemedText>
-                <View style={{ width: '100%', marginTop: spacing.xs }}>
-                  <ProgressBar value={usedPct} tone={usedPct > 0.9 ? 'danger' : 'primary'} />
-                </View>
-              </View>
-            ) : null}
-          </View>
 
-          {/* Folder switch selector if folders exist */}
-          {folders.length > 0 && (
-            <View style={{ marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: sizes.borderWidth, borderColor: colors.border }}>
-              <ThemedText variant="captionBold" color="textMuted" style={{ marginBottom: spacing.xs }}>
-                Select folder:
-              </ThemedText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs }}>
-                <Pressable
-                  onPress={() => setSelectedFolderId(null)}
-                  accessibilityRole="button"
-                  style={[
-                    styles.folderPill,
-                    {
-                      borderRadius: radii.full,
-                      paddingHorizontal: spacing.md,
-                      paddingVertical: spacing.xs,
-                      borderWidth: sizes.borderWidth,
-                      borderColor: selectedFolderId === null ? colors.primary : colors.border,
-                      backgroundColor: selectedFolderId === null ? colors.primary : colors.surfaceSubtle,
-                    },
-                  ]}
-                >
-                  <ThemedText variant="smallBold" color={selectedFolderId === null ? colors.onPrimary : 'text'}>
-                    All files
-                  </ThemedText>
-                </Pressable>
-                {folders.map((f) => {
-                  const isSel = f.id === selectedFolderId;
-                  return (
-                    <Pressable
-                      key={f.id}
-                      onPress={() => setSelectedFolderId(f.id)}
-                      accessibilityRole="button"
-                      style={[
-                        styles.folderPill,
-                        {
-                          borderRadius: radii.full,
-                          paddingHorizontal: spacing.md,
-                          paddingVertical: spacing.xs,
-                          borderWidth: sizes.borderWidth,
-                          borderColor: isSel ? colors.primary : colors.border,
-                          backgroundColor: isSel ? colors.primary : colors.surfaceSubtle,
-                        },
-                      ]}
-                    >
-                      <ThemedText variant="smallBold" color={isSel ? colors.onPrimary : 'text'}>
-                        {f.name}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+            <View style={[styles.dropButtonsRow, { gap: spacing.md }]}>
+              <Button
+                label="Browse files"
+                variant="primary"
+                icon="upload"
+                onPress={triggerBrowse}
+              />
+              <Button
+                label="Take photo"
+                variant="outline"
+                icon="camera"
+                onPress={triggerCamera}
+              />
             </View>
-          )}
-        </Card>
-
-        {/* Drag & Drop Zone */}
-        <View
-          {...({
-            onDragOver: (e: any) => {
-              e.preventDefault();
-              setIsDragging(true);
-            },
-            onDragLeave: () => {
-              setIsDragging(false);
-            },
-            onDrop: (e: any) => {
-              e.preventDefault();
-              setIsDragging(false);
-              if (e.dataTransfer?.files?.length) {
-                addBrowserFiles(e.dataTransfer.files);
-              }
-            },
-          } as any)}
-          style={[
-            styles.dropZone,
-            {
-              backgroundColor: isDragging ? colors.surfaceHighlight : colors.card,
-              borderColor: isDragging ? colors.primary : colors.border,
-              borderWidth: 2,
-              borderStyle: 'dashed',
-              borderRadius: radii.xl,
-              padding: spacing.xl,
-              gap: spacing.md,
-            },
-            shadows.sm,
-          ]}
-        >
-          <View
-            style={[
-              styles.dropIconWrap,
-              {
-                width: sizes.avatarLg,
-                height: sizes.avatarLg,
-                borderRadius: radii.full,
-                backgroundColor: isDragging ? colors.primaryLight : colors.surfaceSubtle,
-              },
-            ]}
-          >
-            <AppIcon name="upload" size={sizes.iconXl} color={isDragging ? 'primary' : 'textMuted'} />
           </View>
+        )}
 
-          <View style={{ alignItems: 'center', gap: spacing.xs }}>
-            <ThemedText variant="h3" style={{ textAlign: 'center' }}>
-              Drag & drop medical documents here
-            </ThemedText>
-            <ThemedText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
-              Supports PDFs, high-res images, diagnostic scans, and clinical reports
-            </ThemedText>
-          </View>
-
-          <View style={[styles.dropButtonsRow, { gap: spacing.md }]}>
-            <Button
-              label="Browse files"
-              variant="primary"
-              icon="upload"
-              onPress={triggerBrowse}
-            />
-            <Button
-              label="Take photo"
-              variant="outline"
-              icon="camera"
-              onPress={triggerCamera}
-            />
-          </View>
-        </View>
-
-        {/* Document type selection */}
+        {/* Category selection */}
         <View style={{ gap: spacing.sm }}>
           <ThemedText variant="smallBold" color="textSecondary">
-            DOCUMENT TYPE
+            RECORD CATEGORY *
           </ThemedText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.typeList, { gap: spacing.sm }]}>
-            {documentTypes.map((type: any) => {
-              const selected = type.id === selectedTypeId;
-              const meta = typeMeta(type.id);
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.typeList, { gap: spacing.sm }]}
+          >
+            {CATEGORIES.map((cat) => {
+              const selected = cat.id === category;
               return (
                 <Pressable
-                  key={type.id}
-                  onPress={() => setSelectedTypeId(type.id)}
+                  key={cat.id}
+                  onPress={() => setCategory(cat.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={type.label}
+                  accessibilityLabel={cat.label}
                   style={[
                     styles.typeChip,
                     {
                       borderRadius: radii.lg,
                       borderWidth: sizes.borderWidth,
                       paddingHorizontal: spacing.md,
-                      paddingVertical: spacing.md,
+                      paddingVertical: spacing.sm,
                       gap: spacing.xs,
+                      borderColor: selected ? colors.primary : colors.border,
+                      backgroundColor: selected ? colors.primaryLight : colors.card,
                     },
-                    selected
-                      ? { backgroundColor: colors.primary, borderColor: colors.primary }
-                      : { backgroundColor: colors.card, borderColor: colors.border },
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.typeChipIcon,
-                      {
-                        width: sizes.controlSm,
-                        height: sizes.controlSm,
-                        borderRadius: radii.sm,
-                        backgroundColor: selected ? colors.primaryHover : colors.surfaceSubtle,
-                      },
-                    ]}
-                  >
-                    <AppIcon name={meta.icon} color={selected ? colors.onPrimary : meta.colorToken} size={sizes.iconSm} />
-                  </View>
-                  <ThemedText variant="smallBold" color={selected ? colors.onPrimary : 'text'}>
-                    {type.label}
-                  </ThemedText>
-                  <ThemedText variant="caption" color={selected ? colors.onPrimary : 'textMuted'} style={{ opacity: selected ? 0.8 : 1 }}>
-                    {getTypeExtensions(type).slice(0, 3).join(', ') || 'All types'}
+                  <AppIcon name={cat.icon} color={selected ? 'primary' : cat.colorToken} size={sizes.iconSm} />
+                  <ThemedText variant="smallBold" color={selected ? 'primary' : 'text'}>
+                    {cat.label}
                   </ThemedText>
                 </Pressable>
               );
@@ -426,94 +368,64 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
           </ScrollView>
         </View>
 
-        {/* Selected files to upload */}
-        <View style={{ gap: spacing.sm }}>
+        {/* Title */}
+        <View style={{ gap: spacing.xs }}>
           <ThemedText variant="smallBold" color="textSecondary">
-            {pickedFiles.length > 0 ? `${pickedFiles.length} FILE${pickedFiles.length === 1 ? '' : 'S'} TO UPLOAD` : 'SELECTED FILES'}
+            RECORD TITLE *
           </ThemedText>
-          {pickedFiles.length > 0 ? (
-            <View style={{ gap: spacing.sm }}>
-              {pickedFiles.map((item, index) => {
-                const meta = typeMeta(selectedTypeId ?? '');
-                const progress = Object.values(progressMap)[index] ?? 0;
-                return (
-                  <Card key={`${(item.file as WebPickedFile).name}-${index}`} padding="md">
-                    <View style={[styles.selectedRow, { gap: spacing.md }]}>
-                      <View
-                        style={[
-                          styles.selectedIcon,
-                          {
-                            width: sizes.controlMd,
-                            height: sizes.controlMd,
-                            borderRadius: radii.md,
-                            backgroundColor: colors.surfaceSubtle,
-                          },
-                        ]}
-                      >
-                        <AppIcon name={meta.icon} color={meta.colorToken} size={sizes.iconMd} />
-                      </View>
-                      <View style={styles.flex}>
-                        <Input
-                          value={item.name ?? (item.file as WebPickedFile).name}
-                          onChangeText={(text) => updateFileName(index, text)}
-                          placeholder="File name"
-                          containerStyle={{ marginBottom: spacing.xs }}
-                        />
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <ThemedText variant="caption" color="textMuted">
-                            {formatBytes(item.sizeBytes ?? (item.file as WebPickedFile).size)}
-                          </ThemedText>
-                          {isSaving && progress > 0 ? (
-                            <ThemedText variant="captionBold" color="primary">
-                              {Math.round(progress * 100)}%
-                            </ThemedText>
-                          ) : null}
-                        </View>
-                        {isSaving && progress > 0 ? (
-                          <View style={{ marginTop: spacing.xs }}>
-                            <ProgressBar value={progress} />
-                          </View>
-                        ) : null}
-                      </View>
-                      {!isSaving && (
-                        <Pressable
-                          onPress={() => removeFile(index)}
-                          accessibilityRole="button"
-                          accessibilityLabel="Remove file"
-                          style={{ padding: spacing.xs }}
-                        >
-                          <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
-                        </Pressable>
-                      )}
-                    </View>
-                  </Card>
-                );
-              })}
-            </View>
-          ) : (
-            <Card padding="lg">
-              <View style={[styles.emptyFiles, { gap: spacing.sm }]}>
-                <AppIcon name="document" size={sizes.iconXl} color="textMuted" />
-                <ThemedText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
-                  No files selected. Drop files above or click "Browse files".
-                </ThemedText>
-              </View>
-            </Card>
-          )}
+          <Input
+            value={title}
+            onChangeText={setTitle}
+            placeholder="e.g. Complete Blood Count (CBC)"
+            maxLength={200}
+          />
         </View>
 
-        {/* Upload Action Button */}
+        {/* Date */}
+        <ProfileDatePicker
+          label="RECORD DATE"
+          value={documentDate}
+          onChange={setDocumentDate}
+          mode="date"
+        />
+
+        {/* Facility Name */}
+        <View style={{ gap: spacing.xs }}>
+          <ThemedText variant="smallBold" color="textSecondary">
+            CLINIC / FACILITY NAME (OPTIONAL)
+          </ThemedText>
+          <Input
+            value={facilityName}
+            onChangeText={setFacilityName}
+            placeholder="e.g. St. Luke's Medical Center"
+            maxLength={200}
+          />
+        </View>
+
+        {/* Clinical Notes */}
+        <View style={{ gap: spacing.xs }}>
+          <ThemedText variant="smallBold" color="textSecondary">
+            CLINICAL NOTES (OPTIONAL)
+          </ThemedText>
+          <Input
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Add clinical observations, physician remarks, or dosage instructions..."
+            multiline
+            numberOfLines={3}
+            maxLength={1000}
+            containerStyle={{ minHeight: 80 }}
+          />
+        </View>
+
+        {/* Save button */}
         <Button
-          label={
-            isSaving
-              ? 'Encrypting & uploading...'
-              : `Upload to Vault${pickedFiles.length ? ` · ${formatBytes(totalSize)}` : ''}`
-          }
+          label={isSaving ? 'Saving record...' : 'Save Health Record'}
           variant="primary"
           loading={isSaving}
-          disabled={!pickedFiles.length || isSaving}
+          disabled={!pickedFile || !title.trim() || isSaving}
           fullWidth
-          onPress={handleImport}
+          onPress={handleSave}
           icon="upload"
         />
       </View>
@@ -523,18 +435,6 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  destCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  destIcon: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  folderPill: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   dropZone: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -553,12 +453,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   typeChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 104,
-  },
-  typeChipIcon: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   selectedRow: {
     flexDirection: 'row',
@@ -568,8 +464,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyFiles: {
+  errorRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
   },
 });

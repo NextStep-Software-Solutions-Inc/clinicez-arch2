@@ -3,14 +3,14 @@ namespace ClinicEz.Patient.Application.Features.Documents;
 /// <summary>Limits for files that enter the patient's record: uploaded lab results, receipts and report PDFs from laboratories.</summary>
 public static class PatientFileLimits
 {
-    public const long MaxFileBytes = 10 * 1024 * 1024;
+    public const long MaxFileBytes = 25 * 1024 * 1024;
 
     /// <summary>How long the clinic has to download a file from the link it is sent.</summary>
     public static readonly TimeSpan ClinicDownloadWindow = TimeSpan.FromDays(7);
 
     public static readonly IReadOnlySet<string> AllowedContentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "application/pdf", "image/jpeg", "image/png", "image/heic"
+        "application/pdf", "image/jpeg", "image/png", "image/heic", "image/webp"
     };
 
     public static bool IsPdfOrImage(string? contentType) =>

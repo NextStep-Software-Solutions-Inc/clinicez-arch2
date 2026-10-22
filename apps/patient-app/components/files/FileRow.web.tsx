@@ -3,12 +3,15 @@ import { View, Pressable, StyleSheet, ColorValue, DeviceEventEmitter } from 'rea
 import { AppIcon, type IconName } from '@ui/Icon';
 import IconButton from '@ui/IconButton';
 import ThemedText from '@ui/ThemedText';
+import Badge from '../ui/Badge';
 import { CircularProgress } from '../ui/CircularProgress';
-import { FileBrowserFile, FileBrowserFolder, formatBytes } from '../../services/files';
+import { FileBrowserFile, formatBytes } from '../../services/files';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import type { ColorToken } from '../../constants/theme';
+import { ProvenanceBadge } from '../records/ProvenanceBadge';
+import { ClinicalUrgencyBadge } from '../records/ClinicalUrgencyBadge';
 
-type BrowserItem = FileBrowserFolder | FileBrowserFile;
+type BrowserItem = FileBrowserFile;
 
 const TYPE_META: Record<string, { colorToken: ColorToken; icon: IconName }> = {
   'file-type-xray': { colorToken: 'info', icon: 'activity' },
@@ -17,7 +20,6 @@ const TYPE_META: Record<string, { colorToken: ColorToken; icon: IconName }> = {
   'file-type-prescription': { colorToken: 'emergency', icon: 'pill' },
   'file-type-id': { colorToken: 'purple', icon: 'badge' },
 };
-const FOLDER_META: { colorToken: ColorToken; icon: IconName } = { colorToken: 'warning', icon: 'folder' };
 const DEFAULT_META: { colorToken: ColorToken; icon: IconName } = { colorToken: 'textSecondary', icon: 'document' };
 
 function fileMeta(item: FileBrowserFile) {
@@ -68,7 +70,6 @@ function StatusDot({ status }: { status: string }) {
 export function FileRow({
   item,
   onPress,
-  onMove,
   onDelete,
   onShare,
   onDownload,
@@ -77,7 +78,7 @@ export function FileRow({
 }: {
   item: BrowserItem;
   onPress: () => void;
-  onMove: () => void;
+  onMove?: () => void;
   onDelete: () => void;
   onShare?: () => void;
   onDownload?: () => void;
@@ -85,13 +86,12 @@ export function FileRow({
   onErrorPress?: () => void;
 }) {
   const { colors, spacing, radii, sizes, shadows } = useAppTheme();
-  const isFolder = item.kind === 'folder';
   const [isHovered, setIsHovered] = useState(false);
 
   const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
-    if (isFolder || (item as FileBrowserFile).syncStatus !== 'syncing') return;
+    if (item.syncStatus !== 'syncing') return;
 
     const sub = DeviceEventEmitter.addListener('file-sync-progress', (e) => {
       if (e.fileId === item.id) {
@@ -99,23 +99,23 @@ export function FileRow({
       }
     });
     return () => sub.remove();
-  }, [isFolder, item.id, (item as FileBrowserFile).syncStatus]);
+  }, [item.id, item.syncStatus]);
 
-  const meta = isFolder ? FOLDER_META : fileMeta(item as FileBrowserFile);
-  const dateStr =
-    !isFolder && (item as FileBrowserFile).createdAt
-      ? new Date((item as FileBrowserFile).createdAt!).toLocaleDateString(undefined, {
-        month: 'short', day: 'numeric', year: 'numeric',
-      })
-      : '';
+  const meta = fileMeta(item);
+  const displayTitle = item.title?.trim() || item.name;
 
-  const subtitle = isFolder
-    ? `${(item as FileBrowserFolder).childCount} item${(item as FileBrowserFolder).childCount === 1 ? '' : 's'}`
-    : [
-      (item as FileBrowserFile).typeLabel,
-      formatBytes((item as FileBrowserFile).sizeBytes),
-      dateStr,
-    ].filter(Boolean).join('  ·  ');
+  const rawDate = item.documentDate || item.createdAt;
+  const dateStr = rawDate
+    ? new Date(rawDate).toLocaleDateString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+    })
+    : '';
+
+  const subtitle = [
+    item.facilityName,
+    formatBytes(item.sizeBytes),
+    dateStr,
+  ].filter(Boolean).join('  ·  ');
 
   const handleDownloadClick = () => {
     if (onDownload) {
@@ -131,7 +131,7 @@ export function FileRow({
       onHoverIn={() => setIsHovered(true)}
       onHoverOut={() => setIsHovered(false)}
       accessibilityRole="button"
-      accessibilityLabel={item.name}
+      accessibilityLabel={displayTitle}
       style={({ pressed }) => [
         styles.row,
         {
@@ -167,32 +167,52 @@ export function FileRow({
       </View>
 
       <View style={styles.rowBody}>
-        <ThemedText variant="bodyBold" numberOfLines={1}>{item.name}</ThemedText>
-        <ThemedText variant="small" color="textMuted" numberOfLines={1}>{subtitle}</ThemedText>
-        {!isFolder && (item as FileBrowserFile).syncStatus === 'failed' && (item as FileBrowserFile).syncError && (
+        {/* Title and Badges */}
+        <View style={[styles.titleBadgeRow, { gap: spacing.xs, marginBottom: spacing.xxs }]}>
+          <ThemedText variant="bodyBold" numberOfLines={1} style={styles.titleText}>
+            {displayTitle}
+          </ThemedText>
+          {item.typeLabel ? (
+            <Badge label={item.typeLabel} tone="neutral" size="sm" />
+          ) : null}
+          <ClinicalUrgencyBadge
+            urgency={(item as any).urgency}
+            isCritical={(item as any).isCritical}
+          />
+          <ProvenanceBadge
+            provenance={(item as any).provenance}
+            clinicId={item.clinicId}
+            facilityName={item.facilityName}
+            compact
+          />
+        </View>
+
+        <ThemedText variant="small" color="textMuted" numberOfLines={1}>
+          {subtitle}
+        </ThemedText>
+
+        {item.syncStatus === 'failed' && (item.syncError || item.lastSyncError) && (
           <ThemedText variant="caption" color="emergencyText" numberOfLines={2} style={{ marginTop: spacing.xxs }}>
-            {(item as FileBrowserFile).syncError}
+            {item.syncError || item.lastSyncError}
           </ThemedText>
         )}
       </View>
 
       {/* Status or syncing indicator */}
-      {!isFolder ? (
-        (item as FileBrowserFile).syncStatus === 'failed' ? (
-          <Pressable onPress={onErrorPress} style={{ padding: spacing.xs, margin: -spacing.xs }} hitSlop={10}>
-            <StatusDot status={(item as FileBrowserFile).syncStatus} />
-          </Pressable>
-        ) : (item as FileBrowserFile).syncStatus === 'syncing' ? (
-          <CircularProgress
-            progress={uploadProgress}
-            size={sizes.iconXl}
-            color={colors.info}
-            trackColor={colors.surfaceSubtle}
-          />
-        ) : (
-          <StatusDot status={(item as FileBrowserFile).syncStatus} />
-        )
-      ) : null}
+      {item.syncStatus === 'failed' ? (
+        <Pressable onPress={onErrorPress} style={{ padding: spacing.xs, margin: -spacing.xs }} hitSlop={10}>
+          <StatusDot status={item.syncStatus} />
+        </Pressable>
+      ) : item.syncStatus === 'syncing' ? (
+        <CircularProgress
+          progress={uploadProgress}
+          size={sizes.iconXl}
+          color={colors.info}
+          trackColor={colors.surfaceSubtle}
+        />
+      ) : (
+        <StatusDot status={item.syncStatus} />
+      )}
 
       {/* Hover quick action buttons on web */}
       <View
@@ -204,7 +224,7 @@ export function FileRow({
           },
         ]}
       >
-        {!isFolder && (onDownload || onShare) && (
+        {(onDownload || onShare) && (
           <IconButton
             icon="download"
             accessibilityLabel="Download"
@@ -216,16 +236,6 @@ export function FileRow({
             }}
           />
         )}
-        <IconButton
-          icon="folderMove"
-          accessibilityLabel="Move"
-          color="textSecondary"
-          size={sizes.iconMd}
-          onPress={(e) => {
-            e.stopPropagation();
-            onMove();
-          }}
-        />
         {onRename && (
           <IconButton
             icon="edit"
@@ -253,6 +263,8 @@ export function FileRow({
   );
 }
 
+export default FileRow;
+
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
@@ -265,6 +277,14 @@ const styles = StyleSheet.create({
   rowBody: {
     flex: 1,
     minWidth: 0,
+  },
+  titleBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  titleText: {
+    flexShrink: 1,
   },
   dot: {
     flexDirection: 'row',

@@ -46,15 +46,22 @@ public sealed class UploadLabResultCommandHandler : IRequestHandler<UploadLabRes
     private readonly IInteropPublisher _publisher;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _clock;
+    private readonly IPatientEncryptionService? _encryptionService;
 
     public UploadLabResultCommandHandler(
-        IPatientDocumentRepository documents, IStorageService storage, IInteropPublisher publisher, IUnitOfWork unitOfWork, TimeProvider clock)
+        IPatientDocumentRepository documents,
+        IStorageService storage,
+        IInteropPublisher publisher,
+        IUnitOfWork unitOfWork,
+        TimeProvider clock,
+        IPatientEncryptionService? encryptionService = null)
     {
         _documents = documents;
         _storage = storage;
         _publisher = publisher;
         _unitOfWork = unitOfWork;
         _clock = clock;
+        _encryptionService = encryptionService;
     }
 
     public async Task<LabResultUploadAcceptedDto> Handle(UploadLabResultCommand request, CancellationToken cancellationToken)
@@ -71,9 +78,25 @@ public sealed class UploadLabResultCommandHandler : IRequestHandler<UploadLabRes
         var now = _clock.GetUtcNow().UtcDateTime;
         var uploadId = Guid.NewGuid();
         var fileName = PatientFileLimits.SafeFileName(request.FileName);
-        var key = $"patients/{request.PatientId}/lab-results/{uploadId}/{fileName}";
 
-        await _storage.UploadAsync(request.Content, key, request.ContentType, cancellationToken);
+        using var memoryStream = new MemoryStream();
+        await request.Content.CopyToAsync(memoryStream, cancellationToken);
+        var plaintextBytes = memoryStream.ToArray();
+
+        var key = $"patients/{request.PatientId}/lab-results/{uploadId}.cez";
+        string storageKey;
+        PatientEncryptedPayload? encrypted = null;
+
+        if (_encryptionService != null)
+        {
+            encrypted = await _encryptionService.EncryptAsync(plaintextBytes, request.PatientId, cancellationToken);
+            storageKey = await _storage.SaveEncryptedAsync(key, encrypted.Ciphertext, cancellationToken);
+        }
+        else
+        {
+            using var uploadStream = new MemoryStream(plaintextBytes);
+            storageKey = await _storage.UploadAsync(uploadStream, key, request.ContentType, cancellationToken);
+        }
 
         try
         {
@@ -87,9 +110,15 @@ public sealed class UploadLabResultCommandHandler : IRequestHandler<UploadLabRes
                 ResultedAt = now,
                 Source = ResultProvenance.PatientUploaded,
                 Verification = ResultVerification.Unverified,
-                FileStorageKey = key,
+                FileStorageKey = storageKey,
                 FileName = fileName,
-                FileContentType = request.ContentType
+                FileContentType = request.ContentType,
+                EncryptionAlgorithm = encrypted?.EncryptionAlgorithm ?? "AES-256-GCM",
+                EncryptionIvBase64 = encrypted?.IvBase64,
+                EncryptionTagBase64 = encrypted?.TagBase64,
+                WrappedKeyJson = encrypted?.WrappedKeyJson,
+                EncryptedHash = encrypted?.EncryptedHash,
+                EncryptedSizeBytes = encrypted?.EncryptedSizeBytes ?? plaintextBytes.LongLength
             }, cancellationToken);
 
             slip.Stage = LabSlipStage.ExternalSubmitted;
@@ -113,6 +142,7 @@ public sealed class UploadLabResultCommandHandler : IRequestHandler<UploadLabRes
                     ContentType = request.ContentType,
                     DocumentType = request.ContentType == "application/pdf" ? "PDF" : "Photo",
                     DocumentUrl = downloadUrl,
+                    FileBase64 = Convert.ToBase64String(plaintextBytes),
                     Notes = request.Notes,
                     UploadedAt = now
                 });
