@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
 import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, Select } from '@ui';
 import { Alert } from '@utils/feedback';
+import { useAuth, usePermission } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../constants/permissions';
 import {
   PHILHEALTH_DELIVERY_TYPE_OPTIONS,
   PHILHEALTH_CONTRACEPTIVE_OPTIONS,
@@ -20,13 +22,20 @@ interface ReproductiveHealthTabProps {
   patient: ClinicPatient;
   initialReproductiveHistory?: PatientReproductiveHistory;
   onRefreshChart?: () => void;
+  readOnly?: boolean;
 }
 
 export default function ReproductiveHealthTab({
   patient,
   initialReproductiveHistory,
   onRefreshChart,
+  readOnly,
 }: ReproductiveHealthTabProps) {
+  const { user, state, permissions } = useAuth();
+  const hasPatientsWrite = usePermission(PERMISSIONS.patientsWrite);
+  const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
+  const canWritePatients = readOnly !== undefined ? !readOnly : isUnmountedTestHarness ? true : hasPatientsWrite;
+
   const isFemale = patient.gender?.toLowerCase().startsWith('f') ?? false;
 
   const [loading, setLoading] = useState(false);
@@ -131,6 +140,13 @@ export default function ReproductiveHealthTab({
   }
 
   const handleSave = async () => {
+    if (!canWritePatients) {
+      Alert.alert(
+        'Insufficient Permissions',
+        "Required permission 'patients:write' is not granted for this clinic role."
+      );
+      return;
+    }
     if (isApplicable && lastMenstrualPeriod && lastMenstrualPeriod.trim()) {
       const lmpValidation = validateDateString(lastMenstrualPeriod, { boundaryMode: 'pastOrToday' });
       if (!lmpValidation.isValid) {
@@ -203,6 +219,15 @@ export default function ReproductiveHealthTab({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {!canWritePatients ? (
+        <View style={styles.readOnlyBanner} accessibilityRole="alert">
+          <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+          <ThemedText variant="small" color={theme.colors.warningText} style={{ flex: 1 }}>
+            Read-only mode: &apos;patients:write&apos; permission is required to save reproductive health changes.
+          </ThemedText>
+        </View>
+      ) : null}
+
       {/* SECTION 1: Menstrual History */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
@@ -220,7 +245,8 @@ export default function ReproductiveHealthTab({
           <View style={styles.toggleRow}>
             <Pressable
               style={[styles.toggleBtn, !isApplicable && styles.toggleBtnActive]}
-              onPress={() => setIsApplicable(false)}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setIsApplicable(false)}
             >
               <ThemedText variant="smallBold" color={!isApplicable ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
@@ -228,7 +254,8 @@ export default function ReproductiveHealthTab({
             </Pressable>
             <Pressable
               style={[styles.toggleBtn, isApplicable && styles.toggleBtnActivePrimary]}
-              onPress={() => setIsApplicable(true)}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setIsApplicable(true)}
             >
               <ThemedText variant="smallBold" color={isApplicable ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -247,6 +274,7 @@ export default function ReproductiveHealthTab({
                   value={menarcheAge}
                   onChangeText={setMenarcheAge}
                   keyboardType="numeric"
+                  editable={canWritePatients}
                 />
               </View>
               <View style={styles.gridItem}>
@@ -268,6 +296,7 @@ export default function ReproductiveHealthTab({
                   value={periodDurationDays}
                   onChangeText={setPeriodDurationDays}
                   keyboardType="numeric"
+                  editable={canWritePatients}
                 />
               </View>
               <View style={styles.gridItem}>
@@ -277,6 +306,7 @@ export default function ReproductiveHealthTab({
                   value={cycleIntervalDays}
                   onChangeText={setCycleIntervalDays}
                   keyboardType="numeric"
+                  editable={canWritePatients}
                 />
               </View>
               <View style={styles.gridItem}>
@@ -286,6 +316,7 @@ export default function ReproductiveHealthTab({
                   value={padsPerDay}
                   onChangeText={setPadsPerDay}
                   keyboardType="numeric"
+                  editable={canWritePatients}
                 />
               </View>
             </View>
@@ -298,7 +329,8 @@ export default function ReproductiveHealthTab({
               <View style={styles.toggleRow}>
                 <Pressable
                   style={[styles.toggleBtn, !isMenopausal && styles.toggleBtnActive]}
-                  onPress={() => setIsMenopausal(false)}
+                  disabled={!canWritePatients}
+                  onPress={() => canWritePatients && setIsMenopausal(false)}
                 >
                   <ThemedText variant="smallBold" color={!isMenopausal ? theme.colors.onPrimary : theme.colors.textSecondary}>
                     No
@@ -306,7 +338,8 @@ export default function ReproductiveHealthTab({
                 </Pressable>
                 <Pressable
                   style={[styles.toggleBtn, isMenopausal && styles.toggleBtnActivePrimary]}
-                  onPress={() => setIsMenopausal(true)}
+                  disabled={!canWritePatients}
+                  onPress={() => canWritePatients && setIsMenopausal(true)}
                 >
                   <ThemedText variant="smallBold" color={isMenopausal ? theme.colors.onPrimary : theme.colors.textSecondary}>
                     Yes
@@ -322,6 +355,7 @@ export default function ReproductiveHealthTab({
                 value={menopauseAge}
                 onChangeText={setMenopauseAge}
                 keyboardType="numeric"
+                editable={canWritePatients}
               />
             )}
           </View>
@@ -350,6 +384,7 @@ export default function ReproductiveHealthTab({
               value={gravidity}
               onChangeText={setGravidity}
               keyboardType="numeric"
+              editable={canWritePatients}
             />
           </View>
           <View style={styles.gridItem}>
@@ -359,6 +394,7 @@ export default function ReproductiveHealthTab({
               value={parity}
               onChangeText={setParity}
               keyboardType="numeric"
+              editable={canWritePatients}
             />
           </View>
           <View style={styles.gridItem}>
@@ -368,6 +404,7 @@ export default function ReproductiveHealthTab({
               value={livingChildren}
               onChangeText={setLivingChildren}
               keyboardType="numeric"
+              editable={canWritePatients}
             />
           </View>
         </View>
@@ -380,6 +417,7 @@ export default function ReproductiveHealthTab({
               value={termBirths}
               onChangeText={setTermBirths}
               keyboardType="numeric"
+              editable={canWritePatients}
             />
           </View>
           <View style={styles.gridItem}>
@@ -389,6 +427,7 @@ export default function ReproductiveHealthTab({
               value={pretermBirths}
               onChangeText={setPretermBirths}
               keyboardType="numeric"
+              editable={canWritePatients}
             />
           </View>
           <View style={styles.gridItem}>
@@ -398,6 +437,7 @@ export default function ReproductiveHealthTab({
               value={abortions}
               onChangeText={setAbortions}
               keyboardType="numeric"
+              editable={canWritePatients}
             />
           </View>
         </View>
@@ -405,13 +445,14 @@ export default function ReproductiveHealthTab({
         <Select
           label="Most Recent Delivery Type"
           value={deliveryType}
-          onSelect={setDeliveryType}
+          onSelect={(val) => canWritePatients && setDeliveryType(val)}
           options={PHILHEALTH_DELIVERY_TYPE_OPTIONS}
           modalTitle="Select Most Recent Delivery Type"
           modalSubtitle="PhilHealth Konsulta (pDeliveryTyp) statutory options"
           icon="baby"
           placeholder="Select delivery type..."
           allowCustom
+          disabled={!canWritePatients}
         />
 
         <View style={styles.switchRow}>
@@ -421,7 +462,8 @@ export default function ReproductiveHealthTab({
           <View style={styles.toggleRow}>
             <Pressable
               style={[styles.toggleBtn, !hadPreEclampsiaHypertension && styles.toggleBtnActive]}
-              onPress={() => setHadPreEclampsiaHypertension(false)}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setHadPreEclampsiaHypertension(false)}
             >
               <ThemedText variant="smallBold" color={!hadPreEclampsiaHypertension ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
@@ -429,7 +471,8 @@ export default function ReproductiveHealthTab({
             </Pressable>
             <Pressable
               style={[styles.toggleBtn, hadPreEclampsiaHypertension && styles.toggleBtnActiveEmergency]}
-              onPress={() => setHadPreEclampsiaHypertension(true)}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setHadPreEclampsiaHypertension(true)}
             >
               <ThemedText variant="smallBold" color={hadPreEclampsiaHypertension ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -446,13 +489,14 @@ export default function ReproductiveHealthTab({
         <Select
           label="Contraceptive Method in Use"
           value={contraceptiveMethod}
-          onSelect={setContraceptiveMethod}
+          onSelect={(val) => canWritePatients && setContraceptiveMethod(val)}
           options={PHILHEALTH_CONTRACEPTIVE_OPTIONS}
           modalTitle="Select Contraceptive Method"
           modalSubtitle="DOH Family Planning Program & PhilHealth Yakap (pBirthCtrlMethod)"
           icon="shield"
           placeholder="Select contraceptive method..."
           allowCustom
+          disabled={!canWritePatients}
         />
 
         <View style={styles.switchRow}>
@@ -462,7 +506,8 @@ export default function ReproductiveHealthTab({
           <View style={styles.toggleRow}>
             <Pressable
               style={[styles.toggleBtn, !receivedFamilyPlanningCounseling && styles.toggleBtnActive]}
-              onPress={() => setReceivedFamilyPlanningCounseling(false)}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setReceivedFamilyPlanningCounseling(false)}
             >
               <ThemedText variant="smallBold" color={!receivedFamilyPlanningCounseling ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
@@ -470,7 +515,8 @@ export default function ReproductiveHealthTab({
             </Pressable>
             <Pressable
               style={[styles.toggleBtn, receivedFamilyPlanningCounseling && styles.toggleBtnActivePrimary]}
-              onPress={() => setReceivedFamilyPlanningCounseling(true)}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setReceivedFamilyPlanningCounseling(true)}
             >
               <ThemedText variant="smallBold" color={receivedFamilyPlanningCounseling ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -484,6 +530,7 @@ export default function ReproductiveHealthTab({
           placeholder="Additional obstetric or gynecological remarks"
           value={remarks}
           onChangeText={setRemarks}
+          editable={canWritePatients}
         />
       </View>
 
@@ -494,7 +541,7 @@ export default function ReproductiveHealthTab({
           size="lg"
           icon="check"
           loading={saving}
-          disabled={saving}
+          disabled={saving || !canWritePatients}
           onPress={handleSave}
         />
       </View>
@@ -509,6 +556,16 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: theme.spacing.xl,
     gap: theme.spacing.md,
+  },
+  readOnlyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
   },
   maleGuardCard: {
     backgroundColor: theme.colors.infoBg,

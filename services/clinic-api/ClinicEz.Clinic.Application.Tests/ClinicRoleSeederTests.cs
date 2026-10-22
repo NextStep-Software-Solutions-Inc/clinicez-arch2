@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Api.Authorization;
+using ClinicEz.Clinic.Api.Controllers;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -90,6 +93,128 @@ public class ClinicRoleSeederTests
         dpoRole.Permissions.Should().Contain(ClinicPermissions.ReportsRead);
         dpoRole.Permissions.Should().Contain(ClinicPermissions.SettingsRead);
         dpoRole.Permissions.Should().Contain(ClinicPermissions.PatientsRead);
+    }
+
+    [Fact]
+    public void GetCanonicalSystemRoleTemplates_GrantsPatientsWriteToDoctorRole()
+    {
+        var templates = ClinicRoleSeeder.GetCanonicalSystemRoleTemplates();
+        var doctorTemplate = templates.SingleOrDefault(t =>
+            t.Name.Equals(ClinicRoleSeeder.DoctorRoleName, StringComparison.OrdinalIgnoreCase));
+
+        doctorTemplate.Should().NotBeNull();
+        doctorTemplate!.Permissions.Should().Contain(ClinicPermissions.PatientsRead);
+        doctorTemplate.Permissions.Should().Contain(ClinicPermissions.PatientsWrite);
+        doctorTemplate.Permissions.Should().Contain(ClinicPermissions.ConsultationsRead);
+        doctorTemplate.Permissions.Should().Contain(ClinicPermissions.ConsultationsWrite);
+        doctorTemplate.Permissions.Should().Contain(ClinicPermissions.ConsultationsSign);
+    }
+
+    [Fact]
+    public async Task SeedOrUpdateAllClinicsAsync_BackfillsPatientsWriteToExistingDoctorRole()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+
+        // Seed an outdated Attending Physician / Doctor role missing patients:write (Issue #52 reproduction)
+        var legacyDoctorPermissions = new List<string>
+        {
+            ClinicPermissions.AppointmentsRead,
+            ClinicPermissions.QueueRead,
+            ClinicPermissions.QueueCall,
+            ClinicPermissions.QueueComplete,
+            ClinicPermissions.TriageRead,
+            ClinicPermissions.ConsultationsRead,
+            ClinicPermissions.ConsultationsWrite,
+            ClinicPermissions.ConsultationsSign,
+            ClinicPermissions.PatientsRead,
+            ClinicPermissions.DocumentsRead,
+            ClinicPermissions.DocumentsIssue,
+            ClinicPermissions.RecordsRead,
+            ClinicPermissions.RecordsUpload,
+            ClinicPermissions.ProceduresRead,
+            ClinicPermissions.ProceduresWrite,
+            ClinicPermissions.LabOrdersRead,
+            ClinicPermissions.LabOrdersWrite,
+            ClinicPermissions.LabResultsReview,
+            ClinicPermissions.ServicesRead
+        };
+
+        var doctorRole = new ClinicRole
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = ClinicRoleSeeder.DoctorRoleName,
+            IsSystem = true,
+            Permissions = legacyDoctorPermissions
+        };
+        await context.ClinicRoles.AddAsync(doctorRole);
+        await context.SaveChangesAsync();
+
+        var updatedCount = await ClinicRoleSeeder.SeedOrUpdateAllClinicsAsync(context, null, CancellationToken.None);
+
+        updatedCount.Should().Be(1);
+
+        var refreshedDoctorRole = await context.ClinicRoles.FirstAsync(r => r.Id == doctorRole.Id);
+        refreshedDoctorRole.Permissions.Should().Contain(ClinicPermissions.PatientsWrite);
+    }
+
+    [Fact]
+    public void DoctorRoleTemplate_SatisfiesAllPatientChartProfileEndpointPermissions()
+    {
+        var doctorTemplate = ClinicRoleSeeder.GetCanonicalSystemRoleTemplates()
+            .Single(t => t.Name.Equals(ClinicRoleSeeder.DoctorRoleName, StringComparison.OrdinalIgnoreCase));
+
+        var profileEndpoints = new (Type Controller, string ActionName)[]
+        {
+            // 1. Surgical & Clinical
+            (typeof(PatientsController), nameof(PatientsController.AddSurgicalHistory)),
+            (typeof(PatientsController), nameof(PatientsController.UpdateSurgicalHistory)),
+            (typeof(PatientsController), nameof(PatientsController.DeleteSurgicalHistory)),
+            (typeof(PatientsController), nameof(PatientsController.UpdateMedicalHistory)),
+            (typeof(PatientsController), nameof(PatientsController.UpdateFamilyHistory)),
+            (typeof(PatientsController), nameof(PatientsController.UpdatePhysicalExam)),
+            (typeof(AllergiesController), nameof(AllergiesController.CreateAllergy)),
+            (typeof(AllergiesController), nameof(AllergiesController.DeleteAllergy)),
+            (typeof(ProblemsController), nameof(ProblemsController.CreateProblem)),
+            (typeof(ProblemsController), nameof(ProblemsController.UpdateProblemStatus)),
+            (typeof(YakapPatientProfileController), nameof(YakapPatientProfileController.UpdateProfile)),
+
+            // 2. Lifestyle & Social
+            (typeof(PatientsController), nameof(PatientsController.UpdateSocialHistory)),
+
+            // 3. Reproductive / OB-GYN
+            (typeof(PatientsController), nameof(PatientsController.UpdateReproductiveHistory)),
+
+            // 4. Cardiometabolic & NCD
+            (typeof(PatientsController), nameof(PatientsController.SaveNcdRiskAssessment)),
+            (typeof(PatientsController), nameof(PatientsController.UpdateNcdRiskAssessment)),
+            (typeof(PatientsController), nameof(PatientsController.VoidNcdRiskAssessment))
+        };
+
+        foreach (var (controller, actionName) in profileEndpoints)
+        {
+            var method = controller.GetMethod(actionName);
+            method.Should().NotBeNull($"Expected endpoint {controller.Name}.{actionName} to exist");
+
+            var requiredPermissions = method!.GetCustomAttributes<HasPermissionAttribute>(true)
+                .Concat(controller.GetCustomAttributes<HasPermissionAttribute>(true))
+                .Select(a => a.Permission)
+                .ToList();
+
+            requiredPermissions.Should().NotBeEmpty($"{controller.Name}.{actionName} must be permission-guarded");
+            foreach (var perm in requiredPermissions)
+            {
+                doctorTemplate.Permissions.Should().Contain(perm,
+                    $"Doctor role must have '{perm}' required by {controller.Name}.{actionName}");
+            }
+        }
     }
 
     [Fact]
