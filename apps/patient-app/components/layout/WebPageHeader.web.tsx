@@ -74,7 +74,7 @@ export default function WebPageHeader({
 
       {showBrand && !onBack ? (
         <View style={{ marginRight: spacing.sm }}>
-          <ClinicEzMark size={sizes.controlSm} variant="color" />
+          <ClinicEzMark size={sizes.controlSm} variant="inverted" />
         </View>
       ) : null}
 

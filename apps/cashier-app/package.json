@@ -28,7 +28,7 @@
     "react-native-web": "~0.21.3"
   },
   "devDependencies": {
-    "@types/node": "^22.20.2",
+    "@types/node": "^24.19.2",
     "@types/react": "~19.2.3",
     "typescript": "~6.0.3"
   },
@@ -37,7 +37,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:web": "expo export -p web && node -e \"const fs = require('fs'); if(fs.existsSync('public')) fs.cpSync('public', 'dist', {recursive: true}); if(fs.existsSync('vercel.json')) fs.copyFileSync('vercel.json', 'dist/vercel.json');\"",
+    "build:web": "expo export -p web && bun -e \"const fs = require('fs'); if(fs.existsSync('public')) fs.cpSync('public', 'dist', {recursive: true}); if(fs.existsSync('vercel.json')) fs.copyFileSync('vercel.json', 'dist/vercel.json');\"",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests"
   },

@@ -11,7 +11,7 @@ const Z_PATH =
 
 export interface ClinicEzMarkProps {
   size?: number;
-  variant?: 'bare' | 'squircle' | 'inverted';
+  variant?: 'bare' | 'squircle' | 'inverted' | 'color';
 }
 
 export default function ClinicEzMark({
