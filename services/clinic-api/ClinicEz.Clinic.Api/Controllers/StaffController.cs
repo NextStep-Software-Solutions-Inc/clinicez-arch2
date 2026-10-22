@@ -171,7 +171,13 @@ public sealed class StaffController : ControllerBase
         [FromBody] ResetStaffPasswordRequest? request,
         CancellationToken ct)
     {
-        var result = await _sender.Send(new ResetStaffPasswordCommand(id, request?.TemporaryPassword), ct);
+        var result = await _sender.Send(
+            new ResetStaffPasswordCommand(
+                id,
+                request?.TemporaryPassword,
+                request?.SendResetEmail ?? false,
+                request?.GenerateResetLink ?? false),
+            ct);
         return Ok(ApiResponse<ResetStaffPasswordResult>.Success(result, "Staff password reset successfully."));
     }
 
@@ -227,7 +233,10 @@ public sealed class StaffController : ControllerBase
     }
 }
 
-public sealed record ResetStaffPasswordRequest(string? TemporaryPassword);
+public sealed record ResetStaffPasswordRequest(
+    string? TemporaryPassword = null,
+    bool SendResetEmail = false,
+    bool GenerateResetLink = false);
 
 public sealed record ResendStaffInviteRequest(bool SendInviteEmail = true);
 

@@ -141,10 +141,12 @@ export default function StaffManagementTab({
     role: string;
     inviteUrl: string;
     sentEmail: boolean;
+    isPasswordReset?: boolean;
   } | null>(null);
 
   // Password Reset Modal State
   const [resetModalStaff, setResetModalStaff] = useState<StaffMember | null>(null);
+  const [resetDeliveryMode, setResetDeliveryMode] = useState<'email' | 'link' | 'password'>('email');
   const [customResetPassword, setCustomResetPassword] = useState('');
   const [resettingPassword, setResettingPassword] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
@@ -469,9 +471,14 @@ export default function StaffManagementTab({
     setResettingPassword(true);
     setResetError(null);
 
+    const isLinkReset = resetDeliveryMode === 'email' || resetDeliveryMode === 'link';
     const [result, err] = await clinicService.resetStaffPassword(
       resetModalStaff.id,
-      customResetPassword.trim() || undefined
+      isLinkReset ? undefined : customResetPassword.trim() || undefined,
+      {
+        sendResetEmail: resetDeliveryMode === 'email',
+        generateResetLink: isLinkReset,
+      }
     );
 
     setResettingPassword(false);
@@ -485,19 +492,50 @@ export default function StaffManagementTab({
     setResetModalStaff(null);
     setCustomResetPassword('');
 
+    const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+    const resetUrl =
+      result.resetUrl ||
+      (result.resetToken
+        ? origin
+          ? `${origin}/invitations/${result.resetToken}`
+          : `/invitations/${result.resetToken}`
+        : '');
+
     // Update local state
     setStaff((prev) =>
-      prev.map((s) => (s.id === targetStaff.id ? { ...s, hasCredentials: true, mustChangePassword: true } : s))
+      prev.map((s) =>
+        s.id === targetStaff.id
+          ? {
+              ...s,
+              hasCredentials: true,
+              mustChangePassword: true,
+              invitationToken: result.resetToken ?? s.invitationToken,
+              inviteUrl: resetUrl || s.inviteUrl,
+            }
+          : s
+      )
     );
 
-    // Show credentials modal with the generated temporary password
-    setCredentialsModal({
-      visible: true,
-      name: result.staffName,
-      email: result.email,
-      role: targetStaff.roleName || targetStaff.role,
-      temporaryPassword: result.temporaryPassword,
-    });
+    if (isLinkReset) {
+      setInviteModal({
+        visible: true,
+        name: result.staffName,
+        email: result.email,
+        role: targetStaff.roleName || targetStaff.role,
+        inviteUrl: resetUrl,
+        sentEmail: resetDeliveryMode === 'email',
+        isPasswordReset: true,
+      });
+    } else {
+      // Show credentials modal with the generated temporary password
+      setCredentialsModal({
+        visible: true,
+        name: result.staffName,
+        email: result.email,
+        role: targetStaff.roleName || targetStaff.role,
+        temporaryPassword: result.temporaryPassword,
+      });
+    }
   };
 
   const handleToggleActive = (staffMember: StaffMember) => {
@@ -827,10 +865,11 @@ export default function StaffManagementTab({
                                     id: 'reset-pwd',
                                     label: 'Reset Password',
                                     icon: 'key' as const,
-                                    hint: 'Issue temporary credentials',
+                                    hint: 'Send reset email, link, or temporary password',
                                     dividerBefore: s.role === 'Doctor',
                                     onPress: () => {
                                       setResetModalStaff(s);
+                                      setResetDeliveryMode('email');
                                       setCustomResetPassword(generateRandomPassword());
                                       setResetError(null);
                                     },
@@ -1809,8 +1848,8 @@ export default function StaffManagementTab({
           visible
           onClose={() => setResetModalStaff(null)}
           title="Reset staff password"
-          subtitle={`Assign temporary password for ${resetModalStaff.firstName} ${resetModalStaff.lastName}`}
-          maxWidth={460}
+          subtitle={`Choose how to reset workstation credentials for ${resetModalStaff.firstName} ${resetModalStaff.lastName}`}
+          maxWidth={480}
           footer={
             <View style={styles.modalFooter}>
               <Button
@@ -1820,7 +1859,13 @@ export default function StaffManagementTab({
                 disabled={resettingPassword}
               />
               <Button
-                title="Confirm Reset"
+                title={
+                  resetDeliveryMode === 'email'
+                    ? 'Send Reset Email'
+                    : resetDeliveryMode === 'link'
+                    ? 'Generate Reset Link'
+                    : 'Set Temporary Password'
+                }
                 onPress={handleResetPassword}
                 loading={resettingPassword}
               />
@@ -1840,35 +1885,67 @@ export default function StaffManagementTab({
             Login Email: <ThemedText variant="smallBold">{resetModalStaff.email || 'None (email required)'}</ThemedText>
           </ThemedText>
 
-          <View style={styles.passwordRow}>
-            <Input
-              containerStyle={styles.flex1}
-              label="New temporary password"
-              value={customResetPassword}
-              onChangeText={setCustomResetPassword}
-              autoCapitalize="none"
-              helperText="Staff member must change password upon next login."
-            />
-            <Button
-              title="Generate"
-              variant="outline"
-              size="sm"
-              onPress={() => setCustomResetPassword(generateRandomPassword())}
-              style={styles.generateBtn}
+          <View style={{ marginVertical: theme.spacing.xs }}>
+            <SegmentedControl<'email' | 'link' | 'password'>
+              value={resetDeliveryMode}
+              onChange={setResetDeliveryMode}
+              options={[
+                { value: 'email', label: 'Email Reset Link' },
+                { value: 'link', label: 'Copy Reset Link' },
+                { value: 'password', label: 'Direct Password' },
+              ]}
             />
           </View>
+
+          {resetDeliveryMode === 'email' ? (
+            <View style={styles.inviteNoticeBox}>
+              <Icon name="mail" size={theme.sizes.iconSm} color={theme.colors.primary} />
+              <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.flex1}>
+                A password reset email with a secure 7-day setup link will be sent to {resetModalStaff.email || 'the staff member'}. Active workstation sessions will be signed out.
+              </ThemedText>
+            </View>
+          ) : resetDeliveryMode === 'link' ? (
+            <View style={styles.inviteNoticeBox}>
+              <Icon name="copy" size={theme.sizes.iconSm} color={theme.colors.primary} />
+              <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.flex1}>
+                A secure 7-day password setup link will be generated for you to copy and share directly via chat or messaging. Active workstation sessions will be signed out.
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.passwordRow}>
+              <Input
+                containerStyle={styles.flex1}
+                label="New temporary password"
+                value={customResetPassword}
+                onChangeText={setCustomResetPassword}
+                autoCapitalize="none"
+                helperText="Staff member must change password upon next login."
+              />
+              <Button
+                title="Generate"
+                variant="outline"
+                size="sm"
+                onPress={() => setCustomResetPassword(generateRandomPassword())}
+                style={styles.generateBtn}
+              />
+            </View>
+          )}
         </Modal>
       ) : null}
 
-      {/* Staff Invitation Link & Delivery Modal */}
+      {/* Staff Invitation / Password Reset Link & Delivery Modal */}
       {inviteModal?.visible ? (
         <Modal
           visible
           onClose={() => setInviteModal(null)}
-          title="Staff Invitation Ready"
+          title={inviteModal.isPasswordReset ? 'Password Reset Link Ready' : 'Staff Invitation Ready'}
           subtitle={
             inviteModal.sentEmail
-              ? 'An invitation email has been sent and the direct link is ready.'
+              ? inviteModal.isPasswordReset
+                ? 'A password reset email has been sent and the direct link is ready.'
+                : 'An invitation email has been sent and the direct link is ready.'
+              : inviteModal.isPasswordReset
+              ? 'Share this password reset link with the staff member to set a new password.'
               : 'Share the invitation link with the staff member to complete account setup.'
           }
           maxWidth={480}
@@ -1898,7 +1975,9 @@ export default function StaffManagementTab({
               </View>
             ) : null}
             <View style={styles.credRow}>
-              <ThemedText variant="caption" color={theme.colors.textMuted}>Invitation Link (Valid for 7 days)</ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                {inviteModal.isPasswordReset ? 'Password Reset Link (Valid for 7 days)' : 'Invitation Link (Valid for 7 days)'}
+              </ThemedText>
               <ThemedText variant="captionBold" color={theme.colors.primary} numberOfLines={2} selectable>
                 {inviteModal.inviteUrl}
               </ThemedText>
@@ -1909,7 +1988,9 @@ export default function StaffManagementTab({
             <View style={styles.inviteNoticeBox}>
               <Icon name="mail" size={theme.sizes.iconSm} color={theme.colors.primary} />
               <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.flex1}>
-                An invitation email was sent to {inviteModal.email || 'the provided address'}. They can also use this direct link to set their password.
+                {inviteModal.isPasswordReset
+                  ? `A password reset email was sent to ${inviteModal.email || 'the provided address'}. They can also use this direct link to set their new password.`
+                  : `An invitation email was sent to ${inviteModal.email || 'the provided address'}. They can also use this direct link to set their password.`}
               </ThemedText>
             </View>
           ) : (
@@ -1922,10 +2003,17 @@ export default function StaffManagementTab({
           )}
 
           <Button
-            title="Copy Invitation Link"
+            title={inviteModal.isPasswordReset ? 'Copy Password Reset Link' : 'Copy Invitation Link'}
             icon="copy"
             variant="outline"
-            onPress={() => copyToClipboard(inviteModal.inviteUrl, 'Invitation link copied to clipboard!')}
+            onPress={() =>
+              copyToClipboard(
+                inviteModal.inviteUrl,
+                inviteModal.isPasswordReset
+                  ? 'Password reset link copied to clipboard!'
+                  : 'Invitation link copied to clipboard!'
+              )
+            }
           />
         </Modal>
       ) : null}

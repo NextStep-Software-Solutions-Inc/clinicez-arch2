@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
@@ -16,21 +17,26 @@ namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
 public sealed record ResetStaffPasswordCommand(
     Guid StaffId,
-    string? TemporaryPassword = null) : IRequest<ResetStaffPasswordResult>;
+    string? TemporaryPassword = null,
+    bool SendResetEmail = false,
+    bool GenerateResetLink = false) : IRequest<ResetStaffPasswordResult>;
 
 public sealed record ResetStaffPasswordResult(
     Guid StaffId,
     string StaffName,
     string Email,
     string TemporaryPassword,
-    string Message);
+    string Message,
+    string? ResetToken = null,
+    string? ResetUrl = null,
+    bool EmailSent = false);
 
 public sealed class ResetStaffPasswordCommandValidator : AbstractValidator<ResetStaffPasswordCommand>
 {
     public ResetStaffPasswordCommandValidator()
     {
         RuleFor(x => x.StaffId).NotEmpty();
-        When(x => !string.IsNullOrEmpty(x.TemporaryPassword), () =>
+        When(x => !x.SendResetEmail && !x.GenerateResetLink && !string.IsNullOrEmpty(x.TemporaryPassword), () =>
         {
             RuleFor(x => x.TemporaryPassword)
                 .MinimumLength(8)
@@ -45,22 +51,32 @@ public sealed class ResetStaffPasswordCommandHandler : IRequestHandler<ResetStaf
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IFacilityPasswordHasher _passwordHasher;
+    private readonly IRepository<ClinicSettings>? _settingsRepository;
+    private readonly IClinicStaffInvitationNotifier? _invitationNotifier;
+    private readonly IStaffAccessInvalidator? _accessCache;
 
     public ResetStaffPasswordCommandHandler(
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IFacilityPasswordHasher? passwordHasher = null)
+        IFacilityPasswordHasher? passwordHasher = null,
+        IRepository<ClinicSettings>? settingsRepository = null,
+        IClinicStaffInvitationNotifier? invitationNotifier = null,
+        IStaffAccessInvalidator? accessCache = null)
     {
         _staffRepository = staffRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _passwordHasher = passwordHasher ?? new FacilityPasswordHasher();
+        _settingsRepository = settingsRepository;
+        _invitationNotifier = invitationNotifier;
+        _accessCache = accessCache;
     }
 
     public async Task<ResetStaffPasswordResult> Handle(ResetStaffPasswordCommand request, CancellationToken cancellationToken)
     {
         var staff = await _staffRepository.Query(s => s.Id == request.StaffId && s.ClinicId == _clinicContext.ClinicId)
+            .Include(s => s.ClinicRole)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (staff == null)
@@ -71,6 +87,60 @@ public sealed class ResetStaffPasswordCommandHandler : IRequestHandler<ResetStaf
         if (string.IsNullOrWhiteSpace(staff.Email))
         {
             throw new ValidationException("Staff member must have a valid email address configured before login credentials can be reset.");
+        }
+
+        var staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
+
+        if (request.SendResetEmail || request.GenerateResetLink)
+        {
+            var resetToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+            var now = DateTime.UtcNow;
+
+            staff.InvitationToken = resetToken;
+            staff.InvitationExpiresAt = now.AddDays(7);
+            staff.MustChangePassword = true;
+            staff.FailedLoginCount = 0;
+            staff.LockoutEnd = null;
+            staff.TokenVersion++;
+            staff.UpdatedAt = now;
+            staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
+
+            ClinicSettings? settings = null;
+            if (_settingsRepository != null)
+            {
+                settings = await _settingsRepository.Query(s => s.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
+            var resetUrl = _invitationNotifier?.BuildInviteUrl(resetToken, settings?.TenantSlug, settings?.FacilitySlug);
+
+            if (request.SendResetEmail)
+            {
+                _invitationNotifier?.EnqueuePasswordResetEmail(
+                    _clinicContext.TenantId,
+                    _clinicContext.ClinicId,
+                    settings?.ClinicName ?? "Clinic EZ",
+                    settings?.TenantSlug,
+                    settings?.FacilitySlug,
+                    staff,
+                    resetToken);
+            }
+
+            _staffRepository.Update(staff);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            _accessCache?.Invalidate(staff.Id);
+
+            return new ResetStaffPasswordResult(
+                staff.Id,
+                staffFullName,
+                staff.Email,
+                string.Empty,
+                request.SendResetEmail
+                    ? "Password reset email sent. The staff member can set their new password using the link (valid for 7 days)."
+                    : "Password reset link generated (valid for 7 days). Share this link with the staff member to set their new password.",
+                ResetToken: resetToken,
+                ResetUrl: resetUrl,
+                EmailSent: request.SendResetEmail);
         }
 
         var tempPassword = request.TemporaryPassword;
@@ -88,6 +158,8 @@ public sealed class ResetStaffPasswordCommandHandler : IRequestHandler<ResetStaf
 
         staff.PasswordHash = _passwordHasher.Hash(tempPassword);
         staff.MustChangePassword = true;
+        staff.InvitationToken = null;
+        staff.InvitationExpiresAt = null;
         staff.FailedLoginCount = 0;
         staff.LockoutEnd = null;
         staff.TokenVersion++;
@@ -96,8 +168,7 @@ public sealed class ResetStaffPasswordCommandHandler : IRequestHandler<ResetStaf
 
         _staffRepository.Update(staff);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        var staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
+        _accessCache?.Invalidate(staff.Id);
 
         return new ResetStaffPasswordResult(
             staff.Id,

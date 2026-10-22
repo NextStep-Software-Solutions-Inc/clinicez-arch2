@@ -12,6 +12,7 @@ public static class EmailTemplateKeys
     public const string PatientClaimInvitation = "patient.claim.invitation";
     public const string AdminInvitation = "admin.invitation";
     public const string ClinicStaffInvitation = "clinic.staff.invitation";
+    public const string ClinicStaffPasswordReset = "clinic.staff.password_reset";
 }
 
 /// <param name="ReplyTo">Where a reply should go, when the template knows (for example the visitor of the contact form).</param>
@@ -51,6 +52,7 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
             EmailTemplateKeys.PatientClaimInvitation => RenderPatientClaimInvitation(subject, model),
             EmailTemplateKeys.AdminInvitation => RenderAdminInvitation(subject, model),
             EmailTemplateKeys.ClinicStaffInvitation => RenderClinicStaffInvitation(subject, model),
+            EmailTemplateKeys.ClinicStaffPasswordReset => RenderClinicStaffPasswordReset(subject, model),
             _ => throw new EmailTemplateException($"Unknown email template '{templateKey}'.")
         };
     }
@@ -538,6 +540,114 @@ public sealed partial class EmailTemplateRenderer : IEmailTemplateRenderer
                 </p>
                 <p style="font-size: 11px; color: #94a3b8; margin: 0;">
                   If you did not expect this invitation, you can safely ignore this email.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        """;
+
+    private static RenderedEmail RenderClinicStaffPasswordReset(string subject, IReadOnlyDictionary<string, string> model)
+    {
+        var staffName = Optional(model, "staffName") ?? Required(model, "inviteeName");
+        var clinicName = Optional(model, "clinicName") ?? Optional(model, "workspaceName") ?? Optional(model, "facilityName") ?? "Clinic EZ";
+        var role = Optional(model, "role") ?? "Staff Member";
+        var resetUrlKey = model.ContainsKey("resetUrl") ? "resetUrl" : "inviteUrl";
+        var resetUrl = RequiredHttpUrl(model, resetUrlKey);
+
+        var html = Fill(ClinicStaffPasswordResetHtml, new Dictionary<string, string>
+        {
+            ["subject"] = Encode(subject),
+            ["staffName"] = Encode(staffName),
+            ["clinicName"] = Encode(clinicName),
+            ["role"] = Encode(role),
+            ["resetUrl"] = Encode(resetUrl)
+        });
+
+        var text = $"""
+            Hello {staffName},
+
+            An administrator at {clinicName} has initiated a password reset for your Clinic EZ workstation account ({role}).
+
+            Set your new workstation password by visiting:
+            {resetUrl}
+
+            This password reset link will expire in 7 days.
+            """;
+
+        return new RenderedEmail(html, text);
+    }
+
+    private const string ClinicStaffPasswordResetHtml = """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>{{subject}}</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+            <!-- Teal Header -->
+            <tr>
+              <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #0D6963 0%, #084c47 100%); text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Clinic EZ</h1>
+                <p style="color: #ccfbf1; margin: 6px 0 0 0; font-size: 13px; font-weight: 500;">Clinical Operations &amp; Practice Management</p>
+              </td>
+            </tr>
+
+            <!-- Content Body -->
+            <tr>
+              <td style="padding: 32px;">
+                <h2 style="font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 16px 0;">
+                  Hello {{staffName}},
+                </h2>
+                <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
+                  An administrator at <strong>{{clinicName}}</strong> has initiated a password reset for your Clinic EZ workstation account.
+                </p>
+
+                <!-- Details Card -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background: #f1f5f9; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                  <tr>
+                    <td>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Clinic / Healthcare Facility:</strong> {{clinicName}}</p>
+                      <p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Assigned Role:</strong> {{role}}</p>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="font-size: 14px; line-height: 22px; color: #475569; margin: 0 0 28px 0;">
+                  Click the button below to create a new workstation password and sign in.
+                </p>
+
+                <!-- CTA Button -->
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td align="center">
+                      <a href="{{resetUrl}}" target="_blank" style="display: inline-block; background-color: #0D6963; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 10px; box-shadow: 0 2px 4px rgba(13, 105, 99, 0.3);">
+                        Set New Workstation Password &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Link Fallback -->
+                <p style="font-size: 12px; color: #94a3b8; line-height: 18px; margin: 32px 0 0 0; word-break: break-all;">
+                  Or copy and paste this link into your browser:<br />
+                  <a href="{{resetUrl}}" style="color: #0D6963; text-decoration: underline;">{{resetUrl}}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center;">
+                <p style="font-size: 12px; color: #64748b; margin: 0 0 4px 0;">
+                  This password reset link expires in <strong>7 days</strong>.
+                </p>
+                <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                  If you did not request or expect this password reset, please contact your clinic administrator.
                 </p>
               </td>
             </tr>

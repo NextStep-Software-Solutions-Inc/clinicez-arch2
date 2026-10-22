@@ -736,4 +736,155 @@ public class StaffInvitationTests
         invitedDto.Status.Should().Be(StaffAccountStatus.Invited);
         invitedDto.HasCredentials.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task ResetStaffPassword_WithSendResetEmail_EnqueuesPasswordResetEmailAndAllowsAcceptance()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_reset_email";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var notifier = Substitute.For<IClinicStaffInvitationNotifier>();
+        notifier.BuildInviteUrl(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns(ci => $"https://nextstep.clinic.dev.clinicez.net/invitations/{ci.ArgAt<string>(0)}");
+
+        await settingsRepo.AddAsync(new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            ClinicName = "Nextstep Clinic",
+            TenantSlug = "nextstep",
+            FacilitySlug = "nextstep"
+        });
+
+        var hasher = new FacilityPasswordHasher();
+        var activeStaff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Wave",
+            LastName = "Ambray",
+            Role = StaffRole.Doctor,
+            Email = "wave@clinicez.ph",
+            PasswordHash = hasher.Hash("OldPass123!"),
+            Status = StaffAccountStatus.Active,
+            MustChangePassword = false,
+            IsActive = true,
+            TokenVersion = 1
+        };
+
+        await staffRepo.AddAsync(activeStaff);
+        await uow.SaveChangesAsync();
+
+        var resetHandler = new ResetStaffPasswordCommandHandler(
+            staffRepo,
+            uow,
+            clinicContext,
+            hasher,
+            settingsRepo,
+            notifier);
+
+        var resetResult = await resetHandler.Handle(
+            new ResetStaffPasswordCommand(
+                activeStaff.Id,
+                TemporaryPassword: null,
+                SendResetEmail: true,
+                GenerateResetLink: true),
+            CancellationToken.None);
+
+        resetResult.EmailSent.Should().BeTrue();
+        resetResult.ResetToken.Should().NotBeNullOrWhiteSpace();
+        resetResult.ResetToken!.Length.Should().Be(64);
+        resetResult.ResetUrl.Should().Contain(resetResult.ResetToken);
+        resetResult.TemporaryPassword.Should().BeEmpty();
+
+        notifier.Received(1).EnqueuePasswordResetEmail(
+            tenantId,
+            clinicId,
+            "Nextstep Clinic",
+            "nextstep",
+            "nextstep",
+            Arg.Is<StaffMember>(s => s.Id == activeStaff.Id),
+            resetResult.ResetToken!);
+
+        // Verify invitation details query allows viewing the reset link for Active member with MustChangePassword=true
+        var detailsHandler = new GetClinicInvitationDetailsQueryHandler(staffRepo, settingsRepo);
+        var details = await detailsHandler.Handle(new GetClinicInvitationDetailsQuery(resetResult.ResetToken!), CancellationToken.None);
+        details.IsAlreadyAccepted.Should().BeFalse();
+        details.IsExpired.Should().BeFalse();
+
+        // Verify accepting the reset link updates the password and clears MustChangePassword
+        var acceptHandler = new AcceptClinicStaffInvitationCommandHandler(staffRepo, hasher, uow);
+        var accepted = await acceptHandler.Handle(
+            new AcceptClinicStaffInvitationCommand(resetResult.ResetToken!, "NewSecurePass123!"),
+            CancellationToken.None);
+
+        accepted.Status.Should().Be(StaffAccountStatus.Active);
+        accepted.MustChangePassword.Should().BeFalse();
+        accepted.HasCredentials.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ResetStaffPassword_WithGenerateResetLinkOnly_DoesNotEnqueueEmail()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_reset_link";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var notifier = Substitute.For<IClinicStaffInvitationNotifier>();
+        notifier.BuildInviteUrl(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns(ci => $"https://nextstep.clinic.dev.clinicez.net/invitations/{ci.ArgAt<string>(0)}");
+
+        var activeStaff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Wave",
+            LastName = "Ambray",
+            Role = StaffRole.Doctor,
+            Email = "wave@clinicez.ph",
+            PasswordHash = "existing_hash",
+            Status = StaffAccountStatus.Active,
+            MustChangePassword = false,
+            IsActive = true
+        };
+
+        await staffRepo.AddAsync(activeStaff);
+        await uow.SaveChangesAsync();
+
+        var resetHandler = new ResetStaffPasswordCommandHandler(
+            staffRepo,
+            uow,
+            clinicContext,
+            new FacilityPasswordHasher(),
+            settingsRepo,
+            notifier);
+
+        var resetResult = await resetHandler.Handle(
+            new ResetStaffPasswordCommand(
+                activeStaff.Id,
+                TemporaryPassword: null,
+                SendResetEmail: false,
+                GenerateResetLink: true),
+            CancellationToken.None);
+
+        resetResult.EmailSent.Should().BeFalse();
+        resetResult.ResetToken.Should().NotBeNullOrWhiteSpace();
+        resetResult.ResetUrl.Should().Contain(resetResult.ResetToken!);
+
+        notifier.DidNotReceiveWithAnyArgs().EnqueuePasswordResetEmail(default!, default, default!, default, default, default!, default!);
+    }
 }

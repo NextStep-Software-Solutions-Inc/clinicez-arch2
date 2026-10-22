@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
@@ -481,8 +481,8 @@ public sealed class ClinicAuthService : IClinicAuthService
         var resolved = await ResolveByClinicAsync(staff.ClinicId, ct);
 
         var now = DateTime.UtcNow;
-        var isExpired = staff.Status == StaffAccountStatus.Invited && staff.InvitationExpiresAt.HasValue && staff.InvitationExpiresAt.Value < now;
-        var isAlreadyAccepted = staff.Status == StaffAccountStatus.Active && !string.IsNullOrEmpty(staff.PasswordHash);
+        var isExpired = (staff.Status == StaffAccountStatus.Invited || staff.MustChangePassword) && staff.InvitationExpiresAt.HasValue && staff.InvitationExpiresAt.Value < now;
+        var isAlreadyAccepted = staff.Status == StaffAccountStatus.Active && !string.IsNullOrEmpty(staff.PasswordHash) && !staff.MustChangePassword;
         var isRevoked = staff.Status == StaffAccountStatus.Revoked;
         var isSuspended = staff.Status == StaffAccountStatus.Suspended;
 
@@ -526,7 +526,7 @@ public sealed class ClinicAuthService : IClinicAuthService
         if (staff.InvitationExpiresAt.HasValue && staff.InvitationExpiresAt.Value < now)
             return AuthOutcome.Fail(AuthFailure.InvalidRequest, "This invitation has expired. Please ask your clinic administrator to resend the invitation.");
 
-        if (staff.Status == StaffAccountStatus.Active && !string.IsNullOrEmpty(staff.PasswordHash))
+        if (staff.Status == StaffAccountStatus.Active && !string.IsNullOrEmpty(staff.PasswordHash) && !staff.MustChangePassword)
             return AuthOutcome.Fail(AuthFailure.InvalidRequest, "This invitation has already been accepted. Sign in instead.");
 
         if (staff.Status != StaffAccountStatus.Invited && staff.Status != StaffAccountStatus.Active)

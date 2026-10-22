@@ -1,4 +1,4 @@
-﻿import type { AxiosRequestConfig } from 'axios';
+import type { AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
 import { SyncStatus, type SearchResponseDto, type ApiError } from '@shared/safe';
 
@@ -164,6 +164,9 @@ export interface ResetStaffPasswordResult {
   email: string;
   temporaryPassword: string;
   message: string;
+  resetToken?: string | null;
+  resetUrl?: string | null;
+  emailSent?: boolean;
 }
 
 export interface FacilityLimits {
@@ -2886,10 +2889,16 @@ export const clinicService = {
     return clinicApiClient.post<StaffMember>(`/staff/${id}/suspend`, {});
   },
 
-  /** Sets or auto-generates a temporary password; the staff member must change it at next sign-in. Requires `staff:manage`. */
-  async resetStaffPassword(id: string, temporaryPassword?: string) {
+  /** Sets or auto-generates a temporary password, or issues a password reset link/email; the staff member must change it at next sign-in. Requires `staff:manage`. */
+  async resetStaffPassword(
+    id: string,
+    temporaryPassword?: string,
+    options?: { sendResetEmail?: boolean; generateResetLink?: boolean }
+  ) {
     return clinicApiClient.post<ResetStaffPasswordResult>(`/staff/${id}/reset-password`, {
       temporaryPassword: temporaryPassword || undefined,
+      sendResetEmail: options?.sendResetEmail ?? false,
+      generateResetLink: options?.generateResetLink ?? false,
     });
   },
 

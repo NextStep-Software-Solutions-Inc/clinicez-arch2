@@ -56,8 +56,8 @@ public sealed class GetClinicInvitationDetailsQueryHandler : IRequestHandler<Get
             .FirstOrDefaultAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
-        var isExpired = staff.Status == StaffAccountStatus.Invited && staff.InvitationExpiresAt.HasValue && staff.InvitationExpiresAt.Value < now;
-        var isAlreadyAccepted = staff.Status == StaffAccountStatus.Active && !string.IsNullOrEmpty(staff.PasswordHash);
+        var isExpired = (staff.Status == StaffAccountStatus.Invited || staff.MustChangePassword) && staff.InvitationExpiresAt.HasValue && staff.InvitationExpiresAt.Value < now;
+        var isAlreadyAccepted = staff.Status == StaffAccountStatus.Active && !string.IsNullOrEmpty(staff.PasswordHash) && !staff.MustChangePassword;
         var isRevoked = staff.Status == StaffAccountStatus.Revoked;
         var isSuspended = staff.Status == StaffAccountStatus.Suspended;
 

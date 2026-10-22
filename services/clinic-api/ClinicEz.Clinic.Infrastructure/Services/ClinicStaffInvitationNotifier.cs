@@ -93,4 +93,49 @@ public sealed class ClinicStaffInvitationNotifier : IClinicStaffInvitationNotifi
 
         _logger.LogInformation("Enqueued clinic staff invitation email for staff member {StaffId} to {Email}.", staff.Id, staff.Email);
     }
+
+    public void EnqueuePasswordResetEmail(
+        string tenantId,
+        Guid clinicId,
+        string clinicName,
+        string? tenantSlug,
+        string? facilitySlug,
+        StaffMember staff,
+        string token)
+    {
+        if (string.IsNullOrWhiteSpace(staff.Email))
+        {
+            _logger.LogWarning("Skipping password reset email for staff member {StaffId}: no email provided.", staff.Id);
+            return;
+        }
+
+        var resetUrl = BuildInviteUrl(token, tenantSlug, facilitySlug);
+        var staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
+
+        var payload = new NotificationEmailRequestedPayload
+        {
+            To = staff.Email.Trim(),
+            Subject = $"Reset your workstation password for {clinicName} on Clinic EZ",
+            TemplateKey = "clinic.staff.password_reset",
+            Model = new Dictionary<string, string>
+            {
+                ["staffName"] = staffFullName,
+                ["inviteeName"] = staffFullName,
+                ["clinicName"] = clinicName,
+                ["role"] = staff.ClinicRole?.Name ?? staff.Role.ToString(),
+                ["resetUrl"] = resetUrl,
+                ["inviteUrl"] = resetUrl
+            },
+            FromFacilityName = clinicName
+        };
+
+        _publisher.Enqueue(
+            InteropTypes.NotificationEmailRequested,
+            Party.ForFacility(tenantId, clinicId.ToString(), FacilityType.Clinic),
+            Party.Portal,
+            Guid.NewGuid(),
+            payload);
+
+        _logger.LogInformation("Enqueued clinic staff password reset email for staff member {StaffId} to {Email}.", staff.Id, staff.Email);
+    }
 }

@@ -80,7 +80,7 @@ public sealed class AcceptClinicStaffInvitationCommandHandler : IRequestHandler<
             throw new InvalidOperationException("This invitation has expired. Please ask your clinic administrator to resend the invitation.");
         }
 
-        if (staff.Status == StaffAccountStatus.Active && !string.IsNullOrEmpty(staff.PasswordHash))
+        if (staff.Status == StaffAccountStatus.Active && !string.IsNullOrEmpty(staff.PasswordHash) && !staff.MustChangePassword)
         {
             throw new InvalidOperationException("This invitation has already been accepted. Sign in instead.");
         }
