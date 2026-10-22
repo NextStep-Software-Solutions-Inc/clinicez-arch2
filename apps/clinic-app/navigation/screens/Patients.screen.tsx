@@ -80,6 +80,7 @@ import {
 
 import {
   clinicService,
+  getManilaTodayStr,
   ClinicPatient,
   RegisterPatientPayload,
   PatientChart,
@@ -682,6 +683,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         sendToTriage && formTriageRoomId
           ? activeRooms.find((r) => r.id === formTriageRoomId)?.name
           : undefined,
+      queueDate: sendToTriage ? getManilaTodayStr() : undefined,
       ...(formPatientCode.trim() ? ({ patientCode: formPatientCode.trim() } as any) : {}),
     };
 
@@ -1353,6 +1355,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         roomOrStation: chosenRoom?.name,
         priority: checkInPriority,
         chiefComplaint: checkInComplaint.trim() || 'General consultation',
+        queueDate: getManilaTodayStr(),
       });
       if (checkInErr) {
         if (

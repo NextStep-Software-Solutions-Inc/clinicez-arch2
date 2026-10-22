@@ -138,6 +138,7 @@ public static class DependencyInjection
         services.AddScoped<ILabResultFileStore, LabResultFileStore>();
         services.AddScoped<ILabResultIntake, LabResultIntake>();
         services.AddScoped<IPatientDocumentPublisher, PatientDocumentPublisher>();
+        services.AddScoped<IClinicStaffInvitationNotifier, ClinicStaffInvitationNotifier>();
         services.AddScoped<IClaimSlipService, ClaimSlipService>();
         services.AddScoped<IBillingRequestPublisher, BillingRequestPublisher>();
         services.AddScoped<IPatientRecordGateway, PatientRecordGateway>();
@@ -145,10 +146,45 @@ public static class DependencyInjection
         services.AddClinicEzDocumentEngine();
         services.AddScoped<IClinicDocumentPdfService, ClinicDocumentPdfService>();
         services.AddScoped<ISampleDocumentGenerator, SampleDocumentGenerator>();
+
         // Read eagerly: a missing or too-short ClinicEncryption:MasterSecret stops the service from starting.
         services.AddSingleton(ClinicEz.Clinic.Infrastructure.Services.Storage.ClinicEncryptionKeyRing.FromConfiguration(configuration));
         services.AddSingleton<IClinicEncryptionService, ClinicEz.Clinic.Infrastructure.Services.Storage.ClinicEncryptionService>();
-        services.AddSingleton<IClinicStorageService, ClinicEz.Clinic.Infrastructure.Services.Storage.LocalClinicStorageService>();
+
+        // Storage Provider Configuration: Local disk (edge / on-premise without S3), Cloudflare R2, or Private S3 Server (MinIO/Ceph/Wasabi)
+        services.Configure<ClinicEz.Clinic.Infrastructure.Options.StorageOptions>(configuration.GetSection(ClinicEz.Clinic.Infrastructure.Options.StorageOptions.SectionName));
+        services.Configure<ClinicEz.Clinic.Infrastructure.Options.S3Options>(configuration.GetSection(ClinicEz.Clinic.Infrastructure.Options.S3Options.SectionName));
+        services.Configure<ClinicEz.Clinic.Infrastructure.Options.R2Options>(configuration.GetSection(ClinicEz.Clinic.Infrastructure.Options.R2Options.SectionName));
+
+        var storageProvider = configuration["Storage:Provider"]?.Trim();
+        var isS3 = string.Equals(storageProvider, "S3", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(storageProvider, "R2", StringComparison.OrdinalIgnoreCase);
+
+        if (isS3)
+        {
+            var enableFallback = configuration.GetValue("Storage:EnableLocalFallback", true);
+            if (enableFallback)
+            {
+                services.AddSingleton<ClinicEz.Clinic.Infrastructure.Services.Storage.S3ClinicStorageAdapter>();
+                services.AddSingleton<ClinicEz.Clinic.Infrastructure.Services.Storage.LocalClinicStorageService>();
+                services.AddSingleton<IClinicStorageService>(sp =>
+                {
+                    var s3 = sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.Services.Storage.S3ClinicStorageAdapter>();
+                    var local = sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.Services.Storage.LocalClinicStorageService>();
+                    var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ClinicEz.Clinic.Infrastructure.Services.Storage.FallbackClinicStorageService>>();
+                    return new ClinicEz.Clinic.Infrastructure.Services.Storage.FallbackClinicStorageService(s3, local, logger);
+                });
+            }
+            else
+            {
+                services.AddSingleton<IClinicStorageService, ClinicEz.Clinic.Infrastructure.Services.Storage.S3ClinicStorageAdapter>();
+            }
+        }
+        else
+        {
+            services.AddSingleton<IClinicStorageService, ClinicEz.Clinic.Infrastructure.Services.Storage.LocalClinicStorageService>();
+        }
+
         services.AddScoped<IClinicRecordEventPublisher, ClinicEz.Clinic.Infrastructure.Services.ClinicRecordEventPublisher>();
 
 

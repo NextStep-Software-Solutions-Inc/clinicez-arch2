@@ -2,13 +2,12 @@ using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Shared.Interoperability;
 using FluentValidation;
 using MediatR;
-using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Portal.Application.Features.Notifications;
 
 /// <summary>
 /// A visitor's message from the public "Contact us" form. It is emailed to the inbox configured in
-/// <c>Notifications:ContactInbox</c>; the visitor never chooses the recipient or the template.
+/// Platform Settings (<c>Mailer:ContactInbox</c>); the visitor never chooses the recipient or the template.
 /// </summary>
 public record SendContactMessageCommand(string Name, string Email, string Message) : IRequest<bool>;
 
@@ -22,23 +21,18 @@ public class SendContactMessageCommandValidator : AbstractValidator<SendContactM
     }
 }
 
-/// <summary>Returns false when no contact inbox is configured (nothing is sent).</summary>
+/// <summary>Returns false when no contact inbox is configured in Platform Settings (nothing is sent).</summary>
 public class SendContactMessageCommandHandler(
     IApplicationDbContext context,
     INotificationService notifications,
-    IConfiguration configuration,
-    ISystemSettingsService? settingsService = null) : IRequestHandler<SendContactMessageCommand, bool>
+    ISystemSettingsService settingsService) : IRequestHandler<SendContactMessageCommand, bool>
 {
     public async Task<bool> Handle(SendContactMessageCommand request, CancellationToken cancellationToken)
     {
-        var inbox = configuration["Notifications:ContactInbox"]?.Trim();
-        if (string.IsNullOrEmpty(inbox) && settingsService is not null)
-        {
-            inbox = (await settingsService.GetSettingValueAsync("Mailer:ContactInbox", string.Empty, cancellationToken))?.Trim();
-        }
+        var inbox = (await settingsService.GetSettingValueAsync("Mailer:ContactInbox", string.Empty, cancellationToken))?.Trim();
         if (string.IsNullOrEmpty(inbox)) return false;
 
-        notifications.RequestEmail(
+        notifications.EnqueueEmail(
             new NotificationEmailRequestedPayload
             {
                 To = inbox,

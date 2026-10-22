@@ -4,10 +4,12 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Workspace;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,22 +27,29 @@ public sealed class ReconcileEodCommandHandler : IRequestHandler<ReconcileEodCom
     private readonly IRepository<EodReconciliationAudit> _auditRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<ClinicSettings>? _settingsRepository;
 
     public ReconcileEodCommandHandler(
         IRepository<QueueItem> queueRepository,
         IRepository<EodReconciliationAudit> auditRepository,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<ClinicSettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _auditRepository = auditRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _workspaceProfiles = workspaceProfiles;
+        _settingsRepository = settingsRepository;
     }
 
     public async Task<ReconcileEodResultDto> Handle(ReconcileEodCommand request, CancellationToken ct)
     {
-        var targetDate = request.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var targetDate = request.Date
+            ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, ct, _settingsRepository);
         var now = DateTime.UtcNow;
 
         // Fetch remaining active waiting tickets for the clinic and target date.

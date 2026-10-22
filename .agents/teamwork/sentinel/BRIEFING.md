@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-21T00:05:08Z
+# BRIEFING — 2026-10-21T03:40:35Z
 
 ## Mission
-Orchestrate and monitor the implementation of multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows in ClinicEZ.
+Orchestrate and monitor the comprehensive rework of user and staff invitations across all three operational tiers (Platform Users, Tenant Workspace Team, and Clinic Staff) using Clinic EZ's built-in email sender and dedicated domain accept flows.
 
 ## 🔒 My Identity
 - Archetype: sentinel
@@ -52,6 +52,10 @@ Orchestrate and monitor the implementation of multi-doctor clinic encounter sign
 - Active Crons: task-30 (Progress Reporting), task-32 (Liveness Check)
 - Victory Auditor (victory_auditor_billing_workflow): d8ed5215-5b05-4463-895f-804d6bd472b8
 - Cleaned up: task-30 killed, task-32 killed, all subagents killed
+- Active Project Orchestrator (orchestrator_invitations): 81eae908-dfae-4fd3-b659-5f657de02e8c
+- Active Crons: task-34 (Progress Reporting), task-36 (Liveness Check)
+- Victory Auditor: b75a8f3f-2b96-42bc-a3d4-d2cbcb89b896 (victory_auditor_invitations)
+
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -148,20 +152,23 @@ Orchestrate and monitor the implementation of multi-doctor clinic encounter sign
 - Automated EF Core migrations using dotnet ef migrations add AddDoctorToInvoiceLineItem
 - Strict design tokens compliance (@clinicez/design-tokens)
 - Automated test verification: backend invoice tests, frontend billing tests, typecheck
+- Route to General (`teamwork_preview_orchestrator`) for User and Staff Invitations across all 3 tiers (Platform, Workspace, Clinic Staff)
+- Built-in email sender via Interop Hub notification.email.requested -> SMTP/Resend (not Clerk)
+- 7-day cryptographically secure invitation tokens
+- Option for administrators: Send Email or Copy Link
+- Dedicated accept pages on appropriate domains (Portal domain for Platform & Workspace; Clinic domain with local JWT auth for Clinic Staff)
+- Full lifecycle status tracking: Invited, Expired, Active, Suspended, Revoked
+- Automated test suites: dotnet test ClinicEz.Portal.Tests, dotnet test ClinicEz.Clinic.Application.Tests, bun test in portal-web & clinic-app
+- Victory Audit is MANDATORY before reporting completion — audit is BLOCKING
 
 ## User Context
-- **Last user request**: Implement the multi-doctor clinic encounter signing, Statement of Account (SOA) drafting, official receipt issuance, and cashier workstation workflows in ClinicEZ, adhering strictly to real clinic practice and `@clinicez/design-tokens` standards.
+- **Last user request**: Rework user and staff invitations across all three operational tiers of Clinic EZ (Platform Users, Tenant Workspace Team, and Clinic Staff) using Clinic EZ's built-in email sender (Interop Hub notification.email.requested -> SMTP/Resend, not Clerk), secure 7-day tokens, copy-link/send-email options, dedicated accept pages, and standardized account status tracking.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` under timestamp `## 2026-10-21T00:05:08Z`.
+  - Recorded user request verbatim to `ORIGINAL_REQUEST.md` under timestamp `## 2026-10-21T03:40:35Z`.
   - Routed to General path (`teamwork_preview_orchestrator`).
-  - Implemented multi-doctor draft SOA merging and paid duplicate prevention in `CreateInvoiceCommand.cs`.
-  - Added `DoctorId` & `DoctorName` to `InvoiceLineItem` and cleanly dropped `AttendingDoctorName` via automated migration `20261021003544_AddDoctorToInvoiceLineItem.cs`.
-  - Updated `GetDoctorSharesReportQuery.cs` to discover clinicians across line items, procedures, and consultations and compute revenue shares per clinician.
-  - Implemented 3-way queue tabs (`Active Queue`, `Unsettled / Promissory`, `Billed & Paid Today`), defensive cashiering (steppers, deletions, custom items), and Defer/Promissory Note action in `Billing.screen.tsx`.
-  - Aligned encounter signing in `Consultations.screen.tsx` to attach doctor attribution and post Draft SOAs without conflict.
-  - Verified document separation between Statement of Account (`INV-...`) and Official Receipt (`OR-...`) across POS and A4 formats.
-  - Independent Victory Audit completed: `VICTORY CONFIRMED`.
+  - Spawned Project Orchestrator `orchestrator_invitations` (81eae908-dfae-4fd3-b659-5f657de02e8c).
+  - Configured crons: task-34 (Progress Reporting, `*/8 * * * *`), task-36 (Liveness Check, `*/10 * * * *`).
 
 ## Project Status
 - **Phase**: complete
@@ -171,15 +178,16 @@ Orchestrate and monitor the implementation of multi-doctor clinic encounter sign
 
 ## Victory Audit Status
 - **Triggered**: yes
-- **Auditor Conv ID**: d8ed5215-5b05-4463-895f-804d6bd472b8 (victory_auditor_billing_workflow)
 - **Verdict**: VICTORY CONFIRMED
 - **Retry count**: 0
+- **Auditor**: b75a8f3f-2b96-42bc-a3d4-d2cbcb89b896 (victory_auditor_invitations)
 
 ## Artifact Index
 - /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/ORIGINAL_REQUEST.md — Authoritative record of user requests
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/TEST_INFRA.md — Comprehensive 4-Tier E2E Test Infrastructure Specification
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/TEST_READY.md — 51-Feature Checklist & 100% Verification Proof across all 4 suites
 - /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/BRIEFING.md — Sentinel persistent working memory
 - /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/sentinel/handoff.md — Sentinel final completion handoff
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_billing_workflow/handoff.md — Project Orchestrator completion report
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_billing_workflow/handoff.md — Independent Victory Auditor report
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/TEST_READY.md — Comprehensive E2E test catalog
-- /Users/macuser/projects/github/nextstep/clinicez-arch2/services/clinic-api/ClinicEz.Clinic.Infrastructure/Migrations/20261021003544_AddDoctorToInvoiceLineItem.cs — Automated EF Core migration
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_invitations/PROJECT.md — Master Project Plan and Feature Checklist
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/orchestrator_invitations/GATE_STATUS.md — Full Gate Verification Record
+- /Users/macuser/projects/github/nextstep/clinicez-arch2/.agents/teamwork/victory_auditor_invitations/handoff.md — Independent Victory Audit Report (VICTORY CONFIRMED)

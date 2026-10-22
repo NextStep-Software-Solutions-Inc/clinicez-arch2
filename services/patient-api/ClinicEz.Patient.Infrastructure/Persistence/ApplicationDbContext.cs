@@ -23,7 +23,6 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
 
     // ── Patient identity & profile ──────────────────────────────────────────
     public DbSet<Patient> Patients => Set<Patient>();
-    public DbSet<PatientStorageProfile> PatientStorageProfiles => Set<PatientStorageProfile>();
     public DbSet<PatientGovernmentId> PatientGovernmentIds => Set<PatientGovernmentId>();
     public DbSet<PatientAddress> PatientAddresses => Set<PatientAddress>();
     public DbSet<EmergencyContact> EmergencyContacts => Set<EmergencyContact>();
@@ -75,7 +74,6 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
     public DbSet<ShareCodeFailure> ShareCodeFailures => Set<ShareCodeFailure>();
 
     // ── Files & Appointments ────────────────────────────────────────────────
-    public DbSet<FileFolder> FileFolders => Set<FileFolder>();
     public DbSet<FileRecord> FileRecords => Set<FileRecord>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
 
@@ -143,7 +141,19 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
         base.OnModelCreating(modelBuilder);
     }
 
+    public override int SaveChanges()
+    {
+        OnBeforeSaveChanges();
+        return base.SaveChanges();
+    }
+
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        OnBeforeSaveChanges();
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void OnBeforeSaveChanges()
     {
         var utcNow = DateTime.UtcNow;
         var actor = _currentUserService?.UserId ?? "system";
@@ -164,8 +174,6 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
                     break;
             }
         }
-
-        return await base.SaveChangesAsync(cancellationToken);
     }
 }
 

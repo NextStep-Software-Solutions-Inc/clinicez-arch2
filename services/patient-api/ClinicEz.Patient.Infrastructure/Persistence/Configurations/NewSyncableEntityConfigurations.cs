@@ -139,18 +139,3 @@ public sealed class PatientDentalVisionConfiguration : IEntityTypeConfiguration<
         builder.HasOne(e => e.Patient).WithOne(p => p.DentalVision).HasForeignKey<PatientDentalVision>(e => e.PatientId);
     }
 }
-
-public sealed class FileFolderConfiguration : IEntityTypeConfiguration<FileFolder>
-{
-    public void Configure(EntityTypeBuilder<FileFolder> builder)
-    {
-        builder.HasKey(e => e.Id);
-        builder.Property(e => e.Name).HasMaxLength(255).IsRequired();
-        builder.Property(e => e.SyncStatus).HasConversion<string>().HasMaxLength(20);
-        builder.Property(e => e.SyncError).HasMaxLength(500);
-        builder.Property(e => e.CreatedBy).HasMaxLength(128).IsRequired();
-        builder.Property(e => e.UpdatedBy).HasMaxLength(128);
-        builder.HasOne(e => e.Patient).WithMany(p => p.FileFolders).HasForeignKey(e => e.PatientId).OnDelete(DeleteBehavior.Cascade);
-        builder.HasOne(e => e.Parent).WithMany(e => e.Children).HasForeignKey(e => e.ParentId).OnDelete(DeleteBehavior.Restrict);
-    }
-}

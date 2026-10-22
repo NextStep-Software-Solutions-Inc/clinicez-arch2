@@ -1,15 +1,15 @@
-# BRIEFING — 2026-10-09T16:25:50Z
+# BRIEFING — 2026-10-21T08:42:00Z
 
 ## Mission
-Adversarially challenge and stress-test R4 WHO Pediatric Growth Calculations, R3 Allergy CDS Contraindications & Problem Lists, and R3 PhilPEN 24 & Cardiovascular Risk Stratification in the Comprehensive Clinic Features Plan against PhilHealth Yakap statutory specifications and lib_zscore.json.
+Adversarially challenge and stress-test the Storage Fallback Mechanism, S3 Endpoint Compatibility, and Migration Runbook Idempotency across clinic-api.
 
 ## 🔒 My Identity
 - Archetype: Empirical Challenger
 - Roles: critic, specialist
 - Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\challenger_2
-- Original parent: 45a7f0e0-f5b1-41d1-a74d-e52fd5602522
-- Milestone: Comprehensive Clinic Features Plan Adversarial Verification
-- Instance: Challenger 2 of 2 (Growth & CDS Challenger)
+- Original parent: 0570e9be-cc00-4a26-807d-12537fe47556
+- Milestone: Storage Fallback Mechanism, S3 Endpoint Compatibility, and Migration Runbook Idempotency
+- Instance: 2 of 2
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code
@@ -18,20 +18,31 @@ Adversarially challenge and stress-test R4 WHO Pediatric Growth Calculations, R3
 - Write only to .agents/teamwork/challenger_2 for agent metadata
 
 ## Current Parent
-- Conversation ID: 45a7f0e0-f5b1-41d1-a74d-e52fd5602522
-- Updated: 2026-10-09T16:25:50Z
+- Conversation ID: 0570e9be-cc00-4a26-807d-12537fe47556
+- Updated: 2026-10-21T08:42:00Z
 
 ## Review Scope
 - **Files to review**:
-  - `c:\Users\User\projects\nextstep\github\clinicez-arch2\.agents\teamwork\ORIGINAL_REQUEST.md`
-  - `c:\Users\User\projects\nextstep\github\clinicez-arch2\docs\plans\comprehensive-clinic-features-plan.md`
-  - `c:\Users\User\projects\nextstep\github\clinicez-arch2\services\clinic-api\ClinicEz.Clinic.Infrastructure\PhilHealth\Catalog\Seed\lib_zscore.json`
-- **Interface contracts**: PhilHealth-case1 Yakap Data Dictionary Structure (`KonsultaData_v1.14.dtd`), WHO Child Growth Standards, PhilPEN 24 & WHO/ISH Cardiovascular Risk Stratification, Allergy CDS Contraindication Rules.
-- **Review criteria**: Mathematical correctness, statutory lookup table alignment, boundary condition safety, clinical cross-reactivity and contraindication enforcement.
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/FallbackClinicStorageService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/S3ClinicStorageAdapter.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/Services/Storage/R2ClinicStorageService.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Infrastructure/DependencyInjection.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/FallbackClinicStorageServiceTests.cs`
+  - `services/clinic-api/ClinicEz.Clinic.Application.Tests/R2ClinicStorageServiceTests.cs`
+  - `scripts/migrate-clinic-storage-to-r2.sh`
+  - `scripts/migrate-clinic-storage-to-r2.ps1`
+- **Interface contracts**:
+  - `IClinicStorageService` contract supporting byte array and stream overloads
+  - Fallback mechanism behavior (write to primary, read primary then fallback, throw FileNotFoundException on double miss)
+  - S3 endpoint formatting & MinIO/Ceph compatibility (S3:ServiceUrl, ForcePathStyle)
+  - Migration script validation & idempotency (fail on missing creds, dry-run preserves source files)
+- **Review criteria**: Correctness, security, idempotency, failure mode handling, test coverage.
 
 ## Key Decisions Made
-- Empirically proved 13 distinct defects across R4 Growth calculations, R3 Allergy CDS, and R3 PhilPEN risk scoring.
-- Determined final verdict: `REQUEST_CHANGES`.
+- Executed full standard test suite: 12/12 tests passed.
+- Built and executed standalone empirical stress test harness covering 26 adversarial scenarios: 26/26 passed.
+- Empirically proved migration script error handling (exit code 1 on missing creds/endpoints/paths) and dry-run non-destructiveness (SHA256 bit-for-bit identity verified).
+- Final verdict: `CONFIRMED / APPROVE`.
 
 ## Artifact Index
 - `BRIEFING.md` — persistent memory index
@@ -40,29 +51,19 @@ Adversarially challenge and stress-test R4 WHO Pediatric Growth Calculations, R3
 
 ## Attack Surface
 - **Hypotheses tested**:
-  - Boundary age conditions (0d, 23m 29d, 24m 0d, 59m 30d, >=60m)
-  - Mathematical integrity of WHO LMS Box-Cox on zero/negative inputs
-  - Seed dataset integrity of `lib_zscore.json`
-  - Discrete table lookup vs continuous anthropometric patient inputs
-  - Case sensitivity in CDS allergy evaluations
-  - Decoupling of `IsAnaphylactic` from severity alert levels
-  - Cross-allergen class detection (Penicillin -> Amoxicillin/Cephalosporins)
-  - PhilPEN fallback under missing cholesterol / FBS
-  - Age-gating and hypertensive crisis safety rules in WHO/ISH stratification
-- **Vulnerabilities found**:
-  1. Typo in `lib_zscore.json` item 1381 (`weight: "7..9"`) causing parse crashes.
-  2. Attribute bifurcation (`length` in 0-23 vs `height` in 24-60) causing missing key crashes.
-  3. Exact match lookup flaw on discrete statutory tables.
-  4. Non-positive anthropometry ($X \le 0$) yielding `NaN` and `OverflowException` in C# `decimal`.
-  5. Postural discontinuity (0.7 cm) unhandled at 24-month boundary.
-  6. Hard non-null constraint (`required string PhilHealthZScoreCategory`) failing for age >= 60 months.
-  7. Silent allergy omission due to case-sensitive `a.Status == "Active"` on string property.
-  8. Anaphylaxis downgrade to Warning when severity is `Severe`.
-  9. Absence of pharmacological class ontology for cross-reactivity.
-  10. Problem list lifecycle detached from CDS (no drug-disease interaction checks).
-  11. Flawed lab fallback substituting FBS instead of WHO/ISH validated BMI.
-  12. Dangerous under-stratification of young patients (<40) with hypertensive crisis.
-- **Untested angles**: None within assigned scope.
+  - Primary write exclusive routing: `SaveEncryptedFileAsync` & `SaveEncryptedStreamAsync` route exclusively to primary; fallback untouched. Primary write failures do not fall back. (CONFIRMED)
+  - Primary read short-circuiting: `ReadEncryptedFileAsync` & `OpenReadEncryptedStreamAsync` return primary data without calling fallback. (CONFIRMED)
+  - Primary 404/NotFound fallback engagement: When primary throws `FileNotFoundException`, fallback returns data seamlessly. (CONFIRMED)
+  - Double miss error mapping: When both miss, standard `FileNotFoundException` is thrown. (CONFIRMED)
+  - Non-404 primary errors: Server errors (500) and network disconnects correctly bubble up without masking or falling back. (CONFIRMED)
+  - Deletion coordination: Primary is deleted, and fallback is conditionally checked and deleted. (CONFIRMED)
+  - On-premise S3 endpoint formatting: Custom `ServiceUrl` (`http://192.168.1.100:9000`, `http://minio:9000`) and `ForcePathStyle = true` instantiate the AWS S3 client without error. (CONFIRMED)
+  - Trailing slash handling: Trailing slash is normalized via `TrimEnd('/')`. (CONFIRMED)
+  - Cloudflare R2 AccountId derivation: Automatically forms `https://{accountId}.r2.cloudflarestorage.com`. (CONFIRMED)
+  - Migration script validation: `.sh` and `.ps1` fail with exit code 1 when required credentials or endpoints are missing or directory does not exist. (CONFIRMED)
+  - Migration script dry-run safety: Source files in local storage tree remain 100% bit-for-bit identical before and after `-DryRun` / `DRY_RUN=true`. (CONFIRMED)
+- **Vulnerabilities found**: None. System is resilient across all tested vectors.
+- **Untested angles**: Live MinIO server network I/O under real physical packet loss (mocked via unit tests and synthetic endpoints).
 
 ## Loaded Skills
 None

@@ -1190,91 +1190,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.ToTable("emergency_contacts", (string)null);
                 });
 
-            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.FileFolder", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("client_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<string>("DeletedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("deleted_by");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_deleted");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("name");
-
-                    b.Property<Guid?>("ParentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("parent_id");
-
-                    b.Property<Guid>("PatientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("patient_id");
-
-                    b.Property<string>("SyncError")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("sync_error");
-
-                    b.Property<string>("SyncStatus")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("sync_status");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("updated_by");
-
-                    b.Property<uint>("xmin")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.HasKey("Id")
-                        .HasName("pk_file_folders");
-
-                    b.HasIndex("ParentId")
-                        .HasDatabaseName("ix_file_folders_parent_id");
-
-                    b.HasIndex("PatientId")
-                        .HasDatabaseName("ix_file_folders_patient_id");
-
-                    b.ToTable("file_folders", (string)null);
-                });
-
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.FileRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1307,6 +1222,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
+
+                    b.Property<DateOnly?>("DocumentDate")
+                        .HasColumnType("date")
+                        .HasColumnName("document_date");
 
                     b.Property<Guid>("DocumentTypeId")
                         .HasColumnType("uuid")
@@ -1346,15 +1265,16 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("extension");
 
+                    b.Property<string>("FacilityName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("facility_name");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("file_name");
-
-                    b.Property<Guid?>("FolderId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("folder_id");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
@@ -1364,6 +1284,11 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("mime_type");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
 
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid")
@@ -1389,6 +1314,12 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("sync_status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1419,11 +1350,8 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.HasIndex("DocumentTypeId")
                         .HasDatabaseName("ix_file_records_document_type_id");
 
-                    b.HasIndex("FolderId")
-                        .HasDatabaseName("ix_file_records_folder_id");
-
-                    b.HasIndex("PatientId")
-                        .HasDatabaseName("ix_file_records_patient_id");
+                    b.HasIndex("PatientId", "DocumentDate")
+                        .HasDatabaseName("ix_file_records_patient_id_document_date");
 
                     b.ToTable("file_records", (string)null);
                 });
@@ -1834,6 +1762,30 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("deleted_by");
 
+                    b.Property<string>("EncryptedHash")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("encrypted_hash");
+
+                    b.Property<long?>("EncryptedSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("encrypted_size_bytes");
+
+                    b.Property<string>("EncryptionAlgorithm")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("encryption_algorithm");
+
+                    b.Property<string>("EncryptionIvBase64")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("encryption_iv_base64");
+
+                    b.Property<string>("EncryptionTagBase64")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("encryption_tag_base64");
+
                     b.Property<string>("FileContentType")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -1929,6 +1881,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("verification");
+
+                    b.Property<string>("WrappedKeyJson")
+                        .HasColumnType("text")
+                        .HasColumnName("wrapped_key_json");
 
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
@@ -5030,77 +4986,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.ToTable("patient_social_histories", (string)null);
                 });
 
-            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientStorageProfile", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<string>("DeletedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("deleted_by");
-
-                    b.Property<string>("EncryptedMAK")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("encrypted_mak");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_deleted");
-
-                    b.Property<Guid>("PatientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("patient_id");
-
-                    b.Property<long>("QuotaBytes")
-                        .HasColumnType("bigint")
-                        .HasColumnName("quota_bytes");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("updated_by");
-
-                    b.Property<long>("UsedBytes")
-                        .HasColumnType("bigint")
-                        .HasColumnName("used_bytes");
-
-                    b.Property<uint>("xmin")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
-                    b.HasKey("Id")
-                        .HasName("pk_patient_storage_profiles");
-
-                    b.HasIndex("PatientId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_patient_storage_profiles_patient_id");
-
-                    b.ToTable("patient_storage_profiles", (string)null);
-                });
-
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientSurgicalHistory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6501,26 +6386,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("Patient");
                 });
 
-            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.FileFolder", b =>
-                {
-                    b.HasOne("ClinicEz.Patient.Domain.Entities.FileFolder", "Parent")
-                        .WithMany("Children")
-                        .HasForeignKey("ParentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_file_folders_file_folders_parent_id");
-
-                    b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
-                        .WithMany("FileFolders")
-                        .HasForeignKey("PatientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_file_folders_patients_patient_id");
-
-                    b.Navigation("Parent");
-
-                    b.Navigation("Patient");
-                });
-
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.FileRecord", b =>
                 {
                     b.HasOne("ClinicEz.Patient.Domain.Entities.DocumentType", "DocumentType")
@@ -6530,12 +6395,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_file_records_document_types_document_type_id");
 
-                    b.HasOne("ClinicEz.Patient.Domain.Entities.FileFolder", "Folder")
-                        .WithMany("Files")
-                        .HasForeignKey("FolderId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_file_records_file_folders_folder_id");
-
                     b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
                         .WithMany("Files")
                         .HasForeignKey("PatientId")
@@ -6544,8 +6403,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasConstraintName("fk_file_records_patients_patient_id");
 
                     b.Navigation("DocumentType");
-
-                    b.Navigation("Folder");
 
                     b.Navigation("Patient");
                 });
@@ -6975,18 +6832,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("Patient");
                 });
 
-            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientStorageProfile", b =>
-                {
-                    b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
-                        .WithOne("StorageProfile")
-                        .HasForeignKey("ClinicEz.Patient.Domain.Entities.PatientStorageProfile", "PatientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_patient_storage_profiles_patients_patient_id");
-
-                    b.Navigation("Patient");
-                });
-
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientSurgicalHistory", b =>
                 {
                     b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
@@ -7148,13 +6993,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("VitalSigns");
                 });
 
-            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.FileFolder", b =>
-                {
-                    b.Navigation("Children");
-
-                    b.Navigation("Files");
-                });
-
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.LabResultReport", b =>
                 {
                     b.Navigation("Observations");
@@ -7199,8 +7037,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
 
                     b.Navigation("FamilyHistories");
 
-                    b.Navigation("FileFolders");
-
                     b.Navigation("Files");
 
                     b.Navigation("GovernmentIds");
@@ -7240,8 +7076,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("Pregnancies");
 
                     b.Navigation("SocialHistory");
-
-                    b.Navigation("StorageProfile");
 
                     b.Navigation("SurgicalHistories");
 

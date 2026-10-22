@@ -16,9 +16,24 @@ public interface IClinicStorageService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Persists encrypted ciphertext stream to storage and returns the storage URI/key.
+    /// </summary>
+    Task<string> SaveEncryptedStreamAsync(
+        string storageKey,
+        Stream ciphertextStream,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Reads encrypted ciphertext bytes from storage.
     /// </summary>
     Task<byte[]> ReadEncryptedFileAsync(
+        string storageKey,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Opens a read-only stream to the encrypted ciphertext from storage.
+    /// </summary>
+    Task<Stream> OpenReadEncryptedStreamAsync(
         string storageKey,
         CancellationToken cancellationToken = default);
 

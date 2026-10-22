@@ -218,6 +218,80 @@ docker compose up -d
 Disaster recovery on a new server: install the same version with the saved `.env`, `docker compose up -d postgres`, restore every dump and the files archive, then `up -d`.
 **Test a restore** on a spare machine regularly.
 
+## Clinical Record Storage (Local Disk vs Private S3 / MinIO / R2)
+
+`clinic-api` supports three storage options for patient record attachments, scanned documents, and finalized lab results:
+
+| Provider (`STORAGE_PROVIDER`) | Description | Best for |
+|---|---|---|
+| `Local` (**default**) | Saves encrypted `.cez` ciphertext files into the `clinic-records` Docker volume (`/app/storage/records`). | Standard edge cells, air-gapped sites, single servers without external dependencies. |
+| `S3` | Uploads encrypted `.cez` ciphertext to an on-premise S3-compatible storage cluster (e.g. MinIO, Ceph, Dell EMC ECS, Wasabi, or AWS S3). | Hospitals & enterprises with dedicated on-premise object storage or private cloud. |
+| `R2` | Uploads encrypted `.cez` ciphertext to Cloudflare R2 object storage. | Cloud/hybrid deployments with internet access. |
+
+### Zero-Knowledge Encryption Model (CMK)
+
+Regardless of the storage provider selected:
+- **Client-Side / In-Transit Encryption:** Every file is encrypted by `clinic-api` via AES-256-GCM envelope encryption using a per-file Data Encryption Key (DEK) wrapped with the Clinic Master Key (`CLINIC_ENCRYPTION_MASTER_SECRET`) before transmission to storage.
+- **Opaque Ciphertexts Only:** The storage server or S3 bucket stores strictly opaque `.cez` binary ciphertexts with random 96-bit IVs and 128-bit authentication tags. Zero plaintext PHI, patient names, or unencrypted metadata are ever written to the storage server.
+- **Strict Folder Isolation:** Objects are isolated in tenant- and clinic-specific folders:
+  - Attachments: `tenants/{tenantId}/clinics/{clinicId}/records/{attachmentId}.cez`
+  - Lab results: `tenants/{tenantId}/clinics/{clinicId}/lab-results/{resultId}.cez`
+
+### Dual-Storage Backward Compatibility (`STORAGE_ENABLE_LOCAL_FALLBACK`)
+
+`STORAGE_ENABLE_LOCAL_FALLBACK=true` (enabled by default) enables seamless dual-storage read fallback:
+- If a subscriber transitions an existing edge cell from `Local` to `S3` (or `R2`), `clinic-api` first queries the S3 bucket.
+- If the object is not found in S3 (e.g., an older record created before the switch that hasn't been migrated yet), `clinic-api` automatically falls back to reading the file from the local Docker volume `/app/storage/records`.
+- This provides 100% backward compatibility and zero downtime during storage migrations.
+
+### Configuring S3 / MinIO on Install
+
+To configure private on-premise S3 storage during installation:
+
+```bash
+# Non-interactive install with private MinIO:
+./install.sh --yes --tenant-id <id> --cell-id <cell> --facility-id <guid> \
+  --storage-provider S3 \
+  --s3-service-url http://minio.hospital.local:9000 \
+  --s3-bucket clinicez-records \
+  --s3-access-key minioadmin \
+  --s3-secret-key 'miniopassword' \
+  --s3-force-path-style true \
+  ...
+```
+
+```powershell
+.\install.ps1 -Yes -TenantId <id> -CellId <cell> -FacilityId <guid> `
+  -StorageProvider S3 `
+  -S3ServiceUrl http://minio.hospital.local:9000 `
+  -S3Bucket clinicez-records `
+  -S3AccessKey minioadmin `
+  -S3SecretKey 'miniopassword' `
+  -S3ForcePathStyle true
+```
+
+### Migrating Existing Local Records to S3 / MinIO
+
+To migrate existing local `.cez` files from the `clinic-records` Docker volume to your S3 / MinIO server:
+
+```bash
+# Run the migration script with your on-premise S3 endpoint:
+scripts/migrate-clinic-storage-to-r2.sh \
+  --source-dir /var/lib/docker/volumes/clinicez-edge_clinic-records/_data \
+  --s3-endpoint http://minio.hospital.local:9000 \
+  --bucket clinicez-records \
+  --access-key-id minioadmin \
+  --secret-access-key 'miniopassword'
+```
+```powershell
+.\scripts\migrate-clinic-storage-to-r2.ps1 `
+  -SourceDir C:\ProgramData\docker\volumes\clinicez-edge_clinic-records\_data `
+  -S3Endpoint http://minio.hospital.local:9000 `
+  -Bucket clinicez-records `
+  -AccessKeyId minioadmin `
+  -SecretAccessKey 'miniopassword'
+```
+
 ## Connecting to the cloud (outbound HTTPS only)
 
 - The hub dials out: it forwards its outbound queue, long-polls the cell inbox and syncs the directory snapshot from `UPSTREAM_HUB_URL`. No port forwarding, VPN or inbound firewall rule is needed.

@@ -6,6 +6,7 @@ using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Notifications;
 using ClinicEz.Portal.Infrastructure.Persistence;
+using ClinicEz.Portal.Infrastructure.Services;
 using ClinicEz.Portal.Tests.Support;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
@@ -36,16 +37,25 @@ public class ResendSmtpIntegrationTests : IDisposable
         var options = Options.Create(new SmtpOptions
         {
             Mode = SmtpMode.Smtp,
-            Host = ResendSmtpHost,
-            Port = ResendSmtpPort,
-            Security = SmtpSecurity.StartTls,
             User = "resend",
-            Password = ResendApiKey,
-            FromEmail = ResendFromEmail,
-            FromName = "Clinic EZ Testing"
+            Password = ResendApiKey
         });
 
-        _smtpSender = new SmtpEmailSender(options);
+        _context.SystemSettings.AddRange(
+            new SystemSetting { Key = "Mailer:SmtpHost", Value = ResendSmtpHost, Category = "Mailer", Description = "", UpdatedAt = DateTime.UtcNow, UpdatedBy = "Test" },
+            new SystemSetting { Key = "Mailer:SmtpPort", Value = ResendSmtpPort.ToString(), Category = "Mailer", Description = "", UpdatedAt = DateTime.UtcNow, UpdatedBy = "Test" },
+            new SystemSetting { Key = "Mailer:SmtpSecurity", Value = "StartTls", Category = "Mailer", Description = "", UpdatedAt = DateTime.UtcNow, UpdatedBy = "Test" },
+            new SystemSetting { Key = "Mailer:SmtpFromEmail", Value = ResendFromEmail, Category = "Mailer", Description = "", UpdatedAt = DateTime.UtcNow, UpdatedBy = "Test" },
+            new SystemSetting { Key = "Mailer:SmtpFromName", Value = "Clinic EZ Testing", Category = "Mailer", Description = "", UpdatedAt = DateTime.UtcNow, UpdatedBy = "Test" }
+        );
+        _context.SaveChanges();
+
+        var settingsService = new SystemSettingsService(
+            _context,
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SystemSettingsService>.Instance);
+
+        _smtpSender = new SmtpEmailSender(options, settingsService);
     }
 
     public void Dispose()

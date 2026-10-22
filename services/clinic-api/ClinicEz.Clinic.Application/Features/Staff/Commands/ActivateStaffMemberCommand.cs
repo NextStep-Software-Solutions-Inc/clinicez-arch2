@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Staff.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Licensing;
@@ -110,6 +111,7 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
         await _unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             staff.IsActive = true;
+            staff.Status = StaffAccountStatus.Active;
             staff.UpdatedAt = DateTime.UtcNow;
             staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
 
@@ -143,6 +145,10 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
             MustChangePassword: staff.MustChangePassword,
             PhilHealthPan: staff.PhilHealthPan,
             AssignedRoomIds: staff.GetAssignedRoomIds(),
-            AssignedRoomNames: roomNames ?? Array.Empty<string>()
+            AssignedRoomNames: roomNames ?? Array.Empty<string>(),
+            Status: staff.Status,
+            InvitationToken: staff.InvitationToken,
+            InvitationExpiresAt: staff.InvitationExpiresAt,
+            InviteAcceptedAt: staff.InviteAcceptedAt
         );
 }

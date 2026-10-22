@@ -509,6 +509,7 @@ describe("Milestone 4 Empirical Challenger: Adversarial Stress Suite", () => {
       if (origOpen) {
         globalThis.window.open = origOpen
       }
+      delete (globalThis as any).window
     })
   })
 })

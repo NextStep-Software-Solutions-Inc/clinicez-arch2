@@ -138,6 +138,23 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
                 c => c.ToList()));
 
+        modelBuilder.Entity<AdminUser>(entity =>
+        {
+            entity.Property(e => e.ClerkUserId).IsRequired(false);
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(254);
+            entity.Property(e => e.FullName).IsRequired().HasMaxLength(256);
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(64);
+            entity.Property(e => e.InvitationToken).HasMaxLength(128);
+
+            entity.HasIndex(e => e.InvitationToken)
+                .HasFilter("\"IsDeleted\" = false AND \"InvitationToken\" IS NOT NULL")
+                .IsUnique();
+
+            entity.HasIndex(e => e.Email)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+        });
+
         modelBuilder.Entity<BillingInvoice>()
             .HasOne(i => i.Tenant)
             .WithMany()

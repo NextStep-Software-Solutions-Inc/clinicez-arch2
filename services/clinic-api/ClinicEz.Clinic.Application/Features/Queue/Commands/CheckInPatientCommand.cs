@@ -5,11 +5,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.DTOs;
 using ClinicEz.Clinic.Application.Common.Exceptions;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Workspace;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -28,7 +30,8 @@ public sealed record CheckInPatientCommand(
     QueuePriority Priority = QueuePriority.Routine,
     string? ChiefComplaint = null,
     string? RoomOrStation = null,
-    Guid? RoomId = null) : IRequest<QueueItemDto>;
+    Guid? RoomId = null,
+    DateOnly? QueueDate = null) : IRequest<QueueItemDto>;
 
 public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPatientCommand>
 {
@@ -53,6 +56,8 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
     private readonly IPatientAppointmentPublisher _appointmentPublisher;
     private readonly IRepository<ClinicRoom>? _roomRepository;
     private readonly IRepository<StaffMember>? _staffRepository;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<ClinicSettings>? _settingsRepository;
 
     public CheckInPatientCommandHandler(
         IRepository<QueueItem> queueRepository,
@@ -62,7 +67,9 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         IClinicIdentityProvider clinicIdentity,
         IPatientAppointmentPublisher appointmentPublisher,
         IRepository<ClinicRoom>? roomRepository = null,
-        IRepository<StaffMember>? staffRepository = null)
+        IRepository<StaffMember>? staffRepository = null,
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<ClinicSettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _appointmentRepository = appointmentRepository;
@@ -72,11 +79,14 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         _appointmentPublisher = appointmentPublisher;
         _roomRepository = roomRepository;
         _staffRepository = staffRepository;
+        _workspaceProfiles = workspaceProfiles;
+        _settingsRepository = settingsRepository;
     }
 
     public async Task<QueueItemDto> Handle(CheckInPatientCommand request, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = request.QueueDate
+            ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepository);
 
         // Enforce active queue day uniqueness: prevent duplicate active tickets today
         QueueStatus[] activeStatuses =

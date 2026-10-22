@@ -2,21 +2,18 @@ import { and, asc, desc, eq, isNull, or, isNotNull } from 'drizzle-orm';
 import { randomUUID } from 'expo-crypto';
 import { mutate } from 'swr';
 import { db } from '@db/index';
-import { fileFolders } from '@db/schema/fileFolders';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import type { FileMetadata } from '@db/schema/filesMetadata';
 import { documentTypes } from '@db/schema/documentTypes';
-import { fileUploadConfig } from '@db/schema/fileUploadConfig';
-import { fetchFileConfig, fetchFiles, hasFileApi } from '../api/filesApi';
+import { fetchPatientRecords, hasFileApi } from '../api/filesApi';
 import { pushSyncPayload, type SyncItemRequest } from '../api/patientApi';
+import { deleteHealthRecord } from './recordDeletionService';
 import {
   DEFAULT_MAX_FILE_SIZE_BYTES,
-  DEFAULT_USER_QUOTA_BYTES,
   FileApiConfigResponse,
   DocumentTypeResponse,
   FileBrowserContents,
   FileBrowserFile,
-  FileBrowserFolder,
   FileItemKind,
   FilePreviewKind,
 } from './types';
@@ -235,7 +232,7 @@ async function upsertDocumentTypes(rows: DocumentTypeResponse[]) {
 
 async function getLocalTotalStorageBytes(patientId: string) {
   const files = await db
-    .select({ encryptedSizeBytes: filesMetadata.encryptedSizeBytes })
+    .select({ sizeBytes: filesMetadata.sizeBytes })
     .from(filesMetadata)
     .where(
       and(
@@ -244,170 +241,37 @@ async function getLocalTotalStorageBytes(patientId: string) {
       )
     );
 
-  return files.reduce((acc, f) => acc + (f.encryptedSizeBytes ?? 0), 0);
+  return files.reduce((acc, f) => acc + (f.sizeBytes ?? 0), 0);
 }
 
 function toConfigValue(patientId: string, response?: FileApiConfigResponse) {
   return {
     patientId,
     maxFileSizeBytes: response?.maxFileSizeBytes ?? DEFAULT_MAX_FILE_SIZE_BYTES,
-    quotaBytes: response?.quotaBytes ?? DEFAULT_USER_QUOTA_BYTES,
-    usedStorageBytes: response?.usedStorageBytes ?? 0,
     nativePreviewExtensionsJson: JSON.stringify(response?.nativePreviewExtensions ?? DEFAULT_NATIVE_PREVIEW_EXTENSIONS),
     configVersion: response?.configVersion ?? 'local-defaults',
-    encryptedMAK: response?.encryptedMAK ?? null,
     fetchedAt: now(),
     serverUpdatedAt: response?.serverUpdatedAt ? new Date(response.serverUpdatedAt) : null,
   };
 }
 
-export async function refreshDocumentTypes(patientId: string, getToken?: () => Promise<string | null>) {
-  let configResponse: FileApiConfigResponse | undefined;
-
-  if (hasFileApi() && getToken) {
-    try {
-      configResponse = await fetchFileConfig(patientId, getToken);
-    } catch (error) {
-      console.warn('Falling back to local file config:', error);
-    }
-  }
-
-  await upsertDocumentTypes(configResponse?.documentTypes?.length ? configResponse.documentTypes : DEFAULT_FILE_TYPES);
-
-  const configValue = toConfigValue(patientId, configResponse);
-
-  await db
-    .insert(fileUploadConfig)
-    .values(configValue)
-    .onConflictDoUpdate({ target: fileUploadConfig.patientId, set: configValue });
-
+export async function refreshDocumentTypes(_patientId: string, _getToken?: () => Promise<string | null>) {
+  await upsertDocumentTypes(DEFAULT_FILE_TYPES);
   return getCachedDocumentTypes();
 }
 
-export async function getFileConfig(patientId: string, getToken?: () => Promise<string | null>) {
-  const cached = await db.select().from(fileUploadConfig).where(eq(fileUploadConfig.patientId, patientId)).limit(1);
-  if (!cached[0]) {
-    await refreshDocumentTypes(patientId, getToken);
-  }
-
-  const [config] = await db.select().from(fileUploadConfig).where(eq(fileUploadConfig.patientId, patientId)).limit(1);
-  const value = config ?? toConfigValue(patientId);
-
-  // Use the local SQLite database as the source of truth for storage used
-  const localUsedBytes = await getLocalTotalStorageBytes(patientId);
-
-  return { ...value, usedStorageBytes: localUsedBytes };
-}
-
-async function getFolderRows(patientId: string) {
-  return db
-    .select()
-    .from(fileFolders)
-    .where(and(eq(fileFolders.patientId, patientId), isNull(fileFolders.deletedAt)))
-    .orderBy(asc(fileFolders.name));
-}
-
-async function getBreadcrumbs(patientId: string, folderId?: string | null) {
-  if (!folderId) return [];
-  const folders = await getFolderRows(patientId);
-  const byId = new Map(folders.map((folder) => [folder.id, folder]));
-  const breadcrumbs = [];
-  let current = byId.get(folderId);
-
-  while (current) {
-    breadcrumbs.unshift(current);
-    current = current.parentId ? byId.get(current.parentId) : undefined;
-  }
-
-  return breadcrumbs;
+export async function getFileConfig(patientId: string, _getToken?: () => Promise<string | null>) {
+  return toConfigValue(patientId);
 }
 
 export async function listFolderContents(
   patientId: string,
-  folderId?: string | null,
+  _folderId?: string | null,
   query = '',
   getToken?: () => Promise<string | null>,
 ): Promise<FileBrowserContents> {
   const normalizedQuery = query.trim().toLowerCase();
-  const parentFilter = folderId ? eq(fileFolders.parentId, folderId) : isNull(fileFolders.parentId);
-  const fileFolderFilter = folderId ? eq(filesMetadata.folderId, folderId) : isNull(filesMetadata.folderId);
-  const [folders, fileRows, allFolders, config, types, pendingRows, allFileFolderIds] = await Promise.all([
-    db
-      .select()
-      .from(fileFolders)
-      .where(and(eq(fileFolders.patientId, patientId), parentFilter, isNull(fileFolders.deletedAt)))
-      .orderBy(asc(fileFolders.name)),
-    db
-      .select()
-      .from(filesMetadata)
-      .where(and(eq(filesMetadata.patientId, patientId), fileFolderFilter, isNull(filesMetadata.deletedAt)))
-      .orderBy(desc(filesMetadata.updatedAt), desc(filesMetadata.createdAt)),
-    getFolderRows(patientId),
-    getFileConfig(patientId, getToken),
-    getCachedDocumentTypes(),
-    db
-      .select({ id: filesMetadata.id })
-      .from(filesMetadata)
-      .where(
-        and(
-          eq(filesMetadata.patientId, patientId),
-          isNull(filesMetadata.deletedAt),
-          or(eq(filesMetadata.syncStatus, 'queued'), eq(filesMetadata.syncStatus, 'failed')),
-        ),
-      ),
-    db
-      .select({ folderId: filesMetadata.folderId })
-      .from(filesMetadata)
-      .where(
-        and(
-          eq(filesMetadata.patientId, patientId),
-          isNull(filesMetadata.deletedAt),
-          isNotNull(filesMetadata.folderId)
-        )
-      )
-  ]);
-
-  const childCounts = new Map<string, number>();
-  for (const folder of allFolders) {
-    if (folder.parentId) childCounts.set(folder.parentId, (childCounts.get(folder.parentId) ?? 0) + 1);
-  }
-  for (const file of allFileFolderIds) {
-    if (file.folderId) childCounts.set(file.folderId, (childCounts.get(file.folderId) ?? 0) + 1);
-  }
-
-  const browserFolders: FileBrowserFolder[] = folders
-    .filter((folder) => !normalizedQuery || folder.name.toLowerCase().includes(normalizedQuery))
-    .map((folder) => ({ ...folder, kind: 'folder', childCount: childCounts.get(folder.id) ?? 0 }));
-
-  const browserFiles: FileBrowserFile[] = fileRows
-    .filter((file) => !normalizedQuery || file.name.toLowerCase().includes(normalizedQuery))
-    .map((file) => ({
-      ...file,
-      kind: 'file',
-      typeLabel: getTypeLabel(file.documentTypeId, types),
-      previewKind: getPreviewKind(file.extension ?? '', file.mimeType),
-    }));
-
-  return {
-    breadcrumbs: await getBreadcrumbs(patientId, folderId),
-    folders: browserFolders,
-    files: browserFiles,
-    config,
-    documentTypes: types,
-    pendingSyncCount: pendingRows.length,
-  };
-}
-
-export async function getStorageOverview(
-  patientId: string,
-  getToken?: () => Promise<string | null>,
-): Promise<FileBrowserContents> {
-  const [allFolders, allFiles, config, types, pendingRows] = await Promise.all([
-    db
-      .select()
-      .from(fileFolders)
-      .where(and(eq(fileFolders.patientId, patientId), isNull(fileFolders.deletedAt)))
-      .orderBy(asc(fileFolders.name)),
+  const [fileRows, config, types, pendingRows] = await Promise.all([
     db
       .select()
       .from(filesMetadata)
@@ -427,87 +291,28 @@ export async function getStorageOverview(
       ),
   ]);
 
-  const childCounts = new Map<string, number>();
-  for (const folder of allFolders) {
-    if (folder.parentId) childCounts.set(folder.parentId, (childCounts.get(folder.parentId) ?? 0) + 1);
-  }
-  for (const file of allFiles) {
-    if (file.folderId) childCounts.set(file.folderId, (childCounts.get(file.folderId) ?? 0) + 1);
-  }
-
-  const browserFolders: FileBrowserFolder[] = allFolders.map((folder) => ({
-    ...folder,
-    kind: 'folder',
-    childCount: childCounts.get(folder.id) ?? 0,
-  }));
-
-  const browserFiles: FileBrowserFile[] = allFiles.map((file) => ({
-    ...file,
-    kind: 'file',
-    typeLabel: getTypeLabel(file.documentTypeId, types),
-    previewKind: getPreviewKind(file.extension ?? '', file.mimeType),
-  }));
+  const browserFiles: FileBrowserFile[] = fileRows
+    .filter((file) => !normalizedQuery || file.name.toLowerCase().includes(normalizedQuery))
+    .map((file) => ({
+      ...file,
+      kind: 'file',
+      typeLabel: getTypeLabel(file.documentTypeId, types),
+      previewKind: getPreviewKind(file.extension ?? '', file.mimeType),
+    }));
 
   return {
-    breadcrumbs: [],
-    folders: browserFolders,
     files: browserFiles,
-    config,
     documentTypes: types,
     pendingSyncCount: pendingRows.length,
+    maxFileSizeBytes: config.maxFileSizeBytes,
   };
 }
 
-export async function listAllFolders(patientId: string) {
-  return getFolderRows(patientId);
-}
-
-export async function getFolder(patientId: string, folderId: string) {
-  const [folder] = await db
-    .select()
-    .from(fileFolders)
-    .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, folderId), isNull(fileFolders.deletedAt)))
-    .limit(1);
-  return folder ?? null;
-}
-
-export async function createFolder(patientId: string, name: string, parentId?: string | null) {
-  const trimmedName = name.trim();
-  if (!trimmedName) throw new Error('Folder name is required.');
-
-  const timestamp = now();
-  const row = {
-    id: makeId('folder'),
-    patientId,
-    parentId: parentId ?? null,
-    name: trimmedName,
-    syncStatus: hasFileApi() ? ('queued' as const) : ('local' as const),
-    syncOperation: 'insert' as const,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-
-  await db.insert(fileFolders).values(row);
-  return row;
-}
-
-export async function renameFolder(patientId: string, folderId: string, name: string) {
-  const trimmedName = name.trim();
-  if (!trimmedName) throw new Error('Folder name is required.');
-
-  const [folder] = await db
-    .select()
-    .from(fileFolders)
-    .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, folderId)))
-    .limit(1);
-  if (!folder) return;
-
-  const op = folder.syncOperation === 'insert' && !folder.serverId ? 'insert' : 'update';
-
-  await db
-    .update(fileFolders)
-    .set({ name: trimmedName, updatedAt: now(), syncStatus: 'queued', syncOperation: op, syncError: null })
-    .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, folderId)));
+export async function getStorageOverview(
+  patientId: string,
+  getToken?: () => Promise<string | null>,
+): Promise<FileBrowserContents> {
+  return listFolderContents(patientId, null, '', getToken);
 }
 
 export async function renameFile(patientId: string, fileId: string, name: string) {
@@ -529,109 +334,19 @@ export async function renameFile(patientId: string, fileId: string, name: string
     .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, fileId)));
 }
 
-function collectDescendantFolderIds(folders: { id: string; parentId: string | null }[], folderId: string) {
-  const descendants = new Set<string>();
-  let changed = true;
-
-  while (changed) {
-    changed = false;
-    for (const folder of folders) {
-      if (folder.parentId && (folder.parentId === folderId || descendants.has(folder.parentId)) && !descendants.has(folder.id)) {
-        descendants.add(folder.id);
-        changed = true;
-      }
-    }
-  }
-
-  return descendants;
-}
-
-export async function moveItem(
+export async function deleteItem(
   patientId: string,
-  itemKind: FileItemKind,
-  itemId: string,
-  targetFolderId?: string | null,
-) {
-  if (itemKind === 'folder') {
-    if (itemId === targetFolderId) throw new Error('A folder cannot be moved into itself.');
-    const folders = await getFolderRows(patientId);
-    const descendants = collectDescendantFolderIds(folders, itemId);
-    if (targetFolderId && descendants.has(targetFolderId)) {
-      throw new Error('A folder cannot be moved inside one of its subfolders.');
-    }
-
-    const [folder] = await db
-      .select()
-      .from(fileFolders)
-      .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, itemId)))
-      .limit(1);
-    if (!folder) return;
-    const op = folder.syncOperation === 'insert' && !folder.serverId ? 'insert' : 'update';
-
-    await db
-      .update(fileFolders)
-      .set({ parentId: targetFolderId ?? null, updatedAt: now(), syncStatus: 'queued', syncOperation: op, syncError: null })
-      .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, itemId)));
-    return;
-  }
-
-  const [file] = await db
-    .select()
-    .from(filesMetadata)
-    .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)))
-    .limit(1);
-  if (!file) return;
-  const op = file.syncOperation === 'insert' && !file.serverId ? 'insert' : 'update';
-
-  await db
-    .update(filesMetadata)
-    .set({ folderId: targetFolderId ?? null, updatedAt: now(), syncStatus: 'queued', syncOperation: op, syncError: null })
-    .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)));
-}
-
-export async function deleteItem(patientId: string, itemKind: FileItemKind, itemId: string) {
-  const timestamp = now();
-
-  if (itemKind === 'folder') {
-    const folders = await getFolderRows(patientId);
-    const folderIds = [itemId, ...collectDescendantFolderIds(folders, itemId)];
-
-    await Promise.all(
-      folderIds.map(async (folderId) => {
-        const [f] = await db.select().from(fileFolders).where(eq(fileFolders.id, folderId)).limit(1);
-        if (!f) return;
-        const op = f.syncOperation === 'insert' && !f.serverId ? 'delete' : 'delete';
-
-        return db
-          .update(fileFolders)
-          .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
-          .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, folderId)));
-      }),
-    );
-
-    await Promise.all(
-      folderIds.map(async (folderId) => {
-        const fileRows = await db.select().from(filesMetadata).where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.folderId, folderId)));
-        return Promise.all(fileRows.map(f => {
-          const op = f.syncOperation === 'insert' && !f.serverId ? 'delete' : 'delete';
-          return db
-            .update(filesMetadata)
-            .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
-            .where(eq(filesMetadata.id, f.id));
-        }));
-      }),
-    );
-    return;
-  }
-
-  const [file] = await db.select().from(filesMetadata).where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId))).limit(1);
-  if (file) {
-    const op = file.syncOperation === 'insert' && !file.serverId ? 'delete' : 'delete';
-    await db
-      .update(filesMetadata)
-      .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
-      .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)));
-  }
+  _itemKindOrId: string,
+  maybeId?: string | (() => Promise<string | null>),
+  maybeGetToken?: () => Promise<string | null>
+): Promise<void> {
+  const targetId = typeof maybeId === 'string' ? maybeId : _itemKindOrId;
+  const getToken = typeof maybeId === 'function' ? maybeId : maybeGetToken;
+  await deleteHealthRecord({
+    patientId,
+    fileId: targetId,
+    getToken,
+  });
 }
 
 export function findBestFileType(
@@ -684,63 +399,10 @@ export async function pullRemoteChanges(
 ): Promise<number> {
   let synced = 0;
   try {
-    const { folders, files } = await fetchFiles(patientId, getToken);
+    const records = await fetchPatientRecords(patientId, getToken);
 
-    for (const remoteFolder of folders) {
+    for (const remoteFile of records) {
       try {
-        if (remoteFolder.isDeleted) {
-          await db.delete(fileFolders).where(eq(fileFolders.id, remoteFolder.id));
-          continue;
-        }
-
-        const existing = await getFolder(patientId, remoteFolder.id);
-
-        const row = {
-          id: remoteFolder.id,
-          patientId,
-          parentId: remoteFolder.parentId ?? null,
-          name: remoteFolder.name,
-          syncStatus: 'synced' as const,
-          syncOperation: 'update' as const,
-          createdAt: new Date(remoteFolder.createdAt),
-          updatedAt: new Date(remoteFolder.updatedAt ?? remoteFolder.createdAt),
-          serverId: remoteFolder.id,
-        };
-
-        if (!existing) {
-          await db.insert(fileFolders).values(row);
-          synced++;
-        } else if (existing.name !== row.name || existing.parentId !== row.parentId || existing.deletedAt !== null) {
-          // Protect local pending changes from being overwritten by downstream pull
-          if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
-            continue;
-          }
-          // Protect against eventual consistency: don't overwrite if local is newer
-          if (existing.updatedAt.getTime() > row.updatedAt.getTime()) {
-            continue;
-          }
-          await db.update(fileFolders).set({
-            name: row.name,
-            parentId: row.parentId,
-            updatedAt: row.updatedAt,
-            deletedAt: null,
-            syncStatus: 'synced',
-          }).where(eq(fileFolders.id, remoteFolder.id));
-          synced++;
-        }
-      } catch (err) {
-        console.warn(`Failed to downstream sync folder ${remoteFolder.id}`, err);
-      }
-    }
-
-    for (const remoteFile of files) {
-      try {
-        if (remoteFile.isDeleted) {
-          await cleanupPreview(remoteFile.id);
-          await db.delete(filesMetadata).where(eq(filesMetadata.id, remoteFile.id));
-          continue;
-        }
-
         const [existing] = await db.select().from(filesMetadata).where(eq(filesMetadata.id, remoteFile.id)).limit(1);
 
         if (!existing) {
@@ -748,33 +410,25 @@ export async function pullRemoteChanges(
             id: remoteFile.id,
             patientId,
             clinicId: null,
-            folderId: remoteFile.folderId ?? null,
             documentTypeId: remoteFile.documentTypeId,
             name: remoteFile.fileName,
             type: null,
             mimeType: remoteFile.mimeType,
             extension: remoteFile.extension,
             sizeBytes: remoteFile.sizeBytes,
-            encryptedSizeBytes: remoteFile.encryptedSizeBytes,
-            localEncryptedPath: null, // Will download on demand via preparePreviewFile
-            cloudObjectKey: null,
+            localPath: null,
+            isCached: false,
+            cloudObjectKey: remoteFile.storageKey,
             syncStatus: 'synced',
             syncOperation: 'update',
-            encryptionAlgorithm: remoteFile.encryptionAlgorithm,
-            encryptionKeyId: remoteFile.encryptionKeyId,
-            encryptionIvBase64: remoteFile.encryptionIvBase64,
-            encryptionTagBase64: remoteFile.encryptionTagBase64,
-            encryptedHash: remoteFile.encryptedHash,
-            serverWrappedKeyJson: remoteFile.wrappedKeyJson,
-            createdAt: new Date(remoteFile.createdAt),
-            updatedAt: new Date(remoteFile.updatedAt),
-            syncedAt: new Date(remoteFile.updatedAt),
+            createdAt: new Date(remoteFile.uploadedAt),
+            updatedAt: new Date(remoteFile.uploadedAt),
+            syncedAt: new Date(remoteFile.uploadedAt),
             serverId: remoteFile.id,
           });
           synced++;
         } else if (
           existing.name !== remoteFile.fileName ||
-          existing.folderId !== (remoteFile.folderId ?? null) ||
           existing.deletedAt !== null
         ) {
           // Protect local pending changes from being overwritten by downstream pull
@@ -782,12 +436,11 @@ export async function pullRemoteChanges(
             continue;
           }
           // Protect against eventual consistency: don't overwrite if local is newer
-          if (existing.updatedAt && existing.updatedAt.getTime() > new Date(remoteFile.updatedAt).getTime()) {
+          if (existing.updatedAt && existing.updatedAt.getTime() > new Date(remoteFile.uploadedAt).getTime()) {
             continue;
           }
           await db.update(filesMetadata).set({
             name: remoteFile.fileName,
-            folderId: remoteFile.folderId ?? null,
             deletedAt: null,
             syncStatus: 'synced',
           }).where(eq(filesMetadata.id, remoteFile.id));
@@ -814,7 +467,7 @@ export interface PushMetadataResult {
   uploadIntentFiles: FileMetadata[];
 }
 
-/** Pushes queued metadata changes (folders, renames, moves, deletes) in a single bulk sync. */
+/** Pushes queued metadata changes (renames, deletes) in a single bulk sync. */
 export async function pushPendingMetadata(
   patientId: string,
   getToken: () => Promise<string | null>,
@@ -823,17 +476,6 @@ export async function pushPendingMetadata(
 ): Promise<PushMetadataResult> {
   let synced = 0;
   let failed = 0;
-  const pendingFolders = await db
-    .select()
-    .from(fileFolders)
-    .where(
-      and(
-        eq(fileFolders.patientId, patientId),
-        retryFailed
-          ? or(eq(fileFolders.syncStatus, 'queued'), eq(fileFolders.syncStatus, 'failed'))
-          : eq(fileFolders.syncStatus, 'queued'),
-      ),
-    );
 
   const pendingFiles = await db
     .select()
@@ -848,24 +490,6 @@ export async function pushPendingMetadata(
     );
 
   const syncRequests: SyncItemRequest[] = [];
-
-  for (const folder of pendingFolders) {
-    const rawOp = folder.syncOperation === 'insert' && folder.serverId ? 'update' : folder.syncOperation;
-    syncRequests.push({
-      idempotencyKey: randomUUID(),
-      entityType: 'file_folder',
-      operation: rawOp === 'insert' ? 'create' : rawOp,
-      clientTimestamp: (folder.updatedAt ?? new Date()).toISOString(),
-      entityId: folder.id,
-      payloadJson: JSON.stringify({
-        clientId: randomUUID(),
-        parentId: folder.parentId,
-        name: folder.name,
-        updatedAt: (folder.updatedAt ?? new Date()).toISOString()
-      })
-    });
-  }
-
   const uploadIntentFiles = [];
 
   for (const file of pendingFiles) {
@@ -881,7 +505,6 @@ export async function pushPendingMetadata(
         entityId: file.id,
         payloadJson: JSON.stringify({
           clientId: randomUUID(),
-          folderId: file.folderId,
           fileName: file.name,
           updatedAt: (file.updatedAt ?? new Date()).toISOString()
         })
@@ -893,10 +516,6 @@ export async function pushPendingMetadata(
   if (syncRequests.length > 0) {
     try {
       await pushSyncPayload(getToken, patientId, syncRequests);
-
-      for (const folder of pendingFolders) {
-        await db.update(fileFolders).set({ syncStatus: 'synced', syncError: null }).where(eq(fileFolders.id, folder.id));
-      }
 
       for (const file of pendingFiles) {
         // If it's an insert without a serverId, it's a binary upload (handled below)

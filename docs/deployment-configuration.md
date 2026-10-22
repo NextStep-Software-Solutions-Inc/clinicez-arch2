@@ -30,21 +30,19 @@ Set each value as a repository / environment **secret or variable** (Settings â†
 | `PATIENT_ENCRYPTION_KEY` | yes | patient-api | Base64 of 32 random bytes for payload encryption (`Encryption__Base64Key`). Must decode to exactly 32 bytes (the deploy checks this; `openssl rand -base64 32` or `scripts/generate-secrets`). Required for any non-Development deployment (the compose file and the deploy fail without it); ignored in Development. Never change it once data exists. Secret. |
 | `CLINIC_PUBLIC_UPLOAD_BASE_URL` | yes | clinic-api | Public URL where labs upload results for a requisition (`Clinic__PublicUploadBaseUrl`). Variable or secret. |
 | `HUB_PUBLIC_URL` | yes | portal-api | Public base URL of the cloud hub, handed to on-premise sites with their credentials (`Hub__PublicUrl`). Variable or secret. |
-| `SMTP_HOST` / `SMTP_FROM_EMAIL` | yes | portal-api | Outgoing mail server and sender address (`Smtp__Host` / `Smtp__FromEmail`); the portal refuses to start without them. Variable or secret. |
-| `SMTP_PORT` / `SMTP_SECURITY` / `SMTP_FROM_NAME` | no | portal-api | Defaults `587` / `Auto` (`Auto`, `None`, `StartTls`, `SslOnConnect`) / `Clinic EZ`. Variables. |
-| `SMTP_USER` / `SMTP_PASSWORD` | no | portal-api | Mail server credentials (secrets). Empty user means no authentication. |
-| `NOTIFICATIONS_CONTACT_INBOX` | no | portal-api | Recipient of the public contact form (`Notifications__ContactInbox`). Empty disables it. |
+| `SMTP_USER` / `SMTP_PASSWORD` | no | portal-api | Mail server credentials (secrets, e.g. Resend API key). Non-secret mail configuration (Host, Port, Security, FromEmail, FromName, ReplyTo, ContactInbox) is managed dynamically in Platform Settings (`/admin/settings`). |
 | `FRONTEND_BASE_URL` | no | portal-api | Web portal base URL, used for billing redirects when a request carries no `Origin` / `Referer` (`FrontendBaseUrl`). Variable. |
 | `CLERK_AUTHORITY` | yes | portal-api | Clerk issuer URL tokens are validated against (`Clerk__Authority`). Variable or secret `PORTAL_CLERK_AUTHORITY`; the dev workflow falls back to the Clerk development instance. |
 | `PATIENT_CLERK_AUTHORITY` / `PATIENT_CLERK_AUDIENCE` | authority: yes | patient-api | Clerk issuer and audience patient tokens are validated against (`Clerk__Authority` / `Clerk__Audience`). The authority has no built-in default: the compose file and the deploy fail without it. Secret or variable. |
 | `HUB_CLOUD_CELL_ID` | no | portal-api | Cell hosting every shared-cloud facility (`Hub__CloudCellId`, default `cloud`). Must equal the cloud hub's `Hub__CloudCellId`. Variable. |
-| `SMTP_REPLY_TO` | no | portal-api | Reply-to address of outgoing mail (`Smtp__ReplyTo`). Variable. |
 | `SERVICES_CLINIC_API_URL` | no | portal-api | Clinic API the portal calls with the internal key (`Services__ClinicApiUrl`, default `http://clinic-api:8080`). Variable. |
 | `WORKSPACE_MAX_OWNED_PER_USER` | no | portal-api | Workspaces one user may own (`Workspace__MaxOwnedPerUser`, default `1`). Variable. |
 | `LAB_UPLOAD_MAX_FILE_BYTES` / `LAB_UPLOAD_RATE_LIMIT_PERMITS` / `LAB_UPLOAD_RATE_LIMIT_WINDOW_MINUTES` | no | portal-api | Limits of the public lab-result upload relay (`LabUploads__MaxFileBytes` / `__RateLimitPermits` / `__RateLimitWindowMinutes`; defaults `5242880` / `20` / `10`). The allowed content types stay at the code default (PDF, JPEG, PNG). Variables. |
 | `LICENSING_TTL_DAYS` / `LICENSING_GRACE_DAYS` / `LICENSING_RENEW_BEFORE_DAYS` | no | portal-api | Facility license lifetime (clamped to 30-90), read-only grace after expiry, renewal lead time (`Licensing__*`; defaults `30` / `14` / `10`). Variables. |
 | `BILLING_DEFAULT_PLAN_SLUG` / `BILLING_TRIAL_DAYS` | no | portal-api | Plan a new workspace starts on and its trial length (`Billing__DefaultPlanSlug` / `__TrialDays`; defaults `starter` / `14`). The plan catalog itself (limits, features, prices) lives in the portal's `appsettings.json`. Variables. |
 | `CLINIC_ENCRYPTION_MASTER_SECRET` | yes | clinic-api | Wraps the per-file keys of stored clinical records (`ClinicEncryption__MasterSecret`). Required, at least 32 characters, there is no built-in fallback any more. Changing it makes files written under the old secret unreadable unless the old value is kept in `CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0` / `_1` (see Rotation); keep it with the backups. Secret. |
+| `CLINIC_R2_BUCKET_NAME` / `_ACCOUNT_ID` / `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | yes (if cloud) | clinic-api | Cloudflare R2 bucket credentials for encrypted clinical attachments. Falls back to shared `R2_*` values. |
+| `S3_SERVICE_URL` / `S3_BUCKET_NAME` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | no | clinic-api | Generic S3 adapter settings for on-premise subscribers hosting their own storage server (MinIO, Ceph, Wasabi). |
 | `PHILHEALTH_PROXY_URL` | no | clinic-api | Base URL of the PhilHealth proxy (`PhilHealthProxy__BaseUrl`, default `http://philhealth-proxy:8080`). Variable. |
 | `FACILITY_SUBDOMAIN_CLINIC` / `_LABORATORY` / `_PHARMACY` / `_ORGANIZATION` | no | portal-api, patient-api | Service subdomain per facility type (defaults `clinic`, `lab`, `pharmacy`, `org`). |
 | `VERIFICATION_BASE_URL` | no | clinic-api, laboratory-api | Public URL embedded in QR codes. Defaults to `https://<BASE_DOMAIN>`. |
@@ -94,7 +92,7 @@ Generate the plain secrets with `scripts/generate-secrets` and the key pairs wit
 - [ ] Hub: `INTEROP_HUB_DB_CONNECTION_STRING`, `INTEROP_HUB_PORTAL_CLIENT_SECRET`, `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY`, `PORTAL_HUB_SIGNING_PUBLIC_KEY`.
 - [ ] Hub client secrets: `<SVC>_HUB_CLIENT_ID` / `<SVC>_HUB_CLIENT_SECRET` for the 7 services.
 - [ ] portal-api: `PORTAL_DB_CONNECTION_STRING`, `PORTAL_CLERK_SECRET_KEY`, `PORTAL_XENDIT_SECRET_KEY`, `PORTAL_XENDIT_CALLBACK_TOKEN`, Hangfire password, `BASE_DOMAIN`.
-- [ ] clinic-api: `CLINIC_DB_CONNECTION_STRING`, `CLINIC_ENCRYPTION_MASTER_SECRET`, `CLINIC_DOCUMENT_SIGNING_KEY`, `CLINIC_JWT_SIGNING_KEY`, `CLINICAPP_HANGFIRE_PASSWORD` (or `HANGFIRE_PASSWORD`).
+- [ ] clinic-api: `CLINIC_DB_CONNECTION_STRING`, `CLINIC_ENCRYPTION_MASTER_SECRET`, `CLINIC_DOCUMENT_SIGNING_KEY`, `CLINIC_JWT_SIGNING_KEY`, `CLINICAPP_HANGFIRE_PASSWORD` (or `HANGFIRE_PASSWORD`), `CLINIC_R2_*` (or shared `R2_*` or on-premise `S3_*` / MinIO credentials).
 - [ ] laboratory-api: `LABORATORY_DB_CONNECTION_STRING`, `LABORATORY_DOCUMENT_SIGNING_KEY`, `LAB_JWT_SIGNING_KEY`.
 - [ ] pharmacy-api: `PHARMACY_DB_CONNECTION_STRING`, `PHARMACY_GAMOT_UPSC_SECRET_KEY`, `PHARMACY_JWT_SIGNING_KEY`.
 - [ ] billing-api: `BILLING_DB_CONNECTION_STRING`, `BILLING_JWT_SIGNING_KEY`.

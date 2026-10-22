@@ -69,6 +69,13 @@ export interface InvoicePdfData {
   balanceDue?: number;
   notes?: string;
   items: ReceiptItem[];
+  payments?: Array<{
+    paymentNumber: string;
+    paymentDate?: string;
+    amount: number;
+    method: string;
+    referenceNumber?: string;
+  }>;
 }
 
 function escapeHtml(value?: string | number | null): string {
@@ -1017,7 +1024,24 @@ export function buildInvoicePdfHtml(
                 <span>NET AMOUNT DUE:</span>
                 <span>${formatMoney(invoice.netAmount)}</span>
               </div>
-              ${invoice.amountPaid != null && invoice.amountPaid > 0 ? `
+              ${invoice.payments && invoice.payments.length > 0 ? `
+                ${invoice.payments.map(p => `
+                  <div class="totals-row" style="color: ${theme.colors.successText}; font-size: 11px;">
+                    <span>Paid (${escapeHtml(p.method)} - OR #${escapeHtml(p.paymentNumber)}${p.referenceNumber ? ` • Ref: ${escapeHtml(p.referenceNumber)}` : ''}):</span>
+                    <span>${formatMoney(p.amount)}</span>
+                  </div>
+                `).join('')}
+                ${invoice.payments.length > 1 ? `
+                  <div class="totals-row" style="font-weight: 600;">
+                    <span>Total Amount Paid:</span>
+                    <span>${formatMoney(invoice.amountPaid || 0)}</span>
+                  </div>
+                ` : ''}
+                <div class="totals-row" style="font-weight: bold; color: ${(invoice.balanceDue ?? 0) > 0 ? theme.colors.emergencyText : theme.colors.text};">
+                  <span>Balance Due:</span>
+                  <span>${formatMoney(invoice.balanceDue ?? 0)}</span>
+                </div>
+              ` : invoice.amountPaid != null && invoice.amountPaid > 0 ? `
               <div class="totals-row">
                 <span>Amount Paid:</span>
                 <span>${formatMoney(invoice.amountPaid)}</span>

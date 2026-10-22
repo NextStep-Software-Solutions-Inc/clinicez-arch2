@@ -167,7 +167,7 @@ export default function AttachFilesScreen({ route }: Props) {
       screen: 'BottomTabs',
       params: {
         screen: 'FilesScreen',
-        params: { screen: 'FilesUploadScreen', params: { folderId: null } },
+        params: { screen: 'FilesUploadScreen' },
       },
     });
   };

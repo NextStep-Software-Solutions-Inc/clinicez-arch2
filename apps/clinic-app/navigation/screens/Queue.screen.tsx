@@ -26,6 +26,8 @@ import { useClinic } from '../../context/ClinicContext';
 import {
   clinicService,
   computeScopedStations,
+  getManilaTodayStr,
+  formatClinicTime,
   isPatientVisibleToStaff,
   resolveCallToRoom,
   PatientQueueItem,
@@ -121,19 +123,21 @@ export default function QueueScreen() {
 
   const loadData = useCallback(async () => {
     setError(null);
+    const todayStr = getManilaTodayStr();
     const doctorId = currentStaff?.id;
     const selectedRoomObj =
       selectedStation === 'ALL'
         ? undefined
         : activeRooms.find((r) => r.name === selectedStation || r.id === selectedStation);
     const [queueData, queueErr] = await clinicService.getQueue({
+      date: todayStr,
       view: selectedView,
       doctorId: selectedView === 'MyRoom' ? doctorId : undefined,
       roomId: selectedRoomObj?.id,
       roomOrStation: selectedStation === 'ALL' ? undefined : selectedStation,
     });
 
-    const [metricsData] = await clinicService.getQueueMetrics();
+    const [metricsData] = await clinicService.getQueueMetrics(todayStr);
 
     if (queueErr || !queueData) {
       setError(queueErr?.message || 'Failed to load queue items.');
@@ -393,7 +397,7 @@ export default function QueueScreen() {
                       <View style={styles.metaItem}>
                         <Icon name="clock" size={14} color={theme.colors.textSecondary} />
                         <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                          In: {ticket.checkInTime ? new Date(ticket.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          In: {ticket.checkInTime ? formatClinicTime(ticket.checkInTime) : '—'}
                         </ThemedText>
                       </View>
                     </View>

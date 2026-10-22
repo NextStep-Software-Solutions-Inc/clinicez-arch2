@@ -183,17 +183,53 @@ public sealed class StaffController : ControllerBase
         return Ok(ApiResponse<bool>.Success(result, "Staff member deactivated successfully."));
     }
 
+    [HttpPost("{id:guid}/resend-invite")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ResendInvite(
+        Guid id,
+        [FromBody] ResendStaffInviteRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new ResendStaffInvitationCommand(id, request?.SendInviteEmail ?? true), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff invitation resent successfully."));
+    }
+
+    [HttpPost("{id:guid}/revoke-invite")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<bool>>> RevokeInvite(Guid id, CancellationToken ct)
+    {
+        var result = await _sender.Send(new RevokeStaffInvitationCommand(id), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Staff invitation revoked successfully."));
+    }
+
+    [HttpPost("{id:guid}/suspend")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> SuspendStaffMember(Guid id, CancellationToken ct)
+    {
+        var result = await _sender.Send(new SuspendStaffMemberCommand(id), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member suspended successfully."));
+    }
+
     [HttpPost("{id:guid}/activate")]
-    [HttpPost("{id:guid}/reactivate")]
     [HasPermission(ClinicPermissions.StaffManage)]
     public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ActivateStaffMember(Guid id, CancellationToken ct)
     {
         var result = await _sender.Send(new ActivateStaffMemberCommand(id), ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member activated successfully."));
     }
+
+    [HttpPost("{id:guid}/reactivate")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ReactivateStaffMember(Guid id, CancellationToken ct)
+    {
+        var result = await _sender.Send(new ReactivateStaffMemberCommand(id), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member reactivated successfully."));
+    }
 }
 
 public sealed record ResetStaffPasswordRequest(string? TemporaryPassword);
+
+public sealed record ResendStaffInviteRequest(bool SendInviteEmail = true);
 
 public sealed record UpdateStaffMemberRequest(
     string FirstName,

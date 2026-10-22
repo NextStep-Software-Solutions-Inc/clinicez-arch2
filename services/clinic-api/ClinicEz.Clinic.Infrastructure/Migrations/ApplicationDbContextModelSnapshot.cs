@@ -1358,6 +1358,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("DateFormat")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<string>("DefaultApproverName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -1557,6 +1561,14 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("TenantSlug")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TimeFormat")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TimeZoneId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
@@ -4905,6 +4917,16 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("InvitationExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InvitationToken")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("InviteAcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -4964,6 +4986,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Active");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -4984,6 +5013,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ClinicRoleId");
+
+                    b.HasIndex("InvitationToken")
+                        .HasFilter("\"IsDeleted\" = false AND \"InvitationToken\" IS NOT NULL");
 
                     b.HasIndex("ClinicId", "Email");
 

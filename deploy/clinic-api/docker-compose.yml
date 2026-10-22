@@ -63,8 +63,23 @@ services:
       - Jwt__KeyDirectory=/app/keys
       # PhilHealth proxy (PhilHealth Konsulta transmittals). The default only works when it runs on the same Docker network.
       - PhilHealthProxy__BaseUrl=${PHILHEALTH_PROXY_URL:-http://philhealth-proxy:8080}
-      # Encrypted scanned records and attachments live on a volume (the default path is inside the container).
+      # Storage Provider: S3 (cloud/on-premise MinIO/Ceph), R2, or Local (edge/offline disk).
+      - Storage__Provider=${STORAGE_PROVIDER:-R2}
       - Storage__BasePath=/app/storage/records
+      - Storage__EnableLocalFallback=${STORAGE_ENABLE_LOCAL_FALLBACK:-true}
+      # Generic S3 adapter settings (for on-premise subscribers with their own MinIO / S3 storage servers)
+      - S3__ServiceUrl=${S3_SERVICE_URL:-}
+      - S3__BucketName=${S3_BUCKET_NAME:-${R2_BUCKET_NAME:-}}
+      - S3__AccessKeyId=${S3_ACCESS_KEY_ID:-${R2_ACCESS_KEY_ID:-}}
+      - S3__SecretAccessKey=${S3_SECRET_ACCESS_KEY:-${R2_SECRET_ACCESS_KEY:-}}
+      - S3__Region=${S3_REGION:-auto}
+      - S3__ForcePathStyle=${S3_FORCE_PATH_STYLE:-true}
+      # Cloudflare R2 specific credentials
+      - R2__AccountId=${R2_ACCOUNT_ID:-}
+      - R2__BucketName=${R2_BUCKET_NAME:-}
+      - R2__AccessKeyId=${R2_ACCESS_KEY_ID:-}
+      - R2__SecretAccessKey=${R2_SECRET_ACCESS_KEY:-}
+      - R2__PublicUrl=${R2_PUBLIC_URL:-}
       # Master secret wrapping the per-file encryption keys. Required (no built-in fallback): set it once and never change it
       # afterwards, because files written under another secret can no longer be opened. Back it up with the records.
       - ClinicEncryption__MasterSecret=${CLINIC_ENCRYPTION_MASTER_SECRET:?CLINIC_ENCRYPTION_MASTER_SECRET must be set}
@@ -76,6 +91,8 @@ services:
       - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-dev.clinicez.net,clinicez.net,dev.nextstep-software.com,nextstep-software.com}
     volumes:
       - clinic-api-keys:/app/keys
+      # clinic-records volume is retained during transition for one-time maintenance migration,
+      # and deprecated once volume migration to S3/R2 object storage is complete.
       - clinic-records:/app/storage/records
     restart: unless-stopped
 

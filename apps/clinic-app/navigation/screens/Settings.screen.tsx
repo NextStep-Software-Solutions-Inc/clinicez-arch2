@@ -18,6 +18,7 @@ import {
   ClinicCustomFieldDefinition,
   ClinicServiceItem,
   ClinicRole,
+  getManilaTodayStr,
 } from '../../services/clinicService';
 
 import SettingsTabBar from '../../components/settings/SettingsTabBar';
@@ -140,7 +141,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       [servicesData, servicesErr],
       [rolesData, rolesErr],
     ] = await Promise.all([
-      clinicService.getDailyEodReport(),
+      clinicService.getDailyEodReport(getManilaTodayStr()),
       clinicService.getSettings(),
       clinicService.getStaff(),
       clinicService.getCustomFields('ClinicPatient'),

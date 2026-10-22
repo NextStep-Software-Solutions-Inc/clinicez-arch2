@@ -34,7 +34,7 @@ public sealed class EntitlementGuard(IApplicationDbContext context, IEntitlement
     {
         var snapshot = await ActiveSnapshotAsync(tenantId, cancellationToken);
         var current = await context.WorkspaceMembers.CountAsync(
-            m => m.TenantId == tenantId && m.Status != MemberStatus.Suspended, cancellationToken);
+            m => m.TenantId == tenantId && m.Status != MemberStatus.Suspended && m.Status != MemberStatus.Revoked, cancellationToken);
         Enforce(snapshot, EntitlementKeys.LimitMembers, current, "team member");
     }
 

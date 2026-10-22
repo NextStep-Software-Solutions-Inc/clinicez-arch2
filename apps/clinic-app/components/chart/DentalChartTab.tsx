@@ -13,6 +13,7 @@ import {
 } from '../ui';
 import {
   clinicService,
+  formatClinicDate,
   type ClinicPatient,
   type PatientChart,
   type ClinicalProcedureRecord,
@@ -163,17 +164,7 @@ export function getToothStatusColor(status?: ToothStatus | string): {
 
 function formatRecordedDate(dateStr?: string | null): string {
   if (!dateStr) return 'Just now';
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString([], {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return dateStr;
-  }
+  return formatClinicDate(dateStr, { fallback: dateStr });
 }
 
 export default function DentalChartTab({
@@ -906,11 +897,7 @@ export default function DentalChartTab({
                         </View>
                         <ThemedText variant="caption" color={theme.colors.textSecondary}>
                           {proc.performedAt || proc.scheduledAt
-                            ? new Date(proc.performedAt || proc.scheduledAt).toLocaleDateString([], {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                              })
+                            ? formatClinicDate(proc.performedAt || proc.scheduledAt)
                             : 'Date recorded'}
                           {proc.orderedByDoctorName ? ` • Provider: ${proc.orderedByDoctorName}` : ''}
                         </ThemedText>

@@ -163,7 +163,7 @@ public class GetBillingInfoQueryHandler(
         }
 
         var memberCount = await context.WorkspaceMembers
-            .CountAsync(m => m.TenantId == tenant.Id && m.Status != MemberStatus.Suspended, cancellationToken);
+            .CountAsync(m => m.TenantId == tenant.Id && m.Status != MemberStatus.Suspended && m.Status != MemberStatus.Revoked, cancellationToken);
 
         var usageDto = new TenantUsageDto(
             tenant.FacilitiesCount,

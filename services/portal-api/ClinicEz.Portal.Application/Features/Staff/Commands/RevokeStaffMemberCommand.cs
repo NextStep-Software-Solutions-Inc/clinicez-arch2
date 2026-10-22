@@ -42,14 +42,11 @@ public class RevokeStaffMemberCommandHandler(
             throw new InvalidOperationException("The primary workspace owner cannot be revoked or removed.");
         }
 
-        var profiles = await context.StaffMembers
-            .Where(s => s.WorkspaceMemberId == member.Id)
-            .ToListAsync(cancellationToken);
-        context.StaffMembers.RemoveRange(profiles);
-        context.WorkspaceMembers.Remove(member);
+        member.Status = MemberStatus.Revoked;
 
-        var currentMemberCount = await context.WorkspaceMembers.CountAsync(m => m.TenantId == tenant.Id, cancellationToken);
-        tenant.StaffAccountsCount = Math.Max(1, currentMemberCount - 1);
+        var currentMemberCount = await context.WorkspaceMembers.CountAsync(
+            m => m.TenantId == tenant.Id && m.Status != MemberStatus.Revoked && m.Status != MemberStatus.Suspended, cancellationToken);
+        tenant.StaffAccountsCount = Math.Max(1, currentMemberCount);
 
         await context.SaveChangesAsync(cancellationToken);
 

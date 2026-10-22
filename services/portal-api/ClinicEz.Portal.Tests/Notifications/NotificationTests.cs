@@ -1,5 +1,6 @@
 using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Features.Staff.Commands;
+using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Notifications;
 using ClinicEz.Portal.Infrastructure.Persistence;
@@ -17,19 +18,6 @@ using Moq;
 using Xunit;
 
 namespace ClinicEz.Portal.Tests.Notifications;
-
-internal sealed class RecordingEmailSender : IEmailSender
-{
-    public List<EmailMessage> Sent { get; } = [];
-    public Exception? FailWith { get; set; }
-
-    public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
-    {
-        if (FailWith is not null) throw FailWith;
-        Sent.Add(message);
-        return Task.CompletedTask;
-    }
-}
 
 public class NotificationEmailRequestedHandlerTests : IDisposable
 {
@@ -326,11 +314,33 @@ public class EmailTemplateRendererTests
         Assert.Throws<EmailTemplateException>(() =>
             _renderer.Render(EmailTemplateKeys.PatientClaimInvitation, "Subject", model));
     }
+
+    [Fact]
+    public void ClinicStaffInvitation_RendersClinicDetailsAndInviteUrl()
+    {
+        var model = new Dictionary<string, string>
+        {
+            ["inviteeName"] = "Dr. Jose Rizal",
+            ["clinicName"] = "Manila Family Health Clinic",
+            ["role"] = "Doctor",
+            ["inviteUrl"] = "https://manila-family.clinic.clinicez.ph/invitations/abcdef1234567890abcdef1234567890"
+        };
+
+        var mail = _renderer.Render(EmailTemplateKeys.ClinicStaffInvitation, "Invitation to join Manila Family Health Clinic on Clinic EZ", model);
+
+        Assert.Contains("Dr. Jose Rizal", mail.Html);
+        Assert.Contains("Manila Family Health Clinic", mail.Html);
+        Assert.Contains("Doctor", mail.Html);
+        Assert.Contains("https://manila-family.clinic.clinicez.ph/invitations/abcdef1234567890abcdef1234567890", mail.Html);
+        Assert.Contains("Dr. Jose Rizal", mail.Text);
+        Assert.Contains("https://manila-family.clinic.clinicez.ph/invitations/abcdef1234567890abcdef1234567890", mail.Text);
+    }
 }
 
 public class StaffInvitationEmailTests : IDisposable
 {
     private readonly ApplicationDbContext _context = TestSupport.NewContext();
+    private readonly RecordingEmailSender _sender = new();
     private readonly Guid _tenantId = Guid.NewGuid();
 
     public StaffInvitationEmailTests()
@@ -346,39 +356,41 @@ public class StaffInvitationEmailTests : IDisposable
     }
 
     [Fact]
-    public async Task Invite_StagesTheInvitationEmail_WithTheMemberTokenAndTheFrontendLink()
-    {
-        var handler = new InviteStaffMemberCommandHandler(_context, new Mock<ClinicEz.Portal.Application.Features.Entitlements.IEntitlementGuard>().Object, TestSupport.InvitationNotifier(_context), TimeProvider.System);
-
-        var result = await handler.Handle(new InviteStaffMemberCommand("metro", "biller@metro.ph", "Bob Biller", "Biller"), CancellationToken.None);
-
-        var envelope = Assert.Single(TestSupport.Outbox(_context, InteropTypes.NotificationEmailRequested));
-        Assert.Equal(Party.Portal, envelope.From);
-        Assert.Equal(Party.Portal, envelope.To);
-        var payload = envelope.GetPayload<NotificationEmailRequestedPayload>();
-        Assert.Equal("biller@metro.ph", payload.To);
-        Assert.Equal(EmailTemplateKeys.StaffInvitation, payload.TemplateKey);
-        Assert.Equal($"https://app.clinicez.test/invitations/{result.InvitationToken}", payload.Model["inviteUrl"]);
-        Assert.Equal("Metro Clinic", payload.Model["workspaceName"]);
-    }
-
-    [Fact]
-    public async Task Invite_WithoutAKnownFrontendUrl_StillInvites_ButQueuesNoEmail()
+    public async Task Invite_DirectlyDispatchesTheInvitationEmail_WithTheMemberTokenAndTheFrontendLink()
     {
         var handler = new InviteStaffMemberCommandHandler(
             _context,
             new Mock<ClinicEz.Portal.Application.Features.Entitlements.IEntitlementGuard>().Object,
-            TestSupport.InvitationNotifier(_context, frontendUrl: null),
+            TestSupport.InvitationNotifier(_context, emailSender: _sender),
             TimeProvider.System);
 
         var result = await handler.Handle(new InviteStaffMemberCommand("metro", "biller@metro.ph", "Bob Biller", "Biller"), CancellationToken.None);
 
-        Assert.Equal("PendingInvitation", result.Status);
-        Assert.Empty(TestSupport.Outbox(_context, InteropTypes.NotificationEmailRequested));
+        var mail = Assert.Single(_sender.Sent);
+        Assert.Equal("biller@metro.ph", mail.To);
+        Assert.Contains("Metro Clinic", mail.FromDisplayName);
+        Assert.Contains($"https://app.clinicez.test/invitations/{result.InvitationToken}", mail.HtmlBody);
+        Assert.Contains($"https://app.clinicez.test/invitations/{result.InvitationToken}", mail.TextBody);
+        Assert.Contains("Metro Clinic", mail.HtmlBody);
     }
 
     [Fact]
-    public async Task Resend_StagesAnEmailWithTheFreshToken()
+    public async Task Invite_WithoutAKnownFrontendUrl_StillInvites_ButSendsNoEmail()
+    {
+        var handler = new InviteStaffMemberCommandHandler(
+            _context,
+            new Mock<ClinicEz.Portal.Application.Features.Entitlements.IEntitlementGuard>().Object,
+            TestSupport.InvitationNotifier(_context, frontendUrl: null, emailSender: _sender),
+            TimeProvider.System);
+
+        var result = await handler.Handle(new InviteStaffMemberCommand("metro", "biller@metro.ph", "Bob Biller", "Biller"), CancellationToken.None);
+
+        Assert.Equal("Invited", result.Status);
+        Assert.Empty(_sender.Sent);
+    }
+
+    [Fact]
+    public async Task Resend_DirectlyDispatchesAnEmailWithTheFreshToken()
     {
         var member = new WorkspaceMember
         {
@@ -395,18 +407,20 @@ public class StaffInvitationEmailTests : IDisposable
         _context.WorkspaceMembers.Add(member);
         await _context.SaveChangesAsync();
 
-        var result = await new ResendStaffInvitationCommandHandler(_context, TestSupport.InvitationNotifier(_context), TimeProvider.System)
+        var result = await new ResendStaffInvitationCommandHandler(_context, TestSupport.InvitationNotifier(_context, emailSender: _sender), TimeProvider.System)
             .Handle(new ResendStaffInvitationCommand("metro", member.Id), CancellationToken.None);
 
-        var payload = Assert.Single(TestSupport.OutboxPayloads<NotificationEmailRequestedPayload>(_context, InteropTypes.NotificationEmailRequested));
-        Assert.EndsWith($"/invitations/{result.InvitationToken}", payload.Model["inviteUrl"]);
-        Assert.DoesNotContain("/old", payload.Model["inviteUrl"]);
+        var mail = Assert.Single(_sender.Sent);
+        Assert.Equal("renew@metro.ph", mail.To);
+        Assert.Contains($"/invitations/{result.InvitationToken}", mail.HtmlBody);
+        Assert.DoesNotContain("/old", mail.HtmlBody);
     }
 }
 
 public class SendContactMessageCommandTests : IDisposable
 {
     private readonly ApplicationDbContext _context = TestSupport.NewContext();
+    private readonly RecordingEmailSender _sender = new();
 
     public void Dispose()
     {
@@ -414,35 +428,44 @@ public class SendContactMessageCommandTests : IDisposable
         _context.Dispose();
     }
 
-    private SendContactMessageCommandHandler Handler(string? inbox) =>
-        new(
+    private SendContactMessageCommandHandler Handler(string? inbox)
+    {
+        var settingsMock = new Mock<ISystemSettingsService>();
+        settingsMock.Setup(s => s.GetSettingValueAsync("Mailer:ContactInbox", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(inbox ?? string.Empty);
+
+        var job = new EmailDispatchJob(new EmailTemplateRenderer(), _sender, NullLogger<EmailDispatchJob>.Instance);
+        var notifications = new TestNotificationService(job);
+
+        return new(
             _context,
-            new NotificationService(new InteropPublisher(_context)),
-            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:ContactInbox"] = inbox }).Build());
+            notifications,
+            settingsMock.Object);
+    }
 
     [Fact]
-    public async Task ConfiguredInbox_ReceivesTheMessage_ThroughTheOutbox()
+    public async Task ConfiguredInbox_ReceivesTheMessage_DirectlyViaEmailSender()
     {
         var accepted = await Handler(" support@clinicez.test ").Handle(
             new SendContactMessageCommand(" Vera ", "vera@example.com", " Hello there, I have a question. "), CancellationToken.None);
 
         Assert.True(accepted);
-        var payload = Assert.Single(TestSupport.OutboxPayloads<NotificationEmailRequestedPayload>(_context, InteropTypes.NotificationEmailRequested));
-        Assert.Equal("support@clinicez.test", payload.To);
-        Assert.Equal(EmailTemplateKeys.ContactMessage, payload.TemplateKey);
-        Assert.Equal("Vera", payload.Model["name"]);
-        Assert.Equal("Hello there, I have a question.", payload.Model["message"]);
+        var mail = Assert.Single(_sender.Sent);
+        Assert.Equal("support@clinicez.test", mail.To);
+        Assert.Equal("Contact Us Message", mail.Subject);
+        Assert.Equal("vera@example.com", mail.ReplyTo);
+        Assert.Contains("Hello there, I have a question.", mail.HtmlBody);
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("  ")]
-    public async Task WithoutAnInbox_NothingIsQueued(string? inbox)
+    public async Task WithoutAnInbox_NothingIsSent(string? inbox)
     {
         var accepted = await Handler(inbox).Handle(new SendContactMessageCommand("Vera", "vera@example.com", "Hello there"), CancellationToken.None);
 
         Assert.False(accepted);
-        Assert.Empty(TestSupport.Outbox(_context));
+        Assert.Empty(_sender.Sent);
     }
 
     [Fact]
@@ -457,24 +480,103 @@ public class SendContactMessageCommandTests : IDisposable
     }
 }
 
-public class NotificationServiceTests
+public class HangfireNotificationServiceTests
 {
     [Fact]
-    public async Task RequestEmail_AddressesThePortalItself_AndUsesTheCorrelationId()
+    public void EnqueueEmail_DelegatesToBackgroundJobClient_AndReturnsJobId()
     {
-        using var context = TestSupport.NewContext();
+        var client = new TestBackgroundJobClient();
+        var service = new HangfireNotificationService(client);
+
         var correlationId = Guid.NewGuid();
+        var payload = new NotificationEmailRequestedPayload
+        {
+            To = "admin@example.com",
+            Subject = "Test Subject",
+            TemplateKey = EmailTemplateKeys.AdminInvitation,
+            Model = new Dictionary<string, string> { ["role"] = "Admin" }
+        };
 
-        new NotificationService(new InteropPublisher(context)).RequestEmail(
-            new NotificationEmailRequestedPayload { To = "a@example.com", Subject = "S", TemplateKey = EmailTemplateKeys.ContactMessage },
-            correlationId);
-        await context.SaveChangesAsync();
+        var jobId = service.EnqueueEmail(payload, correlationId);
 
-        var envelope = Assert.Single(TestSupport.Outbox(context));
-        Assert.Equal(InteropTypes.NotificationEmailRequested, envelope.Type);
-        Assert.Equal(Party.Portal, envelope.From);
-        Assert.Equal(Party.Portal, envelope.To);
-        Assert.Equal(correlationId, envelope.CorrelationId);
+        Assert.NotNull(jobId);
+        Assert.Single(client.EnqueuedJobs);
+    }
+}
+
+public class EmailDispatchJobTests
+{
+    [Fact]
+    public async Task SendEmailAsync_RendersTemplateAndDispatchesViaEmailSender()
+    {
+        var sender = new RecordingEmailSender();
+        var job = new EmailDispatchJob(new EmailTemplateRenderer(), sender, NullLogger<EmailDispatchJob>.Instance);
+
+        await job.SendEmailAsync(
+            new NotificationEmailRequestedPayload
+            {
+                To = "admin@example.com",
+                Subject = "Contact Message",
+                TemplateKey = EmailTemplateKeys.ContactMessage,
+                Model = new Dictionary<string, string>
+                {
+                    ["name"] = "Alice",
+                    ["email"] = "alice@example.com",
+                    ["message"] = "Test contact body"
+                }
+            },
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        var mail = Assert.Single(sender.Sent);
+        Assert.Equal("admin@example.com", mail.To);
+        Assert.Equal("Contact Message", mail.Subject);
+        Assert.Equal("alice@example.com", mail.ReplyTo);
+        Assert.Contains("Test contact body", mail.HtmlBody);
+    }
+
+    [Fact]
+    public async Task SendEmailAsync_InvalidRecipientOrSubject_IsDroppedWithoutThrowing()
+    {
+        var sender = new RecordingEmailSender();
+        var job = new EmailDispatchJob(new EmailTemplateRenderer(), sender, NullLogger<EmailDispatchJob>.Instance);
+
+        await job.SendEmailAsync(
+            new NotificationEmailRequestedPayload
+            {
+                To = "not-an-email",
+                Subject = "Bad Recipient",
+                TemplateKey = EmailTemplateKeys.ContactMessage
+            },
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.Empty(sender.Sent);
+    }
+
+    [Fact]
+    public async Task SendEmailAsync_SmtpFailure_ThrowsException_ToTriggerHangfireRetry()
+    {
+        var sender = new RecordingEmailSender { FailWith = new InvalidOperationException("SMTP connection timeout") };
+        var job = new EmailDispatchJob(new EmailTemplateRenderer(), sender, NullLogger<EmailDispatchJob>.Instance);
+
+        var payload = new NotificationEmailRequestedPayload
+        {
+            To = "admin@example.com",
+            Subject = "Contact Message",
+            TemplateKey = EmailTemplateKeys.ContactMessage,
+            Model = new Dictionary<string, string>
+            {
+                ["name"] = "Alice",
+                ["email"] = "alice@example.com",
+                ["message"] = "Test contact body"
+            }
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            job.SendEmailAsync(payload, Guid.NewGuid(), CancellationToken.None));
+
+        Assert.Equal("SMTP connection timeout", ex.Message);
     }
 }
 
@@ -490,20 +592,10 @@ public class SmtpOptionsTests
     }
 
     [Fact]
-    public void SmtpMode_RequiresHostAndSender()
+    public void SmtpMode_HasNoStaticMailerParameters_OnlyCredentialsAndMode()
     {
-        Assert.NotNull(new SmtpOptions { Mode = SmtpMode.Smtp }.FindProblem(false));
-        Assert.NotNull(new SmtpOptions { Host = "smtp.example.com" }.FindProblem(false));
-        Assert.NotNull(new SmtpOptions { FromEmail = "no-reply@example.com" }.FindProblem(false));
-        Assert.Null(new SmtpOptions { Host = "smtp.example.com", FromEmail = "no-reply@example.com" }.FindProblem(false));
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(70000)]
-    public void SmtpMode_RejectsAnInvalidPort(int port)
-    {
-        Assert.NotNull(new SmtpOptions { Host = "h", FromEmail = "a@example.com", Port = port }.FindProblem(false));
+        var options = new SmtpOptions { Mode = SmtpMode.Smtp, User = "resend", Password = "secret-password" };
+        Assert.Null(options.FindProblem(false));
     }
 
     [Fact]
@@ -516,5 +608,42 @@ public class SmtpOptionsTests
         var line = Assert.Single(logger.Messages);
         Assert.Contains("a@example.com", line);
         Assert.Contains("plain body", line);
+    }
+}
+
+public class SmtpEmailSenderTests
+{
+    [Fact]
+    public async Task SendAsync_ThrowsWhenHostIsNotConfiguredInPlatformSettings()
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(new SmtpOptions());
+        var settingsMock = new Mock<ISystemSettingsService>();
+        settingsMock.Setup(s => s.GetSettingValueAsync("Mailer:SmtpHost", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(string.Empty);
+        var sender = new SmtpEmailSender(options, settingsMock.Object);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sender.SendAsync(new EmailMessage("test@example.com", "Sub", "<p>hi</p>", "hi"), CancellationToken.None));
+
+        Assert.Contains("SMTP host is not configured", ex.Message);
+        Assert.Contains("Platform Settings", ex.Message);
+    }
+
+    [Fact]
+    public async Task SendAsync_ThrowsWhenFromEmailIsNotConfiguredInPlatformSettings()
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(new SmtpOptions());
+        var settingsMock = new Mock<ISystemSettingsService>();
+        settingsMock.Setup(s => s.GetSettingValueAsync("Mailer:SmtpHost", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("smtp.resend.com");
+        settingsMock.Setup(s => s.GetSettingValueAsync("Mailer:SmtpFromEmail", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(string.Empty);
+        var sender = new SmtpEmailSender(options, settingsMock.Object);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sender.SendAsync(new EmailMessage("test@example.com", "Sub", "<p>hi</p>", "hi"), CancellationToken.None));
+
+        Assert.Contains("SMTP sender email is not configured", ex.Message);
+        Assert.Contains("Platform Settings", ex.Message);
     }
 }

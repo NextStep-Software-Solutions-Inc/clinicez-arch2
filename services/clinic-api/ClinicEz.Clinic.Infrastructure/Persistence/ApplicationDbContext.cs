@@ -237,8 +237,13 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.AssignedRoomIdsJson).HasColumnType("text");
 
             entity.Property(e => e.PasswordHash).HasMaxLength(500);
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50).HasDefaultValue(StaffAccountStatus.Active);
+            entity.Property(e => e.InvitationToken).HasMaxLength(128);
+
             entity.HasIndex(e => new { e.TenantId, e.ClinicId });
             entity.HasIndex(e => new { e.ClinicId, e.Email });
+            entity.HasIndex(e => e.InvitationToken)
+                .HasFilter("\"IsDeleted\" = false AND \"InvitationToken\" IS NOT NULL");
         });
 
         modelBuilder.Entity<ClinicRefreshToken>(entity =>
@@ -913,6 +918,9 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.AppointmentReminder24hEnabled).HasDefaultValue(true);
             entity.Property(e => e.AppointmentReminder2hEnabled).HasDefaultValue(true);
             entity.Property(e => e.EnableStaffAppointmentNotifications).HasDefaultValue(true);
+            entity.Property(e => e.TimeZoneId).HasMaxLength(100);
+            entity.Property(e => e.DateFormat).HasMaxLength(50);
+            entity.Property(e => e.TimeFormat).HasMaxLength(20);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
         });
 

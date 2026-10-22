@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Queue.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Workspace;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,18 +27,25 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
 {
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IClinicContext _clinicContext;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<ClinicSettings>? _settingsRepository;
 
     public GetQueueQueryHandler(
         IRepository<QueueItem> queueRepository,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<ClinicSettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _clinicContext = clinicContext;
+        _workspaceProfiles = workspaceProfiles;
+        _settingsRepository = settingsRepository;
     }
 
     public async Task<IReadOnlyList<QueueItemDto>> Handle(GetQueueQuery request, CancellationToken cancellationToken)
     {
-        var targetDate = request.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var targetDate = request.Date
+            ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepository);
 
         var query = _queueRepository.Query(q => 
             q.ClinicId == _clinicContext.ClinicId && 
@@ -162,18 +171,25 @@ public sealed class GetQueueMetricsQueryHandler : IRequestHandler<GetQueueMetric
 {
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IClinicContext _clinicContext;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<ClinicSettings>? _settingsRepository;
 
     public GetQueueMetricsQueryHandler(
         IRepository<QueueItem> queueRepository,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<ClinicSettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _clinicContext = clinicContext;
+        _workspaceProfiles = workspaceProfiles;
+        _settingsRepository = settingsRepository;
     }
 
     public async Task<QueueMetricsDto> Handle(GetQueueMetricsQuery request, CancellationToken cancellationToken)
     {
-        var targetDate = request.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var targetDate = request.Date
+            ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepository);
 
         var items = await _queueRepository.Query(q => 
             q.ClinicId == _clinicContext.ClinicId && 

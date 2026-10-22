@@ -13,7 +13,9 @@ const isProtectedRoute = createRouteMatcher([
 const isPublicRoute = createRouteMatcher([
     '/upload(.*)',
     '/join(.*)',
-    '/api/v1/public(.*)'
+    '/api/v1/public(.*)',
+    '/admin/invitations(.*)',
+    '/invitations(.*)'
 ]);
 
 // Generic reserved labels; service subdomains (clinic, lab, ...) are added from configuration

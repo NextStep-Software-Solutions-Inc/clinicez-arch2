@@ -237,6 +237,7 @@ public sealed class PatientInteropFlowTests
             db.FileRecords.Add(new FileRecord
             {
                 Id = attachmentId, ClientId = Guid.NewGuid(), PatientId = patientId, FileName = "xray.pdf",
+                Title = "Outside Record",
                 StorageKey = "k", DocumentTypeId = Guid.NewGuid(), SyncStatus = FileSyncStatus.Queued, UploadedAt = DateTime.UtcNow
             });
             await db.SaveChangesAsync();

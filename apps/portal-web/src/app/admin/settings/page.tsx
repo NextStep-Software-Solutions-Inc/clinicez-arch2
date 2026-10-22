@@ -111,7 +111,7 @@ export default function PlatformSettingsPage() {
         "Contact:SalesEmail": "sales@clinicez.com",
         "Contact:PhoneNumber": "+63 (965) 429-7640",
         "Contact:OperatingHours": "Mon - Fri, 8am - 5pm (PHT)",
-        "Mailer:ContactInbox": "contact@clinicez.com",
+        "Mailer:ContactInbox": "contact@clinicez.net",
         "Workspace:OrphanInactivityDaysThreshold": "14",
         "Workspace:OrphanAutoPurgeEnabled": "false",
         "Workspace:OrphanAutoPurgeGraceDays": "30",
@@ -838,7 +838,7 @@ export default function PlatformSettingsPage() {
               {renderField("Mailer:SmtpHost", "SMTP Host", "Hostname of the outgoing SMTP mail server.")}
               {renderField("Mailer:SmtpPort", "SMTP Port", "Port number of the SMTP server (e.g. 587, 465, 1025).", "number")}
               {renderField("Mailer:SmtpSecurity", "SMTP Security Mode", "Encryption protocol (None, StartTls, Tls).")}
-              {renderField("Mailer:SmtpFromEmail", "Default Sender Email", "Sender email address on system emails (e.g. no-reply@clinicez.com).")}
+              {renderField("Mailer:SmtpFromEmail", "Default Sender Email", "Sender email address on system emails (e.g. noreply@clinicez.net).")}
               {renderField("Mailer:SmtpFromName", "Default Sender Name", "Display name shown in recipients' inboxes.")}
               {renderField("Mailer:SmtpReplyTo", "Default Reply-To Email", "Reply-To address for outgoing automated emails.")}
               {renderField("Mailer:ContactInbox", "Support Contact Inbox", "Destination inbox email address for customer inquiry submissions.")}

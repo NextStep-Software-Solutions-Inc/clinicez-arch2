@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.Extensions.Logging;
@@ -15,8 +17,7 @@ public interface IFrontendUrlProvider
 public interface IStaffInvitationNotifier
 {
     /// <summary>
-    /// Stages the email. Call it BEFORE the <c>SaveChanges</c> that persists the invitation. When the portal website's
-    /// address is unknown the email is skipped (the invitation link can still be copied by an admin) instead of failing the invite.
+    /// Enqueues the invitation email into Hangfire for background delivery.
     /// </summary>
     void RequestInvitation(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName);
 }
@@ -44,7 +45,7 @@ public sealed class StaffInvitationNotifier(
         };
         if (!string.IsNullOrWhiteSpace(facilityName)) model["facilityName"] = facilityName;
 
-        notifications.RequestEmail(
+        var jobId = notifications.EnqueueEmail(
             new NotificationEmailRequestedPayload
             {
                 To = member.Email,
@@ -54,6 +55,8 @@ public sealed class StaffInvitationNotifier(
                 FromFacilityName = tenant.Name
             },
             member.Id);
+
+        logger.LogInformation("Enqueued staff invitation email job {JobId} for {Email} ({MemberId}).", jobId, member.Email, member.Id);
     }
 
     private static string SingleLine(string value) =>
