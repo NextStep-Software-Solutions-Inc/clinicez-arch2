@@ -1,32 +1,9 @@
 // token-guard:ignore-file
-import { describe, expect, test, mock } from 'bun:test';
-import React from 'react';
-
-(globalThis as any).__DEV__ = true;
-
-// Mock react-native dependencies before dynamic import
-const createMockComponent = (name: string) => {
-  const Comp = ({ children, ...props }: any) =>
-    React.createElement('div', { 'data-component': name, ...props }, children);
-  Comp.displayName = name;
-  return Comp;
-};
-
-mock.module('react-native', () => ({
-  StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
-  View: createMockComponent('View'),
-  Text: createMockComponent('Text'),
-  Platform: { OS: 'web', select: (obj: any) => obj.web ?? obj.default },
-}));
-
-mock.module('../components/ui/ThemedText', () => ({
-  default: createMockComponent('ThemedText'),
-}));
-
-const {
+import { describe, expect, test } from 'bun:test';
+import {
   OFFICIAL_CLOUDFLARE_TEST_SITEKEY,
   LOCAL_OFFLINE_BYPASS_TOKEN,
-} = await import('../components/turnstile/TurnstileWidget');
+} from '../components/turnstile/turnstileConstants';
 
 describe('Turnstile Client Bot Protection Suite', () => {
   test('constants: has official test key and local offline bypass token', () => {

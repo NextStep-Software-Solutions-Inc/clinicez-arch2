@@ -3,9 +3,8 @@ import { View, StyleSheet, Platform } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import { theme } from '../../constants/theme';
 
-export const OFFICIAL_CLOUDFLARE_TEST_SITEKEY = '1x00000000000000000000AA';
-export const LOCAL_OFFLINE_BYPASS_TOKEN = 'LOCAL-OFFLINE-BYPASS';
-export const TURNSTILE_API_HOST = 'challenges.cloudflare.com';
+export * from './turnstileConstants';
+import { OFFICIAL_CLOUDFLARE_TEST_SITEKEY, LOCAL_OFFLINE_BYPASS_TOKEN, TURNSTILE_API_HOST } from './turnstileConstants';
 
 export interface TurnstileWidgetProps {
   siteKey?: string | null;
