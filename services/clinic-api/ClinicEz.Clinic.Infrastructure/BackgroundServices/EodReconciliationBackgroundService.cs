@@ -153,8 +153,11 @@ public sealed class EodReconciliationBackgroundService : BackgroundService
         DateTime utcNow,
         CancellationToken ct)
     {
-        string? tzId = null;
-        if (workspaceProfiles != null)
+        string? tzId = !string.IsNullOrWhiteSpace(clinic.TimeZoneId)
+            ? clinic.TimeZoneId.Trim()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(tzId) && workspaceProfiles != null)
         {
             try
             {

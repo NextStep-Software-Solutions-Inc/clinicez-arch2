@@ -2231,6 +2231,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
     private TenantPrintoutConfig MapToTenantConfig(ClinicSettings settings)
     {
+        var workspaceProfile = _workspaceProfiles?.TryGetCached(settings.TenantId.ToString());
         return new TenantPrintoutConfig
         {
             FacilityName = settings.LetterheadHeader ?? settings.ClinicName,
@@ -2248,6 +2249,9 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 "a5" => DocumentPaperSize.A5,
                 _ => DocumentPaperSize.Letter
             },
+            TimeZoneId = ClinicEz.Clinic.Application.Common.Helpers.ClinicTimeZoneResolver.ResolveEffectiveTimeZoneId(settings, workspaceProfile),
+            DateFormat = ClinicEz.Clinic.Application.Common.Helpers.ClinicTimeZoneResolver.ResolveEffectiveDateFormat(settings, workspaceProfile),
+            TimeFormat = ClinicEz.Clinic.Application.Common.Helpers.ClinicTimeZoneResolver.ResolveEffectiveTimeFormat(settings),
             CustomDisclaimerText = settings.LetterheadFooter ?? "Valid Philippine Clinical Document. Digitally certified via Clinic EZ in compliance with RA 8792 & RA 10173."
         };
     }

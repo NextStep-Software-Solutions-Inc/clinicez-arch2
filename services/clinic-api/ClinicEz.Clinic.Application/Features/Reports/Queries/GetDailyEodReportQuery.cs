@@ -63,7 +63,8 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
             var resolvedToday = await ClinicTimeZoneResolver.ResolveTodayAsync(
                 _workspaceProfiles,
                 _clinicContext.TenantId,
-                cancellationToken);
+                cancellationToken,
+                _settingsRepo);
             targetDate = resolvedToday.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         }
         var nextDay = targetDate.AddDays(1);

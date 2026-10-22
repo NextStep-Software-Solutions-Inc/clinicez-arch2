@@ -118,7 +118,10 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             EnableAppointmentReminders: settings.EnableAppointmentReminders,
             AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
             AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
-            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications);
+            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications,
+            TimeZoneId: settings.TimeZoneId,
+            DateFormat: settings.DateFormat,
+            TimeFormat: settings.TimeFormat);
     }
 }
 

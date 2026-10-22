@@ -57,6 +57,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
     private readonly IRepository<ClinicRoom>? _roomRepository;
     private readonly IRepository<StaffMember>? _staffRepository;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<ClinicSettings>? _settingsRepository;
 
     public CheckInPatientCommandHandler(
         IRepository<QueueItem> queueRepository,
@@ -67,7 +68,8 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         IPatientAppointmentPublisher appointmentPublisher,
         IRepository<ClinicRoom>? roomRepository = null,
         IRepository<StaffMember>? staffRepository = null,
-        IWorkspaceProfileProvider? workspaceProfiles = null)
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<ClinicSettings>? settingsRepository = null)
     {
         _queueRepository = queueRepository;
         _appointmentRepository = appointmentRepository;
@@ -78,12 +80,13 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         _roomRepository = roomRepository;
         _staffRepository = staffRepository;
         _workspaceProfiles = workspaceProfiles;
+        _settingsRepository = settingsRepository;
     }
 
     public async Task<QueueItemDto> Handle(CheckInPatientCommand request, CancellationToken cancellationToken)
     {
         var today = request.QueueDate
-            ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken);
+            ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepository);
 
         // Enforce active queue day uniqueness: prevent duplicate active tickets today
         QueueStatus[] activeStatuses =

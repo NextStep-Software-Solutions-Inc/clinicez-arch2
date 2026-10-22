@@ -59,5 +59,8 @@ public sealed record ClinicSettingsDto(
     bool EnableAppointmentReminders = true,
     bool AppointmentReminder24hEnabled = true,
     bool AppointmentReminder2hEnabled = true,
-    bool EnableStaffAppointmentNotifications = true);
+    bool EnableStaffAppointmentNotifications = true,
+    string? TimeZoneId = null,
+    string? DateFormat = null,
+    string? TimeFormat = null);
 

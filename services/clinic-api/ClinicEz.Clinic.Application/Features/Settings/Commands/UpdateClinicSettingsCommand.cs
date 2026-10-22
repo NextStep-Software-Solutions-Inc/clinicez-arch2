@@ -59,7 +59,10 @@ public sealed record UpdateClinicSettingsCommand(
     bool? EnableAppointmentReminders = null,
     bool? AppointmentReminder24hEnabled = null,
     bool? AppointmentReminder2hEnabled = null,
-    bool? EnableStaffAppointmentNotifications = null) : IRequest<ClinicSettingsDto>;
+    bool? EnableStaffAppointmentNotifications = null,
+    string? TimeZoneId = null,
+    string? DateFormat = null,
+    string? TimeFormat = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -260,6 +263,30 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.EnableStaffAppointmentNotifications.HasValue)
             settings.EnableStaffAppointmentNotifications = request.EnableStaffAppointmentNotifications.Value;
 
+        if (request.TimeZoneId != null)
+        {
+            var trimmed = request.TimeZoneId.Trim();
+            settings.TimeZoneId = string.IsNullOrEmpty(trimmed) || trimmed.Equals("inherit", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : trimmed;
+        }
+
+        if (request.DateFormat != null)
+        {
+            var trimmed = request.DateFormat.Trim();
+            settings.DateFormat = string.IsNullOrEmpty(trimmed) || trimmed.Equals("inherit", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : trimmed;
+        }
+
+        if (request.TimeFormat != null)
+        {
+            var trimmed = request.TimeFormat.Trim();
+            settings.TimeFormat = string.IsNullOrEmpty(trimmed) || trimmed.Equals("inherit", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : trimmed;
+        }
+
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -322,7 +349,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             EnableAppointmentReminders: settings.EnableAppointmentReminders,
             AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
             AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
-            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications);
+            EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications,
+            TimeZoneId: settings.TimeZoneId,
+            DateFormat: settings.DateFormat,
+            TimeFormat: settings.TimeFormat);
     }
 
     private async Task EnsureDentalPresetsSeededAsync(CancellationToken ct)

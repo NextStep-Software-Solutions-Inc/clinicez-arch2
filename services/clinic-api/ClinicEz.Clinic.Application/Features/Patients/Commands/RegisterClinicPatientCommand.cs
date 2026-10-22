@@ -66,6 +66,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     private readonly IRepository<StaffMember>? _staffRepo;
     private readonly IRepository<ClinicRoom>? _roomRepo;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
+    private readonly IRepository<ClinicSettings>? _settingsRepo;
 
     public RegisterClinicPatientCommandHandler(
         IRepository<ClinicPatient> patientRepo,
@@ -77,7 +78,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         IPatientCodeGenerator? codeGenerator = null,
         IRepository<StaffMember>? staffRepo = null,
         IRepository<ClinicRoom>? roomRepo = null,
-        IWorkspaceProfileProvider? workspaceProfiles = null)
+        IWorkspaceProfileProvider? workspaceProfiles = null,
+        IRepository<ClinicSettings>? settingsRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
@@ -89,6 +91,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         _staffRepo = staffRepo;
         _roomRepo = roomRepo;
         _workspaceProfiles = workspaceProfiles;
+        _settingsRepo = settingsRepo;
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
@@ -262,7 +265,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         if (request.SendToTriage && _queueRepo != null)
         {
             var today = request.QueueDate
-                ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, ct);
+                ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, ct, _settingsRepo);
             var lastSequence = await _queueRepo.Query(q =>
                 q.ClinicId == _clinicContext.ClinicId &&
                 q.QueueDate == today)

@@ -102,7 +102,7 @@ mock.module('../services/apiClient', () => ({
   clinicApiUrl: (p: string) => `http://localhost:5000/api/v1${p}`,
 }));
 
-const { clinicService, getManilaTodayStr } = await import('../services/clinicService');
+const { clinicService, getManilaTodayStr, setClinicTimeZoneId, getClinicTimeZoneId } = await import('../services/clinicService');
 const { validateTimeString } = await import('../components/ui/TimeInput');
 
 describe('Milestone 1: End-of-Day (EOD) Reconciliation & Force EOD', () => {
@@ -237,6 +237,7 @@ describe('Milestone 1: End-of-Day (EOD) Reconciliation & Force EOD', () => {
     });
 
     test('4.2 getManilaTodayStr resolves Philippine Standard Time (UTC+8) across midnight rollover (00:00-07:59 AM PHT)', () => {
+      setClinicTimeZoneId('Asia/Manila');
       // 2026-10-21 23:38:00 UTC is 2026-10-22 07:38:00 AM in Asia/Manila (UTC+8)
       const morningManilaUtc = new Date('2026-10-21T23:38:00Z');
       expect(getManilaTodayStr(morningManilaUtc)).toBe('2026-10-22');
@@ -244,6 +245,19 @@ describe('Milestone 1: End-of-Day (EOD) Reconciliation & Force EOD', () => {
       // 2026-10-21 15:59:59 UTC is 2026-10-21 23:59:59 PM in Asia/Manila (UTC+8)
       const lateNightManilaUtc = new Date('2026-10-21T15:59:59Z');
       expect(getManilaTodayStr(lateNightManilaUtc)).toBe('2026-10-21');
+    });
+
+    test('4.3 setClinicTimeZoneId syncs WorkspaceProfile.timeZoneId and falls back to Asia/Manila', () => {
+      const sampleUtc = new Date('2026-10-21T23:38:00Z');
+      // In America/New_York (UTC-4), 2026-10-21 23:38:00 UTC is 2026-10-21 19:38:00 EDT
+      setClinicTimeZoneId('America/New_York');
+      expect(getClinicTimeZoneId()).toBe('America/New_York');
+      expect(getManilaTodayStr(sampleUtc)).toBe('2026-10-21');
+
+      // Reset / empty falls back to Asia/Manila
+      setClinicTimeZoneId(null);
+      expect(getClinicTimeZoneId()).toBe('Asia/Manila');
+      expect(getManilaTodayStr(sampleUtc)).toBe('2026-10-22');
     });
   });
 });
