@@ -172,7 +172,8 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(SmtpOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IEmailTemplateRenderer, EmailTemplateRenderer>();
-        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IEmailDispatchJob, EmailDispatchJob>();
+        services.AddScoped<INotificationService, HangfireNotificationService>();
         services.AddScoped<IStaffInvitationNotifier, StaffInvitationNotifier>();
         services.AddScoped<IAdminInvitationNotifier, AdminInvitationNotifier>();
         services.AddScoped<IFrontendUrlProvider, FrontendUrlProvider>();

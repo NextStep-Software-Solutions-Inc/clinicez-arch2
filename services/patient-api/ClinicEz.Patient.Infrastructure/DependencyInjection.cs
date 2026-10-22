@@ -26,6 +26,7 @@ using ClinicEz.Patient.Infrastructure.Persistence;
 using ClinicEz.Patient.Infrastructure.Persistence.Repositories;
 using ClinicEz.Patient.Infrastructure.Services;
 using ClinicEz.Patient.Infrastructure.Services.Auth;
+using ClinicEz.Patient.Infrastructure.Services.Encryption;
 using ClinicEz.Patient.Infrastructure.Services.Jobs;
 using ClinicEz.Patient.Infrastructure.Services.Jobs.Processors;
 using ClinicEz.Patient.Infrastructure.Services.Storage;
@@ -89,8 +90,6 @@ public static class DependencyInjection
         services.AddScoped<IClinicMembershipRepository, ClinicMembershipRepository>();
         services.AddScoped<IBookingDraftRepository, BookingDraftRepository>();
         services.AddScoped<INotificationPreferencesRepository, NotificationPreferencesRepository>();
-        services.AddScoped<IPatientStorageProfileRepository, PatientStorageProfileRepository>();
-        services.AddScoped<IFileFolderRepository, FileFolderRepository>();
         services.AddScoped<IFileRecordRepository, FileRecordRepository>();
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -100,6 +99,8 @@ public static class DependencyInjection
 
         // ── Application Services ──────────────────────────────────────────────
         services.AddSingleton<IStorageService, R2StorageService>();
+        services.AddSingleton(sp => PatientEncryptionKeyRing.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddScoped<IPatientEncryptionService, PatientEncryptionService>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IBackgroundJobEnqueuer, HangfireJobEnqueuer>();
@@ -137,13 +138,11 @@ public static class DependencyInjection
         services.AddScoped<ISyncEntityProcessor, PatientDentalVisionSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, PatientNcdQuestionnaireSyncProcessor>();
         // Files
-        services.AddScoped<ISyncEntityProcessor, FileFolderSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, FileRecordSyncProcessor>();
 
         // ── Sync processing engine ───────────────────────────────────────────
         services.AddScoped<ISyncPayloadProcessor, SyncPayloadProcessor>();
         services.AddScoped<ISyncPayloadJob, SyncPayloadJobProcessor>();
-        services.AddScoped<IFileUploadReconciliationJob, FileUploadReconciliationJob>();
 
         // ── Clerk JWT Bearer Authentication ───────────────────────────────────
         services.AddClerkAuthentication(configuration);

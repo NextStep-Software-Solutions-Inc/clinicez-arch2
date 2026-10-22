@@ -1,4 +1,3 @@
-import type { FileApiConfigResponse, FileUploadIntentResponse } from '../files/types';
 import { api } from './apiClient';
 
 const baseUrl = process.env.EXPO_PUBLIC_API_URL?.replace(/\/+$/, '') ?? '';
@@ -7,65 +6,43 @@ export function hasFileApi(): boolean {
   return baseUrl.length > 0;
 }
 
-export function fetchFileConfig(patientId: string, getToken: () => Promise<string | null>) {
-  return api.get<FileApiConfigResponse>(getToken, `/patients/${patientId}/files/config`);
-}
-
-export function saveFileConfig(
-  patientId: string,
-  getToken: () => Promise<string | null>,
-  encryptedMAK: string,
-) {
-  return api.post<{ success: true }>(getToken, `/patients/${patientId}/files/config`, { encryptedMAK });
-}
-
-export interface CreateUploadIntentRequest {
-  fileId: string;
-  documentTypeId: string;
-  folderId?: string;
-  originalName: string;
-  contentType: string;
+export interface RemoteFileRecordDto {
+  id: string;
+  clientId: string;
+  fileName: string;
+  mimeType?: string | null;
+  extension?: string | null;
   sizeBytes: number;
+  documentTypeId: string;
+  documentTypeName?: string | null;
+  title: string;
+  documentDate?: string | null;
+  facilityName?: string | null;
+  notes?: string | null;
+  uploadedAt: string;
+  storageKey: string;
 }
 
-export function createUploadIntent(
+export function fetchPatientRecords(
   patientId: string,
   getToken: () => Promise<string | null>,
-  payload: Record<string, unknown>,
+  options?: { documentTypeId?: string; searchTerm?: string }
 ) {
-  return api.post<FileUploadIntentResponse>(getToken, `/patients/${patientId}/files/uploads/intent`, payload);
+  const params = new URLSearchParams();
+  if (options?.documentTypeId) params.set('documentTypeId', options.documentTypeId);
+  if (options?.searchTerm) params.set('searchTerm', options.searchTerm);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return api.get<RemoteFileRecordDto[]>(getToken, `/patients/${patientId}/records${qs}`);
 }
 
-export function completeUpload(
-  patientId: string,
-  getToken: () => Promise<string | null>,
-  payload: Record<string, unknown>,
-) {
-  return api.post<{ fileId: string }>(
-    getToken,
-    `/patients/${patientId}/files/uploads/complete`,
-    payload
-  );
-}
-
-export function fetchFiles(
-  patientId: string,
-  getToken: () => Promise<string | null>,
-) {
-  return api.get<{ folders: any[]; files: any[] }>(
-    getToken,
-    `/patients/${patientId}/files`
-  );
-}
-
-export function getFileDownloadUrl(
+export function deletePatientRecord(
   patientId: string,
   fileId: string,
-  getToken: () => Promise<string | null>,
+  getToken: () => Promise<string | null>
 ) {
-  return api.get<{ downloadUrl: string }>(
-    getToken,
-    `/patients/${patientId}/files/${fileId}/download-url`
-  );
+  return api.delete(getToken, `/patients/${patientId}/records/${fileId}`);
 }
 
+export function getPatientRecordStreamUrl(patientId: string, fileId: string): string {
+  return `${baseUrl}/patients/${patientId}/records/${fileId}/stream`;
+}

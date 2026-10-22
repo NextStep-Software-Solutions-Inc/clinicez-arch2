@@ -91,7 +91,7 @@ public class InviteAdminUserCommandHandler(
         var delivery = string.IsNullOrEmpty(request.DeliveryMode) ? "email" : request.DeliveryMode.ToLowerInvariant();
         if (delivery == "email")
         {
-            await invitationNotifier.RequestInvitationAsync(user, role.Name, request.CreatedBy, cancellationToken);
+            invitationNotifier.RequestInvitation(user, role.Name, request.CreatedBy);
         }
 
         var baseUrl = frontendUrlProvider.GetBaseUrl();

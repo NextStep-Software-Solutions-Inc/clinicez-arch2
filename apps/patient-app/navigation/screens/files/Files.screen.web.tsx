@@ -1,8 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -16,31 +14,38 @@ import Badge from '@ui/Badge';
 import Input from '@ui/Input';
 import EmptyState from '@ui/EmptyState';
 import { AppIcon, type IconName } from '@ui/Icon';
-import { ProgressBar, Divider } from '@ui/Primitives';
+import { Divider } from '@ui/Primitives';
 import Screen from '../../../components/layout/Screen';
 import { usePatientId } from 'hooks/usePatientId';
 import { useBreakpoint } from '../../../hooks/useBreakpoint';
 import {
   FileBrowserFile,
-  FileBrowserFolder,
-  FileItemKind,
   deleteItem,
   syncPendingFiles,
   preparePreviewFile,
   renameFile,
-  renameFolder,
   listFolderContents,
   formatBytes,
-  getFileConfig,
 } from '../../../services/files';
+import { resetAndRetryFailedUploads } from '../../../services/sync/uploadQueueService';
 import type { FilesScreenProps } from './navigationTypes';
-import { useFilesBrowser, useFrkCheck } from '../../../hooks/useFilesBrowser';
+import { useFilesBrowser } from '../../../hooks/useFilesBrowser';
 import { FileRow } from '../../../components/files/FileRow.web';
+import { CategoryPillBar } from '../../../components/records/CategoryPillBar';
+import { RecordsSyncBanner } from '../../../components/records/RecordsSyncBanner';
+import { RecordSkeletonList } from '../../../components/records/RecordSkeletonList';
+import { ProvenanceBadge } from '../../../components/records/ProvenanceBadge';
+import { ClinicalUrgencyBadge } from '../../../components/records/ClinicalUrgencyBadge';
+import {
+  CATEGORY_FILTERS,
+  filterAndSearchRecords,
+  matchesCategoryFilter,
+  type CategoryFilterId,
+} from '../../../services/records/categories';
 import RenameModal from '../../../components/ui/RenameModal';
 import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import type { ColorToken } from '../../../constants/theme';
-import useSWR from 'swr';
 
 type SortOption = 'name-asc' | 'name-desc' | 'date-desc' | 'size-desc';
 
@@ -71,43 +76,30 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
   const { getToken } = useClerkAuth();
   const { isDesktop } = useBreakpoint();
 
-  const folderId = route.params?.folderId;
   const [query, setQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState<CategoryFilterId>('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [sortBy, setSortBy] = useState<SortOption>('name-asc');
+  const [sortBy, setSortBy] = useState<SortOption>('date-desc');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{
-    kind: 'file' | 'folder';
     id: string;
     initialName: string;
   } | null>(null);
 
-  // Hook checks and browser state
-  useFrkCheck(patientId);
-  const { contents, isLoading, isRefreshing, refresh, mutate } = useFilesBrowser(
+  // Browser state
+  const { contents, isLoading, error, refresh, mutate } = useFilesBrowser(
     patientId,
-    folderId ?? null,
-    query
-  );
-
-  // Storage config for quota bar
-  const { data: fileConfig } = useSWR(
-    ['files-config-overview', patientId],
-    () => getFileConfig(patientId, getToken),
-    { revalidateOnFocus: false }
+    null,
+    ''
   );
 
   const handleRenameSave = async (newName: string) => {
     if (!renameTarget) return;
     try {
-      if (renameTarget.kind === 'folder') {
-        await renameFolder(patientId, renameTarget.id, newName);
-      } else {
-        await renameFile(patientId, renameTarget.id, newName);
-      }
+      await renameFile(patientId, renameTarget.id, newName);
       setRenameTarget(null);
-      const newContents = await listFolderContents(patientId, folderId ?? null, query, getToken);
+      const newContents = await listFolderContents(patientId, null, query, getToken);
       await mutate(newContents, { revalidate: false });
       syncPendingFiles(patientId, getToken).then(() => mutate()).catch(console.error);
     } catch (e) {
@@ -115,18 +107,18 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
     }
   };
 
-  const handleDelete = async (kind: FileItemKind, id: string) => {
+  const handleDelete = async (id: string) => {
     const confirmed = await dialog.confirm({
-      title: 'Delete item?',
-      message: `Are you sure you want to delete this ${kind}?`,
+      title: 'Delete record?',
+      message: 'Are you sure you want to permanently delete this health record?',
       confirmLabel: 'Delete',
       destructive: true,
     });
     if (!confirmed) return;
 
     try {
-      await deleteItem(patientId, kind, id);
-      const newContents = await listFolderContents(patientId, folderId ?? null, query, getToken);
+      await deleteItem(patientId, id, getToken);
+      const newContents = await listFolderContents(patientId, null, query, getToken);
       await mutate(newContents, { revalidate: false });
       syncPendingFiles(patientId, getToken).then(() => mutate()).catch(console.error);
     } catch (error) {
@@ -139,7 +131,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
     try {
       const result = await syncPendingFiles(patientId, getToken);
       if (result.skipped) {
-        dialog.alert('Backup Waiting', result.reason ?? 'Files will back up when internet is connected.');
+        dialog.alert('Backup Waiting', result.reason ?? 'Records will sync when internet is connected.');
       } else if (result.failed > 0) {
         dialog.alert('Backup Needs Attention', `${result.synced} backed up, ${result.failed} failed.`);
       }
@@ -150,6 +142,18 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
       setIsSyncing(false);
     }
   }, [getToken, patientId, refresh]);
+
+  const handleRetryFailed = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      await resetAndRetryFailedUploads(patientId, getToken);
+      await refresh();
+    } catch (err) {
+      dialog.alert('Retry Failed', err instanceof Error ? err.message : 'Unable to retry uploads.');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [patientId, getToken, refresh]);
 
   const handleDownloadFile = useCallback(
     async (fileId: string) => {
@@ -173,48 +177,53 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
   );
 
   const openUpload = useCallback(() => {
-    navigation.navigate('FilesUploadScreen', { folderId: folderId ?? null });
-  }, [folderId, navigation]);
-
-  const createFolder = useCallback(() => {
-    navigation.navigate('FileFolderFormScreen', { parentId: folderId ?? null });
-  }, [folderId, navigation]);
-
-  const openRoot = useCallback(() => {
-    navigation.navigate('FilesBrowserScreen');
+    navigation.navigate('FilesUploadScreen');
   }, [navigation]);
 
-  const openFolder = useCallback(
-    (id: string) => {
-      navigation.push('FilesBrowserScreen', { folderId: id });
-    },
-    [navigation]
-  );
+  // Derive counts per category pill
+  const categoryCounts = useMemo(() => {
+    const allFiles = contents?.files ?? [];
+    const counts: Partial<Record<CategoryFilterId, number>> = {
+      all: allFiles.length,
+    };
+    for (const file of allFiles) {
+      for (const filter of CATEGORY_FILTERS) {
+        if (filter.id !== 'all' && matchesCategoryFilter(file, filter.id)) {
+          counts[filter.id] = (counts[filter.id] ?? 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }, [contents?.files]);
 
-  // Sorting
-  const sortedFolders = useMemo(() => {
-    const list = [...(contents?.folders ?? [])];
-    list.sort((a, b) => {
-      if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
-      return a.name.localeCompare(b.name);
+  // Client-side multi-field filter and search
+  const filteredAndSortedRecords = useMemo(() => {
+    const filtered = filterAndSearchRecords(contents?.files ?? [], activeCategory, query);
+    filtered.sort((a, b) => {
+      if (sortBy === 'name-desc') {
+        const nameA = a.title || a.name || '';
+        const nameB = b.title || b.name || '';
+        return nameB.localeCompare(nameA);
+      }
+      if (sortBy === 'date-desc') {
+        const dateA = new Date(a.documentDate || a.createdAt || 0).getTime();
+        const dateB = new Date(b.documentDate || b.createdAt || 0).getTime();
+        return dateB - dateA;
+      }
+      if (sortBy === 'size-desc') {
+        return (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0);
+      }
+      const nameA = a.title || a.name || '';
+      const nameB = b.title || b.name || '';
+      return nameA.localeCompare(nameB);
     });
-    return list;
-  }, [contents?.folders, sortBy]);
+    return filtered;
+  }, [contents?.files, activeCategory, query, sortBy]);
 
-  const sortedFiles = useMemo(() => {
-    const list = [...(contents?.files ?? [])];
-    list.sort((a, b) => {
-      if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
-      if (sortBy === 'date-desc') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
-      if (sortBy === 'size-desc') return (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0);
-      return a.name.localeCompare(b.name);
-    });
-    return list;
-  }, [contents?.files, sortBy]);
-
-  const usedBytes = fileConfig?.usedStorageBytes ?? 0;
-  const quotaBytes = fileConfig?.quotaBytes ?? 500 * 1024 * 1024;
-  const usedRatio = quotaBytes > 0 ? Math.min(1, usedBytes / quotaBytes) : 0;
+  // Count failed uploads
+  const failedCount = useMemo(() => {
+    return (contents?.files ?? []).filter((f) => f.syncStatus === 'failed').length;
+  }, [contents?.files]);
 
   // Drop events on root area
   const dropHandlers = {
@@ -247,20 +256,14 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
         <View style={[styles.layoutWrapper, isDesktop && styles.layoutRow, { gap: spacing.xl }]}>
           {/* Main Browser Column */}
           <View style={[styles.mainColumn, { gap: spacing.lg }]}>
-            {/* Action Bar (Upload, New Folder, Sync) */}
+            {/* Action Bar (Upload, Grid/List toggle, Sort, Sync) */}
             <View style={[styles.actionRow, { gap: spacing.md }]}>
               <View style={[styles.leftActions, { gap: spacing.sm }]}>
                 <Button
-                  label="Upload"
+                  label="Add Record"
                   variant="primary"
-                  icon="upload"
+                  icon="plus"
                   onPress={openUpload}
-                />
-                <Button
-                  label="New folder"
-                  variant="outline"
-                  icon="folderPlus"
-                  onPress={createFolder}
                 />
               </View>
 
@@ -297,10 +300,10 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                 <Pressable
                   onPress={() => {
                     setSortBy((curr) => {
+                      if (curr === 'date-desc') return 'name-asc';
                       if (curr === 'name-asc') return 'name-desc';
-                      if (curr === 'name-desc') return 'date-desc';
-                      if (curr === 'date-desc') return 'size-desc';
-                      return 'name-asc';
+                      if (curr === 'name-desc') return 'size-desc';
+                      return 'date-desc';
                     });
                   }}
                   accessibilityRole="button"
@@ -321,27 +324,27 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                 >
                   <AppIcon name="sort" size={sizes.iconSm} color="textSecondary" />
                   <ThemedText variant="smallBold" color="textSecondary">
-                    {sortBy === 'name-asc'
-                      ? 'Name (A-Z)'
-                      : sortBy === 'name-desc'
-                        ? 'Name (Z-A)'
-                        : sortBy === 'date-desc'
-                          ? 'Newest'
-                          : 'Size'}
+                    {sortBy === 'date-desc'
+                      ? 'Newest Date'
+                      : sortBy === 'name-asc'
+                        ? 'Name (A-Z)'
+                        : sortBy === 'name-desc'
+                          ? 'Name (Z-A)'
+                          : 'File Size'}
                   </ThemedText>
                 </Pressable>
 
-                <IconButton
+                <Button
+                  label="Sync Now"
+                  variant="outline"
                   icon="sync"
-                  accessibilityLabel="Sync now"
-                  color="primary"
+                  loading={isSyncing}
                   onPress={handleSync}
-                  disabled={isSyncing}
                 />
               </View>
             </View>
 
-            {/* Breadcrumbs + Search Filter Bar */}
+            {/* Title Bar + Search Filter Bar */}
             <View
               style={[
                 styles.filterBar,
@@ -350,55 +353,15 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                   borderWidth: sizes.borderWidth,
                   borderRadius: radii.lg,
                   backgroundColor: colors.card,
-                  padding: spacing.sm,
+                  padding: spacing.md,
                   gap: spacing.md,
                 },
                 shadows.sm,
               ]}
             >
-              {/* Breadcrumb Trail */}
-              <View style={[styles.crumbRow, { gap: spacing.xs }]}>
-                <Pressable
-                  onPress={openRoot}
-                  accessibilityRole="button"
-                  accessibilityLabel="Root folder"
-                  style={styles.crumbBtn}
-                >
-                  <AppIcon name="home" size={sizes.iconSm} color={!folderId ? 'primary' : 'textMuted'} />
-                  <ThemedText
-                    variant="smallBold"
-                    color={!folderId ? 'primary' : 'textSecondary'}
-                    style={{ marginLeft: spacing.xxs }}
-                  >
-                    All files
-                  </ThemedText>
-                </Pressable>
-
-                {contents?.breadcrumbs?.map((crumb, idx) => {
-                  const isLast = idx === contents.breadcrumbs.length - 1;
-                  return (
-                    <React.Fragment key={crumb.id}>
-                      <ThemedText variant="caption" color="textLight">
-                        /
-                      </ThemedText>
-                      <Pressable
-                        onPress={() => (isLast ? undefined : openFolder(crumb.id))}
-                        disabled={isLast}
-                        accessibilityRole="button"
-                        accessibilityLabel={crumb.name}
-                        style={styles.crumbBtn}
-                      >
-                        <ThemedText
-                          variant="smallBold"
-                          color={isLast ? 'primary' : 'textSecondary'}
-                        >
-                          {crumb.name}
-                        </ThemedText>
-                      </Pressable>
-                    </React.Fragment>
-                  );
-                })}
-              </View>
+              <ThemedText variant="h3" color="primary">
+                Health Records & Documents
+              </ThemedText>
 
               {/* Search input field */}
               <View
@@ -418,7 +381,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                 <Input
                   value={query}
                   onChangeText={setQuery}
-                  placeholder="Search files..."
+                  placeholder="Search records, facility, notes..."
                   containerStyle={{ marginBottom: 0, flex: 1 }}
                 />
                 {query ? (
@@ -429,68 +392,101 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
               </View>
             </View>
 
+            {/* Category Filter Pills */}
+            <CategoryPillBar
+              selectedCategory={activeCategory}
+              onSelectCategory={setActiveCategory}
+              counts={categoryCounts}
+            />
+
+            {/* Sync and Offline Banner */}
+            <RecordsSyncBanner
+              patientId={patientId}
+              pendingCount={contents?.pendingSyncCount ?? 0}
+              failedCount={failedCount}
+              isSyncing={isSyncing}
+              onSync={handleSync}
+              onRetryFailed={handleRetryFailed}
+            />
+
             {/* Browser Content */}
             {isLoading && !contents ? (
-              <View style={[styles.centerLoading, { paddingVertical: spacing['5xl'], gap: spacing.md }]}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <ThemedText variant="body" color="textMuted">
-                  Opening encrypted vault...
-                </ThemedText>
-              </View>
-            ) : sortedFolders.length === 0 && sortedFiles.length === 0 ? (
+              <RecordSkeletonList count={4} />
+            ) : error && !contents ? (
+              <Card padding="lg">
+                <View style={[styles.centerLoading, { gap: spacing.md }]}>
+                  <AppIcon name="alert" size={sizes.avatarMd} color="emergency" />
+                  <ThemedText variant="h3">Unable to load records</ThemedText>
+                  <ThemedText variant="body" color="textMuted" style={{ textAlign: 'center' }}>
+                    {error.message || 'An unexpected error occurred while accessing local records.'}
+                  </ThemedText>
+                  <Button label="Try Again" variant="outline" onPress={refresh} />
+                </View>
+              </Card>
+            ) : filteredAndSortedRecords.length === 0 ? (
               <Card padding="lg">
                 <EmptyState
-                  title={query ? 'No matching documents' : 'No documents in this folder'}
+                  title={query || activeCategory !== 'all' ? 'No matching records' : 'No health records yet'}
                   message={
-                    query
-                      ? 'Try searching with a different keyword or filename.'
-                      : 'Drop files here to upload, or click "Upload" to select health documents.'
+                    query || activeCategory !== 'all'
+                      ? 'Try searching with a different keyword or select another category.'
+                      : 'Drop files here to upload, or click "Add Record" to attach clinical documents.'
                   }
-                  actionLabel={query ? undefined : 'Upload files'}
-                  onActionPress={query ? undefined : openUpload}
+                  actionLabel={query || activeCategory !== 'all' ? 'Reset Filters' : 'Add Record'}
+                  onActionPress={
+                    query || activeCategory !== 'all'
+                      ? () => {
+                          setQuery('');
+                          setActiveCategory('all');
+                        }
+                      : openUpload
+                  }
                 />
               </Card>
             ) : (
               <View style={{ gap: spacing.lg }}>
-                {/* Folders List/Grid */}
-                {sortedFolders.length > 0 && (
-                  <View style={{ gap: spacing.sm }}>
-                    <ThemedText variant="captionBold" color="textMuted" style={{ textTransform: 'uppercase' }}>
-                      Folders ({sortedFolders.length})
-                    </ThemedText>
-                    {viewMode === 'list' ? (
-                      <View style={{ gap: spacing.xs }}>
-                        {sortedFolders.map((f) => (
-                          <FileRow
-                            key={f.id}
-                            item={f}
-                            onPress={() => openFolder(f.id)}
-                            onMove={() =>
-                              navigation.navigate('FileMoveScreen', {
-                                itemKind: 'folder',
-                                itemId: f.id,
-                                currentFolderId: f.parentId,
-                              })
-                            }
-                            onRename={() =>
-                              setRenameTarget({
-                                kind: 'folder',
-                                id: f.id,
-                                initialName: f.name,
-                              })
-                            }
-                            onDelete={() => handleDelete('folder', f.id)}
-                          />
-                        ))}
-                      </View>
-                    ) : (
-                      <View style={[styles.gridRow, { gap: spacing.md }]}>
-                        {sortedFolders.map((folder) => (
+                <View style={{ gap: spacing.sm }}>
+                  <ThemedText variant="captionBold" color="textMuted" style={{ textTransform: 'uppercase' }}>
+                    Records ({filteredAndSortedRecords.length})
+                  </ThemedText>
+                  {viewMode === 'list' ? (
+                    <View style={{ gap: spacing.xs }}>
+                      {filteredAndSortedRecords.map((file) => (
+                        <FileRow
+                          key={file.id}
+                          item={file}
+                          onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
+                          onDownload={() => handleDownloadFile(file.id)}
+                          onRename={() =>
+                            setRenameTarget({
+                              id: file.id,
+                              initialName: file.name,
+                            })
+                          }
+                          onDelete={() => handleDelete(file.id)}
+                        />
+                      ))}
+                    </View>
+                  ) : (
+                    <View style={[styles.gridRow, { gap: spacing.md }]}>
+                      {filteredAndSortedRecords.map((file) => {
+                        const meta = getFileMeta(file);
+                        const displayTitle = file.title?.trim() || file.name;
+                        const rawDate = file.documentDate || file.createdAt;
+                        const dateStr = rawDate
+                          ? new Date(rawDate).toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })
+                          : '';
+
+                        return (
                           <Pressable
-                            key={folder.id}
-                            onPress={() => openFolder(folder.id)}
+                            key={file.id}
+                            onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
                             style={({ pressed }) => [
-                              styles.folderGridCard,
+                              styles.fileGridCard,
                               {
                                 backgroundColor: colors.card,
                                 borderColor: colors.border,
@@ -511,24 +507,21 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                                     width: sizes.controlLg,
                                     height: sizes.controlLg,
                                     borderRadius: radii.md,
-                                    backgroundColor: colors.warningBg,
+                                    backgroundColor: colors.surfaceSubtle,
                                   },
                                 ]}
                               >
-                                <AppIcon name="folder" color="warning" size={sizes.iconLg} />
+                                <AppIcon name={meta.icon} color={meta.colorToken} size={sizes.iconLg} />
                               </View>
                               <View style={{ flexDirection: 'row', gap: spacing.xxs }}>
                                 <IconButton
-                                  icon="edit"
-                                  accessibilityLabel="Rename"
+                                  icon="download"
+                                  accessibilityLabel="Download"
+                                  color="primary"
                                   size={sizes.iconSm}
                                   onPress={(e) => {
                                     e.stopPropagation();
-                                    setRenameTarget({
-                                      kind: 'folder',
-                                      id: folder.id,
-                                      initialName: folder.name,
-                                    });
+                                    handleDownloadFile(file.id);
                                   }}
                                 />
                                 <IconButton
@@ -538,207 +531,71 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                                   size={sizes.iconSm}
                                   onPress={(e) => {
                                     e.stopPropagation();
-                                    handleDelete('folder', folder.id);
+                                    handleDelete(file.id);
                                   }}
                                 />
                               </View>
                             </View>
-                            <ThemedText variant="bodyBold" numberOfLines={1}>
-                              {folder.name}
-                            </ThemedText>
-                            <ThemedText variant="caption" color="textMuted">
-                              {folder.childCount} items
-                            </ThemedText>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                )}
 
-                {/* Files List/Grid */}
-                {sortedFiles.length > 0 && (
-                  <View style={{ gap: spacing.sm }}>
-                    <ThemedText variant="captionBold" color="textMuted" style={{ textTransform: 'uppercase' }}>
-                      Files ({sortedFiles.length})
-                    </ThemedText>
-                    {viewMode === 'list' ? (
-                      <View style={{ gap: spacing.xs }}>
-                        {sortedFiles.map((file) => (
-                          <FileRow
-                            key={file.id}
-                            item={file}
-                            onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
-                            onDownload={() => handleDownloadFile(file.id)}
-                            onMove={() =>
-                              navigation.navigate('FileMoveScreen', {
-                                itemKind: 'file',
-                                itemId: file.id,
-                                currentFolderId: file.folderId,
-                              })
-                            }
-                            onRename={() =>
-                              setRenameTarget({
-                                kind: 'file',
-                                id: file.id,
-                                initialName: file.name,
-                              })
-                            }
-                            onDelete={() => handleDelete('file', file.id)}
-                          />
-                        ))}
-                      </View>
-                    ) : (
-                      <View style={[styles.gridRow, { gap: spacing.md }]}>
-                        {sortedFiles.map((file) => {
-                          const meta = getFileMeta(file);
-                          return (
-                            <Pressable
-                              key={file.id}
-                              onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
-                              style={({ pressed }) => [
-                                styles.fileGridCard,
-                                {
-                                  backgroundColor: colors.card,
-                                  borderColor: colors.border,
-                                  borderWidth: sizes.borderWidth,
-                                  borderRadius: radii.lg,
-                                  padding: spacing.md,
-                                  gap: spacing.sm,
-                                  opacity: pressed ? 0.9 : 1,
-                                },
-                                shadows.sm,
-                              ]}
-                            >
-                              <View style={styles.gridCardTop}>
-                                <View
-                                  style={[
-                                    styles.cardIconBox,
-                                    {
-                                      width: sizes.controlLg,
-                                      height: sizes.controlLg,
-                                      borderRadius: radii.md,
-                                      backgroundColor: colors.surfaceSubtle,
-                                    },
-                                  ]}
-                                >
-                                  <AppIcon name={meta.icon} color={meta.colorToken} size={sizes.iconLg} />
-                                </View>
-                                <View style={{ flexDirection: 'row', gap: spacing.xxs }}>
-                                  <IconButton
-                                    icon="download"
-                                    accessibilityLabel="Download"
-                                    color="primary"
-                                    size={sizes.iconSm}
-                                    onPress={(e) => {
-                                      e.stopPropagation();
-                                      handleDownloadFile(file.id);
-                                    }}
-                                  />
-                                  <IconButton
-                                    icon="trash"
-                                    accessibilityLabel="Delete"
-                                    color="emergency"
-                                    size={sizes.iconSm}
-                                    onPress={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete('file', file.id);
-                                    }}
-                                  />
-                                </View>
-                              </View>
+                            <ThemedText variant="bodyBold" numberOfLines={2}>
+                              {displayTitle}
+                            </ThemedText>
 
-                              <ThemedText variant="bodyBold" numberOfLines={2}>
-                                {file.name}
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+                              <Badge tone="neutral" label={meta.label} size="sm" />
+                              <ClinicalUrgencyBadge
+                                urgency={(file as any).urgency}
+                                isCritical={(file as any).isCritical}
+                              />
+                              <ProvenanceBadge
+                                provenance={(file as any).provenance}
+                                clinicId={file.clinicId}
+                                facilityName={file.facilityName}
+                                compact
+                              />
+                            </View>
+
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <ThemedText variant="caption" color="textMuted">
+                                {file.facilityName || dateStr}
                               </ThemedText>
-
-                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Badge tone="neutral" label={meta.label} size="sm" />
-                                <ThemedText variant="caption" color="textMuted">
-                                  {formatBytes(file.sizeBytes)}
-                                </ThemedText>
-                              </View>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </View>
-                )}
+                              <ThemedText variant="caption" color="textMuted">
+                                {formatBytes(file.sizeBytes)}
+                              </ThemedText>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
               </View>
             )}
           </View>
 
-          {/* Right Rail: Details & Storage Usage (>= 1024 Desktop) */}
+          {/* Right Rail: Health Records Hub (>= 1024 Desktop) */}
           {isDesktop && (
             <View style={[styles.sideRail, { width: 320, gap: spacing.lg }]}>
-              {/* Storage Overview Card */}
               <Card padding="lg" elevation="sm">
                 <View style={{ gap: spacing.md }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <ThemedText variant="h3">Storage Vault</ThemedText>
-                    <IconButton
-                      icon="externalLink"
-                      accessibilityLabel="Open storage screen"
-                      size={sizes.iconSm}
-                      onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
-                    />
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                    <AppIcon name="shield" size={sizes.iconMd} color="primary" />
+                    <ThemedText variant="h3">Health Records</ThemedText>
                   </View>
-
-                  <ProgressBar value={usedRatio} tone={usedRatio > 0.85 ? 'danger' : 'primary'} />
-
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <ThemedText variant="small" color="textMuted">
-                      {formatBytes(usedBytes)} used
-                    </ThemedText>
-                    <ThemedText variant="smallBold">
-                      {formatBytes(quotaBytes)} total
-                    </ThemedText>
-                  </View>
-
+                  <ThemedText variant="small" color="textMuted">
+                    Your clinical documents, lab results, and patient records are cached offline for instant access anywhere.
+                  </ThemedText>
                   <Divider />
-
                   <View style={{ gap: spacing.sm }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                      <AppIcon name="shield" size={sizes.iconSm} color="success" />
-                      <ThemedText variant="small">End-to-end encrypted</ThemedText>
+                      <AppIcon name="checkCircle" size={sizes.iconSm} color="success" />
+                      <ThemedText variant="small">Offline availability</ThemedText>
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                       <AppIcon name="lock" size={sizes.iconSm} color="primary" />
-                      <ThemedText variant="small">Client-side Web Crypto</ThemedText>
+                      <ThemedText variant="small">Server-side PMK encryption</ThemedText>
                     </View>
                   </View>
-
-                  <Button
-                    label="Storage details"
-                    variant="outline"
-                    fullWidth
-                    size="sm"
-                    onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
-                  />
-                </View>
-              </Card>
-
-              {/* Recovery Key Setup info */}
-              <Card padding="md" elevation="sm">
-                <View style={{ gap: spacing.sm }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                    <AppIcon name="key" size={sizes.iconMd} color="primary" />
-                    <ThemedText variant="bodyBold">Recovery Key</ThemedText>
-                  </View>
-                  <ThemedText variant="small" color="textMuted">
-                    Your Master Access Key encrypts all documents. Make sure you have your 16-character key saved.
-                  </ThemedText>
-                  <Button
-                    label="Unlock / Enter Key"
-                    variant="ghost"
-                    size="sm"
-                    onPress={() =>
-                      navigation.navigate('FRKEntryScreen', {
-                        encryptedMAK: fileConfig?.encryptedMAK ?? '',
-                      })
-                    }
-                  />
                 </View>
               </Card>
             </View>
@@ -769,7 +626,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
         onClose={() => setRenameTarget(null)}
         initialName={renameTarget?.initialName ?? ''}
         onSave={handleRenameSave}
-        title={renameTarget?.kind === 'folder' ? 'Rename Folder' : 'Rename File'}
+        title="Rename Record"
       />
     </Screen>
   );
@@ -822,20 +679,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
   },
-  crumbRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  crumbBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
   searchField: {
     flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 200,
+    minWidth: 260,
     height: 38,
   },
   centerLoading: {
@@ -845,11 +692,6 @@ const styles = StyleSheet.create({
   gridRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-  },
-  folderGridCard: {
-    flexBasis: '31%',
-    flexGrow: 1,
-    minWidth: 200,
   },
   fileGridCard: {
     flexBasis: '31%',

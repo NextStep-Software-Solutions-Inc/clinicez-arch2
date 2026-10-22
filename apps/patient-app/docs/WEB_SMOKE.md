@@ -4,8 +4,7 @@ Manual regression pass for the web build (`bun run build:patient-web` or `bunx e
 Run in **Chrome** and one of Safari/Firefox at three widths: **390px** (compact), **820px** (tablet rail), **1440px** (desktop).
 Also repeat the whole pass once in **Dark** appearance (Settings → Appearance).
 
-> File encryption uses Web Crypto, which only exists on **HTTPS or localhost**. Test files over plain `http://<lan-ip>` should
-> show the "needs a secure connection" message instead of crashing.
+> All patient health records and documents are stored offline-first with zero client-side recovery keys.
 
 ## Global shell
 
@@ -33,14 +32,12 @@ Also repeat the whole pass once in **Dark** appearance (Settings → Appearance)
 - [ ] Reschedule and Attach files open as pages and complete successfully.
 - [ ] `/explore/clinics`, `/explore/orgs`, details pages → `/booking/draft` completes a booking (summary card sticky at ≥ 1024px).
 
-## Files (online-first)
+## Records (offline-first health records hub)
 
-- [ ] `/files` list/grid toggle, breadcrumbs, search, hover row actions (rename/move/delete/download) – no swipe needed.
-- [ ] First visit: recovery-key setup (`/files/frk-setup`) shows key + copy button; on another browser `/files/frk-entry` unlocks with the key.
-- [ ] `/files/upload`: browse + drag-and-drop, per-file progress, file appears in the list after upload; 25 MB limit and quota errors are readable.
-- [ ] `/files/view/:fileId`: image, PDF and "other" (download card) previews; Download works; no `file://` errors; Blob URLs revoked on close.
-- [ ] New folder, rename, move (`/files/move`), delete; changes persist after reload (server sync).
-- [ ] `/files/storage` shows usage.
+- [ ] `/records` category filter pills (All, Lab Results, Prescriptions, Lab Requests, Certificates, Outside Uploads), search, provenance badges, and offline indicators.
+- [ ] `/records/upload`: file/photo picker, category selector, title, date, notes; instant local preview with background sync; 25 MB limit.
+- [ ] `/records/view/:fileId`: image, PDF and preview; works seamlessly offline once cached.
+- [ ] Delete record: deletes local file and purges metadata cleanly.
 
 ## Profile & records
 

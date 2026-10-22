@@ -66,7 +66,7 @@ public class ResendStaffInvitationCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        await invitationNotifier.RequestInvitationAsync(tenant, member, StaffMemberMapping.RoleName(member, profile), profile?.Facility?.Name, cancellationToken);
+        invitationNotifier.RequestInvitation(tenant, member, StaffMemberMapping.RoleName(member, profile), profile?.Facility?.Name);
 
         return StaffMemberMapping.ToDto(member, profile, profile?.Facility?.Name, now);
     }

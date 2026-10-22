@@ -21,6 +21,10 @@ export const inboxLabResults = sqliteTable(
     resultedAt: integer('resulted_at', { mode: 'timestamp_ms' }).notNull(),
     /** Short-lived download URL; refreshed on every sync */
     fileUrl: text('file_url'),
+    /** Local cached file path in sandboxed blob storage */
+    localPath: text('local_path'),
+    /** Whether the file binary is cached locally for offline viewing */
+    isCached: integer('is_cached', { mode: 'boolean' }).notNull().default(false),
     /** JSON-encoded `{ panel, name, value, unit, referenceRange, flag }[]` */
     observationsJson: text('observations_json').notNull().default('[]'),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),

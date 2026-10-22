@@ -17,12 +17,7 @@ public interface IFrontendUrlProvider
 public interface IStaffInvitationNotifier
 {
     /// <summary>
-    /// Renders and delivers the invitation email directly.
-    /// </summary>
-    Task RequestInvitationAsync(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName, CancellationToken ct = default);
-
-    /// <summary>
-    /// Synchronous compatibility wrapper.
+    /// Enqueues the invitation email into Hangfire for background delivery.
     /// </summary>
     void RequestInvitation(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName);
 }
@@ -32,7 +27,7 @@ public sealed class StaffInvitationNotifier(
     IFrontendUrlProvider frontendUrl,
     ILogger<StaffInvitationNotifier> logger) : IStaffInvitationNotifier
 {
-    public async Task RequestInvitationAsync(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName, CancellationToken ct = default)
+    public void RequestInvitation(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName)
     {
         var baseUrl = frontendUrl.GetBaseUrl();
         if (baseUrl is null)
@@ -50,28 +45,19 @@ public sealed class StaffInvitationNotifier(
         };
         if (!string.IsNullOrWhiteSpace(facilityName)) model["facilityName"] = facilityName;
 
-        try
-        {
-            await notifications.RequestEmailAsync(
-                new NotificationEmailRequestedPayload
-                {
-                    To = member.Email,
-                    Subject = $"You've been invited to join {SingleLine(tenant.Name)} on Clinic EZ",
-                    TemplateKey = EmailTemplateKeys.StaffInvitation,
-                    Model = model,
-                    FromFacilityName = tenant.Name
-                },
-                member.Id,
-                ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to deliver staff invitation email to {Email} for member {MemberId}: {ErrorMessage}", member.Email, member.Id, ex.Message);
-        }
-    }
+        var jobId = notifications.EnqueueEmail(
+            new NotificationEmailRequestedPayload
+            {
+                To = member.Email,
+                Subject = $"You've been invited to join {SingleLine(tenant.Name)} on Clinic EZ",
+                TemplateKey = EmailTemplateKeys.StaffInvitation,
+                Model = model,
+                FromFacilityName = tenant.Name
+            },
+            member.Id);
 
-    public void RequestInvitation(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName) =>
-        RequestInvitationAsync(tenant, member, roleLabel, facilityName, CancellationToken.None).GetAwaiter().GetResult();
+        logger.LogInformation("Enqueued staff invitation email job {JobId} for {Email} ({MemberId}).", jobId, member.Email, member.Id);
+    }
 
     private static string SingleLine(string value) =>
         new(value.Select(c => char.IsControl(c) ? ' ' : c).ToArray());

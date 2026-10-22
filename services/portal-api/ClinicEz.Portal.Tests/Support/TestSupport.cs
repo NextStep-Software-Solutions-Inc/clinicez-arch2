@@ -10,10 +10,15 @@ using ClinicEz.Portal.Application.Features.Ownership;
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Portal.Infrastructure.Notifications;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Infrastructure.Persistence.Interceptors;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Interoperability;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -43,20 +48,30 @@ internal static class TestSupport
     public static IStaffInvitationNotifier InvitationNotifier(
         ApplicationDbContext context,
         string? frontendUrl = "https://app.clinicez.test",
-        IEmailSender? emailSender = null) =>
-        new StaffInvitationNotifier(
-            new NotificationService(new EmailTemplateRenderer(), emailSender ?? new RecordingEmailSender(), NullLogger<NotificationService>.Instance),
+        IEmailSender? emailSender = null)
+    {
+        var sender = emailSender ?? new RecordingEmailSender();
+        var job = new EmailDispatchJob(new EmailTemplateRenderer(), sender, NullLogger<EmailDispatchJob>.Instance);
+        var notifications = new TestNotificationService(job);
+        return new StaffInvitationNotifier(
+            notifications,
             new FixedFrontendUrl(frontendUrl),
             NullLogger<StaffInvitationNotifier>.Instance);
+    }
 
     public static IAdminInvitationNotifier AdminInvitationNotifier(
         ApplicationDbContext context,
         string? frontendUrl = "https://app.clinicez.test",
-        IEmailSender? emailSender = null) =>
-        new AdminInvitationNotifier(
-            new NotificationService(new EmailTemplateRenderer(), emailSender ?? new RecordingEmailSender(), NullLogger<NotificationService>.Instance),
+        IEmailSender? emailSender = null)
+    {
+        var sender = emailSender ?? new RecordingEmailSender();
+        var job = new EmailDispatchJob(new EmailTemplateRenderer(), sender, NullLogger<EmailDispatchJob>.Instance);
+        var notifications = new TestNotificationService(job);
+        return new AdminInvitationNotifier(
+            notifications,
             new FixedFrontendUrl(frontendUrl),
             NullLogger<AdminInvitationNotifier>.Instance);
+    }
 
     public static CreateFacilityCommandHandler CreateFacilityHandler(
         ApplicationDbContext context,
@@ -246,4 +261,29 @@ public sealed class RecordingEmailSender : IEmailSender
         Sent.Add(message);
         return Task.CompletedTask;
     }
+}
+
+public sealed class TestNotificationService(IEmailDispatchJob job) : INotificationService
+{
+    public List<(NotificationEmailRequestedPayload Payload, Guid CorrelationId)> Enqueued { get; } = [];
+
+    public string EnqueueEmail(NotificationEmailRequestedPayload payload, Guid correlationId)
+    {
+        Enqueued.Add((payload, correlationId));
+        job.SendEmailAsync(payload, correlationId, CancellationToken.None).GetAwaiter().GetResult();
+        return Guid.NewGuid().ToString("N");
+    }
+}
+
+public sealed class TestBackgroundJobClient : IBackgroundJobClient
+{
+    public List<Job> EnqueuedJobs { get; } = [];
+
+    public string Create(Job job, IState state)
+    {
+        EnqueuedJobs.Add(job);
+        return Guid.NewGuid().ToString("N");
+    }
+
+    public bool ChangeState(string jobId, IState state, string expectedState) => true;
 }

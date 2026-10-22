@@ -434,9 +434,12 @@ public class SendContactMessageCommandTests : IDisposable
         settingsMock.Setup(s => s.GetSettingValueAsync("Mailer:ContactInbox", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(inbox ?? string.Empty);
 
+        var job = new EmailDispatchJob(new EmailTemplateRenderer(), _sender, NullLogger<EmailDispatchJob>.Instance);
+        var notifications = new TestNotificationService(job);
+
         return new(
             _context,
-            new NotificationService(new EmailTemplateRenderer(), _sender, NullLogger<NotificationService>.Instance),
+            notifications,
             settingsMock.Object);
     }
 
@@ -477,15 +480,39 @@ public class SendContactMessageCommandTests : IDisposable
     }
 }
 
-public class NotificationServiceTests
+public class HangfireNotificationServiceTests
 {
     [Fact]
-    public async Task RequestEmailAsync_RendersTemplateAndDispatchesDirectlyViaEmailSender()
+    public void EnqueueEmail_DelegatesToBackgroundJobClient_AndReturnsJobId()
+    {
+        var client = new TestBackgroundJobClient();
+        var service = new HangfireNotificationService(client);
+
+        var correlationId = Guid.NewGuid();
+        var payload = new NotificationEmailRequestedPayload
+        {
+            To = "admin@example.com",
+            Subject = "Test Subject",
+            TemplateKey = EmailTemplateKeys.AdminInvitation,
+            Model = new Dictionary<string, string> { ["role"] = "Admin" }
+        };
+
+        var jobId = service.EnqueueEmail(payload, correlationId);
+
+        Assert.NotNull(jobId);
+        Assert.Single(client.EnqueuedJobs);
+    }
+}
+
+public class EmailDispatchJobTests
+{
+    [Fact]
+    public async Task SendEmailAsync_RendersTemplateAndDispatchesViaEmailSender()
     {
         var sender = new RecordingEmailSender();
-        var service = new NotificationService(new EmailTemplateRenderer(), sender, NullLogger<NotificationService>.Instance);
+        var job = new EmailDispatchJob(new EmailTemplateRenderer(), sender, NullLogger<EmailDispatchJob>.Instance);
 
-        await service.RequestEmailAsync(
+        await job.SendEmailAsync(
             new NotificationEmailRequestedPayload
             {
                 To = "admin@example.com",
@@ -498,7 +525,8 @@ public class NotificationServiceTests
                     ["message"] = "Test contact body"
                 }
             },
-            Guid.NewGuid());
+            Guid.NewGuid(),
+            CancellationToken.None);
 
         var mail = Assert.Single(sender.Sent);
         Assert.Equal("admin@example.com", mail.To);
@@ -508,29 +536,47 @@ public class NotificationServiceTests
     }
 
     [Fact]
-    public void RequestEmail_SyncCompatibility_DispatchesDirectly()
+    public async Task SendEmailAsync_InvalidRecipientOrSubject_IsDroppedWithoutThrowing()
     {
         var sender = new RecordingEmailSender();
-        var service = new NotificationService(new EmailTemplateRenderer(), sender, NullLogger<NotificationService>.Instance);
+        var job = new EmailDispatchJob(new EmailTemplateRenderer(), sender, NullLogger<EmailDispatchJob>.Instance);
 
-        service.RequestEmail(
+        await job.SendEmailAsync(
             new NotificationEmailRequestedPayload
             {
-                To = "sync@example.com",
-                Subject = "Contact Message",
-                TemplateKey = EmailTemplateKeys.ContactMessage,
-                Model = new Dictionary<string, string>
-                {
-                    ["name"] = "Bob",
-                    ["email"] = "bob@example.com",
-                    ["message"] = "Sync contact body"
-                }
+                To = "not-an-email",
+                Subject = "Bad Recipient",
+                TemplateKey = EmailTemplateKeys.ContactMessage
             },
-            Guid.NewGuid());
+            Guid.NewGuid(),
+            CancellationToken.None);
 
-        var mail = Assert.Single(sender.Sent);
-        Assert.Equal("sync@example.com", mail.To);
-        Assert.Contains("Sync contact body", mail.HtmlBody);
+        Assert.Empty(sender.Sent);
+    }
+
+    [Fact]
+    public async Task SendEmailAsync_SmtpFailure_ThrowsException_ToTriggerHangfireRetry()
+    {
+        var sender = new RecordingEmailSender { FailWith = new InvalidOperationException("SMTP connection timeout") };
+        var job = new EmailDispatchJob(new EmailTemplateRenderer(), sender, NullLogger<EmailDispatchJob>.Instance);
+
+        var payload = new NotificationEmailRequestedPayload
+        {
+            To = "admin@example.com",
+            Subject = "Contact Message",
+            TemplateKey = EmailTemplateKeys.ContactMessage,
+            Model = new Dictionary<string, string>
+            {
+                ["name"] = "Alice",
+                ["email"] = "alice@example.com",
+                ["message"] = "Test contact body"
+            }
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            job.SendEmailAsync(payload, Guid.NewGuid(), CancellationToken.None));
+
+        Assert.Equal("SMTP connection timeout", ex.Message);
     }
 }
 

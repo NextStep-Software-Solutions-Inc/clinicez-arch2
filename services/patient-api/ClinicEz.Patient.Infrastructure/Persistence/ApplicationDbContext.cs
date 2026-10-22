@@ -23,7 +23,6 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
 
     // ── Patient identity & profile ──────────────────────────────────────────
     public DbSet<Patient> Patients => Set<Patient>();
-    public DbSet<PatientStorageProfile> PatientStorageProfiles => Set<PatientStorageProfile>();
     public DbSet<PatientGovernmentId> PatientGovernmentIds => Set<PatientGovernmentId>();
     public DbSet<PatientAddress> PatientAddresses => Set<PatientAddress>();
     public DbSet<EmergencyContact> EmergencyContacts => Set<EmergencyContact>();
@@ -75,7 +74,6 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
     public DbSet<ShareCodeFailure> ShareCodeFailures => Set<ShareCodeFailure>();
 
     // ── Files & Appointments ────────────────────────────────────────────────
-    public DbSet<FileFolder> FileFolders => Set<FileFolder>();
     public DbSet<FileRecord> FileRecords => Set<FileRecord>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
 

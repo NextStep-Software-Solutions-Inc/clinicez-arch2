@@ -136,7 +136,7 @@ public class InviteStaffMemberCommandHandler(
 
                 if (request.SendEmail)
                 {
-                    await invitationNotifier.RequestInvitationAsync(tenant, existing, StaffMemberMapping.RoleName(existing, existingProfile), facilityName, cancellationToken);
+                    invitationNotifier.RequestInvitation(tenant, existing, StaffMemberMapping.RoleName(existing, existingProfile), facilityName);
                 }
 
                 return StaffMemberMapping.ToDto(existing, existingProfile, facilityName, now);
@@ -183,7 +183,7 @@ public class InviteStaffMemberCommandHandler(
 
         if (request.SendEmail)
         {
-            await invitationNotifier.RequestInvitationAsync(tenant, newMember, StaffMemberMapping.RoleName(newMember, profile), facilityName, cancellationToken);
+            invitationNotifier.RequestInvitation(tenant, newMember, StaffMemberMapping.RoleName(newMember, profile), facilityName);
         }
 
         return StaffMemberMapping.ToDto(newMember, profile, facilityName, now);

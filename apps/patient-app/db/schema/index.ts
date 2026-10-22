@@ -29,10 +29,11 @@ export * from './clinicMemberships';
 export * from './clinicOrganizationLinks';
 export * from './clinics';
 export * from './bookingDrafts';
-export * from './fileFolders';
 export * from './documentTypes';
-export * from './fileUploadConfig';
 export * from './filesMetadata';
+export * from './localHealthRecords';
+export * from './localDocuments';
+export * from './uploadQueue';
 
 // Part B — HCW Entry (read-only for patient)
 export * from './vitalSigns';
