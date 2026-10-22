@@ -4397,7 +4397,7 @@ export function getOtherRoomCoverageText(
 
   if (otherRoomNames) {
     return isSelected
-      ? `Also in ${otherRoomNames} Â· Will cover both`
+      ? `Also in ${otherRoomNames} · Will cover both`
       : `Currently in ${otherRoomNames}`;
   }
 

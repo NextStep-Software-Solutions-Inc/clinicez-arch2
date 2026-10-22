@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable, Image } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
@@ -593,7 +593,7 @@ export default function GeneralSettingsTab({
                         ? 'The FDI odontogram, tooth surface tracking, and dental procedure catalog are permanently active for Dental specialty practices.'
                         : effectiveSpecialty === 'Medical'
                         ? 'The dental chart module is inactive in Medical Mode. Select Dental or Multi-Specialty to activate dental charting.'
-                        : 'Enables adult (11â€“48) and child (51â€“85) FDI odontograms, tooth surface tracking, and quick-order dental procedures in consultation workstations and patient medical charts.'}
+                        : 'Enables adult (11–48) and child (51–85) FDI odontograms, tooth surface tracking, and quick-order dental procedures in consultation workstations and patient medical charts.'}
                     </ThemedText>
                   </View>
 

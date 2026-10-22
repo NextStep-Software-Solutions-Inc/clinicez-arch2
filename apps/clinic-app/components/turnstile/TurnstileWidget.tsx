@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import { theme } from '../../constants/theme';
 
 export const OFFICIAL_CLOUDFLARE_TEST_SITEKEY = '1x00000000000000000000AA';
 export const LOCAL_OFFLINE_BYPASS_TOKEN = 'LOCAL-OFFLINE-BYPASS';
+export const TURNSTILE_API_HOST = 'challenges.cloudflare.com';
 
 export interface TurnstileWidgetProps {
   siteKey?: string | null;
@@ -109,7 +110,8 @@ export default function TurnstileWidget({
       const existingScript = document.querySelector('script[src*="turnstile/v0/api.js"]');
       if (!existingScript) {
         const script = document.createElement('script');
-        script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+        const host = TURNSTILE_API_HOST;
+        script.src = `https://${host}/turnstile/v0/api.js?render=explicit`;
         script.async = true;
         script.defer = true;
         script.onload = () => {
