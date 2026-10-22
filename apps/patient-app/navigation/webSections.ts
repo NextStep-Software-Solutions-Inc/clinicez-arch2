@@ -1,5 +1,21 @@
-import { getFocusedRouteNameFromRoute, type NavigationState, type ParamListBase } from '@react-navigation/native';
+import type { NavigationState, ParamListBase } from '@react-navigation/native';
 import type { IconName } from '@ui/Icon';
+
+function getFocusedRouteNameFromRoute(route: {
+  state?: { index?: number; routes: Array<{ name: string }> };
+  params?: { screen?: string; state?: { index?: number; routes: Array<{ name: string }> } };
+}): string | undefined {
+  const state = route.state ?? route.params?.state;
+  const params = route.params;
+  if (state && Array.isArray(state.routes) && state.routes.length > 0) {
+    const idx = state.index ?? state.routes.length - 1;
+    return state.routes[idx]?.name;
+  }
+  if (params && typeof params.screen === 'string') {
+    return params.screen;
+  }
+  return undefined;
+}
 
 /**
  * Web workstation navigation model (sidebar + compact tab bar).
@@ -58,13 +74,89 @@ const PROFILE_ROUTES = new Set([
   'ClinicalAssessmentsScreen', 'PhysicalExamScreen', 'NcdQuestionnaireScreen',
 ]);
 
+const NESTED_TAB_PUSH_TITLES: Record<string, string> = {
+  FilesUploadScreen: 'Add Health Record',
+  FileViewerScreen: 'Preview',
+  ExternalOpenConsentScreen: 'Open in Another App',
+};
+
+const ROOT_TAB_HEADERS: Record<string, { title: string; subtitle: string }> = {
+  HomeScreen: { title: 'Clinic EZ', subtitle: 'Patient Portal' },
+  AppointmentsScreen: { title: 'My Appointments', subtitle: 'Patient Portal' },
+  FilesScreen: { title: 'Health Records', subtitle: 'Patient Portal' },
+  ProfileScreen: { title: 'My Profile', subtitle: 'Patient Portal' },
+};
+
+export interface WebHeaderResolution {
+  isRootTab: boolean;
+  isNestedTabPush: boolean;
+  tabKey?: WebSectionKey;
+  title?: string;
+  subtitle?: string;
+}
+
+/**
+ * Inspects the Main stack and nested BottomTabs state to determine whether the active
+ * screen is a root bottom-tab screen, a nested pushed screen inside a tab stack
+ * (e.g. FilesUploadScreen), or a pushed MainStack screen.
+ */
+export function resolveWebHeaderState(
+  state: NavigationState<ParamListBase>,
+  descriptors?: Record<string, { options: { title?: string } }>,
+): WebHeaderResolution {
+  const route = state.routes[state.index];
+  if (!route) {
+    return { isRootTab: true, isNestedTabPush: false, tabKey: 'HomeScreen', title: 'Clinic EZ', subtitle: 'Patient Portal' };
+  }
+
+  if (route.name === 'BottomTabs') {
+    const rawTab = getFocusedRouteNameFromRoute(route as any) ?? 'HomeScreen';
+    const tabKey: WebSectionKey = (
+      ['HomeScreen', 'AppointmentsScreen', 'FilesScreen', 'ProfileScreen'] as const
+    ).includes(rawTab as 'HomeScreen')
+      ? (rawTab as WebSectionKey)
+      : 'HomeScreen';
+
+    const tabState = route.state as NavigationState<ParamListBase> | undefined;
+    const activeTabRoute = tabState?.routes[tabState.index ?? 0];
+    const nestedFromRoute = activeTabRoute ? getFocusedRouteNameFromRoute(activeTabRoute as any) : undefined;
+    const nestedFromParams = (route.params as any)?.params?.screen as string | undefined;
+    const nestedScreenName = nestedFromRoute ?? nestedFromParams;
+
+    if (nestedScreenName && nestedScreenName in NESTED_TAB_PUSH_TITLES) {
+      return {
+        isRootTab: false,
+        isNestedTabPush: true,
+        tabKey,
+        title: NESTED_TAB_PUSH_TITLES[nestedScreenName],
+      };
+    }
+
+    const headerMeta = ROOT_TAB_HEADERS[tabKey] ?? ROOT_TAB_HEADERS.HomeScreen;
+    return {
+      isRootTab: true,
+      isNestedTabPush: false,
+      tabKey,
+      title: headerMeta.title,
+      subtitle: headerMeta.subtitle,
+    };
+  }
+
+  const descriptorTitle = descriptors?.[route.key]?.options.title;
+  return {
+    isRootTab: false,
+    isNestedTabPush: false,
+    title: descriptorTitle ?? route.name,
+  };
+}
+
 /** Which sidebar item is active for the focused route of the Main stack. */
 export function resolveActiveSection(state: NavigationState<ParamListBase>): WebSectionKey {
   const route = state.routes[state.index];
   if (!route) return 'HomeScreen';
 
   if (route.name === 'BottomTabs') {
-    const tab = getFocusedRouteNameFromRoute(route) ?? 'HomeScreen';
+    const tab = getFocusedRouteNameFromRoute(route as any) ?? 'HomeScreen';
     return (['HomeScreen', 'AppointmentsScreen', 'FilesScreen', 'ProfileScreen'] as const).includes(
       tab as 'HomeScreen',
     )
@@ -80,9 +172,10 @@ export function resolveActiveSection(state: NavigationState<ParamListBase>): Web
   return 'HomeScreen';
 }
 
-/** True when the focused Main-stack route is the tab container (tab pages render their own header). */
+/** True when the focused Main-stack route is a root tab screen inside BottomTabs. */
 export function isTabRoute(state: NavigationState<ParamListBase>): boolean {
-  return state.routes[state.index]?.name === 'BottomTabs';
+  const resolved = resolveWebHeaderState(state);
+  return resolved.isRootTab;
 }
 
 /** Navigate to a top-level section from anywhere in the Main stack. */

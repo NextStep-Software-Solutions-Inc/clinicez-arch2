@@ -1,7 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -193,9 +192,14 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
       })}
 
       <View style={{ gap: spacing.xl, paddingVertical: spacing.md }}>
-        <ThemedText variant="h2" color="primary">
-          Add Health Record
-        </ThemedText>
+        <View style={{ gap: spacing.xxs }}>
+          <ThemedText variant="h2" color="primary">
+            Add Health Record
+          </ThemedText>
+          <ThemedText variant="small" color="textSecondary">
+            Attach a lab result, prescription, certificate, or diagnostic image to your records.
+          </ThemedText>
+        </View>
 
         {/* Error banner */}
         {errorBanner ? (
@@ -332,11 +336,7 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
           <ThemedText variant="smallBold" color="textSecondary">
             RECORD CATEGORY *
           </ThemedText>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={[styles.typeList, { gap: spacing.sm }]}
-          >
+          <View style={[styles.typeList, { gap: spacing.sm }]}>
             {CATEGORIES.map((cat) => {
               const selected = cat.id === category;
               return (
@@ -345,6 +345,7 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
                   onPress={() => setCategory(cat.id)}
                   accessibilityRole="button"
                   accessibilityLabel={cat.label}
+                  accessibilityState={{ selected }}
                   style={[
                     styles.typeChip,
                     {
@@ -365,7 +366,7 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </View>
         </View>
 
         {/* Title */}
@@ -378,6 +379,7 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
             onChangeText={setTitle}
             placeholder="e.g. Complete Blood Count (CBC)"
             maxLength={200}
+            containerStyle={{ marginBottom: 0 }}
           />
         </View>
 
@@ -399,6 +401,7 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
             onChangeText={setFacilityName}
             placeholder="e.g. St. Luke's Medical Center"
             maxLength={200}
+            containerStyle={{ marginBottom: 0 }}
           />
         </View>
 
@@ -414,7 +417,7 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
             multiline
             numberOfLines={3}
             maxLength={1000}
-            containerStyle={{ minHeight: 80 }}
+            containerStyle={{ minHeight: 80, marginBottom: 0 }}
           />
         </View>
 
@@ -450,6 +453,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   typeList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingVertical: 2,
   },
   typeChip: {

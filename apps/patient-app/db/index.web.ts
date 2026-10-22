@@ -149,6 +149,15 @@ function ensureRequiredColumns(rawDb: Database): boolean {
       { name: 'unique_prescription_security_code', type: 'text' },
       { name: 'gamot_coverage_amount', type: 'real' },
     ],
+    files_metadata: [
+      { name: 'title', type: 'text' },
+      { name: 'document_date', type: 'text' },
+      { name: 'facility_name', type: 'text' },
+      { name: 'notes', type: 'text' },
+      { name: 'is_cached', type: 'integer', defaultValue: '0' },
+      { name: 'last_sync_error', type: 'text' },
+      { name: 'retry_count', type: 'integer', defaultValue: '0' },
+    ],
   };
 
   for (const [table, cols] of Object.entries(tableColumns)) {

@@ -17,6 +17,7 @@ export const iconNames = [
   'notificationsOff',
   'settings',
   'menu',
+  'grid',
   'back',
   'forward',
   'chevronDown',

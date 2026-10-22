@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useMemo } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useNetInfo } from '@react-native-community/netinfo';
@@ -17,7 +17,6 @@ import OfflineBanner from '../../components/appointments/OfflineBanner';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { usePatientId } from '../../hooks/usePatientId';
-import { useNotificationContext } from '../../contexts/NotificationContext';
 import { db } from '../../db/index';
 import { bookingDrafts } from '../../db/schema/bookingDrafts';
 import { clinics as clinicsTable } from '../../db/schema/clinics';
@@ -76,7 +75,6 @@ export default function AppointmentsScreenWeb() {
   const { getToken } = useClerkAuth();
   const netInfo = useNetInfo();
   const { isDesktop, isCompact } = useBreakpoint();
-  const { unreadCount } = useNotificationContext();
 
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
@@ -265,7 +263,7 @@ export default function AppointmentsScreenWeb() {
         styles.scrollContent,
         {
           padding: isCompact ? spacing.md : spacing['2xl'],
-          gap: spacing['2xl'],
+          gap: isCompact ? spacing.lg : spacing['2xl'],
           paddingBottom: spacing['4xl'],
         },
       ]}
@@ -280,55 +278,17 @@ export default function AppointmentsScreenWeb() {
             <Badge label="CARE SCHEDULE" tone="primary" size="sm" />
             {activeTodayItem && <Badge label="Visit Today" tone="success" size="sm" />}
           </View>
-          <ThemedText variant="display">Appointments & Visits</ThemedText>
-          <ThemedText variant="bodyLarge" color="textSecondary">
+          <ThemedText variant={isCompact ? 'h1' : 'display'}>Appointments & Visits</ThemedText>
+          <ThemedText variant={isCompact ? 'body' : 'bodyLarge'} color="textSecondary">
             Track your scheduled consultations, review past care history, and resume booking drafts.
           </ThemedText>
         </View>
 
-        <View style={[styles.headerActions, { gap: spacing.md }]}>
-          {isCompact && (
-            <View style={styles.compactShortcuts}>
-              <Pressable
-                onPress={() => navigation.navigate('Main', { screen: 'NotificationScreen' })}
-                accessibilityRole="button"
-                accessibilityLabel="Notifications"
-                style={(state: any) => [
-                  styles.iconButton,
-                  {
-                    backgroundColor: state.hovered ? colors.surfaceSubtle : colors.transparent,
-                    borderColor: colors.border,
-                    borderRadius: radii.md,
-                  },
-                ]}
-              >
-                <AppIcon
-                  name={unreadCount > 0 ? 'notificationsActive' : 'notifications'}
-                  size={sizes.iconMd}
-                  color="text"
-                />
-              </Pressable>
-              <Pressable
-                onPress={() => navigation.navigate('Main', { screen: 'SettingsScreen' })}
-                accessibilityRole="button"
-                accessibilityLabel="Settings"
-                style={(state: any) => [
-                  styles.iconButton,
-                  {
-                    backgroundColor: state.hovered ? colors.surfaceSubtle : colors.transparent,
-                    borderColor: colors.border,
-                    borderRadius: radii.md,
-                  },
-                ]}
-              >
-                <AppIcon name="settings" size={sizes.iconMd} color="text" />
-              </Pressable>
-            </View>
-          )}
+        <View style={[styles.headerActions, { gap: spacing.sm }]}>
           <Button
             label="Refresh"
             variant="outline"
-            size="md"
+            size={isCompact ? 'sm' : 'md'}
             icon="refresh"
             loading={isRefreshing}
             onPress={loadAppointments}
@@ -336,7 +296,7 @@ export default function AppointmentsScreenWeb() {
           <Button
             label="Book Appointment"
             variant="primary"
-            size="md"
+            size={isCompact ? 'sm' : 'md'}
             icon="plus"
             onPress={handleBookNew}
           />
@@ -437,7 +397,7 @@ export default function AppointmentsScreenWeb() {
         >
           <AppIcon name="search" size={sizes.iconSm} color="textMuted" />
           <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
+            style={[styles.searchInput, { color: colors.text }, { outlineStyle: 'none' } as object]}
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Search by clinic, doctor, or reason..."
@@ -512,6 +472,7 @@ export default function AppointmentsScreenWeb() {
           </View>
         ) : (
           <EmptyState
+            icon="calendar"
             title="No booking drafts"
             message="You don't have any pending drafts. Choose a clinic to start booking an appointment."
             actionLabel="Find a Clinic"
@@ -721,6 +682,7 @@ export default function AppointmentsScreenWeb() {
         </View>
       ) : (
         <EmptyState
+          icon="calendar"
           title={query ? 'No matching appointments' : `No ${selectedTab} visits`}
           message={
             query
@@ -754,8 +716,10 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   headerLeft: {
-    gap: 6,
+    flex: 1,
+    minWidth: 240,
     maxWidth: 680,
+    gap: 6,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -766,17 +730,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-  },
-  compactShortcuts: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  iconButton: {
-    borderWidth: 1,
-    padding: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   todayBannerHeader: {
     flexDirection: 'row',
@@ -807,14 +760,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   searchBox: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
-    minWidth: 280,
+    minWidth: 240,
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
   },
   grid: {
     flexDirection: 'row',

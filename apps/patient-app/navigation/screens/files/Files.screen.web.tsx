@@ -74,7 +74,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
-  const { isDesktop } = useBreakpoint();
+  const { isDesktop, isCompact } = useBreakpoint();
 
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<CategoryFilterId>('all');
@@ -248,7 +248,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
         style={[
           styles.container,
           {
-            padding: spacing.xl,
+            padding: isCompact ? spacing.md : spacing['2xl'],
             backgroundColor: isDraggingOver ? colors.surfaceHighlight : colors.background,
           },
         ]}
@@ -256,18 +256,67 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
         <View style={[styles.layoutWrapper, isDesktop && styles.layoutRow, { gap: spacing.xl }]}>
           {/* Main Browser Column */}
           <View style={[styles.mainColumn, { gap: spacing.lg }]}>
-            {/* Action Bar (Upload, Grid/List toggle, Sort, Sync) */}
-            <View style={[styles.actionRow, { gap: spacing.md }]}>
-              <View style={[styles.leftActions, { gap: spacing.sm }]}>
+            {/* Page Header + Primary Actions */}
+            <View style={[styles.headerRow, { gap: spacing.md }]}>
+              <View style={styles.headerTextWrap}>
+                <ThemedText variant={isCompact ? 'h1' : 'display'}>
+                  Health Records & Documents
+                </ThemedText>
+                <ThemedText variant="body" color="textSecondary">
+                  Access lab results, prescriptions, medical certificates, and uploaded clinical documents.
+                </ThemedText>
+              </View>
+
+              <View style={[styles.headerActions, { gap: spacing.sm }]}>
+                <Button
+                  label="Sync Now"
+                  variant="outline"
+                  size={isCompact ? 'sm' : 'md'}
+                  icon="sync"
+                  loading={isSyncing}
+                  onPress={handleSync}
+                />
                 <Button
                   label="Add Record"
                   variant="primary"
+                  size={isCompact ? 'sm' : 'md'}
                   icon="plus"
                   onPress={openUpload}
                 />
               </View>
+            </View>
 
-              <View style={[styles.rightActions, { gap: spacing.sm }]}>
+            {/* Search & View Controls Bar */}
+            <View
+              style={[
+                styles.filterBar,
+                {
+                  borderColor: colors.border,
+                  borderWidth: sizes.borderWidth,
+                  borderRadius: radii.lg,
+                  backgroundColor: colors.card,
+                  padding: spacing.md,
+                  gap: spacing.sm,
+                },
+                shadows.sm,
+              ]}
+            >
+              <Input
+                leftIcon="search"
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search records, facility, notes..."
+                containerStyle={styles.searchInputContainer}
+                right={
+                  query ? (
+                    <Pressable onPress={() => setQuery('')} accessibilityLabel="Clear search">
+                      <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
+                    </Pressable>
+                  ) : undefined
+                }
+              />
+
+              <View style={[styles.viewControlsRow, { gap: spacing.sm }]}>
                 {/* Grid / List Toggle */}
                 <View
                   style={[
@@ -276,7 +325,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                       borderColor: colors.border,
                       borderWidth: sizes.borderWidth,
                       borderRadius: radii.md,
-                      backgroundColor: colors.card,
+                      backgroundColor: colors.surfaceSubtle,
                     },
                   ]}
                 >
@@ -288,7 +337,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                     onPress={() => setViewMode('list')}
                   />
                   <IconButton
-                    icon="activity"
+                    icon="grid"
                     accessibilityLabel="Grid view"
                     color={viewMode === 'grid' ? 'primary' : 'textMuted'}
                     tone={viewMode === 'grid' ? 'filled' : 'plain'}
@@ -315,7 +364,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                       borderWidth: sizes.borderWidth,
                       borderRadius: radii.md,
                       paddingHorizontal: spacing.md,
-                      paddingVertical: spacing.sm,
+                      minHeight: sizes.controlMd,
                       backgroundColor: colors.card,
                       gap: spacing.xs,
                       opacity: pressed ? 0.8 : 1,
@@ -333,62 +382,6 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                           : 'File Size'}
                   </ThemedText>
                 </Pressable>
-
-                <Button
-                  label="Sync Now"
-                  variant="outline"
-                  icon="sync"
-                  loading={isSyncing}
-                  onPress={handleSync}
-                />
-              </View>
-            </View>
-
-            {/* Title Bar + Search Filter Bar */}
-            <View
-              style={[
-                styles.filterBar,
-                {
-                  borderColor: colors.border,
-                  borderWidth: sizes.borderWidth,
-                  borderRadius: radii.lg,
-                  backgroundColor: colors.card,
-                  padding: spacing.md,
-                  gap: spacing.md,
-                },
-                shadows.sm,
-              ]}
-            >
-              <ThemedText variant="h3" color="primary">
-                Health Records & Documents
-              </ThemedText>
-
-              {/* Search input field */}
-              <View
-                style={[
-                  styles.searchField,
-                  {
-                    backgroundColor: colors.surfaceSubtle,
-                    borderColor: colors.border,
-                    borderWidth: sizes.borderWidth,
-                    borderRadius: radii.md,
-                    paddingHorizontal: spacing.sm,
-                    gap: spacing.xs,
-                  },
-                ]}
-              >
-                <AppIcon name="search" size={sizes.iconSm} color="textMuted" />
-                <Input
-                  value={query}
-                  onChangeText={setQuery}
-                  placeholder="Search records, facility, notes..."
-                  containerStyle={{ marginBottom: 0, flex: 1 }}
-                />
-                {query ? (
-                  <Pressable onPress={() => setQuery('')} accessibilityLabel="Clear search">
-                    <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
-                  </Pressable>
-                ) : null}
               </View>
             </View>
 
@@ -424,25 +417,24 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                 </View>
               </Card>
             ) : filteredAndSortedRecords.length === 0 ? (
-              <Card padding="lg">
-                <EmptyState
-                  title={query || activeCategory !== 'all' ? 'No matching records' : 'No health records yet'}
-                  message={
-                    query || activeCategory !== 'all'
-                      ? 'Try searching with a different keyword or select another category.'
-                      : 'Drop files here to upload, or click "Add Record" to attach clinical documents.'
-                  }
-                  actionLabel={query || activeCategory !== 'all' ? 'Reset Filters' : 'Add Record'}
-                  onActionPress={
-                    query || activeCategory !== 'all'
-                      ? () => {
-                          setQuery('');
-                          setActiveCategory('all');
-                        }
-                      : openUpload
-                  }
-                />
-              </Card>
+              <EmptyState
+                icon="files"
+                title={query || activeCategory !== 'all' ? 'No matching records' : 'No health records yet'}
+                message={
+                  query || activeCategory !== 'all'
+                    ? 'Try searching with a different keyword or select another category.'
+                    : 'Drop files here to upload, or click "Add Record" to attach clinical documents.'
+                }
+                actionLabel={query || activeCategory !== 'all' ? 'Reset Filters' : 'Add Record'}
+                onActionPress={
+                  query || activeCategory !== 'all'
+                    ? () => {
+                        setQuery('');
+                        setActiveCategory('all');
+                      }
+                    : openUpload
+                }
+              />
             ) : (
               <View style={{ gap: spacing.lg }}>
                 <View style={{ gap: spacing.sm }}>
@@ -651,17 +643,34 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   sideRail: {},
-  actionRow: {
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+  },
+  headerTextWrap: {
+    flex: 1,
+    minWidth: 240,
+    gap: 4,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  filterBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
   },
-  leftActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  searchInputContainer: {
+    marginBottom: 0,
+    flex: 1,
+    minWidth: 220,
   },
-  rightActions: {
+  viewControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -672,18 +681,6 @@ const styles = StyleSheet.create({
   sortBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  filterBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  searchField: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: 260,
-    height: 38,
   },
   centerLoading: {
     alignItems: 'center',

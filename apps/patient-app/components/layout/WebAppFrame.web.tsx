@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import type { NavigationState, ParamListBase } from '@react-navigation/native';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import { isTabRoute } from '../../navigation/webSections';
+import { resolveWebHeaderState } from '../../navigation/webSections';
 import { useWebKeyboardShortcuts } from '../../hooks/useWebKeyboardShortcuts.web';
 import WebSidebar from './WebSidebar.web';
 import WebPageHeader from './WebPageHeader.web';
@@ -19,27 +19,47 @@ interface WebAppFrameProps {
  * Navigator `layout` for the web Main stack.
  *
  * >= 768px  : persistent sidebar + content column (centered, max width from tokens)
- * <  768px  : full-width content; the compact bottom tab bar is rendered by the tab navigator
+ * <  768px  : full-width content with a persistent top header and compact bottom tab bar
  *
- * Pushed (non-tab) pages get a header with back + title. Tab pages draw their own page header.
+ * Pushed (non-tab) pages and nested tab sub-pages (e.g. Add Health Record) get a header
+ * with back + title on all viewports. Root tab pages get the compact header with brand mark,
+ * title, and Notification/Settings actions when < 768px (where the sidebar is hidden).
  */
 export default function WebAppFrame({ state, navigation, descriptors, children }: WebAppFrameProps) {
   const { colors, sizes } = useAppTheme();
-  const { isWorkstation, isDesktop } = useBreakpoint();
+  const { isWorkstation, isDesktop, isCompact } = useBreakpoint();
   useWebKeyboardShortcuts(navigation);
 
-  const focused = state.routes[state.index];
-  const showHeader = !isTabRoute(state);
-  const title = focused ? descriptors[focused.key]?.options.title : undefined;
+  const headerInfo = resolveWebHeaderState(state, descriptors);
+  const showBackHeader = !headerInfo.isRootTab;
+  const showCompactTabHeader = headerInfo.isRootTab && isCompact;
 
   const onBack = () => {
+    if (headerInfo.isNestedTabPush && headerInfo.tabKey === 'FilesScreen') {
+      navigation.navigate('BottomTabs', {
+        screen: 'FilesScreen',
+        params: { screen: 'FilesBrowserScreen' },
+      });
+      return;
+    }
     if (navigation.canGoBack()) navigation.goBack();
     else navigation.navigate('BottomTabs', { screen: 'HomeScreen' });
   };
 
   const content = (
     <View style={styles.column}>
-      {showHeader ? <WebPageHeader title={title} onBack={onBack} /> : null}
+      {showBackHeader ? (
+        <WebPageHeader title={headerInfo.title} onBack={onBack} />
+      ) : showCompactTabHeader ? (
+        <WebPageHeader
+          title={headerInfo.title}
+          subtitle={headerInfo.subtitle}
+          showBrand
+          showAccountActions
+          onOpenNotifications={() => navigation.navigate('NotificationScreen')}
+          onOpenSettings={() => navigation.navigate('SettingsScreen')}
+        />
+      ) : null}
       <View style={styles.contentOuter}>
         <View style={[styles.contentInner, { maxWidth: sizes.contentMaxWidth }]}>{children}</View>
       </View>

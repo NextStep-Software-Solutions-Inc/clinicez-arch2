@@ -449,7 +449,7 @@ async function loadCounts(): Promise<Counts> {
 
 export default function ProfileScreenWeb() {
   const { colors, radii, spacing, sizes, shadows } = useAppTheme();
-  const { isWorkstation, isWide } = useBreakpoint();
+  const { isWorkstation, isWide, isCompact } = useBreakpoint();
   const navigation = useNavigation<any>();
   const { internalPatientId, getToken } = useAuth();
   const { user } = useUser();
@@ -586,14 +586,18 @@ export default function ProfileScreenWeb() {
       contentContainerStyle={[
         styles.scrollContent,
         {
-          paddingVertical: spacing['2xl'],
-          paddingHorizontal: spacing.xl,
+          padding: isCompact ? spacing.md : spacing['2xl'],
           paddingBottom: spacing['4xl'],
         },
       ]}
       showsVerticalScrollIndicator={false}
     >
-      <View style={[styles.container, { maxWidth: sizes.contentMaxWidth, gap: spacing['2xl'] }]}>
+      <View
+        style={[
+          styles.container,
+          { maxWidth: sizes.contentMaxWidth, gap: isCompact ? spacing.lg : spacing['2xl'] },
+        ]}
+      >
         {/* Header Overview Card */}
         <View
           style={[
@@ -602,7 +606,7 @@ export default function ProfileScreenWeb() {
               backgroundColor: colors.card,
               borderColor: colors.border,
               borderRadius: radii.xl,
-              padding: spacing['2xl'],
+              padding: isCompact ? spacing.lg : spacing['2xl'],
             },
             shadows.sm,
           ]}
@@ -611,8 +615,8 @@ export default function ProfileScreenWeb() {
             <Avatar name={displayName} size="lg" />
 
             <View style={styles.headerInfo}>
-              <View style={[styles.nameRow, { gap: spacing.md }]}>
-                <ThemedText variant="h1" numberOfLines={1}>
+              <View style={[styles.nameRow, { gap: spacing.sm }]}>
+                <ThemedText variant={isCompact ? 'h2' : 'h1'} numberOfLines={1}>
                   {displayName}
                 </ThemedText>
                 <Badge
@@ -658,7 +662,7 @@ export default function ProfileScreenWeb() {
           </View>
 
           {/* Completeness bar */}
-          <View style={[styles.completenessSection, { marginTop: spacing.xl, gap: spacing.xs }]}>
+          <View style={[styles.completenessSection, { marginTop: spacing.lg, gap: spacing.xs }]}>
             <View style={styles.completenessRow}>
               <ThemedText variant="smallBold">Profile Completeness</ThemedText>
               <ThemedText variant="smallBold" color="primary">
@@ -732,12 +736,13 @@ export default function ProfileScreenWeb() {
                 paddingHorizontal: spacing.md,
                 paddingVertical: spacing.sm,
                 gap: spacing.sm,
+                maxWidth: isWorkstation ? 360 : '100%',
               },
             ]}
           >
             <AppIcon name="search" size={sizes.iconSm} color="textMuted" />
             <TextInput
-              style={[styles.searchInput, { color: colors.text }]}
+              style={[styles.searchInput, { color: colors.text }, { outlineStyle: 'none' } as object]}
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder="Search profile sections..."
@@ -756,7 +761,7 @@ export default function ProfileScreenWeb() {
         </View>
 
         {/* Section Cards Responsive Grid */}
-        <View style={[styles.grid, { gap: spacing.lg }]}>
+        <View style={[styles.grid, { gap: isCompact ? spacing.md : spacing.lg }]}>
           {filteredCategories.map((cat) => {
             const countValue = cat.countKey && counts ? counts[cat.countKey] : null;
 
@@ -771,7 +776,7 @@ export default function ProfileScreenWeb() {
                     backgroundColor: colors.card,
                     borderColor: hovered ? colors.primaryBorder : colors.border,
                     borderRadius: radii.lg,
-                    padding: spacing.xl,
+                    padding: isCompact ? spacing.lg : spacing.xl,
                     gap: spacing.md,
                   },
                   shadows.sm,
@@ -847,7 +852,7 @@ const styles = StyleSheet.create({
   },
   headerInfo: {
     flex: 1,
-    minWidth: 240,
+    minWidth: 180,
   },
   nameRow: {
     flexDirection: 'row',
@@ -890,12 +895,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    minWidth: 260,
+    minWidth: 240,
     flex: 1,
-    maxWidth: 360,
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     padding: 0,
     borderWidth: 0,
   },
@@ -906,7 +911,7 @@ const styles = StyleSheet.create({
   categoryCard: {
     borderWidth: 1,
     flexGrow: 1,
-    minWidth: 280,
+    minWidth: 260,
   },
   cardTop: {
     flexDirection: 'row',

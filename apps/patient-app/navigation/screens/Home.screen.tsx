@@ -9,9 +9,8 @@ import EmptyState from '../../components/ui/EmptyState';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
-import Button from '../../components/ui/Button';
 import { AppIcon } from '../../components/ui/Icon';
-import { ListRow, SectionHeader, ProgressBar } from '../../components/ui/Primitives';
+import { ListRow, SectionHeader } from '../../components/ui/Primitives';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useContentInsets } from '../../hooks/useContentInsets';
 import { usePatientId } from '../../hooks/usePatientId';
@@ -104,7 +103,7 @@ function AppointmentCard({ item, onPress }: { item: AppointmentLineupItem; onPre
 }
 
 export default function HomeScreen() {
-  const { colors, spacing, radii, sizes } = useAppTheme();
+  const { colors, spacing, radii } = useAppTheme();
   const navigation = useNavigation<any>();
   const { user } = useUser();
   const patientId = usePatientId();
@@ -278,9 +277,9 @@ export default function HomeScreen() {
 
       <View style={styles.sectionWrap}>
         <SectionHeader title="Recent Consultations" />
-        <Card padding="md">
-          {(dashboard?.recentConsultationSummary ?? []).length ? (
-            dashboard?.recentConsultationSummary.map((item) => (
+        {(dashboard?.recentConsultationSummary ?? []).length ? (
+          <Card padding="md">
+            {dashboard?.recentConsultationSummary.map((item) => (
               <View key={item} style={styles.summaryRow}>
                 <View
                   style={[
@@ -292,14 +291,14 @@ export default function HomeScreen() {
                   {item}
                 </ThemedText>
               </View>
-            ))
-          ) : (
-            <EmptyState
-              title="No consultations yet"
-              message="Your consultation history will show up here once records are synced from a clinic."
-            />
-          )}
-        </Card>
+            ))}
+          </Card>
+        ) : (
+          <EmptyState
+            title="No consultations yet"
+            message="Your consultation history will show up here once records are synced from a clinic."
+          />
+        )}
       </View>
 
       <View style={styles.sectionWrap}>

@@ -11,6 +11,7 @@ export const NATIVE_ICONS: Record<IconName, { android: string; ios: string }> = 
   notificationsOff: { android: 'notifications_off', ios: 'bell.slash.fill' },
   settings: { android: 'settings', ios: 'gear' },
   menu: { android: 'menu', ios: 'line.3.horizontal' },
+  grid: { android: 'grid_view', ios: 'square.grid.2x2' },
   back: { android: 'arrow_back', ios: 'chevron.left' },
   forward: { android: 'chevron_right', ios: 'chevron.right' },
   chevronDown: { android: 'expand_more', ios: 'chevron.down' },

@@ -8,15 +8,13 @@ import EmptyState from '../../components/ui/EmptyState';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
-import Button from '../../components/ui/Button';
 import { AppIcon } from '../../components/ui/Icon';
-import { ListRow, SectionHeader, ProgressBar, StatTile } from '../../components/ui/Primitives';
+import { ListRow, SectionHeader, StatTile } from '../../components/ui/Primitives';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { usePatientId } from '../../hooks/usePatientId';
-import { useNotificationContext } from '../../contexts/NotificationContext';
 import { getHomeDashboard } from '../../services/discovery/discoveryService';
-import { HomeDashboard, HealthMetric, AppointmentLineupItem } from '../../services/discovery/types';
+import { HomeDashboard, AppointmentLineupItem } from '../../services/discovery/types';
 import YakapPromoCard from '../../components/yakap/YakapPromoCard';
 import YakapActiveCard from '../../components/yakap/YakapActiveCard';
 import { useYakapRegistrationStatus } from '../../hooks/useYakapRegistrationStatus';
@@ -81,12 +79,11 @@ function WebAppointmentCard({
 }
 
 export default function HomeScreenWeb() {
-  const { colors, spacing, radii, sizes } = useAppTheme();
+  const { colors, spacing, radii } = useAppTheme();
   const navigation = useNavigation<any>();
   const { user } = useUser();
   const patientId = usePatientId();
   const { isDesktop, isCompact } = useBreakpoint();
-  const { unreadCount } = useNotificationContext();
 
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -128,72 +125,12 @@ export default function HomeScreenWeb() {
         styles.scrollContent,
         {
           padding: isCompact ? spacing.md : spacing['2xl'],
-          gap: spacing['2xl'],
+          gap: isCompact ? spacing.lg : spacing['2xl'],
           paddingBottom: spacing['4xl'],
         },
       ]}
       showsVerticalScrollIndicator={false}
     >
-      {/* Compact header row on screens < 768px where sidebar is hidden */}
-      {isCompact && (
-        <View style={styles.compactHeaderRow}>
-          <View>
-            <ThemedText variant="h2">Clinic EZ</ThemedText>
-            <ThemedText variant="small" color="textMuted">
-              Patient Portal
-            </ThemedText>
-          </View>
-          <View style={styles.compactHeaderActions}>
-            <Pressable
-              onPress={() => navigation.navigate('Main', { screen: 'NotificationScreen' })}
-              accessibilityRole="button"
-              accessibilityLabel={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
-              style={(state: any) => [
-                styles.iconButton,
-                {
-                  backgroundColor: state.hovered ? colors.surfaceSubtle : colors.transparent,
-                  borderColor: colors.border,
-                  borderRadius: radii.md,
-                },
-              ]}
-            >
-              <AppIcon
-                name={unreadCount > 0 ? 'notificationsActive' : 'notifications'}
-                size={sizes.iconMd}
-                color="text"
-              />
-              {unreadCount > 0 && (
-                <View
-                  style={[
-                    styles.compactBadge,
-                    { backgroundColor: colors.emergency, borderRadius: radii.full },
-                  ]}
-                >
-                  <ThemedText variant="captionBold" color="textInverted">
-                    {unreadCount > 9 ? '9+' : String(unreadCount)}
-                  </ThemedText>
-                </View>
-              )}
-            </Pressable>
-            <Pressable
-              onPress={() => navigation.navigate('Main', { screen: 'SettingsScreen' })}
-              accessibilityRole="button"
-              accessibilityLabel="Settings"
-              style={(state: any) => [
-                styles.iconButton,
-                {
-                  backgroundColor: state.hovered ? colors.surfaceSubtle : colors.transparent,
-                  borderColor: colors.border,
-                  borderRadius: radii.md,
-                },
-              ]}
-            >
-              <AppIcon name="settings" size={sizes.iconMd} color="text" />
-            </Pressable>
-          </View>
-        </View>
-      )}
-
       {/* Hero greeting banner */}
       <LinearGradient
         colors={[colors.primary, colors.primaryDark]}
@@ -209,16 +146,16 @@ export default function HomeScreenWeb() {
         ]}
       >
         <Badge label="PATIENT DASHBOARD" tone="primary" size="sm" />
-        <ThemedText variant="display" color="onPrimary">
+        <ThemedText variant={isCompact ? 'h1' : 'display'} color="onPrimary">
           Welcome back, {greetingName}
         </ThemedText>
-        <ThemedText variant="bodyLarge" color="onPrimary">
+        <ThemedText variant={isCompact ? 'body' : 'bodyLarge'} color="onPrimary">
           Here is your healthcare summary, upcoming appointments, and PhilHealth benefit status.
         </ThemedText>
       </LinearGradient>
 
       {/* Stats row with StatTiles */}
-      <View style={[styles.statsRow, { gap: spacing.md }]}>
+      <View style={[styles.statsRow, { gap: isCompact ? spacing.sm : spacing.md }]}>
         <StatTile
           label="Upcoming Visits"
           value={dashboard?.nextAppointments?.length ?? 0}
@@ -247,6 +184,12 @@ export default function HomeScreenWeb() {
           value={dashboard?.recentConsultationSummary?.length ?? 0}
           icon="activity"
           tone="purple"
+          onPress={() =>
+            navigation.navigate('Main', {
+              screen: 'BottomTabs',
+              params: { screen: 'FilesScreen', params: { screen: 'FilesBrowserScreen' } },
+            })
+          }
         />
       </View>
 
@@ -308,6 +251,7 @@ export default function HomeScreenWeb() {
               </View>
             ) : (
               <EmptyState
+                icon="calendar"
                 title="No upcoming appointments"
                 message="Once you schedule an appointment or save a draft, it will appear here."
                 actionLabel="Browse clinics"
@@ -464,42 +408,14 @@ const styles = StyleSheet.create({
   scrollContent: {
     width: '100%',
   },
-  compactHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  compactHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  iconButton: {
-    borderWidth: 1,
-    padding: 8,
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  compactBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
   heroCard: {
     width: '100%',
-    minHeight: 160,
+    minHeight: 150,
     justifyContent: 'flex-end',
   },
   statsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'stretch',
     width: '100%',
   },
   layoutContainer: {
