@@ -6,9 +6,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { RocketIcon } from "lucide-react"
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -49,6 +50,8 @@ type ContactUsFormSchema = z.infer<typeof contactUseFormSchema>
 export const ContactUsForm = () => {
   const [status, setStatus] = useState(false)
   const [prevName, setPrevName] = useState("")
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileWidgetHandle>(null)
 
   const form = useForm<ContactUsFormSchema>({
     resolver: zodResolver(contactUseFormSchema),
@@ -62,16 +65,28 @@ export const ContactUsForm = () => {
   const action = async () => {
     form.handleSubmit(async (data) => {
       setStatus(false)
-      toast.promise(sendContactUsMessage(data), {
-        loading: "Sending message...",
-        success: () => {
-          setStatus(true)
-          form.reset()
-          setPrevName(data.name)
-          return "Message sent successfully"
-        },
-        error: "An error occurred while sending message",
-      })
+      toast.promise(
+        sendContactUsMessage({
+          ...data,
+          turnstileToken: turnstileToken || undefined,
+        }),
+        {
+          loading: "Sending message...",
+          success: () => {
+            setStatus(true)
+            form.reset()
+            setPrevName(data.name)
+            setTurnstileToken(null)
+            turnstileRef.current?.reset()
+            return "Message sent successfully"
+          },
+          error: () => {
+            turnstileRef.current?.reset()
+            setTurnstileToken(null)
+            return "An error occurred while sending message"
+          },
+        }
+      )
     })()
   }
 
@@ -124,16 +139,19 @@ export const ContactUsForm = () => {
                 <FormItem>
                   <FormLabel>Message</FormLabel>
                   <FormControl>
-                    <Textarea
-                      {...field}
-                      className="resize-none" />
+                    <Textarea {...field} />
                   </FormControl>
                 </FormItem>
               )}
             />
-          </div>
-          <div className="mt-4">
-            <ActionButton className="w-full">Get Started</ActionButton>
+            <TurnstileWidget
+              ref={turnstileRef}
+              action="contact_us"
+              onSuccess={(token) => setTurnstileToken(token)}
+              onExpire={() => setTurnstileToken(null)}
+              onError={() => setTurnstileToken(null)}
+            />
+            <ActionButton type="submit">Submit message</ActionButton>
           </div>
         </form>
       </div>

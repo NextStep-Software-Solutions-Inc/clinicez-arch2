@@ -1,7 +1,8 @@
-// token-guard:ignore-file
+﻿// token-guard:ignore-file
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { fileURLToPath } from 'node:url';
 
 (globalThis as any).__DEV__ = true;
 
@@ -273,7 +274,7 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
     test('1.5 ServicesCatalogTab source code includes Dental in Edit modal and label mapping', async () => {
       const fs = await import('fs');
       const tabSource = fs.readFileSync(
-        new URL('../components/settings/ServicesCatalogTab.tsx', import.meta.url).pathname,
+        fileURLToPath(new URL('../components/settings/ServicesCatalogTab.tsx', import.meta.url)),
         'utf8'
       );
       expect(tabSource).toContain("Dental: 'Dental Services'");
@@ -285,7 +286,7 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
 
     test('1.6 ServicesCatalogTab source code binds Seed Dental Services to empty state for dental category', async () => {
       const tabSource = await Bun.file(
-        new URL('../components/settings/ServicesCatalogTab.tsx', import.meta.url).pathname
+        fileURLToPath(new URL('../components/settings/ServicesCatalogTab.tsx', import.meta.url))
       ).text();
 
       expect(tabSource).toContain("selectedCategory === 'Dental' ? 'Seed Dental Services'");
@@ -455,7 +456,7 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
     test('3.4 OrderCatalogSearchModal exports DENTAL_CLINICAL_INSTRUCTION_CHIPS and binds it in source AST', async () => {
       const fs = await import('fs');
       const modalSource = fs.readFileSync(
-        new URL('../components/consultation/OrderCatalogSearchModal.tsx', import.meta.url).pathname,
+        fileURLToPath(new URL('../components/consultation/OrderCatalogSearchModal.tsx', import.meta.url)),
         'utf8'
       );
 

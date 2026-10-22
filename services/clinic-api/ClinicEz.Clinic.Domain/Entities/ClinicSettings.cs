@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
@@ -174,6 +174,16 @@ public sealed class ClinicSettings : BaseEntity
     public bool EnableStaffAppointmentNotifications { get; set; } = true;
 
     /// <summary>
+    /// Controls whether Cloudflare Turnstile bot protection is active for facility entry points (such as staff login and public forms).
+    /// Defaults to false for on-premise/offline environments. Overridden by environment variable (TURNSTILE_ENABLED / Turnstile:Enabled) if set.
+    /// </summary>
+    public bool TurnstileEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Optional clinic-specific Cloudflare Turnstile Site Key. If not set, falls back to environment or default test key.
+    /// </summary>
+    public string? TurnstileSiteKey { get; set; }
+
     /// Optional clinic-level IANA timezone override (e.g. "Asia/Manila", "Asia/Singapore", "America/New_York").
     /// When null or empty, inherits from <c>WorkspaceProfile.TimeZoneId</c> (defaulting to "Asia/Manila").
     /// </summary>
@@ -190,6 +200,7 @@ public sealed class ClinicSettings : BaseEntity
     /// When null or empty, defaults to "12h" (12-hour AM/PM clock).
     /// </summary>
     public string? TimeFormat { get; set; }
+
 }
 
 /// <summary>
@@ -200,4 +211,3 @@ public sealed record DocumentSignatoryConfig(
     string? ApproverName = null,
     string? ApproverTitle = null
 );
-

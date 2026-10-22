@@ -46,6 +46,7 @@ public sealed record PatientJoinRequestedPayload
     // Structured Clinical Lists & External Attachments
     public List<PatientJoinAllergyItem>? Allergies { get; init; }
     public List<PatientJoinAttachmentItem>? Attachments { get; init; }
+    public string? TurnstileToken { get; init; }
 }
 
 /// <summary>

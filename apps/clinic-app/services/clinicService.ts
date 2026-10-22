@@ -1,4 +1,4 @@
-import type { AxiosRequestConfig } from 'axios';
+﻿import type { AxiosRequestConfig } from 'axios';
 import { clinicApiClient, clinicApiUrl } from './apiClient';
 import { SyncStatus, type SearchResponseDto, type ApiError } from '@shared/safe';
 
@@ -1940,10 +1940,17 @@ export interface ClinicSettingsRecord {
   appointmentReminder2hEnabled?: boolean;
   enableStaffAppointmentNotifications?: boolean;
 
+  // Bot Challenge Protection (Turnstile)
+  turnstileEnabled?: boolean;
+  turnstileSiteKey?: string | null;
+  isTurnstileOverriddenByEnv?: boolean;
+  turnstileEnvOverrideValue?: boolean | null;
+
   // Regional Timezone, Date & Time Format Overrides (null/undefined = inherit from WorkspaceProfile)
   timeZoneId?: string | null;
   dateFormat?: string | null;
   timeFormat?: '12h' | '24h' | string | null;
+
 }
 
 export interface DocumentSignatoryItemConfig {
@@ -3516,7 +3523,7 @@ export const clinicService = {
     return clinicApiClient.post<number>('/notifications/read-all');
   },
 
-  // ── Audit Trail & Forensic Logging (Milestone 3) ─────────────────────────
+  // â”€â”€ Audit Trail & Forensic Logging (Milestone 3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async getAuditLogs(params?: AuditFilterParams) {
     const qp = new URLSearchParams();
