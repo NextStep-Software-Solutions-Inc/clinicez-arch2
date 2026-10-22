@@ -32,7 +32,7 @@ public class SendContactMessageCommandHandler(
         var inbox = (await settingsService.GetSettingValueAsync("Mailer:ContactInbox", string.Empty, cancellationToken))?.Trim();
         if (string.IsNullOrEmpty(inbox)) return false;
 
-        notifications.RequestEmail(
+        await notifications.RequestEmailAsync(
             new NotificationEmailRequestedPayload
             {
                 To = inbox,
@@ -45,7 +45,8 @@ public class SendContactMessageCommandHandler(
                     ["message"] = request.Message.Trim()
                 }
             },
-            Guid.NewGuid());
+            Guid.NewGuid(),
+            cancellationToken);
 
         await context.SaveChangesAsync(cancellationToken);
         return true;

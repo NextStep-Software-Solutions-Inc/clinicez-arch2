@@ -64,10 +64,9 @@ public class ResendStaffInvitationCommandHandler(
         member.InvitationExpiresAt = now.AddDays(7);
         member.Status = MemberStatus.Invited;
 
-        // Commits atomically with the new token; delivery happens later and is retried.
-        invitationNotifier.RequestInvitation(tenant, member, StaffMemberMapping.RoleName(member, profile), profile?.Facility?.Name);
-
         await context.SaveChangesAsync(cancellationToken);
+
+        await invitationNotifier.RequestInvitationAsync(tenant, member, StaffMemberMapping.RoleName(member, profile), profile?.Facility?.Name, cancellationToken);
 
         return StaffMemberMapping.ToDto(member, profile, profile?.Facility?.Name, now);
     }

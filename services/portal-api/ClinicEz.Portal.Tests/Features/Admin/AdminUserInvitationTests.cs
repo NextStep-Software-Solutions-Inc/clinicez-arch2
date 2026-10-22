@@ -19,6 +19,7 @@ namespace ClinicEz.Portal.Tests.Features.Admin;
 public class AdminUserInvitationTests : IDisposable
 {
     private readonly ApplicationDbContext _context;
+    private readonly RecordingEmailSender _emailSender = new();
     private readonly Guid _roleId = Guid.NewGuid();
     private const string RoleName = "Support Staff";
     private const string FrontendUrl = "https://portal.clinicez.test";
@@ -51,7 +52,7 @@ public class AdminUserInvitationTests : IDisposable
     {
         var handler = new InviteAdminUserCommandHandler(
             _context,
-            TestSupport.AdminInvitationNotifier(_context, FrontendUrl),
+            TestSupport.AdminInvitationNotifier(_context, FrontendUrl, _emailSender),
             UrlProvider,
             TimeProvider.System
         );
@@ -73,11 +74,11 @@ public class AdminUserInvitationTests : IDisposable
         Assert.True(result.InvitationExpiresAt.Value > DateTime.UtcNow.AddDays(6));
         Assert.Contains(result.InvitationToken, result.InviteUrl!);
 
-        // Verify outbox email enqueued
-        var outboxMessage = await _context.InteropOutbox.FirstOrDefaultAsync();
-        Assert.NotNull(outboxMessage);
-        Assert.Contains(EmailTemplateKeys.AdminInvitation, outboxMessage.EnvelopeJson);
-        Assert.Contains("newadmin@clinicez.com", outboxMessage.EnvelopeJson);
+        // Verify direct email dispatched
+        var mail = Assert.Single(_emailSender.Sent);
+        Assert.Equal("newadmin@clinicez.com", mail.To);
+        Assert.Contains(result.InvitationToken, mail.HtmlBody);
+        Assert.Contains(result.InvitationToken, mail.TextBody);
     }
 
     [Fact]
@@ -85,7 +86,7 @@ public class AdminUserInvitationTests : IDisposable
     {
         var handler = new InviteAdminUserCommandHandler(
             _context,
-            TestSupport.AdminInvitationNotifier(_context, FrontendUrl),
+            TestSupport.AdminInvitationNotifier(_context, FrontendUrl, _emailSender),
             UrlProvider,
             TimeProvider.System
         );
@@ -99,9 +100,8 @@ public class AdminUserInvitationTests : IDisposable
         Assert.Equal(AdminUserStatus.Invited, result.Status);
         Assert.Equal(64, result.InvitationToken!.Length);
 
-        // Verify NO email outbox was enqueued
-        var outboxCount = await _context.InteropOutbox.CountAsync();
-        Assert.Equal(0, outboxCount);
+        // Verify NO email was dispatched
+        Assert.Empty(_emailSender.Sent);
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class AdminUserInvitationTests : IDisposable
 
         var handler = new ResendAdminInvitationCommandHandler(
             _context,
-            TestSupport.AdminInvitationNotifier(_context, FrontendUrl),
+            TestSupport.AdminInvitationNotifier(_context, FrontendUrl, _emailSender),
             UrlProvider,
             TimeProvider.System
         );
@@ -178,10 +178,10 @@ public class AdminUserInvitationTests : IDisposable
         Assert.Equal(AdminUserStatus.Invited, result.Status);
         Assert.True(result.InvitationExpiresAt > DateTime.UtcNow.AddDays(6));
 
-        // Verify outbox email
-        var outboxMessage = await _context.InteropOutbox.FirstOrDefaultAsync();
-        Assert.NotNull(outboxMessage);
-        Assert.Contains("resend@clinicez.com", outboxMessage.EnvelopeJson);
+        // Verify direct email dispatched
+        var mail = Assert.Single(_emailSender.Sent);
+        Assert.Equal("resend@clinicez.com", mail.To);
+        Assert.Contains(result.InvitationToken, mail.HtmlBody);
     }
 
     [Fact]

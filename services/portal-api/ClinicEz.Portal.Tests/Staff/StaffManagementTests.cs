@@ -51,8 +51,10 @@ public class StaffManagementTests : IDisposable
         _context.Dispose();
     }
 
-    private InviteStaffMemberCommandHandler InviteHandler() =>
-        new(_context, _guardMock.Object, TestSupport.InvitationNotifier(_context), TimeProvider.System);
+    private readonly RecordingEmailSender _emailSender = new();
+
+    private InviteStaffMemberCommandHandler InviteHandler(IEmailSender? sender = null) =>
+        new(_context, _guardMock.Object, TestSupport.InvitationNotifier(_context, emailSender: sender ?? _emailSender), TimeProvider.System);
 
     private WorkspaceMember SeedMember(
         string email,
@@ -290,8 +292,7 @@ public class StaffManagementTests : IDisposable
 
         Assert.NotNull(result);
         Assert.Equal("Invited", result.Status);
-        var payloads = TestSupport.OutboxPayloads<NotificationEmailRequestedPayload>(_context, InteropTypes.NotificationEmailRequested);
-        Assert.Contains(payloads, p => p.To == "emailtrue@metro.ph");
+        Assert.Contains(_emailSender.Sent, m => m.To == "emailtrue@metro.ph");
     }
 
     [Fact]
@@ -305,8 +306,7 @@ public class StaffManagementTests : IDisposable
         Assert.NotNull(result.InvitationToken);
         Assert.Equal(64, result.InvitationToken.Length);
 
-        var payloads = TestSupport.OutboxPayloads<NotificationEmailRequestedPayload>(_context, InteropTypes.NotificationEmailRequested);
-        Assert.DoesNotContain(payloads, p => p.To == "emailfalse@metro.ph");
+        Assert.DoesNotContain(_emailSender.Sent, m => m.To == "emailfalse@metro.ph");
     }
 
     [Fact]
