@@ -35,7 +35,6 @@ import { useStaff, formatStaffName } from '../../context/StaffContext';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import {
   clinicService,
-  getManilaTodayStr,
   AppointmentItem,
   AppointmentStatus,
   ClinicPatient,
