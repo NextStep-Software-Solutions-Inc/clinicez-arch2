@@ -1,5 +1,6 @@
 using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Portal.Application.Features.Staff.Commands;
+using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Notifications;
 using ClinicEz.Portal.Infrastructure.Persistence;
@@ -435,11 +436,17 @@ public class SendContactMessageCommandTests : IDisposable
         _context.Dispose();
     }
 
-    private SendContactMessageCommandHandler Handler(string? inbox) =>
-        new(
+    private SendContactMessageCommandHandler Handler(string? inbox)
+    {
+        var settingsMock = new Mock<ISystemSettingsService>();
+        settingsMock.Setup(s => s.GetSettingValueAsync("Mailer:ContactInbox", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(inbox ?? string.Empty);
+
+        return new(
             _context,
             new NotificationService(new InteropPublisher(_context)),
-            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Notifications:ContactInbox"] = inbox }).Build());
+            settingsMock.Object);
+    }
 
     [Fact]
     public async Task ConfiguredInbox_ReceivesTheMessage_ThroughTheOutbox()
@@ -511,22 +518,10 @@ public class SmtpOptionsTests
     }
 
     [Fact]
-    public void SmtpMode_DoesNotRequireStaticHostOrSender_BecausePlatformSettingsHandleIt()
+    public void SmtpMode_HasNoStaticMailerParameters_OnlyCredentialsAndMode()
     {
-        // Host and FromEmail are managed dynamically in Platform Settings (SystemSettings) in DB.
-        // Static configuration at startup is optional, so missing static values should not fail validation.
-        Assert.Null(new SmtpOptions { Mode = SmtpMode.Smtp }.FindProblem(false));
-        Assert.Null(new SmtpOptions { Host = "smtp.example.com" }.FindProblem(false));
-        Assert.Null(new SmtpOptions { FromEmail = "no-reply@example.com" }.FindProblem(false));
-        Assert.Null(new SmtpOptions { Host = "smtp.example.com", FromEmail = "no-reply@example.com" }.FindProblem(false));
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(70000)]
-    public void SmtpMode_RejectsAnInvalidPort(int port)
-    {
-        Assert.NotNull(new SmtpOptions { Port = port }.FindProblem(false));
+        var options = new SmtpOptions { Mode = SmtpMode.Smtp, User = "resend", Password = "secret-password" };
+        Assert.Null(options.FindProblem(false));
     }
 
     [Fact]
@@ -545,26 +540,36 @@ public class SmtpOptionsTests
 public class SmtpEmailSenderTests
 {
     [Fact]
-    public async Task SendAsync_ThrowsWhenHostIsNotConfiguredAnywhere()
+    public async Task SendAsync_ThrowsWhenHostIsNotConfiguredInPlatformSettings()
     {
         var options = Microsoft.Extensions.Options.Options.Create(new SmtpOptions());
-        var sender = new SmtpEmailSender(options);
+        var settingsMock = new Mock<ISystemSettingsService>();
+        settingsMock.Setup(s => s.GetSettingValueAsync("Mailer:SmtpHost", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(string.Empty);
+        var sender = new SmtpEmailSender(options, settingsMock.Object);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sender.SendAsync(new EmailMessage("test@example.com", "Sub", "<p>hi</p>", "hi"), CancellationToken.None));
 
         Assert.Contains("SMTP host is not configured", ex.Message);
+        Assert.Contains("Platform Settings", ex.Message);
     }
 
     [Fact]
-    public async Task SendAsync_ThrowsWhenFromEmailIsNotConfiguredAnywhere()
+    public async Task SendAsync_ThrowsWhenFromEmailIsNotConfiguredInPlatformSettings()
     {
-        var options = Microsoft.Extensions.Options.Options.Create(new SmtpOptions { Host = "smtp.example.com" });
-        var sender = new SmtpEmailSender(options);
+        var options = Microsoft.Extensions.Options.Options.Create(new SmtpOptions());
+        var settingsMock = new Mock<ISystemSettingsService>();
+        settingsMock.Setup(s => s.GetSettingValueAsync("Mailer:SmtpHost", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("smtp.resend.com");
+        settingsMock.Setup(s => s.GetSettingValueAsync("Mailer:SmtpFromEmail", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(string.Empty);
+        var sender = new SmtpEmailSender(options, settingsMock.Object);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sender.SendAsync(new EmailMessage("test@example.com", "Sub", "<p>hi</p>", "hi"), CancellationToken.None));
 
         Assert.Contains("SMTP sender email is not configured", ex.Message);
+        Assert.Contains("Platform Settings", ex.Message);
     }
 }

@@ -457,6 +457,17 @@ public class DomainSearchProvidersTests
         feeResults.Should().HaveCount(1);
         feeResults[0].BadgeText.Should().Be("Paid");
         feeResults[0].BadgeVariant.Should().Be(SearchBadgeVariant.Routine);
+
+        // Search by keyword "unpaid" or "unsettled"
+        var unpaidResults = await provider.SearchAsync("unpaid", _clinicIdA, 10, CancellationToken.None);
+        unpaidResults.Should().HaveCount(1);
+        unpaidResults[0].Id.Should().Be(unpaidInvoice.Id.ToString());
+        unpaidResults[0].BadgeText.Should().Be("Bal: ₱1,500");
+        unpaidResults[0].RouteParams.Should().ContainKey("patientId");
+
+        var balanceResults = await provider.SearchAsync("balance", _clinicIdA, 10, CancellationToken.None);
+        balanceResults.Should().HaveCount(1);
+        balanceResults[0].Id.Should().Be(unpaidInvoice.Id.ToString());
     }
 
     // ==========================================

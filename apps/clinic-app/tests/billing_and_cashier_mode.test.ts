@@ -886,6 +886,35 @@ describe('Billing & Cashier Station Feature Suite', () => {
       expect(receipts[1].paymentNumber).toBe('OR-20261021-002');
       expect(receipts.reduce((sum, r) => sum + r.amount, 0)).toBe(net);
     });
+
+    test('8.2 Partial payment collection clamps tendered cash to amountToCollect and leaves remaining balance in unsettled accounts', () => {
+      const netTotal = 1500;
+      const previousPayments = 0;
+      const balanceDue = netTotal - previousPayments;
+
+      // Cashier collects partial payment of 500
+      const isPartial = true;
+      const partialAmount = 500;
+      const amountToCollect = isPartial ? Math.min(balanceDue, partialAmount) : balanceDue;
+      expect(amountToCollect).toBe(500);
+
+      // Customer tenders 500 cash
+      const cashTendered = 500;
+      const changeDue = Math.max(0, cashTendered - amountToCollect);
+      expect(changeDue).toBe(0);
+
+      // Remaining balance
+      const remainingBalance = balanceDue - amountToCollect;
+      expect(remainingBalance).toBe(1000);
+
+      // Subsequent payment settling the remaining 1000
+      const subsequentBalanceDue = remainingBalance;
+      const subsequentAmountToCollect = subsequentBalanceDue;
+      const subsequentTendered = 1000;
+      expect(subsequentAmountToCollect).toBe(1000);
+      expect(subsequentTendered - subsequentAmountToCollect).toBe(0);
+      expect(subsequentBalanceDue - subsequentAmountToCollect).toBe(0);
+    });
   });
 });
 

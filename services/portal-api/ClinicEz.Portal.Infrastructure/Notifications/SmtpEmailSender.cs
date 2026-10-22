@@ -27,23 +27,14 @@ public enum SmtpSecurity
     SslOnConnect
 }
 
-/// <summary>The unified mail server, configured under <c>Smtp</c>. Credentials come from secrets or environment, never from source.</summary>
+/// <summary>SMTP secrets and execution mode configured under <c>Smtp</c>. All non-secret mail server parameters (Host, Port, Security, FromEmail, FromName, ReplyTo) are managed exclusively in Platform Settings (SystemSettings) in the database.</summary>
 public sealed class SmtpOptions
 {
     public const string SectionName = "Smtp";
 
     public SmtpMode Mode { get; set; } = SmtpMode.Smtp;
-    public string Host { get; set; } = string.Empty;
-    public int Port { get; set; } = 587;
-    public SmtpSecurity Security { get; set; } = SmtpSecurity.Auto;
     public string User { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
-
-    /// <summary>Sender address. The only address mail is ever sent from.</summary>
-    public string FromEmail { get; set; } = string.Empty;
-
-    public string FromName { get; set; } = "Clinic EZ";
-    public string? ReplyTo { get; set; }
 
     public string? FindProblem(bool isDevelopment)
     {
@@ -52,9 +43,6 @@ public sealed class SmtpOptions
             return isDevelopment ? null : "Smtp:Mode 'Log' is only allowed in the Development environment.";
         }
 
-        // Host, FromEmail, Port, and Security are managed dynamically via Platform Settings (SystemSettings) in DB.
-        // Static configuration in appsettings/env is an optional fallback.
-        if (Port is < 1 or > 65535) return "Smtp:Port must be between 1 and 65535.";
         return null;
     }
 }
@@ -70,70 +58,38 @@ internal sealed class SmtpOptionsValidator(IHostEnvironment environment) : IVali
 
 public sealed class SmtpEmailSender(
     IOptions<SmtpOptions> options,
-    ClinicEz.Portal.Application.Interfaces.ISystemSettingsService? settingsService = null,
+    ClinicEz.Portal.Application.Interfaces.ISystemSettingsService settingsService,
     ILogger<SmtpEmailSender>? logger = null) : IEmailSender
 {
     public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
         var smtp = options.Value;
-        var host = smtp.Host;
-        var port = smtp.Port;
-        var fromEmail = smtp.FromEmail;
-        var fromName = smtp.FromName;
-        var defaultReplyTo = smtp.ReplyTo;
-        var security = smtp.Security;
 
-        // Platform Settings (SystemSettings) in DB is the primary source of truth for all non-secret mailer parameters.
-        if (settingsService is not null)
-        {
-            var dbHost = await settingsService.GetSettingValueAsync("Mailer:SmtpHost", string.Empty, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(dbHost))
-            {
-                host = dbHost.Trim();
-            }
-
-            var dbPort = await settingsService.GetSettingValueAsync("Mailer:SmtpPort", string.Empty, cancellationToken);
-            if (int.TryParse(dbPort, out var parsedPort) && parsedPort > 0)
-            {
-                port = parsedPort;
-            }
-
-            var dbSec = await settingsService.GetSettingValueAsync("Mailer:SmtpSecurity", string.Empty, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(dbSec) && Enum.TryParse<SmtpSecurity>(dbSec, true, out var parsedSec))
-            {
-                security = parsedSec;
-            }
-
-            var dbFromEmail = await settingsService.GetSettingValueAsync("Mailer:SmtpFromEmail", string.Empty, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(dbFromEmail))
-            {
-                fromEmail = dbFromEmail.Trim();
-            }
-
-            var dbFromName = await settingsService.GetSettingValueAsync("Mailer:SmtpFromName", string.Empty, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(dbFromName))
-            {
-                fromName = dbFromName.Trim();
-            }
-
-            var dbReplyTo = await settingsService.GetSettingValueAsync("Mailer:SmtpReplyTo", string.Empty, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(dbReplyTo))
-            {
-                defaultReplyTo = dbReplyTo.Trim();
-            }
-        }
-
+        // Platform Settings (SystemSettings) in the database is the exclusive source of truth for all non-secret mailer parameters.
+        var host = (await settingsService.GetSettingValueAsync("Mailer:SmtpHost", string.Empty, cancellationToken))?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(host))
         {
             throw new InvalidOperationException(
-                "SMTP host is not configured. Please configure 'Mailer:SmtpHost' in Platform Settings (/admin/settings) or provide Smtp:Host in configuration.");
+                "SMTP host is not configured. Please configure 'Mailer:SmtpHost' in Platform Settings (/admin/settings).");
         }
 
+        var fromEmail = (await settingsService.GetSettingValueAsync("Mailer:SmtpFromEmail", string.Empty, cancellationToken))?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(fromEmail))
         {
             throw new InvalidOperationException(
-                "SMTP sender email is not configured. Please configure 'Mailer:SmtpFromEmail' in Platform Settings (/admin/settings) or provide Smtp:FromEmail in configuration.");
+                "SMTP sender email is not configured. Please configure 'Mailer:SmtpFromEmail' in Platform Settings (/admin/settings).");
         }
+
+        var dbPort = await settingsService.GetSettingValueAsync("Mailer:SmtpPort", "587", cancellationToken);
+        var port = int.TryParse(dbPort, out var parsedPort) && parsedPort > 0 ? parsedPort : 587;
+
+        var dbSec = await settingsService.GetSettingValueAsync("Mailer:SmtpSecurity", "StartTls", cancellationToken);
+        var security = Enum.TryParse<SmtpSecurity>(dbSec, true, out var parsedSec) ? parsedSec : SmtpSecurity.StartTls;
+
+        var fromName = (await settingsService.GetSettingValueAsync("Mailer:SmtpFromName", "Clinic EZ Support", cancellationToken))?.Trim();
+        if (string.IsNullOrWhiteSpace(fromName)) fromName = "Clinic EZ Support";
+
+        var defaultReplyTo = (await settingsService.GetSettingValueAsync("Mailer:SmtpReplyTo", string.Empty, cancellationToken))?.Trim();
 
         var mime = new MimeMessage();
         mime.From.Add(new MailboxAddress(DisplayName(fromName, message), fromEmail));
