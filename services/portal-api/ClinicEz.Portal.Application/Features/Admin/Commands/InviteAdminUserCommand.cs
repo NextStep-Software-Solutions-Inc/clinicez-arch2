@@ -85,14 +85,14 @@ public class InviteAdminUserCommandHandler(
             CreatedBy = request.CreatedBy
         };
 
+        await context.AdminUsers.AddAsync(user, cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
+
         var delivery = string.IsNullOrEmpty(request.DeliveryMode) ? "email" : request.DeliveryMode.ToLowerInvariant();
         if (delivery == "email")
         {
-            invitationNotifier.RequestInvitation(user, role.Name, request.CreatedBy);
+            await invitationNotifier.RequestInvitationAsync(user, role.Name, request.CreatedBy, cancellationToken);
         }
-
-        await context.AdminUsers.AddAsync(user, cancellationToken);
-        await context.SaveChangesAsync(cancellationToken);
 
         var baseUrl = frontendUrlProvider.GetBaseUrl();
         return AdminUserMapping.ToDto(user, timeProvider, baseUrl);

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.Extensions.Logging;
@@ -15,8 +17,12 @@ public interface IFrontendUrlProvider
 public interface IStaffInvitationNotifier
 {
     /// <summary>
-    /// Stages the email. Call it BEFORE the <c>SaveChanges</c> that persists the invitation. When the portal website's
-    /// address is unknown the email is skipped (the invitation link can still be copied by an admin) instead of failing the invite.
+    /// Renders and delivers the invitation email directly.
+    /// </summary>
+    Task RequestInvitationAsync(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Synchronous compatibility wrapper.
     /// </summary>
     void RequestInvitation(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName);
 }
@@ -26,7 +32,7 @@ public sealed class StaffInvitationNotifier(
     IFrontendUrlProvider frontendUrl,
     ILogger<StaffInvitationNotifier> logger) : IStaffInvitationNotifier
 {
-    public void RequestInvitation(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName)
+    public async Task RequestInvitationAsync(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName, CancellationToken ct = default)
     {
         var baseUrl = frontendUrl.GetBaseUrl();
         if (baseUrl is null)
@@ -44,17 +50,28 @@ public sealed class StaffInvitationNotifier(
         };
         if (!string.IsNullOrWhiteSpace(facilityName)) model["facilityName"] = facilityName;
 
-        notifications.RequestEmail(
-            new NotificationEmailRequestedPayload
-            {
-                To = member.Email,
-                Subject = $"You've been invited to join {SingleLine(tenant.Name)} on Clinic EZ",
-                TemplateKey = EmailTemplateKeys.StaffInvitation,
-                Model = model,
-                FromFacilityName = tenant.Name
-            },
-            member.Id);
+        try
+        {
+            await notifications.RequestEmailAsync(
+                new NotificationEmailRequestedPayload
+                {
+                    To = member.Email,
+                    Subject = $"You've been invited to join {SingleLine(tenant.Name)} on Clinic EZ",
+                    TemplateKey = EmailTemplateKeys.StaffInvitation,
+                    Model = model,
+                    FromFacilityName = tenant.Name
+                },
+                member.Id,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to deliver staff invitation email to {Email} for member {MemberId}: {ErrorMessage}", member.Email, member.Id, ex.Message);
+        }
     }
+
+    public void RequestInvitation(Tenant tenant, WorkspaceMember member, string roleLabel, string? facilityName) =>
+        RequestInvitationAsync(tenant, member, roleLabel, facilityName, CancellationToken.None).GetAwaiter().GetResult();
 
     private static string SingleLine(string value) =>
         new(value.Select(c => char.IsControl(c) ? ' ' : c).ToArray());

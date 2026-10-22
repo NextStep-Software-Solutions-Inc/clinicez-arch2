@@ -132,12 +132,13 @@ public class InviteStaffMemberCommandHandler(
                     existingProfile = null;
                 }
 
+                await context.SaveChangesAsync(cancellationToken);
+
                 if (request.SendEmail)
                 {
-                    invitationNotifier.RequestInvitation(tenant, existing, StaffMemberMapping.RoleName(existing, existingProfile), facilityName);
+                    await invitationNotifier.RequestInvitationAsync(tenant, existing, StaffMemberMapping.RoleName(existing, existingProfile), facilityName, cancellationToken);
                 }
 
-                await context.SaveChangesAsync(cancellationToken);
                 return StaffMemberMapping.ToDto(existing, existingProfile, facilityName, now);
             }
 
@@ -178,12 +179,12 @@ public class InviteStaffMemberCommandHandler(
         var currentMemberCount = await context.WorkspaceMembers.CountAsync(m => m.TenantId == tenant.Id && m.Status != MemberStatus.Revoked && m.Status != MemberStatus.Suspended, cancellationToken);
         tenant.StaffAccountsCount = currentMemberCount + 1;
 
+        await context.SaveChangesAsync(cancellationToken);
+
         if (request.SendEmail)
         {
-            invitationNotifier.RequestInvitation(tenant, newMember, StaffMemberMapping.RoleName(newMember, profile), facilityName);
+            await invitationNotifier.RequestInvitationAsync(tenant, newMember, StaffMemberMapping.RoleName(newMember, profile), facilityName, cancellationToken);
         }
-
-        await context.SaveChangesAsync(cancellationToken);
 
         return StaffMemberMapping.ToDto(newMember, profile, facilityName, now);
     }

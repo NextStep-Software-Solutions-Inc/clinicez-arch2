@@ -8,6 +8,7 @@ namespace ClinicEz.Portal.Application.Features.Notifications;
 
 public interface IAdminInvitationNotifier
 {
+    Task RequestInvitationAsync(AdminUser user, string roleName, string? inviterName = null, CancellationToken ct = default);
     void RequestInvitation(AdminUser user, string roleName, string? inviterName = null);
 }
 
@@ -16,7 +17,7 @@ public sealed class AdminInvitationNotifier(
     IFrontendUrlProvider frontendUrl,
     ILogger<AdminInvitationNotifier> logger) : IAdminInvitationNotifier
 {
-    public void RequestInvitation(AdminUser user, string roleName, string? inviterName = null)
+    public async Task RequestInvitationAsync(AdminUser user, string roleName, string? inviterName = null, CancellationToken ct = default)
     {
         var baseUrl = frontendUrl.GetBaseUrl();
         if (baseUrl is null)
@@ -33,17 +34,28 @@ public sealed class AdminInvitationNotifier(
         };
         if (!string.IsNullOrWhiteSpace(inviterName)) model["inviterName"] = inviterName;
 
-        notifications.RequestEmail(
-            new NotificationEmailRequestedPayload
-            {
-                To = user.Email,
-                Subject = $"You've been invited to join Clinic EZ Platform Administration as {SingleLine(roleName)}",
-                TemplateKey = EmailTemplateKeys.AdminInvitation,
-                Model = model,
-                FromFacilityName = "Clinic EZ Platform"
-            },
-            user.Id);
+        try
+        {
+            await notifications.RequestEmailAsync(
+                new NotificationEmailRequestedPayload
+                {
+                    To = user.Email,
+                    Subject = $"You've been invited to join Clinic EZ Platform Administration as {SingleLine(roleName)}",
+                    TemplateKey = EmailTemplateKeys.AdminInvitation,
+                    Model = model,
+                    FromFacilityName = "Clinic EZ Platform"
+                },
+                user.Id,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to deliver admin invitation email to {Email} for user {UserId}: {ErrorMessage}", user.Email, user.Id, ex.Message);
+        }
     }
+
+    public void RequestInvitation(AdminUser user, string roleName, string? inviterName = null) =>
+        RequestInvitationAsync(user, roleName, inviterName, CancellationToken.None).GetAwaiter().GetResult();
 
     private static string SingleLine(string value) =>
         new(value.Select(c => char.IsControl(c) ? ' ' : c).ToArray());

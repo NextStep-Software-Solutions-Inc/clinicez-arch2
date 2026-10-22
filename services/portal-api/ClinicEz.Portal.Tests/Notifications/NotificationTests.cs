@@ -19,19 +19,6 @@ using Xunit;
 
 namespace ClinicEz.Portal.Tests.Notifications;
 
-internal sealed class RecordingEmailSender : IEmailSender
-{
-    public List<EmailMessage> Sent { get; } = [];
-    public Exception? FailWith { get; set; }
-
-    public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
-    {
-        if (FailWith is not null) throw FailWith;
-        Sent.Add(message);
-        return Task.CompletedTask;
-    }
-}
-
 public class NotificationEmailRequestedHandlerTests : IDisposable
 {
     private readonly ApplicationDbContext _context = TestSupport.NewContext();
@@ -353,6 +340,7 @@ public class EmailTemplateRendererTests
 public class StaffInvitationEmailTests : IDisposable
 {
     private readonly ApplicationDbContext _context = TestSupport.NewContext();
+    private readonly RecordingEmailSender _sender = new();
     private readonly Guid _tenantId = Guid.NewGuid();
 
     public StaffInvitationEmailTests()
@@ -368,39 +356,41 @@ public class StaffInvitationEmailTests : IDisposable
     }
 
     [Fact]
-    public async Task Invite_StagesTheInvitationEmail_WithTheMemberTokenAndTheFrontendLink()
-    {
-        var handler = new InviteStaffMemberCommandHandler(_context, new Mock<ClinicEz.Portal.Application.Features.Entitlements.IEntitlementGuard>().Object, TestSupport.InvitationNotifier(_context), TimeProvider.System);
-
-        var result = await handler.Handle(new InviteStaffMemberCommand("metro", "biller@metro.ph", "Bob Biller", "Biller"), CancellationToken.None);
-
-        var envelope = Assert.Single(TestSupport.Outbox(_context, InteropTypes.NotificationEmailRequested));
-        Assert.Equal(Party.Portal, envelope.From);
-        Assert.Equal(Party.Portal, envelope.To);
-        var payload = envelope.GetPayload<NotificationEmailRequestedPayload>();
-        Assert.Equal("biller@metro.ph", payload.To);
-        Assert.Equal(EmailTemplateKeys.StaffInvitation, payload.TemplateKey);
-        Assert.Equal($"https://app.clinicez.test/invitations/{result.InvitationToken}", payload.Model["inviteUrl"]);
-        Assert.Equal("Metro Clinic", payload.Model["workspaceName"]);
-    }
-
-    [Fact]
-    public async Task Invite_WithoutAKnownFrontendUrl_StillInvites_ButQueuesNoEmail()
+    public async Task Invite_DirectlyDispatchesTheInvitationEmail_WithTheMemberTokenAndTheFrontendLink()
     {
         var handler = new InviteStaffMemberCommandHandler(
             _context,
             new Mock<ClinicEz.Portal.Application.Features.Entitlements.IEntitlementGuard>().Object,
-            TestSupport.InvitationNotifier(_context, frontendUrl: null),
+            TestSupport.InvitationNotifier(_context, emailSender: _sender),
+            TimeProvider.System);
+
+        var result = await handler.Handle(new InviteStaffMemberCommand("metro", "biller@metro.ph", "Bob Biller", "Biller"), CancellationToken.None);
+
+        var mail = Assert.Single(_sender.Sent);
+        Assert.Equal("biller@metro.ph", mail.To);
+        Assert.Contains("Metro Clinic", mail.FromDisplayName);
+        Assert.Contains($"https://app.clinicez.test/invitations/{result.InvitationToken}", mail.HtmlBody);
+        Assert.Contains($"https://app.clinicez.test/invitations/{result.InvitationToken}", mail.TextBody);
+        Assert.Contains("Metro Clinic", mail.HtmlBody);
+    }
+
+    [Fact]
+    public async Task Invite_WithoutAKnownFrontendUrl_StillInvites_ButSendsNoEmail()
+    {
+        var handler = new InviteStaffMemberCommandHandler(
+            _context,
+            new Mock<ClinicEz.Portal.Application.Features.Entitlements.IEntitlementGuard>().Object,
+            TestSupport.InvitationNotifier(_context, frontendUrl: null, emailSender: _sender),
             TimeProvider.System);
 
         var result = await handler.Handle(new InviteStaffMemberCommand("metro", "biller@metro.ph", "Bob Biller", "Biller"), CancellationToken.None);
 
         Assert.Equal("Invited", result.Status);
-        Assert.Empty(TestSupport.Outbox(_context, InteropTypes.NotificationEmailRequested));
+        Assert.Empty(_sender.Sent);
     }
 
     [Fact]
-    public async Task Resend_StagesAnEmailWithTheFreshToken()
+    public async Task Resend_DirectlyDispatchesAnEmailWithTheFreshToken()
     {
         var member = new WorkspaceMember
         {
@@ -417,18 +407,20 @@ public class StaffInvitationEmailTests : IDisposable
         _context.WorkspaceMembers.Add(member);
         await _context.SaveChangesAsync();
 
-        var result = await new ResendStaffInvitationCommandHandler(_context, TestSupport.InvitationNotifier(_context), TimeProvider.System)
+        var result = await new ResendStaffInvitationCommandHandler(_context, TestSupport.InvitationNotifier(_context, emailSender: _sender), TimeProvider.System)
             .Handle(new ResendStaffInvitationCommand("metro", member.Id), CancellationToken.None);
 
-        var payload = Assert.Single(TestSupport.OutboxPayloads<NotificationEmailRequestedPayload>(_context, InteropTypes.NotificationEmailRequested));
-        Assert.EndsWith($"/invitations/{result.InvitationToken}", payload.Model["inviteUrl"]);
-        Assert.DoesNotContain("/old", payload.Model["inviteUrl"]);
+        var mail = Assert.Single(_sender.Sent);
+        Assert.Equal("renew@metro.ph", mail.To);
+        Assert.Contains($"/invitations/{result.InvitationToken}", mail.HtmlBody);
+        Assert.DoesNotContain("/old", mail.HtmlBody);
     }
 }
 
 public class SendContactMessageCommandTests : IDisposable
 {
     private readonly ApplicationDbContext _context = TestSupport.NewContext();
+    private readonly RecordingEmailSender _sender = new();
 
     public void Dispose()
     {
@@ -444,33 +436,33 @@ public class SendContactMessageCommandTests : IDisposable
 
         return new(
             _context,
-            new NotificationService(new InteropPublisher(_context)),
+            new NotificationService(new EmailTemplateRenderer(), _sender, NullLogger<NotificationService>.Instance),
             settingsMock.Object);
     }
 
     [Fact]
-    public async Task ConfiguredInbox_ReceivesTheMessage_ThroughTheOutbox()
+    public async Task ConfiguredInbox_ReceivesTheMessage_DirectlyViaEmailSender()
     {
         var accepted = await Handler(" support@clinicez.test ").Handle(
             new SendContactMessageCommand(" Vera ", "vera@example.com", " Hello there, I have a question. "), CancellationToken.None);
 
         Assert.True(accepted);
-        var payload = Assert.Single(TestSupport.OutboxPayloads<NotificationEmailRequestedPayload>(_context, InteropTypes.NotificationEmailRequested));
-        Assert.Equal("support@clinicez.test", payload.To);
-        Assert.Equal(EmailTemplateKeys.ContactMessage, payload.TemplateKey);
-        Assert.Equal("Vera", payload.Model["name"]);
-        Assert.Equal("Hello there, I have a question.", payload.Model["message"]);
+        var mail = Assert.Single(_sender.Sent);
+        Assert.Equal("support@clinicez.test", mail.To);
+        Assert.Equal("Contact Us Message", mail.Subject);
+        Assert.Equal("vera@example.com", mail.ReplyTo);
+        Assert.Contains("Hello there, I have a question.", mail.HtmlBody);
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("  ")]
-    public async Task WithoutAnInbox_NothingIsQueued(string? inbox)
+    public async Task WithoutAnInbox_NothingIsSent(string? inbox)
     {
         var accepted = await Handler(inbox).Handle(new SendContactMessageCommand("Vera", "vera@example.com", "Hello there"), CancellationToken.None);
 
         Assert.False(accepted);
-        Assert.Empty(TestSupport.Outbox(_context));
+        Assert.Empty(_sender.Sent);
     }
 
     [Fact]
@@ -488,21 +480,57 @@ public class SendContactMessageCommandTests : IDisposable
 public class NotificationServiceTests
 {
     [Fact]
-    public async Task RequestEmail_AddressesThePortalItself_AndUsesTheCorrelationId()
+    public async Task RequestEmailAsync_RendersTemplateAndDispatchesDirectlyViaEmailSender()
     {
-        using var context = TestSupport.NewContext();
-        var correlationId = Guid.NewGuid();
+        var sender = new RecordingEmailSender();
+        var service = new NotificationService(new EmailTemplateRenderer(), sender, NullLogger<NotificationService>.Instance);
 
-        new NotificationService(new InteropPublisher(context)).RequestEmail(
-            new NotificationEmailRequestedPayload { To = "a@example.com", Subject = "S", TemplateKey = EmailTemplateKeys.ContactMessage },
-            correlationId);
-        await context.SaveChangesAsync();
+        await service.RequestEmailAsync(
+            new NotificationEmailRequestedPayload
+            {
+                To = "admin@example.com",
+                Subject = "Contact Message",
+                TemplateKey = EmailTemplateKeys.ContactMessage,
+                Model = new Dictionary<string, string>
+                {
+                    ["name"] = "Alice",
+                    ["email"] = "alice@example.com",
+                    ["message"] = "Test contact body"
+                }
+            },
+            Guid.NewGuid());
 
-        var envelope = Assert.Single(TestSupport.Outbox(context));
-        Assert.Equal(InteropTypes.NotificationEmailRequested, envelope.Type);
-        Assert.Equal(Party.Portal, envelope.From);
-        Assert.Equal(Party.Portal, envelope.To);
-        Assert.Equal(correlationId, envelope.CorrelationId);
+        var mail = Assert.Single(sender.Sent);
+        Assert.Equal("admin@example.com", mail.To);
+        Assert.Equal("Contact Message", mail.Subject);
+        Assert.Equal("alice@example.com", mail.ReplyTo);
+        Assert.Contains("Test contact body", mail.HtmlBody);
+    }
+
+    [Fact]
+    public void RequestEmail_SyncCompatibility_DispatchesDirectly()
+    {
+        var sender = new RecordingEmailSender();
+        var service = new NotificationService(new EmailTemplateRenderer(), sender, NullLogger<NotificationService>.Instance);
+
+        service.RequestEmail(
+            new NotificationEmailRequestedPayload
+            {
+                To = "sync@example.com",
+                Subject = "Contact Message",
+                TemplateKey = EmailTemplateKeys.ContactMessage,
+                Model = new Dictionary<string, string>
+                {
+                    ["name"] = "Bob",
+                    ["email"] = "bob@example.com",
+                    ["message"] = "Sync contact body"
+                }
+            },
+            Guid.NewGuid());
+
+        var mail = Assert.Single(sender.Sent);
+        Assert.Equal("sync@example.com", mail.To);
+        Assert.Contains("Sync contact body", mail.HtmlBody);
     }
 }
 
