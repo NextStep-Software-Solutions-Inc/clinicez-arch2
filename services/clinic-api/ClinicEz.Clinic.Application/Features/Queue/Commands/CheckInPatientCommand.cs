@@ -28,7 +28,8 @@ public sealed record CheckInPatientCommand(
     QueuePriority Priority = QueuePriority.Routine,
     string? ChiefComplaint = null,
     string? RoomOrStation = null,
-    Guid? RoomId = null) : IRequest<QueueItemDto>;
+    Guid? RoomId = null,
+    DateOnly? QueueDate = null) : IRequest<QueueItemDto>;
 
 public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPatientCommand>
 {
@@ -76,7 +77,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
 
     public async Task<QueueItemDto> Handle(CheckInPatientCommand request, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = request.QueueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
         // Enforce active queue day uniqueness: prevent duplicate active tickets today
         QueueStatus[] activeStatuses =

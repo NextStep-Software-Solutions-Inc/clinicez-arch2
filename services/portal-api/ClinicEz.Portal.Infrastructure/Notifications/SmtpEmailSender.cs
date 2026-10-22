@@ -70,7 +70,8 @@ internal sealed class SmtpOptionsValidator(IHostEnvironment environment) : IVali
 
 public sealed class SmtpEmailSender(
     IOptions<SmtpOptions> options,
-    ClinicEz.Portal.Application.Interfaces.ISystemSettingsService? settingsService = null) : IEmailSender
+    ClinicEz.Portal.Application.Interfaces.ISystemSettingsService? settingsService = null,
+    ILogger<SmtpEmailSender>? logger = null) : IEmailSender
 {
     public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
@@ -80,12 +81,46 @@ public sealed class SmtpEmailSender(
         var fromEmail = smtp.FromEmail;
         var fromName = smtp.FromName;
         var defaultReplyTo = smtp.ReplyTo;
+        var security = smtp.Security;
 
         if (settingsService is not null)
         {
-            fromEmail = await settingsService.GetSettingValueAsync("Mailer:SmtpFromEmail", fromEmail, cancellationToken);
-            fromName = await settingsService.GetSettingValueAsync("Mailer:SmtpFromName", fromName, cancellationToken);
-            defaultReplyTo = await settingsService.GetSettingValueAsync("Mailer:SmtpReplyTo", defaultReplyTo ?? string.Empty, cancellationToken);
+            var dbFromEmail = await settingsService.GetSettingValueAsync("Mailer:SmtpFromEmail", string.Empty, cancellationToken);
+            // Only override if db setting is populated and not the generic placeholder when env is already configured
+            if (!string.IsNullOrWhiteSpace(dbFromEmail) && (string.IsNullOrWhiteSpace(fromEmail) || dbFromEmail != "no-reply@clinicez.com"))
+            {
+                fromEmail = dbFromEmail;
+            }
+
+            var dbFromName = await settingsService.GetSettingValueAsync("Mailer:SmtpFromName", string.Empty, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(dbFromName))
+            {
+                fromName = dbFromName;
+            }
+
+            var dbReplyTo = await settingsService.GetSettingValueAsync("Mailer:SmtpReplyTo", string.Empty, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(dbReplyTo))
+            {
+                defaultReplyTo = dbReplyTo;
+            }
+
+            var dbHost = await settingsService.GetSettingValueAsync("Mailer:SmtpHost", string.Empty, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(dbHost) && dbHost != "localhost")
+            {
+                host = dbHost;
+            }
+
+            var dbPort = await settingsService.GetSettingValueAsync("Mailer:SmtpPort", string.Empty, cancellationToken);
+            if (int.TryParse(dbPort, out var parsedPort) && parsedPort > 0)
+            {
+                port = parsedPort;
+            }
+
+            var dbSec = await settingsService.GetSettingValueAsync("Mailer:SmtpSecurity", string.Empty, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(dbSec) && Enum.TryParse<SmtpSecurity>(dbSec, true, out var parsedSec))
+            {
+                security = parsedSec;
+            }
         }
 
         var mime = new MimeMessage();
@@ -100,25 +135,38 @@ public sealed class SmtpEmailSender(
 
         using var client = new SmtpClient();
         client.CheckCertificateRevocation = false;
-        await client.ConnectAsync(host, port, SocketOptions(smtp), cancellationToken);
-        if (!string.IsNullOrEmpty(smtp.User))
-        {
-            await client.AuthenticateAsync(smtp.User, smtp.Password, cancellationToken);
-        }
 
-        await client.SendAsync(mime, cancellationToken);
-        await client.DisconnectAsync(true, cancellationToken);
+        try
+        {
+            logger?.LogInformation("Connecting to SMTP host {Host}:{Port} (Security: {Security}) to send email to {To}...",
+                host, port, security, message.To);
+            await client.ConnectAsync(host, port, SocketOptions(security, port), cancellationToken);
+            if (!string.IsNullOrEmpty(smtp.User))
+            {
+                await client.AuthenticateAsync(smtp.User, smtp.Password, cancellationToken);
+            }
+
+            await client.SendAsync(mime, cancellationToken);
+            await client.DisconnectAsync(true, cancellationToken);
+            logger?.LogInformation("Successfully dispatched email to {To} via SMTP host {Host}.", message.To, host);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogError(ex, "Failed to send email to {To} via SMTP host {Host}:{Port}: {ErrorMessage}",
+                message.To, host, port, ex.Message);
+            throw;
+        }
     }
 
     private static string DisplayName(string fromName, EmailMessage message) =>
         string.IsNullOrWhiteSpace(message.FromDisplayName) ? fromName : $"{message.FromDisplayName} (via {fromName})";
 
-    private static SecureSocketOptions SocketOptions(SmtpOptions smtp) => smtp.Security switch
+    private static SecureSocketOptions SocketOptions(SmtpSecurity security, int port) => security switch
     {
         SmtpSecurity.None => SecureSocketOptions.None,
         SmtpSecurity.StartTls => SecureSocketOptions.StartTls,
         SmtpSecurity.SslOnConnect => SecureSocketOptions.SslOnConnect,
-        _ => smtp.Port == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable
+        _ => port == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable
     };
 }
 

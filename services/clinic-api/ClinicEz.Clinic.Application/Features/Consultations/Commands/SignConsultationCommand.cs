@@ -142,6 +142,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         else
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var manilaToday = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8));
             QueueStatus[] activeStatuses =
             [
                 QueueStatus.Waiting,
@@ -154,7 +155,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
 
             queueItem = await _queueRepository.Query(q =>
                 q.ClinicId == _clinicContext.ClinicId &&
-                q.QueueDate == today &&
+                (q.QueueDate == today || q.QueueDate == manilaToday) &&
                 q.PatientId == encounter.PatientId &&
                 activeStatuses.Contains(q.Status))
                 .OrderByDescending(q => q.CheckInTime)

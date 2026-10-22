@@ -1719,6 +1719,7 @@ export interface RegisterPatientPayload {
   doctorName?: string;
   roomId?: string;
   roomOrStation?: string;
+  queueDate?: string;
 }
 
 export interface VisibilityRule {
@@ -2008,6 +2009,7 @@ export interface CheckInRequest {
   chiefComplaint?: string;
   roomOrStation?: string;
   roomId?: string;
+  queueDate?: string;
 }
 
 export interface RecordTriageRequest {
@@ -4408,6 +4410,26 @@ export function resolveWalkInDoctorRoomSelection(
     doctorRoomIds: validRooms,
   };
 }
+
+/**
+ * Returns today's calendar date (YYYY-MM-DD) in Philippine Standard Time (Asia/Manila, UTC+8).
+ * Prevents UTC midnight rollover mismatches (00:00–07:59 AM PHT) where UTC is still on the previous calendar day.
+ */
+export function getManilaTodayStr(now: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
+  } catch {
+    const manilaOffsetMs = 8 * 60 * 60 * 1000;
+    const manilaDate = new Date(now.getTime() + manilaOffsetMs);
+    return manilaDate.toISOString().split('T')[0];
+  }
+}
+
 
 
 

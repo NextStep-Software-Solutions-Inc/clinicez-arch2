@@ -668,4 +668,72 @@ public class StaffInvitationTests
         reAccept.Ok.Should().BeFalse();
         reAccept.Failure.Should().Be(AuthFailure.InvalidRequest);
     }
+
+    [Fact]
+    public async Task GetStaffMembersQuery_HealsCredentialedStaff_FromMigrationStatusInvited_ToActive()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        // Pre-existing staff member whose DB status got set to Invited by migration
+        var existingStaff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Wave",
+            LastName = "Ambray",
+            Role = StaffRole.Admin,
+            Email = "wave@clinicez.ph",
+            PasswordHash = "already_hashed_password",
+            Status = StaffAccountStatus.Invited, // Faulty migration status
+            InvitationToken = null, // No pending invitation token
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow.AddMonths(-1)
+        };
+
+        // Genuinely invited staff member
+        var invitedStaff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "New",
+            LastName = "Doctor",
+            Role = StaffRole.Doctor,
+            Email = "newdoc@clinicez.ph",
+            PasswordHash = null,
+            Status = StaffAccountStatus.Invited,
+            InvitationToken = "active_invite_token_123",
+            InvitationExpiresAt = DateTime.UtcNow.AddDays(7),
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await staffRepo.AddAsync(existingStaff);
+        await staffRepo.AddAsync(invitedStaff);
+        await uow.SaveChangesAsync();
+
+        var queryHandler = new ClinicEz.Clinic.Application.Features.Staff.Queries.GetStaffMembersQueryHandler(
+            staffRepo,
+            clinicContext);
+
+        var list = await queryHandler.Handle(
+            new ClinicEz.Clinic.Application.Features.Staff.Queries.GetStaffMembersQuery(),
+            CancellationToken.None);
+
+        var waveDto = list.First(s => s.Id == existingStaff.Id);
+        waveDto.Status.Should().Be(StaffAccountStatus.Active);
+        waveDto.HasCredentials.Should().BeTrue();
+
+        var invitedDto = list.First(s => s.Id == invitedStaff.Id);
+        invitedDto.Status.Should().Be(StaffAccountStatus.Invited);
+        invitedDto.HasCredentials.Should().BeFalse();
+    }
 }

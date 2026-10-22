@@ -228,8 +228,8 @@ export default function BillingScreen() {
       [settingsData],
     ] = await Promise.all([
       clinicService.getServices(),
-      clinicService.getQueue({ view: 'All' }),
-      clinicService.getDailyEodReport(),
+      clinicService.getQueue({ date: todayStr, view: 'All' }),
+      clinicService.getDailyEodReport(todayStr),
       clinicService.getInvoices(todayStr),
       clinicService.getInvoices(undefined, undefined, 'Draft'),
       clinicService.getSettings(),

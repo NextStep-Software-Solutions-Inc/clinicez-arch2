@@ -75,6 +75,7 @@ import { openDocument, openDocumentBlob } from '../../services/documentOpener';
 import {
   clinicService,
   computeScopedStations,
+  getManilaTodayStr,
   isPatientVisibleToStaff,
   resolveCallToRoom,
   PatientQueueItem,
@@ -973,6 +974,7 @@ export default function ConsultationsScreen() {
         ? undefined
         : activeRooms.find((r) => r.name === selectedStationFilter);
     const [queueData, queueErr] = await clinicService.getQueue({
+      date: getManilaTodayStr(),
       view: queueViewFilter,
       doctorId: queueViewFilter === 'MyRoom' ? doctorId : undefined,
       roomId: selectedRoomObj?.id,

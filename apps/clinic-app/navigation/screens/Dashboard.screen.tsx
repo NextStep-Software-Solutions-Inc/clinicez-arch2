@@ -299,6 +299,7 @@ export default function DashboardScreen() {
   const [isEodDatePickerModalOpen, setIsEodDatePickerModalOpen] = useState(false);
 
   const loadData = useCallback(async () => {
+    const todayStr = getManilaTodayStr();
     const [
       [metricsData, metricsErr],
       [queueData, queueErr],
@@ -308,10 +309,10 @@ export default function DashboardScreen() {
       [taxData, taxErr],
       [sharesData, sharesErr],
     ] = await Promise.all([
-      clinicService.getQueueMetrics(),
-      clinicService.getQueue({ view: 'All' }),
+      clinicService.getQueueMetrics(todayStr),
+      clinicService.getQueue({ date: todayStr, view: 'All' }),
       clinicService.getClinicAnalytics(),
-      clinicService.getDailyEodReport(),
+      clinicService.getDailyEodReport(todayStr),
       clinicService.getMorbidityReport(),
       clinicService.getTaxDiscountAuditReport(),
       clinicService.getDoctorSharesReport(),
@@ -351,7 +352,7 @@ export default function DashboardScreen() {
   const loadReports = useCallback(async (type: ReportType, start?: string, end?: string, date?: string) => {
     setReportsError(null);
     if (type === 'DAILY_EOD') {
-      const [data, err] = await clinicService.getDailyEodReport(date || undefined);
+      const [data, err] = await clinicService.getDailyEodReport(date || getManilaTodayStr());
       setEodReport(data ?? null);
       if (err) setReportsError(err.message);
     } else if (type === 'MORBIDITY') {
@@ -381,7 +382,7 @@ export default function DashboardScreen() {
   );
 
   const loadMetrics = useCallback(async () => {
-    const [metricsData] = await clinicService.getQueueMetrics();
+    const [metricsData] = await clinicService.getQueueMetrics(getManilaTodayStr());
     if (metricsData) setMetrics(metricsData);
   }, []);
 

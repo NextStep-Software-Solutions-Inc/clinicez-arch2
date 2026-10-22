@@ -92,7 +92,7 @@ public sealed class StaffMember : BaseEntity
     public SignatureMode DefaultSignatureMode { get; set; } = SignatureMode.ESignatureSpecimen;
 
     public bool IsActive { get; set; } = true;
-    public StaffAccountStatus Status { get; set; } = StaffAccountStatus.Invited;
+    public StaffAccountStatus Status { get; set; } = StaffAccountStatus.Active;
     public string? InvitationToken { get; set; }
     public DateTime? InvitationExpiresAt { get; set; }
     public DateTime? InviteAcceptedAt { get; set; }

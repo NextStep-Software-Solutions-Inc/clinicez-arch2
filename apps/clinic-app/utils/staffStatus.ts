@@ -19,13 +19,20 @@ export interface StaffBadgeResult {
  * 6. Default (No Login)
  */
 export function resolveStaffBadge(s: Partial<StaffMember>): StaffBadgeResult {
+  if (s.status === 'Active') {
+    return s.mustChangePassword
+      ? { label: 'Password Reset Pending', variant: 'warning', icon: 'lock' }
+      : { label: 'Active', variant: 'success', icon: 'check' };
+  }
+
   const isExpired =
     s.isExpired ||
     (s.status === 'Invited' &&
       !!s.invitationExpiresAt &&
       new Date(s.invitationExpiresAt).getTime() < Date.now());
 
-  if (s.status === 'Invited') {
+  // Genuine pending invitation without credentials
+  if (s.status === 'Invited' && !s.hasCredentials) {
     return isExpired
       ? { label: 'Expired', variant: 'warning', icon: 'alertCircle' }
       : { label: 'Invited', variant: 'purple', icon: 'mail' };
@@ -35,11 +42,6 @@ export function resolveStaffBadge(s: Partial<StaffMember>): StaffBadgeResult {
   }
   if (s.status === 'Suspended' || s.isActive === false) {
     return { label: 'Suspended', variant: 'emergency', icon: 'alertTriangle' };
-  }
-  if (s.status === 'Active') {
-    return s.mustChangePassword
-      ? { label: 'Password Reset Pending', variant: 'warning', icon: 'lock' }
-      : { label: 'Active', variant: 'success', icon: 'check' };
   }
   if (s.hasCredentials) {
     return s.mustChangePassword
@@ -71,18 +73,31 @@ export function getAvailableStaffActions(
   options?: { isSelf?: boolean }
 ): StaffActionType[] {
   const isSelf = options?.isSelf ?? false;
-  const isRowActive = s.status === 'Active' || (!s.status && s.isActive !== false);
-  const isRowInvited = s.status === 'Invited';
+  const isCredentialed = !!s.hasCredentials;
   const isRowRevoked = s.status === 'Revoked';
-  const isRowSuspended = s.status === 'Suspended' || (s.isActive === false && !isRowInvited && !isRowRevoked);
+  const isRowSuspended = s.status === 'Suspended' || (s.isActive === false && !isRowRevoked && s.status !== 'Invited');
 
-  const isExpired =
-    s.isExpired ||
-    (isRowInvited &&
-      !!s.invitationExpiresAt &&
-      new Date(s.invitationExpiresAt).getTime() < Date.now());
+  if (isRowRevoked) {
+    return [];
+  }
+
+  if (isRowSuspended) {
+    const actions: StaffActionType[] = [];
+    if (!isSelf) {
+      actions.push('reactivate-staff');
+    }
+    return actions;
+  }
+
+  // A member is only pending invite if in Invited status and lacking credentials
+  const isRowInvited = s.status === 'Invited' && !isCredentialed;
 
   if (isRowInvited) {
+    const isExpired =
+      s.isExpired ||
+      (!!s.invitationExpiresAt &&
+        new Date(s.invitationExpiresAt).getTime() < Date.now());
+
     const actions: StaffActionType[] = [];
     if (!isExpired && (s.invitationToken || s.inviteUrl)) {
       actions.push('copy-invite');
@@ -94,22 +109,10 @@ export function getAvailableStaffActions(
     return actions;
   }
 
-  if (isRowActive) {
-    const actions: StaffActionType[] = ['edit', 'reset-pwd'];
-    if (!isSelf) {
-      actions.push('suspend-staff');
-    }
-    return actions;
+  // Active / Credentialed member
+  const actions: StaffActionType[] = ['edit', 'reset-pwd'];
+  if (!isSelf) {
+    actions.push('suspend-staff');
   }
-
-  if (isRowSuspended) {
-    const actions: StaffActionType[] = [];
-    if (!isSelf) {
-      actions.push('reactivate-staff');
-    }
-    return actions;
-  }
-
-  // Revoked accounts have 0 lifecycle actions
-  return [];
+  return actions;
 }

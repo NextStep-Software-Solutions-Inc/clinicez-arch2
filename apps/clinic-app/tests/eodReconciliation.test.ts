@@ -102,7 +102,7 @@ mock.module('../services/apiClient', () => ({
   clinicApiUrl: (p: string) => `http://localhost:5000/api/v1${p}`,
 }));
 
-const { clinicService } = await import('../services/clinicService');
+const { clinicService, getManilaTodayStr } = await import('../services/clinicService');
 const { validateTimeString } = await import('../components/ui/TimeInput');
 
 describe('Milestone 1: End-of-Day (EOD) Reconciliation & Force EOD', () => {
@@ -234,6 +234,16 @@ describe('Milestone 1: End-of-Day (EOD) Reconciliation & Force EOD', () => {
         (t) => t.status === 'InConsultation' || t.status === 'Completed'
       );
       expect(protectedTickets.every((t) => !activeEodTickets.includes(t))).toBe(true);
+    });
+
+    test('4.2 getManilaTodayStr resolves Philippine Standard Time (UTC+8) across midnight rollover (00:00-07:59 AM PHT)', () => {
+      // 2026-10-21 23:38:00 UTC is 2026-10-22 07:38:00 AM in Asia/Manila (UTC+8)
+      const morningManilaUtc = new Date('2026-10-21T23:38:00Z');
+      expect(getManilaTodayStr(morningManilaUtc)).toBe('2026-10-22');
+
+      // 2026-10-21 15:59:59 UTC is 2026-10-21 23:59:59 PM in Asia/Manila (UTC+8)
+      const lateNightManilaUtc = new Date('2026-10-21T15:59:59Z');
+      expect(getManilaTodayStr(lateNightManilaUtc)).toBe('2026-10-21');
     });
   });
 });

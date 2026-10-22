@@ -35,6 +35,7 @@ import { useStaff, formatStaffName } from '../../context/StaffContext';
 import QueueRoutingSelector from '../../components/queue/QueueRoutingSelector';
 import {
   clinicService,
+  getManilaTodayStr,
   AppointmentItem,
   AppointmentStatus,
   ClinicPatient,
@@ -684,6 +685,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
         roomOrStation: chosenRoom?.name,
         priority: isUrgent ? 'Urgent' : 'Routine',
         chiefComplaint: item.reason ?? 'General Consultation',
+        queueDate: getManilaTodayStr(),
       });
 
       if (err) {

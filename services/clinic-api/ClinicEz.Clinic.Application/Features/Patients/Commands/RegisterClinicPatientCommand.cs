@@ -50,7 +50,8 @@ public sealed record RegisterClinicPatientCommand(
     Guid? DoctorId = null,
     string? DoctorName = null,
     Guid? RoomId = null,
-    string? RoomOrStation = null) : IRequest<ClinicPatientDto>;
+    string? RoomOrStation = null,
+    DateOnly? QueueDate = null) : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
@@ -256,7 +257,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         QueueItem? queueItem = null;
         if (request.SendToTriage && _queueRepo != null)
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = request.QueueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
             var lastSequence = await _queueRepo.Query(q =>
                 q.ClinicId == _clinicContext.ClinicId &&
                 q.QueueDate == today)

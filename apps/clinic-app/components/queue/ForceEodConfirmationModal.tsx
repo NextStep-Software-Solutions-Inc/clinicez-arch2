@@ -7,14 +7,16 @@ import Badge from '../ui/Badge';
 import Icon from '../ui/Icon';
 import Input from '../ui/Input';
 import { theme } from '../../constants/theme';
-import { notify } from '../../utils/feedback';
-import { clinicService, ReconcileEodResult } from '../../services/clinicService';
+import { Alert, notify } from '../../utils/feedback';
+import { openDocument } from '../../services/documentOpener';
+import { clinicService, getManilaTodayStr, ReconcileEodResult } from '../../services/clinicService';
 
 export interface ForceEodConfirmationModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess?: (result: ReconcileEodResult) => void;
   activeTicketCount?: number;
+  date?: string;
 }
 
 export function ForceEodConfirmationModal({
@@ -22,38 +24,91 @@ export function ForceEodConfirmationModal({
   onClose,
   onSuccess,
   activeTicketCount = 0,
+  date,
 }: ForceEodConfirmationModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [reason, setReason] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const inFlightRef = useRef(false);
 
   const handleClose = () => {
     if (submitting || inFlightRef.current) return;
+    setErrorMessage(null);
     onClose();
+  };
+
+  const handleDownloadReport = async (reconciliationDate?: string) => {
+    const targetDate = reconciliationDate || date || getManilaTodayStr();
+    const pdfUrl = clinicService.getDailyEodPdfUrl(targetDate);
+    const opened = await openDocument(pdfUrl);
+    if (!opened) {
+      notify.error('Could not download the Daily EOD Report PDF. Please try again.');
+    }
+  };
+
+  const handleFailure = (msg: string) => {
+    setErrorMessage(msg);
+    notify.error(msg);
+    Alert.alert('EOD Reconciliation Failed', msg, [
+      {
+        text: 'Close',
+        style: 'cancel',
+        onPress: () => {
+          setErrorMessage(null);
+          onClose();
+        },
+      },
+      {
+        text: 'Retry',
+        onPress: () => {
+          void handleConfirm();
+        },
+      },
+    ]);
   };
 
   const handleConfirm = async () => {
     if (submitting || inFlightRef.current) return;
     inFlightRef.current = true;
     setSubmitting(true);
+    setErrorMessage(null);
+    const targetDate = date || getManilaTodayStr();
     try {
       const [res, err] = await clinicService.reconcileEod(
-        undefined,
+        targetDate,
         reason.trim() || 'Manual Force EOD triggered from workstation'
       );
       if (err) {
-        notify.error(err?.message || 'Failed to reconcile end-of-day queue.');
+        const errMsg = err?.message || 'Failed to reconcile end-of-day queue.';
+        handleFailure(errMsg);
         return;
       }
       if (res) {
-        notify.success(
-          res.summary || `Clinic day closed: ${res.reconciledCount} ticket(s) reconciled.`
-        );
+        const summaryMsg =
+          res.summary || `Clinic day closed: ${res.reconciledCount} ticket(s) reconciled.`;
+        const reportDate = res.reconciliationDate || targetDate;
+        const dialogMessage = `${summaryMsg}\n\nReconciliation Date: ${reportDate}\nTickets Reconciled: ${res.reconciledCount}`;
+        notify.success(summaryMsg);
         onSuccess?.(res);
+        onClose();
+        Alert.alert('End-of-Day Reconciliation Complete', dialogMessage, [
+          {
+            text: 'Close',
+            style: 'cancel',
+          },
+          {
+            text: 'Download Report',
+            onPress: () => {
+              void handleDownloadReport(reportDate);
+            },
+          },
+        ]);
+        return;
       }
       onClose();
     } catch (err: any) {
-      notify.error(err?.message || 'Failed to reconcile end-of-day queue.');
+      const errMsg = err?.message || 'Failed to reconcile end-of-day queue.';
+      handleFailure(errMsg);
     } finally {
       inFlightRef.current = false;
       setSubmitting(false);
@@ -90,6 +145,38 @@ export function ForceEodConfirmationModal({
       }
     >
       <View style={styles.content}>
+        {errorMessage ? (
+          <View style={styles.warningBanner}>
+            <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
+            <View style={styles.bannerText}>
+              <ThemedText variant="bodyBold" style={styles.bannerTitle}>
+                EOD Reconciliation Failed
+              </ThemedText>
+              <ThemedText variant="small" style={styles.bannerMessage}>
+                {errorMessage}
+              </ThemedText>
+              <View style={styles.footerRow}>
+                <Button
+                  title="Close"
+                  variant="outline"
+                  size="sm"
+                  disabled={submitting}
+                  onPress={handleClose}
+                />
+                <Button
+                  title="Retry"
+                  variant="danger"
+                  size="sm"
+                  icon="refresh"
+                  loading={submitting}
+                  disabled={submitting}
+                  onPress={handleConfirm}
+                />
+              </View>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.warningBanner}>
           <Icon name="alert" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
           <View style={styles.bannerText}>
