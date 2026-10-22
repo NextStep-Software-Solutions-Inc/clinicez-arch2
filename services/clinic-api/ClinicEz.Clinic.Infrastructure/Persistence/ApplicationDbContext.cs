@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using ClinicEz.Clinic.Domain.Entities;
@@ -6,6 +6,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Interop.Persistence;
 using ClinicEz.Shared.Workspace;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -14,7 +15,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Clinic.Infrastructure.Persistence;
 
-public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProfileDbContext
+public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProfileDbContext, IDataProtectionKeyContext
 {
     private readonly IConfiguration _configuration;
     private readonly IClinicContext? _clinicContext;
@@ -83,6 +84,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
     public DbSet<ClinicAuditEntry> ClinicAuditEntries { get; set; } = null!;
     public DbSet<DentalToothRecord> DentalToothRecords { get; set; } = null!;
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -237,7 +239,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.AssignedRoomIdsJson).HasColumnType("text");
 
             entity.Property(e => e.PasswordHash).HasMaxLength(500);
-            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50).HasDefaultValue(StaffAccountStatus.Active);
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(50).HasDefaultValue(StaffAccountStatus.Active).HasSentinel((StaffAccountStatus)0);
             entity.Property(e => e.InvitationToken).HasMaxLength(128);
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId });
@@ -1074,6 +1076,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.ApplyInteropModel();
 
         modelBuilder.ApplyWorkspaceProfileModel();
+        modelBuilder.Entity<DataProtectionKey>(entity => { entity.ToTable("DataProtectionKeys"); });
 
         base.OnModelCreating(modelBuilder);
     }

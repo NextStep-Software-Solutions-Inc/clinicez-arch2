@@ -81,6 +81,7 @@ a **PEM** (multi-line GitHub secret) or as **base64 of a PEM** is turned into on
 | `PORTAL_DB_CONNECTION_STRING`, `PORTAL_CLERK_SECRET_KEY`, `PORTAL_XENDIT_SECRET_KEY`, `PORTAL_XENDIT_CALLBACK_TOKEN` | `ConnectionStrings__DefaultConnection`, `Clerk__SecretKey`, `Xendit__SecretKey`, `Xendit__CallbackToken` | portal-api | All four required (no development fallbacks). |
 | `PORTAL_DATA_PROTECTION_CERT_BASE64` / `_PASSWORD`, `PHILHEALTH_DATA_PROTECTION_CERT_BASE64` / `_PASSWORD` | `DataProtection__CertificateBase64` / `__CertificatePassword` | portal-api, philhealth-proxy | *Optional.* Base64 of a `.pfx` that encrypts the ASP.NET Data Protection key ring at rest. For `portal-api`, key ring XMLs are stored directly in PostgreSQL via EF Core (`public.DataProtectionKeys`). |
 | `CORS_ALLOWED_ORIGINS` / `CORS_ALLOWED_DOMAINS` | `Cors__AllowedOrigins` / `Cors__AllowedDomains` | see the table above | *Optional* when `BASE_DOMAIN` is set. |
+| `MEDIATR_LICENSE_KEY` (secret or variable) | `MediatR__LicenseKey` (`MEDIATR_LICENSE_KEY`) | portal-api, clinic-api, laboratory-api, pharmacy-api, organization-api, philhealth-proxy, edge bundle | *Optional* (falls back to the bundled Lucky Penny Software license key in `MediatRLicense.DefaultKey`; set to override/rotate). |
 
 #### GitHub secrets checklist (cloud deploy)
 

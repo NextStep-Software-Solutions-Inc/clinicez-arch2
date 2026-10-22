@@ -87,6 +87,7 @@ services:
       - ClinicEncryption__PreviousMasterSecrets__1=${CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1:-}
       # HMAC key of the document digests (verification QR codes): a long random secret, required, no built-in fallback.
       - Documents__SigningKey=${DOCUMENT_SIGNING_KEY:?DOCUMENT_SIGNING_KEY must be set}
+      - MediatR__LicenseKey=${MEDIATR_LICENSE_KEY:-}
       - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-dev.clinicez.net,clinicez.net,dev.nextstep-software.com,nextstep-software.com}
     volumes:
       - clinic-api-keys:/app/keys

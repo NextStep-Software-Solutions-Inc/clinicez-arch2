@@ -7,6 +7,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -40,6 +41,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IBillingDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
+        services.AddPersistentDataProtection<ApplicationDbContext>(configuration, null, "ClinicEz.Billing");
 
         // Cell-local authentication (no external identity provider; works offline/LAN).
         services.AddHttpContextAccessor();

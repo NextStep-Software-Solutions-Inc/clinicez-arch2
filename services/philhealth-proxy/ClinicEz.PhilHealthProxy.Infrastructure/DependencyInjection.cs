@@ -58,7 +58,7 @@ public static class DependencyInjection
         services.AddSingleton<ISoapSandboxService, SoapSandboxService>();
 
         // The Data Protection provider protects tenant credentials in memory during local caching.
-        services.AddDataProtection().SetApplicationName("ClinicEz.PhilHealthProxy");
+        services.AddInMemoryEncryptedDataProtection(configuration, "ClinicEz.PhilHealthProxy");
 
         return services;
     }

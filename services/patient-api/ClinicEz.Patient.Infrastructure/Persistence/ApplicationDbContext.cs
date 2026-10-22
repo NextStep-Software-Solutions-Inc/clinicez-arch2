@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using ClinicEz.Shared.Interfaces;
 using ClinicEz.Shared.Interop.Persistence;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using ClinicEz.Patient.Domain.Common;
 using ClinicEz.Patient.Domain.Entities;
@@ -9,7 +10,7 @@ namespace ClinicEz.Patient.Infrastructure.Persistence;
 
 using Patient = ClinicEz.Patient.Domain.Entities.Patient;
 
-public sealed class ApplicationDbContext : DbContext, IInteropDbContext
+public sealed class ApplicationDbContext : DbContext, IInteropDbContext, IDataProtectionKeyContext
 {
     private readonly ICurrentUserService? _currentUserService;
 
@@ -100,6 +101,7 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
     // ── Interop hub outbox / inbox ──────────────────────────────────────────
     public DbSet<InteropOutboxMessage> InteropOutbox => Set<InteropOutboxMessage>();
     public DbSet<InteropInboxMessage> InteropInbox => Set<InteropInboxMessage>();
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

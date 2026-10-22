@@ -63,6 +63,7 @@ x-api-env: &api-env
   FacilityLicense__PreviousPublicKeyPem: ${FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS:-}
   Hangfire__DashboardPassword: ${HANGFIRE_DASHBOARD_PASSWORD:-}
   Jwt__KeyDirectory: /app/keys
+  MediatR__LicenseKey: ${MEDIATR_LICENSE_KEY:-}
 
 services:
   # ---------------------------------------------------------------- data
@@ -177,6 +178,7 @@ services:
       Facility__BaseDomain: ${BASE_DOMAIN:-clinic.local}
       Jwt__SigningKey: ${BILLING_JWT_SIGNING_KEY:?BILLING_JWT_SIGNING_KEY must be set (run the installer)}
       Jwt__KeyDirectory: /app/keys
+  MediatR__LicenseKey: ${MEDIATR_LICENSE_KEY:-}
     volumes:
       - billing-api-keys:/app/keys
     healthcheck: *api-healthcheck

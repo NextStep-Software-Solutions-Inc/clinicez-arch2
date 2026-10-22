@@ -8,6 +8,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Workspace;
+using ClinicEz.Shared.Security;
 using ClinicEz.Organization.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -53,6 +54,7 @@ public static class DependencyInjection
 
         // Workspace profile (brand and regional defaults), pushed by the portal and held in this service's own database.
         services.AddWorkspaceProfile<ApplicationDbContext>();
+        services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Organization");
 
         // Interop hub messaging (replaces the message broker): transactional outbox/inbox + typed handlers.
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers

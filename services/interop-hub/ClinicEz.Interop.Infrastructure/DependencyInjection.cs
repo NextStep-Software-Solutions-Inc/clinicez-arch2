@@ -4,6 +4,7 @@ using ClinicEz.Interop.Infrastructure.Background;
 using ClinicEz.Interop.Infrastructure.Persistence;
 using ClinicEz.Interop.Infrastructure.Security;
 using ClinicEz.Interop.Infrastructure.Upstream;
+using ClinicEz.Shared.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IOutboundStore, EfOutboundStore>();
         services.AddScoped<IClaimStore, EfClaimStore>();
         services.AddSingleton<IEnvelopeProtector, EnvelopeProtector>();
+        services.AddPersistentDataProtection<HubDbContext>(configuration, null, "ClinicEz.InteropHub");
 
         services.AddHttpClient(UpstreamHubClient.HttpClientName, (sp, client) =>
         {

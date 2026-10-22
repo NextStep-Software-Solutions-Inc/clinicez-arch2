@@ -16,7 +16,7 @@ public static class DependencyInjection
         services.AddScoped<ISieveProcessor, SieveProcessor>();
 
         services.AddMediatR(config =>
-            config.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
+            { config.LicenseKey = ClinicEz.Shared.Common.MediatRLicense.Resolve(); config.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()); });
 
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
 

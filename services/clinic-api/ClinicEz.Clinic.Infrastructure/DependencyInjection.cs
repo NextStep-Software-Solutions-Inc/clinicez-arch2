@@ -1,4 +1,4 @@
-﻿using System.Net.Http;
+using System.Net.Http;
 using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -7,6 +7,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Security;
 using ClinicEz.Shared.Workspace;
 using ClinicEz.Clinic.Infrastructure.Context;
 using ClinicEz.Clinic.Infrastructure.Persistence;
@@ -93,6 +94,7 @@ public static class DependencyInjection
 
         // Workspace brand/regional defaults: fed by workspace.profile.updated messages and held in this service's own database
         services.AddWorkspaceProfile<ApplicationDbContext>();
+        services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Clinic");
 
         // PhilHealth Yakap & GAMOT Services with Comprehensive Audit Decorators
         services.AddScoped<PhilHealthProxyClient>();

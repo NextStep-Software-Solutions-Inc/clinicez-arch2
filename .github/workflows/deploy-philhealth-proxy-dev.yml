@@ -87,6 +87,7 @@ jobs:
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
         PORTAL_API_BASE_URL: ${{ vars.PORTAL_API_BASE_URL || secrets.PORTAL_API_BASE_URL }}
+        MEDIATR_LICENSE_KEY: ${{ secrets.MEDIATR_LICENSE_KEY || vars.MEDIATR_LICENSE_KEY }}
       run: |
         for var in PORTAL_API_BASE_URL; do
           if [ -z "$(printenv $var)" ]; then
@@ -94,7 +95,7 @@ jobs:
             exit 1
           fi
         done
-        for var in ASPNETCORE_ENVIRONMENT IMAGE_NAME IMAGE_TAG PORTAL_API_BASE_URL; do
+        for var in ASPNETCORE_ENVIRONMENT IMAGE_NAME IMAGE_TAG PORTAL_API_BASE_URL MEDIATR_LICENSE_KEY; do
           echo "$var=$(printenv $var)" >> deploy/philhealth-proxy/.env
         done
 

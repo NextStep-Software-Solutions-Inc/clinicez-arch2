@@ -60,6 +60,7 @@ services:
       # Key behind the UPSC codes of the GAMOT module (at least 32 characters, required, no built-in fallback). Changing it
       # invalidates the codes issued under the old key.
       - Gamot__UpscSecretKey=${GAMOT_UPSC_SECRET_KEY:?GAMOT_UPSC_SECRET_KEY must be set (at least 32 characters)}
+      - MediatR__LicenseKey=${MEDIATR_LICENSE_KEY:-}
     volumes:
       - pharmacy-api-keys:/app/keys
     restart: unless-stopped

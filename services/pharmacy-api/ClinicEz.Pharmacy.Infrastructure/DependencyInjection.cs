@@ -9,6 +9,7 @@ using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interoperability;
 using ClinicEz.Shared.Workspace;
+using ClinicEz.Shared.Security;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
@@ -52,6 +53,7 @@ public static class DependencyInjection
 
         // Workspace brand / regional profile, pushed by the portal (workspace.profile.updated) and held in this database
         services.AddWorkspaceProfile<ApplicationDbContext>();
+        services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Pharmacy");
 
         // Facility-local authentication (no external identity provider; works offline/LAN)
         services.AddMemoryCache();

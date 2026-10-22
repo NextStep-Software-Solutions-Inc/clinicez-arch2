@@ -894,6 +894,25 @@ namespace ClinicEz.Billing.Infrastructure.Migrations
                     b.ToTable("interop_outbox", "public");
                 });
 
+            modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Xml")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataProtectionKeys", "public");
+                });
+
             modelBuilder.Entity("ClinicEz.Billing.Domain.Entities.InvoiceDiscount", b =>
                 {
                     b.HasOne("ClinicEz.Billing.Domain.Entities.Invoice", null)

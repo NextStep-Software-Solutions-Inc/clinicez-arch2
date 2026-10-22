@@ -1137,6 +1137,25 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.ToTable("workspace_profiles", "public");
                 });
 
+            modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Xml")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataProtectionKeys", "public");
+                });
+
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.DispenseAuditRecord", b =>
                 {
                     b.HasOne("ClinicEz.Pharmacy.Domain.Entities.PrescriptionOrder", "PrescriptionOrder")

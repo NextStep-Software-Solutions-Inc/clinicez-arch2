@@ -35,6 +35,7 @@ services:
       - DOTNET_GCHeapHardLimitPercent=75
       - DOTNET_gcServer=0
       - PortalApi__BaseUrl=${PORTAL_API_BASE_URL:?PORTAL_API_BASE_URL must be set}
+      - MediatR__LicenseKey=${MEDIATR_LICENSE_KEY:-}
     restart: unless-stopped
 
 networks:

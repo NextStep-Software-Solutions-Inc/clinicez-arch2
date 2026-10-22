@@ -59,6 +59,7 @@ services:
       - Jwt__KeyDirectory=/app/keys
       # HMAC key of the document digests (verification QR codes): a long random secret, required, no built-in fallback.
       - Documents__SigningKey=${DOCUMENT_SIGNING_KEY:?DOCUMENT_SIGNING_KEY must be set}
+      - MediatR__LicenseKey=${MEDIATR_LICENSE_KEY:-}
     volumes:
       - laboratory-api-keys:/app/keys
     restart: unless-stopped

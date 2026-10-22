@@ -5,6 +5,8 @@ using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests.CrossDomainParity;
@@ -183,7 +185,9 @@ public class CrossDomainStatusAndAuditParityTests
     public void ClinicDbContext_ConfiguresStringConversions_ForStaffMemberStatus()
     {
         var clinicContext = NSubstitute.Substitute.For<ClinicEz.Clinic.Domain.Interfaces.IClinicContext>();
-        var (context, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddInMemoryCollection([new System.Collections.Generic.KeyValuePair<string, string?>("DbSchema", "public")]).Build();
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>().UseNpgsql("Host=localhost;Database=clinicez_test_model;Username=postgres;Password=postgres").ConfigureWarnings(w => w.Throw(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.BoolWithDefaultWarning)).Options;
+        var context = new ApplicationDbContext(options, config, clinicContext);
         using (context)
         {
             var model = context.Model;
@@ -194,6 +198,27 @@ public class CrossDomainStatusAndAuditParityTests
             var statusProp = staffEntityType.FindProperty(nameof(StaffMember.Status));
             Assert.NotNull(statusProp);
             Assert.Equal(50, statusProp.GetMaxLength());
+            Assert.Equal((StaffAccountStatus)0, statusProp.Sentinel);
+        }
+
+        var dbName = $"clinicez_dp_{Guid.NewGuid():N}";
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(config);
+        services.AddSingleton(clinicContext);
+        services.AddDbContext<ApplicationDbContext>(opts => opts.UseInMemoryDatabase(dbName));
+        ClinicEz.Shared.Security.DataProtectionSetup.AddPersistentDataProtection<ApplicationDbContext>(services, config, null, "ClinicEz.Clinic");
+        using var provider = services.BuildServiceProvider();
+        var dp = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>(provider);
+        var protectedPayload = Microsoft.AspNetCore.DataProtection.DataProtectionCommonExtensions.Protect(dp.CreateProtector("test"), "clinic-secret");
+        Assert.Equal("clinic-secret", Microsoft.AspNetCore.DataProtection.DataProtectionCommonExtensions.Unprotect(dp.CreateProtector("test"), protectedPayload));
+
+        using var scope = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.CreateScope(provider);
+        var db = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<ApplicationDbContext>(scope.ServiceProvider);
+        var storedKey = Assert.Single(db.DataProtectionKeys);
+        Assert.Contains("encryptedKey", storedKey.Xml, StringComparison.Ordinal);
+        if (true)
+        {
         }
     }
 }

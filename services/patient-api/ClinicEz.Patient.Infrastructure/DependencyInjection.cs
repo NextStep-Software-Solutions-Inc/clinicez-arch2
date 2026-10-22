@@ -2,6 +2,7 @@ using System.Security.Claims;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interfaces;
 using ClinicEz.Shared.Security.ClaimTokens;
+using ClinicEz.Shared.Security;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
@@ -106,6 +107,7 @@ public static class DependencyInjection
         services.AddScoped<IBackgroundJobEnqueuer, HangfireJobEnqueuer>();
         services.AddSingleton<IPushNotificationService, FirebasePushNotificationService>();
         services.AddClaimTokenService();
+        services.AddPersistentDataProtection<ApplicationDbContext>(configuration, env, "ClinicEz.Patient");
 
         // ── Sync entity processors ────────────────────────────────────────────
         // Core
