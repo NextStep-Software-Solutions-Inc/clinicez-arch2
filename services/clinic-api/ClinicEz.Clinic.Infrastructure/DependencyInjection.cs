@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -65,6 +65,11 @@ public static class DependencyInjection
         services.AddSingleton<ClinicEz.Clinic.Infrastructure.Auth.IStaffAccessCache, ClinicEz.Clinic.Infrastructure.Auth.StaffAccessCache>();
         services.AddSingleton<ClinicEz.Clinic.Domain.Interfaces.IStaffAccessInvalidator>(sp => sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.Auth.IStaffAccessCache>());
         services.AddScoped<ClinicEz.Clinic.Infrastructure.Auth.IWorkspaceResolver, ClinicEz.Clinic.Infrastructure.Auth.WorkspaceResolver>();
+        services.AddSingleton<ClinicEz.Shared.Security.Turnstile.ITurnstileSettingResolver, ClinicEz.Shared.Security.Turnstile.TurnstileSettingResolver>();
+        services.AddHttpClient<ClinicEz.Shared.Security.Turnstile.ITurnstileValidator, ClinicEz.Shared.Security.Turnstile.CloudflareTurnstileValidator>(client =>
+        {
+            client.Timeout = System.TimeSpan.FromSeconds(5);
+        });
         services.AddScoped<ClinicEz.Clinic.Infrastructure.Auth.IClinicAuthService, ClinicEz.Clinic.Infrastructure.Auth.ClinicAuthService>();
 
         // PhilHealth Catalog: bundled lib_* JSON seeded on every boot + idempotent administrator import

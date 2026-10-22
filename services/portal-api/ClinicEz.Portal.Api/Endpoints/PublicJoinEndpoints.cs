@@ -53,8 +53,23 @@ public sealed class PublicJoinEndpoints : IEndpoint
         IClaimTokenService? claimTokenService = null,
         IConfiguration? configuration = null,
         IHostEnvironment? hostEnvironment = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ITurnstileValidator? turnstileValidator = null,
+        HttpContext? httpContext = null)
     {
+        // 0. Bot challenge verification
+        if (turnstileValidator != null)
+        {
+            var remoteIp = httpContext?.Connection.RemoteIpAddress?.ToString();
+            var isTurnstileValid = await turnstileValidator.ValidateAsync(payload.TurnstileToken, remoteIp, ct);
+            if (!isTurnstileValid)
+            {
+                return Results.Json(
+                    new { Success = false, Message = "Bot verification failed. Please complete the security challenge." },
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+        }
+
         // 1. Input Validation
         if (string.IsNullOrWhiteSpace(payload.TenantSlug) ||
             string.IsNullOrWhiteSpace(payload.FacilitySlug) ||

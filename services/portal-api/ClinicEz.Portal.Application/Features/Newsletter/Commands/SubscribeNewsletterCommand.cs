@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace ClinicEz.Portal.Application.Features.Newsletter.Commands;
 
-public record SubscribeNewsletterCommand(string Email, string Source = "website", string? IpHash = null) : IRequest<SubscribeNewsletterResult>;
+public record SubscribeNewsletterCommand(string Email, string Source = "website", string? IpHash = null, string? TurnstileToken = null) : IRequest<SubscribeNewsletterResult>;
 
 public record SubscribeNewsletterResult(bool Success, string Message, bool AlreadySubscribed = false);
 

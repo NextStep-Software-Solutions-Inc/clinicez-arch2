@@ -4,6 +4,7 @@ export interface ContactMessageDto {
   name: string;
   email: string;
   message: string;
+  turnstileToken?: string;
 }
 
 // The portal API validates the message and emails it to the support inbox; this app never sends mail itself.
