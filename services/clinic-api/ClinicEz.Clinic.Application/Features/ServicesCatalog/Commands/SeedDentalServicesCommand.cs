@@ -95,10 +95,13 @@ public sealed class SeedDentalServicesCommandHandler : IRequestHandler<SeedDenta
             }
         }
 
-        var activeDentalItems = await _serviceRepo.Query()
-            .Where(s => canonicalCodes.Contains(s.Code.Trim().ToUpperInvariant()))
-            .OrderBy(s => s.Code)
+        var currentServices = await _serviceRepo.Query()
             .ToListAsync(cancellationToken);
+
+        var activeDentalItems = currentServices
+            .Where(s => !string.IsNullOrWhiteSpace(s.Code) && canonicalCodes.Contains(s.Code.Trim().ToUpperInvariant()))
+            .OrderBy(s => s.Code)
+            .ToList();
 
         return activeDentalItems.Select(s => new ClinicServiceItemDto(
             s.Id,
