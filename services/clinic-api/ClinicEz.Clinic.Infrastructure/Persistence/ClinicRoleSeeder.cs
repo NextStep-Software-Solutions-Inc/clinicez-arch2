@@ -40,7 +40,7 @@ public static class ClinicRoleSeeder
         ),
         new(
             DoctorRoleName,
-            "Consultation documentation, vitals review, prescription issuing, lab/procedure ordering, and encounter signing",
+            "Consultation documentation, vitals recording & review, prescription issuing, lab/procedure ordering, and encounter signing",
             new List<string>
             {
                 ClinicPermissions.AppointmentsRead,
@@ -48,6 +48,7 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.QueueCall,
                 ClinicPermissions.QueueComplete,
                 ClinicPermissions.TriageRead,
+                ClinicPermissions.TriageWrite,
                 ClinicPermissions.ConsultationsRead,
                 ClinicPermissions.ConsultationsWrite,
                 ClinicPermissions.ConsultationsSign,
@@ -211,30 +212,19 @@ public static class ClinicRoleSeeder
             }
             else
             {
-                // Synchronize system permissions (e.g. AuditRead, AuditExport for Clinic Administrator or DPO)
-                if (template.Name.Equals(SystemAdminRoleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    var missingAdminPerms = ClinicPermissions.All
-                        .Where(p => !existingRole.Permissions.Contains(p))
-                        .ToList();
+                // Synchronize canonical system permissions across all built-in system roles
+                var targetPermissions = template.Name.Equals(SystemAdminRoleName, StringComparison.OrdinalIgnoreCase)
+                    ? ClinicPermissions.All
+                    : template.Permissions;
 
-                    if (missingAdminPerms.Count > 0)
-                    {
-                        existingRole.Permissions.AddRange(missingAdminPerms);
-                        hasChanges = true;
-                    }
-                }
-                else if (template.Name.Equals(DpoRoleName, StringComparison.OrdinalIgnoreCase))
-                {
-                    var missingDpoPerms = template.Permissions
-                        .Where(p => !existingRole.Permissions.Contains(p))
-                        .ToList();
+                var missingPerms = targetPermissions
+                    .Where(p => !existingRole.Permissions.Contains(p, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
 
-                    if (missingDpoPerms.Count > 0)
-                    {
-                        existingRole.Permissions.AddRange(missingDpoPerms);
-                        hasChanges = true;
-                    }
+                if (missingPerms.Count > 0)
+                {
+                    existingRole.Permissions.AddRange(missingPerms);
+                    hasChanges = true;
                 }
             }
         }

@@ -3,12 +3,19 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Api.Authorization;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Xunit;
 
@@ -16,6 +23,120 @@ namespace ClinicEz.Clinic.Application.Tests;
 
 public class ClinicRoleSeederTests
 {
+    [Fact]
+    public void CanonicalDoctorRoleTemplate_IncludesTriageWritePermission()
+    {
+        var templates = ClinicRoleSeeder.GetCanonicalSystemRoleTemplates();
+        var doctorTemplate = templates.SingleOrDefault(t => t.Name == ClinicRoleSeeder.DoctorRoleName);
+
+        doctorTemplate.Should().NotBeNull();
+        doctorTemplate!.Permissions.Should().Contain(ClinicPermissions.TriageRead);
+        doctorTemplate.Permissions.Should().Contain(ClinicPermissions.TriageWrite);
+        doctorTemplate.Permissions.Should().Contain(ClinicPermissions.ConsultationsWrite);
+        doctorTemplate.Permissions.Should().Contain(ClinicPermissions.ConsultationsSign);
+    }
+
+    [Fact]
+    public async Task SeedOrUpdateAllClinicsAsync_BackfillsTriageWritePermissionToExistingDoctorRole()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, _, _) = TestDbHelper.CreateTestContext(clinicContext);
+
+        // Seed an outdated Attending Physician / Doctor system role missing triage:write
+        var outdatedDoctorPermissions = new List<string>
+        {
+            ClinicPermissions.AppointmentsRead,
+            ClinicPermissions.QueueRead,
+            ClinicPermissions.QueueCall,
+            ClinicPermissions.QueueComplete,
+            ClinicPermissions.TriageRead,
+            ClinicPermissions.ConsultationsRead,
+            ClinicPermissions.ConsultationsWrite,
+            ClinicPermissions.ConsultationsSign,
+            ClinicPermissions.PatientsRead
+        };
+
+        var doctorRole = new ClinicRole
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = ClinicRoleSeeder.DoctorRoleName,
+            IsSystem = true,
+            Permissions = outdatedDoctorPermissions
+        };
+        await context.ClinicRoles.AddAsync(doctorRole);
+        await context.SaveChangesAsync();
+
+        // Run multi-clinic startup synchronization
+        var updatedCount = await ClinicRoleSeeder.SeedOrUpdateAllClinicsAsync(context, null, CancellationToken.None);
+
+        updatedCount.Should().Be(1);
+
+        var refreshedDoctorRole = await context.ClinicRoles.FirstAsync(r => r.Id == doctorRole.Id);
+        refreshedDoctorRole.Permissions.Should().Contain(ClinicPermissions.TriageWrite);
+    }
+
+    [Fact]
+    public async Task HasPermissionAttribute_WithMultiplePermissions_EnforcesStrictAndSemantics()
+    {
+        var attr = new HasPermissionAttribute(ClinicPermissions.TriageWrite, ClinicPermissions.ConsultationsWrite);
+
+        // Case 1: Only has ConsultationsWrite (missing TriageWrite) -> must fail with 403 Forbidden (AND, not OR)
+        var partialContext = Substitute.For<IClinicContext>();
+        partialContext.HasPermission(ClinicPermissions.TriageWrite).Returns(false);
+        partialContext.HasPermission(ClinicPermissions.ConsultationsWrite).Returns(true);
+
+        var services1 = new ServiceCollection().AddSingleton(partialContext).BuildServiceProvider();
+        var httpContext1 = new DefaultHttpContext { RequestServices = services1 };
+        var actionContext1 = new ActionContext(httpContext1, new RouteData(), new ActionDescriptor());
+        var executingContext1 = new ActionExecutingContext(
+            actionContext1,
+            new List<IFilterMetadata>(),
+            new Dictionary<string, object?>(),
+            controller: new object());
+
+        var nextCalled1 = false;
+        await attr.OnActionExecutionAsync(executingContext1, () =>
+        {
+            nextCalled1 = true;
+            return Task.FromResult(new ActionExecutedContext(actionContext1, new List<IFilterMetadata>(), new object()));
+        });
+
+        nextCalled1.Should().BeFalse();
+        executingContext1.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+
+        // Case 2: Has BOTH TriageWrite AND ConsultationsWrite -> succeeds
+        var fullContext = Substitute.For<IClinicContext>();
+        fullContext.HasPermission(ClinicPermissions.TriageWrite).Returns(true);
+        fullContext.HasPermission(ClinicPermissions.ConsultationsWrite).Returns(true);
+
+        var services2 = new ServiceCollection().AddSingleton(fullContext).BuildServiceProvider();
+        var httpContext2 = new DefaultHttpContext { RequestServices = services2 };
+        var actionContext2 = new ActionContext(httpContext2, new RouteData(), new ActionDescriptor());
+        var executingContext2 = new ActionExecutingContext(
+            actionContext2,
+            new List<IFilterMetadata>(),
+            new Dictionary<string, object?>(),
+            controller: new object());
+
+        var nextCalled2 = false;
+        await attr.OnActionExecutionAsync(executingContext2, () =>
+        {
+            nextCalled2 = true;
+            return Task.FromResult(new ActionExecutedContext(actionContext2, new List<IFilterMetadata>(), new object()));
+        });
+
+        nextCalled2.Should().BeTrue();
+        executingContext2.Result.Should().BeNull();
+    }
+
     [Fact]
     public async Task SeedOrUpdateAllClinicsAsync_BackfillsAuditPermissionsToExistingAdminRole()
     {
