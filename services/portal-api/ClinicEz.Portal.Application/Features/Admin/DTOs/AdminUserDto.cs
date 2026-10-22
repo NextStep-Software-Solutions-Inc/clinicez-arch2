@@ -38,7 +38,9 @@ public static class AdminUserMapping
         string? inviteUrl = null;
         if (!string.IsNullOrEmpty(user.InvitationToken) && !string.IsNullOrEmpty(baseUrl))
         {
-            inviteUrl = $"{baseUrl.TrimEnd('/')}/admin/invitations/{user.InvitationToken}";
+            inviteUrl = user.InvitationToken.StartsWith("pwdreset_", StringComparison.OrdinalIgnoreCase)
+                ? $"{baseUrl.TrimEnd('/')}/reset-password/{user.InvitationToken}"
+                : $"{baseUrl.TrimEnd('/')}/admin/invitations/{user.InvitationToken}";
         }
 
         return new AdminUserDto

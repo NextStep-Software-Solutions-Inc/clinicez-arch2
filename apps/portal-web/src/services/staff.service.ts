@@ -67,6 +67,27 @@ export interface AcceptInvitationResultDto {
   fullName: string;
 }
 
+export interface ResetPortalPasswordResultDto {
+  userId: string;
+  fullName: string;
+  email: string;
+  role: string;
+  temporaryPassword: string;
+  message: string;
+  resetToken?: string | null;
+  resetUrl?: string | null;
+  emailSent?: boolean;
+}
+
+export interface PortalPasswordResetDetailsDto {
+  fullName: string;
+  email: string;
+  role: string;
+  scopeName: string;
+  isExpired: boolean;
+  expiresAt?: string | null;
+}
+
 export const staffService = {
   getTenantStaff: async (tenantSlug: string): Promise<TenantStaffResultDto> => {
     const res = await apiClient.get<TenantStaffResultDto>(`/staff?tenantSlug=${tenantSlug}`);
@@ -115,6 +136,42 @@ export const staffService = {
 
   acceptInvitation: async (token: string): Promise<AcceptInvitationResultDto> => {
     const res = await apiClient.post<AcceptInvitationResultDto>(`/staff/invitations/${token}/accept`);
+    return res.data;
+  },
+
+  resetStaffMemberPassword: async (
+    id: string,
+    tenantSlug: string,
+    options?: {
+      temporaryPassword?: string;
+      sendResetEmail?: boolean;
+      generateResetLink?: boolean;
+      deliveryMode?: "email" | "link" | "password";
+    }
+  ): Promise<ResetPortalPasswordResultDto> => {
+    const sendResetEmail = options?.sendResetEmail ?? options?.deliveryMode === "email";
+    const generateResetLink = options?.generateResetLink ?? options?.deliveryMode === "link";
+    const res = await apiClient.post<ResetPortalPasswordResultDto>(
+      `/staff/${id}/reset-password?tenantSlug=${encodeURIComponent(tenantSlug)}`,
+      {
+        temporaryPassword: options?.temporaryPassword || undefined,
+        sendResetEmail,
+        generateResetLink,
+        deliveryMode: options?.deliveryMode,
+      }
+    );
+    return res.data;
+  },
+
+  getPasswordResetDetails: async (token: string): Promise<PortalPasswordResetDetailsDto> => {
+    const res = await apiClient.get<PortalPasswordResetDetailsDto>(`/public/password-reset/${encodeURIComponent(token)}`);
+    return res.data;
+  },
+
+  completePasswordReset: async (token: string, newPassword: string): Promise<{ message: string }> => {
+    const res = await apiClient.post<{ message: string }>(`/public/password-reset/${encodeURIComponent(token)}`, {
+      newPassword,
+    });
     return res.data;
   },
 };

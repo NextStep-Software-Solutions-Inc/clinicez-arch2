@@ -35,7 +35,9 @@ import {
   IconPlayerPause,
   IconPlayerPlay,
   IconClock,
-  IconCheck
+  IconCheck,
+  IconKey,
+  IconLink
 } from "@tabler/icons-react";
 
 export const resolveAdminDisplayStatus = (u: {
@@ -84,6 +86,21 @@ export default function AdminUsersPage() {
     email: string;
     role: string;
     inviteUrl: string;
+  } | null>(null);
+
+  // Reset Password Modal state
+  const [resetTarget, setResetTarget] = useState<AdminUserDto | null>(null);
+  const [resetMode, setResetMode] = useState<"email" | "link" | "password">("email");
+  const [resetTempPassword, setResetTempPassword] = useState("");
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [submittingReset, setSubmittingReset] = useState(false);
+  const [resetResultModal, setResetResultModal] = useState<{
+    open: boolean;
+    fullName: string;
+    email: string;
+    deliveryMode: "email" | "link" | "password";
+    resetUrl?: string;
+    temporaryPassword?: string;
   } | null>(null);
 
   const canManage = hasPermission(ADMIN_PERMISSIONS.MANAGE_ADMINS);
@@ -320,6 +337,68 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleOpenResetPassword = (user: AdminUserDto) => {
+    setResetTarget(user);
+    setResetMode("email");
+    setResetTempPassword("");
+    setResetError(null);
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTarget) return;
+    setResetError(null);
+
+    if (resetMode === "password" && resetTempPassword.trim().length < 8) {
+      setResetError("Temporary password must be at least 8 characters.");
+      return;
+    }
+
+    setSubmittingReset(true);
+    try {
+      const res = await adminService.resetUserPassword(resetTarget.id, {
+        deliveryMode: resetMode,
+        temporaryPassword: resetMode === "password" ? resetTempPassword : undefined,
+      });
+
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const fullResetUrl = res.resetToken
+        ? `${origin}/reset-password/${res.resetToken}`
+        : res.resetUrl || undefined;
+
+      if (fullResetUrl) {
+        navigator.clipboard.writeText(fullResetUrl);
+      }
+
+      const targetSnapshot = resetTarget;
+      const tempPwdSnapshot = resetTempPassword;
+      setResetTarget(null);
+
+      setResetResultModal({
+        open: true,
+        fullName: targetSnapshot.fullName,
+        email: targetSnapshot.email,
+        deliveryMode: resetMode,
+        resetUrl: fullResetUrl,
+        temporaryPassword: resetMode === "password" ? tempPwdSnapshot : undefined,
+      });
+
+      if (resetMode === "email") {
+        toast.success(`Password reset email sent to ${targetSnapshot.email}`);
+      } else if (resetMode === "link") {
+        toast.success("Password reset link generated and copied!");
+      } else {
+        toast.success(`Temporary password set for ${targetSnapshot.fullName}`);
+      }
+
+      loadData();
+    } catch (err: any) {
+      setResetError(err.response?.data?.message || err.message || "Failed to reset password.");
+    } finally {
+      setSubmittingReset(false);
+    }
+  };
+
   const renderStatusBadge = (user: AdminUserDto) => {
     const status = resolveAdminDisplayStatus(user);
 
@@ -540,6 +619,17 @@ export default function AdminUsersPage() {
                                 title="Edit Details"
                               >
                                 <IconEdit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleOpenResetPassword(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1"
+                                title="Reset Password"
+                              >
+                                <IconKey className="h-3.5 w-3.5" />
+                                <span>Reset Password</span>
                               </Button>
                               <Button
                                 variant="ghost"
@@ -889,6 +979,244 @@ export default function AdminUsersPage() {
             <Button
               type="button"
               onClick={() => setCreatedInviteModal(null)}
+              className="w-full sm:w-auto rounded-xl text-xs font-semibold"
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetTarget} onOpenChange={(open) => !open && setResetTarget(null)}>
+        <DialogContent className="sm:max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <IconKey className="h-5 w-5 text-primary" />
+              Reset Admin User Password
+            </DialogTitle>
+            <DialogDescription>
+              Choose how to reset the password for <strong>{resetTarget?.fullName}</strong> ({resetTarget?.email}).
+            </DialogDescription>
+          </DialogHeader>
+
+          {resetError && (
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
+              <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{resetError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleResetPasswordSubmit} className="space-y-4 pt-1">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Reset Method
+              </label>
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResetMode("email")}
+                  className={`p-3 rounded-2xl border text-left transition-all ${
+                    resetMode === "email"
+                      ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5 font-semibold text-xs">
+                    <IconMail className="h-4 w-4" />
+                    <span>Email Reset Link (Recommended)</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground font-normal">
+                    Emails a secure 7-day self-service password reset link to {resetTarget?.email}.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setResetMode("link")}
+                  className={`p-3 rounded-2xl border text-left transition-all ${
+                    resetMode === "link"
+                      ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5 font-semibold text-xs">
+                    <IconLink className="h-4 w-4" />
+                    <span>Copy Reset Link Only</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground font-normal">
+                    Generates a 7-day reset link to copy and share manually (no email sent).
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setResetMode("password")}
+                  className={`p-3 rounded-2xl border text-left transition-all ${
+                    resetMode === "password"
+                      ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5 font-semibold text-xs">
+                    <IconKey className="h-4 w-4" />
+                    <span>Set Temporary Password Directly</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground font-normal">
+                    Immediately updates their password and signs out active sessions.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {resetMode === "password" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  New Temporary Password *
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Minimum 8 characters"
+                  value={resetTempPassword}
+                  onChange={(e) => setResetTempPassword(e.target.value)}
+                  className="rounded-xl font-mono text-xs"
+                  required
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Share this temporary password with the administrator over a secure channel.
+                </p>
+              </div>
+            )}
+
+            <DialogFooter className="gap-2 pt-2 sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setResetTarget(null)}
+                disabled={submittingReset}
+                className="rounded-full"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={submittingReset}
+                className="rounded-full shadow-md gap-1.5"
+              >
+                {submittingReset ? (
+                  <>
+                    <IconLoader className="h-4 w-4 animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <>
+                    <IconKey className="h-4 w-4" />
+                    <span>
+                      {resetMode === "email"
+                        ? "Send Reset Email"
+                        : resetMode === "link"
+                          ? "Generate Reset Link"
+                          : "Set Temporary Password"}
+                    </span>
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Result Dialog */}
+      <Dialog open={!!resetResultModal?.open} onOpenChange={(open) => !open && setResetResultModal(null)}>
+        <DialogContent className="sm:max-w-lg rounded-3xl">
+          <DialogHeader className="flex flex-col items-center text-center sm:items-center sm:text-center">
+            <div className="size-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-1">
+              <IconCheck className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 text-center">
+              {resetResultModal?.deliveryMode === "password"
+                ? "Temporary Password Set"
+                : "Password Reset Link Ready"}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 text-center max-w-sm">
+              {resetResultModal?.deliveryMode === "email" ? (
+                <>
+                  A password reset email has been queued for <strong>{resetResultModal?.fullName}</strong> ({resetResultModal?.email}).
+                </>
+              ) : resetResultModal?.deliveryMode === "link" ? (
+                <>
+                  A self-service password reset link was generated for <strong>{resetResultModal?.fullName}</strong> (no email sent).
+                </>
+              ) : (
+                <>
+                  The password for <strong>{resetResultModal?.fullName}</strong> ({resetResultModal?.email}) has been updated immediately.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            {resetResultModal?.resetUrl && (
+              <>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  You can also copy and share this 7-day password reset link directly:
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={resetResultModal.resetUrl}
+                    className="h-9 text-xs font-mono rounded-xl bg-slate-50 dark:bg-slate-900 select-all"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (resetResultModal?.resetUrl) {
+                        navigator.clipboard.writeText(resetResultModal.resetUrl);
+                        toast.success("Reset link copied to clipboard!");
+                      }
+                    }}
+                    className="h-9 px-3 text-xs font-semibold rounded-xl gap-1.5 shrink-0"
+                  >
+                    <IconCopy className="h-3.5 w-3.5" />
+                    <span>Copy</span>
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {resetResultModal?.temporaryPassword && (
+              <>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Copy the temporary credentials below and share them securely with the administrator:
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={resetResultModal.temporaryPassword}
+                    className="h-9 text-xs font-mono rounded-xl bg-slate-50 dark:bg-slate-900 select-all"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (resetResultModal?.temporaryPassword) {
+                        navigator.clipboard.writeText(resetResultModal.temporaryPassword);
+                        toast.success("Temporary password copied!");
+                      }
+                    }}
+                    className="h-9 px-3 text-xs font-semibold rounded-xl gap-1.5 shrink-0"
+                  >
+                    <IconCopy className="h-3.5 w-3.5" />
+                    <span>Copy</span>
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="pt-2 sm:justify-end">
+            <Button
+              type="button"
+              onClick={() => setResetResultModal(null)}
               className="w-full sm:w-auto rounded-xl text-xs font-semibold"
             >
               Done

@@ -570,7 +570,128 @@ public class StaffEndpoints : IEndpoint
         .WithName("UpdateStaffMember")
         .WithDescription("Updates staff member details including full name, role, and facility assignment.")
         .WithTags("Staff");
+
+        // 10. Reset workspace member password
+        app.MapPost("/staff/{id:guid}/reset-password", async (
+            Guid id,
+            string tenantSlug,
+            ResetPortalPasswordRequest? request,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower());
+
+            if (tenant == null)
+            {
+                return Results.NotFound(new { Message = "Workspace not found." });
+            }
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+
+            if (!isOwner && !isAdmin)
+            {
+                return Results.Forbid();
+            }
+
+            try
+            {
+                var sendResetEmail = (request?.SendResetEmail ?? false) ||
+                                     string.Equals(request?.DeliveryMode, "email", StringComparison.OrdinalIgnoreCase);
+                var generateResetLink = (request?.GenerateResetLink ?? false) ||
+                                        string.Equals(request?.DeliveryMode, "link", StringComparison.OrdinalIgnoreCase);
+
+                var result = await sender.Send(new ResetStaffMemberPasswordCommand(
+                    tenantSlug,
+                    id,
+                    request?.TemporaryPassword,
+                    sendResetEmail,
+                    generateResetLink));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .RequireAuthorization()
+        .WithName("ResetStaffMemberPassword")
+        .WithDescription("Resets a workspace team member's password via email reset link, copyable reset link, or direct temporary password.")
+        .WithTags("Staff");
+
+        // 11. Public password reset token details & completion
+        app.MapGet("/public/password-reset/{token}", async (string token, ISender sender) =>
+        {
+            try
+            {
+                var result = await sender.Send(new ClinicEz.Portal.Application.Features.Notifications.GetPortalPasswordResetDetailsQuery(token));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .AllowAnonymous()
+        .WithName("GetPortalPasswordResetDetails")
+        .WithDescription("Retrieves user details and expiration status for a portal password reset token.")
+        .WithTags("Staff");
+
+        app.MapPost("/public/password-reset/{token}", async (
+            string token,
+            CompletePortalPasswordResetRequest request,
+            ISender sender) =>
+        {
+            try
+            {
+                await sender.Send(new ClinicEz.Portal.Application.Features.Notifications.CompletePortalPasswordResetCommand(token, request.NewPassword));
+                return Results.Ok(new { Message = "Password has been reset successfully. You can now sign in with your new password." });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .AllowAnonymous()
+        .WithName("CompletePortalPasswordReset")
+        .WithDescription("Completes a portal password reset using a valid reset token.")
+        .WithTags("Staff");
     }
 }
 
 public record UpdateStaffMemberRequest(string FullName, string Role, Guid? FacilityId = null);
+
+public record CompletePortalPasswordResetRequest(string NewPassword);

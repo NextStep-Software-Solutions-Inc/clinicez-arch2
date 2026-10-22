@@ -15,7 +15,8 @@ const isPublicRoute = createRouteMatcher([
     '/join(.*)',
     '/api/v1/public(.*)',
     '/admin/invitations(.*)',
-    '/invitations(.*)'
+    '/invitations(.*)',
+    '/reset-password(.*)'
 ]);
 
 // Generic reserved labels; service subdomains (clinic, lab, ...) are added from configuration

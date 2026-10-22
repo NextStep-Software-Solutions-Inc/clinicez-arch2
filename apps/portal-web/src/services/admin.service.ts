@@ -576,6 +576,36 @@ export const adminService = {
     );
     return res.data?.subscribers || [];
   },
+
+  resetUserPassword: async (
+    id: string,
+    options?: {
+      temporaryPassword?: string;
+      sendResetEmail?: boolean;
+      generateResetLink?: boolean;
+      deliveryMode?: "email" | "link" | "password";
+    }
+  ): Promise<{
+    userId: string;
+    fullName: string;
+    email: string;
+    role: string;
+    temporaryPassword: string;
+    message: string;
+    resetToken?: string | null;
+    resetUrl?: string | null;
+    emailSent?: boolean;
+  }> => {
+    const sendResetEmail = options?.sendResetEmail ?? options?.deliveryMode === "email";
+    const generateResetLink = options?.generateResetLink ?? options?.deliveryMode === "link";
+    const res = await apiClient.post(`/admin/users/${id}/reset-password`, {
+      temporaryPassword: options?.temporaryPassword || undefined,
+      sendResetEmail,
+      generateResetLink,
+      deliveryMode: options?.deliveryMode,
+    });
+    return res.data;
+  },
 };
 
 export interface AdminNewsletterSubscriberDto {

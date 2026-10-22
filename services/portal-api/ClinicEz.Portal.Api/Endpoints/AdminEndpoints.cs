@@ -767,6 +767,47 @@ public class AdminEndpoints : IEndpoint
         .WithName("AcceptAdminInvitation")
         .WithDescription("Accepts an admin invitation and links the authenticated Clerk user identity.")
         .WithTags("Admin");
+
+        // 23. POST /admin/users/{id}/reset-password
+        group.MapPost("/users/{id:guid}/reset-password", async (
+            Guid id,
+            ResetPortalPasswordRequest? request,
+            HttpContext httpContext,
+            ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageAdmins, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            try
+            {
+                var sendResetEmail = (request?.SendResetEmail ?? false) ||
+                                     string.Equals(request?.DeliveryMode, "email", StringComparison.OrdinalIgnoreCase);
+                var generateResetLink = (request?.GenerateResetLink ?? false) ||
+                                        string.Equals(request?.DeliveryMode, "link", StringComparison.OrdinalIgnoreCase);
+
+                var result = await sender.Send(new ResetAdminUserPasswordCommand(
+                    id,
+                    request?.TemporaryPassword,
+                    sendResetEmail,
+                    generateResetLink));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .WithName("ResetAdminUserPassword")
+        .WithDescription("Resets a platform user's password via email reset link, copyable reset link, or direct temporary password.")
+        .WithTags("Admin");
     }
 
     private static async Task<AdminMeResponse?> CheckPermissionAsync(
@@ -817,4 +858,11 @@ public record RecordManualPaymentRequest(
 );
 
 public record AdminArchiveTenantRequest(string? Reason = null);
+
+public record ResetPortalPasswordRequest(
+    string? TemporaryPassword = null,
+    bool SendResetEmail = false,
+    bool GenerateResetLink = false,
+    string? DeliveryMode = null
+);
 
