@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Features.Reports.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Workspace;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ClinicEz.Shared.Common;
@@ -25,6 +27,7 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
     private readonly IRepository<ClinicLabOrder> _labOrderRepo;
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
 
     public GetDailyEodReportQueryHandler(
         IRepository<QueueItem> queueRepo,
@@ -34,7 +37,8 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
         IRepository<ClinicalProcedure> procedureRepo,
         IRepository<ClinicLabOrder> labOrderRepo,
         IClinicContext clinicContext,
-        IRepository<ClinicSettings>? settingsRepo = null)
+        IRepository<ClinicSettings>? settingsRepo = null,
+        IWorkspaceProfileProvider? workspaceProfiles = null)
     {
         _queueRepo = queueRepo;
         _invoiceRepo = invoiceRepo;
@@ -44,13 +48,24 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
         _labOrderRepo = labOrderRepo;
         _clinicContext = clinicContext;
         _settingsRepo = settingsRepo;
+        _workspaceProfiles = workspaceProfiles;
     }
 
     public async Task<DailyEodReportDto> Handle(GetDailyEodReportQuery request, CancellationToken cancellationToken)
     {
-        var targetDate = request.Date.HasValue
-            ? request.Date.Value.ToStartOfDayUtc()
-            : DateTime.UtcNow.ToStartOfDayUtc();
+        DateTime targetDate;
+        if (request.Date.HasValue)
+        {
+            targetDate = request.Date.Value.ToStartOfDayUtc();
+        }
+        else
+        {
+            var resolvedToday = await ClinicTimeZoneResolver.ResolveTodayAsync(
+                _workspaceProfiles,
+                _clinicContext.TenantId,
+                cancellationToken);
+            targetDate = resolvedToday.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        }
         var nextDay = targetDate.AddDays(1);
 
         ClinicSettings? settings = null;

@@ -54,6 +54,7 @@ import {
   MorbidityReport,
   TaxDiscountAuditReport,
   DoctorSharesReport,
+  getManilaTodayStr,
 } from '../../services/clinicService';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
 
@@ -192,14 +193,6 @@ function LoadingBlock({ rows = 4 }: { rows?: number }) {
   );
 }
 
-function getManilaTodayStr(): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
-  } catch {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-}
 
 function formatDateRangeLabel(start?: string, end?: string): string {
   if (!start && !end) return 'Select Date Range';

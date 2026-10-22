@@ -10,6 +10,7 @@ using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Workspace;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -64,6 +65,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     private readonly IPatientCodeGenerator _codeGenerator;
     private readonly IRepository<StaffMember>? _staffRepo;
     private readonly IRepository<ClinicRoom>? _roomRepo;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
 
     public RegisterClinicPatientCommandHandler(
         IRepository<ClinicPatient> patientRepo,
@@ -74,7 +76,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         IRepository<PatientPastMedicalHistory>? medicalRepo = null,
         IPatientCodeGenerator? codeGenerator = null,
         IRepository<StaffMember>? staffRepo = null,
-        IRepository<ClinicRoom>? roomRepo = null)
+        IRepository<ClinicRoom>? roomRepo = null,
+        IWorkspaceProfileProvider? workspaceProfiles = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
@@ -85,6 +88,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         _codeGenerator = codeGenerator ?? ResolveFallbackCodeGenerator(patientRepo, unitOfWork);
         _staffRepo = staffRepo;
         _roomRepo = roomRepo;
+        _workspaceProfiles = workspaceProfiles;
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
@@ -257,7 +261,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         QueueItem? queueItem = null;
         if (request.SendToTriage && _queueRepo != null)
         {
-            var today = request.QueueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = request.QueueDate
+                ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, ct);
             var lastSequence = await _queueRepo.Query(q =>
                 q.ClinicId == _clinicContext.ClinicId &&
                 q.QueueDate == today)

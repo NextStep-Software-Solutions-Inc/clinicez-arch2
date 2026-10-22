@@ -60,9 +60,7 @@ export function ForceEodConfirmationModal({
       },
       {
         text: 'Retry',
-        onPress: () => {
-          void handleConfirm();
-        },
+        onPress: () => handleConfirm(),
       },
     ]);
   };
@@ -80,6 +78,8 @@ export function ForceEodConfirmationModal({
       );
       if (err) {
         const errMsg = err?.message || 'Failed to reconcile end-of-day queue.';
+        inFlightRef.current = false;
+        setSubmitting(false);
         handleFailure(errMsg);
         return;
       }
@@ -98,9 +98,7 @@ export function ForceEodConfirmationModal({
           },
           {
             text: 'Download Report',
-            onPress: () => {
-              void handleDownloadReport(reportDate);
-            },
+            onPress: () => handleDownloadReport(reportDate),
           },
         ]);
         return;
@@ -108,6 +106,8 @@ export function ForceEodConfirmationModal({
       onClose();
     } catch (err: any) {
       const errMsg = err?.message || 'Failed to reconcile end-of-day queue.';
+      inFlightRef.current = false;
+      setSubmitting(false);
       handleFailure(errMsg);
     } finally {
       inFlightRef.current = false;

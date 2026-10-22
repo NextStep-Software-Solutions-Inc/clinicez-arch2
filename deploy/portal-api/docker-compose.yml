@@ -61,17 +61,10 @@ services:
       - Hub__PublicUrl=${HUB_PUBLIC_URL:?HUB_PUBLIC_URL must be set}
       # Cell hosting every shared-cloud facility. Must equal the cloud hub's Hub__CloudCellId.
       - Hub__CloudCellId=${HUB_CLOUD_CELL_ID:-cloud}
-      # Outgoing mail (the host fails to start without Host and FromEmail). Empty User means no authentication.
-      - Smtp__Host=${SMTP_HOST:?SMTP_HOST must be set}
-      - Smtp__Port=${SMTP_PORT:-587}
-      - Smtp__Security=${SMTP_SECURITY:-Auto}
+      # Outgoing mail secrets. Non-secret mailer parameters (Host, Port, Security, FromEmail, FromName, ReplyTo, ContactInbox)
+      # are managed directly in Platform Settings (/admin/settings).
       - Smtp__User=${SMTP_USER:-}
       - Smtp__Password=${SMTP_PASSWORD:-}
-      - Smtp__FromEmail=${SMTP_FROM_EMAIL:?SMTP_FROM_EMAIL must be set}
-      - Smtp__FromName=${SMTP_FROM_NAME:-Clinic EZ}
-      - Smtp__ReplyTo=${SMTP_REPLY_TO:-}
-      # Recipient of the public contact form. Empty disables it.
-      - Notifications__ContactInbox=${NOTIFICATIONS_CONTACT_INBOX:-}
       # Web portal base URL (billing redirects when the request carries no Origin/Referer).
       - FrontendBaseUrl=${FRONTEND_BASE_URL:-}
       # Clinic API the portal calls (provisioning, workspace-level reads).

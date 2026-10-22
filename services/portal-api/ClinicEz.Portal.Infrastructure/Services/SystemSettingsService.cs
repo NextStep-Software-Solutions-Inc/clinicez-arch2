@@ -86,13 +86,13 @@ public sealed class SystemSettingsService(
         ("Storage:LabUploadMaxFileBytes", "10485760", "Storage", "Maximum file size allowed for public patient lab report uploads (in bytes)."),
         ("Storage:LabUploadRateLimitPermits", "5", "Storage", "Maximum permits allowed per rate limit window for public lab uploads."),
         ("Storage:LabUploadRateLimitWindowMinutes", "1", "Storage", "Rate limit window duration in minutes for public lab uploads."),
-        ("Mailer:SmtpHost", "localhost", "Mailer", "SMTP mail server hostname."),
-        ("Mailer:SmtpPort", "1025", "Mailer", "SMTP mail server port."),
-        ("Mailer:SmtpSecurity", "None", "Mailer", "SMTP security protocol (None, StartTls, Tls)."),
-        ("Mailer:SmtpFromEmail", "no-reply@clinicez.com", "Mailer", "Default sender email address for outgoing system emails."),
+        ("Mailer:SmtpHost", "smtp.resend.com", "Mailer", "SMTP mail server hostname."),
+        ("Mailer:SmtpPort", "587", "Mailer", "SMTP mail server port."),
+        ("Mailer:SmtpSecurity", "StartTls", "Mailer", "SMTP security protocol (None, StartTls, Tls)."),
+        ("Mailer:SmtpFromEmail", "noreply@clinicez.net", "Mailer", "Default sender email address for outgoing system emails."),
         ("Mailer:SmtpFromName", "Clinic EZ Support", "Mailer", "Default sender display name for outgoing system emails."),
-        ("Mailer:SmtpReplyTo", "support@clinicez.com", "Mailer", "Default reply-to email address for system notifications."),
-        ("Mailer:ContactInbox", "contact@clinicez.com", "Mailer", "Inbox email address where contact/support inquiries are delivered."),
+        ("Mailer:SmtpReplyTo", "support@clinicez.net", "Mailer", "Default reply-to email address for system notifications."),
+        ("Mailer:ContactInbox", "contact@clinicez.net", "Mailer", "Inbox email address where contact/support inquiries are delivered."),
         ("JoinClaim:TtlHours", "48", "JoinClaim", "Validity window in hours for progressive patient account claim tokens."),
         ("PatientApp:AppleAppStoreUrl", "https://apps.apple.com/app/clinicez-patient/id000000000", "PatientApp", "Download URL for Clinic EZ Patient App on Apple App Store."),
         ("PatientApp:GooglePlayStoreUrl", "https://play.google.com/store/apps/details?id=com.clinicez.patient", "PatientApp", "Download URL for Clinic EZ Patient App on Google Play Store."),
@@ -337,26 +337,87 @@ public sealed class SystemSettingsService(
 
     private async Task EnsureDefaultsSeededAsync(CancellationToken ct)
     {
-        var existingKeys = await dbContext.SystemSettings.Select(s => s.Key).ToListAsync(ct);
-        var missingDefaults = SystemDefaults.Where(d => !existingKeys.Contains(d.Key, StringComparer.OrdinalIgnoreCase)).ToList();
-
-        if (missingDefaults.Count == 0) return;
+        var existingSettings = await dbContext.SystemSettings.ToListAsync(ct);
+        var existingKeys = existingSettings.Select(s => s.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missingDefaults = SystemDefaults.Where(d => !existingKeys.Contains(d.Key)).ToList();
 
         var now = DateTime.UtcNow;
-        foreach (var (key, value, category, description) in missingDefaults)
+        var hasChanges = false;
+
+        // Auto-heal legacy unconfigured placeholder defaults to production defaults
+        foreach (var setting in existingSettings)
         {
-            dbContext.SystemSettings.Add(new SystemSetting
+            if (string.Equals(setting.Key, "Mailer:SmtpHost", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(setting.Value, "localhost", StringComparison.OrdinalIgnoreCase))
             {
-                Key = key,
-                Value = value,
-                Category = category,
-                Description = description,
-                UpdatedAt = now,
-                UpdatedBy = "System Default"
-            });
+                setting.Value = "smtp.resend.com";
+                setting.UpdatedAt = now;
+                setting.UpdatedBy = "System Default";
+                hasChanges = true;
+            }
+            else if (string.Equals(setting.Key, "Mailer:SmtpPort", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(setting.Value, "1025", StringComparison.OrdinalIgnoreCase))
+            {
+                setting.Value = "587";
+                setting.UpdatedAt = now;
+                setting.UpdatedBy = "System Default";
+                hasChanges = true;
+            }
+            else if (string.Equals(setting.Key, "Mailer:SmtpSecurity", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(setting.Value, "None", StringComparison.OrdinalIgnoreCase))
+            {
+                setting.Value = "StartTls";
+                setting.UpdatedAt = now;
+                setting.UpdatedBy = "System Default";
+                hasChanges = true;
+            }
+            else if (string.Equals(setting.Key, "Mailer:SmtpFromEmail", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(setting.Value, "no-reply@clinicez.com", StringComparison.OrdinalIgnoreCase))
+            {
+                setting.Value = "noreply@clinicez.net";
+                setting.UpdatedAt = now;
+                setting.UpdatedBy = "System Default";
+                hasChanges = true;
+            }
+            else if (string.Equals(setting.Key, "Mailer:SmtpReplyTo", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(setting.Value, "support@clinicez.com", StringComparison.OrdinalIgnoreCase))
+            {
+                setting.Value = "support@clinicez.net";
+                setting.UpdatedAt = now;
+                setting.UpdatedBy = "System Default";
+                hasChanges = true;
+            }
+            else if (string.Equals(setting.Key, "Mailer:ContactInbox", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(setting.Value, "contact@clinicez.com", StringComparison.OrdinalIgnoreCase))
+            {
+                setting.Value = "contact@clinicez.net";
+                setting.UpdatedAt = now;
+                setting.UpdatedBy = "System Default";
+                hasChanges = true;
+            }
         }
 
-        await dbContext.SaveChangesAsync(ct);
-        logger.LogInformation("Seeded {Count} missing default system settings.", missingDefaults.Count);
+        if (missingDefaults.Count > 0)
+        {
+            foreach (var (key, value, category, description) in missingDefaults)
+            {
+                dbContext.SystemSettings.Add(new SystemSetting
+                {
+                    Key = key,
+                    Value = value,
+                    Category = category,
+                    Description = description,
+                    UpdatedAt = now,
+                    UpdatedBy = "System Default"
+                });
+            }
+            hasChanges = true;
+            logger.LogInformation("Seeded {Count} missing default system settings.", missingDefaults.Count);
+        }
+
+        if (hasChanges)
+        {
+            await dbContext.SaveChangesAsync(ct);
+        }
     }
 }

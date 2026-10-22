@@ -511,11 +511,13 @@ public class SmtpOptionsTests
     }
 
     [Fact]
-    public void SmtpMode_RequiresHostAndSender()
+    public void SmtpMode_DoesNotRequireStaticHostOrSender_BecausePlatformSettingsHandleIt()
     {
-        Assert.NotNull(new SmtpOptions { Mode = SmtpMode.Smtp }.FindProblem(false));
-        Assert.NotNull(new SmtpOptions { Host = "smtp.example.com" }.FindProblem(false));
-        Assert.NotNull(new SmtpOptions { FromEmail = "no-reply@example.com" }.FindProblem(false));
+        // Host and FromEmail are managed dynamically in Platform Settings (SystemSettings) in DB.
+        // Static configuration at startup is optional, so missing static values should not fail validation.
+        Assert.Null(new SmtpOptions { Mode = SmtpMode.Smtp }.FindProblem(false));
+        Assert.Null(new SmtpOptions { Host = "smtp.example.com" }.FindProblem(false));
+        Assert.Null(new SmtpOptions { FromEmail = "no-reply@example.com" }.FindProblem(false));
         Assert.Null(new SmtpOptions { Host = "smtp.example.com", FromEmail = "no-reply@example.com" }.FindProblem(false));
     }
 
@@ -524,7 +526,7 @@ public class SmtpOptionsTests
     [InlineData(70000)]
     public void SmtpMode_RejectsAnInvalidPort(int port)
     {
-        Assert.NotNull(new SmtpOptions { Host = "h", FromEmail = "a@example.com", Port = port }.FindProblem(false));
+        Assert.NotNull(new SmtpOptions { Port = port }.FindProblem(false));
     }
 
     [Fact]
@@ -537,5 +539,32 @@ public class SmtpOptionsTests
         var line = Assert.Single(logger.Messages);
         Assert.Contains("a@example.com", line);
         Assert.Contains("plain body", line);
+    }
+}
+
+public class SmtpEmailSenderTests
+{
+    [Fact]
+    public async Task SendAsync_ThrowsWhenHostIsNotConfiguredAnywhere()
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(new SmtpOptions());
+        var sender = new SmtpEmailSender(options);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sender.SendAsync(new EmailMessage("test@example.com", "Sub", "<p>hi</p>", "hi"), CancellationToken.None));
+
+        Assert.Contains("SMTP host is not configured", ex.Message);
+    }
+
+    [Fact]
+    public async Task SendAsync_ThrowsWhenFromEmailIsNotConfiguredAnywhere()
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(new SmtpOptions { Host = "smtp.example.com" });
+        var sender = new SmtpEmailSender(options);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sender.SendAsync(new EmailMessage("test@example.com", "Sub", "<p>hi</p>", "hi"), CancellationToken.None));
+
+        Assert.Contains("SMTP sender email is not configured", ex.Message);
     }
 }

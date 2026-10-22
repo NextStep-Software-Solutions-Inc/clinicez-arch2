@@ -31,10 +31,14 @@ public class SendContactMessageCommandHandler(
 {
     public async Task<bool> Handle(SendContactMessageCommand request, CancellationToken cancellationToken)
     {
-        var inbox = configuration["Notifications:ContactInbox"]?.Trim();
-        if (string.IsNullOrEmpty(inbox) && settingsService is not null)
+        string? inbox = null;
+        if (settingsService is not null)
         {
             inbox = (await settingsService.GetSettingValueAsync("Mailer:ContactInbox", string.Empty, cancellationToken))?.Trim();
+        }
+        if (string.IsNullOrEmpty(inbox))
+        {
+            inbox = configuration["Notifications:ContactInbox"]?.Trim();
         }
         if (string.IsNullOrEmpty(inbox)) return false;
 

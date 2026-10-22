@@ -4411,24 +4411,62 @@ export function resolveWalkInDoctorRoomSelection(
   };
 }
 
+let activeClinicTimeZoneId = 'Asia/Manila';
+
 /**
- * Returns today's calendar date (YYYY-MM-DD) in Philippine Standard Time (Asia/Manila, UTC+8).
- * Prevents UTC midnight rollover mismatches (00:00–07:59 AM PHT) where UTC is still on the previous calendar day.
+ * Sets the active clinic/workspace IANA time zone ID (e.g. from WorkspaceProfile.timeZoneId).
+ * Falls back to 'Asia/Manila' when null or empty.
  */
-export function getManilaTodayStr(now: Date = new Date()): string {
+export function setClinicTimeZoneId(timeZoneId?: string | null): void {
+  const trimmed = timeZoneId?.trim();
+  activeClinicTimeZoneId = trimmed || 'Asia/Manila';
+}
+
+/**
+ * Returns the currently configured clinic/workspace IANA time zone ID (defaults to 'Asia/Manila').
+ */
+export function getClinicTimeZoneId(): string {
+  return activeClinicTimeZoneId || 'Asia/Manila';
+}
+
+/**
+ * Returns today's calendar date (YYYY-MM-DD) in the configured clinic/workspace timezone
+ * (falling back to 'Asia/Manila', UTC+8).
+ * Prevents UTC midnight rollover mismatches where UTC is still on the previous calendar day.
+ */
+export function getClinicTodayStr(now: Date = new Date(), timeZoneId?: string): string {
+  const targetTz = timeZoneId?.trim() || activeClinicTimeZoneId || 'Asia/Manila';
   try {
     return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Manila',
+      timeZone: targetTz,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
     }).format(now);
   } catch {
-    const manilaOffsetMs = 8 * 60 * 60 * 1000;
-    const manilaDate = new Date(now.getTime() + manilaOffsetMs);
-    return manilaDate.toISOString().split('T')[0];
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(now);
+    } catch {
+      const manilaOffsetMs = 8 * 60 * 60 * 1000;
+      const manilaDate = new Date(now.getTime() + manilaOffsetMs);
+      return manilaDate.toISOString().split('T')[0];
+    }
   }
 }
+
+/**
+ * Alias for `getClinicTodayStr` — returns today's calendar date (YYYY-MM-DD) in the configured
+ * clinic/workspace timezone (defaulting to Philippine Standard Time, Asia/Manila).
+ */
+export function getManilaTodayStr(now: Date = new Date(), timeZoneId?: string): string {
+  return getClinicTodayStr(now, timeZoneId);
+}
+
 
 
 

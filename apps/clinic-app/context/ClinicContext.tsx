@@ -6,6 +6,7 @@ import {
   ClinicSettingsRecord,
   FacilityLicenseStatus,
   WorkspaceProfile,
+  setClinicTimeZoneId,
 } from '../services/clinicService';
 import { useFacilityLicense } from '../components/FacilityActivationGate';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
@@ -20,6 +21,8 @@ import {
 export const CLINIC_LOGO_STORAGE_KEY = 'clinicez_clinic_logo';
 export const CLINIC_PRIMARY_COLOR_OVERRIDE_KEY = 'clinicez_clinic_primary_color_override';
 export const CLINIC_WORKSPACE_ACCENT_STORAGE_KEY = 'clinicez_workspace_accent_color';
+export const CLINIC_WORKSPACE_TIMEZONE_STORAGE_KEY = 'clinicez_workspace_timezone';
+
 
 export interface Letterhead {
   header: string;
@@ -52,6 +55,8 @@ export interface ClinicContextValue {
   workspaceAccentColorHex: string | null;
   /** Workspace profile inherited from portal tenant workspace. */
   workspaceProfile: WorkspaceProfile | null;
+  /** Effective configured IANA timezone ID (inherited from workspace profile, falls back to 'Asia/Manila'). */
+  timeZoneId: string;
   /** True if the clinic facility has an active custom color override. */
   isColorOverridden: boolean;
   /** Color source: 'clinic_override' | 'workspace_inherited' | 'default_fallback'. */
@@ -83,6 +88,7 @@ export const ClinicContext = createContext<ClinicContextValue>({
   primaryColorHex: DEFAULT_CLINIC_BRAND_COLOR,
   workspaceAccentColorHex: null,
   workspaceProfile: null,
+  timeZoneId: 'Asia/Manila',
   isColorOverridden: false,
   colorSource: 'default_fallback',
   setPrimaryColorHex: async () => false,
@@ -114,6 +120,13 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   const [cachedWorkspaceAccent, setCachedWorkspaceAccent] = useState<string | null>(() =>
     getDeviceItem(CLINIC_WORKSPACE_ACCENT_STORAGE_KEY)
   );
+  const [cachedWorkspaceTimeZone, setCachedWorkspaceTimeZone] = useState<string | null>(() => {
+    const cachedTz = getDeviceItem(CLINIC_WORKSPACE_TIMEZONE_STORAGE_KEY);
+    if (cachedTz) {
+      setClinicTimeZoneId(cachedTz);
+    }
+    return cachedTz;
+  });
   const [rooms, setRooms] = useState<ClinicRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +179,11 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
         if (profile.accentColorHex) {
           setCachedWorkspaceAccent(profile.accentColorHex);
           setDeviceItem(CLINIC_WORKSPACE_ACCENT_STORAGE_KEY, profile.accentColorHex);
+        }
+        if (profile.timeZoneId) {
+          setCachedWorkspaceTimeZone(profile.timeZoneId);
+          setDeviceItem(CLINIC_WORKSPACE_TIMEZONE_STORAGE_KEY, profile.timeZoneId);
+          setClinicTimeZoneId(profile.timeZoneId);
         }
       }
     }
@@ -265,6 +283,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       primaryColorHex: resolvedBrand.color,
       workspaceAccentColorHex: activeWorkspaceAccent,
       workspaceProfile,
+      timeZoneId: workspaceProfile?.timeZoneId || cachedWorkspaceTimeZone || 'Asia/Manila',
       isColorOverridden: resolvedBrand.isOverridden,
       colorSource: resolvedBrand.source,
       setPrimaryColorHex,
@@ -282,6 +301,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       resolvedBrand,
       activeWorkspaceAccent,
       workspaceProfile,
+      cachedWorkspaceTimeZone,
       setPrimaryColorHex,
       setClinicLogo,
       loading,

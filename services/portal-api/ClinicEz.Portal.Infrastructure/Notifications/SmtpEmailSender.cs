@@ -52,8 +52,8 @@ public sealed class SmtpOptions
             return isDevelopment ? null : "Smtp:Mode 'Log' is only allowed in the Development environment.";
         }
 
-        if (string.IsNullOrWhiteSpace(Host)) return "Smtp:Host is required when Smtp:Mode is 'Smtp'.";
-        if (string.IsNullOrWhiteSpace(FromEmail)) return "Smtp:FromEmail is required when Smtp:Mode is 'Smtp'.";
+        // Host, FromEmail, Port, and Security are managed dynamically via Platform Settings (SystemSettings) in DB.
+        // Static configuration in appsettings/env is an optional fallback.
         if (Port is < 1 or > 65535) return "Smtp:Port must be between 1 and 65535.";
         return null;
     }
@@ -83,31 +83,13 @@ public sealed class SmtpEmailSender(
         var defaultReplyTo = smtp.ReplyTo;
         var security = smtp.Security;
 
+        // Platform Settings (SystemSettings) in DB is the primary source of truth for all non-secret mailer parameters.
         if (settingsService is not null)
         {
-            var dbFromEmail = await settingsService.GetSettingValueAsync("Mailer:SmtpFromEmail", string.Empty, cancellationToken);
-            // Only override if db setting is populated and not the generic placeholder when env is already configured
-            if (!string.IsNullOrWhiteSpace(dbFromEmail) && (string.IsNullOrWhiteSpace(fromEmail) || dbFromEmail != "no-reply@clinicez.com"))
-            {
-                fromEmail = dbFromEmail;
-            }
-
-            var dbFromName = await settingsService.GetSettingValueAsync("Mailer:SmtpFromName", string.Empty, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(dbFromName))
-            {
-                fromName = dbFromName;
-            }
-
-            var dbReplyTo = await settingsService.GetSettingValueAsync("Mailer:SmtpReplyTo", string.Empty, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(dbReplyTo))
-            {
-                defaultReplyTo = dbReplyTo;
-            }
-
             var dbHost = await settingsService.GetSettingValueAsync("Mailer:SmtpHost", string.Empty, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(dbHost) && dbHost != "localhost")
+            if (!string.IsNullOrWhiteSpace(dbHost))
             {
-                host = dbHost;
+                host = dbHost.Trim();
             }
 
             var dbPort = await settingsService.GetSettingValueAsync("Mailer:SmtpPort", string.Empty, cancellationToken);
@@ -121,6 +103,36 @@ public sealed class SmtpEmailSender(
             {
                 security = parsedSec;
             }
+
+            var dbFromEmail = await settingsService.GetSettingValueAsync("Mailer:SmtpFromEmail", string.Empty, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(dbFromEmail))
+            {
+                fromEmail = dbFromEmail.Trim();
+            }
+
+            var dbFromName = await settingsService.GetSettingValueAsync("Mailer:SmtpFromName", string.Empty, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(dbFromName))
+            {
+                fromName = dbFromName.Trim();
+            }
+
+            var dbReplyTo = await settingsService.GetSettingValueAsync("Mailer:SmtpReplyTo", string.Empty, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(dbReplyTo))
+            {
+                defaultReplyTo = dbReplyTo.Trim();
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            throw new InvalidOperationException(
+                "SMTP host is not configured. Please configure 'Mailer:SmtpHost' in Platform Settings (/admin/settings) or provide Smtp:Host in configuration.");
+        }
+
+        if (string.IsNullOrWhiteSpace(fromEmail))
+        {
+            throw new InvalidOperationException(
+                "SMTP sender email is not configured. Please configure 'Mailer:SmtpFromEmail' in Platform Settings (/admin/settings) or provide Smtp:FromEmail in configuration.");
         }
 
         var mime = new MimeMessage();
