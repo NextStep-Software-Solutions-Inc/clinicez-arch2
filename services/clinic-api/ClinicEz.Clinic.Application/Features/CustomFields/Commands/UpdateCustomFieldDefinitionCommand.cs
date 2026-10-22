@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
@@ -10,6 +11,7 @@ using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 namespace ClinicEz.Clinic.Application.Features.CustomFields.Commands;
 
@@ -48,7 +50,9 @@ public sealed class UpdateCustomFieldDefinitionCommandValidator : AbstractValida
             .GreaterThanOrEqualTo(0).WithMessage("DisplayOrder must be 0 or greater.");
 
         RuleFor(x => x.FieldKey)
-            .MaximumLength(100).WithMessage("FieldKey cannot exceed 100 characters.");
+            .MaximumLength(100).WithMessage("FieldKey cannot exceed 100 characters.")
+            .Matches(@"^[a-z0-9_]+$").When(x => !string.IsNullOrEmpty(x.FieldKey))
+            .WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
 
         RuleFor(x => x.OptionsJson)
             .Must(BeValidJsonOrNull).WithMessage("OptionsJson must be a valid JSON string or null.");
@@ -99,17 +103,21 @@ public sealed class UpdateCustomFieldDefinitionCommandHandler : IRequestHandler<
         if (!string.IsNullOrWhiteSpace(request.FieldKey))
         {
             var normalizedKey = request.FieldKey.Trim().ToLowerInvariant().Replace(" ", "_");
+            if (!Regex.IsMatch(normalizedKey, @"^[a-z0-9_]+$"))
+            {
+                throw new ValidationException("Machine key must contain only lowercase alphanumeric characters and underscores.");
+            }
+
             if (normalizedKey != field.FieldKey)
             {
                 var conflict = await _repo.Query().AnyAsync(f =>
                     f.Id != request.Id &&
                     f.EntityType == field.EntityType &&
-                    f.FieldKey == normalizedKey &&
-                    f.IsActive, ct);
+                    f.FieldKey == normalizedKey, ct);
 
                 if (conflict)
                 {
-                    throw new ConflictException($"A custom field with key '{normalizedKey}' already exists for entity '{field.EntityType}'.");
+                    throw new ConflictException("A custom field with this machine key already exists.");
                 }
 
                 field.FieldKey = normalizedKey;

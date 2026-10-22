@@ -50,12 +50,54 @@ export function ToggleSwitch({
   );
 }
 
+export const MACHINE_KEY_REGEX = /^[a-z0-9_]+$/;
+
+export function slugifyMachineKey(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+export function normalizeMachineKeyOnBlur(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+}
+
+export function validateMachineKey(
+  rawKey: string,
+  existingFields: Array<Pick<ClinicCustomFieldDefinition, 'id' | 'fieldKey'>>,
+  editingFieldId?: string | null
+): string | null {
+  if (!rawKey) {
+    return 'Machine key is required.';
+  }
+  if (rawKey !== rawKey.trim() || !MACHINE_KEY_REGEX.test(rawKey)) {
+    return 'Machine key must contain only lowercase alphanumeric characters and underscores (e.g. student_id).';
+  }
+  if (rawKey.length > 100) {
+    return 'Machine key cannot exceed 100 characters.';
+  }
+  const normalized = rawKey.toLowerCase();
+  const isDuplicate = existingFields.some(
+    (f) => f.id !== editingFieldId && f.fieldKey.toLowerCase() === normalized
+  );
+  if (isDuplicate) {
+    return 'A custom field with this machine key already exists.';
+  }
+  return null;
+}
+
 export interface AddEditFieldModalProps {
   visible: boolean;
   onClose: () => void;
   fieldToEdit?: ClinicCustomFieldDefinition | null;
   existingFields: ClinicCustomFieldDefinition[];
   onSave: (fieldData: Partial<ClinicCustomFieldDefinition>) => Promise<boolean>;
+  saveError?: string | null;
 }
 
 const STATIC_FIELD_OPTIONS = [
@@ -79,12 +121,15 @@ export default function AddEditFieldModal({
   fieldToEdit,
   existingFields,
   onSave,
+  saveError,
 }: AddEditFieldModalProps) {
   const isEditing = Boolean(fieldToEdit);
 
   // Core metadata state
   const [label, setLabel] = useState('');
   const [fieldKey, setFieldKey] = useState('');
+  const [isFieldKeyManuallyEdited, setIsFieldKeyManuallyEdited] = useState(false);
+  const [fieldKeyError, setFieldKeyError] = useState<string | null>(null);
   const [dataType, setDataType] = useState<ClinicCustomFieldDefinition['dataType']>('Text');
   const [category, setCategory] = useState('Demographics');
   const [placeholder, setPlaceholder] = useState('');
@@ -117,6 +162,8 @@ export default function AddEditFieldModal({
     if (fieldToEdit) {
       setLabel(fieldToEdit.label || '');
       setFieldKey(fieldToEdit.fieldKey || '');
+      setIsFieldKeyManuallyEdited(true);
+      setFieldKeyError(null);
       setDataType(fieldToEdit.dataType || 'Text');
       setCategory(fieldToEdit.category || 'Demographics');
       setPlaceholder(fieldToEdit.placeholder || '');
@@ -198,6 +245,8 @@ export default function AddEditFieldModal({
       // Create mode defaults
       setLabel('');
       setFieldKey('');
+      setIsFieldKeyManuallyEdited(false);
+      setFieldKeyError(null);
       setDataType('Text');
       setCategory('Demographics');
       setPlaceholder('');
@@ -220,13 +269,55 @@ export default function AddEditFieldModal({
   // Handle label change and auto-generate key in Create mode
   const handleLabelChange = (text: string) => {
     setLabel(text);
-    if (!isEditing && !fieldKey) {
-      const generated = text
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
+    if (!isEditing && !isFieldKeyManuallyEdited) {
+      const generated = slugifyMachineKey(text);
       setFieldKey(generated);
+      if (fieldKeyError) {
+        setFieldKeyError(
+          generated ? validateMachineKey(generated, existingFields, fieldToEdit?.id) : null
+        );
+      }
+    }
+  };
+
+  const handleFieldKeyChange = (text: string) => {
+    setFieldKey(text);
+    setIsFieldKeyManuallyEdited(text.trim().length > 0);
+    if (fieldKeyError) {
+      setFieldKeyError(validateMachineKey(text, existingFields, fieldToEdit?.id));
+    }
+    if (error) {
+      setError(null);
+    }
+  };
+
+  const handleFieldKeyBlur = () => {
+    if (!fieldKey.trim() && label.trim()) {
+      const generated = slugifyMachineKey(label);
+      setFieldKey(generated);
+      setIsFieldKeyManuallyEdited(false);
+      setFieldKeyError(
+        generated ? validateMachineKey(generated, existingFields, fieldToEdit?.id) : null
+      );
+      return;
+    }
+    if (fieldKey) {
+      const normalized = normalizeMachineKeyOnBlur(fieldKey);
+      setFieldKey(normalized);
+      setFieldKeyError(validateMachineKey(normalized, existingFields, fieldToEdit?.id));
+    }
+  };
+
+  const handleAutoSlugify = () => {
+    const source = label.trim() || fieldKey.trim();
+    const slugified = slugifyMachineKey(source);
+    setFieldKey(slugified);
+    setIsFieldKeyManuallyEdited(false);
+    setFieldKeyError(
+      slugified ? validateMachineKey(slugified, existingFields, fieldToEdit?.id) : null
+    );
+    if (error) {
+      setError(null);
     }
   };
 
@@ -258,15 +349,17 @@ export default function AddEditFieldModal({
       return;
     }
 
+    const candidateKey = fieldKey.length > 0 ? fieldKey : slugifyMachineKey(trimmedLabel);
+    const keyValidationError = validateMachineKey(candidateKey, existingFields, fieldToEdit?.id);
+    if (keyValidationError) {
+      setFieldKeyError(keyValidationError);
+      setError(keyValidationError);
+      return;
+    }
+
     setSaving(true);
     setError(null);
-
-    const generatedKey =
-      fieldKey.trim() ||
-      trimmedLabel
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
+    setFieldKeyError(null);
 
     // 1. Flat options serialization
     let optionsJson: string | undefined = undefined;
@@ -343,7 +436,7 @@ export default function AddEditFieldModal({
 
     const payload: Partial<ClinicCustomFieldDefinition> = {
       label: trimmedLabel,
-      fieldKey: generatedKey || `field_${Date.now()}`,
+      fieldKey: candidateKey,
       dataType,
       category,
       placeholder: placeholder.trim() || undefined,
@@ -364,6 +457,8 @@ export default function AddEditFieldModal({
   const candidateParentFields = existingFields.filter(
     (f) => !fieldToEdit || f.id !== fieldToEdit.id
   );
+
+  const displayedError = error || saveError;
 
   return (
     <Modal
@@ -393,11 +488,11 @@ export default function AddEditFieldModal({
       }
     >
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {error ? (
+        {displayedError ? (
           <View style={styles.errorBox}>
             <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
             <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
-              {error}
+              {displayedError}
             </ThemedText>
           </View>
         ) : null}
@@ -412,12 +507,35 @@ export default function AddEditFieldModal({
         />
 
         {/* Machine Key */}
-        <Input
-          label="Machine Key (System Identifier)"
-          value={fieldKey}
-          onChangeText={setFieldKey}
-          placeholder="e.g. student_id, college, spouse_name"
-        />
+        <View style={styles.machineKeyFieldBlock}>
+          <View style={styles.rowBetween}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+              Machine Key (System Identifier)
+              <ThemedText color={theme.colors.emergency}> *</ThemedText>
+            </ThemedText>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Auto-slugify machine key from label"
+              onPress={handleAutoSlugify}
+              style={styles.slugifyActionBtn}
+            >
+              <Icon name="refresh" size={theme.sizes.iconSm} color={theme.colors.primary} />
+              <ThemedText variant="captionBold" color={theme.colors.primary}>
+                Auto-slugify from label
+              </ThemedText>
+            </Pressable>
+          </View>
+          <Input
+            value={fieldKey}
+            onChangeText={handleFieldKeyChange}
+            onBlur={handleFieldKeyBlur}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="e.g. student_id, college, spouse_name"
+            error={fieldKeyError || undefined}
+            helperText="Lowercase letters, numbers, and underscores only (^[a-z0-9_]+$)."
+          />
+        </View>
 
         {/* Data Type */}
         <FieldGroup label="Data Format / Field Type">
@@ -837,5 +955,15 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderLight,
     backgroundColor: theme.colors.surfaceMuted,
     gap: theme.spacing.xs,
+  },
+  machineKeyFieldBlock: {
+    gap: theme.spacing.xs,
+  },
+  slugifyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: 2,
+    paddingHorizontal: theme.spacing.xs,
   },
 });

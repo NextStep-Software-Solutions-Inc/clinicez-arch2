@@ -10,6 +10,7 @@ using ClinicEz.Clinic.Application.Features.CustomFields.Queries;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -902,6 +903,184 @@ public class CustomFieldsE2ETests
 
         // Assert
         result.Label.Should().Be(xssPayload);
+    }
+
+    [Fact]
+    public async Task TC_IF_004_1_CreateCustomField_DuplicateMachineKey_ShouldThrowConflictException()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var handler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
+
+        await handler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Student ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Act
+        var act = () => handler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Duplicate Student ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<ConflictException>()
+            .WithMessage("A custom field with this machine key already exists.");
+    }
+
+    [Fact]
+    public async Task TC_IF_004_2_UpdateCustomField_DuplicateMachineKey_ShouldThrowConflictException()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
+        var updateHandler = new UpdateCustomFieldDefinitionCommandHandler(repo, uow);
+
+        await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Student ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        var second = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "employee_id",
+            Label: "Employee ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Act
+        var act = () => updateHandler.Handle(new UpdateCustomFieldDefinitionCommand(
+            Id: second.Id,
+            Label: "Employee ID",
+            DataType: CustomFieldDataType.Text,
+            FieldKey: "student_id"
+        ), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<ConflictException>()
+            .WithMessage("A custom field with this machine key already exists.");
+    }
+
+    [Fact]
+    public async Task TC_IF_004_3_CreateCustomField_AfterSoftDeletingSameMachineKey_ShouldSucceed()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
+        var deleteHandler = new DeleteCustomFieldDefinitionCommandHandler(repo, uow);
+
+        var first = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Student ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        await deleteHandler.Handle(new DeleteCustomFieldDefinitionCommand(first.Id), CancellationToken.None);
+
+        // Act
+        var recreated = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Student ID Recreated",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Assert
+        recreated.Should().NotBeNull();
+        recreated.FieldKey.Should().Be("student_id");
+        recreated.Id.Should().NotBe(first.Id);
+    }
+
+    [Theory]
+    [InlineData("full name 89 123!@#!")]
+    [InlineData("student-id")]
+    [InlineData("student@id")]
+    [InlineData("Student_ID")]
+    [InlineData("  student_id  ")]
+    [InlineData("student id")]
+    public void TC_IF_006_1_CreateCustomFieldValidator_InvalidMachineKeyFormat_ShouldFailValidation(string invalidKey)
+    {
+        // Arrange
+        var validator = new CreateCustomFieldDefinitionCommandValidator();
+        var command = new CreateCustomFieldDefinitionCommand(
+            FieldKey: invalidKey,
+            Label: "Test Field",
+            DataType: CustomFieldDataType.Text
+        );
+
+        // Act
+        var result = validator.Validate(command);
+
+        // Assert
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e =>
+            e.PropertyName == "FieldKey" &&
+            e.ErrorMessage == "Machine key must contain only lowercase alphanumeric characters and underscores.");
+    }
+
+    [Theory]
+    [InlineData("full name 89 123!@#!")]
+    [InlineData("student-id")]
+    [InlineData("Student_ID")]
+    [InlineData("  student_id  ")]
+    public void TC_IF_006_2_UpdateCustomFieldValidator_InvalidMachineKeyFormat_ShouldFailValidation(string invalidKey)
+    {
+        // Arrange
+        var validator = new UpdateCustomFieldDefinitionCommandValidator();
+        var command = new UpdateCustomFieldDefinitionCommand(
+            Id: Guid.NewGuid(),
+            Label: "Test Field",
+            DataType: CustomFieldDataType.Text,
+            FieldKey: invalidKey
+        );
+
+        // Act
+        var result = validator.Validate(command);
+
+        // Assert
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e =>
+            e.PropertyName == "FieldKey" &&
+            e.ErrorMessage == "Machine key must contain only lowercase alphanumeric characters and underscores.");
+    }
+
+    [Fact]
+    public async Task TC_IF_006_3_CreateAndUpdateHandlers_SpecialCharactersInMachineKey_ShouldThrowValidationException()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, uow, _clinicContext);
+        var updateHandler = new UpdateCustomFieldDefinitionCommandHandler(repo, uow);
+
+        var validField = await createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "valid_key",
+            Label: "Valid Field",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Act & Assert - Create handler rejects special characters
+        var createAct = () => createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "full name 89 123!@#!",
+            Label: "Invalid Field",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+        await createAct.Should().ThrowAsync<ValidationException>()
+            .WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
+
+        // Act & Assert - Update handler rejects special characters
+        var updateAct = () => updateHandler.Handle(new UpdateCustomFieldDefinitionCommand(
+            Id: validField.Id,
+            Label: "Valid Field",
+            DataType: CustomFieldDataType.Text,
+            FieldKey: "full name 89 123!@#!"
+        ), CancellationToken.None);
+        await updateAct.Should().ThrowAsync<ValidationException>()
+            .WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
     }
 
     #endregion

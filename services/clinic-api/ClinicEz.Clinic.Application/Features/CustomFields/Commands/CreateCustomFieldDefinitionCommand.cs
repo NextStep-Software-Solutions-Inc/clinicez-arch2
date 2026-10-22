@@ -1,13 +1,17 @@
 using System;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.CustomFields.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 namespace ClinicEz.Clinic.Application.Features.CustomFields.Commands;
 
@@ -30,7 +34,8 @@ public sealed class CreateCustomFieldDefinitionCommandValidator : AbstractValida
     {
         RuleFor(x => x.FieldKey)
             .NotEmpty().WithMessage("FieldKey is required.")
-            .MaximumLength(100).WithMessage("FieldKey cannot exceed 100 characters.");
+            .MaximumLength(100).WithMessage("FieldKey cannot exceed 100 characters.")
+            .Matches(@"^[a-z0-9_]+$").WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
 
         RuleFor(x => x.Label)
             .NotEmpty().WithMessage("Label is required.")
@@ -91,13 +96,30 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
 
     public async Task<ClinicCustomFieldDefinitionDto> Handle(CreateCustomFieldDefinitionCommand request, CancellationToken ct)
     {
+        var targetEntityType = string.IsNullOrWhiteSpace(request.EntityType) ? "ClinicPatient" : request.EntityType.Trim();
+        var normalizedKey = (request.FieldKey ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "_");
+
+        if (string.IsNullOrWhiteSpace(normalizedKey) || !Regex.IsMatch(normalizedKey, @"^[a-z0-9_]+$"))
+        {
+            throw new ValidationException("Machine key must contain only lowercase alphanumeric characters and underscores.");
+        }
+
+        var conflict = await _repo.Query().AnyAsync(f =>
+            f.EntityType == targetEntityType &&
+            f.FieldKey == normalizedKey, ct);
+
+        if (conflict)
+        {
+            throw new ConflictException("A custom field with this machine key already exists.");
+        }
+
         var entity = new ClinicCustomFieldDefinition
         {
             Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
-            EntityType = string.IsNullOrWhiteSpace(request.EntityType) ? "ClinicPatient" : request.EntityType.Trim(),
-            FieldKey = request.FieldKey.Trim().ToLowerInvariant().Replace(" ", "_"),
+            EntityType = targetEntityType,
+            FieldKey = normalizedKey,
             Label = request.Label.Trim(),
             DataType = request.DataType,
             Category = request.Category?.Trim(),
