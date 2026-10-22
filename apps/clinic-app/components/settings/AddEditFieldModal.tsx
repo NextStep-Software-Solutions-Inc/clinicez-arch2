@@ -154,6 +154,7 @@ export default function AddEditFieldModal({
   // UI state
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dismissedSaveError, setDismissedSaveError] = useState(false);
 
   // Initialize form when fieldToEdit changes or modal opens
   useEffect(() => {
@@ -263,12 +264,14 @@ export default function AddEditFieldModal({
       setDefaultOptions('');
     }
     setError(null);
+    setDismissedSaveError(false);
     setSaving(false);
   }, [visible, fieldToEdit]);
 
   // Handle label change and auto-generate key in Create mode
   const handleLabelChange = (text: string) => {
     setLabel(text);
+    setDismissedSaveError(true);
     if (!isEditing && !isFieldKeyManuallyEdited) {
       const generated = slugifyMachineKey(text);
       setFieldKey(generated);
@@ -282,7 +285,8 @@ export default function AddEditFieldModal({
 
   const handleFieldKeyChange = (text: string) => {
     setFieldKey(text);
-    setIsFieldKeyManuallyEdited(text.trim().length > 0);
+    setIsFieldKeyManuallyEdited(true);
+    setDismissedSaveError(true);
     if (fieldKeyError) {
       setFieldKeyError(validateMachineKey(text, existingFields, fieldToEdit?.id));
     }
@@ -292,16 +296,15 @@ export default function AddEditFieldModal({
   };
 
   const handleFieldKeyBlur = () => {
-    if (!fieldKey.trim() && label.trim()) {
+    if (!fieldKey.trim() && label.trim() && !isEditing && !isFieldKeyManuallyEdited) {
       const generated = slugifyMachineKey(label);
       setFieldKey(generated);
-      setIsFieldKeyManuallyEdited(false);
       setFieldKeyError(
         generated ? validateMachineKey(generated, existingFields, fieldToEdit?.id) : null
       );
       return;
     }
-    if (fieldKey) {
+    if (fieldKey || isEditing || isFieldKeyManuallyEdited) {
       const normalized = normalizeMachineKeyOnBlur(fieldKey);
       setFieldKey(normalized);
       setFieldKeyError(validateMachineKey(normalized, existingFields, fieldToEdit?.id));
@@ -313,6 +316,7 @@ export default function AddEditFieldModal({
     const slugified = slugifyMachineKey(source);
     setFieldKey(slugified);
     setIsFieldKeyManuallyEdited(false);
+    setDismissedSaveError(true);
     setFieldKeyError(
       slugified ? validateMachineKey(slugified, existingFields, fieldToEdit?.id) : null
     );
@@ -349,7 +353,10 @@ export default function AddEditFieldModal({
       return;
     }
 
-    const candidateKey = fieldKey.length > 0 ? fieldKey : slugifyMachineKey(trimmedLabel);
+    const candidateKey =
+      !isEditing && !isFieldKeyManuallyEdited && fieldKey.length === 0
+        ? slugifyMachineKey(trimmedLabel)
+        : fieldKey;
     const keyValidationError = validateMachineKey(candidateKey, existingFields, fieldToEdit?.id);
     if (keyValidationError) {
       setFieldKeyError(keyValidationError);
@@ -359,6 +366,7 @@ export default function AddEditFieldModal({
 
     setSaving(true);
     setError(null);
+    setDismissedSaveError(false);
     setFieldKeyError(null);
 
     // 1. Flat options serialization
@@ -458,7 +466,7 @@ export default function AddEditFieldModal({
     (f) => !fieldToEdit || f.id !== fieldToEdit.id
   );
 
-  const displayedError = error || saveError;
+  const displayedError = error || (!dismissedSaveError ? saveError : null);
 
   return (
     <Modal

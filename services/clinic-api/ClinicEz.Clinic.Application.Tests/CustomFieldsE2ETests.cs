@@ -995,6 +995,32 @@ public class CustomFieldsE2ETests
         recreated.Id.Should().NotBe(first.Id);
     }
 
+    [Fact]
+    public async Task TC_IF_004_4_ConcurrentUniqueConstraintDbUpdateException_ShouldThrowConflictException()
+    {
+        // Arrange
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicCustomFieldDefinition>(context, sieve);
+        var racingUow = Substitute.For<IUnitOfWork>();
+        racingUow.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<int>>(_ => throw new Microsoft.EntityFrameworkCore.DbUpdateException(
+                "An error occurred while saving the entity changes.",
+                new Exception("23505: duplicate key value violates unique constraint \"IX_CustomFieldDefinitions_TenantId_ClinicId_EntityType_FieldKey\"")));
+
+        var createHandler = new CreateCustomFieldDefinitionCommandHandler(repo, racingUow, _clinicContext);
+
+        // Act
+        var act = () => createHandler.Handle(new CreateCustomFieldDefinitionCommand(
+            FieldKey: "student_id",
+            Label: "Student ID",
+            DataType: CustomFieldDataType.Text
+        ), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<ConflictException>()
+            .WithMessage("A custom field with this machine key already exists.");
+    }
+
     [Theory]
     [InlineData("full name 89 123!@#!")]
     [InlineData("student-id")]
@@ -1002,6 +1028,7 @@ public class CustomFieldsE2ETests
     [InlineData("Student_ID")]
     [InlineData("  student_id  ")]
     [InlineData("student id")]
+    [InlineData("student_id\n")]
     public void TC_IF_006_1_CreateCustomFieldValidator_InvalidMachineKeyFormat_ShouldFailValidation(string invalidKey)
     {
         // Arrange
@@ -1027,6 +1054,9 @@ public class CustomFieldsE2ETests
     [InlineData("student-id")]
     [InlineData("Student_ID")]
     [InlineData("  student_id  ")]
+    [InlineData("student_id\n")]
+    [InlineData("")]
+    [InlineData("   ")]
     public void TC_IF_006_2_UpdateCustomFieldValidator_InvalidMachineKeyFormat_ShouldFailValidation(string invalidKey)
     {
         // Arrange
@@ -1049,7 +1079,7 @@ public class CustomFieldsE2ETests
     }
 
     [Fact]
-    public async Task TC_IF_006_3_CreateAndUpdateHandlers_SpecialCharactersInMachineKey_ShouldThrowValidationException()
+    public async Task TC_IF_006_3_CreateAndUpdateHandlers_SpecialCharactersOrEmptyMachineKey_ShouldThrowValidationException()
     {
         // Arrange
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
@@ -1080,6 +1110,16 @@ public class CustomFieldsE2ETests
             FieldKey: "full name 89 123!@#!"
         ), CancellationToken.None);
         await updateAct.Should().ThrowAsync<ValidationException>()
+            .WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
+
+        // Act & Assert - Update handler rejects whitespace-only or empty non-null FieldKey
+        var updateWhitespaceAct = () => updateHandler.Handle(new UpdateCustomFieldDefinitionCommand(
+            Id: validField.Id,
+            Label: "Valid Field",
+            DataType: CustomFieldDataType.Text,
+            FieldKey: "   "
+        ), CancellationToken.None);
+        await updateWhitespaceAct.Should().ThrowAsync<ValidationException>()
             .WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
     }
 

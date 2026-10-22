@@ -35,7 +35,7 @@ public sealed class CreateCustomFieldDefinitionCommandValidator : AbstractValida
         RuleFor(x => x.FieldKey)
             .NotEmpty().WithMessage("FieldKey is required.")
             .MaximumLength(100).WithMessage("FieldKey cannot exceed 100 characters.")
-            .Matches(@"^[a-z0-9_]+$").WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
+            .Matches(@"\A[a-z0-9_]+\z").WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
 
         RuleFor(x => x.Label)
             .NotEmpty().WithMessage("Label is required.")
@@ -99,9 +99,14 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
         var targetEntityType = string.IsNullOrWhiteSpace(request.EntityType) ? "ClinicPatient" : request.EntityType.Trim();
         var normalizedKey = (request.FieldKey ?? string.Empty).Trim().ToLowerInvariant().Replace(" ", "_");
 
-        if (string.IsNullOrWhiteSpace(normalizedKey) || !Regex.IsMatch(normalizedKey, @"^[a-z0-9_]+$"))
+        if (string.IsNullOrWhiteSpace(normalizedKey) || !Regex.IsMatch(normalizedKey, @"\A[a-z0-9_]+\z"))
         {
             throw new ValidationException("Machine key must contain only lowercase alphanumeric characters and underscores.");
+        }
+
+        if (normalizedKey.Length > 100)
+        {
+            throw new ValidationException("FieldKey cannot exceed 100 characters.");
         }
 
         var conflict = await _repo.Query().AnyAsync(f =>
@@ -135,7 +140,14 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
         };
 
         await _repo.AddAsync(entity, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            throw new ConflictException("A custom field with this machine key already exists.");
+        }
 
         return new ClinicCustomFieldDefinitionDto(
             entity.Id,
@@ -154,5 +166,27 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
             entity.CreatedAt,
             entity.VisibilityRuleJson,
             entity.ConditionalOptionsJson);
+    }
+
+    internal static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        for (Exception? current = ex; current is not null; current = current.InnerException)
+        {
+            var sqlStateProp = current.GetType().GetProperty("SqlState");
+            if (sqlStateProp?.GetValue(current) is string sqlState && sqlState == "23505")
+            {
+                return true;
+            }
+
+            if (current.Message.Contains("23505", StringComparison.OrdinalIgnoreCase) ||
+                current.Message.Contains("IX_CustomFieldDefinitions_TenantId_ClinicId_EntityType_FieldKey", StringComparison.OrdinalIgnoreCase) ||
+                current.Message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) ||
+                current.Message.Contains("unique constraint", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

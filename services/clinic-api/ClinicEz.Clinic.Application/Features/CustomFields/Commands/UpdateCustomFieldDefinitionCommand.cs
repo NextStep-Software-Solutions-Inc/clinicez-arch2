@@ -51,7 +51,7 @@ public sealed class UpdateCustomFieldDefinitionCommandValidator : AbstractValida
 
         RuleFor(x => x.FieldKey)
             .MaximumLength(100).WithMessage("FieldKey cannot exceed 100 characters.")
-            .Matches(@"^[a-z0-9_]+$").When(x => !string.IsNullOrEmpty(x.FieldKey))
+            .Matches(@"\A[a-z0-9_]+\z").When(x => x.FieldKey is not null)
             .WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
 
         RuleFor(x => x.OptionsJson)
@@ -100,12 +100,17 @@ public sealed class UpdateCustomFieldDefinitionCommandHandler : IRequestHandler<
             throw new NotFoundException($"Custom field definition with ID '{request.Id}' was not found.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.FieldKey))
+        if (request.FieldKey is not null)
         {
             var normalizedKey = request.FieldKey.Trim().ToLowerInvariant().Replace(" ", "_");
-            if (!Regex.IsMatch(normalizedKey, @"^[a-z0-9_]+$"))
+            if (string.IsNullOrWhiteSpace(normalizedKey) || !Regex.IsMatch(normalizedKey, @"\A[a-z0-9_]+\z"))
             {
                 throw new ValidationException("Machine key must contain only lowercase alphanumeric characters and underscores.");
+            }
+
+            if (normalizedKey.Length > 100)
+            {
+                throw new ValidationException("FieldKey cannot exceed 100 characters.");
             }
 
             if (normalizedKey != field.FieldKey)
@@ -137,7 +142,14 @@ public sealed class UpdateCustomFieldDefinitionCommandHandler : IRequestHandler<
         field.UpdatedAt = DateTime.UtcNow;
         field.UpdatedBy = "ClinicAdmin";
 
-        await _unitOfWork.SaveChangesAsync(ct);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (CreateCustomFieldDefinitionCommandHandler.IsUniqueConstraintViolation(ex))
+        {
+            throw new ConflictException("A custom field with this machine key already exists.");
+        }
 
         return new ClinicCustomFieldDefinitionDto(
             field.Id,

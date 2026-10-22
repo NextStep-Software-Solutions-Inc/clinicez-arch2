@@ -254,9 +254,9 @@ class CustomFieldsTabHarness {
     }
 
     const candidateKey =
-      this.draftFieldKey.length > 0
-        ? this.draftFieldKey
-        : slugifyMachineKey(trimmedLabel);
+      !this.draftId && this.draftFieldKey.length === 0
+        ? slugifyMachineKey(trimmedLabel)
+        : this.draftFieldKey;
 
     const keyValidationError = validateMachineKey(
       candidateKey,
@@ -1780,6 +1780,30 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
         'Machine key cannot exceed 100 characters.'
       );
       expect(validateMachineKey('a'.repeat(100), [])).toBeNull();
+    });
+
+    test('TC-IF-006-5: Clearing machine key in Edit mode rejects save instead of silently overwriting from label', async () => {
+      const f1: CustomFieldDefinition = {
+        id: 'f-1',
+        tenantId: 't',
+        clinicId: 'c',
+        entityType: 'ClinicPatient',
+        fieldKey: 'student_id',
+        label: 'Student ID',
+        dataType: 'Text',
+        displayOrder: 1,
+        isRequired: true,
+        isActive: true,
+      };
+      const harness = new CustomFieldsTabHarness([f1]);
+
+      harness.openEditModal(f1);
+      harness.draftLabel = 'Updated Student ID Label';
+      harness.draftFieldKey = '';
+      const updated = await harness.saveField();
+      expect(updated).toBeNull();
+      expect(harness.modalError).toBe('Machine key is required.');
+      expect(harness.fields[0].fieldKey).toBe('student_id');
     });
   });
 });
