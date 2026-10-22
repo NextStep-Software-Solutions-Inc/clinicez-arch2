@@ -1,41 +1,33 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Mail;
+using System.Threading;
+using System.Threading.Tasks;
+using ClinicEz.Portal.Application.Features.Notifications;
 using ClinicEz.Shared.Interoperability;
+using Hangfire;
 using Microsoft.Extensions.Logging;
 
-namespace ClinicEz.Portal.Application.Features.Notifications;
+namespace ClinicEz.Portal.Infrastructure.Notifications;
 
-/// <summary>
-/// Dispatches emails directly through the unified email sender (<see cref="IEmailSender"/>) and template renderer (<see cref="IEmailTemplateRenderer"/>).
-/// </summary>
-public interface INotificationService
-{
-    /// <summary>
-    /// Renders and sends the requested email directly.
-    /// </summary>
-    Task RequestEmailAsync(NotificationEmailRequestedPayload payload, Guid correlationId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Synchronous compatibility wrapper.
-    /// </summary>
-    void RequestEmail(NotificationEmailRequestedPayload payload, Guid correlationId);
-}
-
-public sealed class NotificationService(
+public sealed class EmailDispatchJob(
     IEmailTemplateRenderer renderer,
     IEmailSender sender,
-    ILogger<NotificationService> logger) : INotificationService
+    ILogger<EmailDispatchJob> logger) : IEmailDispatchJob
 {
     private const int MaxSubjectLength = 300;
     private const int MaxDisplayNameLength = 100;
 
-    public async Task RequestEmailAsync(NotificationEmailRequestedPayload payload, Guid correlationId, CancellationToken ct = default)
+    [AutomaticRetry(Attempts = 5, DelaysInSeconds = [30, 60, 300, 900, 3600], LogEvents = true, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
+    public async Task SendEmailAsync(NotificationEmailRequestedPayload payload, Guid correlationId, CancellationToken ct)
     {
         var to = payload.To?.Trim() ?? string.Empty;
         var subject = payload.Subject?.Trim() ?? string.Empty;
 
         if (!IsSingleEmailAddress(to) || !IsSafeSubject(subject))
         {
-            logger.LogWarning("Dropping email request {CorrelationId} ({Template}): the recipient or subject is invalid.", correlationId, payload.TemplateKey);
+            logger.LogWarning("Dropping email job {CorrelationId} ({Template}): invalid recipient '{To}' or subject.", correlationId, payload.TemplateKey, to);
             return;
         }
 
@@ -46,7 +38,7 @@ public sealed class NotificationService(
         }
         catch (EmailTemplateException ex)
         {
-            logger.LogWarning("Dropping email request {CorrelationId} ({Template}): {Reason}", correlationId, payload.TemplateKey, ex.Message);
+            logger.LogWarning("Dropping email job {CorrelationId} ({Template}): template error: {Reason}", correlationId, payload.TemplateKey, ex.Message);
             return;
         }
 
@@ -61,17 +53,14 @@ public sealed class NotificationService(
         try
         {
             await sender.SendAsync(message, ct);
-            logger.LogInformation("Directly dispatched email {CorrelationId} ({Template}) to {To}.", correlationId, payload.TemplateKey, to);
+            logger.LogInformation("Hangfire successfully dispatched email job {CorrelationId} ({Template}) to {To}.", correlationId, payload.TemplateKey, to);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to send email {CorrelationId} ({Template}) to {To}: {ErrorMessage}", correlationId, payload.TemplateKey, to, ex.Message);
+            logger.LogError(ex, "Failed to send email job {CorrelationId} ({Template}) to {To} via SMTP: {Message}. Hangfire will retry according to policy.", correlationId, payload.TemplateKey, to, ex.Message);
             throw;
         }
     }
-
-    public void RequestEmail(NotificationEmailRequestedPayload payload, Guid correlationId) =>
-        RequestEmailAsync(payload, correlationId, CancellationToken.None).GetAwaiter().GetResult();
 
     private static bool IsSingleEmailAddress(string value) =>
         value.Length is > 0 and <= 254

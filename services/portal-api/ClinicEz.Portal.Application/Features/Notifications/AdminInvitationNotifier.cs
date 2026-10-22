@@ -8,7 +8,6 @@ namespace ClinicEz.Portal.Application.Features.Notifications;
 
 public interface IAdminInvitationNotifier
 {
-    Task RequestInvitationAsync(AdminUser user, string roleName, string? inviterName = null, CancellationToken ct = default);
     void RequestInvitation(AdminUser user, string roleName, string? inviterName = null);
 }
 
@@ -17,7 +16,7 @@ public sealed class AdminInvitationNotifier(
     IFrontendUrlProvider frontendUrl,
     ILogger<AdminInvitationNotifier> logger) : IAdminInvitationNotifier
 {
-    public async Task RequestInvitationAsync(AdminUser user, string roleName, string? inviterName = null, CancellationToken ct = default)
+    public void RequestInvitation(AdminUser user, string roleName, string? inviterName = null)
     {
         var baseUrl = frontendUrl.GetBaseUrl();
         if (baseUrl is null)
@@ -34,28 +33,19 @@ public sealed class AdminInvitationNotifier(
         };
         if (!string.IsNullOrWhiteSpace(inviterName)) model["inviterName"] = inviterName;
 
-        try
-        {
-            await notifications.RequestEmailAsync(
-                new NotificationEmailRequestedPayload
-                {
-                    To = user.Email,
-                    Subject = $"You've been invited to join Clinic EZ Platform Administration as {SingleLine(roleName)}",
-                    TemplateKey = EmailTemplateKeys.AdminInvitation,
-                    Model = model,
-                    FromFacilityName = "Clinic EZ Platform"
-                },
-                user.Id,
-                ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to deliver admin invitation email to {Email} for user {UserId}: {ErrorMessage}", user.Email, user.Id, ex.Message);
-        }
-    }
+        var jobId = notifications.EnqueueEmail(
+            new NotificationEmailRequestedPayload
+            {
+                To = user.Email,
+                Subject = $"You've been invited to join Clinic EZ Platform Administration as {SingleLine(roleName)}",
+                TemplateKey = EmailTemplateKeys.AdminInvitation,
+                Model = model,
+                FromFacilityName = "Clinic EZ Platform"
+            },
+            user.Id);
 
-    public void RequestInvitation(AdminUser user, string roleName, string? inviterName = null) =>
-        RequestInvitationAsync(user, roleName, inviterName, CancellationToken.None).GetAwaiter().GetResult();
+        logger.LogInformation("Enqueued admin invitation email job {JobId} for {Email} ({UserId}).", jobId, user.Email, user.Id);
+    }
 
     private static string SingleLine(string value) =>
         new(value.Select(c => char.IsControl(c) ? ' ' : c).ToArray());
