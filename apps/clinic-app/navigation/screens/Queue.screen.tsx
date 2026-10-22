@@ -27,6 +27,7 @@ import {
   clinicService,
   computeScopedStations,
   getManilaTodayStr,
+  formatClinicTime,
   isPatientVisibleToStaff,
   resolveCallToRoom,
   PatientQueueItem,
@@ -396,7 +397,7 @@ export default function QueueScreen() {
                       <View style={styles.metaItem}>
                         <Icon name="clock" size={14} color={theme.colors.textSecondary} />
                         <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                          In: {ticket.checkInTime ? new Date(ticket.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          In: {ticket.checkInTime ? formatClinicTime(ticket.checkInTime) : '—'}
                         </ThemedText>
                       </View>
                     </View>

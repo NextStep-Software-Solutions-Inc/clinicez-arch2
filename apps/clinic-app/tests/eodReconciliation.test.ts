@@ -102,7 +102,16 @@ mock.module('../services/apiClient', () => ({
   clinicApiUrl: (p: string) => `http://localhost:5000/api/v1${p}`,
 }));
 
-const { clinicService, getManilaTodayStr, setClinicTimeZoneId, getClinicTimeZoneId } = await import('../services/clinicService');
+const {
+  clinicService,
+  getManilaTodayStr,
+  setClinicTimeZoneId,
+  getClinicTimeZoneId,
+  setClinicRegionalConfig,
+  formatClinicDate,
+  formatClinicTime,
+  formatClinicDateTime,
+} = await import('../services/clinicService');
 const { validateTimeString } = await import('../components/ui/TimeInput');
 
 describe('Milestone 1: End-of-Day (EOD) Reconciliation & Force EOD', () => {
@@ -258,6 +267,43 @@ describe('Milestone 1: End-of-Day (EOD) Reconciliation & Force EOD', () => {
       setClinicTimeZoneId(null);
       expect(getClinicTimeZoneId()).toBe('Asia/Manila');
       expect(getManilaTodayStr(sampleUtc)).toBe('2026-10-22');
+    });
+
+    test('4.4 formatClinicDate, formatClinicTime, and formatClinicDateTime respect clinic overrides across all patterns', () => {
+      // 2026-10-22T06:45:00Z = 2026-10-22 14:45:00 in Asia/Manila (UTC+8)
+      const sampleIso = '2026-10-22T06:45:00Z';
+
+      setClinicRegionalConfig({
+        timeZoneId: 'Asia/Manila',
+        dateFormat: 'MMM d, yyyy',
+        timeFormat: '12h',
+      });
+      expect(formatClinicDate(sampleIso)).toBe('Oct 22, 2026');
+      expect(formatClinicTime(sampleIso)).toBe('02:45 PM');
+      expect(formatClinicDateTime(sampleIso)).toBe('Oct 22, 2026, 02:45 PM');
+
+      setClinicRegionalConfig({
+        timeZoneId: 'Asia/Manila',
+        dateFormat: 'dd/MM/yyyy',
+        timeFormat: '24h',
+      });
+      expect(formatClinicDate(sampleIso)).toBe('22/10/2026');
+      expect(formatClinicTime(sampleIso)).toBe('14:45');
+      expect(formatClinicDateTime(sampleIso)).toBe('22/10/2026, 14:45');
+
+      setClinicRegionalConfig({
+        timeZoneId: 'Asia/Manila',
+        dateFormat: 'yyyy-MM-dd',
+        timeFormat: '24h',
+      });
+      expect(formatClinicDate(sampleIso)).toBe('2026-10-22');
+
+      // Reset back to defaults
+      setClinicRegionalConfig({
+        timeZoneId: 'Asia/Manila',
+        dateFormat: 'MMM d, yyyy',
+        timeFormat: '12h',
+      });
     });
   });
 });

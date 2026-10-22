@@ -1939,6 +1939,11 @@ export interface ClinicSettingsRecord {
   appointmentReminder24hEnabled?: boolean;
   appointmentReminder2hEnabled?: boolean;
   enableStaffAppointmentNotifications?: boolean;
+
+  // Regional Timezone, Date & Time Format Overrides (null/undefined = inherit from WorkspaceProfile)
+  timeZoneId?: string | null;
+  dateFormat?: string | null;
+  timeFormat?: '12h' | '24h' | string | null;
 }
 
 export interface DocumentSignatoryItemConfig {
@@ -4411,10 +4416,62 @@ export function resolveWalkInDoctorRoomSelection(
   };
 }
 
+export type ClinicTimeFormat = '12h' | '24h';
+
+export interface ClinicRegionalConfig {
+  timeZoneId: string;
+  dateFormat: string;
+  timeFormat: ClinicTimeFormat;
+}
+
+export const CLINIC_DATE_FORMAT_OPTIONS = [
+  { value: 'MMM d, yyyy', example: 'Oct 22, 2026', label: 'Month Day, Year' },
+  { value: 'd MMM yyyy', example: '22 Oct 2026', label: 'Day Month Year' },
+  { value: 'dd/MM/yyyy', example: '22/10/2026', label: 'DD/MM/YYYY' },
+  { value: 'MM/dd/yyyy', example: '10/22/2026', label: 'MM/DD/YYYY' },
+  { value: 'yyyy-MM-dd', example: '2026-10-22', label: 'ISO (YYYY-MM-DD)' },
+] as const;
+
+export const CLINIC_TIME_FORMAT_OPTIONS: Array<{
+  value: ClinicTimeFormat;
+  label: string;
+  example: string;
+  description: string;
+}> = [
+  {
+    value: '12h',
+    label: '12-Hour (AM / PM)',
+    example: '08:45 AM',
+    description: 'Standard 12-hour clock with AM/PM period indicator',
+  },
+  {
+    value: '24h',
+    label: '24-Hour (Clinical / Military)',
+    example: '14:45',
+    description: '24-hour clinical clock (00:00 – 23:59) without AM/PM',
+  },
+];
+
+export const CLINIC_COMMON_TIMEZONES = [
+  'Asia/Manila',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Asia/Hong_Kong',
+  'Asia/Dubai',
+  'Europe/London',
+  'America/New_York',
+  'America/Chicago',
+  'America/Los_Angeles',
+  'Australia/Sydney',
+  'UTC',
+] as const;
+
 let activeClinicTimeZoneId = 'Asia/Manila';
+let activeClinicDateFormat = 'MMM d, yyyy';
+let activeClinicTimeFormat: ClinicTimeFormat = '12h';
 
 /**
- * Sets the active clinic/workspace IANA time zone ID (e.g. from WorkspaceProfile.timeZoneId).
+ * Sets the active clinic/workspace IANA time zone ID (e.g. from ClinicSettings.timeZoneId or WorkspaceProfile.timeZoneId).
  * Falls back to 'Asia/Manila' when null or empty.
  */
 export function setClinicTimeZoneId(timeZoneId?: string | null): void {
@@ -4427,6 +4484,191 @@ export function setClinicTimeZoneId(timeZoneId?: string | null): void {
  */
 export function getClinicTimeZoneId(): string {
   return activeClinicTimeZoneId || 'Asia/Manila';
+}
+
+/**
+ * Sets the active clinic/workspace date format pattern (e.g. 'MMM d, yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd').
+ */
+export function setClinicDateFormat(dateFormat?: string | null): void {
+  const trimmed = dateFormat?.trim();
+  activeClinicDateFormat = trimmed || 'MMM d, yyyy';
+}
+
+/**
+ * Returns the currently configured clinic/workspace date format pattern (defaults to 'MMM d, yyyy').
+ */
+export function getClinicDateFormat(): string {
+  return activeClinicDateFormat || 'MMM d, yyyy';
+}
+
+/**
+ * Sets the active clinic time format ('12h' or '24h').
+ */
+export function setClinicTimeFormat(timeFormat?: string | null): void {
+  const trimmed = timeFormat?.trim().toLowerCase();
+  activeClinicTimeFormat = trimmed === '24h' || trimmed === 'hh:mm' ? '24h' : '12h';
+}
+
+/**
+ * Returns the currently configured clinic time format ('12h' or '24h').
+ */
+export function getClinicTimeFormat(): ClinicTimeFormat {
+  return activeClinicTimeFormat || '12h';
+}
+
+/**
+ * Updates all three active clinic regional settings at once.
+ */
+export function setClinicRegionalConfig(config: {
+  timeZoneId?: string | null;
+  dateFormat?: string | null;
+  timeFormat?: string | null;
+}): void {
+  if (config.timeZoneId !== undefined) setClinicTimeZoneId(config.timeZoneId);
+  if (config.dateFormat !== undefined) setClinicDateFormat(config.dateFormat);
+  if (config.timeFormat !== undefined) setClinicTimeFormat(config.timeFormat);
+}
+
+export function getClinicRegionalConfig(): ClinicRegionalConfig {
+  return {
+    timeZoneId: getClinicTimeZoneId(),
+    dateFormat: getClinicDateFormat(),
+    timeFormat: getClinicTimeFormat(),
+  };
+}
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Formats a date or timestamp according to the active clinic/workspace timezone and dateFormat.
+ * Pure calendar strings ('YYYY-MM-DD') are formatted without timezone day-shifting.
+ */
+export function formatClinicDate(
+  input: string | Date | number | null | undefined,
+  options?: { dateFormat?: string; timeZoneId?: string; fallback?: string }
+): string {
+  const fallback = options?.fallback ?? '—';
+  if (input === null || input === undefined || input === '') return fallback;
+
+  const targetFormat = options?.dateFormat?.trim() || activeClinicDateFormat || 'MMM d, yyyy';
+  const targetTz = options?.timeZoneId?.trim() || activeClinicTimeZoneId || 'Asia/Manila';
+
+  let year: number;
+  let month: number; // 1-12
+  let day: number;   // 1-31
+
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.trim())) {
+    const [y, m, d] = input.trim().split('-').map(Number);
+    if (!y || !m || !d) return fallback;
+    year = y;
+    month = m;
+    day = d;
+  } else {
+    const dateObj = input instanceof Date ? input : new Date(input);
+    if (Number.isNaN(dateObj.getTime())) return fallback;
+
+    const ymd = getClinicTodayStr(dateObj, targetTz);
+    const [y, m, d] = ymd.split('-').map(Number);
+    year = y;
+    month = m;
+    day = d;
+  }
+
+  const monthShort = SHORT_MONTHS[month - 1] || 'Jan';
+  const month2 = String(month).padStart(2, '0');
+  const day2 = String(day).padStart(2, '0');
+
+  switch (targetFormat) {
+    case 'd MMM yyyy':
+      return `${day} ${monthShort} ${year}`;
+    case 'dd/MM/yyyy':
+      return `${day2}/${month2}/${year}`;
+    case 'MM/dd/yyyy':
+      return `${month2}/${day2}/${year}`;
+    case 'yyyy-MM-dd':
+      return `${year}-${month2}-${day2}`;
+    case 'MMM d, yyyy':
+    default:
+      return `${monthShort} ${day}, ${year}`;
+  }
+}
+
+/**
+ * Formats a timestamp or Date object (or 'HH:mm' string) according to the active clinic timezone and timeFormat ('12h' or '24h').
+ */
+export function formatClinicTime(
+  input: string | Date | number | null | undefined,
+  options?: { timeFormat?: string; timeZoneId?: string; fallback?: string; includeSeconds?: boolean }
+): string {
+  const fallback = options?.fallback ?? '—';
+  if (input === null || input === undefined || input === '') return fallback;
+
+  const targetTimeFormat = (options?.timeFormat?.trim().toLowerCase() || activeClinicTimeFormat || '12h') === '24h' ? '24h' : '12h';
+  const targetTz = options?.timeZoneId?.trim() || activeClinicTimeZoneId || 'Asia/Manila';
+
+  // Handle raw 'HH:mm' or 'HH:mm:ss' strings
+  if (typeof input === 'string' && /^\d{1,2}:\d{2}(:\d{2})?$/.test(input.trim())) {
+    const parts = input.trim().split(':').map(Number);
+    const h = parts[0] ?? 0;
+    const m = parts[1] ?? 0;
+    if (targetTimeFormat === '24h') {
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+  }
+
+  const dateObj = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(dateObj.getTime())) return fallback;
+
+  const is12h = targetTimeFormat !== '24h';
+  const formatOpts: Intl.DateTimeFormatOptions = {
+    timeZone: targetTz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: is12h,
+    ...(options?.includeSeconds ? { second: '2-digit' } : {}),
+  };
+
+  try {
+    return new Intl.DateTimeFormat('en-US', formatOpts).format(dateObj);
+  } catch {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: is12h,
+    }).format(dateObj);
+  }
+}
+
+/**
+ * Formats an ISO timestamp or Date into both date and time using the clinic's active timezone, dateFormat, and timeFormat.
+ */
+export function formatClinicDateTime(
+  input: string | Date | number | null | undefined,
+  options?: { dateFormat?: string; timeFormat?: string; timeZoneId?: string; separator?: string; fallback?: string }
+): string {
+  const fallback = options?.fallback ?? '—';
+  if (input === null || input === undefined || input === '') return fallback;
+
+  const dateObj = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(dateObj.getTime())) return fallback;
+
+  const dStr = formatClinicDate(dateObj, {
+    dateFormat: options?.dateFormat,
+    timeZoneId: options?.timeZoneId,
+    fallback,
+  });
+  const tStr = formatClinicTime(dateObj, {
+    timeFormat: options?.timeFormat,
+    timeZoneId: options?.timeZoneId,
+    fallback,
+  });
+
+  if (dStr === fallback || tStr === fallback) return fallback;
+  return `${dStr}${options?.separator ?? ', '}${tStr}`;
 }
 
 /**

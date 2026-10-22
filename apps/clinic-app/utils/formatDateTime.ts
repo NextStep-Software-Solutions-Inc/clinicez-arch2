@@ -1,9 +1,20 @@
-/** Locale date + time for an ISO timestamp from the API; "--" when missing or unparseable. */
+import {
+  formatClinicDate,
+  formatClinicTime,
+  formatClinicDateTime,
+} from '../services/clinicService';
+
+export { formatClinicDate, formatClinicTime, formatClinicDateTime };
+
+/**
+ * Formats an ISO timestamp from the API using the clinic's configured timezone, date format, and time format;
+ * returns "--" when missing or unparseable.
+ */
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '--';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '--';
-  return date.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return formatClinicDateTime(date, { fallback: '--' });
 }
 
 /** True when the ISO timestamp is in the past relative to `nowMs`. Missing/invalid values are not expired. */

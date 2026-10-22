@@ -76,6 +76,8 @@ import {
   clinicService,
   computeScopedStations,
   getManilaTodayStr,
+  formatClinicDate,
+  formatClinicTime,
   isPatientVisibleToStaff,
   resolveCallToRoom,
   PatientQueueItem,
@@ -185,8 +187,7 @@ const humanize = (value: string) => value.replace(/([a-z])([A-Z])/g, '$1 $2');
 
 const formatDate = (iso?: string) => {
   if (!iso) return '';
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString();
+  return formatClinicDate(iso, { fallback: '' });
 };
 
 const priorityVariant = (priority: string): BadgeVariant =>
@@ -1049,7 +1050,7 @@ export default function ConsultationsScreen() {
         setIsSigned(Boolean(existingEncounter.isSigned));
         setSignedAt(
           existingEncounter.signedAt
-            ? new Date(existingEncounter.signedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            ? formatClinicTime(existingEncounter.signedAt)
             : null,
         );
         if (existingEncounter.subjective) setSubjective(existingEncounter.subjective);
@@ -1227,7 +1228,7 @@ export default function ConsultationsScreen() {
                 targetRoomName: pr.targetRoomName || undefined,
                 isHandedOff: true,
                 handedOffAt: pr.scheduledAt
-                  ? new Date(pr.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  ? formatClinicTime(pr.scheduledAt)
                   : undefined,
                 toothNumber: pr.toothNumber ?? undefined,
                 toothSurface: pr.toothSurface ?? undefined,

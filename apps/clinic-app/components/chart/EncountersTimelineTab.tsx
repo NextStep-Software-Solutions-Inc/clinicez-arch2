@@ -2,9 +2,12 @@ import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
 import { ThemedText, Badge, Icon, EmptyState } from '../ui';
-import type {
-  ClinicPatient,
-  ConsultationRecord,
+import {
+  type ClinicPatient,
+  type ConsultationRecord,
+  formatClinicDate,
+  formatClinicTime,
+  formatClinicDateTime,
 } from '../../services/clinicService';
 
 export interface EncountersTimelineTabProps {
@@ -209,12 +212,7 @@ export default function EncountersTimelineTab({
                     <View style={styles.cardHeaderLeft}>
                       <View style={styles.dateAndDoctorRow}>
                         <ThemedText variant="captionBold" color={theme.colors.text}>
-                          {new Date(enc.encounterDate).toLocaleDateString(undefined, {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          })}{' '}
-                          • {new Date(enc.encounterDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {formatClinicDate(enc.encounterDate)} • {formatClinicTime(enc.encounterDate)}
                         </ThemedText>
                         <ThemedText variant="caption" color={theme.colors.textSecondary}>
                           {enc.doctorName}
@@ -447,7 +445,7 @@ export default function EncountersTimelineTab({
                         </ThemedText>
                         {enc.signedAt ? (
                           <ThemedText variant="caption" color={theme.colors.textMuted}>
-                            Signed at: {new Date(enc.signedAt).toLocaleString()}
+                            Signed at: {formatClinicDateTime(enc.signedAt)}
                           </ThemedText>
                         ) : null}
                       </View>
