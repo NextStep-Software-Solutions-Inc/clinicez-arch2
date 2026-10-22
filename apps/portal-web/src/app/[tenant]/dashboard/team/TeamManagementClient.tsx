@@ -23,7 +23,8 @@ import {
     IconRefresh,
     IconPencil,
     IconPlayerPause,
-    IconPlayerPlay
+    IconPlayerPlay,
+    IconBan
 } from "@tabler/icons-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -149,6 +150,10 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
     // Revoke Modal state
     const [revokeTarget, setRevokeTarget] = useState<StaffMemberDto | null>(null);
     const [submittingRevoke, setSubmittingRevoke] = useState(false);
+
+    // Permanent Remove Modal state (from Revoked state)
+    const [deleteTarget, setDeleteTarget] = useState<StaffMemberDto | null>(null);
+    const [submittingDelete, setSubmittingDelete] = useState(false);
 
     const loadData = async () => {
         try {
@@ -338,7 +343,11 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
         setSubmittingRevoke(true);
         try {
             await staffService.revokeStaffMember(revokeTarget.id, tenantSlug);
-            toast.success(`Removed ${revokeTarget.fullName} from workspace`);
+            toast.success(
+                revokeTarget.status === "Invited" || revokeTarget.status === "Expired"
+                    ? `Revoked invitation for ${revokeTarget.fullName}`
+                    : `Revoked workspace access for ${revokeTarget.fullName}`
+            );
             setRevokeTarget(null);
             await loadData();
         } catch (err: unknown) {
@@ -347,6 +356,64 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             setSubmittingRevoke(false);
         }
     };
+
+    const handleReinvite = async (member: StaffMemberDto) => {
+        setResendingId(member.id);
+        try {
+            const reinvited = await staffService.inviteStaffMember({
+                tenantSlug,
+                fullName: member.fullName,
+                email: member.email,
+                role: member.role,
+                facilityId: member.facilityId || undefined,
+                sendEmail: true,
+            });
+            const inviteUrl = reinvited.invitationToken
+                ? `${window.location.origin}/invitations/${reinvited.invitationToken}`
+                : "";
+            if (inviteUrl) {
+                navigator.clipboard.writeText(inviteUrl);
+                setCreatedInviteModal({
+                    open: true,
+                    fullName: reinvited.fullName,
+                    email: reinvited.email,
+                    role: reinvited.role,
+                    inviteUrl,
+                    sentEmail: true,
+                });
+            } else {
+                toast.success(`Re-invited ${member.fullName} and sent a new invitation email.`);
+            }
+            await loadData();
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to re-invite member", tenantSlug);
+        } finally {
+            setResendingId(null);
+        }
+    };
+
+    const handlePermanentDeleteConfirm = async () => {
+        if (!deleteTarget) return;
+        setSubmittingDelete(true);
+        try {
+            await staffService.deleteStaffMemberPermanently(deleteTarget.id, tenantSlug);
+            toast.success(`Permanently removed ${deleteTarget.fullName} from workspace`);
+            setDeleteTarget(null);
+            await loadData();
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to permanently remove member", tenantSlug);
+        } finally {
+            setSubmittingDelete(false);
+        }
+    };
+
+    const existingEmailMember = React.useMemo(() => {
+        const normalized = email.trim().toLowerCase();
+        if (!normalized) return null;
+        return (staffData?.members || []).find(
+            (m) => m.email.trim().toLowerCase() === normalized
+        ) || null;
+    }, [email, staffData?.members]);
 
     const quota = staffData?.quota;
     const currentSeats = quota?.currentCount ?? 1;
@@ -723,7 +790,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                         disabled={actionLoadingId === member.id}
                                                                         onClick={() => handleSuspend(member)}
                                                                         title="Suspend Account"
-                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                        className="h-8 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg text-xs font-semibold gap-1"
                                                                     >
                                                                         {actionLoadingId === member.id ? (
                                                                             <IconLoader className="h-3.5 w-3.5 animate-spin" />
@@ -732,29 +799,77 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                         )}
                                                                         <span className="hidden sm:inline">Suspend</span>
                                                                     </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => setRevokeTarget(member)}
+                                                                        title="Revoke Workspace Access"
+                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    >
+                                                                        <IconBan className="h-3.5 w-3.5" />
+                                                                        <span className="hidden sm:inline">Revoke</span>
+                                                                    </Button>
                                                                 </>
                                                             )}
 
                                                             {isSuspended && (
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    disabled={actionLoadingId === member.id}
-                                                                    onClick={() => handleReactivate(member)}
-                                                                    title="Reactivate Account"
-                                                                    className="h-8 px-2.5 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg text-xs font-semibold gap-1.5"
-                                                                >
-                                                                    {actionLoadingId === member.id ? (
-                                                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
-                                                                    ) : (
-                                                                        <IconPlayerPlay className="h-3.5 w-3.5" />
-                                                                    )}
-                                                                    <span>Reactivate</span>
-                                                                </Button>
+                                                                <>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        disabled={actionLoadingId === member.id}
+                                                                        onClick={() => handleReactivate(member)}
+                                                                        title="Reactivate Account"
+                                                                        className="h-8 px-2.5 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg text-xs font-semibold gap-1.5"
+                                                                    >
+                                                                        {actionLoadingId === member.id ? (
+                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                                        ) : (
+                                                                            <IconPlayerPlay className="h-3.5 w-3.5" />
+                                                                        )}
+                                                                        <span>Reactivate</span>
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => setRevokeTarget(member)}
+                                                                        title="Revoke Workspace Access"
+                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    >
+                                                                        <IconBan className="h-3.5 w-3.5" />
+                                                                        <span className="hidden sm:inline">Revoke</span>
+                                                                    </Button>
+                                                                </>
                                                             )}
 
                                                             {isRevoked && (
-                                                                <span className="text-[11px] text-slate-400 italic">Revoked</span>
+                                                                <>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        disabled={resendingId === member.id || isQuotaFull}
+                                                                        onClick={() => handleReinvite(member)}
+                                                                        title="Send a fresh 7-day invitation"
+                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
+                                                                    >
+                                                                        {resendingId === member.id ? (
+                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                                        ) : (
+                                                                            <IconRefresh className="h-3.5 w-3.5" />
+                                                                        )}
+                                                                        <span>Re-invite</span>
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => setDeleteTarget(member)}
+                                                                        title="Permanently remove from workspace"
+                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    >
+                                                                        <IconTrash className="h-3.5 w-3.5" />
+                                                                        <span className="hidden sm:inline">Remove</span>
+                                                                    </Button>
+                                                                </>
                                                             )}
                                                         </div>
                                                     )}
@@ -817,6 +932,86 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 className="h-9 text-xs rounded-xl"
                                 required
                             />
+                            {existingEmailMember && existingEmailMember.status === "Active" && (
+                                <div className="mt-1.5 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
+                                    <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                                    <div>
+                                        <strong>Existing Active Member:</strong> {existingEmailMember.fullName} ({existingEmailMember.email}) is already an active member of this workspace ({ROLE_DETAILS[existingEmailMember.role]?.label || existingEmailMember.role}).
+                                    </div>
+                                </div>
+                            )}
+                            {existingEmailMember && (existingEmailMember.status === "Invited" || existingEmailMember.status === "Expired") && (
+                                <div className="mt-1.5 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs space-y-2">
+                                    <div className="flex items-start gap-2">
+                                        <IconClock className="h-4 w-4 shrink-0 mt-0.5" />
+                                        <div>
+                                            <strong>{existingEmailMember.status === "Expired" ? "Expired" : "Pending"} Invitation Detected:</strong> {existingEmailMember.fullName} ({existingEmailMember.email}) already has {existingEmailMember.status === "Expired" ? "an expired" : "a pending"} invitation as {ROLE_DETAILS[existingEmailMember.role]?.label || existingEmailMember.role}.
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 pl-6">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={resendingId === existingEmailMember.id}
+                                            onClick={async () => {
+                                                await handleResendInvite(existingEmailMember);
+                                                setInviteOpen(false);
+                                            }}
+                                            className="h-7 px-2.5 text-[11px] font-semibold rounded-lg gap-1 bg-white dark:bg-slate-900"
+                                        >
+                                            <IconRefresh className="h-3 w-3" />
+                                            <span>Resend Invitation Instead</span>
+                                        </Button>
+                                        {existingEmailMember.status === "Invited" && existingEmailMember.invitationToken && (
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleCopyInviteLink(existingEmailMember.invitationToken)}
+                                                className="h-7 px-2.5 text-[11px] font-semibold rounded-lg gap-1 bg-white dark:bg-slate-900"
+                                            >
+                                                <IconCopy className="h-3 w-3" />
+                                                <span>Copy Link</span>
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            {existingEmailMember && existingEmailMember.status === "Suspended" && (
+                                <div className="mt-1.5 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs space-y-2">
+                                    <div className="flex items-start gap-2">
+                                        <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                                        <div>
+                                            <strong>Suspended Account Detected:</strong> {existingEmailMember.fullName} ({existingEmailMember.email}) is currently suspended in this workspace.
+                                        </div>
+                                    </div>
+                                    <div className="pl-6">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={actionLoadingId === existingEmailMember.id}
+                                            onClick={async () => {
+                                                await handleReactivate(existingEmailMember);
+                                                setInviteOpen(false);
+                                            }}
+                                            className="h-7 px-2.5 text-[11px] font-semibold rounded-lg gap-1 bg-white dark:bg-slate-900"
+                                        >
+                                            <IconPlayerPlay className="h-3 w-3" />
+                                            <span>Reactivate Account Instead</span>
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                            {existingEmailMember && existingEmailMember.status === "Revoked" && (
+                                <div className="mt-1.5 p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs flex items-start gap-2">
+                                    <IconRefresh className="h-4 w-4 shrink-0 mt-0.5" />
+                                    <div>
+                                        <strong>Previously Revoked Member:</strong> {existingEmailMember.fullName} ({existingEmailMember.email}) was previously revoked. Submitting this form will re-invite them with a fresh 7-day invitation token.
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-1.5">
@@ -933,7 +1128,11 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             </Button>
                             <Button
                                 type="submit"
-                                disabled={submittingInvite || isQuotaFull}
+                                disabled={
+                                    submittingInvite ||
+                                    isQuotaFull ||
+                                    (!!existingEmailMember && existingEmailMember.status !== "Revoked")
+                                }
                                 className="rounded-xl text-xs font-semibold gap-1.5"
                             >
                                 {submittingInvite ? (
@@ -1070,16 +1269,28 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                 <DialogContent className="sm:max-w-md rounded-2xl">
                     <DialogHeader>
                         <DialogTitle className="text-lg font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                            <IconTrash className="h-5 w-5" />
-                            Revoke Staff Member
+                            <IconBan className="h-5 w-5" />
+                            {revokeTarget?.status === "Invited" || revokeTarget?.status === "Expired"
+                                ? "Revoke Invitation"
+                                : "Revoke Workspace Access"}
                         </DialogTitle>
                         <DialogDescription className="text-xs text-slate-500">
-                            Are you sure you want to remove <strong>{revokeTarget?.fullName}</strong> ({revokeTarget?.email}) from this workspace?
+                            {revokeTarget?.status === "Invited" || revokeTarget?.status === "Expired" ? (
+                                <>
+                                    Are you sure you want to revoke the pending invitation for <strong>{revokeTarget?.fullName}</strong> ({revokeTarget?.email})?
+                                </>
+                            ) : (
+                                <>
+                                    Are you sure you want to revoke workspace access for <strong>{revokeTarget?.fullName}</strong> ({revokeTarget?.email})?
+                                </>
+                            )}
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300">
-                        This action will immediately terminate their clinical console access and free up 1 staff seat in your subscription quota.
+                        {revokeTarget?.status === "Invited" || revokeTarget?.status === "Expired"
+                            ? "This will invalidate their invitation link, free up 1 seat in your subscription quota, and mark the record as Revoked. You can re-invite or permanently remove them afterwards."
+                            : "This will immediately terminate their workspace access, free up 1 seat in your subscription quota, and keep the record in Revoked state for audit history. You can re-invite or permanently remove them afterwards."}
                     </div>
 
                     <DialogFooter className="gap-2 pt-2 sm:justify-end">
@@ -1106,8 +1317,58 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 </>
                             ) : (
                                 <>
-                                    <IconTrash className="h-3.5 w-3.5" />
+                                    <IconBan className="h-3.5 w-3.5" />
                                     <span>Confirm Revoke</span>
+                                </>
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 6b. Permanently Remove Member Dialog (from Revoked state) */}
+            <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+                <DialogContent className="sm:max-w-md rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                            <IconTrash className="h-5 w-5" />
+                            Remove from Workspace
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500">
+                            Are you sure you want to permanently remove <strong>{deleteTarget?.fullName}</strong> ({deleteTarget?.email}) from this workspace directory?
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300">
+                        This will permanently delete the revoked member record from your workspace directory.
+                    </div>
+
+                    <DialogFooter className="gap-2 pt-2 sm:justify-end">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setDeleteTarget(null)}
+                            disabled={submittingDelete}
+                            className="rounded-xl text-xs"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={handlePermanentDeleteConfirm}
+                            disabled={submittingDelete}
+                            className="rounded-xl text-xs font-semibold gap-1.5"
+                        >
+                            {submittingDelete ? (
+                                <>
+                                    <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                    <span>Removing...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <IconTrash className="h-3.5 w-3.5" />
+                                    <span>Permanently Remove</span>
                                 </>
                             )}
                         </Button>

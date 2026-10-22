@@ -119,8 +119,73 @@ public class StaffEndpoints : IEndpoint
         .WithDescription("Invites a new staff member to the workspace with role assignment, subject to subscription quotas.")
         .WithTags("Staff");
 
-        // 3. Revoke or remove a staff member / invitation
+        // 3. Revoke or permanently remove a staff member / invitation
         app.MapDelete("/staff/{id:guid}", async (
+            Guid id,
+            string tenantSlug,
+            bool? permanent,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower());
+
+            if (tenant == null)
+            {
+                return Results.NotFound(new { Message = "Workspace not found." });
+            }
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+
+            if (!isOwner && !isAdmin)
+            {
+                return Results.Forbid();
+            }
+
+            try
+            {
+                if (permanent == true)
+                {
+                    var deleted = await sender.Send(new DeleteStaffMemberCommand(tenantSlug, id));
+                    return deleted
+                        ? Results.Ok(new { Success = true, Message = "Staff member permanently removed from workspace." })
+                        : Results.BadRequest(new { Message = "Failed to remove staff member." });
+                }
+
+                var success = await sender.Send(new RevokeStaffMemberCommand(tenantSlug, id));
+                return success 
+                    ? Results.Ok(new { Success = true, Message = "Staff member / invitation revoked successfully." }) 
+                    : Results.BadRequest(new { Message = "Failed to revoke staff member." });
+            }
+            catch (InvalidOperationException ex) when (ex is not EntitlementException)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .RequireAuthorization()
+        .WithName("RevokeStaffMember")
+        .WithDescription("Revokes an invitation/member or permanently removes a revoked member from the workspace.")
+        .WithTags("Staff");
+
+        // 3b. Permanently remove a revoked staff member from the workspace
+        app.MapDelete("/staff/{id:guid}/permanent", async (
             Guid id,
             string tenantSlug,
             HttpContext httpContext,
@@ -152,10 +217,10 @@ public class StaffEndpoints : IEndpoint
 
             try
             {
-                var success = await sender.Send(new RevokeStaffMemberCommand(tenantSlug, id));
-                return success 
-                    ? Results.Ok(new { Success = true, Message = "Staff member / invitation revoked successfully." }) 
-                    : Results.BadRequest(new { Message = "Failed to revoke staff member." });
+                var deleted = await sender.Send(new DeleteStaffMemberCommand(tenantSlug, id));
+                return deleted
+                    ? Results.Ok(new { Success = true, Message = "Staff member permanently removed from workspace." })
+                    : Results.BadRequest(new { Message = "Failed to remove staff member." });
             }
             catch (InvalidOperationException ex) when (ex is not EntitlementException)
             {
@@ -171,8 +236,8 @@ public class StaffEndpoints : IEndpoint
             }
         })
         .RequireAuthorization()
-        .WithName("RevokeStaffMember")
-        .WithDescription("Revokes an invitation or removes a staff member from the workspace.")
+        .WithName("DeleteStaffMemberPermanently")
+        .WithDescription("Permanently removes a revoked staff member record from the workspace.")
         .WithTags("Staff");
 
         // 4. Get public invitation details by token

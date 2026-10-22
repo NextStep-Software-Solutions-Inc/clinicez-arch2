@@ -83,6 +83,11 @@ export const staffService = {
     return res.data;
   },
 
+  deleteStaffMemberPermanently: async (id: string, tenantSlug: string): Promise<{ success: boolean; message: string }> => {
+    const res = await apiClient.delete<{ success: boolean; message: string }>(`/staff/${id}/permanent?tenantSlug=${tenantSlug}`);
+    return res.data;
+  },
+
   resendInvitation: async (id: string, tenantSlug: string): Promise<StaffMemberDto> => {
     const res = await apiClient.post<StaffMemberDto>(`/staff/invitations/${id}/resend?tenantSlug=${tenantSlug}`);
     return res.data;

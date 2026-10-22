@@ -498,4 +498,42 @@ public class StaffManagementTests : IDisposable
         Assert.False(suspendedResult.IsRevoked);
         Assert.True(suspendedResult.IsSuspended);
     }
+
+    [Fact]
+    public async Task DeleteStaffMember_RevokedMember_DeletesPermanentlyAndSyncsClerk()
+    {
+        var member = SeedMember("revoked.delete@metro.ph", "Revoked Delete", WorkspaceMemberRole.Billing, MemberStatus.Revoked, userId: "clerk_revoked_del");
+
+        var handler = new DeleteStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var result = await handler.Handle(new DeleteStaffMemberCommand(TenantSlug, member.Id), CancellationToken.None);
+
+        Assert.True(result);
+        var inDb = await _context.WorkspaceMembers.FindAsync(member.Id);
+        Assert.Null(inDb);
+        _clerkMock.Verify(c => c.SyncAsync("clerk_revoked_del", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteStaffMember_NonRevokedMember_ThrowsInvalidOperationException()
+    {
+        var member = SeedMember("active.delete@metro.ph", "Active Delete", WorkspaceMemberRole.Admin, MemberStatus.Active, userId: "clerk_active_del");
+
+        var handler = new DeleteStaffMemberCommandHandler(_context, _clerkMock.Object);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(new DeleteStaffMemberCommand(TenantSlug, member.Id), CancellationToken.None));
+
+        Assert.Contains("Only revoked workspace members can be permanently deleted", ex.Message);
+    }
+
+    [Fact]
+    public async Task InviteStaffMember_ExistingActiveMember_ThrowsActiveMemberMessage()
+    {
+        SeedMember("alreadyactive@metro.ph", "Already Active", WorkspaceMemberRole.Admin, MemberStatus.Active, userId: "clerk_act_1");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            InviteHandler().Handle(new InviteStaffMemberCommand(TenantSlug, "alreadyactive@metro.ph", "Already Active", "Admin"), CancellationToken.None));
+
+        Assert.Contains("active team member", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

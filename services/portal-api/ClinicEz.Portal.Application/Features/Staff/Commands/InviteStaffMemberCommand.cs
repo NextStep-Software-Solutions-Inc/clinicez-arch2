@@ -99,6 +99,7 @@ public class InviteStaffMemberCommandHandler(
                 existing.Status = MemberStatus.Invited;
                 existing.InvitationToken = TokenGenerator.GenerateSecureToken();
                 existing.InvitationExpiresAt = now.AddDays(7);
+                existing.UserId = null;
                 existing.JoinedAt = null;
 
                 StaffMember? existingProfile = await context.StaffMembers
@@ -132,6 +133,11 @@ public class InviteStaffMemberCommandHandler(
                     existingProfile = null;
                 }
 
+                var activeCount = await context.WorkspaceMembers.CountAsync(
+                    m => m.TenantId == tenant.Id && m.Id != existing.Id && m.Status != MemberStatus.Revoked && m.Status != MemberStatus.Suspended,
+                    cancellationToken);
+                tenant.StaffAccountsCount = activeCount + 1;
+
                 await context.SaveChangesAsync(cancellationToken);
 
                 if (request.SendEmail)
@@ -142,7 +148,18 @@ public class InviteStaffMemberCommandHandler(
                 return StaffMemberMapping.ToDto(existing, existingProfile, facilityName, now);
             }
 
-            throw new InvalidOperationException($"A team member with email '{request.Email}' already exists or has an active invitation in this workspace.");
+            var isExpiredInvite = existing.Status == MemberStatus.Invited &&
+                                  existing.InvitationExpiresAt.HasValue &&
+                                  existing.InvitationExpiresAt.Value < now;
+
+            throw new InvalidOperationException(existing.Status switch
+            {
+                MemberStatus.Active => $"An active team member with email '{request.Email}' already exists in this workspace.",
+                MemberStatus.Invited when isExpiredInvite => $"An expired invitation for '{request.Email}' already exists in this workspace. Please resend the invitation instead.",
+                MemberStatus.Invited => $"A pending invitation for '{request.Email}' already exists in this workspace. Please resend the existing invitation instead.",
+                MemberStatus.Suspended => $"A suspended team member with email '{request.Email}' already exists in this workspace. Please reactivate their account instead.",
+                _ => $"A team member with email '{request.Email}' already exists in this workspace."
+            });
         }
 
         var newMember = new WorkspaceMember

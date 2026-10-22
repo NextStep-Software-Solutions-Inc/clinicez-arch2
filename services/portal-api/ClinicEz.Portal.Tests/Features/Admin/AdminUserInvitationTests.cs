@@ -757,4 +757,42 @@ public class AdminUserInvitationTests : IDisposable
         var suspendedResult = await handler.Handle(new GetAdminMeQuery("user_clerk_susp", null), CancellationToken.None);
         Assert.Null(suspendedResult);
     }
+
+    [Fact]
+    public async Task InviteAdminUser_ReinvitingRevokedAdmin_ReactivatesWithFreshTokenAndExpiry()
+    {
+        var user = new AdminUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "revokedreinvite@clinicez.com",
+            FullName = "Old Revoked Admin",
+            RoleId = _roleId,
+            Status = AdminUserStatus.Revoked,
+            InvitationToken = "old-revoked-token",
+            InvitationExpiresAt = DateTime.UtcNow.AddDays(-2),
+            IsActive = false,
+            CreatedAt = DateTime.UtcNow.AddDays(-10)
+        };
+        _context.AdminUsers.Add(user);
+        await _context.SaveChangesAsync();
+
+        var handler = new InviteAdminUserCommandHandler(
+            _context,
+            TestSupport.AdminInvitationNotifier(_context, FrontendUrl, _emailSender),
+            UrlProvider,
+            TimeProvider.System
+        );
+
+        var result = await handler.Handle(
+            new InviteAdminUserCommand("revokedreinvite@clinicez.com", "Reinvited Admin", _roleId, "email", "Super Admin"),
+            CancellationToken.None
+        );
+
+        Assert.NotNull(result);
+        Assert.Equal(user.Id, result.Id);
+        Assert.Equal(AdminUserStatus.Invited, result.Status);
+        Assert.Equal("Invited", result.DisplayStatus);
+        Assert.NotEqual("old-revoked-token", result.InvitationToken);
+        Assert.True(result.InvitationExpiresAt > DateTime.UtcNow.AddDays(6));
+    }
 }

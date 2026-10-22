@@ -206,6 +206,29 @@ describe("Tenant Workspace Team Invitations & Member Lifecycle (Milestone 2)", (
       }
     });
 
+    test("deleteStaffMemberPermanently calls DELETE /staff/:id/permanent?tenantSlug=:slug", async () => {
+      const originalDelete = apiClient.delete;
+      let capturedUrl = "";
+
+      apiClient.delete = mock(async (url: string) => {
+        capturedUrl = url;
+        return {
+          data: {
+            success: true,
+            message: "Staff member permanently removed from workspace."
+          }
+        };
+      }) as any;
+
+      try {
+        const res = await staffService.deleteStaffMemberPermanently("member-revoked-1", "acme-health");
+        expect(capturedUrl).toBe("/staff/member-revoked-1/permanent?tenantSlug=acme-health");
+        expect(res.success).toBe(true);
+      } finally {
+        apiClient.delete = originalDelete;
+      }
+    });
+
     test("suspendStaffMember calls POST /staff/:id/suspend?tenantSlug=:slug", async () => {
       const originalPost = apiClient.post;
       let capturedUrl = "";

@@ -56,36 +56,68 @@ public class InviteAdminUserCommandHandler(
     {
         var emailLower = request.Email.Trim().ToLowerInvariant();
 
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+
         var existing = await context.AdminUsers
-            .AnyAsync(u => u.Email.ToLower() == emailLower, cancellationToken);
-        if (existing)
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower, cancellationToken);
+        if (existing != null && existing.Status != AdminUserStatus.Revoked)
         {
-            throw new InvalidOperationException("An admin with this email already exists.");
+            var isExpired = existing.Status == AdminUserStatus.Invited &&
+                            existing.InvitationExpiresAt.HasValue &&
+                            existing.InvitationExpiresAt.Value < now;
+
+            throw new InvalidOperationException(existing.Status switch
+            {
+                AdminUserStatus.Active => $"An active admin with email '{request.Email}' already exists.",
+                AdminUserStatus.Invited when isExpired => $"An expired invitation for '{request.Email}' already exists. Please resend the invitation instead.",
+                AdminUserStatus.Invited => $"A pending invitation for '{request.Email}' already exists. Please resend the existing invitation instead.",
+                AdminUserStatus.Suspended => $"A suspended admin account with email '{request.Email}' already exists. Please reactivate the account instead.",
+                _ => "An admin with this email already exists."
+            });
         }
 
         var role = await context.AdminRoles
             .FirstOrDefaultAsync(r => r.Id == request.RoleId, cancellationToken)
             ?? throw new KeyNotFoundException($"Role with ID '{request.RoleId}' not found.");
 
-        var now = timeProvider.GetUtcNow().UtcDateTime;
         var token = TokenGenerator.GenerateSecureToken(32);
 
-        var user = new AdminUser
+        AdminUser user;
+        if (existing != null)
         {
-            Id = Guid.NewGuid(),
-            Email = emailLower,
-            FullName = request.FullName.Trim(),
-            RoleId = request.RoleId,
-            Role = role,
-            IsActive = true,
-            Status = AdminUserStatus.Invited,
-            InvitationToken = token,
-            InvitationExpiresAt = now.AddDays(7),
-            CreatedAt = now,
-            CreatedBy = request.CreatedBy
-        };
+            user = existing;
+            user.FullName = request.FullName.Trim();
+            user.RoleId = request.RoleId;
+            user.Role = role;
+            user.IsActive = true;
+            user.Status = AdminUserStatus.Invited;
+            user.InvitationToken = token;
+            user.InvitationExpiresAt = now.AddDays(7);
+            user.ClerkUserId = null;
+            user.JoinedAt = null;
+            user.UpdatedAt = now;
+            user.UpdatedBy = request.CreatedBy;
+        }
+        else
+        {
+            user = new AdminUser
+            {
+                Id = Guid.NewGuid(),
+                Email = emailLower,
+                FullName = request.FullName.Trim(),
+                RoleId = request.RoleId,
+                Role = role,
+                IsActive = true,
+                Status = AdminUserStatus.Invited,
+                InvitationToken = token,
+                InvitationExpiresAt = now.AddDays(7),
+                CreatedAt = now,
+                CreatedBy = request.CreatedBy
+            };
 
-        await context.AdminUsers.AddAsync(user, cancellationToken);
+            await context.AdminUsers.AddAsync(user, cancellationToken);
+        }
+
         await context.SaveChangesAsync(cancellationToken);
 
         var delivery = string.IsNullOrEmpty(request.DeliveryMode) ? "email" : request.DeliveryMode.ToLowerInvariant();

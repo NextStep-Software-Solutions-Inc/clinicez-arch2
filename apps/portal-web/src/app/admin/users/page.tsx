@@ -225,11 +225,16 @@ export default function AdminUsersPage() {
   };
 
   const handleRevoke = async (u: AdminUserDto) => {
-    if (!confirm(`Are you sure you want to revoke the invitation for ${u.fullName}?`)) return;
+    const status = resolveAdminDisplayStatus(u);
+    const msg =
+      status === "Invited" || status === "Expired"
+        ? `Are you sure you want to revoke the pending invitation for ${u.fullName}?`
+        : `Are you sure you want to revoke admin access for ${u.fullName}? Their status will be marked as Revoked.`;
+    if (!confirm(msg)) return;
     try {
       setActionLoadingId(u.id);
       await adminService.revokeInvitation(u.id);
-      toast.success("Invitation revoked successfully.");
+      toast.success("Admin access / invitation revoked.");
       loadData();
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || "Failed to revoke invitation");
@@ -237,6 +242,44 @@ export default function AdminUsersPage() {
       setActionLoadingId(null);
     }
   };
+
+  const handleReinvite = async (u: AdminUserDto) => {
+    try {
+      setActionLoadingId(u.id);
+      const res = await adminService.inviteUser({
+        email: u.email,
+        fullName: u.fullName,
+        roleId: u.roleId,
+        deliveryMode: "email"
+      });
+      toast.success(`Re-invited ${u.fullName} and sent a new invitation email!`);
+      loadData();
+
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const linkUrl = res.inviteUrl || (res.invitationToken ? `${origin}/admin/invitations/${res.invitationToken}` : "");
+      if (linkUrl) {
+        setCreatedInviteModal({
+          open: true,
+          fullName: res.fullName,
+          email: res.email,
+          role: u.role?.name || "Admin",
+          inviteUrl: linkUrl
+        });
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || "Failed to re-invite admin user");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const existingEmailAdmin = React.useMemo(() => {
+    if (editingUser) return null;
+    const normalized = formData.email.trim().toLowerCase();
+    if (!normalized) return null;
+    return users.find(u => u.email.trim().toLowerCase() === normalized) || null;
+  }, [editingUser, formData.email, users]);
+  const existingEmailAdminStatus = existingEmailAdmin ? resolveAdminDisplayStatus(existingEmailAdmin) : null;
 
   const handleSuspend = async (u: AdminUserDto) => {
     if (!confirm(`Are you sure you want to suspend admin access for ${u.fullName}?`)) return;
@@ -503,39 +546,78 @@ export default function AdminUsersPage() {
                                 size="sm"
                                 disabled={isBusy}
                                 onClick={() => handleSuspend(u)}
-                                className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
                                 title="Suspend Account"
                               >
                                 <IconPlayerPause className="h-3.5 w-3.5" />
                                 <span>Suspend</span>
                               </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleRevoke(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                title="Revoke Admin Access"
+                              >
+                                <IconBan className="h-3.5 w-3.5" />
+                                <span>Revoke</span>
+                              </Button>
                             </>
                           )}
 
                           {status === "Suspended" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={isBusy}
-                              onClick={() => handleReactivate(u)}
-                              className="h-7 px-2 text-xs rounded-lg gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                              title="Reactivate Account"
-                            >
-                              <IconPlayerPlay className="h-3.5 w-3.5" />
-                              <span>Reactivate</span>
-                            </Button>
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleReactivate(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                                title="Reactivate Account"
+                              >
+                                <IconPlayerPlay className="h-3.5 w-3.5" />
+                                <span>Reactivate</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleRevoke(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                title="Revoke Admin Access"
+                              >
+                                <IconBan className="h-3.5 w-3.5" />
+                                <span>Revoke</span>
+                              </Button>
+                            </>
                           )}
 
-                          {/* Delete Action */}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(u)}
-                            className="h-8 w-8 rounded-xl text-slate-400 hover:text-red-700 hover:bg-red-50"
-                            title="Delete Admin Profile"
-                          >
-                            <IconTrash className="h-3.5 w-3.5" />
-                          </Button>
+                          {status === "Revoked" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleReinvite(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-sky-600 border-sky-200 hover:bg-sky-50 dark:hover:bg-sky-950/30"
+                                title="Send a fresh 7-day invitation"
+                              >
+                                <IconMailForward className="h-3.5 w-3.5" />
+                                <span>Re-invite</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDelete(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                title="Permanently Delete Admin Profile"
+                              >
+                                <IconTrash className="h-3.5 w-3.5" />
+                                <span>Remove</span>
+                              </Button>
+                            </>
+                          )}
                         </div>
                       )}
                     </td>
@@ -582,6 +664,86 @@ export default function AdminUsersPage() {
                   onChange={e => setFormData(prev => ({ ...prev, email: e.target.value }))}
                   className="rounded-xl"
                 />
+                {existingEmailAdmin && existingEmailAdminStatus === "Active" && (
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2">
+                    <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Existing Active Admin:</strong> {existingEmailAdmin.fullName} ({existingEmailAdmin.email}) is already an active platform administrator ({existingEmailAdmin.role?.name || "Admin"}).
+                    </div>
+                  </div>
+                )}
+                {existingEmailAdmin && (existingEmailAdminStatus === "Invited" || existingEmailAdminStatus === "Expired") && (
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs space-y-2">
+                    <div className="flex items-start gap-2">
+                      <IconClock className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>{existingEmailAdminStatus === "Expired" ? "Expired" : "Pending"} Invitation Detected:</strong> {existingEmailAdmin.fullName} ({existingEmailAdmin.email}) already has {existingEmailAdminStatus === "Expired" ? "an expired" : "a pending"} invitation ({existingEmailAdmin.role?.name || "Admin"}).
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pl-6">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={actionLoadingId === existingEmailAdmin.id}
+                        onClick={async () => {
+                          setDialogOpen(false);
+                          await handleResend(existingEmailAdmin);
+                        }}
+                        className="h-7 px-2.5 text-[11px] font-semibold rounded-lg gap-1 bg-white dark:bg-slate-900"
+                      >
+                        <IconMailForward className="h-3 w-3" />
+                        <span>Resend Invitation Instead</span>
+                      </Button>
+                      {existingEmailAdminStatus === "Invited" && existingEmailAdmin.invitationToken && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleCopyLink(existingEmailAdmin)}
+                          className="h-7 px-2.5 text-[11px] font-semibold rounded-lg gap-1 bg-white dark:bg-slate-900"
+                        >
+                          <IconCopy className="h-3 w-3" />
+                          <span>Copy Link</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {existingEmailAdmin && existingEmailAdminStatus === "Suspended" && (
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs space-y-2">
+                    <div className="flex items-start gap-2">
+                      <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Suspended Account Detected:</strong> {existingEmailAdmin.fullName} ({existingEmailAdmin.email}) is currently suspended.
+                      </div>
+                    </div>
+                    <div className="pl-6">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={actionLoadingId === existingEmailAdmin.id}
+                        onClick={async () => {
+                          setDialogOpen(false);
+                          await handleReactivate(existingEmailAdmin);
+                        }}
+                        className="h-7 px-2.5 text-[11px] font-semibold rounded-lg gap-1 bg-white dark:bg-slate-900"
+                      >
+                        <IconPlayerPlay className="h-3 w-3" />
+                        <span>Reactivate Account Instead</span>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {existingEmailAdmin && existingEmailAdminStatus === "Revoked" && (
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-xs flex items-start gap-2">
+                    <IconMailForward className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Previously Revoked Admin:</strong> {existingEmailAdmin.fullName} ({existingEmailAdmin.email}) was previously revoked. Submitting this form will re-invite them with a fresh 7-day invitation token.
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Role */}
@@ -661,7 +823,14 @@ export default function AdminUsersPage() {
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} className="rounded-full">
                 Cancel
               </Button>
-              <Button type="submit" disabled={formLoading} className="rounded-full shadow-md">
+              <Button
+                type="submit"
+                disabled={
+                  formLoading ||
+                  (!editingUser && !!existingEmailAdmin && existingEmailAdminStatus !== "Revoked")
+                }
+                className="rounded-full shadow-md"
+              >
                 {formLoading ? "Saving..." : editingUser ? "Update User" : "Invite User"}
               </Button>
             </DialogFooter>
