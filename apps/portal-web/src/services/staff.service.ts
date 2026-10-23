@@ -88,6 +88,17 @@ export interface PortalPasswordResetDetailsDto {
   expiresAt?: string | null;
 }
 
+export interface PendingSelfInvitationDto {
+  invitationType: "Workspace" | "Admin";
+  token: string;
+  tenantSlug?: string | null;
+  workspaceName?: string | null;
+  role: string;
+  email: string;
+  expiresAt?: string | null;
+  redirectUrl: string;
+}
+
 export const staffService = {
   getTenantStaff: async (tenantSlug: string): Promise<TenantStaffResultDto> => {
     const res = await apiClient.get<TenantStaffResultDto>(`/staff?tenantSlug=${tenantSlug}`);
@@ -173,5 +184,18 @@ export const staffService = {
       newPassword,
     });
     return res.data;
+  },
+
+  getPendingSelfInvitation: async (token?: string | null): Promise<PendingSelfInvitationDto | null> => {
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const res = await apiClient.get<PendingSelfInvitationDto>("/staff/invitations/pending-self", { headers });
+      return res.data;
+    } catch (err: unknown) {
+      if ((err as { response?: { status?: number } }).response?.status === 404) {
+        return null;
+      }
+      throw err;
+    }
   },
 };

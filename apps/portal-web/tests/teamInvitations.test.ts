@@ -368,5 +368,56 @@ describe("Tenant Workspace Team Invitations & Member Lifecycle (Milestone 2)", (
         apiClient.post = originalPost;
       }
     });
+
+    test("getPendingSelfInvitation calls GET /staff/invitations/pending-self with Authorization header", async () => {
+      const originalGet = apiClient.get;
+      let capturedUrl = "";
+      let capturedHeaders: any = null;
+
+      apiClient.get = mock(async (url: string, config?: any) => {
+        capturedUrl = url;
+        capturedHeaders = config?.headers;
+        return {
+          data: {
+            invitationType: "Workspace",
+            token: "tok_pending_abc",
+            tenantSlug: "acme-clinic",
+            workspaceName: "Acme Clinic",
+            role: "Nurse",
+            email: "nurse@acme.ph",
+            expiresAt: "2026-10-30T12:00:00Z",
+            redirectUrl: "/invitations/tok_pending_abc",
+          },
+        };
+      }) as any;
+
+      try {
+        const res = await staffService.getPendingSelfInvitation("jwt_bearer_token");
+        expect(capturedUrl).toBe("/staff/invitations/pending-self");
+        expect(capturedHeaders?.Authorization).toBe("Bearer jwt_bearer_token");
+        expect(res?.invitationType).toBe("Workspace");
+        expect(res?.token).toBe("tok_pending_abc");
+      } finally {
+        apiClient.get = originalGet;
+      }
+    });
+
+    test("getPendingSelfInvitation returns null when API responds with HTTP 404", async () => {
+      const originalGet = apiClient.get;
+
+      apiClient.get = mock(async () => {
+        const err: any = new Error("Not Found");
+        err.response = { status: 404 };
+        throw err;
+      }) as any;
+
+      try {
+        const res = await staffService.getPendingSelfInvitation("jwt_bearer_token");
+        expect(res).toBeNull();
+      } finally {
+        apiClient.get = originalGet;
+      }
+    });
   });
 });
+
