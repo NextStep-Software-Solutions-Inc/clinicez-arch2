@@ -56,6 +56,7 @@ export default function ServicesCatalogTab({
   const [itemCategory, setItemCategory] = useState('Consultation');
   const [itemPrice, setItemPrice] = useState('500');
   const [itemDescription, setItemDescription] = useState('');
+  const [itemPhilHealthCode, setItemPhilHealthCode] = useState('');
   const [savingItem, setSavingItem] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
 
@@ -80,9 +81,10 @@ export default function ServicesCatalogTab({
   const handleOpenAdd = () => {
     setItemCode(`SVC-${Math.floor(1000 + Math.random() * 9000)}`);
     setItemName('');
-    setItemCategory('Consultation');
+    setItemCategory(selectedCategory !== 'All' ? selectedCategory : 'Consultation');
     setItemPrice('500');
     setItemDescription('');
+    setItemPhilHealthCode('');
     setServiceError(null);
     setShowAddModal(true);
   };
@@ -108,6 +110,7 @@ export default function ServicesCatalogTab({
       category: itemCategory,
       standardPrice: priceNum,
       description: itemDescription.trim() || undefined,
+      philHealthCode: itemPhilHealthCode.trim() || undefined,
     });
 
     setSavingItem(false);
@@ -149,13 +152,21 @@ export default function ServicesCatalogTab({
     setSavingEdit(true);
     setEditError(null);
 
+    const trimmedPhilHealthCode = editPhilHealthCode.trim() || undefined;
+    const preservePhilHealthDescription =
+      trimmedPhilHealthCode && trimmedPhilHealthCode === editingItem.philHealthCode?.trim()
+        ? editingItem.philHealthDescription
+        : undefined;
+
     const [updated, err] = await clinicService.updateService(editingItem.id, {
       name: editName.trim(),
       category: editCategory,
       standardPrice: priceNum,
       description: editDescription.trim() || undefined,
       isActive: editIsActive,
-      philHealthCode: editPhilHealthCode.trim() || undefined,
+      philHealthCode: trimmedPhilHealthCode,
+      philHealthDescription: preservePhilHealthDescription,
+      isPhilHealthFormulary: Boolean(trimmedPhilHealthCode),
     });
 
     setSavingEdit(false);
@@ -179,6 +190,8 @@ export default function ServicesCatalogTab({
       description: item.description,
       isActive: nextActive,
       philHealthCode: item.philHealthCode,
+      philHealthDescription: item.philHealthDescription,
+      isPhilHealthFormulary: item.isPhilHealthFormulary,
     });
     if (err || !updated) {
       notify.error(err?.message || 'Could not update service status.');
@@ -189,6 +202,7 @@ export default function ServicesCatalogTab({
   };
 
   const handleSeedDentalServices = async () => {
+    if (seedingDental) return;
     setSeedingDental(true);
     const [seeded, err] = await clinicService.seedDentalServices();
     setSeedingDental(false);
@@ -218,13 +232,6 @@ export default function ServicesCatalogTab({
           subtitle="Fees, outpatient consultations, diagnostic procedures, and clinical price lists"
           rightAction={
             <View style={styles.headerActions}>
-              <Button
-                title="Add Dental Services"
-                variant="secondary"
-                icon="plus"
-                loading={seedingDental}
-                onPress={handleSeedDentalServices}
-              />
               <Button title="Add service item" icon="plus" onPress={handleOpenAdd} />
             </View>
           }
@@ -282,7 +289,11 @@ export default function ServicesCatalogTab({
                       <Badge label={item.code} variant="outline" size="sm" />
                       <Badge label={item.category} variant="neutral" size="sm" />
                       {!item.isActive && <Badge label="Inactive" variant="emergency" size="sm" />}
-                      {item.isPhilHealthFormulary && <Badge label="PhilHealth" variant="success" size="sm" />}
+                      {item.philHealthCode?.trim() ? (
+                        <Badge label={`PhilHealth: ${item.philHealthCode.trim()}`} variant="success" size="sm" />
+                      ) : item.isPhilHealthFormulary ? (
+                        <Badge label="PhilHealth" variant="success" size="sm" />
+                      ) : null}
                     </View>
 
                     {item.description ? (
@@ -393,6 +404,13 @@ export default function ServicesCatalogTab({
             ))}
           </View>
         </FieldGroup>
+
+        <Input
+          label="PhilHealth statutory code (optional)"
+          value={itemPhilHealthCode}
+          onChangeText={setItemPhilHealthCode}
+          placeholder="e.g. 93000, 82947"
+        />
 
         <Input
           label="Notes or instructions (optional)"

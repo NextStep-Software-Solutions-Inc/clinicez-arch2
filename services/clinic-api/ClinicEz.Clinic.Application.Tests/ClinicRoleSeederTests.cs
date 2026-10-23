@@ -96,7 +96,7 @@ public class ClinicRoleSeederTests
     }
 
     [Fact]
-    public void GetCanonicalSystemRoleTemplates_GrantsPatientsWriteToDoctorRole()
+    public void GetCanonicalSystemRoleTemplates_GrantsPatientsWriteAndTriageWriteToDoctorRole()
     {
         var templates = ClinicRoleSeeder.GetCanonicalSystemRoleTemplates();
         var doctorTemplate = templates.SingleOrDefault(t =>
@@ -105,13 +105,15 @@ public class ClinicRoleSeederTests
         doctorTemplate.Should().NotBeNull();
         doctorTemplate!.Permissions.Should().Contain(ClinicPermissions.PatientsRead);
         doctorTemplate.Permissions.Should().Contain(ClinicPermissions.PatientsWrite);
+        doctorTemplate.Permissions.Should().Contain(ClinicPermissions.TriageRead);
+        doctorTemplate.Permissions.Should().Contain(ClinicPermissions.TriageWrite);
         doctorTemplate.Permissions.Should().Contain(ClinicPermissions.ConsultationsRead);
         doctorTemplate.Permissions.Should().Contain(ClinicPermissions.ConsultationsWrite);
         doctorTemplate.Permissions.Should().Contain(ClinicPermissions.ConsultationsSign);
     }
 
     [Fact]
-    public async Task SeedOrUpdateAllClinicsAsync_BackfillsPatientsWriteToExistingDoctorRole()
+    public async Task SeedOrUpdateAllClinicsAsync_BackfillsPatientsWriteAndTriageWriteToExistingDoctorRole()
     {
         var clinicId = Guid.NewGuid();
         var tenantId = "tenant_test";
@@ -121,7 +123,7 @@ public class ClinicRoleSeederTests
 
         var (context, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        // Seed an outdated Attending Physician / Doctor role missing patients:write (Issue #52 reproduction)
+        // Seed an outdated Attending Physician / Doctor role missing patients:write and triage:write (Issues #50 & #52 reproduction)
         var legacyDoctorPermissions = new List<string>
         {
             ClinicPermissions.AppointmentsRead,
@@ -163,6 +165,40 @@ public class ClinicRoleSeederTests
 
         var refreshedDoctorRole = await context.ClinicRoles.FirstAsync(r => r.Id == doctorRole.Id);
         refreshedDoctorRole.Permissions.Should().Contain(ClinicPermissions.PatientsWrite);
+        refreshedDoctorRole.Permissions.Should().Contain(ClinicPermissions.TriageWrite);
+    }
+
+    [Fact]
+    public void DoctorRole_HasPermissionsRequiredForDemographicsAndVitalsEndpoints()
+    {
+        var doctorTemplate = ClinicRoleSeeder.GetCanonicalSystemRoleTemplates()
+            .Single(t => t.Name.Equals(ClinicRoleSeeder.DoctorRoleName, StringComparison.OrdinalIgnoreCase));
+
+        var consultationEndpoints = new (Type Controller, string ActionName)[]
+        {
+            (typeof(PatientsController), nameof(PatientsController.UpdatePatient)),
+            (typeof(QueueController), nameof(QueueController.RecordTriage)),
+            (typeof(AllergiesController), nameof(AllergiesController.CreateAllergy)),
+            (typeof(AllergiesController), nameof(AllergiesController.DeleteAllergy))
+        };
+
+        foreach (var (controller, actionName) in consultationEndpoints)
+        {
+            var method = controller.GetMethod(actionName);
+            method.Should().NotBeNull($"Expected endpoint {controller.Name}.{actionName} to exist");
+
+            var requiredPermissions = method!.GetCustomAttributes<HasPermissionAttribute>(true)
+                .Concat(controller.GetCustomAttributes<HasPermissionAttribute>(true))
+                .Select(a => a.Permission)
+                .ToList();
+
+            requiredPermissions.Should().NotBeEmpty($"{controller.Name}.{actionName} must be permission-guarded");
+            foreach (var perm in requiredPermissions)
+            {
+                doctorTemplate.Permissions.Should().Contain(perm,
+                    $"Doctor role must have '{perm}' required by {controller.Name}.{actionName}");
+            }
+        }
     }
 
     [Fact]

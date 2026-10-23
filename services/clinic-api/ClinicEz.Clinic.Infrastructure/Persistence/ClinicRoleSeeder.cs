@@ -48,6 +48,7 @@ public static class ClinicRoleSeeder
                 ClinicPermissions.QueueCall,
                 ClinicPermissions.QueueComplete,
                 ClinicPermissions.TriageRead,
+                ClinicPermissions.TriageWrite,
                 ClinicPermissions.ConsultationsRead,
                 ClinicPermissions.ConsultationsWrite,
                 ClinicPermissions.ConsultationsSign,
@@ -213,7 +214,7 @@ public static class ClinicRoleSeeder
             else
             {
                 // Synchronize canonical system permissions across all built-in system roles
-                // (e.g. AuditRead/AuditExport for Admin & DPO, PatientsWrite for Attending Physician / Doctor)
+                // (e.g. AuditRead/AuditExport for Admin & DPO, PatientsWrite & TriageWrite for Attending Physician / Doctor)
                 var expectedPermissions = template.Name.Equals(SystemAdminRoleName, StringComparison.OrdinalIgnoreCase)
                     ? ClinicPermissions.All
                     : template.Permissions;

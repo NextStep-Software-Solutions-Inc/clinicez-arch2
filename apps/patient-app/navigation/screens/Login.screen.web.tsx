@@ -11,6 +11,11 @@ import Input from '@ui/Input';
 import { AppIcon } from '@ui/Icon';
 import ClinicEzLogo from '@ui/ClinicEzLogo';
 import GoogleSignInButton from '@ui/GoogleSignInButton';
+import {
+  isSignInSecondFactorRequired,
+  resolveDefaultSecondFactorStrategy,
+  prepareSecondFactorIfNeeded,
+} from '../../utils/mfaHelpers';
 
 export default function LoginScreenWeb() {
   const navigation = useNavigation<any>();
@@ -50,14 +55,14 @@ export default function LoginScreenWeb() {
           unlock();
         },
       });
-    } else if (signIn.status === 'needs_client_trust') {
-      const emailFactor = signIn.supportedSecondFactors?.find(
-        (f) => f.strategy === 'email_code',
-      );
-      if (emailFactor) {
-        await signIn.mfa.sendEmailCode();
-        navigation.navigate('Auth', { screen: 'Verify' });
-      }
+    } else if (
+      isSignInSecondFactorRequired(signIn.status) ||
+      signIn.status === 'needs_second_factor' ||
+      signIn.status === 'needs_client_trust'
+    ) {
+      const strategy = resolveDefaultSecondFactorStrategy(signIn);
+      await prepareSecondFactorIfNeeded(signIn, strategy);
+      navigation.navigate('Auth', { screen: 'Verify' });
     }
   };
 
@@ -66,13 +71,23 @@ export default function LoginScreenWeb() {
       setIsSocialLoading(true);
       setErrorMessage(null);
 
-      const { createdSessionId, setActive, signUp: ssoSignUp } = await startSSOFlow({
+      const {
+        createdSessionId,
+        setActive,
+        signIn: ssoSignIn,
+        signUp: ssoSignUp,
+      } = await startSSOFlow({
         strategy: 'oauth_google',
       });
 
       if (createdSessionId) {
         await setActive!({ session: createdSessionId });
         unlock();
+      } else if (isSignInSecondFactorRequired(ssoSignIn?.status ?? signIn?.status)) {
+        const mfaSource = ssoSignIn?.status ? ssoSignIn : signIn;
+        const strategy = resolveDefaultSecondFactorStrategy(mfaSource);
+        await prepareSecondFactorIfNeeded(signIn?.mfa ? signIn : mfaSource, strategy);
+        navigation.navigate('Auth', { screen: 'Verify' });
       } else if (ssoSignUp?.status === 'missing_requirements') {
         navigation.navigate('Auth', { screen: 'Verify' });
       }

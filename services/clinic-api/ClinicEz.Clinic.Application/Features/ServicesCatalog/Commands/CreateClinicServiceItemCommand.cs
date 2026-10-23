@@ -53,6 +53,10 @@ public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClini
             throw new ConflictException($"Service with code '{codeUpper}' already exists in this clinic.");
         }
 
+        var philHealthCode = string.IsNullOrWhiteSpace(request.PhilHealthCode) ? null : request.PhilHealthCode.Trim();
+        var philHealthDescription = string.IsNullOrWhiteSpace(request.PhilHealthDescription) ? null : request.PhilHealthDescription.Trim();
+        var description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+
         var entity = new ClinicServiceItem
         {
             TenantId = _clinicContext.TenantId,
@@ -61,11 +65,11 @@ public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClini
             Name = request.Name.Trim(),
             Category = string.IsNullOrWhiteSpace(request.Category) ? "General" : request.Category.Trim(),
             StandardPrice = Math.Max(0m, request.StandardPrice),
-            Description = request.Description?.Trim(),
+            Description = description,
             IsActive = true,
-            PhilHealthCode = request.PhilHealthCode?.Trim(),
-            PhilHealthDescription = request.PhilHealthDescription?.Trim(),
-            IsPhilHealthFormulary = request.IsPhilHealthFormulary
+            PhilHealthCode = philHealthCode,
+            PhilHealthDescription = philHealthDescription,
+            IsPhilHealthFormulary = request.IsPhilHealthFormulary || philHealthCode != null
         };
 
         await _serviceRepo.AddAsync(entity, cancellationToken);

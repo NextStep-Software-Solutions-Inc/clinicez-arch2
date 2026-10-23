@@ -399,4 +399,88 @@ public class ServicesCatalogTests
         permissionAttr.Should().NotBeNull();
         permissionAttr!.Permission.Should().Be(ClinicPermissions.ServicesManage);
     }
+
+    [Theory]
+    [InlineData("Consultation", "99201")]
+    [InlineData("Procedure", "10060")]
+    [InlineData("Diagnostic", "82947")]
+    [InlineData("Dental", "D1110")]
+    [InlineData("Medicine", "PHIL-DRUG-PARA-500")]
+    [InlineData("NursingService", "96372")]
+    public async Task CreateClinicServiceItem_UnderAnyCategory_SupportsOptionalPhilHealthCodeAndNormalizesBlankToNull(
+        string category,
+        string philHealthCode)
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var handler = new CreateClinicServiceItemCommandHandler(repo, uow, _clinicContext);
+
+        // 1. With PhilHealthCode provided (even when IsPhilHealthFormulary is not explicitly set)
+        var createdWithCode = await handler.Handle(new CreateClinicServiceItemCommand(
+            Code: $"SVC-{category.ToUpperInvariant()}-PH",
+            Name: $"{category} With PhilHealth",
+            Category: category,
+            StandardPrice: 500m,
+            PhilHealthCode: $"  {philHealthCode}  "
+        ), CancellationToken.None);
+
+        createdWithCode.Category.Should().Be(category);
+        createdWithCode.PhilHealthCode.Should().Be(philHealthCode);
+        createdWithCode.IsPhilHealthFormulary.Should().BeTrue();
+
+        // 2. With blank/whitespace PhilHealthCode -> normalized to null and IsPhilHealthFormulary = false
+        var createdWithoutCode = await handler.Handle(new CreateClinicServiceItemCommand(
+            Code: $"SVC-{category.ToUpperInvariant()}-NO-PH",
+            Name: $"{category} Without PhilHealth",
+            Category: category,
+            StandardPrice: 500m,
+            PhilHealthCode: "   "
+        ), CancellationToken.None);
+
+        createdWithoutCode.Category.Should().Be(category);
+        createdWithoutCode.PhilHealthCode.Should().BeNull();
+        createdWithoutCode.IsPhilHealthFormulary.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UpdateClinicServiceItem_ClearingPhilHealthCode_ResetsCodeAndFormularyFlag()
+    {
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var createHandler = new CreateClinicServiceItemCommandHandler(repo, uow, _clinicContext);
+        var updateHandler = new UpdateClinicServiceItemCommandHandler(repo, uow, _clinicContext);
+
+        var created = await createHandler.Handle(new CreateClinicServiceItemCommand(
+            Code: "DENT-PROPH-01",
+            Name: "Oral Prophylaxis",
+            Category: "Dental",
+            StandardPrice: 850m,
+            PhilHealthCode: "D1110",
+            PhilHealthDescription: "Adult prophylaxis"
+        ), CancellationToken.None);
+
+        created.PhilHealthCode.Should().Be("D1110");
+        created.IsPhilHealthFormulary.Should().BeTrue();
+
+        // Act: Clear PhilHealthCode on update
+        var updated = await updateHandler.Handle(new UpdateClinicServiceItemCommand(
+            Id: created.Id,
+            Name: "Oral Prophylaxis",
+            Category: "Dental",
+            StandardPrice: 900m,
+            IsActive: true,
+            PhilHealthCode: "   ",
+            PhilHealthDescription: null,
+            IsPhilHealthFormulary: false
+        ), CancellationToken.None);
+
+        // Assert
+        updated.PhilHealthCode.Should().BeNull();
+        updated.PhilHealthDescription.Should().BeNull();
+        updated.IsPhilHealthFormulary.Should().BeFalse();
+
+        var inDb = await repo.GetByIdAsync(created.Id);
+        inDb!.PhilHealthCode.Should().BeNull();
+        inDb.IsPhilHealthFormulary.Should().BeFalse();
+    }
 }

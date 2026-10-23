@@ -107,7 +107,13 @@ mock.module('../constants/fonts', () => ({
 
 const { clinicService } = await import('../services/clinicService');
 const { default: CustomFieldsTab } = await import('../components/settings/CustomFieldsTab');
-const { default: AddEditFieldModal } = await import('../components/settings/AddEditFieldModal');
+const {
+  default: AddEditFieldModal,
+  slugifyMachineKey,
+  normalizeMachineKeyOnBlur,
+  validateMachineKey,
+  MACHINE_KEY_REGEX,
+} = await import('../components/settings/AddEditFieldModal');
 const { default: SortableCustomFieldsList } = await import('../components/settings/SortableCustomFieldsList');
 const { default: SortableCustomFieldsListWeb } = await import('../components/settings/SortableCustomFieldsList.web');
 const { getDeviceItem, setDeviceItem } = await import('../utils/deviceStorage');
@@ -247,11 +253,23 @@ class CustomFieldsTabHarness {
       return null;
     }
 
+    const candidateKey =
+      !this.draftId && this.draftFieldKey.length === 0
+        ? slugifyMachineKey(trimmedLabel)
+        : this.draftFieldKey;
+
+    const keyValidationError = validateMachineKey(
+      candidateKey,
+      this.fields,
+      this.draftId
+    );
+    if (keyValidationError) {
+      this.modalError = keyValidationError;
+      this.saving = false;
+      return null;
+    }
+
     this.saving = true;
-    const generatedKey = this.draftFieldKey.trim() || trimmedLabel
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '');
 
     const optionsJson =
       this.draftDataType === 'Select' && this.draftOptions.trim()
@@ -275,7 +293,7 @@ class CustomFieldsTabHarness {
 
     const payload: Partial<CustomFieldDefinition> = {
       label: trimmedLabel,
-      fieldKey: generatedKey || `field_${Date.now()}`,
+      fieldKey: candidateKey,
       dataType: this.draftDataType,
       category: this.draftCategory,
       placeholder: this.draftPlaceholder.trim() || undefined,
@@ -1623,6 +1641,169 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
       harness.setReorderMode('arrows');
       expect(harness.reorderMode).toBe('arrows');
       expect(getDeviceItem('clinicez_intake_reorder_mode')).toBe('arrows');
+    });
+  });
+
+  // =========================================================================
+  // ISSUE #57: Machine Key Uniqueness (TC-IF-004) & Format Validation (TC-IF-006)
+  // =========================================================================
+
+  describe('Issue #57: Machine Key Uniqueness (TC-IF-004) & Format Validation (TC-IF-006)', () => {
+    test('TC-IF-004-1: Rejects duplicate machine key when creating a custom field', async () => {
+      const harness = new CustomFieldsTabHarness();
+      harness.openAddModal();
+      harness.draftLabel = 'Student ID';
+      harness.draftFieldKey = 'student_id';
+      const first = await harness.saveField();
+      expect(first).not.toBeNull();
+      expect(first?.fieldKey).toBe('student_id');
+
+      harness.openAddModal();
+      harness.draftLabel = 'Another Student ID';
+      harness.draftFieldKey = 'student_id';
+      const second = await harness.saveField();
+      expect(second).toBeNull();
+      expect(harness.modalError).toBe('A custom field with this machine key already exists.');
+      expect(harness.fields).toHaveLength(1);
+    });
+
+    test('TC-IF-004-2: Rejects duplicate machine key when updating an existing field to collide with another', async () => {
+      const f1: CustomFieldDefinition = {
+        id: 'f-1',
+        tenantId: 't',
+        clinicId: 'c',
+        entityType: 'ClinicPatient',
+        fieldKey: 'student_id',
+        label: 'Student ID',
+        dataType: 'Text',
+        displayOrder: 1,
+        isRequired: true,
+        isActive: true,
+      };
+      const f2: CustomFieldDefinition = {
+        id: 'f-2',
+        tenantId: 't',
+        clinicId: 'c',
+        entityType: 'ClinicPatient',
+        fieldKey: 'employee_id',
+        label: 'Employee ID',
+        dataType: 'Text',
+        displayOrder: 2,
+        isRequired: false,
+        isActive: true,
+      };
+      const harness = new CustomFieldsTabHarness([f1, f2]);
+
+      harness.openEditModal(f2);
+      harness.draftFieldKey = 'student_id';
+      const updated = await harness.saveField();
+      expect(updated).toBeNull();
+      expect(harness.modalError).toBe('A custom field with this machine key already exists.');
+      expect(harness.fields.find((f) => f.id === 'f-2')?.fieldKey).toBe('employee_id');
+    });
+
+    test('TC-IF-004-3: Allows saving an edited field when its own machine key is retained', async () => {
+      const f1: CustomFieldDefinition = {
+        id: 'f-1',
+        tenantId: 't',
+        clinicId: 'c',
+        entityType: 'ClinicPatient',
+        fieldKey: 'student_id',
+        label: 'Student ID',
+        dataType: 'Text',
+        displayOrder: 1,
+        isRequired: true,
+        isActive: true,
+      };
+      const harness = new CustomFieldsTabHarness([f1]);
+
+      harness.openEditModal(f1);
+      harness.draftLabel = 'Student ID Number (Updated)';
+      const updated = await harness.saveField();
+      expect(updated).not.toBeNull();
+      expect(updated?.fieldKey).toBe('student_id');
+      expect(updated?.label).toBe('Student ID Number (Updated)');
+    });
+
+    test('TC-IF-006-1: Rejects special characters, spaces, uppercase, and leading/trailing spaces in machine key', async () => {
+      const invalidKeys = [
+        'full name 89 123!@#!',
+        'student-id',
+        'student@id',
+        'student$id!',
+        'Student_ID',
+        '  student_id  ',
+        'student_id ',
+        ' student_id',
+      ];
+
+      for (const badKey of invalidKeys) {
+        const err = validateMachineKey(badKey, []);
+        expect(err).toBe(
+          'Machine key must contain only lowercase alphanumeric characters and underscores (e.g. student_id).'
+        );
+
+        const harness = new CustomFieldsTabHarness();
+        harness.openAddModal();
+        harness.draftLabel = 'Test Field';
+        harness.draftFieldKey = badKey;
+        const saved = await harness.saveField();
+        expect(saved).toBeNull();
+        expect(harness.modalError).toBe(
+          'Machine key must contain only lowercase alphanumeric characters and underscores (e.g. student_id).'
+        );
+      }
+    });
+
+    test('TC-IF-006-2: slugifyMachineKey automatically generates valid snake_case keys from Display Label', () => {
+      expect(slugifyMachineKey('Student ID')).toBe('student_id');
+      expect(slugifyMachineKey('  Spouse Full Name (Optional)!  ')).toBe('spouse_full_name_optional');
+      expect(slugifyMachineKey('Year / Grade Level #1')).toBe('year_grade_level_1');
+      expect(MACHINE_KEY_REGEX.test(slugifyMachineKey('Student ID'))).toBe(true);
+    });
+
+    test('TC-IF-006-3: normalizeMachineKeyOnBlur replaces spaces with underscores and lowercases while preserving invalid symbols for validation', () => {
+      expect(normalizeMachineKeyOnBlur('  Student   ID  ')).toBe('student_id');
+      expect(validateMachineKey(normalizeMachineKeyOnBlur('  Student   ID  '), [])).toBeNull();
+
+      // Special characters are preserved on blur so validation immediately flags them
+      const blurredInvalid = normalizeMachineKeyOnBlur('full name 89 123!@#!');
+      expect(blurredInvalid).toBe('full_name_89_123!@#!');
+      expect(validateMachineKey(blurredInvalid, [])).toBe(
+        'Machine key must contain only lowercase alphanumeric characters and underscores (e.g. student_id).'
+      );
+    });
+
+    test('TC-IF-006-4: Rejects empty or overlong (>100 chars) machine keys', () => {
+      expect(validateMachineKey('', [])).toBe('Machine key is required.');
+      expect(validateMachineKey('a'.repeat(101), [])).toBe(
+        'Machine key cannot exceed 100 characters.'
+      );
+      expect(validateMachineKey('a'.repeat(100), [])).toBeNull();
+    });
+
+    test('TC-IF-006-5: Clearing machine key in Edit mode rejects save instead of silently overwriting from label', async () => {
+      const f1: CustomFieldDefinition = {
+        id: 'f-1',
+        tenantId: 't',
+        clinicId: 'c',
+        entityType: 'ClinicPatient',
+        fieldKey: 'student_id',
+        label: 'Student ID',
+        dataType: 'Text',
+        displayOrder: 1,
+        isRequired: true,
+        isActive: true,
+      };
+      const harness = new CustomFieldsTabHarness([f1]);
+
+      harness.openEditModal(f1);
+      harness.draftLabel = 'Updated Student ID Label';
+      harness.draftFieldKey = '';
+      const updated = await harness.saveField();
+      expect(updated).toBeNull();
+      expect(harness.modalError).toBe('Machine key is required.');
+      expect(harness.fields[0].fieldKey).toBe('student_id');
     });
   });
 });

@@ -269,9 +269,11 @@ export default function ServiceSelect({
                         <View style={styles.optionTitleRow}>
                           <ThemedText variant="bodyBold">{item.name}</ThemedText>
                           <Badge label={item.category} variant="neutral" size="sm" />
-                          {item.isPhilHealthFormulary && (
+                          {item.philHealthCode?.trim() ? (
+                            <Badge label={`PhilHealth: ${item.philHealthCode.trim()}`} variant="success" size="sm" />
+                          ) : item.isPhilHealthFormulary ? (
                             <Badge label="PhilHealth" variant="success" size="sm" />
-                          )}
+                          ) : null}
                         </View>
                         {item.description ? (
                           <ThemedText variant="caption" color={theme.colors.textMuted}>

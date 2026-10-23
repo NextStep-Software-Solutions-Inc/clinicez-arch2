@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useSignUp } from "@clerk/nextjs";
+import { useSignIn, useSignUp } from "@clerk/nextjs";
 import { 
   Mail, 
   Lock, 
@@ -30,6 +30,7 @@ export function CustomSignUpForm() {
   const redirectUrl = searchParams.get("redirect_url") || "/sync-auth";
 
   const { isLoaded, signUp, setActive } = useSignUp();
+  const { isLoaded: isSignInLoaded, signIn } = useSignIn();
 
   const [step, setStep] = useState<SignUpStep>("sign-up");
   const [firstName, setFirstName] = useState("");
@@ -49,13 +50,25 @@ export function CustomSignUpForm() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Check if sign-up is already in progress and missing requirements (e.g. after Google OAuth)
+  // or if an OAuth sign-up transferred to an existing account that requires MFA second factor.
   useEffect(() => {
-    if (isLoaded && signUp) {
-      if (signUp.status === "missing_requirements") {
-        setStep("complete-requirements");
-      }
+    if (isLoaded && signUp && signUp.status === "missing_requirements") {
+      setStep("complete-requirements");
+      return;
     }
-  }, [isLoaded, signUp]);
+    if (
+      isSignInLoaded &&
+      signIn &&
+      (signIn.status === "needs_second_factor" ||
+        (signIn.status as string | null) === "needs_client_trust")
+    ) {
+      const target =
+        redirectUrl !== "/sync-auth"
+          ? `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`
+          : "/sign-in";
+      router.replace(target);
+    }
+  }, [isLoaded, signUp, isSignInLoaded, signIn, redirectUrl, router]);
 
   const getErrorMessage = (err: any): string => {
     if (err?.errors && err.errors.length > 0) {

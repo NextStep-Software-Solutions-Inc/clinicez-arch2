@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Pressable, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useSignUp, useSSO } from '@clerk/expo';
+import { useSignIn, useSignUp, useSSO } from '@clerk/expo';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import ThemedText from '@ui/ThemedText';
@@ -11,9 +11,15 @@ import Input from '@ui/Input';
 import { AppIcon } from '@ui/Icon';
 import ClinicEzLogo from '@ui/ClinicEzLogo';
 import GoogleSignInButton from '@ui/GoogleSignInButton';
+import {
+  isSignInSecondFactorRequired,
+  resolveDefaultSecondFactorStrategy,
+  prepareSecondFactorIfNeeded,
+} from '../../utils/mfaHelpers';
 
 export default function SignupScreenWeb() {
   const navigation = useNavigation<any>();
+  const { signIn } = useSignIn();
   const { signUp, errors, fetchStatus } = useSignUp();
   const { startSSOFlow } = useSSO();
   const { unlock } = useAuth();
@@ -67,13 +73,23 @@ export default function SignupScreenWeb() {
       setIsSocialLoading(true);
       setErrorMessage(null);
 
-      const { createdSessionId, setActive, signUp: ssoSignUp } = await startSSOFlow({
+      const {
+        createdSessionId,
+        setActive,
+        signIn: ssoSignIn,
+        signUp: ssoSignUp,
+      } = await startSSOFlow({
         strategy: 'oauth_google',
       });
 
       if (createdSessionId) {
         await setActive!({ session: createdSessionId });
         unlock();
+      } else if (isSignInSecondFactorRequired(ssoSignIn?.status ?? signIn?.status)) {
+        const mfaSource = ssoSignIn?.status ? ssoSignIn : signIn;
+        const strategy = resolveDefaultSecondFactorStrategy(mfaSource);
+        await prepareSecondFactorIfNeeded(signIn?.mfa ? signIn : mfaSource, strategy);
+        navigation.navigate('Auth', { screen: 'Verify' });
       } else if (ssoSignUp?.status === 'missing_requirements') {
         navigation.navigate('Auth', { screen: 'Verify' });
       }
