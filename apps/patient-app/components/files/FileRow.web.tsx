@@ -7,6 +7,7 @@ import Badge from '../ui/Badge';
 import { CircularProgress } from '../ui/CircularProgress';
 import { FileBrowserFile, formatBytes } from '../../services/files';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import type { ColorToken } from '../../constants/theme';
 import { ProvenanceBadge } from '../records/ProvenanceBadge';
 import { ClinicalUrgencyBadge } from '../records/ClinicalUrgencyBadge';
@@ -86,6 +87,7 @@ export function FileRow({
   onErrorPress?: () => void;
 }) {
   const { colors, spacing, radii, sizes, shadows } = useAppTheme();
+  const { isCompact } = useBreakpoint();
   const [isHovered, setIsHovered] = useState(false);
 
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -214,51 +216,45 @@ export function FileRow({
         <StatusDot status={item.syncStatus} />
       )}
 
-      {/* Hover quick action buttons on web */}
-      <View
-        style={[
-          styles.quickActions,
-          {
-            opacity: isHovered ? 1 : 0,
-            gap: spacing.xs,
-          },
-        ]}
-      >
-        {(onDownload || onShare) && (
+      {/* Hover quick action buttons on desktop/tablet web only (never reserve width when hidden) */}
+      {!isCompact && isHovered && (
+        <View style={[styles.quickActions, { gap: spacing.xs }]}>
+          {(onDownload || onShare) && (
+            <IconButton
+              icon="download"
+              accessibilityLabel="Download"
+              color="primary"
+              size={sizes.iconMd}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleDownloadClick();
+              }}
+            />
+          )}
+          {onRename && (
+            <IconButton
+              icon="edit"
+              accessibilityLabel="Rename"
+              color="textSecondary"
+              size={sizes.iconMd}
+              onPress={(e) => {
+                e.stopPropagation();
+                onRename();
+              }}
+            />
+          )}
           <IconButton
-            icon="download"
-            accessibilityLabel="Download"
-            color="primary"
+            icon="trash"
+            accessibilityLabel="Delete"
+            color="emergency"
             size={sizes.iconMd}
             onPress={(e) => {
               e.stopPropagation();
-              handleDownloadClick();
+              onDelete();
             }}
           />
-        )}
-        {onRename && (
-          <IconButton
-            icon="edit"
-            accessibilityLabel="Rename"
-            color="textSecondary"
-            size={sizes.iconMd}
-            onPress={(e) => {
-              e.stopPropagation();
-              onRename();
-            }}
-          />
-        )}
-        <IconButton
-          icon="trash"
-          accessibilityLabel="Delete"
-          color="emergency"
-          size={sizes.iconMd}
-          onPress={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        />
-      </View>
+        </View>
+      )}
     </Pressable>
   );
 }

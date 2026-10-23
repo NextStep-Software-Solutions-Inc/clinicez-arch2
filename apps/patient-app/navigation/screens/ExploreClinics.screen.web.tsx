@@ -77,7 +77,7 @@ function ConsentToggle({
 
 export default function ExploreClinicsScreenWeb() {
     const { colors, spacing, radii, sizes, typography, shadows } = useAppTheme();
-    const { isWorkstation, isWide } = useBreakpoint();
+    const { isCompact, isWorkstation, isWide } = useBreakpoint();
     const navigation = useNavigation() as any;
     const route = useRoute() as any;
     const patientId = usePatientId();
@@ -183,7 +183,10 @@ export default function ExploreClinicsScreenWeb() {
     return (
         <ScrollView
             style={[styles.screen, { backgroundColor: colors.background }]}
-            contentContainerStyle={[styles.contentContainer, { padding: spacing.xl, paddingBottom: spacing['4xl'] }]}
+            contentContainerStyle={[
+                styles.contentContainer,
+                { padding: isCompact ? spacing.md : spacing.xl, paddingBottom: spacing['4xl'] },
+            ]}
         >
             {/* Top Toolbar: Search + Filter Chips */}
             <View style={[styles.toolbar, { gap: spacing.md, marginBottom: spacing.xl }]}>
@@ -239,14 +242,19 @@ export default function ExploreClinicsScreenWeb() {
                 </View>
 
                 {/* Filter Chips */}
-                <View style={[styles.filterRow, { gap: spacing.sm }]}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.filterScroll}
+                    contentContainerStyle={[styles.filterRow, { gap: spacing.sm }]}
+                >
                     {clinicFilters.map((item) => {
                         const active = item.key === filter;
                         return (
                             <Pressable
                                 key={item.key}
                                 onPress={() => setFilter(item.key)}
-                                accessibilityRole="button"
+                                accessibilityRole="tab"
                                 accessibilityState={{ selected: active }}
                                 style={({ pressed, hovered }: any) => [
                                     styles.filterChip,
@@ -263,6 +271,7 @@ export default function ExploreClinicsScreenWeb() {
                             >
                                 <ThemedText
                                     variant="smallBold"
+                                    numberOfLines={1}
                                     color={active ? 'onPrimary' : 'text'}
                                 >
                                     {item.label}
@@ -270,7 +279,7 @@ export default function ExploreClinicsScreenWeb() {
                             </Pressable>
                         );
                     })}
-                </View>
+                </ScrollView>
             </View>
 
             {/* Content: Cards Grid or Empty/Loading State */}
@@ -282,6 +291,7 @@ export default function ExploreClinicsScreenWeb() {
                 </View>
             ) : clinics.length === 0 ? (
                 <EmptyState
+                    icon="hospital"
                     title="No clinics found"
                     message="Try another search term or filter option."
                     actionLabel="Reset filters"
@@ -560,13 +570,17 @@ const styles = StyleSheet.create({
     iconButton: {
         padding: 4,
     },
+    filterScroll: {
+        flexGrow: 0,
+    },
     filterRow: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
+        alignItems: 'center',
     },
     filterChip: {
         alignItems: 'center',
         justifyContent: 'center',
+        flexShrink: 0,
     },
     grid: {
         flexDirection: 'row',

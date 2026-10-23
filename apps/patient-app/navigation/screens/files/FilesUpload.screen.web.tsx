@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -191,16 +192,7 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
         onChange: handleFileInputChange,
       })}
 
-      <View style={{ gap: spacing.xl, paddingVertical: spacing.md }}>
-        <View style={{ gap: spacing.xxs }}>
-          <ThemedText variant="h2" color="primary">
-            Add Health Record
-          </ThemedText>
-          <ThemedText variant="small" color="textSecondary">
-            Attach a lab result, prescription, certificate, or diagnostic image to your records.
-          </ThemedText>
-        </View>
-
+      <View style={{ gap: spacing.lg }}>
         {/* Error banner */}
         {errorBanner ? (
           <Card
@@ -336,7 +328,12 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
           <ThemedText variant="smallBold" color="textSecondary">
             RECORD CATEGORY *
           </ThemedText>
-          <View style={[styles.typeList, { gap: spacing.sm }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.typeScroll}
+            contentContainerStyle={[styles.typeList, { gap: spacing.sm }]}
+          >
             {CATEGORIES.map((cat) => {
               const selected = cat.id === category;
               return (
@@ -360,13 +357,13 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
                   ]}
                 >
                   <AppIcon name={cat.icon} color={selected ? 'primary' : cat.colorToken} size={sizes.iconSm} />
-                  <ThemedText variant="smallBold" color={selected ? 'primary' : 'text'}>
+                  <ThemedText variant="smallBold" numberOfLines={1} color={selected ? 'primary' : 'text'}>
                     {cat.label}
                   </ThemedText>
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
         </View>
 
         {/* Title */}
@@ -452,14 +449,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexWrap: 'wrap',
   },
+  typeScroll: {
+    flexGrow: 0,
+  },
   typeList: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     paddingVertical: 2,
   },
   typeChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
   },
   selectedRow: {
     flexDirection: 'row',

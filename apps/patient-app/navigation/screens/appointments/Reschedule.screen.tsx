@@ -144,13 +144,9 @@ export default function RescheduleScreen({ route }: Props) {
 
   return (
     <Screen width="form" contentContainerStyle={{ gap: spacing.lg }}>
-      {/* Current appointment summary */}
-      <View style={{ gap: spacing.xs }}>
-        <ThemedText variant="h2">Request Reschedule</ThemedText>
-        <ThemedText variant="body" color="textSecondary">
-          Choose a new preferred date and time. The clinic will confirm the change.
-        </ThemedText>
-      </View>
+      <ThemedText variant="small" color="textSecondary">
+        Choose a new preferred date and time. The clinic will confirm the change.
+      </ThemedText>
 
       {currentDateLabel ? (
         <Card padding="md" style={{ gap: spacing.xs }}>
