@@ -10,7 +10,8 @@ public record BulkImportServiceItemDto(
     string? Description = null,
     string? PhilHealthCode = null,
     string? PhilHealthDescription = null,
-    bool IsPhilHealthFormulary = false
+    bool IsPhilHealthFormulary = false,
+    bool IsNurseOrderable = false
 );
 
 public record BulkImportResultDto(

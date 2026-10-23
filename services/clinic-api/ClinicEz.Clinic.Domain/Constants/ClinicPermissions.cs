@@ -17,6 +17,7 @@ public static class ClinicPermissions
     public const string QueueCheckIn = "queue:check-in";
     public const string QueueCall = "queue:call";
     public const string QueueComplete = "queue:complete";
+    public const string QueueCompleteNonDoctor = "queue:complete-non-doctor";
 
     // Triage
     public const string TriageRead = "triage:read";
@@ -108,6 +109,7 @@ public static class ClinicPermissions
         QueueCheckIn,
         QueueCall,
         QueueComplete,
+        QueueCompleteNonDoctor,
         TriageRead,
         TriageWrite,
         ConsultationsRead,

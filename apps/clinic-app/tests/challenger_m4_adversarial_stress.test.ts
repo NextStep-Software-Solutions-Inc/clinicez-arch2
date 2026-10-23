@@ -303,20 +303,20 @@ describe('Adversarial Reviewer Stress Suite — Milestone 4 (Layout & Dental Syn
   describe('Dimension 2: Non-Dental Clinic & Tab Concealment', () => {
     test('2.1 getAvailableChartTabs conceals dental tab when dental module is disabled and no dental records exist', () => {
       const tabs = getAvailableChartTabs(false, false);
-      expect(tabs).toHaveLength(7);
+      expect(tabs).toHaveLength(8);
       expect(tabs.map((t) => t.value)).not.toContain('dental');
     });
 
     test('2.2 getAvailableChartTabs reveals dental tab when dental module is enabled', () => {
       const tabs = getAvailableChartTabs(true, false);
-      expect(tabs).toHaveLength(8);
+      expect(tabs).toHaveLength(9);
       expect(tabs.map((t) => t.value)).toContain('dental');
-      expect(tabs[7]).toEqual(DENTAL_CHART_TAB);
+      expect(tabs[8]).toEqual(DENTAL_CHART_TAB);
     });
 
     test('2.3 getAvailableChartTabs reveals dental tab when dental module is disabled but patient has dental records', () => {
       const tabs = getAvailableChartTabs(false, true);
-      expect(tabs).toHaveLength(8);
+      expect(tabs).toHaveLength(9);
       expect(tabs.map((t) => t.value)).toContain('dental');
     });
   });

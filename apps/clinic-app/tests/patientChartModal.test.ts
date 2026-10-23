@@ -220,8 +220,8 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
     ],
   };
 
-  test('1. CHART_TABS exports canonical 7 longitudinal sections without truncation', () => {
-    expect(CHART_TABS.length).toBe(7);
+  test('1. CHART_TABS exports canonical 8 longitudinal sections without truncation', () => {
+    expect(CHART_TABS.length).toBe(8);
     const tabValues = CHART_TABS.map((t) => t.value);
     expect(tabValues).toEqual([
       'summary',
@@ -231,10 +231,12 @@ describe('PatientChartModal — Workstation Sizing & Responsive Longitudinal EHR
       'immunizations',
       'profiles',
       'vault',
+      'documents',
     ]);
 
     const tabLabels = CHART_TABS.map((t) => t.label);
     expect(tabLabels).toContain('Doc Vault');
+    expect(tabLabels).toContain('Admin Vault');
     expect(tabLabels).toContain('Vaccines');
     expect(tabLabels).toContain('Health Profiles');
   });

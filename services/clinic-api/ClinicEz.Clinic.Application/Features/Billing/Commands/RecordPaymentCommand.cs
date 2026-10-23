@@ -11,6 +11,10 @@ using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interoperability;
+
 namespace ClinicEz.Clinic.Application.Features.Billing.Commands;
 
 public record RecordPaymentCommand(
@@ -27,12 +31,13 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
     private readonly IRepository<PaymentRecord>? _paymentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IInteropPublisher? _interopPublisher;
 
     public RecordPaymentCommandHandler(
         IRepository<Invoice> invoiceRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
-        : this(invoiceRepo, null, unitOfWork, clinicContext)
+        : this(invoiceRepo, null, unitOfWork, clinicContext, null)
     {
     }
 
@@ -41,11 +46,22 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
         IRepository<PaymentRecord>? paymentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
+        : this(invoiceRepo, paymentRepo, unitOfWork, clinicContext, null)
+    {
+    }
+
+    public RecordPaymentCommandHandler(
+        IRepository<Invoice> invoiceRepo,
+        IRepository<PaymentRecord>? paymentRepo,
+        IUnitOfWork unitOfWork,
+        IClinicContext clinicContext,
+        IInteropPublisher? interopPublisher)
     {
         _invoiceRepo = invoiceRepo;
         _paymentRepo = paymentRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _interopPublisher = interopPublisher;
     }
 
     public async Task<InvoiceDto> Handle(RecordPaymentCommand request, CancellationToken cancellationToken)
@@ -128,6 +144,45 @@ public class RecordPaymentCommandHandler : IRequestHandler<RecordPaymentCommand,
         else
         {
             invoice.Status = InvoiceStatus.PartiallyPaid;
+        }
+
+        var otcItems = invoice.LineItems
+            .Where(li => string.Equals(li.Category, "Medicine", StringComparison.OrdinalIgnoreCase)
+                      || string.Equals(li.Category, "Medication", StringComparison.OrdinalIgnoreCase)
+                      || string.Equals(li.Category, "Supply", StringComparison.OrdinalIgnoreCase)
+                      || string.Equals(li.Category, "OTC", StringComparison.OrdinalIgnoreCase)
+                      || string.Equals(li.Category, "NonClinical", StringComparison.OrdinalIgnoreCase))
+            .Select(li => new OtcDispensedItemDto(
+                li.ServiceItemId,
+                li.ItemCode,
+                li.Description,
+                li.Category,
+                li.Quantity,
+                li.UnitPrice,
+                li.TotalPrice))
+            .ToList();
+
+        if (otcItems.Count > 0 && _interopPublisher != null && !string.IsNullOrWhiteSpace(_clinicContext.TenantId))
+        {
+            var payload = new PharmacyOtcDispensedPayload(
+                Guid.NewGuid(),
+                invoice.Id,
+                invoice.InvoiceNumber,
+                _clinicContext.ClinicId,
+                payment.PaymentDate,
+                otcItems
+            );
+
+            var from = Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Clinic);
+            var to = Party.ForFacility(_clinicContext.TenantId, _clinicContext.ClinicId.ToString(), FacilityType.Pharmacy);
+
+            _interopPublisher.Enqueue(
+                type: InteropTypes.PharmacyOtcDispensed,
+                from: from,
+                to: to,
+                correlationId: invoice.Id,
+                payload: payload
+            );
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

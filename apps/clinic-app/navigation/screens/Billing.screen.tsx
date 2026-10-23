@@ -60,6 +60,7 @@ import {
 export type LineItemForm = BillingLineItem;
 export { consolidateLineItems };
 
+export type BillingMode = 'queue' | 'registry' | 'retail';
 type BillingTab = 'active' | 'unsettled' | 'paid';
 
 /** The patient being billed: either a queue entry or a patient opened from another screen. */
@@ -78,6 +79,7 @@ interface BillingPatient {
   isPromissory?: boolean;
   promissoryDueDate?: string;
   promissoryReason?: string;
+  isWalkInRetail?: boolean;
 }
 
 interface Remittance {
@@ -161,7 +163,14 @@ export default function BillingScreen() {
   const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead } = useClinic();
   const { current: currentStaff, currentName } = useStaff();
 
+  const [billingMode, setBillingMode] = useState<BillingMode>('queue');
   const [activeTab, setActiveTab] = useState<BillingTab>('active');
+  const [walkInCustomerName, setWalkInCustomerName] = useState('Walk-In Retail Guest');
+  const [retailSearch, setRetailSearch] = useState('');
+  const [registrySearch, setRegistrySearch] = useState('');
+  const [registryResults, setRegistryResults] = useState<ClinicPatient[]>([]);
+  const [isSearchingRegistry, setIsSearchingRegistry] = useState(false);
+  const [hasSearchedRegistry, setHasSearchedRegistry] = useState(false);
   const [services, setServices] = useState<ClinicServiceItem[]>([]);
   const [patients, setPatients] = useState<BillingPatient[]>([]);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
@@ -444,6 +453,64 @@ export default function BillingScreen() {
     }
   }, [services, clinicSettings, invoices]);
 
+  const handleSelectRegistryPatient = useCallback(async (patient: ClinicPatient) => {
+    const openInv = invoices.find(
+      (inv) => inv.patientId === patient.id && (inv.status === 'Draft' || inv.status === 'PartiallyPaid')
+    );
+    const paidInv = invoices.find((inv) => inv.patientId === patient.id && inv.status === 'Paid');
+    const bp: BillingPatient = {
+      key: `registry-${patient.id}`,
+      patientId: patient.id,
+      patientName: patient.fullName || `${patient.firstName} ${patient.lastName}`,
+      hasOpenSoa: Boolean(openInv),
+      activeInvoice: openInv,
+      isAlreadyBilled: !openInv && Boolean(paidInv),
+      existingInvoiceNumber: openInv ? openInv.invoiceNumber : paidInv?.invoiceNumber,
+    };
+    await handleSelectPatient(bp);
+  }, [invoices, handleSelectPatient]);
+
+  const handleSearchRegistry = useCallback(async () => {
+    if (!registrySearch.trim()) return;
+    setIsSearchingRegistry(true);
+    setHasSearchedRegistry(true);
+    try {
+      const [res, err] = await clinicService.getPatients(registrySearch.trim());
+      if (err || !res) {
+        setRegistryResults([]);
+      } else {
+        setRegistryResults(res);
+      }
+    } catch {
+      setRegistryResults([]);
+    } finally {
+      setIsSearchingRegistry(false);
+    }
+  }, [registrySearch]);
+
+  const handleAddRetailItem = useCallback((svc: ClinicServiceItem) => {
+    setLineItems((prev) => {
+      const existing = prev.find((i) => (svc.code && i.code === svc.code) || i.name === svc.name);
+      if (existing) {
+        return prev.map((i) =>
+          i.id === existing.id ? { ...i, qty: i.qty + 1 } : i
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: `retail-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          code: svc.code || '',
+          name: svc.name,
+          category: svc.category || 'Medicine',
+          price: svc.standardPrice,
+          qty: 1,
+          doctorName: currentName,
+        },
+      ];
+    });
+  }, [currentName]);
+
   const handleSelectUnsettledInvoice = useCallback((inv: InvoiceRecord) => {
     const isPromissory = Boolean(
       inv.notes?.includes('[PROMISSORY NOTE]') ||
@@ -452,7 +519,7 @@ export default function BillingScreen() {
     );
     const p: BillingPatient = {
       key: `unsettled-${inv.id}`,
-      patientId: inv.patientId,
+      patientId: inv.patientId || '',
       patientName: inv.patientName,
       queueItemId: inv.queueItemId,
       hasOpenSoa: true,
@@ -539,6 +606,32 @@ export default function BillingScreen() {
     selectedPatient && !patients.some((p) => p.key === selectedPatient.key)
       ? [selectedPatient, ...patients]
       : patients;
+
+  const retailCatalog = services.filter((s) => {
+    const isRetail =
+      s.category?.toLowerCase() === 'medicine' ||
+      s.category?.toLowerCase() === 'supply' ||
+      s.category?.toLowerCase() === 'nonclinical' ||
+      s.category === 'Medicine' ||
+      s.category === 'Supply' ||
+      s.category === 'NonClinical';
+    const hasAnyRetail = services.some(
+      (x) =>
+        x.category?.toLowerCase() === 'medicine' ||
+        x.category?.toLowerCase() === 'supply' ||
+        x.category?.toLowerCase() === 'nonclinical'
+    );
+    if (hasAnyRetail && !isRetail) return false;
+
+    if (retailSearch.trim()) {
+      const q = retailSearch.trim().toLowerCase();
+      return (
+        s.name.toLowerCase().includes(q) ||
+        (s.code && s.code.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
 
   const handleAddService = (svc: ClinicServiceItem) => {
     const targetDoctorId = selectedPatient?.doctorId;
@@ -910,8 +1003,8 @@ export default function BillingScreen() {
       return;
     }
 
-    if ((discountType === 'SeniorCitizen' || discountType === 'Pwd') && !discountId.trim()) {
-      notify.error('Enter the Senior OSCA ID or PWD ID number to apply the 20% statutory discount.');
+    if ((discountType === 'SeniorCitizen' || discountType === 'Pwd') && discountId.trim().length < 3) {
+      notify.error('Enter a valid Senior OSCA ID or PWD ID number (at least 3 characters) to apply the 20% statutory discount.');
       return;
     }
 
@@ -927,6 +1020,9 @@ export default function BillingScreen() {
 
     setIsProcessing(true);
 
+    const isRetail = billingMode === 'retail' || Boolean(selectedPatient.isWalkInRetail);
+    const effWalkInName = isRetail ? (walkInCustomerName.trim() || 'Walk-In Retail Guest') : selectedPatient.patientName;
+
     let invoiceToPayId: string;
     let orNumber: string;
 
@@ -939,6 +1035,8 @@ export default function BillingScreen() {
         discountIdNumber: discountId,
         notes: isPartialPayment && amountToCollect < balanceDue
           ? `Partial payment via ${paymentMethod}`
+          : isRetail
+          ? `Retail POS sale via ${paymentMethod}`
           : `Settled via ${paymentMethod}`,
         lineItems: lineItems.map(l => ({
           itemCode: l.code,
@@ -957,7 +1055,7 @@ export default function BillingScreen() {
         return;
       }
     } else {
-      if (selectedPatient.isAlreadyBilled && !allowDuplicate) {
+      if (selectedPatient.isAlreadyBilled && !allowDuplicate && !isRetail) {
         setIsProcessing(false);
         Alert.alert(
           'Duplicate invoice blocked',
@@ -967,16 +1065,21 @@ export default function BillingScreen() {
       }
 
       const invoicePayload = {
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
+        patientId: isRetail ? undefined : selectedPatient.patientId,
+        patientName: effWalkInName,
+        isWalkInRetail: isRetail,
+        walkInCustomerName: isRetail ? effWalkInName : undefined,
+        visitType: isRetail ? ('RetailPurchase' as const) : undefined,
         queueItemId: selectedPatient.queueItemId,
         attendingDoctorId: selectedPatient.doctorId,
         discountType,
         discountIdNumber: discountId,
         notes: isPartialPayment && amountToCollect < balanceDue
           ? `Partial payment via ${paymentMethod}`
+          : isRetail
+          ? `Retail POS sale via ${paymentMethod}`
           : `Settled via ${paymentMethod}`,
-        allowDuplicate,
+        allowDuplicate: isRetail ? true : allowDuplicate,
         lineItems: lineItems.map(l => ({
           serviceItemId: undefined,
           itemCode: l.code,
@@ -1008,8 +1111,8 @@ export default function BillingScreen() {
         method: paymentMethod,
         referenceNumber: referenceNumber || undefined,
         notes: isPartial
-          ? `Partial payment received from ${selectedPatient.patientName} by ${currentName}`
-          : `Received from ${selectedPatient.patientName} by ${currentName}`,
+          ? `Partial payment received from ${effWalkInName} by ${currentName}`
+          : `Received from ${effWalkInName} by ${currentName}`,
       });
 
       if (payErr || !paidInvoice) {
@@ -1046,8 +1149,8 @@ export default function BillingScreen() {
       invoiceId: invoiceToPayId,
       orNumber,
       invoiceNumber: activeInvoice?.invoiceNumber,
-      patientName: selectedPatient.patientName,
-      patientId: selectedPatient.patientId,
+      patientName: effWalkInName,
+      patientId: isRetail ? undefined : selectedPatient.patientId,
       cashierName: currentName,
       paidAt: formatClinicDateTime(new Date()),
       paymentMethod,
@@ -1070,8 +1173,13 @@ export default function BillingScreen() {
       notify.success(`Payment of ${formatPeso(amountToCollect)} recorded. Invoice settled.`);
     }
 
+    // Auto-complete linked queue ticket on full payment settlement (F13)
+    if ((!isPartialPayment || amountToCollect >= balanceDue) && selectedPatient?.queueItemId) {
+      clinicService.completeQueueItem(selectedPatient.queueItemId).catch(() => {});
+    }
+
     // Persist Senior Citizen / PWD ID to patient profile in background if updated
-    if (currentPatientProfile && selectedPatient) {
+    if (currentPatientProfile && selectedPatient && !selectedPatient.isWalkInRetail) {
       const seniorIdChanged =
         discountType === 'SeniorCitizen' &&
         discountId.trim() &&
@@ -1110,15 +1218,30 @@ export default function BillingScreen() {
     notify.success(`Payment recorded. Official receipt #${orNumber} issued.`);
 
     // Reset billing form to prevent accidental duplicate submission
-    setSelectedPatient(null);
-    setActiveInvoice(null);
-    setCurrentPatientProfile(null);
-    setLineItems([]);
-    setCashTendered('');
-    setReferenceNumber('');
-    setDiscountId('');
-    setDiscountType('None');
-    setAllowDuplicate(false);
+    if (isRetail) {
+      setLineItems([]);
+      setCashTendered('');
+      setReferenceNumber('');
+      setDiscountId('');
+      setDiscountType('None');
+      setWalkInCustomerName('Walk-In Retail Guest');
+      setSelectedPatient({
+        key: 'retail-walk-in',
+        patientId: '',
+        patientName: 'Walk-In Retail Guest',
+        isWalkInRetail: true,
+      });
+    } else {
+      setSelectedPatient(null);
+      setActiveInvoice(null);
+      setCurrentPatientProfile(null);
+      setLineItems([]);
+      setCashTendered('');
+      setReferenceNumber('');
+      setDiscountId('');
+      setDiscountType('None');
+      setAllowDuplicate(false);
+    }
 
     // Clear route param so subsequent loadInitialData does NOT re-select this patient!
     handledParamPatientRef.current = null;
@@ -1185,7 +1308,7 @@ export default function BillingScreen() {
   const activePatients = patientChoices.filter(
     (p) => (!p.isAlreadyBilled || p.hasOpenSoa) && !p.isPromissory
   );
-  const patientsToBill = selectedPatient && !activePatients.some((p) => p.key === selectedPatient.key)
+  const patientsToBill = selectedPatient && !activePatients.some((p) => p.key === selectedPatient.key) && !selectedPatient.isWalkInRetail
     ? [selectedPatient, ...activePatients]
     : activePatients;
   const paidInvoicesToday = invoices.filter((i) => i.status === 'Paid');
@@ -1455,20 +1578,23 @@ export default function BillingScreen() {
           <Icon name="receipt" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
           <View style={styles.flexFill}>
             <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
-              Draft Statement of Account
+              {selectedPatient?.isWalkInRetail ? 'Walk-In Retail Cart' : 'Draft Statement of Account'}
             </ThemedText>
             <ThemedText variant="caption" color={theme.colors.primaryDark}>
-              {selectedPatient?.doctorName ? `Attending: Dr. ${selectedPatient.doctorName} • ` : ''}
-              Auto-populated from today's encounter &amp; procedures
+              {selectedPatient?.isWalkInRetail
+                ? `Customer: ${selectedPatient.patientName || 'Walk-In Retail Guest'} • OTC medicines & supplies`
+                : `${selectedPatient?.doctorName ? `Attending: Dr. ${selectedPatient.doctorName} • ` : ''}Auto-populated from today's encounter & procedures`}
             </ThemedText>
           </View>
-          <Button
-            size="sm"
-            variant="outline"
-            icon="fileText"
-            title="Print SOA (PDF)"
-            onPress={handlePrintInvoicePdf}
-          />
+          {!selectedPatient?.isWalkInRetail && (
+            <Button
+              size="sm"
+              variant="outline"
+              icon="fileText"
+              title="Print SOA (PDF)"
+              onPress={handlePrintInvoicePdf}
+            />
+          )}
         </View>
       )}
 
@@ -1683,6 +1809,32 @@ export default function BillingScreen() {
             value={cashTendered}
             onChangeText={setCashTendered}
           />
+          <View style={styles.fastCashRow}>
+            <Button
+              size="sm"
+              variant={cashTendered === amountToCollect.toFixed(2) ? 'primary' : 'secondary'}
+              title="Exact"
+              onPress={() => setCashTendered(amountToCollect.toFixed(2))}
+            />
+            <Button
+              size="sm"
+              variant={cashTendered === '100' ? 'primary' : 'secondary'}
+              title="₱100"
+              onPress={() => setCashTendered('100')}
+            />
+            <Button
+              size="sm"
+              variant={cashTendered === '500' ? 'primary' : 'secondary'}
+              title="₱500"
+              onPress={() => setCashTendered('500')}
+            />
+            <Button
+              size="sm"
+              variant={cashTendered === '1000' ? 'primary' : 'secondary'}
+              title="₱1,000"
+              onPress={() => setCashTendered('1000')}
+            />
+          </View>
           <View style={styles.summaryRow}>
             <ThemedText variant="body" color={theme.colors.textSecondary}>
               Change due
@@ -1835,12 +1987,12 @@ export default function BillingScreen() {
             !selectedPatient ||
             lineItems.length === 0 ||
             amountToCollect <= 0 ||
-            (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate)
+            (Boolean(selectedPatient.isAlreadyBilled) && !activeInvoice && !allowDuplicate && !selectedPatient.isWalkInRetail)
           }
           onPress={handleSettlePayment}
           style={styles.settlePrimaryButton}
         />
-        {selectedPatient && lineItems.length > 0 && (
+        {selectedPatient && !selectedPatient.isWalkInRetail && lineItems.length > 0 && (
           <Button
             variant="outline"
             size="md"
@@ -1858,6 +2010,225 @@ export default function BillingScreen() {
           />
         )}
       </View>
+    </Card>
+  );
+
+  const renderModeSwitcher = () => (
+    <View style={styles.modeSegment}>
+      <Pressable
+        style={[styles.modeTab, billingMode === 'queue' && styles.modeTabActive]}
+        onPress={() => {
+          setBillingMode('queue');
+          if (selectedPatient?.isWalkInRetail) {
+            setSelectedPatient(null);
+            setLineItems([]);
+            setActiveInvoice(null);
+          }
+        }}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: billingMode === 'queue' }}
+      >
+        <Icon
+          name="clock"
+          size={theme.sizes.iconSm}
+          color={billingMode === 'queue' ? theme.colors.primary : theme.colors.textSecondary}
+        />
+        <ThemedText
+          variant={billingMode === 'queue' ? 'bodyBold' : 'body'}
+          color={billingMode === 'queue' ? theme.colors.primary : theme.colors.textSecondary}
+        >
+          Today's Queue
+        </ThemedText>
+      </Pressable>
+
+      <Pressable
+        style={[styles.modeTab, billingMode === 'registry' && styles.modeTabActive]}
+        onPress={() => {
+          setBillingMode('registry');
+          if (selectedPatient?.isWalkInRetail) {
+            setSelectedPatient(null);
+            setLineItems([]);
+            setActiveInvoice(null);
+          }
+        }}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: billingMode === 'registry' }}
+      >
+        <Icon
+          name="search"
+          size={theme.sizes.iconSm}
+          color={billingMode === 'registry' ? theme.colors.primary : theme.colors.textSecondary}
+        />
+        <ThemedText
+          variant={billingMode === 'registry' ? 'bodyBold' : 'body'}
+          color={billingMode === 'registry' ? theme.colors.primary : theme.colors.textSecondary}
+        >
+          Patient Registry Search
+        </ThemedText>
+      </Pressable>
+
+      <Pressable
+        style={[styles.modeTab, billingMode === 'retail' && styles.modeTabActive]}
+        onPress={() => {
+          setBillingMode('retail');
+          setSelectedPatient({
+            key: 'retail-walk-in',
+            patientId: '',
+            patientName: walkInCustomerName.trim() || 'Walk-In Retail Guest',
+            isWalkInRetail: true,
+          });
+          setActiveInvoice(null);
+          setCurrentPatientProfile(null);
+        }}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: billingMode === 'retail' }}
+      >
+        <Icon
+          name="pill"
+          size={theme.sizes.iconSm}
+          color={billingMode === 'retail' ? theme.colors.primary : theme.colors.textSecondary}
+        />
+        <ThemedText
+          variant={billingMode === 'retail' ? 'bodyBold' : 'body'}
+          color={billingMode === 'retail' ? theme.colors.primary : theme.colors.textSecondary}
+        >
+          Walk-In Retail POS
+        </ThemedText>
+      </Pressable>
+    </View>
+  );
+
+  const renderRetailCustomerCard = () => (
+    <Card>
+      <CardHeader title="Walk-In Customer" icon="patient" />
+      <Input
+        label="Customer Name"
+        placeholder="Walk-In Retail Guest"
+        value={walkInCustomerName}
+        onChangeText={(text) => {
+          setWalkInCustomerName(text);
+          setSelectedPatient((prev) =>
+            prev?.isWalkInRetail
+              ? { ...prev, patientName: text.trim() || 'Walk-In Retail Guest' }
+              : prev
+          );
+        }}
+      />
+    </Card>
+  );
+
+  const renderRetailCatalogCard = () => (
+    <Card>
+      <CardHeader
+        title="Quick OTC & Supply Picker"
+        icon="pill"
+        rightAction={<Badge label={`${retailCatalog.length} available`} variant="neutral" size="sm" />}
+      />
+      <Input
+        label="Search OTC & Supplies"
+        placeholder="Filter medicines or supplies by name..."
+        value={retailSearch}
+        onChangeText={setRetailSearch}
+      />
+      {retailCatalog.length === 0 ? (
+        <EmptyState
+          icon="clipboard"
+          title="No retail items matching search"
+          description="Check the spelling or add items under Medicine or Supply categories in Settings."
+        />
+      ) : (
+        <View style={styles.chipRow}>
+          {retailCatalog.map((svc) => (
+            <Button
+              key={svc.id}
+              size="sm"
+              variant="outline"
+              icon="plus"
+              title={`${svc.name} · ${formatPeso(svc.standardPrice)}`}
+              onPress={() => handleAddRetailItem(svc)}
+            />
+          ))}
+        </View>
+      )}
+    </Card>
+  );
+
+  const renderRegistrySearch = () => (
+    <Card>
+      <CardHeader
+        title="Search Patient Registry"
+        icon="search"
+        rightAction={
+          registryResults.length > 0 ? (
+            <Badge label={`${registryResults.length} found`} variant="neutral" size="sm" />
+          ) : undefined
+        }
+      />
+      <View style={styles.registrySearchRow}>
+        <View style={styles.flexFill}>
+          <Input
+            label="Patient Name / MRN"
+            placeholder="Type name, MRN, or ClinicEZ ID..."
+            value={registrySearch}
+            onChangeText={setRegistrySearch}
+            onSubmitEditing={handleSearchRegistry}
+          />
+        </View>
+        <View style={styles.registrySearchBtnWrap}>
+          <Button
+            size="md"
+            variant="primary"
+            icon="search"
+            title="Search"
+            loading={isSearchingRegistry}
+            onPress={handleSearchRegistry}
+          />
+        </View>
+      </View>
+
+      {isSearchingRegistry ? (
+        <SkeletonList rows={3} rowHeight={theme.sizes.controlMd} />
+      ) : hasSearchedRegistry && registryResults.length === 0 ? (
+        <EmptyState
+          icon="search"
+          title="No patients found"
+          description="Try searching with a different name, MRN, or phone number."
+        />
+      ) : registryResults.length > 0 ? (
+        <View style={styles.registryResultsList}>
+          {registryResults.map((patient) => {
+            const isSelected = selectedPatient?.patientId === patient.id;
+            const displayName = patient.fullName || `${patient.firstName} ${patient.lastName}`;
+            return (
+              <View key={patient.id} style={styles.registryResultItem}>
+                <View style={styles.flexFill}>
+                  <View style={styles.registryResultHeader}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      {displayName}
+                    </ThemedText>
+                    {patient.patientCode && <Badge label={`Code: ${patient.patientCode}`} variant="neutral" size="sm" />}
+                    {patient.seniorCitizenId && <Badge label="Senior" variant="warning" size="sm" />}
+                    {patient.pwdId && <Badge label="PWD" variant="info" size="sm" />}
+                  </View>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    DOB: {patient.dateOfBirth || 'N/A'} • Contact: {patient.contactNumber || 'N/A'}
+                  </ThemedText>
+                </View>
+                <Button
+                  size="sm"
+                  variant={isSelected ? 'primary' : 'outline'}
+                  title={isSelected ? 'Selected' : 'Load SOA / Bill'}
+                  onPress={() => handleSelectRegistryPatient(patient)}
+                />
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.registrySearchHint}>
+          Enter patient name, MRN, or mobile number and tap Search to retrieve their chart and Statement of Account.
+        </ThemedText>
+      )}
     </Card>
   );
 
@@ -2127,12 +2498,84 @@ export default function BillingScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
         {renderTotals()}
-        {renderTabBar()}
+        {renderModeSwitcher()}
 
-        {activeTab === 'active' && (
+        {billingMode === 'queue' && (
+          <>
+            {renderTabBar()}
+
+            {activeTab === 'active' && (
+              <View style={[styles.columns, isWide && styles.columnsWide]}>
+                <View style={[styles.column, isWide && styles.mainColumn]}>
+                  {renderPatientSelector()}
+                  {renderInvoiceItems()}
+                  {renderDiscounts()}
+                </View>
+                <View style={[styles.column, isWide && styles.sideColumn]}>
+                  {renderPayment()}
+                  {renderTotalsAndSettle()}
+                </View>
+              </View>
+            )}
+
+            {activeTab === 'unsettled' && (
+              <View style={[styles.columns, isWide && styles.columnsWide]}>
+                <View style={[styles.column, isWide && styles.mainColumn]}>
+                  {renderUnsettledPromissory()}
+                </View>
+                {selectedPatient && (
+                  <View style={[styles.column, isWide && styles.sideColumn]}>
+                    {renderPayment()}
+                    {renderTotalsAndSettle()}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {activeTab === 'paid' && (
+              <View style={styles.columns}>
+                {renderBilledAndPaidToday()}
+              </View>
+            )}
+          </>
+        )}
+
+        {billingMode === 'registry' && (
           <View style={[styles.columns, isWide && styles.columnsWide]}>
             <View style={[styles.column, isWide && styles.mainColumn]}>
-              {renderPatientSelector()}
+              {renderRegistrySearch()}
+              {selectedPatient && !selectedPatient.isWalkInRetail && (
+                <>
+                  {renderInvoiceItems()}
+                  {renderDiscounts()}
+                </>
+              )}
+            </View>
+            <View style={[styles.column, isWide && styles.sideColumn]}>
+              {selectedPatient && !selectedPatient.isWalkInRetail ? (
+                <>
+                  {renderPayment()}
+                  {renderTotalsAndSettle()}
+                </>
+              ) : (
+                <Card>
+                  <CardHeader title="Cashier Station" icon="billing" />
+                  <EmptyState
+                    icon="search"
+                    title="No Patient Selected"
+                    description="Search the master patient registry and select a patient to review their Statement of Account or bill clinical services."
+                  />
+                </Card>
+              )}
+            </View>
+          </View>
+        )}
+
+        {billingMode === 'retail' && (
+          <View style={[styles.columns, isWide && styles.columnsWide]}>
+            <View style={[styles.column, isWide && styles.mainColumn]}>
+              {renderRetailCustomerCard()}
+              {renderRetailCatalogCard()}
               {renderInvoiceItems()}
               {renderDiscounts()}
             </View>
@@ -2140,26 +2583,6 @@ export default function BillingScreen() {
               {renderPayment()}
               {renderTotalsAndSettle()}
             </View>
-          </View>
-        )}
-
-        {activeTab === 'unsettled' && (
-          <View style={[styles.columns, isWide && styles.columnsWide]}>
-            <View style={[styles.column, isWide && styles.mainColumn]}>
-              {renderUnsettledPromissory()}
-            </View>
-            {selectedPatient && (
-              <View style={[styles.column, isWide && styles.sideColumn]}>
-                {renderPayment()}
-                {renderTotalsAndSettle()}
-              </View>
-            )}
-          </View>
-        )}
-
-        {activeTab === 'paid' && (
-          <View style={styles.columns}>
-            {renderBilledAndPaidToday()}
           </View>
         )}
       </ScrollView>
@@ -2479,5 +2902,72 @@ const styles = StyleSheet.create({
   settleDeferButton: {
     width: '100%',
     justifyContent: 'center',
+  },
+  modeSegment: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  modeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.sm,
+  },
+  modeTabActive: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+  },
+  fastCashRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
+  },
+  registrySearchRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  registrySearchBtnWrap: {
+    marginBottom: theme.spacing.sm,
+  },
+  registryResultsList: {
+    gap: theme.spacing.sm,
+  },
+  registryResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
+  registryResultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  registrySearchHint: {
+    paddingVertical: theme.spacing.sm,
+    fontStyle: 'italic',
   },
 });

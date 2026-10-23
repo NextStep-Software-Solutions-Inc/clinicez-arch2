@@ -84,6 +84,7 @@ public class BulkImportServicesCommandHandler : IRequestHandler<BulkImportServic
                 existing.PhilHealthCode = row.PhilHealthCode?.Trim();
                 existing.PhilHealthDescription = row.PhilHealthDescription?.Trim();
                 existing.IsPhilHealthFormulary = row.IsPhilHealthFormulary;
+                existing.IsNurseOrderable = row.IsNurseOrderable;
 
                 _serviceRepo.Update(existing);
                 updatedCount++;
@@ -100,7 +101,8 @@ public class BulkImportServicesCommandHandler : IRequestHandler<BulkImportServic
                     existing.IsActive,
                     existing.PhilHealthCode,
                     existing.PhilHealthDescription,
-                    existing.IsPhilHealthFormulary
+                    existing.IsPhilHealthFormulary,
+                    existing.IsNurseOrderable
                 ));
             }
             else
@@ -117,7 +119,8 @@ public class BulkImportServicesCommandHandler : IRequestHandler<BulkImportServic
                     IsActive = true,
                     PhilHealthCode = row.PhilHealthCode?.Trim(),
                     PhilHealthDescription = row.PhilHealthDescription?.Trim(),
-                    IsPhilHealthFormulary = row.IsPhilHealthFormulary
+                    IsPhilHealthFormulary = row.IsPhilHealthFormulary,
+                    IsNurseOrderable = row.IsNurseOrderable
                 };
 
                 await _serviceRepo.AddAsync(newItem, cancellationToken);
@@ -136,7 +139,8 @@ public class BulkImportServicesCommandHandler : IRequestHandler<BulkImportServic
                     newItem.IsActive,
                     newItem.PhilHealthCode,
                     newItem.PhilHealthDescription,
-                    newItem.IsPhilHealthFormulary
+                    newItem.IsPhilHealthFormulary,
+                    newItem.IsNurseOrderable
                 ));
             }
         }

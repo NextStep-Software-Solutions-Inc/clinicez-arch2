@@ -54,7 +54,7 @@ public sealed class ReconcileEodCommandHandler : IRequestHandler<ReconcileEodCom
 
         // Fetch remaining active waiting tickets for the clinic and target date.
         // CRITICAL INVARIANT: Only Waiting, Triaged, and OnHold are transitioned.
-        // InConsultation and Completed tickets MUST NOT be modified or invalidated!
+        // InConsultation, Completed, DischargedNonDoctor, and Diverted tickets MUST NOT be modified or invalidated!
         var activeItems = await _queueRepository.Query(q =>
             q.ClinicId == _clinicContext.ClinicId &&
             q.QueueDate == targetDate &&
@@ -66,7 +66,21 @@ public sealed class ReconcileEodCommandHandler : IRequestHandler<ReconcileEodCom
 
         foreach (var item in activeItems)
         {
-            item.Status = QueueStatus.NoShow;
+            // Shield DischargedNonDoctor and Diverted (already terminal, excluded by query)
+            // Differentiate consultation vs non-consultation visits:
+            if (item.VisitType == VisitType.Consultation)
+            {
+                item.Status = QueueStatus.NoShow;
+            }
+            else
+            {
+                // Cleanly close stale non-consultation visits without false NoShow penalty
+                item.Status = QueueStatus.Cancelled;
+                item.DischargeNotes = string.IsNullOrWhiteSpace(item.DischargeNotes)
+                    ? "Auto-closed during EOD reconciliation."
+                    : item.DischargeNotes;
+            }
+
             item.CompletedTime = now;
             item.UpdatedAt = now;
             item.UpdatedBy = request.TriggerType == "Automatic"

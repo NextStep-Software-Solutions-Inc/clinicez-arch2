@@ -19,7 +19,8 @@ public record UpdateClinicServiceItemCommand(
     bool IsActive = true,
     string? PhilHealthCode = null,
     string? PhilHealthDescription = null,
-    bool IsPhilHealthFormulary = false
+    bool IsPhilHealthFormulary = false,
+    bool IsNurseOrderable = false
 ) : IRequest<ClinicServiceItemDto>;
 
 public class UpdateClinicServiceItemCommandHandler : IRequestHandler<UpdateClinicServiceItemCommand, ClinicServiceItemDto>
@@ -63,6 +64,7 @@ public class UpdateClinicServiceItemCommandHandler : IRequestHandler<UpdateClini
         item.PhilHealthCode = philHealthCode;
         item.PhilHealthDescription = philHealthDescription;
         item.IsPhilHealthFormulary = request.IsPhilHealthFormulary || philHealthCode != null;
+        item.IsNurseOrderable = request.IsNurseOrderable;
 
         _serviceRepo.Update(item);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -79,7 +81,8 @@ public class UpdateClinicServiceItemCommandHandler : IRequestHandler<UpdateClini
             item.IsActive,
             item.PhilHealthCode,
             item.PhilHealthDescription,
-            item.IsPhilHealthFormulary
+            item.IsPhilHealthFormulary,
+            item.IsNurseOrderable
         );
     }
 }

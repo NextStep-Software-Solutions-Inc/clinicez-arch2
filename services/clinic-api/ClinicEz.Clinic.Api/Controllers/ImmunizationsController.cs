@@ -59,7 +59,9 @@ public sealed class ImmunizationsController : ControllerBase
             AdministeredByStaffId: request.AdministeredByStaffId ?? Guid.Empty,
             AdministeredByStaffName: request.AdministeredByStaffName,
             AdministeredByPrcLicense: request.AdministeredByPrcLicense,
-            Remarks: request.Remarks);
+            Remarks: request.Remarks,
+            QueueItemId: request.QueueItemId,
+            CompleteVisit: request.CompleteVisit);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<PatientImmunizationDto>.Success(result, "Vaccine administered successfully."));
@@ -127,7 +129,9 @@ public sealed record AdministerVaccineRequest(
     Guid? AdministeredByStaffId,
     string AdministeredByStaffName,
     string? AdministeredByPrcLicense,
-    string? Remarks
+    string? Remarks,
+    Guid? QueueItemId = null,
+    bool CompleteVisit = false
 );
 
 public sealed record RecordHistoricalImmunizationRequest(

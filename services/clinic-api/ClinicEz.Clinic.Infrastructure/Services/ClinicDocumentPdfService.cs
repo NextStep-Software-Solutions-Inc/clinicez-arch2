@@ -947,18 +947,22 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                     // Patient & Attending Clinician Summary Box
                     col.Item().PaddingTop(8).Border(1).BorderColor("#E2E8F0").Background("#F8FAFC").Padding(10).Column(demog =>
                     {
+                        var isWalkInRetail = invoice.PatientId == Guid.Empty;
                         demog.Item().Row(r =>
                         {
                             r.RelativeItem().Column(c =>
                             {
                                 c.Item().Text(t =>
                                 {
-                                    t.Span("Patient: ").Bold().FontColor("#0F172A");
-                                    t.Span(invoice.PatientName).FontSize(10.5f).Bold().FontColor("#0F172A");
+                                    t.Span(isWalkInRetail ? "Customer: " : "Patient: ").Bold().FontColor("#0F172A");
+                                    var displayName = !string.IsNullOrWhiteSpace(invoice.PatientName) ? invoice.PatientName : "Walk-In Retail Guest";
+                                    t.Span(displayName).FontSize(10.5f).Bold().FontColor("#0F172A");
                                 });
-                                var demogText = $"ID: {patientIdStr}";
-                                if (patientAge.HasValue) demogText += $" • Age: {patientAge} yrs";
-                                if (!string.IsNullOrWhiteSpace(patientGender)) demogText += $" • Gender: {patientGender}";
+                                var demogText = isWalkInRetail
+                                    ? "Customer Type: Walk-In Retail POS"
+                                    : $"ID: {patientIdStr}";
+                                if (!isWalkInRetail && patientAge.HasValue) demogText += $" • Age: {patientAge} yrs";
+                                if (!isWalkInRetail && !string.IsNullOrWhiteSpace(patientGender)) demogText += $" • Gender: {patientGender}";
                                 if (!string.IsNullOrWhiteSpace(queueNumber)) demogText += $" • Queue: {queueNumber}";
                                 c.Item().PaddingTop(2).Text(demogText).FontSize(8.5f).FontColor("#475569");
 
@@ -970,15 +974,30 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
 
                             r.RelativeItem().AlignRight().Column(c =>
                             {
-                                c.Item().Text(t =>
+                                if (isWalkInRetail)
                                 {
-                                    t.Span("Attending: ").SemiBold().FontColor("#475569");
-                                    t.Span(docName).Bold().FontColor("#0F172A");
-                                });
-                                c.Item().PaddingTop(2).Text($"PRC License: {doctorPrc}").FontSize(8.5f).FontColor("#475569");
-                                if (!string.IsNullOrWhiteSpace(invoice.BilledByStaffName))
+                                    var cashierDisplayName = !string.IsNullOrWhiteSpace(invoice.BilledByStaffName)
+                                        ? invoice.BilledByStaffName
+                                        : "Cashier Station";
+                                    c.Item().Text(t =>
+                                    {
+                                        t.Span("Dispensed By: ").SemiBold().FontColor("#475569");
+                                        t.Span(cashierDisplayName).Bold().FontColor("#0F172A");
+                                    });
+                                    c.Item().PaddingTop(2).Text("Station: In-Clinic Cashier POS").FontSize(8.5f).FontColor("#475569");
+                                }
+                                else
                                 {
-                                    c.Item().PaddingTop(2).Text($"Cashier: {invoice.BilledByStaffName}").FontSize(8.5f).FontColor("#64748B");
+                                    c.Item().Text(t =>
+                                    {
+                                        t.Span("Attending: ").SemiBold().FontColor("#475569");
+                                        t.Span(docName).Bold().FontColor("#0F172A");
+                                    });
+                                    c.Item().PaddingTop(2).Text($"PRC License: {doctorPrc}").FontSize(8.5f).FontColor("#475569");
+                                    if (!string.IsNullOrWhiteSpace(invoice.BilledByStaffName))
+                                    {
+                                        c.Item().PaddingTop(2).Text($"Cashier: {invoice.BilledByStaffName}").FontSize(8.5f).FontColor("#64748B");
+                                    }
                                 }
                             });
                         });

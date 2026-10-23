@@ -299,6 +299,12 @@ public class ReconcileEodEmpiricalChallengerTests
         // 8. ReEvaluation -> PRESERVED (clinical sub-flow)
         reloadedItems[(int)QueueStatus.ReEvaluation].Status.Should().Be(QueueStatus.ReEvaluation);
         reloadedItems[(int)QueueStatus.ReEvaluation].CompletedTime.Should().BeNull();
+
+        // 10. DischargedNonDoctor -> PRESERVED (terminal non-doctor status, MUST NOT be NoShow)
+        reloadedItems[(int)QueueStatus.DischargedNonDoctor].Status.Should().Be(QueueStatus.DischargedNonDoctor);
+
+        // 11. Diverted -> PRESERVED (emergency diversion, MUST NOT be NoShow)
+        reloadedItems[(int)QueueStatus.Diverted].Status.Should().Be(QueueStatus.Diverted);
     }
 
     // =========================================================================

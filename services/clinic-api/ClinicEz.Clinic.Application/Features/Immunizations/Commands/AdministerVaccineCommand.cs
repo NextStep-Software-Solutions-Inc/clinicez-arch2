@@ -7,6 +7,7 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Immunizations.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using FluentValidation;
@@ -33,7 +34,9 @@ public sealed record AdministerVaccineCommand(
     Guid AdministeredByStaffId,
     string AdministeredByStaffName,
     string? AdministeredByPrcLicense,
-    string? Remarks
+    string? Remarks,
+    Guid? QueueItemId = null,
+    bool CompleteVisit = false
 ) : IRequest<PatientImmunizationDto>;
 
 public sealed class AdministerVaccineValidator : AbstractValidator<AdministerVaccineCommand>
@@ -67,19 +70,22 @@ public sealed class AdministerVaccineCommandHandler : IRequestHandler<Administer
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IImmunizationEventPublisher _publisher;
+    private readonly IRepository<QueueItem>? _queueRepo;
 
     public AdministerVaccineCommandHandler(
         IRepository<ClinicPatient> patientRepo,
         IRepository<PatientImmunization> immunizationRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IImmunizationEventPublisher publisher)
+        IImmunizationEventPublisher publisher,
+        IRepository<QueueItem>? queueRepo = null)
     {
         _patientRepo = patientRepo;
         _immunizationRepo = immunizationRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _publisher = publisher;
+        _queueRepo = queueRepo;
     }
 
     public async Task<PatientImmunizationDto> Handle(AdministerVaccineCommand request, CancellationToken cancellationToken)
@@ -128,6 +134,24 @@ public sealed class AdministerVaccineCommandHandler : IRequestHandler<Administer
             await _publisher.PublishImmunizationAdministeredAsync(immunization, cancellationToken);
             immunization.IsSynchronizedToPatientApp = true;
             immunization.SynchronizedAtUtc = DateTime.UtcNow;
+        }
+
+        if (request.QueueItemId.HasValue && request.CompleteVisit && _queueRepo != null)
+        {
+            var queueItem = await _queueRepo.Query(q => q.Id == request.QueueItemId.Value && q.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (queueItem != null && queueItem.Status != QueueStatus.Completed && queueItem.Status != QueueStatus.Cancelled)
+            {
+                queueItem.Status = QueueStatus.DischargedNonDoctor;
+                queueItem.CompletedTime = DateTime.UtcNow;
+                queueItem.DischargedAt = DateTime.UtcNow;
+                queueItem.DischargedByStaffId = request.AdministeredByStaffId;
+                queueItem.DischargeNotes = !string.IsNullOrWhiteSpace(request.Remarks)
+                    ? request.Remarks.Trim()
+                    : $"Discharged following vaccine administration: {request.VaccineName}";
+                queueItem.UpdatedAt = DateTime.UtcNow;
+                _queueRepo.Update(queueItem);
+            }
         }
 
         TrySyncToPhilHealthProfile(patient, request.PhilHealthLibrary, request.PhilHealthCode);

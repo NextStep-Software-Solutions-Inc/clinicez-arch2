@@ -62,5 +62,6 @@ public record RecordProcedureExecutionRequest(
     DateTime? ExpirationDate,
     string? SiteRoute,
     string? ClinicalNotes,
-    string? Complications
+    string? Complications,
+    bool? RequiresDoctorReEvaluation = null
 );

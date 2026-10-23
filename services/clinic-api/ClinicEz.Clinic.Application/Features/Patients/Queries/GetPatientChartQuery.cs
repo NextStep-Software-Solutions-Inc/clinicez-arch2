@@ -8,6 +8,7 @@ using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 using ClinicEz.Clinic.Application.Features.Billing.DTOs;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
 using ClinicEz.Clinic.Application.Features.Dental.DTOs;
+using ClinicEz.Clinic.Application.Features.Documents.DTOs;
 using ClinicEz.Clinic.Application.Features.Immunizations.DTOs;
 using ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
@@ -47,6 +48,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
     private readonly IRepository<ClinicRecordAttachment>? _attachmentRepo;
     private readonly IRepository<PatientPhysicalExamProfile>? _physicalExamRepo;
     private readonly IRepository<DentalToothRecord>? _dentalToothRepo;
+    private readonly IRepository<MedicalCertificate>? _medCertRepo;
+    private readonly IRepository<ReferralLetter>? _referralRepo;
 
     public GetPatientChartQueryHandler(
         IRepository<ConsultationEncounter> consultationRepo,
@@ -66,7 +69,9 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         IRepository<PatientImmunization>? immunizationRepo = null,
         IRepository<ClinicRecordAttachment>? attachmentRepo = null,
         IRepository<PatientPhysicalExamProfile>? physicalExamRepo = null,
-        IRepository<DentalToothRecord>? dentalToothRepo = null)
+        IRepository<DentalToothRecord>? dentalToothRepo = null,
+        IRepository<MedicalCertificate>? medCertRepo = null,
+        IRepository<ReferralLetter>? referralRepo = null)
     {
         _consultationRepo = consultationRepo;
         _triageRepo = triageRepo;
@@ -86,6 +91,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         _attachmentRepo = attachmentRepo;
         _physicalExamRepo = physicalExamRepo;
         _dentalToothRepo = dentalToothRepo;
+        _medCertRepo = medCertRepo;
+        _referralRepo = referralRepo;
     }
 
     public async Task<PatientChartDto> Handle(GetPatientChartQuery request, CancellationToken cancellationToken)
@@ -669,6 +676,75 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             }
         }
 
+        List<MedicalCertificateDto>? medicalCertificateDtos = null;
+        if (_medCertRepo != null)
+        {
+            var medCerts = await _medCertRepo.Query(m => m.PatientId == request.PatientId)
+                .OrderByDescending(m => m.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            medicalCertificateDtos = medCerts.Select(cert => new MedicalCertificateDto(
+                cert.Id,
+                cert.TenantId,
+                cert.ClinicId,
+                cert.CertificateNumber,
+                cert.PatientId,
+                cert.PatientName,
+                cert.ConsultationId,
+                cert.DoctorId,
+                cert.DoctorName,
+                cert.PrcLicenseNumber,
+                cert.PtrNumber,
+                cert.IssueDate,
+                cert.Diagnosis,
+                cert.ClinicalFindings,
+                cert.FitnessStatus,
+                cert.RecommendedRestDays,
+                cert.RestStartDate,
+                cert.RestEndDate,
+                cert.Purpose,
+                cert.Remarks,
+                cert.IsSigned,
+                cert.SignedAt,
+                cert.CreatedAt,
+                cert.SecurityDigest
+            )).ToList();
+        }
+
+        List<ReferralLetterDto>? referralLetterDtos = null;
+        if (_referralRepo != null)
+        {
+            var referrals = await _referralRepo.Query(r => r.PatientId == request.PatientId)
+                .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+            referralLetterDtos = referrals.Select(referral => new ReferralLetterDto(
+                referral.Id,
+                referral.TenantId,
+                referral.ClinicId,
+                referral.ReferralNumber,
+                referral.PatientId,
+                referral.PatientName,
+                referral.ConsultationId,
+                referral.ReferringDoctorId,
+                referral.ReferringDoctorName,
+                referral.ReferredToDoctor,
+                referral.ReferredToFacility,
+                referral.ReferredDepartment,
+                referral.ReferralDate,
+                referral.Urgency,
+                referral.ReasonForReferral,
+                referral.ProvisionalDiagnosis,
+                referral.ClinicalSummary,
+                referral.CurrentMedications,
+                referral.AttachedDiagnostics,
+                referral.IsSigned,
+                referral.SignedAt,
+                referral.CreatedAt,
+                referral.SecurityDigest
+            )).ToList();
+        }
+
         return new PatientChartDto(
             request.PatientId,
             patientName,
@@ -689,7 +765,9 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             attachmentDtos,
             PhysicalExamProfile: physicalExamDto,
             DentalTeeth: dentalToothDtos,
-            DentalProcedures: procedureDtos.Where(p => p.Category == "Dental" || p.ToothNumber.HasValue).ToList()
+            DentalProcedures: procedureDtos.Where(p => p.Category == "Dental" || p.ToothNumber.HasValue).ToList(),
+            MedicalCertificates: medicalCertificateDtos,
+            ReferralLetters: referralLetterDtos
         );
     }
 

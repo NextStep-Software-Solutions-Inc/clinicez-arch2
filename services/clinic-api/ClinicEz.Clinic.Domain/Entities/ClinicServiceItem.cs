@@ -21,4 +21,10 @@ public sealed class ClinicServiceItem : BaseEntity
     public string? PhilHealthCode { get; set; }
     public string? PhilHealthDescription { get; set; }
     public bool IsPhilHealthFormulary { get; set; } = false;
+
+    /// <summary>
+    /// Indicates whether nursing staff are authorized to order this service/procedure autonomously without an attending doctor.
+    /// </summary>
+    public bool IsNurseOrderable { get; set; } = false;
 }
+

@@ -66,6 +66,7 @@ public sealed class GetMedicalCertificatesQueryHandler : IRequestHandler<GetMedi
             cert.Remarks,
             cert.IsSigned,
             cert.SignedAt,
-            cert.CreatedAt)).ToList().AsReadOnly();
+            cert.CreatedAt,
+            cert.SecurityDigest)).ToList().AsReadOnly();
     }
 }

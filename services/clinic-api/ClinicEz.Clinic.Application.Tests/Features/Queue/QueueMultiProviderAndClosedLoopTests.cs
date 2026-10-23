@@ -37,6 +37,7 @@ public class QueueMultiProviderAndClosedLoopTests
         var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
 
         var patientId = Guid.NewGuid();
+        var doctorId = Guid.NewGuid();
         var queueItem = new QueueItem
         {
             Id = Guid.NewGuid(),
@@ -47,6 +48,8 @@ public class QueueMultiProviderAndClosedLoopTests
             QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
             PatientId = patientId,
             PatientName = "Juan Dela Cruz",
+            DoctorId = doctorId,
+            DoctorName = "Dr. Santos",
             Status = QueueStatus.InConsultation
         };
         await queueRepo.AddAsync(queueItem, CancellationToken.None);
@@ -61,7 +64,9 @@ public class QueueMultiProviderAndClosedLoopTests
             PatientName: "Juan Dela Cruz",
             QueueItemId: queueItem.Id,
             ProcedureName: "Nebulization Therapy",
-            Category: "Respiratory"
+            Category: "Respiratory",
+            OrderedByDoctorId: doctorId,
+            OrderedByDoctorName: "Dr. Santos"
         );
         var procDto = await orderHandler.Handle(orderCommand, CancellationToken.None);
 

@@ -82,7 +82,8 @@ public sealed class ProceduresController : ControllerBase
             request.ExpirationDate,
             request.SiteRoute,
             request.ClinicalNotes,
-            request.Complications
+            request.Complications,
+            request.RequiresDoctorReEvaluation
         );
 
         var result = await _sender.Send(command, ct);

@@ -105,20 +105,57 @@ public record CreateInvoiceLineItemRequest(
     }
 }
 
+[method: JsonConstructor]
 public record CreateInvoiceRequest(
-    Guid PatientId,
-    string PatientName,
-    Guid? QueueItemId,
-    Guid? AppointmentId,
-    Guid? ConsultationId,
-    Guid? AttendingDoctorId,
-    DiscountType DiscountType,
-    string? DiscountIdNumber,
-    decimal? CustomDiscountPercentage,
-    string? Notes,
-    List<CreateInvoiceLineItemRequest> LineItems,
-    bool AllowDuplicate = false
-);
+    Guid? PatientId = null,
+    string? PatientName = null,
+    Guid? QueueItemId = null,
+    Guid? AppointmentId = null,
+    Guid? ConsultationId = null,
+    Guid? AttendingDoctorId = null,
+    DiscountType DiscountType = DiscountType.None,
+    string? DiscountIdNumber = null,
+    decimal? CustomDiscountPercentage = null,
+    string? Notes = null,
+    List<CreateInvoiceLineItemRequest>? LineItems = null,
+    bool AllowDuplicate = false,
+    bool IsWalkInRetail = false,
+    string? WalkInCustomerName = null,
+    VisitType? VisitType = null
+)
+{
+    public CreateInvoiceRequest(
+        Guid patientId,
+        string patientName,
+        Guid? queueItemId,
+        Guid? appointmentId,
+        Guid? consultationId,
+        Guid? attendingDoctorId,
+        DiscountType discountType,
+        string? discountIdNumber,
+        decimal? customDiscountPercentage,
+        string? notes,
+        List<CreateInvoiceLineItemRequest> lineItems,
+        bool allowDuplicate = false)
+        : this(
+            patientId,
+            patientName,
+            queueItemId,
+            appointmentId,
+            consultationId,
+            attendingDoctorId,
+            discountType,
+            discountIdNumber,
+            customDiscountPercentage,
+            notes,
+            lineItems,
+            allowDuplicate,
+            false,
+            null,
+            null)
+    {
+    }
+}
 
 public record RecordPaymentRequest(
     decimal Amount,

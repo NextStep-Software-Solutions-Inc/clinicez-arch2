@@ -18,6 +18,7 @@ export type ChartTab =
   | 'immunizations'
   | 'profiles'
   | 'vault'
+  | 'documents'
   | 'dental';
 
 export const CHART_TABS: SegmentedOption<ChartTab>[] = [
@@ -28,6 +29,7 @@ export const CHART_TABS: SegmentedOption<ChartTab>[] = [
   { value: 'immunizations', label: 'Vaccines' },
   { value: 'profiles', label: 'Health Profiles' },
   { value: 'vault', label: 'Doc Vault' },
+  { value: 'documents', label: 'Admin Vault' },
 ];
 
 export const DENTAL_CHART_TAB: SegmentedOption<ChartTab> = {
@@ -120,6 +122,9 @@ export interface ChartLayoutProps {
   focusToothNumber?: number;
   onOrderDentalProcedure?: (toothNumber: number, toothSurface?: string) => void;
   onVoidDentalCondition?: (toothNumber: number, recordId: string, reason?: string) => void | Promise<void>;
+  onOrderProcedure?: () => void;
+  onIntakeSpecimen?: () => void;
+  queueItemId?: string | null;
 }
 
 export interface PatientChartModalProps {
@@ -142,6 +147,9 @@ export interface PatientChartModalProps {
   focusToothNumber?: number;
   onOrderDentalProcedure?: (toothNumber: number, toothSurface?: string) => void;
   onVoidDentalCondition?: (toothNumber: number, recordId: string, reason?: string) => void | Promise<void>;
+  onOrderProcedure?: () => void;
+  onIntakeSpecimen?: () => void;
+  queueItemId?: string | null;
 
   // Tab Action Handlers
   onViewPrescriptionSlip?: (consultation: ConsultationRecord) => void;

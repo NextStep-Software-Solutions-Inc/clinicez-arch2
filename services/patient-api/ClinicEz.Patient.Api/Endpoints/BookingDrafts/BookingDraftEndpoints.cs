@@ -16,20 +16,34 @@ public sealed record CreateBookingDraftRequest(
     string? Notes,
     string ShareFieldsJson,
     string AttachedFileIdsJson,
-    IReadOnlyList<string>? ShareSections = null);
+    IReadOnlyList<string>? ShareSections = null,
+    string? TurnstileToken = null);
 
 public sealed class CreateBookingDraftEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapPost("/patients/{patientId:guid}/booking-drafts", async (
-                Guid patientId, CreateBookingDraftRequest request,
-                ISender sender, CancellationToken ct) =>
+                Guid patientId,
+                CreateBookingDraftRequest request,
+                HttpContext httpContext,
+                ISender sender,
+                CancellationToken ct) =>
             {
+                var remoteIp = httpContext.Connection.RemoteIpAddress?.ToString();
                 var id = await sender.Send(new CreateBookingDraftCommand(
-                    patientId, request.ClinicId, request.OrganizationId,
-                    request.PreferredDate, request.PreferredTime,
-                    request.Reason, request.Notes, request.ShareFieldsJson, request.AttachedFileIdsJson ?? "[]", request.ShareSections), ct);
+                    patientId,
+                    request.ClinicId,
+                    request.OrganizationId,
+                    request.PreferredDate,
+                    request.PreferredTime,
+                    request.Reason,
+                    request.Notes,
+                    request.ShareFieldsJson,
+                    request.AttachedFileIdsJson ?? "[]",
+                    request.ShareSections,
+                    request.TurnstileToken,
+                    remoteIp), ct);
 
                 return Results.Created(
                     $"/api/v1/patients/{patientId}/booking-drafts/{id}",

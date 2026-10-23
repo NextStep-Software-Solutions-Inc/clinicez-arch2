@@ -37,19 +37,25 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
     private readonly IClinicContext _clinicContext;
     private readonly IRepository<QueueItem>? _queueRepo;
     private readonly IRepository<ClinicRoom>? _roomRepo;
+    private readonly IRepository<ClinicServiceItem>? _serviceRepo;
+    private readonly IRepository<StaffMember>? _staffRepo;
 
     public OrderProcedureCommandHandler(
         IRepository<ClinicalProcedure> procRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IRepository<QueueItem>? queueRepo = null,
-        IRepository<ClinicRoom>? roomRepo = null)
+        IRepository<ClinicRoom>? roomRepo = null,
+        IRepository<ClinicServiceItem>? serviceRepo = null,
+        IRepository<StaffMember>? staffRepo = null)
     {
         _procRepo = procRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _queueRepo = queueRepo;
         _roomRepo = roomRepo;
+        _serviceRepo = serviceRepo;
+        _staffRepo = staffRepo;
     }
 
     public async Task<ClinicalProcedureDto> Handle(OrderProcedureCommand request, CancellationToken cancellationToken)
@@ -57,6 +63,40 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
         if (request.PatientId == Guid.Empty || string.IsNullOrWhiteSpace(request.PatientName))
         {
             throw new BadRequestException("PatientId and PatientName are required to order a procedure.");
+        }
+
+        bool isDoctorOrder = false;
+        if (request.OrderedByDoctorId.HasValue && request.OrderedByDoctorId.Value != Guid.Empty)
+        {
+            if (_staffRepo != null)
+            {
+                var doctor = await _staffRepo.Query(s => s.Id == request.OrderedByDoctorId.Value && s.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (doctor != null && !string.IsNullOrWhiteSpace(doctor.PrcLicenseNumber))
+                {
+                    isDoctorOrder = true;
+                }
+            }
+            else
+            {
+                isDoctorOrder = true;
+            }
+        }
+
+        if (!isDoctorOrder && _serviceRepo != null)
+        {
+            var codeUpper = request.ProcedureCode?.Trim().ToUpperInvariant();
+            var nameLower = request.ProcedureName?.Trim().ToLowerInvariant();
+
+            var serviceItem = await _serviceRepo.Query(s => s.ClinicId == _clinicContext.ClinicId &&
+                ((!string.IsNullOrEmpty(codeUpper) && s.Code.ToUpper() == codeUpper) ||
+                 (!string.IsNullOrEmpty(nameLower) && s.Name.ToLower() == nameLower)))
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (serviceItem == null || !serviceItem.IsNurseOrderable)
+            {
+                throw new BadRequestException("Only procedures flagged as nurse-orderable in the clinic catalog can be ordered by non-doctor staff. Doctor order required.");
+            }
         }
 
         Guid? resolvedRoomId = request.TargetRoomId;
@@ -112,7 +152,7 @@ public class OrderProcedureCommandHandler : IRequestHandler<OrderProcedureComman
             QueueItemId = request.QueueItemId,
             ConsultationId = request.ConsultationId,
             ProcedureCode = request.ProcedureCode?.Trim(),
-            ProcedureName = request.ProcedureName.Trim(),
+            ProcedureName = string.IsNullOrWhiteSpace(request.ProcedureName) ? "Nebulization Therapy" : request.ProcedureName.Trim(),
             Category = string.IsNullOrWhiteSpace(request.Category) ? "Procedure" : request.Category.Trim(),
             OrderedByDoctorId = request.OrderedByDoctorId,
             OrderedByDoctorName = request.OrderedByDoctorName?.Trim(),

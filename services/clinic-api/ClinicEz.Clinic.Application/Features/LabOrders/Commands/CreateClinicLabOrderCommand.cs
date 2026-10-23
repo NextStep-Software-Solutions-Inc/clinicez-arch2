@@ -41,6 +41,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
     private readonly IUploadGrantService _uploadGrants;
     private readonly IClaimSlipService _claims;
     private readonly IPatientDocumentPublisher _documents;
+    private readonly IRepository<ClinicServiceItem>? _serviceRepo;
 
     public CreateClinicLabOrderCommandHandler(
         IRepository<ClinicLabOrder> orderRepo,
@@ -52,7 +53,8 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         ILabRequisitionPublisher requisitionPublisher,
         IUploadGrantService uploadGrants,
         IClaimSlipService claims,
-        IPatientDocumentPublisher documents)
+        IPatientDocumentPublisher documents,
+        IRepository<ClinicServiceItem>? serviceRepo = null)
     {
         _orderRepo = orderRepo;
         _patientRepo = patientRepo;
@@ -64,6 +66,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         _uploadGrants = uploadGrants;
         _claims = claims;
         _documents = documents;
+        _serviceRepo = serviceRepo;
     }
 
     public async Task<ClinicLabOrderDto> Handle(CreateClinicLabOrderCommand request, CancellationToken cancellationToken)
@@ -92,6 +95,37 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             }
 
             targetFacilityId = parsedTarget;
+        }
+
+        bool isDoctorOrder = false;
+        if (request.OrderedByDoctorId is { } doctorId && doctorId != Guid.Empty)
+        {
+            var doctor = await _staffRepo.Query(s => s.Id == doctorId && s.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (doctor != null && !string.IsNullOrWhiteSpace(doctor.PrcLicenseNumber))
+            {
+                isDoctorOrder = true;
+            }
+        }
+
+        if (!isRouted && !isDoctorOrder && _serviceRepo != null)
+        {
+            var testNames = request.Items != null && request.Items.Any()
+                ? request.Items.Select(i => i.TestName.Trim()).ToList()
+                : new List<string> { "Complete Blood Count (CBC) with Platelet" };
+
+            foreach (var testName in testNames)
+            {
+                var testUpper = testName.ToUpperInvariant();
+                var serviceItem = await _serviceRepo.Query(s => s.ClinicId == _clinicContext.ClinicId &&
+                    (s.Code.ToUpper() == testUpper || s.Name.ToUpper() == testUpper))
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (serviceItem == null || !serviceItem.IsNurseOrderable)
+                {
+                    throw new BadRequestException($"Only laboratory tests flagged as nurse-orderable in the clinic catalog can be ordered by non-doctor staff. Doctor order required for '{testName}'.");
+                }
+            }
         }
 
         var today = DateTime.UtcNow.Date;

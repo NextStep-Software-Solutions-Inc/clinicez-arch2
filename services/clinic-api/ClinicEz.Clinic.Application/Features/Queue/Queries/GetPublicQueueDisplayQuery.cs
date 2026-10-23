@@ -117,14 +117,16 @@ public sealed class GetPublicQueueDisplayQueryHandler : IRequestHandler<GetPubli
             ))
             .ToList();
 
-        // 4. Up Next: upcoming tickets (Waiting, Triaged, OnHold, PendingProcedure, ReEvaluation)
+        // 4. Up Next: upcoming tickets (Consultation visits in Waiting, Triaged, OnHold, or procedures/re-eval)
+        // Diverted and DischargedNonDoctor tickets are strictly excluded from public lobby TV display!
         var mask = clinic.TvDisplayMaskPatientNames;
         var upNext = queueItems
-            .Where(q => q.Status == QueueStatus.Waiting ||
-                        q.Status == QueueStatus.Triaged ||
-                        q.Status == QueueStatus.OnHold ||
-                        q.Status == QueueStatus.PendingProcedure ||
-                        q.Status == QueueStatus.ReEvaluation)
+            .Where(q => q.Status != QueueStatus.Diverted &&
+                        q.Status != QueueStatus.DischargedNonDoctor &&
+                        ((q.VisitType == VisitType.Consultation &&
+                          (q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged || q.Status == QueueStatus.OnHold))
+                         || q.Status == QueueStatus.PendingProcedure
+                         || q.Status == QueueStatus.ReEvaluation))
             .OrderByDescending(q => q.Priority)
             .ThenBy(q => q.SequenceNumber)
             .Select(q => new UpcomingTicketDto(

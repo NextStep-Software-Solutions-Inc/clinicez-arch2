@@ -47,6 +47,7 @@ export default function NursingProceduresTab({
 }: NursingProceduresTabProps) {
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED'>('ALL');
   const [executingProc, setExecutingProc] = useState<ClinicalProcedureRecord | null>(null);
+  const [orderModalVisible, setOrderModalVisible] = useState(false);
 
   const filteredProcedures = useMemo(() => {
     return procedures.filter((p) => {
@@ -132,14 +133,16 @@ export default function NursingProceduresTab({
           </Pressable>
         </View>
 
-        {onOrderProcedure ? (
-          <Pressable onPress={onOrderProcedure} style={styles.orderProcedureBtn}>
-            <Icon name="plus" size={14} color={theme.colors.onPrimary} />
-            <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
-              Order Procedure
-            </ThemedText>
-          </Pressable>
-        ) : null}
+        <Pressable
+          testID="order-procedure-button"
+          onPress={onOrderProcedure || (() => setOrderModalVisible(true))}
+          style={styles.orderProcedureBtn}
+        >
+          <Icon name="plus" size={14} color={theme.colors.onPrimary} />
+          <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+            Order Procedure
+          </ThemedText>
+        </Pressable>
       </View>
 
       {/* ========================================================================= */}
@@ -253,6 +256,7 @@ export default function NursingProceduresTab({
                 {!isCompleted ? (
                   <View style={styles.procedureFooter}>
                     <Pressable
+                      testID="execute-procedure-action"
                       onPress={() => {
                         if (onExecuteProcedure) {
                           onExecuteProcedure(proc);
@@ -289,6 +293,18 @@ export default function NursingProceduresTab({
         onClose={() => setExecutingProc(null)}
         onSuccess={() => {
           setExecutingProc(null);
+          onRefreshChart?.();
+        }}
+      />
+
+      {/* Embedded Order Procedure Modal */}
+      <OrderProcedureModal
+        visible={orderModalVisible}
+        patient={patient}
+        patientId={patientId || patient?.id}
+        onClose={() => setOrderModalVisible(false)}
+        onSuccess={() => {
+          setOrderModalVisible(false);
           onRefreshChart?.();
         }}
       />
@@ -459,6 +475,29 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.sm,
   },
+  reEvalContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  toggleBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  toggleBtnActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
 });
 
 export interface ProcedureExecutionModalProps {
@@ -504,6 +543,13 @@ export function ProcedureExecutionModal({
   // Notes & complications
   const [clinicalNotes, setClinicalNotes] = useState('');
   const [complications, setComplications] = useState('None');
+  const [requiresDoctorReEvaluation, setRequiresDoctorReEvaluation] = useState(Boolean(procedure?.orderedByDoctorId));
+
+  React.useEffect(() => {
+    if (procedure) {
+      setRequiresDoctorReEvaluation(Boolean(procedure.orderedByDoctorId));
+    }
+  }, [procedure]);
 
   const handleComplete = async () => {
     if (!procedure) return;
@@ -543,6 +589,7 @@ export function ProcedureExecutionModal({
       siteRoute: siteRoute.trim() || undefined,
       clinicalNotes: clinicalNotes.trim() || undefined,
       complications: complications.trim() || 'None',
+      requiresDoctorReEvaluation,
     });
 
     setSubmitting(false);
@@ -551,7 +598,11 @@ export function ProcedureExecutionModal({
       return;
     }
 
-    notify.success(`${procedure.procedureName} completed. Patient routed to Doctor for re-evaluation.`);
+    if (requiresDoctorReEvaluation) {
+      notify.success(`${procedure.procedureName} completed. Patient routed to Doctor for re-evaluation.`);
+    } else {
+      notify.success(`${procedure.procedureName} completed. Patient visit completed and discharged.`);
+    }
     onSuccess?.(updated || undefined);
     onClose();
   };
@@ -748,6 +799,37 @@ export function ProcedureExecutionModal({
           />
         </View>
 
+        {/* Section 4: Routing & Re-Evaluation Toggle */}
+        <View style={styles.modalSection}>
+          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+            ROUTING & DISCHARGE
+          </ThemedText>
+          <View style={styles.reEvalContainer}>
+            <View style={{ flex: 1, paddingRight: theme.spacing.sm }}>
+              <ThemedText variant="captionBold" color={theme.colors.text}>
+                Requires Doctor Re-Evaluation?
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                {requiresDoctorReEvaluation
+                  ? 'Patient will be returned to Doctor queue for re-evaluation upon completion.'
+                  : 'Standalone procedure: complete and discharge patient visit directly.'}
+              </ThemedText>
+            </View>
+            <Pressable
+              testID="requires-doctor-re-eval-toggle"
+              style={[styles.toggleBtn, requiresDoctorReEvaluation && styles.toggleBtnActive]}
+              onPress={() => setRequiresDoctorReEvaluation(!requiresDoctorReEvaluation)}
+            >
+              <ThemedText
+                variant="captionBold"
+                color={requiresDoctorReEvaluation ? theme.colors.onPrimary : theme.colors.textSecondary}
+              >
+                {requiresDoctorReEvaluation ? 'Yes' : 'No'}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+
         {/* Action Buttons */}
         <View style={styles.modalActionRow}>
           <Button
@@ -756,11 +838,121 @@ export function ProcedureExecutionModal({
             onPress={onClose}
           />
           <Button
-            title="Complete & Return for Re-Evaluation"
+            title={requiresDoctorReEvaluation ? 'Complete & Return for Re-Evaluation' : 'Complete & Discharge Patient'}
             variant="primary"
             icon="check"
             loading={submitting}
             onPress={handleComplete}
+          />
+        </View>
+      </ScrollView>
+    </Modal>
+  );
+}
+
+export interface OrderProcedureModalProps {
+  visible: boolean;
+  patient?: ClinicPatient | null;
+  patientId?: string;
+  onClose: () => void;
+  onSuccess?: () => void;
+}
+
+export function OrderProcedureModal({
+  visible,
+  patient,
+  patientId,
+  onClose,
+  onSuccess,
+}: OrderProcedureModalProps) {
+  const { current: currentStaff } = useStaff();
+  const [procedureCode, setProcedureCode] = useState('PROC-NEB');
+  const [procedureName, setProcedureName] = useState('Nebulization Therapy');
+  const [category, setCategory] = useState('Nursing Procedures');
+  const [targetRoomName, setTargetRoomName] = useState('Treatment Bay 1');
+  const [clinicalNotes, setClinicalNotes] = useState('');
+  const [ordering, setOrdering] = useState(false);
+
+  const handleOrder = async () => {
+    const targetPatId = patientId || patient?.id;
+    if (!targetPatId) {
+      notify.error('No patient selected.');
+      return;
+    }
+    if (!procedureName.trim()) {
+      notify.error('Procedure name is required.');
+      return;
+    }
+    setOrdering(true);
+    const [created, err] = await clinicService.orderProcedure({
+      patientId: targetPatId,
+      patientName: patient ? `${patient.firstName} ${patient.lastName}` : 'Walk-in Patient',
+      procedureCode: procedureCode.trim() || undefined,
+      procedureName: procedureName.trim(),
+      category: category.trim() || 'Nursing Procedures',
+      targetRoomName: targetRoomName.trim() || undefined,
+      clinicalNotes: clinicalNotes.trim() || undefined,
+      orderedByDoctorId: currentStaff?.role === 'Doctor' ? currentStaff.id : undefined,
+      orderedByDoctorName: currentStaff?.role === 'Doctor' ? `${currentStaff.firstName} ${currentStaff.lastName}` : undefined,
+    });
+    setOrdering(false);
+    if (err) {
+      notify.error(err.message || 'Failed to order procedure.');
+      return;
+    }
+    notify.success(`${procedureName} ordered successfully.`);
+    onSuccess?.();
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} title="Order Clinical Procedure" onClose={onClose}>
+      <ScrollView contentContainerStyle={styles.modalContent}>
+        <View style={styles.modalSection}>
+          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+            PROCEDURE DETAILS
+          </ThemedText>
+          <Input
+            label="Procedure Code"
+            value={procedureCode}
+            onChangeText={setProcedureCode}
+            placeholder="e.g. PROC-NEB, PROC-WOUND"
+          />
+          <Input
+            label="Procedure Name *"
+            value={procedureName}
+            onChangeText={setProcedureName}
+            placeholder="e.g. Nebulization Therapy"
+          />
+          <Input
+            label="Category"
+            value={category}
+            onChangeText={setCategory}
+            placeholder="Nursing Procedures"
+          />
+          <Input
+            label="Treatment Bay / Room"
+            value={targetRoomName}
+            onChangeText={setTargetRoomName}
+            placeholder="e.g. Treatment Bay 1"
+          />
+          <Input
+            label="Clinical Notes / Indication"
+            value={clinicalNotes}
+            onChangeText={setClinicalNotes}
+            placeholder="Clinical indications and dosage instructions..."
+            multiline
+          />
+        </View>
+        <View style={styles.modalActionRow}>
+          <Button title="Cancel" variant="ghost" onPress={onClose} disabled={ordering} />
+          <Button
+            testID="confirm-order-procedure-button"
+            title={ordering ? 'Ordering...' : 'Confirm Order'}
+            variant="primary"
+            icon="plus"
+            loading={ordering}
+            onPress={handleOrder}
           />
         </View>
       </ScrollView>

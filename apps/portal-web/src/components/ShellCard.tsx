@@ -48,7 +48,12 @@ export default function ShellCard({ image, title, description, button, content, 
         </div>
       </CardContent>
       <CardFooter className="pt-0 flex flex-col gap-2">
-        <Link href={button.href} className="w-full">
+        <Link
+          href={button.href}
+          className="w-full"
+          target={button.href.startsWith("http") ? "_blank" : undefined}
+          rel={button.href.startsWith("http") ? "noopener noreferrer" : undefined}
+        >
           <Button className="w-full">{button.text}</Button>
         </Link>
         <div className="flex items-center justify-between w-full text-[11px] text-muted-foreground pt-1">
