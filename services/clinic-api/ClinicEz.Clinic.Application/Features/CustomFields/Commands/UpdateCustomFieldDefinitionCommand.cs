@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
@@ -10,6 +11,7 @@ using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 namespace ClinicEz.Clinic.Application.Features.CustomFields.Commands;
 
@@ -48,7 +50,9 @@ public sealed class UpdateCustomFieldDefinitionCommandValidator : AbstractValida
             .GreaterThanOrEqualTo(0).WithMessage("DisplayOrder must be 0 or greater.");
 
         RuleFor(x => x.FieldKey)
-            .MaximumLength(100).WithMessage("FieldKey cannot exceed 100 characters.");
+            .MaximumLength(100).WithMessage("FieldKey cannot exceed 100 characters.")
+            .Matches(@"\A[a-z0-9_]+\z").When(x => x.FieldKey is not null)
+            .WithMessage("Machine key must contain only lowercase alphanumeric characters and underscores.");
 
         RuleFor(x => x.OptionsJson)
             .Must(BeValidJsonOrNull).WithMessage("OptionsJson must be a valid JSON string or null.");
@@ -96,20 +100,29 @@ public sealed class UpdateCustomFieldDefinitionCommandHandler : IRequestHandler<
             throw new NotFoundException($"Custom field definition with ID '{request.Id}' was not found.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.FieldKey))
+        if (request.FieldKey is not null)
         {
             var normalizedKey = request.FieldKey.Trim().ToLowerInvariant().Replace(" ", "_");
+            if (string.IsNullOrWhiteSpace(normalizedKey) || !Regex.IsMatch(normalizedKey, @"\A[a-z0-9_]+\z"))
+            {
+                throw new ValidationException("Machine key must contain only lowercase alphanumeric characters and underscores.");
+            }
+
+            if (normalizedKey.Length > 100)
+            {
+                throw new ValidationException("FieldKey cannot exceed 100 characters.");
+            }
+
             if (normalizedKey != field.FieldKey)
             {
                 var conflict = await _repo.Query().AnyAsync(f =>
                     f.Id != request.Id &&
                     f.EntityType == field.EntityType &&
-                    f.FieldKey == normalizedKey &&
-                    f.IsActive, ct);
+                    f.FieldKey == normalizedKey, ct);
 
                 if (conflict)
                 {
-                    throw new ConflictException($"A custom field with key '{normalizedKey}' already exists for entity '{field.EntityType}'.");
+                    throw new ConflictException("A custom field with this machine key already exists.");
                 }
 
                 field.FieldKey = normalizedKey;
@@ -129,7 +142,14 @@ public sealed class UpdateCustomFieldDefinitionCommandHandler : IRequestHandler<
         field.UpdatedAt = DateTime.UtcNow;
         field.UpdatedBy = "ClinicAdmin";
 
-        await _unitOfWork.SaveChangesAsync(ct);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (CreateCustomFieldDefinitionCommandHandler.IsUniqueConstraintViolation(ex))
+        {
+            throw new ConflictException("A custom field with this machine key already exists.");
+        }
 
         return new ClinicCustomFieldDefinitionDto(
             field.Id,

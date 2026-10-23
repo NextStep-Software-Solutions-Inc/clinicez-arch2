@@ -881,7 +881,9 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.OptionsJson).HasColumnType("text");
             entity.Property(e => e.VisibilityRuleJson).HasColumnType("text");
             entity.Property(e => e.ConditionalOptionsJson).HasColumnType("text");
-            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.EntityType, e.FieldKey });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.EntityType, e.FieldKey })
+                .IsUnique()
+                .HasFilter("\"IsDeleted\" = false");
         });
 
         modelBuilder.Entity<ClinicSettings>(entity =>

@@ -88,6 +88,7 @@ export default function CustomFieldsTab({
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [showModal, setShowModal] = useState(false);
   const [editingField, setEditingField] = useState<ClinicCustomFieldDefinition | null>(null);
+  const [modalSaveError, setModalSaveError] = useState<string | null>(null);
   const [showTemplatesSection, setShowTemplatesSection] = useState(false);
   const [installingBundle, setInstallingBundle] = useState<string | null>(null);
   const [isReordering, setIsReordering] = useState(false);
@@ -115,20 +116,25 @@ export default function CustomFieldsTab({
 
   const handleOpenAdd = () => {
     setEditingField(null);
+    setModalSaveError(null);
     setShowModal(true);
   };
 
   const handleOpenEdit = (field: ClinicCustomFieldDefinition) => {
     setEditingField(field);
+    setModalSaveError(null);
     setShowModal(true);
   };
 
   const handleSaveField = async (payload: Partial<ClinicCustomFieldDefinition>): Promise<boolean> => {
+    setModalSaveError(null);
     if (editingField) {
       // Update existing
       const [updated, err] = await clinicService.updateCustomField(editingField.id, payload);
       if (err || !updated) {
-        notify.error(err?.message || 'Could not update custom field.');
+        const msg = err?.message || 'Could not update custom field.';
+        setModalSaveError(msg);
+        notify.error(msg);
         return false;
       }
       setFields((prev) =>
@@ -150,7 +156,9 @@ export default function CustomFieldsTab({
       });
 
       if (err || !created) {
-        notify.error(err?.message || 'Could not create custom field.');
+        const msg = err?.message || 'Could not create custom field.';
+        setModalSaveError(msg);
+        notify.error(msg);
         return false;
       }
 
@@ -612,6 +620,7 @@ export default function CustomFieldsTab({
         fieldToEdit={editingField}
         existingFields={fields}
         onSave={handleSaveField}
+        saveError={modalSaveError}
       />
     </View>
   );

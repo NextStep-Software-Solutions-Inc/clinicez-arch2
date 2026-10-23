@@ -367,7 +367,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "ClinicId", "EntityType", "FieldKey");
+                    b.HasIndex("TenantId", "ClinicId", "EntityType", "FieldKey")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.ToTable("CustomFieldDefinitions", "public");
                 });
