@@ -14,6 +14,10 @@ import Icon from '../ui/Icon';
 import { notify } from '../../utils/feedback';
 import { clinicService } from '../../services/clinicService';
 import type { ExtendedAppointmentItem } from './types';
+import {
+  getAppointmentLocalDateTime,
+  manilaDateTimeToUtcIso,
+} from './calendarUtils';
 
 export interface AppointmentRescheduleModalProps {
   visible: boolean;
@@ -32,8 +36,16 @@ export function AppointmentRescheduleModal({
   onSubmitReschedule,
   conflictError: externalConflictError,
 }: AppointmentRescheduleModalProps) {
-  const [newDate, setNewDate] = useState<string>('');
-  const [newTime, setNewTime] = useState<string>('09:00');
+  const [newDate, setNewDate] = useState<string>(() => {
+    if (!appointment?.scheduledAt) return '';
+    const { dateStr } = getAppointmentLocalDateTime(appointment.scheduledAt);
+    return dateStr || appointment.scheduledAt.split('T')[0] || '';
+  });
+  const [newTime, setNewTime] = useState<string>(() => {
+    if (!appointment?.scheduledAt) return '09:00';
+    const { timeStr } = getAppointmentLocalDateTime(appointment.scheduledAt);
+    return timeStr || '09:00';
+  });
   const [reason, setReason] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [internalConflictError, setInternalConflictError] = useState<string | null>(null);
@@ -41,14 +53,9 @@ export function AppointmentRescheduleModal({
   useEffect(() => {
     if (appointment) {
       const scheduled = appointment.scheduledAt || '';
-      const datePart = scheduled.includes('T')
-        ? scheduled.split('T')[0]
-        : scheduled;
-      const timePart = scheduled.includes('T')
-        ? scheduled.split('T')[1].slice(0, 5)
-        : '09:00';
-      setNewDate(datePart);
-      setNewTime(timePart || '09:00');
+      const { dateStr, timeStr } = getAppointmentLocalDateTime(scheduled);
+      setNewDate(dateStr || scheduled.split('T')[0] || '');
+      setNewTime(timeStr || '09:00');
       setReason('');
       setInternalConflictError(null);
     }
@@ -71,7 +78,7 @@ export function AppointmentRescheduleModal({
     setLoading(true);
     setInternalConflictError(null);
 
-    const newScheduledAt = `${newDate}T${newTime}:00Z`;
+    const newScheduledAt = manilaDateTimeToUtcIso(newDate, newTime);
     const [result, err] = await clinicService.rescheduleAppointment(
       appointment.id,
       {

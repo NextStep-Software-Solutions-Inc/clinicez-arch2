@@ -9,6 +9,7 @@ import {
   resolveUrgencyTokens,
   resolveStatusTokens,
   formatTime12,
+  getAppointmentLocalDateTime,
 } from './calendarUtils';
 
 export interface AppointmentCardProps {
@@ -34,10 +35,7 @@ export function AppointmentCard({
   const urgencyTokens = resolveUrgencyTokens(urgency);
   const statusTokens = resolveStatusTokens(appointment.status);
 
-  const timeStr = appointment.scheduledAt.includes('T')
-    ? appointment.scheduledAt.split('T')[1].slice(0, 5)
-    : '';
-  const formattedTime = timeStr ? formatTime12(timeStr) : '';
+  const { formattedTime } = getAppointmentLocalDateTime(appointment.scheduledAt);
 
   // Compact variant: for MonthView day cells
   if (variant === 'compact') {

@@ -11,6 +11,7 @@ import {
   resolveUrgencyTokens,
   resolveStatusTokens,
   formatTime12,
+  getAppointmentLocalDateTime,
 } from './calendarUtils';
 
 export interface AppointmentInspectionModalProps {
@@ -88,11 +89,7 @@ export function AppointmentInspectionModal({
   const urgencyTokens = resolveUrgencyTokens(urgency);
   const statusTokens = resolveStatusTokens(currentAppointment.status);
 
-  const timeStr = currentAppointment.scheduledAt.includes('T')
-    ? currentAppointment.scheduledAt.split('T')[1].slice(0, 5)
-    : '';
-  const dateStr = currentAppointment.scheduledAt.split('T')[0];
-  const formattedTime = timeStr ? formatTime12(timeStr) : '';
+  const { dateStr, formattedTime } = getAppointmentLocalDateTime(currentAppointment.scheduledAt);
 
   const canCheckIn =
     (currentAppointment.status === 'Confirmed' || currentAppointment.status === 'Pending') &&
