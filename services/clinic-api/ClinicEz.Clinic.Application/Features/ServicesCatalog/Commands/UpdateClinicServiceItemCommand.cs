@@ -51,14 +51,18 @@ public class UpdateClinicServiceItemCommandHandler : IRequestHandler<UpdateClini
             throw new NotFoundException($"Clinic service item with ID '{request.Id}' was not found.");
         }
 
+        var philHealthCode = string.IsNullOrWhiteSpace(request.PhilHealthCode) ? null : request.PhilHealthCode.Trim();
+        var philHealthDescription = string.IsNullOrWhiteSpace(request.PhilHealthDescription) ? null : request.PhilHealthDescription.Trim();
+        var description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+
         item.Name = request.Name.Trim();
         item.Category = string.IsNullOrWhiteSpace(request.Category) ? "General" : request.Category.Trim();
         item.StandardPrice = Math.Max(0m, request.StandardPrice);
-        item.Description = request.Description?.Trim();
+        item.Description = description;
         item.IsActive = request.IsActive;
-        item.PhilHealthCode = request.PhilHealthCode?.Trim();
-        item.PhilHealthDescription = request.PhilHealthDescription?.Trim();
-        item.IsPhilHealthFormulary = request.IsPhilHealthFormulary;
+        item.PhilHealthCode = philHealthCode;
+        item.PhilHealthDescription = philHealthDescription;
+        item.IsPhilHealthFormulary = request.IsPhilHealthFormulary || philHealthCode != null;
 
         _serviceRepo.Update(item);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
