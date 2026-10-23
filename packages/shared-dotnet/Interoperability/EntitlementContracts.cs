@@ -50,4 +50,5 @@ public record FacilityHeartbeatPayload
     public string AppVersion { get; init; } = string.Empty;
     public DateTime? LicenseExpiresAt { get; init; }
     public DateTime ClockUtc { get; init; } = DateTime.UtcNow;
+    public bool? IsWorkspaceEligible { get; init; }
 }

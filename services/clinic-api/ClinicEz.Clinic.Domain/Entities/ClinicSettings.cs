@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using ClinicEz.Clinic.Domain.Common;
 
 namespace ClinicEz.Clinic.Domain.Entities;
@@ -74,6 +74,13 @@ public sealed class ClinicSettings : BaseEntity
     public bool IsJoinEnabled { get; set; } = true;
     public string? JoinCode { get; set; }
     public DateTime? JoinCodeExpiresAt { get; set; }
+
+    /// <summary>
+    /// Tier 1 publishing governance: whether this clinic facility has been granted patient app directory discovery
+    /// eligibility by the workspace administrator in Portal. Controlled strictly via control-plane interop events
+    /// (<c>facility.directory.updated</c> or <c>facility.license.issued</c>). Clinic staff cannot mutate this flag.
+    /// </summary>
+    public bool IsWorkspaceEligible { get; set; } = false;
 
     /// <summary>
     /// Tier 2 publishing governance: whether this clinic has published its profile to the patient app directory.

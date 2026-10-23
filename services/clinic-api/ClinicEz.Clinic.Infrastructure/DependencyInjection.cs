@@ -213,6 +213,7 @@ public static class DependencyInjection
         // ever sent to a clinic. GAMOT and PhilHealth answers are replies to this clinic's own requests.
         services.AddInterop<ApplicationDbContext>(configuration, b => b
             .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
+            .Handle<FacilityCreatedEvent, FacilityDirectoryUpdatedHandler>(InteropTypes.FacilityDirectoryUpdated)
             .HandleWorkspaceProfileUpdated()
             .Handle<AppointmentBookedEvent, AppointmentBookedHandler>(InteropTypes.PatientAppointmentBooked)
             .Handle<PatientJoinRequestedPayload, PatientJoinRequestedHandler>(InteropTypes.PatientJoinRequested)

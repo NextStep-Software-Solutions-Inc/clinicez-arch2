@@ -17,7 +17,8 @@ public sealed record ClinicPublishingReadinessDto(
     ClinicPublishingChecksDto Checks,
     int LicensedDoctorsCount,
     int ActiveServicesCount,
-    string? OperatingHours
+    string? OperatingHours,
+    bool IsWorkspaceEligible = false
 );
 
 public sealed record ClinicPublishingChecksDto(
@@ -84,7 +85,8 @@ public sealed class GetClinicPublishingReadinessQueryHandler : IRequestHandler<G
             ),
             LicensedDoctorsCount: licensedDoctorsCount,
             ActiveServicesCount: activeServicesCount,
-            OperatingHours: settings?.OperatingHours
+            OperatingHours: settings?.OperatingHours,
+            IsWorkspaceEligible: settings?.IsWorkspaceEligible ?? false
         );
     }
 }

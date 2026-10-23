@@ -12,9 +12,11 @@ using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interoperability;
 using ClinicEz.Shared.Licensing;
+using ClinicEz.Clinic.Domain.Interfaces;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using Xunit;
 
 namespace ClinicEz.Clinic.Application.Tests;
@@ -35,6 +37,9 @@ public class ClinicInboundHandlerTests
 
     private static FacilityCreatedHandler FacilityHandler(ApplicationDbContext db) =>
         new(db, new InteropPublisher(db), new FacilityLicenseValidator(FacilityLicenseValidator.DefaultAuthorityPublicKeyPem), NullLogger<FacilityCreatedHandler>.Instance);
+
+    private static FacilityDirectoryUpdatedHandler DirectoryUpdatedHandler(ApplicationDbContext db) =>
+        new(db, NullLogger<FacilityDirectoryUpdatedHandler>.Instance);
 
     private static ClinicLabOrder SeedLabOrder(ApplicationDbContext db, Guid clinicId, string orderNumber = "LAB-0001")
     {
@@ -403,6 +408,7 @@ public class ClinicInboundHandlerTests
         settings.ClinicName.Should().Be("Apex Clinic");
         settings.LicenseToken.Should().Be("signed-token");
         settings.PlanTier.Should().Be("Pro");
+        settings.IsWorkspaceEligible.Should().BeFalse();
 
         var outbox = await db.InteropOutbox.SingleAsync();
         outbox.Type.Should().Be(InteropTypes.FacilityProvisioned);
@@ -413,6 +419,28 @@ public class ClinicInboundHandlerTests
         var confirmation = envelope.GetPayload<FacilityProvisionedEvent>();
         confirmation.ResourceId.Should().Be(clinicId);
         confirmation.Success.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FacilityLicense_WhenIsWorkspaceEligibleSpecified_MapsToSettings()
+    {
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+        var license = LicenseFor(clinicId) with { IsWorkspaceEligible = true };
+
+        await FacilityHandler(db).HandleAsync(
+            license, License(license, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
+
+        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync();
+        settings.IsWorkspaceEligible.Should().BeTrue();
+
+        // Also verify redelivery with updated eligibility updates existing settings
+        var updatedLicense = license with { IsWorkspaceEligible = false };
+        await FacilityHandler(db).HandleAsync(
+            updatedLicense, License(updatedLicense, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
+
+        var updatedSettings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync();
+        updatedSettings.IsWorkspaceEligible.Should().BeFalse();
     }
 
     [Fact]
@@ -470,5 +498,182 @@ public class ClinicInboundHandlerTests
             license, License(license, Party.Portal, MessagingTestKit.ClinicParty(TenantId, facilityId)), CancellationToken.None);
 
         (await db.ClinicSettings.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+    }
+
+    // ----- facility.directory.updated -----
+
+    private static FacilityCreatedEvent DirectoryUpdateFor(Guid clinicId, string tenantId = TenantId, bool isWorkspaceEligible = true) => new()
+    {
+        TenantId = tenantId,
+        TenantSlug = "apex-group",
+        FacilityType = FacilityType.Clinic,
+        ResourceId = clinicId,
+        Name = "Apex Clinic Main",
+        Slug = "apex-main",
+        IsWorkspaceEligible = isWorkspaceEligible
+    };
+
+    private static InteropMessageContext DirectoryUpdate(FacilityCreatedEvent evt, Party from, Party to, Guid? correlationId = null) =>
+        MessagingTestKit.Delivered(InteropTypes.FacilityDirectoryUpdated, from, to, correlationId ?? Guid.NewGuid(), evt);
+
+    [Fact]
+    public async Task FacilityDirectoryUpdated_FromPortal_UpdatesIsWorkspaceEligibleAndMetadata()
+    {
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+        MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Original Name");
+
+        var updateEvt = DirectoryUpdateFor(clinicId, TenantId, isWorkspaceEligible: true) with
+        {
+            Name = "Updated Clinic Name",
+            Slug = "updated-slug",
+            TenantSlug = "updated-tenant-slug"
+        };
+
+        await DirectoryUpdatedHandler(db).HandleAsync(
+            updateEvt,
+            DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)),
+            CancellationToken.None);
+
+        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        settings.IsWorkspaceEligible.Should().BeTrue();
+        settings.ClinicName.Should().Be("Updated Clinic Name");
+        settings.FacilitySlug.Should().Be("updated-slug");
+        settings.TenantSlug.Should().Be("updated-tenant-slug");
+        settings.UpdatedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task FacilityDirectoryUpdated_WhenWorkspaceRevoked_UpdatesIsWorkspaceEligibleToFalse()
+    {
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+        var existing = MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Eligible Clinic");
+        existing.IsWorkspaceEligible = true;
+        await db.SaveChangesAsync();
+
+        var updateEvt = DirectoryUpdateFor(clinicId, TenantId, isWorkspaceEligible: false);
+
+        await DirectoryUpdatedHandler(db).HandleAsync(
+            updateEvt,
+            DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)),
+            CancellationToken.None);
+
+        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        settings.IsWorkspaceEligible.Should().BeFalse("Portal revoked workspace discovery eligibility");
+    }
+
+    [Fact]
+    public async Task FacilityDirectoryUpdated_FromNonControlPlaneSender_IsIgnored()
+    {
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+        MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Untouched Clinic");
+
+        var updateEvt = DirectoryUpdateFor(clinicId, TenantId, isWorkspaceEligible: true);
+
+        // From Lab
+        await DirectoryUpdatedHandler(db).HandleAsync(
+            updateEvt,
+            DirectoryUpdate(updateEvt, MessagingTestKit.LabParty(), MessagingTestKit.ClinicParty(TenantId, clinicId)),
+            CancellationToken.None);
+
+        // From another Clinic
+        await DirectoryUpdatedHandler(db).HandleAsync(
+            updateEvt,
+            DirectoryUpdate(updateEvt, MessagingTestKit.ClinicParty(TenantId, Guid.NewGuid()), MessagingTestKit.ClinicParty(TenantId, clinicId)),
+            CancellationToken.None);
+
+        // From Patient
+        await DirectoryUpdatedHandler(db).HandleAsync(
+            updateEvt,
+            DirectoryUpdate(updateEvt, Party.ForPatient(Guid.NewGuid().ToString()), MessagingTestKit.ClinicParty(TenantId, clinicId)),
+            CancellationToken.None);
+
+        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        settings.IsWorkspaceEligible.Should().BeFalse("Non-control-plane sender must be rejected");
+        settings.ClinicName.Should().Be("Untouched Clinic");
+    }
+
+    [Fact]
+    public async Task FacilityDirectoryUpdated_AddressedToAnotherFacilityOrTenant_IsIgnored()
+    {
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+        MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Untouched Clinic");
+
+        var updateEvt = DirectoryUpdateFor(clinicId, TenantId, isWorkspaceEligible: true);
+
+        // Addressed to another facility ID
+        await DirectoryUpdatedHandler(db).HandleAsync(
+            updateEvt,
+            DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty(TenantId, Guid.NewGuid())),
+            CancellationToken.None);
+
+        // Addressed to another tenant
+        await DirectoryUpdatedHandler(db).HandleAsync(
+            updateEvt,
+            DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty("different_tenant", clinicId)),
+            CancellationToken.None);
+
+        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        settings.IsWorkspaceEligible.Should().BeFalse();
+        settings.ClinicName.Should().Be("Untouched Clinic");
+    }
+
+    [Fact]
+    public async Task FacilityDirectoryUpdated_ForAnotherFacilityType_IsIgnored()
+    {
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+        MessagingTestKit.SeedClinic(db, clinicId, TenantId, "Untouched Clinic");
+
+        var updateEvt = DirectoryUpdateFor(clinicId, TenantId, isWorkspaceEligible: true) with
+        {
+            FacilityType = FacilityType.Pharmacy
+        };
+
+        await DirectoryUpdatedHandler(db).HandleAsync(
+            updateEvt,
+            DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty(TenantId, clinicId)),
+            CancellationToken.None);
+
+        var settings = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == clinicId);
+        settings.IsWorkspaceEligible.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task FacilityDirectoryUpdated_BypassesAmbientMultiTenantQueryFilter()
+    {
+        var activeClinicId = Guid.NewGuid();
+        var foreignClinicId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(activeClinicId);
+        clinicContext.TenantId.Returns("active_tenant");
+
+        using var db = MessagingTestKit.CreateDbContext(clinicContext);
+
+        // Seed foreign clinic in db
+        MessagingTestKit.SeedClinic(db, foreignClinicId, "foreign_tenant", "Foreign Clinic");
+
+        // Verify standard query without IgnoreQueryFilters() hides the foreign clinic due to active filter
+        var visibleStandard = await db.ClinicSettings.FirstOrDefaultAsync(s => s.ClinicId == foreignClinicId);
+        visibleStandard.Should().BeNull("Global query filter hides foreign clinic settings");
+
+        var updateEvt = DirectoryUpdateFor(foreignClinicId, "foreign_tenant", isWorkspaceEligible: true) with
+        {
+            Name = "Updated Foreign Clinic"
+        };
+
+        // FacilityDirectoryUpdatedHandler uses IgnoreQueryFilters() and must successfully find and update it
+        await DirectoryUpdatedHandler(db).HandleAsync(
+            updateEvt,
+            DirectoryUpdate(updateEvt, Party.Portal, MessagingTestKit.ClinicParty("foreign_tenant", foreignClinicId)),
+            CancellationToken.None);
+
+        var updated = await db.ClinicSettings.IgnoreQueryFilters().SingleAsync(s => s.ClinicId == foreignClinicId);
+        updated.IsWorkspaceEligible.Should().BeTrue("Handler must bypass ambient query filter to update settings");
+        updated.ClinicName.Should().Be("Updated Foreign Clinic");
     }
 }

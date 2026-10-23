@@ -685,6 +685,7 @@ public class ChallengerMaEmpiricalTests
             ClinicName = "Test Healthcare Hub",
             OperatingHours = "8:00 AM - 5:00 PM Mon-Fri",
             SpecialtyMode = specialtyMode!,
+            IsWorkspaceEligible = true,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);

@@ -77,6 +77,7 @@ public class PublishClinicToDirectoryTests
             ClinicName = "Metro Clinic",
             OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM",
             SpecialtyMode = specialtyMode!,
+            IsWorkspaceEligible = true,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -101,6 +102,8 @@ public class PublishClinicToDirectoryTests
             Arg.Is<FacilityCreatedEvent>(e =>
                 e.Classification == expectedClassification &&
                 e.IsPublic == true &&
+                e.IsWorkspaceEligible == true &&
+                e.IsDirectoryPublished == true &&
                 e.Providers != null && e.Providers.Count == 1 &&
                 e.Services != null && e.Services.Count == 1));
     }
@@ -122,6 +125,7 @@ public class PublishClinicToDirectoryTests
             ClinicName = "Metro Dental Studio",
             OperatingHours = "Mon-Sat 9:00 AM - 6:00 PM",
             SpecialtyMode = "Dental",
+            IsWorkspaceEligible = true,
             IsDirectoryPublished = true
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -145,7 +149,9 @@ public class PublishClinicToDirectoryTests
             _testClinicId,
             Arg.Is<FacilityCreatedEvent>(e =>
                 e.Classification == "Dental Clinic" &&
-                e.IsPublic == false));
+                e.IsPublic == false &&
+                e.IsDirectoryPublished == false &&
+                e.IsWorkspaceEligible == true));
     }
 
     [Fact]
@@ -246,6 +252,7 @@ public class PublishClinicToDirectoryTests
             ClinicName = "Apex Dental Studio",
             OperatingHours = "Mon-Fri 9:00 AM - 5:00 PM",
             SpecialtyMode = "Dental",
+            IsWorkspaceEligible = true,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
@@ -269,8 +276,114 @@ public class PublishClinicToDirectoryTests
             Arg.Is<FacilityCreatedEvent>(e =>
                 e.Classification == "Dental Clinic" &&
                 e.IsPublic == true &&
+                e.IsWorkspaceEligible == true &&
+                e.IsDirectoryPublished == true &&
                 e.Services != null &&
                 e.Services.Count == 2 &&
                 e.Services.All(s => s.Category == "Dental" && s.IsActive)));
+    }
+
+    [Fact]
+    public async Task PublishClinic_WhenWorkspaceIneligible_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var interopPublisher = Substitute.For<IInteropPublisher>();
+
+        await staffRepo.AddAsync(new StaffMember
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            FirstName = "Maria",
+            LastName = "Santos",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-998877",
+            IsActive = true
+        }, CancellationToken.None);
+
+        await servicesRepo.AddAsync(new ClinicServiceItem
+        {
+            ClinicId = _testClinicId,
+            Code = "SRV-01",
+            Name = "Clinical Consultation",
+            Category = "Consultation",
+            StandardPrice = 800.00m,
+            IsActive = true
+        }, CancellationToken.None);
+
+        var settings = new ClinicSettings
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            ClinicName = "Metro Clinic",
+            OperatingHours = "Mon-Fri 8:00 AM - 5:00 PM",
+            SpecialtyMode = "Medical",
+            IsWorkspaceEligible = false,
+            IsDirectoryPublished = false
+        };
+        await settingsRepo.AddAsync(settings, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new PublishClinicToDirectoryCommandHandler(
+            settingsRepo, staffRepo, servicesRepo, _clinicContext, uow, interopPublisher);
+
+        // Act
+        var act = async () => await handler.Handle(new PublishClinicToDirectoryCommand(true), CancellationToken.None);
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*readiness checks failed*");
+
+        settings.IsDirectoryPublished.Should().BeFalse();
+        interopPublisher.DidNotReceiveWithAnyArgs().Enqueue<FacilityCreatedEvent>(default!, default!, default!, default, default!);
+    }
+
+    [Fact]
+    public async Task PublishClinic_WhenWorkspaceIneligible_AllowsUnpublishing()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var servicesRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
+        var interopPublisher = Substitute.For<IInteropPublisher>();
+
+        var settings = new ClinicSettings
+        {
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            ClinicName = "Metro Dental Studio",
+            OperatingHours = "Mon-Sat 9:00 AM - 6:00 PM",
+            SpecialtyMode = "Dental",
+            IsWorkspaceEligible = false,
+            IsDirectoryPublished = true
+        };
+        await settingsRepo.AddAsync(settings, CancellationToken.None);
+        await uow.SaveChangesAsync(CancellationToken.None);
+
+        var handler = new PublishClinicToDirectoryCommandHandler(
+            settingsRepo, staffRepo, servicesRepo, _clinicContext, uow, interopPublisher);
+
+        // Act
+        var result = await handler.Handle(new PublishClinicToDirectoryCommand(false), CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.IsPublished.Should().BeFalse();
+        settings.IsDirectoryPublished.Should().BeFalse();
+
+        interopPublisher.Received(1).Enqueue(
+            InteropTypes.FacilityDirectoryUpdated,
+            Arg.Any<Party>(),
+            Arg.Any<Party>(),
+            _testClinicId,
+            Arg.Is<FacilityCreatedEvent>(e =>
+                e.Classification == "Dental Clinic" &&
+                e.IsPublic == false &&
+                e.IsDirectoryPublished == false &&
+                e.IsWorkspaceEligible == false));
     }
 }

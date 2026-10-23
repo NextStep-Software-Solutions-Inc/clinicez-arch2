@@ -149,8 +149,13 @@ public class FacilityProvisioningProfileTests : IDisposable
         await StageAsync(facilityId, FacilityType.Clinic);
         await _context.SaveChangesAsync();
 
-        var directoryEvent = TestSupport.OutboxPayloads<FacilityCreatedEvent>(_context, InteropTypes.FacilityDirectoryUpdated).Single();
+        var directoryMessages = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated);
+        Assert.Equal(2, directoryMessages.Count);
+        Assert.Contains(directoryMessages, m => m.To.Kind == PartyKind.ControlPlane && m.To.Service == InteropServices.Patient);
+        Assert.Contains(directoryMessages, m => m.To.Kind == PartyKind.Facility && m.To.FacilityId == facilityId.ToString());
+        var directoryEvent = directoryMessages.First(m => m.To.Service == InteropServices.Patient).GetPayload<FacilityCreatedEvent>();
         Assert.False(directoryEvent.IsPublic ?? true, "Newly provisioned facility MUST default to IsPublic = false (Draft/Private).");
+        Assert.False(directoryEvent.IsWorkspaceEligible ?? true);
     }
 
     [Fact]
@@ -172,8 +177,13 @@ public class FacilityProvisioningProfileTests : IDisposable
         await StageAsync(facilityId, FacilityType.Clinic);
         await _context.SaveChangesAsync();
 
-        var directoryEvent = TestSupport.OutboxPayloads<FacilityCreatedEvent>(_context, InteropTypes.FacilityDirectoryUpdated).Single();
+        var directoryMessages = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated);
+        Assert.Equal(2, directoryMessages.Count);
+        Assert.Contains(directoryMessages, m => m.To.Kind == PartyKind.ControlPlane && m.To.Service == InteropServices.Patient);
+        Assert.Contains(directoryMessages, m => m.To.Kind == PartyKind.Facility && m.To.FacilityId == facilityId.ToString());
+        var directoryEvent = directoryMessages.First(m => m.To.Service == InteropServices.Patient).GetPayload<FacilityCreatedEvent>();
         Assert.True(directoryEvent.IsPublic, "Facility with IsPatientDiscoveryEligible = true MUST have IsPublic = true.");
+        Assert.True(directoryEvent.IsWorkspaceEligible);
     }
 }
 

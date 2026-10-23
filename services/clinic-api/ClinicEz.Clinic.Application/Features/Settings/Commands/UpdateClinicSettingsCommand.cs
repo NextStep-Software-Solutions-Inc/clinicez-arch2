@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -352,8 +352,9 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.StaffNotificationRetentionDays,
             settings.EnableStatAudioAlert,
             settings.EnableStatVibrationAlert,
-            settings.IsDirectoryPublished,
-            settings.IsOnlineBookingPaused,
+            IsWorkspaceEligible: settings.IsWorkspaceEligible,
+            IsDirectoryPublished: settings.IsDirectoryPublished,
+            IsOnlineBookingPaused: settings.IsOnlineBookingPaused,
             settings.SpecialtyMode,
             settings.EnableDentalModule,
             settings.DefaultDoctorSharePercentage,

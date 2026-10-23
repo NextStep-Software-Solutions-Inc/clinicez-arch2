@@ -26,8 +26,8 @@ public interface IFacilityProvisioningPublisher
     Task StageProvisionedAsync(Tenant tenant, FacilityCreatedEvent facilityCreated, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Stages a licence-free <c>facility.directory.updated</c> message to <c>patient-api</c> whenever a facility's
-    /// metadata, branch address, PhilHealth accreditation, visibility, or staff roster changes.
+    /// Stages a licence-free <c>facility.directory.updated</c> message to <c>patient-api</c> (and to the facility mailbox
+    /// for Clinic facilities) whenever a facility's metadata, branch address, PhilHealth accreditation, visibility, or staff roster changes.
     /// </summary>
     Task StageDirectoryUpdateAsync(Tenant tenant, Facility facility, CancellationToken cancellationToken = default);
 }
@@ -90,6 +90,17 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
             correlationId,
             directoryEvent);
+
+        var targetFacilityType = trackedFacility?.FacilityType ?? facilityCreated.FacilityType;
+        if (targetFacilityType == FacilityType.Clinic)
+        {
+            publisher.Enqueue(
+                InteropTypes.FacilityDirectoryUpdated,
+                Party.Portal,
+                Party.ForFacility(tenant.Id.ToString(), (trackedFacility?.Id ?? facilityCreated.ResourceId).ToString(), targetFacilityType),
+                correlationId,
+                directoryEvent);
+        }
     }
 
     public async Task StageDirectoryUpdateAsync(Tenant tenant, Facility facility, CancellationToken cancellationToken = default)
@@ -112,6 +123,16 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
             facility.Id,
             directoryEvent);
+
+        if (facility.FacilityType == FacilityType.Clinic)
+        {
+            publisher.Enqueue(
+                InteropTypes.FacilityDirectoryUpdated,
+                Party.Portal,
+                Party.ForFacility(tenant.Id.ToString(), facility.Id.ToString(), facility.FacilityType),
+                facility.Id,
+                directoryEvent);
+        }
     }
 
     private async Task<FacilityCreatedEvent> BuildDirectoryEventAsync(
@@ -192,6 +213,7 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             OperatingHours = operatingHours,
             Classification = classification,
             IsPhilHealthAccredited = isPhilHealthAccredited,
+            IsWorkspaceEligible = facility?.IsPatientDiscoveryEligible,
             IsPublic = isPublic,
             Providers = providers
         };

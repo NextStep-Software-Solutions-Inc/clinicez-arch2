@@ -188,6 +188,7 @@ public class ClinicPublishingGovernanceTests
             ClinicId = _testClinicId,
             ClinicName = "Cruz Medical Clinic",
             OperatingHours = "Mon-Sat 9:00 AM - 6:00 PM",
+            IsWorkspaceEligible = true,
             IsDirectoryPublished = false
         };
         await settingsRepo.AddAsync(settings, CancellationToken.None);
