@@ -8,7 +8,7 @@ describe('inferStaffRole', () => {
       inferStaffRole({
         name: 'Attending Physician / Doctor',
         isSystem: true,
-        permissions: ['consultations:sign', 'patients:write', 'triage:write', 'procedures:write'],
+        permissions: ['triage:read', 'triage:write', 'patients:write', 'procedures:write', 'consultations:write', 'consultations:sign'],
       }),
     ).toBe('Doctor');
     expect(inferStaffRole({ name: 'Triage Nurse', isSystem: true })).toBe('Nurse');
@@ -24,7 +24,7 @@ describe('inferStaffRole', () => {
       inferStaffRole({
         name: 'Pediatric Specialist',
         isSystem: false,
-        permissions: ['consultations:sign', 'patients:write', 'triage:write'],
+        permissions: ['consultations:write', 'consultations:sign', 'patients:write', 'triage:write'],
       }),
     ).toBe('Doctor');
     expect(inferStaffRole({ name: 'Visiting Physician', isSystem: false })).toBe('Doctor');

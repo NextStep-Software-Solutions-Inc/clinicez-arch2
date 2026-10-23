@@ -40,7 +40,7 @@ public static class ClinicRoleSeeder
         ),
         new(
             DoctorRoleName,
-            "Consultation documentation, vitals review, prescription issuing, lab/procedure ordering, and encounter signing",
+            "Consultation documentation, vitals recording & review, prescription issuing, lab/procedure ordering, and encounter signing",
             new List<string>
             {
                 ClinicPermissions.AppointmentsRead,
@@ -220,7 +220,7 @@ public static class ClinicRoleSeeder
                     : template.Permissions;
 
                 var missingPerms = expectedPermissions
-                    .Where(p => !existingRole.Permissions.Contains(p))
+                    .Where(p => !existingRole.Permissions.Contains(p, StringComparer.OrdinalIgnoreCase))
                     .ToList();
 
                 if (missingPerms.Count > 0)

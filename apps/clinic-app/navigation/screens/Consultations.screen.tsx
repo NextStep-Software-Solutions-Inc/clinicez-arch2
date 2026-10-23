@@ -71,6 +71,8 @@ import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhil
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
+import { useAuth } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../constants/permissions';
 import { openDocument, openDocumentBlob } from '../../services/documentOpener';
 import {
   clinicService,
@@ -319,6 +321,8 @@ export default function ConsultationsScreen() {
   const { facilityName, accreditationNumber, taxIdentificationNumber, letterhead, rooms = [], settings } = useClinic();
   const allowChipLevelCalling = Boolean(settings?.enableChipLevelQueueCalling);
   const { current, staff, reload: reloadStaff } = useStaff();
+  const { user: authUser, can } = useAuth();
+  const canRecordVitals = authUser ? can(PERMISSIONS.triageWrite) : true;
 
   const activeRooms = useMemo(() => (rooms || []).filter((r) => r.isActive), [rooms]);
   const treatmentRooms = useMemo(
@@ -507,7 +511,7 @@ export default function ConsultationsScreen() {
   const soapPaneOffsetY = useRef<number>(0);
 
   const handleJumpToSection = (section: StatutorySectionKey) => {
-    if (section === 'vitals') {
+    if (section === 'vitals' && canRecordVitals) {
       setRecordVitalsModalVisible(true);
     }
     if (mobileWorkstationView !== 'soap') {
@@ -3555,7 +3559,7 @@ export default function ConsultationsScreen() {
                   title="Objective"
                   subtitle="Physical findings, auscultation and examination"
                   rightAction={
-                    !isSigned ? (
+                    !isSigned && canRecordVitals ? (
                       <Button
                         title="Record Vitals"
                         icon="activity"
@@ -4928,7 +4932,7 @@ export default function ConsultationsScreen() {
                 loading={contextLoading}
                 onPressRefresh={() => loadPatientContext(selectedPatient)}
                 onPressEdit={() => setEditPatientModalVisible(true)}
-                onPressRecordVitals={() => setRecordVitalsModalVisible(true)}
+                onPressRecordVitals={!isSigned && canRecordVitals ? () => setRecordVitalsModalVisible(true) : undefined}
               />
             </View>
 
