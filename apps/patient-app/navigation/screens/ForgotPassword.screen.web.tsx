@@ -8,6 +8,11 @@ import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import Card from '@ui/Card';
 import Input from '@ui/Input';
+import {
+  isSignInSecondFactorRequired,
+  resolveDefaultSecondFactorStrategy,
+  prepareSecondFactorIfNeeded,
+} from '../../utils/mfaHelpers';
 
 type Step = 'email' | 'code' | 'password';
 
@@ -75,6 +80,14 @@ export default function ForgotPasswordScreenWeb() {
           unlock();
         },
       });
+    } else if (
+      isSignInSecondFactorRequired(signIn.status) ||
+      signIn.status === 'needs_second_factor' ||
+      signIn.status === 'needs_client_trust'
+    ) {
+      const strategy = resolveDefaultSecondFactorStrategy(signIn);
+      await prepareSecondFactorIfNeeded(signIn, strategy);
+      navigation.navigate('Auth', { screen: 'Verify' });
     }
   };
 
