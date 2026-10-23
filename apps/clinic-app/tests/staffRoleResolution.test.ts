@@ -3,7 +3,14 @@ import { inferStaffRole, isSelfStaffMember, canModifyStaffRole } from '../servic
 
 describe('inferStaffRole', () => {
   test('correctly identifies system standard roles', () => {
-    expect(inferStaffRole({ name: 'Attending Physician / Doctor', isSystem: true, permissions: ['triage:read', 'triage:write', 'consultations:write', 'consultations:sign'] })).toBe('Doctor');
+    expect(inferStaffRole({ name: 'Attending Physician / Doctor', isSystem: true })).toBe('Doctor');
+    expect(
+      inferStaffRole({
+        name: 'Attending Physician / Doctor',
+        isSystem: true,
+        permissions: ['triage:read', 'triage:write', 'patients:write', 'procedures:write', 'consultations:write', 'consultations:sign'],
+      }),
+    ).toBe('Doctor');
     expect(inferStaffRole({ name: 'Triage Nurse', isSystem: true })).toBe('Nurse');
     expect(inferStaffRole({ name: 'Front Desk Receptionist', isSystem: true })).toBe('Receptionist');
     expect(inferStaffRole({ name: 'Clinic Cashier / Billing Officer', isSystem: true })).toBe('Cashier');
@@ -11,9 +18,15 @@ describe('inferStaffRole', () => {
     expect(inferStaffRole({ name: 'Data Protection Officer / Compliance Officer', isSystem: true })).toBe('Admin');
   });
 
-  test('correctly infers doctor custom roles by name or signing permission even when triage:write is granted', () => {
+  test('correctly infers doctor custom roles by name or signing permission even with triage:write and patients:write', () => {
     expect(inferStaffRole({ name: 'Pediatric Specialist', isSystem: false, permissions: ['consultations:sign'] })).toBe('Doctor');
-    expect(inferStaffRole({ name: 'Pediatric Specialist', isSystem: false, permissions: ['triage:write', 'consultations:write', 'consultations:sign'] })).toBe('Doctor');
+    expect(
+      inferStaffRole({
+        name: 'Pediatric Specialist',
+        isSystem: false,
+        permissions: ['consultations:write', 'consultations:sign', 'patients:write', 'triage:write'],
+      }),
+    ).toBe('Doctor');
     expect(inferStaffRole({ name: 'Visiting Physician', isSystem: false })).toBe('Doctor');
     expect(inferStaffRole({ name: 'Resident Medical Officer', isSystem: false, permissions: ['consultations:write', 'consultations:sign'] })).toBe('Doctor');
   });

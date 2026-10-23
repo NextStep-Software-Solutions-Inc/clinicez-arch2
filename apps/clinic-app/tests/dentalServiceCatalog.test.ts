@@ -1,4 +1,4 @@
-﻿// token-guard:ignore-file
+// token-guard:ignore-file
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -209,7 +209,7 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
       expect(html).toContain('Nursing Services (1)');
     });
 
-    test('1.2 ServicesCatalogTab renders "Add Dental Services" button in header actions', () => {
+    test('1.2 ServicesCatalogTab renders "Add service item" in header actions without redundant "Add Dental Services" button', () => {
       const setServicesMock = mock(() => {});
       const onRefreshMock = mock(() => Promise.resolve());
 
@@ -226,11 +226,11 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
         })
       );
 
-      expect(html).toContain('Add Dental Services');
       expect(html).toContain('Add service item');
+      expect(html).not.toContain('Add Dental Services');
     });
 
-    test('1.3 "Add Service" modal category selector includes "Dental" option', () => {
+    test('1.3 "Add Service" modal category selector includes "Dental" option and optional PhilHealth code input', () => {
       const setServicesMock = mock(() => {});
       const onRefreshMock = mock(() => Promise.resolve());
 
@@ -247,7 +247,7 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
         })
       );
 
-      // The modal is open (showAddModal: true), verifying category chips include Dental
+      // The modal is open (showAddModal: true), verifying category chips include Dental and PhilHealth input is present
       expect(html).toContain('Add catalog service item');
       expect(html).toContain('Dental');
       expect(html).toContain('Consultation');
@@ -255,6 +255,7 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
       expect(html).toContain('Diagnostic');
       expect(html).toContain('Medicine');
       expect(html).toContain('NursingService');
+      expect(html).toContain('PhilHealth statutory code (optional)');
     });
 
     test('1.4 seedDentalServices API client invokes /services/seed-dental endpoint', async () => {
@@ -271,7 +272,7 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
       expect(items?.[0].category).toBe('Dental');
     });
 
-    test('1.5 ServicesCatalogTab source code includes Dental in Edit modal and label mapping', async () => {
+    test('1.5 ServicesCatalogTab source code includes Dental in Add/Edit modals, PhilHealth code support, and no redundant header button', async () => {
       const fs = await import('fs');
       const tabSource = fs.readFileSync(
         fileURLToPath(new URL('../components/settings/ServicesCatalogTab.tsx', import.meta.url)),
@@ -279,9 +280,10 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
       );
       expect(tabSource).toContain("Dental: 'Dental Services'");
       expect(tabSource).toContain("'Dental', 'Medicine', 'NursingService'");
-      expect(tabSource).toContain('title="Add Dental Services"');
-      expect(tabSource).toContain('loading={seedingDental}');
-      expect(tabSource).toContain('onPress={handleSeedDentalServices}');
+      expect(tabSource).not.toContain('title="Add Dental Services"');
+      expect(tabSource).toContain('itemPhilHealthCode');
+      expect(tabSource).toContain('editPhilHealthCode');
+      expect(tabSource).toContain('PhilHealth: ${item.philHealthCode.trim()}');
     });
 
     test('1.6 ServicesCatalogTab source code binds Seed Dental Services to empty state for dental category', async () => {
@@ -291,6 +293,109 @@ describe('Dental Service Catalog Frontend Integration Tests (R3, R4, R5)', () =>
 
       expect(tabSource).toContain("selectedCategory === 'Dental' ? 'Seed Dental Services'");
       expect(tabSource).toContain('handleSeedDentalServices');
+    });
+
+    test('1.7 ServicesCatalogTab displays PhilHealth code as a chip on the list of added services when provided under any category', () => {
+      const setServicesMock = mock(() => {});
+      const onRefreshMock = mock(() => Promise.resolve());
+
+      const servicesWithPhilHealth: ClinicServiceItem[] = [
+        {
+          id: 'svc-cons-ph',
+          tenantId: 't1',
+          clinicId: 'c1',
+          code: 'CONS-PH',
+          name: 'Konsulta Primary Consultation',
+          category: 'Consultation',
+          standardPrice: 500,
+          philHealthCode: '99201',
+          isActive: true,
+        },
+        {
+          id: 'svc-dent-ph',
+          tenantId: 't1',
+          clinicId: 'c1',
+          code: 'DENT-CLEAN-PH',
+          name: 'Oral Prophylaxis',
+          category: 'Dental',
+          standardPrice: 850,
+          philHealthCode: 'D1110',
+          isActive: true,
+        },
+        {
+          id: 'svc-diag-blank',
+          tenantId: 't1',
+          clinicId: 'c1',
+          code: 'LAB-PLAIN',
+          name: 'Plain Diagnostic Test',
+          category: 'Diagnostic',
+          standardPrice: 300,
+          philHealthCode: '   ',
+          isActive: true,
+        },
+      ];
+
+      const html = renderToStaticMarkup(
+        React.createElement(ServicesCatalogTab, {
+          services: servicesWithPhilHealth,
+          setServices: setServicesMock,
+          servicesLoadError: null,
+          showSkeletons: false,
+          onRefreshServices: onRefreshMock,
+          formatPeso: (v) => `₱${v}`,
+          showAddModal: false,
+          setShowAddModal: () => {},
+        })
+      );
+
+      expect(html).toContain('PhilHealth: 99201');
+      expect(html).toContain('PhilHealth: D1110');
+      expect(html).not.toContain('PhilHealth:    ');
+    });
+
+    test('1.8 clinicService.createService transmits optional philHealthCode for any category', async () => {
+      const { clinicService } = await import('../services/clinicService');
+      const [created, err] = await clinicService.createService({
+        code: 'DENT-001',
+        name: 'Dental Extraction',
+        category: 'Dental',
+        standardPrice: 1000,
+        description: 'Simple extraction',
+        philHealthCode: 'D7140',
+      });
+
+      expect(err).toBeNull();
+      expect(lastApiClientCall.method).toBe('POST');
+      expect(lastApiClientCall.url).toBe('/services');
+      expect(lastApiClientCall.data).toEqual({
+        code: 'DENT-001',
+        name: 'Dental Extraction',
+        category: 'Dental',
+        standardPrice: 1000,
+        description: 'Simple extraction',
+        philHealthCode: 'D7140',
+      });
+      expect(created?.philHealthCode).toBe('D7140');
+    });
+
+    test('1.9 clinicService.updateService supports updating and clearing philHealthCode across categories', async () => {
+      const { clinicService } = await import('../services/clinicService');
+      const [updated, err] = await clinicService.updateService('svc-1', {
+        name: 'Dental Extraction',
+        category: 'Dental',
+        standardPrice: 1100,
+        isActive: true,
+        philHealthCode: undefined,
+        philHealthDescription: undefined,
+        isPhilHealthFormulary: false,
+      });
+
+      expect(err).toBeNull();
+      expect(lastApiClientCall.method).toBe('PUT');
+      expect(lastApiClientCall.url).toBe('/services/svc-1');
+      expect(lastApiClientCall.data.philHealthCode).toBeUndefined();
+      expect(lastApiClientCall.data.isPhilHealthFormulary).toBe(false);
+      expect(updated?.philHealthCode).toBeUndefined();
     });
   });
 
