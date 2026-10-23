@@ -119,52 +119,53 @@ describe('Milestone 4: Cross-Domain Status & Action Matrix Alignment (Clinic App
       expect(actions).not.toContain('copy-invite');
     });
 
-    it('Active status provides Edit Details, Reset Password, and Suspend', () => {
+    it('Active status provides Edit Details, Reset Password, Suspend, and Revoke', () => {
       const actions = getAvailableStaffActions({
         status: 'Active',
         isActive: true,
       });
 
-      expect(actions).toEqual(['edit', 'reset-pwd', 'suspend-staff']);
+      expect(actions).toEqual(['edit', 'reset-pwd', 'suspend-staff', 'revoke-invite']);
     });
 
-    it('Credentialed staff member with status Invited provides Edit Details, Reset Password, and Suspend', () => {
+    it('Credentialed staff member with status Invited provides Edit Details, Reset Password, Suspend, and Revoke', () => {
       const actions = getAvailableStaffActions({
         status: 'Invited',
         hasCredentials: true,
         isActive: true,
       });
 
-      expect(actions).toEqual(['edit', 'reset-pwd', 'suspend-staff']);
+      expect(actions).toEqual(['edit', 'reset-pwd', 'suspend-staff', 'revoke-invite']);
     });
 
-    it('Suspended status provides Reactivate only (excludes Edit and Suspend)', () => {
+    it('Suspended status provides Reactivate, Revoke, and Remove (excludes Edit and Suspend)', () => {
       const actions = getAvailableStaffActions({
         status: 'Suspended',
         isActive: false,
       });
 
-      expect(actions).toEqual(['reactivate-staff']);
+      expect(actions).toEqual(['reactivate-staff', 'revoke-invite', 'remove-staff']);
       expect(actions).not.toContain('edit');
       expect(actions).not.toContain('suspend-staff');
     });
 
-    it('Revoked status provides 0 lifecycle actions', () => {
+    it('Revoked status provides Re-invite and Remove lifecycle actions', () => {
       const actions = getAvailableStaffActions({
         status: 'Revoked',
         isActive: false,
       });
 
-      expect(actions).toEqual([]);
+      expect(actions).toEqual(['reinvite-staff', 'remove-staff']);
       expect(actions).not.toContain('edit');
       expect(actions).not.toContain('reactivate-staff');
       expect(actions).not.toContain('resend-invite');
     });
 
-    it('Self row prevents destructive actions (revoke, suspend, reactivate on self)', () => {
+    it('Self row prevents destructive actions (revoke, suspend, reactivate, remove on self)', () => {
       const activeSelf = getAvailableStaffActions({ status: 'Active', isActive: true }, { isSelf: true });
       expect(activeSelf).toEqual(['edit', 'reset-pwd']);
       expect(activeSelf).not.toContain('suspend-staff');
+      expect(activeSelf).not.toContain('revoke-invite');
 
       const invitedSelf = getAvailableStaffActions({ status: 'Invited', invitationToken: 'tok_self', invitationExpiresAt: new Date(Date.now() + 100000).toISOString() }, { isSelf: true });
       expect(invitedSelf).toEqual(['copy-invite', 'resend-invite']);
@@ -173,6 +174,10 @@ describe('Milestone 4: Cross-Domain Status & Action Matrix Alignment (Clinic App
       const suspendedSelf = getAvailableStaffActions({ status: 'Suspended', isActive: false }, { isSelf: true });
       expect(suspendedSelf).toEqual([]);
       expect(suspendedSelf).not.toContain('reactivate-staff');
+      expect(suspendedSelf).not.toContain('remove-staff');
+
+      const revokedSelf = getAvailableStaffActions({ status: 'Revoked', isActive: false }, { isSelf: true });
+      expect(revokedSelf).toEqual([]);
     });
   });
 
@@ -221,14 +226,12 @@ describe('Milestone 4: Cross-Domain Status & Action Matrix Alignment (Clinic App
       // 4. Verify menu items gate via actions.includes
       expect(source).toContain("actions.includes('copy-invite')");
       expect(source).toContain("actions.includes('resend-invite')");
+      expect(source).toContain("actions.includes('reinvite-staff')");
       expect(source).toContain("actions.includes('revoke-invite')");
+      expect(source).toContain("actions.includes('remove-staff')");
       expect(source).toContain("actions.includes('reset-pwd')");
       expect(source).toContain("actions.includes('suspend-staff')");
       expect(source).toContain("actions.includes('reactivate-staff')");
-
-      // 5. Verify Revoked status displays read-only text and no action menu
-      expect(source).toContain("s.status === 'Revoked'");
-      expect(source).toContain('styles.revokedText');
     });
   });
 });

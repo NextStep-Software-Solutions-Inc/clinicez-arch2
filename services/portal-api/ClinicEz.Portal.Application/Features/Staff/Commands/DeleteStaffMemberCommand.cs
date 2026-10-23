@@ -43,9 +43,9 @@ public class DeleteStaffMemberCommandHandler(
             throw new InvalidOperationException("The primary workspace owner cannot be removed.");
         }
 
-        if (member.Status != MemberStatus.Revoked)
+        if (member.Status != MemberStatus.Revoked && member.Status != MemberStatus.Suspended)
         {
-            throw new InvalidOperationException("Only revoked workspace members can be permanently deleted. Please revoke their access first.");
+            throw new InvalidOperationException("Only revoked workspace members can be permanently deleted (or suspended members). Please revoke or suspend their access first.");
         }
 
         var profiles = await context.StaffMembers

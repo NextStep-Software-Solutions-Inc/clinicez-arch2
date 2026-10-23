@@ -56,6 +56,8 @@ export type StaffActionType =
   | 'copy-invite'
   | 'resend-invite'
   | 'revoke-invite'
+  | 'reinvite-staff'
+  | 'remove-staff'
   | 'reset-pwd'
   | 'suspend-staff'
   | 'reactivate-staff';
@@ -64,9 +66,9 @@ export type StaffActionType =
  * Resolves available actions for a staff member adhering to the unified cross-domain action matrix:
  * - Invited: Copy Link (if not expired & has token/url), Resend Email, Revoke
  * - Expired: Resend Email, Revoke (no Copy Link)
- * - Active: Edit Details, Reset Password, Suspend
- * - Suspended: Reactivate
- * - Revoked: No actions
+ * - Active: Edit Details, Reset Password, Suspend, Revoke
+ * - Suspended: Reactivate, Revoke, Remove
+ * - Revoked: Re-invite, Remove
  */
 export function getAvailableStaffActions(
   s: Partial<StaffMember>,
@@ -78,13 +80,14 @@ export function getAvailableStaffActions(
   const isRowSuspended = s.status === 'Suspended' || (s.isActive === false && !isRowRevoked && s.status !== 'Invited');
 
   if (isRowRevoked) {
-    return [];
+    if (isSelf) return [];
+    return ['reinvite-staff', 'remove-staff'];
   }
 
   if (isRowSuspended) {
     const actions: StaffActionType[] = [];
     if (!isSelf) {
-      actions.push('reactivate-staff');
+      actions.push('reactivate-staff', 'revoke-invite', 'remove-staff');
     }
     return actions;
   }
@@ -112,7 +115,7 @@ export function getAvailableStaffActions(
   // Active / Credentialed member
   const actions: StaffActionType[] = ['edit', 'reset-pwd'];
   if (!isSelf) {
-    actions.push('suspend-staff');
+    actions.push('suspend-staff', 'revoke-invite');
   }
   return actions;
 }

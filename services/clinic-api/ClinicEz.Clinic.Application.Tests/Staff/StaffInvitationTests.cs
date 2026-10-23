@@ -887,4 +887,133 @@ public class StaffInvitationTests
 
         notifier.DidNotReceiveWithAnyArgs().EnqueuePasswordResetEmail(default!, default, default!, default, default, default!, default!);
     }
+
+    [Fact]
+    public async Task ReinviteStaffMember_RevokedStaff_GeneratesFreshTokenAndEnqueuesEmail()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_reinvite";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var notifier = Substitute.For<IClinicStaffInvitationNotifier>();
+        notifier.BuildInviteUrl(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns(ci => $"https://nextstep.clinic.dev.clinicez.net/invitations/{ci.ArgAt<string>(0)}");
+
+        await settingsRepo.AddAsync(new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            ClinicName = "Nextstep Clinic",
+            TenantSlug = "nextstep",
+            FacilitySlug = "nextstep"
+        });
+
+        var revokedStaff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Wave",
+            LastName = "Ambray",
+            Role = StaffRole.Doctor,
+            Email = "wave@clinicez.ph",
+            Status = StaffAccountStatus.Revoked,
+            InvitationToken = "old_revoked_token",
+            IsActive = false
+        };
+        await staffRepo.AddAsync(revokedStaff);
+        await uow.SaveChangesAsync();
+
+        var handler = new ReinviteStaffMemberCommandHandler(staffRepo, settingsRepo, uow, clinicContext, notifier);
+        var result = await handler.Handle(new ReinviteStaffMemberCommand(revokedStaff.Id, SendInviteEmail: true), CancellationToken.None);
+
+        result.Status.Should().Be(StaffAccountStatus.Invited);
+        result.IsActive.Should().BeTrue();
+        result.InvitationToken.Should().NotBeNullOrWhiteSpace();
+        result.InvitationToken.Should().NotBe("old_revoked_token");
+        result.InvitationExpiresAt.Should().BeAfter(DateTime.UtcNow.AddDays(6));
+
+        notifier.Received(1).EnqueueInvitationEmail(
+            tenantId,
+            clinicId,
+            "Nextstep Clinic",
+            "nextstep",
+            "nextstep",
+            Arg.Is<StaffMember>(s => s.Id == revokedStaff.Id),
+            result.InvitationToken!);
+    }
+
+    [Fact]
+    public async Task RemoveStaffMember_RevokedOrSuspended_SoftDeletesFromRoster_AndBlocksActive()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_remove";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(Guid.NewGuid());
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        var activeStaff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Active",
+            LastName = "Doc",
+            Role = StaffRole.Doctor,
+            Status = StaffAccountStatus.Active,
+            IsActive = true
+        };
+        var suspendedStaff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Suspended",
+            LastName = "Nurse",
+            Role = StaffRole.Nurse,
+            Status = StaffAccountStatus.Suspended,
+            IsActive = false
+        };
+        var revokedStaff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Revoked",
+            LastName = "Receptionist",
+            Role = StaffRole.Receptionist,
+            Status = StaffAccountStatus.Revoked,
+            IsActive = false
+        };
+
+        await staffRepo.AddAsync(activeStaff);
+        await staffRepo.AddAsync(suspendedStaff);
+        await staffRepo.AddAsync(revokedStaff);
+        await uow.SaveChangesAsync();
+
+        var removeHandler = new RemoveStaffMemberCommandHandler(staffRepo, uow, clinicContext);
+
+        // 1. Removing Active staff fails
+        var actActive = () => removeHandler.Handle(new RemoveStaffMemberCommand(activeStaff.Id), CancellationToken.None);
+        await actActive.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>();
+
+        // 2. Removing Suspended staff succeeds and hides from directory query
+        (await removeHandler.Handle(new RemoveStaffMemberCommand(suspendedStaff.Id), CancellationToken.None)).Should().BeTrue();
+
+        // 3. Removing Revoked staff succeeds and hides from directory query
+        (await removeHandler.Handle(new RemoveStaffMemberCommand(revokedStaff.Id), CancellationToken.None)).Should().BeTrue();
+
+        var remaining = await staffRepo.Query(s => s.ClinicId == clinicId).ToListAsync();
+        remaining.Should().ContainSingle(s => s.Id == activeStaff.Id);
+    }
 }

@@ -589,9 +589,17 @@ export default function StaffManagementTab({
   };
 
   const handleRevokeInvite = (staffMember: StaffMember) => {
+    const isPendingInvite = staffMember.status === 'Invited' && !staffMember.hasCredentials;
+    if (!isPendingInvite && isSystemAdminStaff(staffMember) && activeSystemAdmins.length <= 1) {
+      notify.error('Cannot revoke the only active Clinic Administrator.');
+      return;
+    }
+
     Alert.alert(
-      'Revoke Invitation',
-      `Are you sure you want to revoke the invitation for ${staffMember.firstName} ${staffMember.lastName}? The invitation link will be immediately invalidated.`,
+      isPendingInvite ? 'Revoke Invitation' : 'Revoke Facility Access',
+      isPendingInvite
+        ? `Are you sure you want to revoke the invitation for ${staffMember.firstName} ${staffMember.lastName}? The invitation link will be immediately invalidated.`
+        : `Are you sure you want to revoke facility access for ${staffMember.firstName} ${staffMember.lastName}? Their status will be marked as Revoked and active sessions will be signed out.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -600,7 +608,7 @@ export default function StaffManagementTab({
           onPress: async () => {
             const [ok, err] = await clinicService.revokeStaffInvitation(staffMember.id);
             if (err || !ok) {
-              notify.error(err?.message || 'Could not revoke invitation.');
+              notify.error(err?.message || 'Could not revoke staff access.');
               return;
             }
             setStaff((prev) =>
@@ -608,8 +616,66 @@ export default function StaffManagementTab({
                 item.id === staffMember.id ? { ...item, status: 'Revoked', isActive: false } : item
               )
             );
-            notify.success(`Invitation for ${staffMember.firstName} ${staffMember.lastName} revoked.`);
-            await onRefreshStaff();
+            notify.success(
+              isPendingInvite
+                ? `Invitation for ${staffMember.firstName} ${staffMember.lastName} revoked.`
+                : `Facility access for ${staffMember.firstName} ${staffMember.lastName} revoked.`
+            );
+            await Promise.all([onRefreshStaff(), refreshGlobalStaff()]);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleReinviteStaff = async (staffMember: StaffMember) => {
+    const [updated, err] = await clinicService.reinviteStaffMember(staffMember.id, true);
+    if (err || !updated) {
+      notify.error(err?.message || 'Could not re-invite staff member.');
+      return;
+    }
+    setStaff((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    notify.success(`Sent a new 7-day invitation to ${updated.email || staffMember.email}.`);
+
+    const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+    const inviteUrl =
+      updated.inviteUrl ||
+      (updated.invitationToken
+        ? origin
+          ? `${origin}/invitations/${updated.invitationToken}`
+          : `/invitations/${updated.invitationToken}`
+        : '');
+    if (inviteUrl) {
+      setInviteModal({
+        visible: true,
+        name: `${updated.firstName} ${updated.lastName}`.trim(),
+        email: updated.email || staffMember.email,
+        role: updated.roleName || updated.role,
+        inviteUrl,
+        sentEmail: true,
+      });
+    }
+    await onRefreshStaff();
+  };
+
+  const handleRemoveStaff = (staffMember: StaffMember) => {
+    Alert.alert(
+      'Remove from Facility',
+      `Are you sure you want to permanently remove ${staffMember.firstName} ${staffMember.lastName} from the facility staff directory?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            const [ok, err] = await clinicService.removeStaffMember(staffMember.id);
+            if (err || !ok) {
+              notify.error(err?.message || 'Could not remove staff member from facility.');
+              return;
+            }
+            setStaff((prev) => prev.filter((item) => item.id !== staffMember.id));
+            notify.success(`${staffMember.firstName} ${staffMember.lastName} removed from facility directory.`);
+            await Promise.all([onRefreshStaff(), refreshGlobalStaff()]);
           },
         },
       ]
@@ -793,11 +859,11 @@ export default function StaffManagementTab({
                           onPress={() => handleOpenEditModal(s)}
                         />
                       ) : null}
-                      {s.status === 'Revoked' ? (
+                      {actions.length === 0 && s.status === 'Revoked' ? (
                         <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.revokedText}>
                           Revoked
                         </ThemedText>
-                      ) : (
+                      ) : actions.length > 0 ? (
                         <ActionMenu
                           align="right"
                           triggerAriaLabel={`More actions for ${fullName}`}
@@ -846,16 +912,14 @@ export default function StaffManagementTab({
                                   },
                                 ]
                               : []),
-                            ...(actions.includes('revoke-invite')
+                            ...(actions.includes('reinvite-staff')
                               ? [
                                   {
-                                    id: 'revoke-invite',
-                                    label: 'Revoke Invitation',
-                                    icon: 'close' as const,
-                                    hint: 'Cancel invitation permanently',
-                                    destructive: true,
-                                    dividerBefore: true,
-                                    onPress: () => handleRevokeInvite(s),
+                                    id: 'reinvite-staff',
+                                    label: 'Re-invite Staff Member',
+                                    icon: 'mail' as const,
+                                    hint: 'Generate fresh 7-day token & send email',
+                                    onPress: () => handleReinviteStaff(s),
                                   },
                                 ]
                               : []),
@@ -876,19 +940,6 @@ export default function StaffManagementTab({
                                   },
                                 ]
                               : []),
-                            ...(actions.includes('suspend-staff')
-                              ? [
-                                  {
-                                    id: 'suspend-staff',
-                                    label: 'Suspend Staff Member',
-                                    icon: 'alert' as const,
-                                    hint: 'Revoke access and active sessions',
-                                    destructive: true,
-                                    dividerBefore: true,
-                                    onPress: () => handleSuspendStaff(s),
-                                  },
-                                ]
-                              : []),
                             ...(actions.includes('reactivate-staff')
                               ? [
                                   {
@@ -901,9 +952,54 @@ export default function StaffManagementTab({
                                   },
                                 ]
                               : []),
+                            ...(actions.includes('suspend-staff')
+                              ? [
+                                  {
+                                    id: 'suspend-staff',
+                                    label: 'Suspend Staff Member',
+                                    icon: 'alert' as const,
+                                    hint: 'Suspend access and active sessions',
+                                    destructive: true,
+                                    dividerBefore: true,
+                                    onPress: () => handleSuspendStaff(s),
+                                  },
+                                ]
+                              : []),
+                            ...(actions.includes('revoke-invite')
+                              ? [
+                                  {
+                                    id: 'revoke-invite',
+                                    label:
+                                      s.status === 'Invited' && !s.hasCredentials
+                                        ? 'Revoke Invitation'
+                                        : 'Revoke Access',
+                                    icon: 'close' as const,
+                                    hint:
+                                      s.status === 'Invited' && !s.hasCredentials
+                                        ? 'Cancel invitation'
+                                        : 'Mark as Revoked and terminate access',
+                                    destructive: true,
+                                    dividerBefore: !actions.includes('suspend-staff'),
+                                    onPress: () => handleRevokeInvite(s),
+                                  },
+                                ]
+                              : []),
+                            ...(actions.includes('remove-staff')
+                              ? [
+                                  {
+                                    id: 'remove-staff',
+                                    label: 'Remove from Facility',
+                                    icon: 'trash' as const,
+                                    hint: 'Permanently remove from staff directory',
+                                    destructive: true,
+                                    dividerBefore: !actions.includes('revoke-invite'),
+                                    onPress: () => handleRemoveStaff(s),
+                                  },
+                                ]
+                              : []),
                           ]}
                         />
-                      )}
+                      ) : null}
                     </View>
                   </View>
                 );

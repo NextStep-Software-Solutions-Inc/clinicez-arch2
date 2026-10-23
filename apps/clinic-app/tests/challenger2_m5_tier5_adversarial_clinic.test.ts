@@ -236,37 +236,38 @@ describe('Milestone 5 Tier 5: Adversarial Clinic App Frontend & Routing Suite', 
       expect(actions).not.toContain('copy-invite');
     });
 
-    it('3.5 Active state: Exposes Edit Details, Reset Password, and Suspend Staff', () => {
+    it('3.5 Active state: Exposes Edit Details, Reset Password, Suspend Staff, and Revoke', () => {
       const actions = getAvailableStaffActions({
         status: 'Active',
         isActive: true,
       });
-      expect(actions).toEqual(['edit', 'reset-pwd', 'suspend-staff']);
+      expect(actions).toEqual(['edit', 'reset-pwd', 'suspend-staff', 'revoke-invite']);
     });
 
-    it('3.6 Active state for self: Prevents self-suspension (strips suspend-staff)', () => {
+    it('3.6 Active state for self: Prevents self-suspension and self-revocation', () => {
       const actions = getAvailableStaffActions(
         { status: 'Active', isActive: true },
         { isSelf: true }
       );
       expect(actions).toEqual(['edit', 'reset-pwd']);
       expect(actions).not.toContain('suspend-staff');
+      expect(actions).not.toContain('revoke-invite');
     });
 
-    it('3.7 Suspended state: Exposes Reactivate Staff', () => {
+    it('3.7 Suspended state: Exposes Reactivate Staff, Revoke, and Remove', () => {
       const actions = getAvailableStaffActions({
         status: 'Suspended',
         isActive: false,
       });
-      expect(actions).toEqual(['reactivate-staff']);
+      expect(actions).toEqual(['reactivate-staff', 'revoke-invite', 'remove-staff']);
     });
 
-    it('3.8 Revoked state: Strictly produces 0 actions (empty array)', () => {
+    it('3.8 Revoked state: Exposes Re-invite and Remove', () => {
       const actions = getAvailableStaffActions({
         status: 'Revoked',
         isActive: false,
       });
-      expect(actions).toEqual([]);
+      expect(actions).toEqual(['reinvite-staff', 'remove-staff']);
     });
 
     it('3.9 Dynamic Badge Resolution verifies full lifecycle badge parity', () => {

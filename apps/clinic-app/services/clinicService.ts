@@ -2885,6 +2885,14 @@ export const clinicService = {
     return clinicApiClient.post<boolean>(`/staff/${id}/revoke-invite`, {});
   },
 
+  async reinviteStaffMember(id: string, sendInviteEmail = true) {
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/reinvite`, { sendInviteEmail });
+  },
+
+  async removeStaffMember(id: string) {
+    return clinicApiClient.delete<boolean>(`/staff/${id}/permanent`);
+  },
+
   async suspendStaffMember(id: string) {
     return clinicApiClient.post<StaffMember>(`/staff/${id}/suspend`, {});
   },

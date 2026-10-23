@@ -231,6 +231,25 @@ public sealed class StaffController : ControllerBase
         var result = await _sender.Send(new ReactivateStaffMemberCommand(id), ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member reactivated successfully."));
     }
+
+    [HttpPost("{id:guid}/reinvite")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> ReinviteStaffMember(
+        Guid id,
+        [FromBody] ResendStaffInviteRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new ReinviteStaffMemberCommand(id, request?.SendInviteEmail ?? true), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member re-invited successfully."));
+    }
+
+    [HttpDelete("{id:guid}/permanent")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<bool>>> RemoveStaffMember(Guid id, CancellationToken ct)
+    {
+        var result = await _sender.Send(new RemoveStaffMemberCommand(id), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Staff member permanently removed from facility directory."));
+    }
 }
 
 public sealed record ResetStaffPasswordRequest(
