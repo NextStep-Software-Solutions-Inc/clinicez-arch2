@@ -121,6 +121,31 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
             var item = request.Patients[i];
             var patientCode = patientCodes[i];
 
+            var customFields = item.CustomFields != null
+                ? new Dictionary<string, object?>(item.CustomFields)
+                : new Dictionary<string, object?>();
+
+            if (!string.IsNullOrWhiteSpace(item.AddressLine) && !customFields.ContainsKey("primary_address_line"))
+                customFields["primary_address_line"] = item.AddressLine.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.Barangay) && !customFields.ContainsKey("primary_barangay"))
+                customFields["primary_barangay"] = item.Barangay.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.City) && !customFields.ContainsKey("primary_city"))
+                customFields["primary_city"] = item.City.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.Province) && !customFields.ContainsKey("primary_province"))
+                customFields["primary_province"] = item.Province.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.EmergencyContactName) && !customFields.ContainsKey("emergency_contact_name"))
+                customFields["emergency_contact_name"] = item.EmergencyContactName.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.EmergencyContactPhone) && !customFields.ContainsKey("emergency_contact_phone"))
+                customFields["emergency_contact_phone"] = item.EmergencyContactPhone.Trim();
+
+            if (!string.IsNullOrWhiteSpace(item.EmergencyContactRelationship) && !customFields.ContainsKey("emergency_contact_relationship"))
+                customFields["emergency_contact_relationship"] = item.EmergencyContactRelationship.Trim();
+
             var patient = new ClinicPatient
             {
                 Id = Guid.NewGuid(),
@@ -136,13 +161,6 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
                 CivilStatus = item.CivilStatus,
                 ContactNumber = item.ContactNumber.Trim(),
                 Email = item.Email?.Trim(),
-                AddressLine = item.AddressLine?.Trim(),
-                Barangay = item.Barangay?.Trim(),
-                City = item.City?.Trim(),
-                Province = item.Province?.Trim(),
-                EmergencyContactName = item.EmergencyContactName?.Trim(),
-                EmergencyContactPhone = item.EmergencyContactPhone?.Trim(),
-                EmergencyContactRelationship = item.EmergencyContactRelationship?.Trim(),
                 PhilHealthNumber = item.PhilHealthNumber?.Trim(),
                 SeniorCitizenId = item.SeniorCitizenId?.Trim(),
                 PwdId = item.PwdId?.Trim(),
@@ -150,7 +168,7 @@ public sealed class BulkRegisterClinicPatientsCommandHandler
                 Allergies = item.Allergies?.Trim(),
                 ChronicConditions = item.ChronicConditions?.Trim(),
                 Alerts = item.Alerts?.Trim(),
-                CustomFields = item.CustomFields ?? new Dictionary<string, object?>(),
+                CustomFields = customFields,
                 VerificationStatus = string.IsNullOrWhiteSpace(item.VerificationStatus) ? "PendingVerification" : item.VerificationStatus,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "BulkRegistrarImport"

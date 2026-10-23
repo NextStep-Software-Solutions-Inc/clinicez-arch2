@@ -4,6 +4,9 @@ import { ThemedText, Badge, Button, Card, Icon, ActionMenu, type ActionMenuItem 
 import { theme } from '@constants/theme';
 import { formatLongAge } from '../../utils/age';
 import type { ClinicPatient } from '../../services/clinicService';
+import { computePatientLocation } from './patientLocation';
+
+export { computePatientLocation };
 
 export type PatientDirectoryViewMode = 'cards' | 'table';
 
@@ -188,7 +191,7 @@ function PatientDirectoryCard({
 }: PatientDirectoryCardProps) {
   const initials = getPatientInitials(patient);
   const demographics = formatPatientDemographicsLine(patient);
-  const location = patient.city ? [patient.barangay, patient.city].filter(Boolean).join(', ') : patient.barangay || '';
+  const location = computePatientLocation(patient);
   const hasAllergies = hasKnownAllergies(patient.allergies);
   const isStatAllergy = hasStatAllergy(patient.allergies);
   const isQueued = Boolean(patient.activeQueueTicket);

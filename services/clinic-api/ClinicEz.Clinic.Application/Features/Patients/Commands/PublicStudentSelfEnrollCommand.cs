@@ -113,12 +113,36 @@ public sealed class PublicStudentSelfEnrollCommandHandler
         var patientCode = reservation.PatientCode;
         var queueToken = $"Q-{((reservation.Sequence - 1) % 500 + 1):D3}";
 
-        var customFields = request.AdditionalCustomFields ?? new Dictionary<string, object?>();
+        var customFields = request.AdditionalCustomFields != null
+            ? new Dictionary<string, object?>(request.AdditionalCustomFields)
+            : new Dictionary<string, object?>();
+
         customFields["classification"] = "Student";
         customFields["student_id"] = request.StudentId.Trim();
         if (!string.IsNullOrWhiteSpace(request.College)) customFields["college"] = request.College.Trim();
         if (!string.IsNullOrWhiteSpace(request.Program)) customFields["program"] = request.Program.Trim();
         if (!string.IsNullOrWhiteSpace(request.YearLevel)) customFields["year_level"] = request.YearLevel.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.AddressLine) && !customFields.ContainsKey("primary_address_line"))
+            customFields["primary_address_line"] = request.AddressLine.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.Barangay) && !customFields.ContainsKey("primary_barangay"))
+            customFields["primary_barangay"] = request.Barangay.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.City) && !customFields.ContainsKey("primary_city"))
+            customFields["primary_city"] = request.City.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.Province) && !customFields.ContainsKey("primary_province"))
+            customFields["primary_province"] = request.Province.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactName) && !customFields.ContainsKey("emergency_contact_name"))
+            customFields["emergency_contact_name"] = request.EmergencyContactName.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactPhone) && !customFields.ContainsKey("emergency_contact_phone"))
+            customFields["emergency_contact_phone"] = request.EmergencyContactPhone.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactRelationship) && !customFields.ContainsKey("emergency_contact_relationship"))
+            customFields["emergency_contact_relationship"] = request.EmergencyContactRelationship.Trim();
 
         var patient = new ClinicPatient
         {
@@ -133,13 +157,6 @@ public sealed class PublicStudentSelfEnrollCommandHandler
             Gender = string.IsNullOrWhiteSpace(request.Gender) ? "Male" : request.Gender,
             ContactNumber = request.ContactNumber.Trim(),
             Email = request.Email?.Trim(),
-            AddressLine = request.AddressLine?.Trim(),
-            Barangay = request.Barangay?.Trim(),
-            City = request.City?.Trim(),
-            Province = request.Province?.Trim(),
-            EmergencyContactName = request.EmergencyContactName?.Trim(),
-            EmergencyContactPhone = request.EmergencyContactPhone?.Trim(),
-            EmergencyContactRelationship = request.EmergencyContactRelationship?.Trim(),
             BloodType = request.BloodType?.Trim(),
             CustomFields = customFields,
             VerificationStatus = "PendingVerification",

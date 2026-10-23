@@ -39,3 +39,29 @@ export {
   isPresetActive,
   toggleAlertPreset,
 } from './ClinicalAlertsSection';
+
+export {
+  computePatientLocation,
+  type PatientLocationFields,
+} from './patientLocation';
+
+export {
+  getYakapEnlistments,
+  getActiveYakapEnlistment,
+  isYakapEnlistmentActive,
+  needsYakapRenewal,
+  createAnnualRenewal,
+  recordAnnualRenewal,
+  formatYakapStatusBadge,
+  formatYakapSourceLabel,
+  toIsoDateString,
+  type YakapEnlistmentEntry,
+  type YakapEnlistmentStatus,
+  type YakapEnlistmentSource,
+  type AnnualRenewalOptions,
+} from './yakapEnlistment';
+
+export {
+  default as YakapEnlistmentSection,
+  type YakapEnlistmentSectionProps,
+} from './YakapEnlistmentSection';

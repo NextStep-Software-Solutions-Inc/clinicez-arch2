@@ -12,8 +12,10 @@ using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetEligibleYakapEncount
 using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittalById;
 using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittalRawXml;
 using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittals;
+using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -26,13 +28,19 @@ public sealed class YakapTransmittalsController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IPhilHealthProxyClient _proxyClient;
+    private readonly IPhilHealthMasterlistSyncService? _syncService;
+    private readonly IClinicContext? _clinicContext;
 
     public YakapTransmittalsController(
         ISender sender,
-        IPhilHealthProxyClient proxyClient)
+        IPhilHealthProxyClient proxyClient,
+        IPhilHealthMasterlistSyncService? syncService = null,
+        IClinicContext? clinicContext = null)
     {
         _sender = sender;
         _proxyClient = proxyClient;
+        _syncService = syncService;
+        _clinicContext = clinicContext;
     }
 
     /// <summary>
@@ -179,9 +187,16 @@ public sealed class YakapTransmittalsController : ControllerBase
         CancellationToken ct)
     {
         var result = await _proxyClient.ExtractMasterlistAsync(request, ct);
-        if (!result.Succeeded)
+        if (!result.Succeeded || result.Data == null)
         {
             return BadRequest(result);
+        }
+
+        if (_syncService != null)
+        {
+            var tenantId = _clinicContext?.TenantId ?? string.Empty;
+            var clinicId = _clinicContext?.ClinicId;
+            await _syncService.SyncProxyResponseAsync(tenantId, clinicId, result.Data, ct);
         }
 
         return Ok(result);

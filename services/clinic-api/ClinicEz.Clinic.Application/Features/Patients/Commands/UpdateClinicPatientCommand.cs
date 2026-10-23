@@ -21,20 +21,20 @@ public sealed record UpdateClinicPatientCommand(
     string? CivilStatus,
     string ContactNumber,
     string? Email,
-    string? AddressLine,
-    string? Barangay,
-    string? City,
-    string? Province,
-    string? EmergencyContactName,
-    string? EmergencyContactPhone,
-    string? EmergencyContactRelationship,
-    string? PhilHealthNumber,
-    string? SeniorCitizenId,
-    string? PwdId,
-    string? BloodType,
-    string? Allergies,
-    string? ChronicConditions,
-    string? Alerts,
+    string? AddressLine = null,
+    string? Barangay = null,
+    string? City = null,
+    string? Province = null,
+    string? EmergencyContactName = null,
+    string? EmergencyContactPhone = null,
+    string? EmergencyContactRelationship = null,
+    string? PhilHealthNumber = null,
+    string? SeniorCitizenId = null,
+    string? PwdId = null,
+    string? BloodType = null,
+    string? Allergies = null,
+    string? ChronicConditions = null,
+    string? Alerts = null,
     System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
     string? VerificationStatus = null,
     System.Collections.Generic.List<MedicalHistoryEntryDto>? MedicalHistories = null) : IRequest<ClinicPatientDto>;
@@ -78,23 +78,48 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
         patient.CivilStatus = request.CivilStatus;
         patient.ContactNumber = request.ContactNumber.Trim();
         patient.Email = request.Email?.Trim();
-        patient.AddressLine = request.AddressLine?.Trim();
-        patient.Barangay = request.Barangay?.Trim();
-        patient.City = request.City?.Trim();
-        patient.Province = request.Province?.Trim();
-        patient.EmergencyContactName = request.EmergencyContactName?.Trim();
-        patient.EmergencyContactPhone = request.EmergencyContactPhone?.Trim();
-        patient.EmergencyContactRelationship = request.EmergencyContactRelationship?.Trim();
+
         patient.PhilHealthNumber = request.PhilHealthNumber?.Trim();
         patient.SeniorCitizenId = request.SeniorCitizenId?.Trim();
         patient.PwdId = request.PwdId?.Trim();
         patient.BloodType = request.BloodType?.Trim();
         patient.Allergies = request.Allergies?.Trim();
         patient.Alerts = request.Alerts?.Trim();
+
+        // Safely merge CustomFields
+        patient.CustomFields ??= new System.Collections.Generic.Dictionary<string, object?>();
+
+        // 1. If explicit CustomFields dictionary is provided in request, merge keys to preserve existing data (e.g. yakap_enlistments)
         if (request.CustomFields != null)
         {
-            patient.CustomFields = request.CustomFields;
+            foreach (var kvp in request.CustomFields)
+            {
+                patient.CustomFields[kvp.Key] = kvp.Value;
+            }
         }
+
+        // 2. If address/contact parameters are explicitly passed, update them in patient.CustomFields
+        if (request.AddressLine != null)
+            patient.CustomFields["primary_address_line"] = string.IsNullOrWhiteSpace(request.AddressLine) ? null : request.AddressLine.Trim();
+
+        if (request.Barangay != null)
+            patient.CustomFields["primary_barangay"] = string.IsNullOrWhiteSpace(request.Barangay) ? null : request.Barangay.Trim();
+
+        if (request.City != null)
+            patient.CustomFields["primary_city"] = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
+
+        if (request.Province != null)
+            patient.CustomFields["primary_province"] = string.IsNullOrWhiteSpace(request.Province) ? null : request.Province.Trim();
+
+        if (request.EmergencyContactName != null)
+            patient.CustomFields["emergency_contact_name"] = string.IsNullOrWhiteSpace(request.EmergencyContactName) ? null : request.EmergencyContactName.Trim();
+
+        if (request.EmergencyContactPhone != null)
+            patient.CustomFields["emergency_contact_phone"] = string.IsNullOrWhiteSpace(request.EmergencyContactPhone) ? null : request.EmergencyContactPhone.Trim();
+
+        if (request.EmergencyContactRelationship != null)
+            patient.CustomFields["emergency_contact_relationship"] = string.IsNullOrWhiteSpace(request.EmergencyContactRelationship) ? null : request.EmergencyContactRelationship.Trim();
+
         if (!string.IsNullOrWhiteSpace(request.VerificationStatus))
         {
             patient.VerificationStatus = request.VerificationStatus;

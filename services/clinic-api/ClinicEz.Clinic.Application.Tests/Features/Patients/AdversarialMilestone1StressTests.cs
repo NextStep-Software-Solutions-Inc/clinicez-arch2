@@ -736,13 +736,6 @@ public class AdversarialMilestone1StressTests
             CivilStatus = null,
             ContactNumber = "09170000000",
             Email = null,
-            AddressLine = null,
-            Barangay = null,
-            City = null,
-            Province = null,
-            EmergencyContactName = null,
-            EmergencyContactPhone = null,
-            EmergencyContactRelationship = null,
             PhilHealthNumber = null,
             SeniorCitizenId = null,
             PwdId = null,
@@ -750,7 +743,6 @@ public class AdversarialMilestone1StressTests
             Allergies = null,
             ChronicConditions = null,
             Alerts = null,
-            PhilHealthCaseNo = null,
             CustomFields = new Dictionary<string, object?>() // Empty custom fields
         };
         await patientRepo.AddAsync(patientWithNulls, CancellationToken.None);

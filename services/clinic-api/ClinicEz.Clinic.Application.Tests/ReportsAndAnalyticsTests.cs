@@ -128,13 +128,16 @@ public class ReportsAndAnalyticsTests
             Gender = "Female",
             CivilStatus = "Married",
             ContactNumber = "09170001111",
-            AddressLine = "Street 1",
-            Barangay = "Brgy 1",
-            City = "Manila",
-            Province = "Metro Manila",
-            EmergencyContactName = "Son",
-            EmergencyContactPhone = "09180002222",
-            EmergencyContactRelationship = "Child"
+            CustomFields = new Dictionary<string, object?>
+            {
+                ["primary_address_line"] = "Street 1",
+                ["primary_barangay"] = "Brgy 1",
+                ["primary_city"] = "Manila",
+                ["primary_province"] = "Metro Manila",
+                ["emergency_contact_name"] = "Son",
+                ["emergency_contact_phone"] = "09180002222",
+                ["emergency_contact_relationship"] = "Child"
+            }
         };
         await patientRepo.AddAsync(patient);
 

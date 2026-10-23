@@ -171,7 +171,7 @@ public class PatientJoinTier5AdversarialE2ETests
             patient.Should().NotBeNull();
             patient!.FirstName.Should().Be(sqlPayload);
             patient.LastName.Should().Be(xssPayload);
-            patient.AddressLine.Should().Be(unicodeAddress);
+            patient.CustomFields["primary_address_line"]!.ToString().Should().Be(unicodeAddress);
 
             var queue = await db.QueueItems.IgnoreQueryFilters().FirstOrDefaultAsync(q => q.ClinicId == fac.Id);
             queue.Should().NotBeNull();

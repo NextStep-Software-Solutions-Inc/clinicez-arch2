@@ -4,6 +4,7 @@ import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
 import { theme } from '../../constants/theme';
 import { ClinicPatient, ClinicCustomFieldDefinition } from '../../services/clinicService';
+import { computePatientLocation } from './patientLocation';
 
 export const STANDARD_SEARCH_FIELDS = [
   { key: 'patientCode', label: 'Patient Code / ID', defaultChecked: true },
@@ -66,7 +67,7 @@ export default function PatientSearchResultRow({
       case 'civilStatus':
         return patient.civilStatus ? { value: patient.civilStatus } : null;
       case 'barangay': {
-        const loc = [patient.barangay, patient.city].filter(Boolean).join(', ');
+        const loc = computePatientLocation(patient);
         return loc ? { value: loc } : null;
       }
       default: {

@@ -59,5 +59,15 @@ public interface IPhilHealthSequenceGenerator
         Guid? encounterId,
         string accreditationNumber,
         string effectiveYear,
+        DateTime? referenceDate = null,
         CancellationToken ct = default);
+
+    Task<PhilHealthPatientJourneyNumbers> AssignPatientJourneyNumbersAsync(
+        string tenantId,
+        Guid clinicId,
+        Guid patientId,
+        Guid? encounterId,
+        string accreditationNumber,
+        string effectiveYear,
+        CancellationToken ct);
 }
