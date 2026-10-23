@@ -565,7 +565,7 @@ public class PatientJoinTier5AdversarialTests
         var patient = await db.Patients.IgnoreQueryFilters().FirstAsync(p => p.ClinicId == clinicId);
         patient.FirstName.Should().Be(bidiFirst);
         patient.LastName.Should().Be(filipinoLast);
-        patient.AddressLine.Should().Be(emojiAddress);
+        patient.CustomFields["primary_address_line"]!.ToString().Should().Be(emojiAddress);
         patient.MiddleName.Should().Be("Iñigo");
 
         var queueItem = await db.QueueItems.IgnoreQueryFilters().FirstAsync(q => q.PatientId == patient.Id);

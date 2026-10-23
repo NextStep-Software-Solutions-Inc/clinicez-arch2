@@ -221,6 +221,14 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
     private static ClinicPatient NewPatient(string tenantId, Guid clinicId, ShareDemographicsDto demographics, Guid patientPlaneId, DateTime now)
     {
         var (first, last) = SplitName(demographics.FullName);
+
+        var customFields = new Dictionary<string, object?>();
+        var address = Clean(demographics.Address);
+        if (!string.IsNullOrWhiteSpace(address))
+        {
+            customFields["primary_address_line"] = address;
+        }
+
         return new ClinicPatient
         {
             Id = Guid.NewGuid(),
@@ -233,9 +241,8 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             Gender = NormalizeGender(demographics.Sex),
             ContactNumber = !string.IsNullOrWhiteSpace(demographics.MobileNumber) ? demographics.MobileNumber.Trim() : "N/A",
             Email = Clean(demographics.Email),
-            AddressLine = Clean(demographics.Address),
             PhilHealthNumber = Clean(demographics.PhilHealthPin),
-            CustomFields = new Dictionary<string, object?>(),
+            CustomFields = customFields,
             CreatedAt = now,
             CreatedBy = "System:PatientShareImport"
         };
@@ -245,7 +252,17 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
     {
         if (!string.IsNullOrWhiteSpace(demographics.MobileNumber)) patient.ContactNumber = demographics.MobileNumber.Trim();
         if (!string.IsNullOrWhiteSpace(demographics.Email)) patient.Email = demographics.Email.Trim();
-        if (string.IsNullOrWhiteSpace(patient.AddressLine)) patient.AddressLine = Clean(demographics.Address);
+
+        patient.CustomFields ??= new Dictionary<string, object?>();
+        var cleanAddress = Clean(demographics.Address);
+        if (!string.IsNullOrWhiteSpace(cleanAddress) &&
+            (!patient.CustomFields.TryGetValue("primary_address_line", out var existing) ||
+             existing == null ||
+             string.IsNullOrWhiteSpace(existing.ToString())))
+        {
+            patient.CustomFields["primary_address_line"] = cleanAddress;
+        }
+
         if (string.IsNullOrWhiteSpace(patient.PhilHealthNumber)) patient.PhilHealthNumber = Clean(demographics.PhilHealthPin);
     }
 

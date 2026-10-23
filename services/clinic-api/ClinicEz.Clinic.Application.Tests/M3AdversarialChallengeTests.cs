@@ -348,6 +348,17 @@ public sealed class M3AdversarialChallengeTests
             PhilHealthNumber = "030263078508",
             DateOfBirth = new DateOnly(1980, 11, 30)
         };
+        patient.CustomFields["yakap_enlistments"] = new List<Dictionary<string, object?>>
+        {
+            new()
+            {
+                ["enlisted_at"] = "2026-01-10",
+                ["valid_until"] = "2026-12-31",
+                ["effective_year"] = 2026,
+                ["status"] = "Active",
+                ["source"] = "ClinicEnlistment"
+            }
+        };
         dbContext.Patients.Add(patient);
 
         var encounter = new ConsultationEncounter

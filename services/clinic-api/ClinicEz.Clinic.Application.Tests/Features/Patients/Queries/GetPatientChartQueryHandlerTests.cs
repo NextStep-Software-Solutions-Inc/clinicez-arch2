@@ -63,7 +63,18 @@ public class GetPatientChartQueryHandlerTests
             SeniorCitizenId = null,
             PwdId = "PWD-12345",
             BloodType = "O+",
-            PhilHealthCaseNo = "CASE-99999"
+            CustomFields = new Dictionary<string, object?>
+            {
+                ["yakap_enlistments"] = new List<Dictionary<string, object?>>
+                {
+                    new()
+                    {
+                        ["status"] = "Active",
+                        ["case_no"] = "CASE-99999",
+                        ["enlistment_no"] = "ENLIST-99999"
+                    }
+                }
+            }
         };
         await patientRepo.AddAsync(patient, CancellationToken.None);
 

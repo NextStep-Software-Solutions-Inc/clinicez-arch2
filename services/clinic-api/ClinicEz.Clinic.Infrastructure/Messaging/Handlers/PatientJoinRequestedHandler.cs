@@ -126,6 +126,11 @@ public sealed class PatientJoinRequestedHandler : IInteropHandler<PatientJoinReq
 
         customFields["join_tracking_id"] = correlationIdStr;
 
+        if (!string.IsNullOrWhiteSpace(message.Address) && !customFields.ContainsKey("primary_address_line"))
+        {
+            customFields["primary_address_line"] = message.Address.Trim();
+        }
+
         // Create ClinicPatient in quarantine
         var clinicPatient = new ClinicPatient
         {
@@ -143,7 +148,6 @@ public sealed class PatientJoinRequestedHandler : IInteropHandler<PatientJoinReq
             CivilStatus = message.CivilStatus?.Trim(),
             ContactNumber = !string.IsNullOrWhiteSpace(message.ContactNumber) ? message.ContactNumber.Trim() : "N/A",
             Email = message.Email?.Trim(),
-            AddressLine = message.Address?.Trim(),
             PhilHealthNumber = message.PhilHealthPin?.Trim(),
             SeniorCitizenId = message.SeniorCitizenId?.Trim(),
             PwdId = message.PwdId?.Trim(),

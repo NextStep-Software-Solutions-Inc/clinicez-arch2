@@ -464,7 +464,8 @@ public sealed record YakapBeneficiaryDto(
     string MemberType,
     string EffectivityYear,
     string RegistrationDate,
-    string PackageType);
+    string PackageType,
+    string AssignedStatus = "1");
 
 public sealed record YakapMasterlistProxyResponse(
     bool IsSuccess,

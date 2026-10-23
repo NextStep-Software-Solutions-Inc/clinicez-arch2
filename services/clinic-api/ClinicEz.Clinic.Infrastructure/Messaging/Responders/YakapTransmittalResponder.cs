@@ -11,6 +11,7 @@ using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetEligibleYakapEncount
 using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittalById;
 using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittalRawXml;
 using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittals;
+using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
@@ -38,6 +39,7 @@ public sealed class YakapTransmittalResponder : IInteropResponder<YakapTransmitt
     private readonly IPhilHealthProxyClient _proxyClient;
     private readonly ClinicRecipientResolver _recipient;
     private readonly IClinicScopeSetter _scope;
+    private readonly IPhilHealthMasterlistSyncService? _syncService;
     private readonly ILogger<YakapTransmittalResponder> _logger;
 
     public YakapTransmittalResponder(
@@ -45,13 +47,15 @@ public sealed class YakapTransmittalResponder : IInteropResponder<YakapTransmitt
         IPhilHealthProxyClient proxyClient,
         ClinicRecipientResolver recipient,
         IClinicScopeSetter scope,
-        ILogger<YakapTransmittalResponder> logger)
+        ILogger<YakapTransmittalResponder> logger,
+        IPhilHealthMasterlistSyncService? syncService = null)
     {
         _sender = sender;
         _proxyClient = proxyClient;
         _recipient = recipient;
         _scope = scope;
         _logger = logger;
+        _syncService = syncService;
     }
 
     public async Task<YakapTransmittalRespondedPayload> RespondAsync(
@@ -111,7 +115,7 @@ public sealed class YakapTransmittalResponder : IInteropResponder<YakapTransmitt
                     => await HandleSubmitTransmittalAsync(rawPath, ct),
                 ("GET", _) when rawPath.StartsWith("pin/", StringComparison.OrdinalIgnoreCase) && rawPath.EndsWith("/validate", StringComparison.OrdinalIgnoreCase)
                     => await HandleValidatePinAsync(rawPath, ct),
-                ("POST", "masterlist/extract") => await HandleExtractMasterlistAsync(request.Body, ct),
+                ("POST", "masterlist/extract") => await HandleExtractMasterlistAsync(request.Body, clinic.TenantId, clinic.ClinicId, ct),
                 _ => Fail(404, "NOT_FOUND", $"Unknown YAKAP operation: {method} {request.Path}")
             };
         }
@@ -230,7 +234,11 @@ public sealed class YakapTransmittalResponder : IInteropResponder<YakapTransmitt
         return Success(result);
     }
 
-    private async Task<YakapTransmittalRespondedPayload> HandleExtractMasterlistAsync(string? body, CancellationToken ct)
+    private async Task<YakapTransmittalRespondedPayload> HandleExtractMasterlistAsync(
+        string? body,
+        string tenantId,
+        Guid? clinicId,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(body))
         {
@@ -244,7 +252,17 @@ public sealed class YakapTransmittalResponder : IInteropResponder<YakapTransmitt
         }
 
         var result = await _proxyClient.ExtractMasterlistAsync(req, ct);
-        return result.Succeeded ? Success(result) : Fail(400, "EXTRACT_FAILED", result.Message ?? "Failed to extract masterlist");
+        if (!result.Succeeded || result.Data == null)
+        {
+            return Fail(400, "EXTRACT_FAILED", result.Message ?? "Failed to extract masterlist");
+        }
+
+        if (_syncService != null)
+        {
+            await _syncService.SyncProxyResponseAsync(tenantId, clinicId, result.Data, ct);
+        }
+
+        return Success(result);
     }
 
     private static YakapTransmittalRespondedPayload Success<T>(ApiResponse<T> result, int statusCode = 200)

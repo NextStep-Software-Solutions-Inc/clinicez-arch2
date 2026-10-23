@@ -724,8 +724,52 @@ public static class DevPatientSeeder
                     ? MaleFirstNames[rng.Next(MaleFirstNames.Length)]
                     : FemaleFirstNames[rng.Next(FemaleFirstNames.Length)];
                 var emergencyLastName = LastNames[rng.Next(LastNames.Length)];
-
                 var patientCode = $"{prefix}{currentSeq:D5}";
+                var emergencyPhone = $"{mobilePrefixes[rng.Next(mobilePrefixes.Length)]}-{rng.Next(100, 999)}-{rng.Next(1000, 9999)}";
+                var emergencyRel = civilStatus == "Married" ? "Spouse" : (ageYears < 25 ? "Mother" : "Sibling");
+                var emergencyName = $"{emergencyLastName}, {emergencyFirstName}";
+
+                var customFields = new Dictionary<string, object?>
+                {
+                    { "category", ageYears < 22 ? "Student" : (ageYears >= 60 ? "Retiree" : "Employee") },
+                    { "workplace", loc.City },
+                    { "seeded_batch", "scale_test_1000" },
+                    { "primary_address_line", loc.Street },
+                    { "primary_barangay", loc.Barangay },
+                    { "primary_city", loc.City },
+                    { "primary_province", loc.Province },
+                    { "emergency_contact_name", emergencyName },
+                    { "emergency_contact_phone", emergencyPhone },
+                    { "emergency_contact_relationship", emergencyRel }
+                };
+
+                // Seed active PhilHealth YAKAP enlistment when PhilHealthNumber is present
+                if (!string.IsNullOrWhiteSpace(philHealthNo))
+                {
+                    var currentYear = now.Year;
+                    var enlistedAt = now.AddMonths(-rng.Next(1, 6)).ToString("yyyy-MM-dd");
+                    var validUntil = $"{currentYear}-12-31";
+                    var seqNum = rng.Next(1, 99999);
+                    var caseNo = $"C000921{currentYear}{seqNum:D5}";
+                    var enlistmentNo = $"E000921{currentYear}{seqNum:D5}";
+                    var profilingTransNo = $"P000921{currentYear}{seqNum:D5}";
+
+                    customFields["yakap_enlistments"] = new List<Dictionary<string, object?>>
+                    {
+                        new()
+                        {
+                            { "enlisted_at", enlistedAt },
+                            { "valid_until", validUntil },
+                            { "effective_year", currentYear },
+                            { "status", "Active" },
+                            { "source", "ClinicEnlistment" },
+                            { "case_no", caseNo },
+                            { "enlistment_no", enlistmentNo },
+                            { "profiling_trans_no", profilingTransNo }
+                        }
+                    };
+                }
+
                 var patient = new ClinicPatient
                 {
                     Id = patientId,
@@ -741,13 +785,6 @@ public static class DevPatientSeeder
                     CivilStatus = civilStatus,
                     ContactNumber = contactNumber,
                     Email = email,
-                    AddressLine = loc.Street,
-                    Barangay = loc.Barangay,
-                    City = loc.City,
-                    Province = loc.Province,
-                    EmergencyContactName = $"{emergencyLastName}, {emergencyFirstName}",
-                    EmergencyContactPhone = $"{mobilePrefixes[rng.Next(mobilePrefixes.Length)]}-{rng.Next(100, 999)}-{rng.Next(1000, 9999)}",
-                    EmergencyContactRelationship = civilStatus == "Married" ? "Spouse" : (ageYears < 25 ? "Mother" : "Sibling"),
                     PhilHealthNumber = philHealthNo,
                     SeniorCitizenId = seniorCitizenId,
                     PwdId = pwdId,
@@ -758,12 +795,7 @@ public static class DevPatientSeeder
                     VerificationStatus = rng.NextDouble() < 0.92 ? "Verified" : "PendingVerification",
                     PersonalMedicalHistoryNotes = chronicConditions != null ? $"Patient maintained on oral therapy. Baseline profile reviewed." : null,
                     FamilyMedicalHistoryNotes = "Strong familial predisposition to cardiovascular/metabolic conditions in 1st degree relatives.",
-                    CustomFields = new Dictionary<string, object?>
-                    {
-                        { "category", ageYears < 22 ? "Student" : (ageYears >= 60 ? "Retiree" : "Employee") },
-                        { "workplace", loc.City },
-                        { "seeded_batch", "scale_test_1000" }
-                    },
+                    CustomFields = customFields,
                     CreatedAt = now.AddDays(-rng.Next(30, 720)),
                     CreatedBy = "System:DevPatientSeeder",
                     UpdatedAt = now,

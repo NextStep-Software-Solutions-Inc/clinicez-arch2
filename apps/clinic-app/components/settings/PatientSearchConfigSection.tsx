@@ -111,6 +111,8 @@ export default function PatientSearchConfigSection({
     verificationStatus: 'Verified',
     createdAt: new Date().toISOString(),
     customFields: {
+      primary_barangay: 'Brgy. San Antonio',
+      primary_city: 'Pasig City',
       insurance_provider: 'PhilHealth Plus',
       department: 'Corporate Account',
       vip_status: 'Gold Tier',

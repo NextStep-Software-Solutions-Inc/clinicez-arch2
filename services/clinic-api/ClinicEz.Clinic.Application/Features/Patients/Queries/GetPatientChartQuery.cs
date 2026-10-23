@@ -154,9 +154,8 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 ?? customProfile?.Atc
                 ?? (string.IsNullOrWhiteSpace(patient.PhilHealthNumber) ? null : "A");
 
-            var activeCaseNo = !string.IsNullOrWhiteSpace(patient.PhilHealthCaseNo)
-                ? patient.PhilHealthCaseNo
-                : consultations.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.PhilHealthCaseNo))?.PhilHealthCaseNo
+            var activeCaseNo = ResolveActiveCaseNo(patient)
+                ?? consultations.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.PhilHealthCaseNo))?.PhilHealthCaseNo
                 ?? (string.IsNullOrWhiteSpace(patient.PhilHealthNumber) ? null : $"C{patient.PatientCode.Replace("-", string.Empty)}");
 
             demographicsDto = new PatientDemographicsDto(
@@ -166,10 +165,10 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 CivilStatus: patient.CivilStatus,
                 ContactNumber: patient.ContactNumber,
                 Email: patient.Email,
-                AddressLine: patient.AddressLine,
-                Barangay: patient.Barangay,
-                City: patient.City,
-                Province: patient.Province,
+                AddressLine: GetCustomFieldString(patient, "primary_address_line"),
+                Barangay: GetCustomFieldString(patient, "primary_barangay"),
+                City: GetCustomFieldString(patient, "primary_city"),
+                Province: GetCustomFieldString(patient, "primary_province"),
                 PhilHealthNumber: !string.IsNullOrWhiteSpace(patient.PhilHealthNumber) ? patient.PhilHealthNumber : customProfile?.Pin,
                 SeniorCitizenId: patient.SeniorCitizenId,
                 PwdId: patient.PwdId,
@@ -177,9 +176,9 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
                 MemberStatus: memberStatus,
                 PhilHealthAtc: atc,
                 ActiveCaseNo: activeCaseNo,
-                EmergencyContactName: patient.EmergencyContactName,
-                EmergencyContactPhone: patient.EmergencyContactPhone,
-                EmergencyContactRelationship: patient.EmergencyContactRelationship,
+                EmergencyContactName: GetCustomFieldString(patient, "emergency_contact_name"),
+                EmergencyContactPhone: GetCustomFieldString(patient, "emergency_contact_phone"),
+                EmergencyContactRelationship: GetCustomFieldString(patient, "emergency_contact_relationship"),
                 Alerts: patient.Alerts,
                 PatientCode: patient.PatientCode,
                 ClinicEzId: patient.ClinicEzId,
@@ -739,5 +738,90 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             return "Member";
 
         return "Non-Member";
+    }
+
+    private static string? GetCustomFieldString(ClinicPatient patient, string key)
+    {
+        if (patient.CustomFields == null) return null;
+        if (!patient.CustomFields.TryGetValue(key, out var val) || val == null) return null;
+
+        if (val is System.Text.Json.JsonElement elem)
+        {
+            if (elem.ValueKind == System.Text.Json.JsonValueKind.String)
+                return elem.GetString();
+            if (elem.ValueKind == System.Text.Json.JsonValueKind.Null || elem.ValueKind == System.Text.Json.JsonValueKind.Undefined)
+                return null;
+            return elem.ToString();
+        }
+
+        var str = val.ToString();
+        return string.IsNullOrWhiteSpace(str) ? null : str;
+    }
+
+    private static string? ResolveActiveCaseNo(ClinicPatient patient)
+    {
+        if (patient.CustomFields == null) return null;
+
+        if (patient.CustomFields.TryGetValue("yakap_enlistments", out var enlistmentObj) && enlistmentObj != null)
+        {
+            try
+            {
+                // Case 1: JsonElement array
+                if (enlistmentObj is System.Text.Json.JsonElement elem && elem.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var item in elem.EnumerateArray())
+                    {
+                        var status = item.TryGetProperty("status", out var sProp) ? sProp.GetString() : null;
+                        if (!string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        var caseNo = item.TryGetProperty("case_no", out var cProp) ? cProp.GetString() : null;
+                        if (!string.IsNullOrWhiteSpace(caseNo)) return caseNo;
+                    }
+                }
+                // Case 2: In-memory List or IEnumerable of Dictionary
+                else if (enlistmentObj is System.Collections.IEnumerable list)
+                {
+                    foreach (var item in list)
+                    {
+                        if (item is IDictionary<string, object?> dict)
+                        {
+                            var status = dict.TryGetValue("status", out var s) ? s?.ToString() : null;
+                            if (!string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase)) continue;
+
+                            var caseNo = dict.TryGetValue("case_no", out var c) ? c?.ToString() : null;
+                            if (!string.IsNullOrWhiteSpace(caseNo)) return caseNo;
+                        }
+                    }
+                }
+                // Case 3: JSON string
+                else if (enlistmentObj is string jsonStr && !string.IsNullOrWhiteSpace(jsonStr))
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(jsonStr);
+                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var item in doc.RootElement.EnumerateArray())
+                        {
+                            var status = item.TryGetProperty("status", out var sProp) ? sProp.GetString() : null;
+                            if (!string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase)) continue;
+
+                            var caseNo = item.TryGetProperty("case_no", out var cProp) ? cProp.GetString() : null;
+                            if (!string.IsNullOrWhiteSpace(caseNo)) return caseNo;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Graceful fallback
+            }
+        }
+
+        if (patient.CustomFields.TryGetValue("philhealth_case_no", out var directCase) && directCase != null)
+        {
+            var directStr = directCase.ToString();
+            if (!string.IsNullOrWhiteSpace(directStr)) return directStr;
+        }
+
+        return null;
     }
 }

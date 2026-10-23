@@ -30,8 +30,121 @@ import StructuredMedicalHistoryModal, {
   parseChronicConditionsStringToStructured,
 } from './StructuredMedicalHistoryModal';
 import ClinicalAlertsSection from './ClinicalAlertsSection';
+import YakapEnlistmentSection from './YakapEnlistmentSection';
 
 export { parseChronicConditionsStringToStructured };
+
+export const BASELINE_PATIENT_CUSTOM_FIELDS: ClinicCustomFieldDefinition[] = [
+  {
+    id: 'default-primary-address-line',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'primary_address_line',
+    label: 'Address Line / Street',
+    dataType: 'Text',
+    category: 'Address',
+    isRequired: false,
+    displayOrder: 1,
+    placeholder: 'House / Unit / Street',
+    isActive: true,
+  },
+  {
+    id: 'default-primary-barangay',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'primary_barangay',
+    label: 'Barangay',
+    dataType: 'Text',
+    category: 'Address',
+    isRequired: false,
+    displayOrder: 2,
+    placeholder: 'Barangay',
+    isActive: true,
+  },
+  {
+    id: 'default-primary-city',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'primary_city',
+    label: 'City / Municipality',
+    dataType: 'Text',
+    category: 'Address',
+    isRequired: false,
+    displayOrder: 3,
+    placeholder: 'City',
+    isActive: true,
+  },
+  {
+    id: 'default-primary-province',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'primary_province',
+    label: 'Province',
+    dataType: 'Text',
+    category: 'Address',
+    isRequired: false,
+    displayOrder: 4,
+    placeholder: 'Province',
+    isActive: true,
+  },
+  {
+    id: 'default-emergency-contact-name',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'emergency_contact_name',
+    label: 'Contact Person Name',
+    dataType: 'Text',
+    category: 'Emergency Contacts',
+    isRequired: false,
+    displayOrder: 10,
+    placeholder: 'Full Name',
+    isActive: true,
+  },
+  {
+    id: 'default-emergency-contact-phone',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'emergency_contact_phone',
+    label: 'Contact Person Phone',
+    dataType: 'Text',
+    category: 'Emergency Contacts',
+    isRequired: false,
+    displayOrder: 11,
+    placeholder: '0918-123-4567',
+    isActive: true,
+  },
+  {
+    id: 'default-emergency-contact-relationship',
+    tenantId: '',
+    clinicId: '',
+    entityType: 'ClinicPatient',
+    fieldKey: 'emergency_contact_relationship',
+    label: 'Relationship to Patient',
+    dataType: 'Select',
+    category: 'Emergency Contacts',
+    isRequired: false,
+    displayOrder: 12,
+    placeholder: 'Select relationship',
+    optionsJson: JSON.stringify([
+      'Parent',
+      'Spouse',
+      'Child',
+      'Sibling',
+      'Guardian',
+      'Relative',
+      'Friend',
+      'Workplace Colleague',
+      'Other',
+    ]),
+    isActive: true,
+  },
+];
 
 export function parseAllergiesStringToStructured(raw?: string | null): CreateAllergyRequest[] {
   if (!raw || !raw.trim()) return [];
@@ -140,13 +253,6 @@ export function EditPatientModal({
   const [civilStatus, setCivilStatus] = useState<'Single' | 'Married' | 'Widowed' | 'Separated'>('Single');
   const [contactNumber, setContactNumber] = useState('');
   const [email, setEmail] = useState('');
-  const [addressLine, setAddressLine] = useState('');
-  const [barangay, setBarangay] = useState('');
-  const [city, setCity] = useState('');
-  const [province, setProvince] = useState('');
-  const [emergencyContactName, setEmergencyContactName] = useState('');
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
-  const [emergencyContactRelationship, setEmergencyContactRelationship] = useState('');
   const [philHealthNumber, setPhilHealthNumber] = useState('');
   const [memberType, setMemberType] = useState<MemberType>('MM');
   const [principalMemberPin, setPrincipalMemberPin] = useState('');
@@ -220,6 +326,45 @@ export function EditPatientModal({
     });
   };
 
+  const effectiveCustomFields = useMemo(() => {
+    const existingKeys = new Set(tenantCustomFields.map((f) => f.fieldKey));
+    const missingBaseline = BASELINE_PATIENT_CUSTOM_FIELDS.filter(
+      (bf) => !existingKeys.has(bf.fieldKey)
+    );
+    return [...tenantCustomFields, ...missingBaseline].sort(
+      (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
+    );
+  }, [tenantCustomFields]);
+
+  const addressFields = useMemo(() => {
+    return effectiveCustomFields.filter((f) => f.category === 'Address');
+  }, [effectiveCustomFields]);
+
+  const emergencyFields = useMemo(() => {
+    return effectiveCustomFields.filter((f) => f.category === 'Emergency Contacts');
+  }, [effectiveCustomFields]);
+
+  const additionalCustomFields = useMemo(() => {
+    return effectiveCustomFields.filter(
+      (f) => f.category !== 'Address' && f.category !== 'Emergency Contacts'
+    );
+  }, [effectiveCustomFields]);
+
+  const handleCustomFieldChange = (key: string, val: any) => {
+    setCustomFieldValues((prev) => ({ ...prev, [key]: val }));
+    setCustomFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const staticValues = useMemo(
+    () => ({ gender, civilStatus, dateOfBirth }),
+    [gender, civilStatus, dateOfBirth]
+  );
+
   const [saving, setSaving] = useState(false);
   const [isPinValid, setIsPinValid] = useState<boolean | null>(null);
 
@@ -255,13 +400,6 @@ export function EditPatientModal({
     );
     setContactNumber(patient.contactNumber || '');
     setEmail(patient.email || '');
-    setAddressLine(patient.addressLine || '');
-    setBarangay(patient.barangay || '');
-    setCity(patient.city || '');
-    setProvince(patient.province || '');
-    setEmergencyContactName(patient.emergencyContactName || '');
-    setEmergencyContactPhone(patient.emergencyContactPhone || '');
-    setEmergencyContactRelationship(patient.emergencyContactRelationship || '');
     setPhilHealthNumber(patient.philHealthNumber || '');
     const pProfile = extractPhilHealthProfileData(patient.customFields, patient);
     setMemberType(pProfile.memberType);
@@ -288,7 +426,16 @@ export function EditPatientModal({
     setAlerts(patient.alerts || '');
 
     const cf = patient.customFields || {};
-    setCustomFieldValues({ ...cf });
+    setCustomFieldValues({
+      ...cf,
+      primary_address_line: cf['primary_address_line'] ?? (patient as any).addressLine ?? '',
+      primary_barangay: cf['primary_barangay'] ?? (patient as any).barangay ?? '',
+      primary_city: cf['primary_city'] ?? (patient as any).city ?? '',
+      primary_province: cf['primary_province'] ?? (patient as any).province ?? '',
+      emergency_contact_name: cf['emergency_contact_name'] ?? (patient as any).emergencyContactName ?? '',
+      emergency_contact_phone: cf['emergency_contact_phone'] ?? (patient as any).emergencyContactPhone ?? '',
+      emergency_contact_relationship: cf['emergency_contact_relationship'] ?? (patient as any).emergencyContactRelationship ?? '',
+    });
     setCustomFieldErrors({});
     setFieldErrors({});
     const cls = cf['classification'] || (cf['affiliation'] === 'Student' ? 'Student' : cf['affiliation'] === 'Employee/Faculty' ? 'Employee' : 'General');
@@ -348,9 +495,8 @@ export function EditPatientModal({
     }
 
     // Defensive validation for dynamic custom fields
-    const staticValues = { gender, civilStatus, dateOfBirth };
-    if (tenantCustomFields.length > 0) {
-      const { isValid, errors } = validateCustomFields(tenantCustomFields, customFieldValues, staticValues);
+    if (effectiveCustomFields.length > 0) {
+      const { isValid, errors } = validateCustomFields(effectiveCustomFields, customFieldValues, staticValues);
       if (!isValid) {
         setCustomFieldErrors(errors);
         Alert.alert('Missing Required Custom Fields', Object.values(errors).join('\n'));
@@ -364,10 +510,47 @@ export function EditPatientModal({
       ...(patient.customFields || {}),
     };
 
-    if (tenantCustomFields.length > 0) {
-      const cleanCustom = sanitizeCustomFieldsPayload(tenantCustomFields, customFieldValues, staticValues);
+    if (effectiveCustomFields.length > 0) {
+      const cleanCustom = sanitizeCustomFieldsPayload(effectiveCustomFields, customFieldValues, staticValues);
       Object.assign(mergedCustomFields, cleanCustom);
-    } else {
+    }
+
+    // Explicit handling for the 7 address & emergency contact keys
+    const addressAndContactKeys = [
+      'primary_address_line',
+      'primary_barangay',
+      'primary_city',
+      'primary_province',
+      'emergency_contact_name',
+      'emergency_contact_phone',
+      'emergency_contact_relationship',
+    ];
+
+    for (const key of addressAndContactKeys) {
+      const val = customFieldValues[key];
+      if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if (trimmed) {
+          mergedCustomFields[key] = trimmed;
+        } else if (patient.customFields?.[key] || (patient as any)[key]) {
+          mergedCustomFields[key] = null;
+        } else {
+          delete mergedCustomFields[key];
+        }
+      } else if (val !== undefined && val !== null) {
+        mergedCustomFields[key] = val;
+      } else if (patient.customFields?.[key] || (patient as any)[key]) {
+        mergedCustomFields[key] = null;
+      } else {
+        delete mergedCustomFields[key];
+      }
+    }
+
+    if (customFieldValues['yakap_enlistments']) {
+      mergedCustomFields['yakap_enlistments'] = customFieldValues['yakap_enlistments'];
+    }
+
+    if (tenantCustomFields.length === 0) {
       mergedCustomFields['classification'] = classification;
       if (classification === 'Student') {
         if (studentId.trim()) mergedCustomFields['student_id'] = studentId.trim();
@@ -461,13 +644,6 @@ export function EditPatientModal({
       civilStatus,
       contactNumber: contactNumber.trim(),
       email: email.trim() || undefined,
-      addressLine: addressLine.trim() || undefined,
-      barangay: barangay.trim() || undefined,
-      city: city.trim() || undefined,
-      province: province.trim() || undefined,
-      emergencyContactName: emergencyContactName.trim() || undefined,
-      emergencyContactPhone: emergencyContactPhone.trim() || undefined,
-      emergencyContactRelationship: emergencyContactRelationship.trim() || undefined,
       philHealthNumber: philHealthNumber.trim() || undefined,
       seniorCitizenId: seniorCitizenId.trim() || undefined,
       pwdId: pwdId.trim() || undefined,
@@ -724,104 +900,37 @@ export function EditPatientModal({
               </View>
             </View>
 
-            <View style={styles.formRow}>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Address Line / Street
+            {/* Address Details (Dynamic Custom Fields) */}
+            {addressFields.length > 0 && (
+              <>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
+                  Address Details
                 </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="House / Unit / Street"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={addressLine}
-                  onChangeText={setAddressLine}
+                <DynamicCustomFieldsRenderer
+                  fields={addressFields}
+                  values={customFieldValues}
+                  onChange={handleCustomFieldChange}
+                  errors={customFieldErrors}
+                  staticValues={staticValues}
                 />
-              </View>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Barangay
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Barangay"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={barangay}
-                  onChangeText={setBarangay}
-                />
-              </View>
-            </View>
+              </>
+            )}
 
-            <View style={styles.formRow}>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  City / Municipality
+            {/* Emergency Contact (Dynamic Custom Fields) */}
+            {emergencyFields.length > 0 && (
+              <>
+                <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
+                  Emergency Contact
                 </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="City"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={city}
-                  onChangeText={setCity}
+                <DynamicCustomFieldsRenderer
+                  fields={emergencyFields}
+                  values={customFieldValues}
+                  onChange={handleCustomFieldChange}
+                  errors={customFieldErrors}
+                  staticValues={staticValues}
                 />
-              </View>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Province
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Province"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={province}
-                  onChangeText={setProvince}
-                />
-              </View>
-            </View>
-
-            {/* Emergency Contact Section */}
-            <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
-              Emergency Contact
-            </ThemedText>
-
-            <View style={styles.formRow}>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Contact Person Name
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Full Name"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={emergencyContactName}
-                  onChangeText={setEmergencyContactName}
-                />
-              </View>
-              <View style={styles.formCol}>
-                <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                  Contact Person Phone
-                </ThemedText>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="0918-123-4567"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={emergencyContactPhone}
-                  onChangeText={setEmergencyContactPhone}
-                />
-              </View>
-            </View>
-
-            <View>
-              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.inputLabel}>
-                Relationship to Patient
-              </ThemedText>
-              <TextInput
-                style={styles.textInput}
-                placeholder="e.g. Spouse, Parent, Sibling, Guardian"
-                placeholderTextColor={theme.colors.textMuted}
-                value={emergencyContactRelationship}
-                onChangeText={setEmergencyContactRelationship}
-              />
-            </View>
+              </>
+            )}
 
             {/* Statutory Identifiers */}
             <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
@@ -961,25 +1070,24 @@ export function EditPatientModal({
               </View>
             </View>
 
-            {/* Institutional & Custom Metadata */}
-            {tenantCustomFields.length > 0 && (
+            {/* PhilHealth YAKAP Annual Enlistment Lifecycle Section */}
+            <YakapEnlistmentSection
+              customFields={customFieldValues}
+              onCustomFieldsChange={(next) => setCustomFieldValues(next)}
+            />
+
+            {/* Institutional & Additional Details */}
+            {additionalCustomFields.length > 0 && (
               <>
                 <ThemedText variant="captionBold" color={theme.colors.primaryDark} style={styles.sectionHeader}>
                   Institutional & Additional Details
                 </ThemedText>
                 <DynamicCustomFieldsRenderer
-                  fields={tenantCustomFields}
+                  fields={additionalCustomFields}
                   values={customFieldValues}
-                  onChange={(key, val) => {
-                    setCustomFieldValues((prev) => ({ ...prev, [key]: val }));
-                    setCustomFieldErrors((prev) => {
-                      const next = { ...prev };
-                      delete next[key];
-                      return next;
-                    });
-                  }}
+                  onChange={handleCustomFieldChange}
                   errors={customFieldErrors}
-                  staticValues={{ gender, civilStatus, dateOfBirth }}
+                  staticValues={staticValues}
                 />
               </>
             )}

@@ -101,15 +101,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                 ? customProfile.MemberBirthDate.Trim()
                 : patient.DateOfBirth.ToString("yyyy-MM-dd");
 
-            var caseNo = !string.IsNullOrWhiteSpace(patient.PhilHealthCaseNo)
-                ? patient.PhilHealthCaseNo
-                : $"C{patient.PatientCode.Replace("-", string.Empty)}";
-            var enlistTransNo = !string.IsNullOrWhiteSpace(patient.PhilHealthEnlistmentNo)
-                ? patient.PhilHealthEnlistmentNo
-                : $"E{patient.PatientCode.Replace("-", string.Empty)}";
-            var profTransNo = !string.IsNullOrWhiteSpace(patient.PhilHealthProfilingTransNo)
-                ? patient.PhilHealthProfilingTransNo
-                : $"P{patient.PatientCode.Replace("-", string.Empty)}";
+            var (caseNo, enlistTransNo, profTransNo, enlistDate) = ResolveYakapControlNumbers(patient, effectiveYear, firstEncounter.EncounterDate);
             var soapTransNo = !string.IsNullOrWhiteSpace(firstEncounter.PhilHealthSoapTransNo)
                 ? firstEncounter.PhilHealthSoapTransNo
                 : $"S{patient.PatientCode.Replace("-", string.Empty)}";
@@ -120,7 +112,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                 HciTransNo: enlistTransNo,
                 EffYear: effectiveYear,
                 EnlistStat: "1",
-                EnlistDate: firstEncounter.EncounterDate.ToString("yyyy-MM-dd"),
+                EnlistDate: enlistDate,
                 PackageType: "K",
                 MemPin: memPin,
                 MemFname: memFname,
@@ -1434,5 +1426,105 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             CbcResults: cbcList.Count > 0 ? cbcList : null,
             UrinalysisResults: uriList.Count > 0 ? uriList : null,
             ChestXrayResults: cxrList.Count > 0 ? cxrList : null);
+    }
+
+    private static (string caseNo, string enlistTransNo, string profTransNo, string enlistDate) ResolveYakapControlNumbers(
+        ClinicPatient patient,
+        string effectiveYear,
+        DateTime? encounterDate = null)
+    {
+        string? caseNo = null;
+        string? enlistTransNo = null;
+        string? profTransNo = null;
+        string? enlistDate = null;
+
+        // 1. Utilize domain extensions built in Milestone 2
+        var enlistments = patient.GetYakapEnlistments();
+        YakapEnlistmentEntry? match = null;
+
+        if (enlistments.Count > 0)
+        {
+            if (int.TryParse(effectiveYear, out var targetYear) && targetYear > 0)
+            {
+                // A. Prefer active enlistment matching target benefit year
+                match = enlistments.LastOrDefault(e =>
+                    e.EffectiveYear == targetYear &&
+                    string.Equals(e.Status, YakapEnlistmentStatus.Active, StringComparison.OrdinalIgnoreCase));
+
+                // B. If no active entry, match any entry for that benefit year (e.g. historical claim/audit)
+                match ??= enlistments.LastOrDefault(e => e.EffectiveYear == targetYear);
+            }
+
+            // C. If no benefit year match, check if an active entry covers the encounter date
+            if (match == null && encounterDate.HasValue)
+            {
+                var encDateOnly = DateOnly.FromDateTime(encounterDate.Value);
+                match = enlistments.LastOrDefault(e => e.IsActiveOn(encDateOnly));
+                match ??= enlistments.LastOrDefault(e => e.IsCoveringDate(encDateOnly));
+            }
+
+            // D. Fallback to latest active entry or latest overall entry
+            match ??= enlistments.LastOrDefault(e =>
+                string.Equals(e.Status, YakapEnlistmentStatus.Active, StringComparison.OrdinalIgnoreCase));
+            match ??= enlistments.LastOrDefault();
+        }
+
+        if (match != null)
+        {
+            caseNo = match.CaseNo;
+            enlistTransNo = match.EnlistmentNo;
+            profTransNo = match.ProfilingTransNo;
+
+            // E. Normalize statutory enlistment date to YYYY-MM-DD
+            if (!string.IsNullOrWhiteSpace(match.EnlistedAt))
+            {
+                if (PhilHealthDateParser.TryNormalizeDate(match.EnlistedAt, out var normDate))
+                {
+                    enlistDate = normDate!;
+                }
+                else
+                {
+                    enlistDate = match.EnlistedAt.Trim();
+                }
+            }
+        }
+
+        // 2. Backward compatibility fallback for legacy CustomFields keys
+        if (patient.CustomFields != null)
+        {
+            if (string.IsNullOrWhiteSpace(caseNo) && patient.CustomFields.TryGetValue("philhealth_case_no", out var dc) && dc != null)
+                caseNo = dc.ToString();
+            if (string.IsNullOrWhiteSpace(enlistTransNo) && patient.CustomFields.TryGetValue("philhealth_enlistment_no", out var de) && de != null)
+                enlistTransNo = de.ToString();
+            if (string.IsNullOrWhiteSpace(profTransNo) && patient.CustomFields.TryGetValue("philhealth_profiling_trans_no", out var dp) && dp != null)
+                profTransNo = dp.ToString();
+        }
+
+        // 3. Fallback for enlistDate if not resolved from enlistment entry
+        if (string.IsNullOrWhiteSpace(enlistDate))
+        {
+            enlistDate = encounterDate.HasValue
+                ? encounterDate.Value.ToString("yyyy-MM-dd")
+                : (int.TryParse(effectiveYear, out var yr) && yr > 0
+                    ? $"{yr}-01-01"
+                    : DateTime.UtcNow.ToString("yyyy-MM-dd"));
+        }
+
+        // 4. Fallback for sequence numbers using clean patient code
+        var cleanCode = (patient.PatientCode ?? string.Empty).Replace("-", string.Empty);
+        return (
+            string.IsNullOrWhiteSpace(caseNo) ? $"C{cleanCode}" : caseNo,
+            string.IsNullOrWhiteSpace(enlistTransNo) ? $"E{cleanCode}" : enlistTransNo,
+            string.IsNullOrWhiteSpace(profTransNo) ? $"P{cleanCode}" : profTransNo,
+            enlistDate
+        );
+    }
+
+    private static (string caseNo, string enlistTransNo, string profTransNo) ResolveYakapControlNumbers(
+        ClinicPatient patient,
+        string effectiveYear)
+    {
+        var (caseNo, enlistTransNo, profTransNo, _) = ResolveYakapControlNumbers(patient, effectiveYear, null);
+        return (caseNo, enlistTransNo, profTransNo);
     }
 }
