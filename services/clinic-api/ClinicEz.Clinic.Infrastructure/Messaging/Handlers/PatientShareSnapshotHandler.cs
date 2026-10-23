@@ -170,7 +170,9 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         if (!string.IsNullOrWhiteSpace(message.ClinicEzId))
         {
             var clinicEzId = message.ClinicEzId.Trim();
-            var byClinicEzId = await patients.FirstOrDefaultAsync(p => p.ClinicEzId == clinicEzId, ct);
+            var clinicEzIdUpper = clinicEzId.ToUpperInvariant();
+            var byClinicEzId = await patients.FirstOrDefaultAsync(
+                p => p.ClinicEzId != null && (p.ClinicEzId == clinicEzId || p.ClinicEzId.ToUpper() == clinicEzIdUpper), ct);
             if (byClinicEzId != null) return byClinicEzId;
         }
 
@@ -220,7 +222,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
 
     private static ClinicPatient NewPatient(string tenantId, Guid clinicId, ShareDemographicsDto demographics, Guid patientPlaneId, DateTime now)
     {
-        var (first, last) = SplitName(demographics.FullName);
+        var (first, middle, last, suffix) = ResolveNames(demographics);
         return new ClinicPatient
         {
             Id = Guid.NewGuid(),
@@ -228,7 +230,9 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
             ClinicId = clinicId,
             PatientCode = $"PAT-EXT-{now:yyyyMMdd}-{patientPlaneId.ToString("N")[..6].ToUpperInvariant()}",
             FirstName = first,
+            MiddleName = middle,
             LastName = last,
+            Suffix = suffix,
             DateOfBirth = ParseDate(demographics.DateOfBirth) ?? new DateOnly(2000, 1, 1),
             Gender = NormalizeGender(demographics.Sex),
             ContactNumber = !string.IsNullOrWhiteSpace(demographics.MobileNumber) ? demographics.MobileNumber.Trim() : "N/A",
@@ -243,10 +247,37 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
 
     private static void MergeDemographics(ClinicPatient patient, ShareDemographicsDto demographics)
     {
+        var hasDiscreteFirst = !string.IsNullOrWhiteSpace(demographics.FirstName);
+        var hasDiscreteLast = !string.IsNullOrWhiteSpace(demographics.LastName);
+        var hasDiscreteMiddle = !string.IsNullOrWhiteSpace(demographics.MiddleName);
+        var hasDiscreteSuffix = !string.IsNullOrWhiteSpace(demographics.Suffix);
+
+        if (hasDiscreteFirst || hasDiscreteLast || hasDiscreteMiddle || hasDiscreteSuffix)
+        {
+            if (hasDiscreteFirst) patient.FirstName = demographics.FirstName!.Trim();
+            if (hasDiscreteLast) patient.LastName = demographics.LastName!.Trim();
+            if (hasDiscreteMiddle) patient.MiddleName = demographics.MiddleName!.Trim();
+            if (hasDiscreteSuffix) patient.Suffix = demographics.Suffix!.Trim();
+        }
+        else if (!string.IsNullOrWhiteSpace(demographics.FullName))
+        {
+            var (first, middle, last, suffix) = SplitFullNameLossless(demographics.FullName);
+            if (!string.IsNullOrWhiteSpace(first)) patient.FirstName = first;
+            if (!string.IsNullOrWhiteSpace(last)) patient.LastName = last;
+            if (!string.IsNullOrWhiteSpace(middle)) patient.MiddleName = middle;
+            if (!string.IsNullOrWhiteSpace(suffix)) patient.Suffix = suffix;
+        }
+
+        var parsedDob = ParseDate(demographics.DateOfBirth);
+        if (parsedDob.HasValue) patient.DateOfBirth = parsedDob.Value;
+
+        if (!string.IsNullOrWhiteSpace(demographics.Sex))
+            patient.Gender = NormalizeGender(demographics.Sex);
+
         if (!string.IsNullOrWhiteSpace(demographics.MobileNumber)) patient.ContactNumber = demographics.MobileNumber.Trim();
         if (!string.IsNullOrWhiteSpace(demographics.Email)) patient.Email = demographics.Email.Trim();
-        if (string.IsNullOrWhiteSpace(patient.AddressLine)) patient.AddressLine = Clean(demographics.Address);
-        if (string.IsNullOrWhiteSpace(patient.PhilHealthNumber)) patient.PhilHealthNumber = Clean(demographics.PhilHealthPin);
+        if (!string.IsNullOrWhiteSpace(demographics.Address)) patient.AddressLine = Clean(demographics.Address);
+        if (!string.IsNullOrWhiteSpace(demographics.PhilHealthPin)) patient.PhilHealthNumber = Clean(demographics.PhilHealthPin);
     }
 
     private async Task<QueueItem> QueuePatientAsync(ClinicSettings clinic, ClinicPatient patient, ShareImport import, DateTime now, CancellationToken ct)
@@ -280,17 +311,64 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         return queueItem;
     }
 
-    private static string DisplayName(ClinicPatient patient) => $"{patient.FirstName} {patient.LastName}".Trim();
-
-    private static (string First, string Last) SplitName(string fullName)
+    private static string DisplayName(ClinicPatient patient)
     {
-        var parts = (fullName ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parts = new[] { patient.FirstName, patient.MiddleName, patient.LastName, patient.Suffix }
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s!.Trim());
+        return string.Join(" ", parts);
+    }
+
+    private static readonly HashSet<string> KnownSuffixes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Jr", "Jr.", "Sr", "Sr.", "II", "III", "IV", "V", "VI", "VII", "VIII"
+    };
+
+    private static (string FirstName, string? MiddleName, string LastName, string? Suffix) ResolveNames(ShareDemographicsDto demographics)
+    {
+        var hasDiscreteFirst = !string.IsNullOrWhiteSpace(demographics.FirstName);
+        var hasDiscreteLast = !string.IsNullOrWhiteSpace(demographics.LastName);
+
+        if (hasDiscreteFirst || hasDiscreteLast)
+        {
+            var first = hasDiscreteFirst ? demographics.FirstName!.Trim() : "Patient";
+            var last = hasDiscreteLast ? demographics.LastName!.Trim() : "Unknown";
+            var middle = Clean(demographics.MiddleName);
+            var suffix = Clean(demographics.Suffix);
+            return (first, middle, last, suffix);
+        }
+
+        return SplitFullNameLossless(demographics.FullName);
+    }
+
+    private static (string FirstName, string? MiddleName, string LastName, string? Suffix) SplitFullNameLossless(string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName))
+            return ("Patient", null, "Unknown", null);
+
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return parts.Length switch
         {
-            0 => ("Patient", "Unknown"),
-            1 => (parts[0], parts[0]),
-            _ => (parts[0], parts[^1])
+            0 => ("Patient", null, "Unknown", null),
+            1 => (parts[0], null, parts[0], null),
+            2 => KnownSuffixes.Contains(parts[1]) ? (parts[0], null, parts[0], parts[1]) : (parts[0], null, parts[1], null),
+            _ => ResolveMultiTokenFallback(parts)
         };
+    }
+
+    private static (string FirstName, string? MiddleName, string LastName, string? Suffix) ResolveMultiTokenFallback(string[] parts)
+    {
+        if (parts.Length >= 3 && KnownSuffixes.Contains(parts[^1]))
+        {
+            var suffix = parts[^1];
+            var last = parts[^2];
+            var first = string.Join(" ", parts[..^2]);
+            return (first, null, last, suffix);
+        }
+
+        var lastName = parts[^1];
+        var firstName = string.Join(" ", parts[..^1]);
+        return (firstName, null, lastName, null);
     }
 
     private static DateOnly? ParseDate(string? value) =>

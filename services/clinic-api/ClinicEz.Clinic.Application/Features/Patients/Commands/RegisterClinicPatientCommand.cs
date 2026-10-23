@@ -451,6 +451,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             p.VerificationStatus,
             activeQueueTicket,
             activeQueueItemId,
-            pastMedicalHistories);
+            pastMedicalHistories,
+            p.ClinicEzId);
     }
 }

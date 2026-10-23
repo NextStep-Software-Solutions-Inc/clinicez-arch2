@@ -1604,6 +1604,7 @@ export interface ClinicPatient {
   tenantId: string;
   clinicId: string;
   patientCode: string;
+  clinicEzId?: string | null;
   firstName: string;
   lastName: string;
   middleName?: string;

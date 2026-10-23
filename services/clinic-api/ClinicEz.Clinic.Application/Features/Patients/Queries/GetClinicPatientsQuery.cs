@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Patients.Commands;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
+using ClinicEz.Clinic.Application.Features.Patients.Search;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
@@ -34,18 +35,7 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
     {
         IQueryable<ClinicPatient> query = _patientRepo.Query().AsNoTracking().Include(p => p.PastMedicalHistories);
 
-        if (!string.IsNullOrWhiteSpace(request.SearchTerm))
-        {
-            var term = request.SearchTerm.Trim().ToLower();
-            query = query.Where(p =>
-                p.FirstName.ToLower().Contains(term) ||
-                p.LastName.ToLower().Contains(term) ||
-                p.PatientCode.ToLower().Contains(term) ||
-                p.ContactNumber.Contains(term) ||
-                (p.PhilHealthNumber != null && p.PhilHealthNumber.Contains(term)) ||
-                (p.SeniorCitizenId != null && p.SeniorCitizenId.Contains(term)) ||
-                (p.PwdId != null && p.PwdId.Contains(term)));
-        }
+        query = query.WhereMatchesSearchTerm(request.SearchTerm);
 
         if (request.HasAlerts == true || string.Equals(request.FilterMode, "ALERTS", StringComparison.OrdinalIgnoreCase))
         {

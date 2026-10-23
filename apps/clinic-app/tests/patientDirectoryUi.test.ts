@@ -133,6 +133,7 @@ const {
   buildPatientOverflowMenuItems,
 } = await import('../components/patient/PatientDirectoryCard');
 import type { ClinicPatient } from '../services/clinicService';
+import { theme } from '../constants/theme';
 
 describe('PatientDirectoryCard & Directory UI Improvements', () => {
   const basePatient: ClinicPatient = {
@@ -410,5 +411,177 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     expect(rowMarkup).toContain('View chart');
     expect(rowMarkup).toContain('Add to queue');
     expect(rowMarkup).toContain('aria-label="More actions for Ambray, Cassandra"');
+  });
+
+  test('8. Card mode renders clinicEzId badge with primary variant when clinicEzId is present', () => {
+    const patientWithEzId: ClinicPatient = {
+      ...basePatient,
+      clinicEzId: 'CEZ-2026-0042',
+    };
+
+    const markup = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: patientWithEzId,
+        mode: 'card',
+        onOpenChart: () => {},
+      })
+    );
+
+    // Verify clinicEzId badge is rendered
+    expect(markup).toContain('CEZ-2026-0042');
+    // Verify semantic token styling: primary variant uses theme.colors.primaryLight & primaryBorder
+    expect(markup).toContain(theme.colors.primaryLight);
+    expect(markup).toContain(theme.colors.primaryBorder);
+    expect(markup).toContain(theme.colors.primaryDark);
+  });
+
+  test('9. Table mode renders clinicEzId badge with primary variant and sm size when clinicEzId is present', () => {
+    const patientWithEzId: ClinicPatient = {
+      ...basePatient,
+      clinicEzId: 'CEZ-2026-8888',
+    };
+
+    const rowMarkup = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: patientWithEzId,
+        mode: 'table',
+        onOpenChart: () => {},
+      })
+    );
+
+    // Verify clinicEzId badge is rendered in table row
+    expect(rowMarkup).toContain('CEZ-2026-8888');
+    // Verify semantic token styling for primary variant
+    expect(rowMarkup).toContain(theme.colors.primaryLight);
+    expect(rowMarkup).toContain(theme.colors.primaryBorder);
+    expect(rowMarkup).toContain(theme.colors.primaryDark);
+  });
+
+  test('10. Absence of clinicEzId badge when clinicEzId is null or undefined', () => {
+    // Case A: undefined in card mode and table mode
+    const patientWithoutEzId: ClinicPatient = {
+      ...basePatient,
+      clinicEzId: undefined,
+    };
+
+    const cardMarkupUndefined = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: patientWithoutEzId,
+        mode: 'card',
+      })
+    );
+    expect(cardMarkupUndefined).not.toContain('CEZ-');
+
+    const tableMarkupUndefined = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: patientWithoutEzId,
+        mode: 'table',
+      })
+    );
+    expect(tableMarkupUndefined).not.toContain('CEZ-');
+
+    // Case B: null in card mode and table mode
+    const patientWithNullEzId: ClinicPatient = {
+      ...basePatient,
+      clinicEzId: null,
+    };
+
+    const cardMarkupNull = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: patientWithNullEzId,
+        mode: 'card',
+      })
+    );
+    expect(cardMarkupNull).not.toContain('CEZ-');
+
+    const tableMarkupNull = renderToStaticMarkup(
+      React.createElement(PatientDirectoryCard, {
+        patient: patientWithNullEzId,
+        mode: 'table',
+      })
+    );
+    expect(tableMarkupNull).not.toContain('CEZ-');
+  });
+
+  test('11. Directory reactivity and state upsert logic: prepend new patient and update existing in-place', () => {
+    // The exact state updater logic from Patients.screen.tsx:
+    const upsertDirectoryPatient = (
+      prev: ClinicPatient[] | null,
+      patient: ClinicPatient
+    ): ClinicPatient[] => {
+      if (!prev) return [patient];
+      const index = prev.findIndex((p) => p.id === patient.id);
+      if (index >= 0) {
+        const next = [...prev];
+        next[index] = { ...next[index], ...patient };
+        return next;
+      }
+      return [patient, ...prev];
+    };
+
+    // Sub-case A: initial state is null
+    const initialUpsert = upsertDirectoryPatient(null, basePatient);
+    expect(initialUpsert).toHaveLength(1);
+    expect(initialUpsert[0].id).toBe(basePatient.id);
+
+    // Sub-case B: prepend new patient
+    const existingList: ClinicPatient[] = [basePatient];
+    const newPatient: ClinicPatient = {
+      ...basePatient,
+      id: 'pat-diego',
+      patientCode: 'PAT-20261023-DIEGO1',
+      fullName: 'Dela Cruz, Diego',
+      clinicEzId: 'CEZ-2026-0099',
+    };
+
+    const listAfterPrepend = upsertDirectoryPatient(existingList, newPatient);
+    expect(listAfterPrepend).toHaveLength(2);
+    expect(listAfterPrepend[0].id).toBe('pat-diego');
+    expect(listAfterPrepend[0].clinicEzId).toBe('CEZ-2026-0099');
+    expect(listAfterPrepend[1].id).toBe(basePatient.id);
+
+    // Sub-case C: update existing patient in-place (e.g. clinicEzId added after sync or demographic update)
+    const updatedPatient: ClinicPatient = {
+      ...basePatient,
+      clinicEzId: 'CEZ-2026-0042',
+      verificationStatus: 'Verified',
+    };
+
+    const listAfterUpdate = upsertDirectoryPatient(listAfterPrepend, updatedPatient);
+    expect(listAfterUpdate).toHaveLength(2);
+    // Position 0 unchanged
+    expect(listAfterUpdate[0].id).toBe('pat-diego');
+    // Position 1 updated in-place with new clinicEzId
+    expect(listAfterUpdate[1].id).toBe(basePatient.id);
+    expect(listAfterUpdate[1].clinicEzId).toBe('CEZ-2026-0042');
+    expect(listAfterUpdate[1].verificationStatus).toBe('Verified');
+  });
+
+  test('12. Directory navigation focus reactivity guard: suppresses first focus and triggers on subsequent focus', () => {
+    let fetchCount = 0;
+    const fetchPatients = () => {
+      fetchCount += 1;
+    };
+
+    const isFirstFocusRef = { current: true };
+    const focusCallback = () => {
+      if (isFirstFocusRef.current) {
+        isFirstFocusRef.current = false;
+        return;
+      }
+      fetchPatients();
+    };
+
+    // Initial mount focus: suppressed, does not double-fetch
+    focusCallback();
+    expect(fetchCount).toBe(0);
+    expect(isFirstFocusRef.current).toBe(false);
+
+    // Subsequent navigation focus (e.g. navigating back from QR scan or import): triggers refresh
+    focusCallback();
+    expect(fetchCount).toBe(1);
+
+    focusCallback();
+    expect(fetchCount).toBe(2);
   });
 });

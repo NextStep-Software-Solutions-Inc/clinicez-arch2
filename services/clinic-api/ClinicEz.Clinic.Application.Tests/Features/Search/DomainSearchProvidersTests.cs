@@ -105,6 +105,186 @@ public class DomainSearchProvidersTests
     }
 
     [Fact]
+    public async Task PatientSearchProvider_MatchesClinicEzIdExactPartialAndUnhyphenated_AndIncludesClinicEzIdInSubtitle()
+    {
+        // Arrange
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var provider = new PatientSearchProvider(patientRepo);
+
+        var patientA = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientCode = "PAT-2026-00010",
+            FirstName = "Juan",
+            LastName = "Dela Cruz",
+            ClinicEzId = "CE-WDP9-FMBJ",
+            ContactNumber = "09170001122",
+            DateOfBirth = new DateOnly(1995, 2, 14)
+        };
+
+        var patientB = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-b",
+            ClinicId = _clinicIdB, // Different clinic tenant
+            PatientCode = "PAT-2026-00020",
+            FirstName = "Pedro",
+            LastName = "Dela Cruz",
+            ClinicEzId = "CE-WDP9-FMBJ",
+            ContactNumber = "09180001122",
+            DateOfBirth = new DateOnly(1992, 3, 10)
+        };
+
+        var patientNoClinicEzId = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientCode = "PAT-2026-00030",
+            FirstName = "Elena",
+            LastName = "Ramos",
+            ClinicEzId = null,
+            ContactNumber = "09190001122",
+            DateOfBirth = new DateOnly(1990, 10, 5)
+        };
+
+        context.Patients.AddRange(patientA, patientB, patientNoClinicEzId);
+        await context.SaveChangesAsync();
+
+        // 1. Exact ClinicEzId match in Clinic A
+        var exactResults = await provider.SearchAsync("CE-WDP9-FMBJ", _clinicIdA, 10, CancellationToken.None);
+        exactResults.Should().HaveCount(1);
+        exactResults[0].Id.Should().Be(patientA.Id.ToString());
+        exactResults[0].Subtitle.Should().Be("PAT-2026-00010 • CE-WDP9-FMBJ • DOB: 1995-02-14 • 09170001122");
+
+        // 2. Partial ClinicEzId match in Clinic A
+        var partialResults = await provider.SearchAsync("WDP9", _clinicIdA, 10, CancellationToken.None);
+        partialResults.Should().HaveCount(1);
+        partialResults[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 3. Unhyphenated ClinicEzId (lowercase) in Clinic A
+        var unhyphenatedLower = await provider.SearchAsync("cewdp9fmbj", _clinicIdA, 10, CancellationToken.None);
+        unhyphenatedLower.Should().HaveCount(1);
+        unhyphenatedLower[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 4. Unhyphenated ClinicEzId (uppercase) in Clinic A
+        var unhyphenatedUpper = await provider.SearchAsync("CEWDP9FMBJ", _clinicIdA, 10, CancellationToken.None);
+        unhyphenatedUpper.Should().HaveCount(1);
+        unhyphenatedUpper[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 5. Strict Tenant Isolation: Searching Clinic B with the same ClinicEzId returns only Clinic B's patient
+        var clinicBResults = await provider.SearchAsync("CE-WDP9-FMBJ", _clinicIdB, 10, CancellationToken.None);
+        clinicBResults.Should().HaveCount(1);
+        clinicBResults[0].Id.Should().Be(patientB.Id.ToString());
+        clinicBResults[0].Subtitle.Should().Be("PAT-2026-00020 • CE-WDP9-FMBJ • DOB: 1992-03-10 • 09180001122");
+
+        // 6. Subtitle fallback when ClinicEzId is null
+        var noClinicEzIdResults = await provider.SearchAsync("Ramos", _clinicIdA, 10, CancellationToken.None);
+        noClinicEzIdResults.Should().HaveCount(1);
+        noClinicEzIdResults[0].Id.Should().Be(patientNoClinicEzId.Id.ToString());
+        noClinicEzIdResults[0].Subtitle.Should().Be("PAT-2026-00030 • DOB: 1990-10-05 • 09190001122");
+    }
+
+    [Fact]
+    public async Task PatientSearchProvider_MatchesCompoundAndInvertedNames_WithSuffixInTitle_AndPreservesTenantIsolation()
+    {
+        // Arrange
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var provider = new PatientSearchProvider(patientRepo);
+
+        var patientA = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-a",
+            ClinicId = _clinicIdA,
+            PatientCode = "PAT-2026-00050",
+            FirstName = "Ely An",
+            LastName = "Maureal",
+            MiddleName = "Santos",
+            Suffix = "Jr.",
+            ClinicEzId = "CE-WDP9-FMBJ",
+            ContactNumber = "09175554433",
+            DateOfBirth = new DateOnly(1993, 7, 21)
+        };
+
+        var patientB = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-b",
+            ClinicId = _clinicIdB, // Tenant isolation check
+            PatientCode = "PAT-2026-00051",
+            FirstName = "Ely An",
+            LastName = "Maureal",
+            MiddleName = "Santos",
+            Suffix = "Jr.",
+            ClinicEzId = "CE-WDP9-FMBJ",
+            ContactNumber = "09185554433",
+            DateOfBirth = new DateOnly(1993, 7, 21)
+        };
+
+        context.Patients.AddRange(patientA, patientB);
+        await context.SaveChangesAsync();
+
+        // 1. Compound Given Name: "Ely An"
+        var compoundFirst = await provider.SearchAsync("Ely An", _clinicIdA, 10, CancellationToken.None);
+        compoundFirst.Should().HaveCount(1);
+        compoundFirst[0].Id.Should().Be(patientA.Id.ToString());
+        compoundFirst[0].Title.Should().Be("Maureal, Ely An Santos Jr.");
+
+        // 2. Full Name: "Ely An Maureal"
+        var fullName = await provider.SearchAsync("Ely An Maureal", _clinicIdA, 10, CancellationToken.None);
+        fullName.Should().HaveCount(1);
+        fullName[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 3. Full Name with Middle: "Ely An Santos Maureal"
+        var fullWithMiddle = await provider.SearchAsync("Ely An Santos Maureal", _clinicIdA, 10, CancellationToken.None);
+        fullWithMiddle.Should().HaveCount(1);
+        fullWithMiddle[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 4. Inverted Name with Comma: "Maureal, Ely An"
+        var invertedComma = await provider.SearchAsync("Maureal, Ely An", _clinicIdA, 10, CancellationToken.None);
+        invertedComma.Should().HaveCount(1);
+        invertedComma[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 5. Inverted Name without Comma: "Maureal Ely An"
+        var invertedNoComma = await provider.SearchAsync("Maureal Ely An", _clinicIdA, 10, CancellationToken.None);
+        invertedNoComma.Should().HaveCount(1);
+        invertedNoComma[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 6. Inverted Name with Middle: "Maureal, Ely An Santos" & "Maureal Ely An Santos"
+        var invertedMiddleComma = await provider.SearchAsync("Maureal, Ely An Santos", _clinicIdA, 10, CancellationToken.None);
+        invertedMiddleComma.Should().HaveCount(1);
+        invertedMiddleComma[0].Id.Should().Be(patientA.Id.ToString());
+
+        var invertedMiddleNoComma = await provider.SearchAsync("Maureal Ely An Santos", _clinicIdA, 10, CancellationToken.None);
+        invertedMiddleNoComma.Should().HaveCount(1);
+        invertedMiddleNoComma[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 7. Middle name: "Santos"
+        var middleResults = await provider.SearchAsync("Santos", _clinicIdA, 10, CancellationToken.None);
+        middleResults.Should().HaveCount(1);
+        middleResults[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 8. Suffix: "Jr." and "Jr"
+        var suffixDotResults = await provider.SearchAsync("Jr.", _clinicIdA, 10, CancellationToken.None);
+        suffixDotResults.Should().HaveCount(1);
+        suffixDotResults[0].Id.Should().Be(patientA.Id.ToString());
+
+        var suffixNoDotResults = await provider.SearchAsync("Jr", _clinicIdA, 10, CancellationToken.None);
+        suffixNoDotResults.Should().HaveCount(1);
+        suffixNoDotResults[0].Id.Should().Be(patientA.Id.ToString());
+
+        // 9. Preserves Tenant Isolation: Clinic B sees Patient B, not Patient A
+        var bResults = await provider.SearchAsync("Ely An Maureal", _clinicIdB, 10, CancellationToken.None);
+        bResults.Should().HaveCount(1);
+        bResults[0].Id.Should().Be(patientB.Id.ToString());
+    }
+
+    [Fact]
     public async Task PatientSearchProvider_ResolvesAlertSeniorAndPwdBadges()
     {
         // Arrange
