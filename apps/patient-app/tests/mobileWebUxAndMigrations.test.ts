@@ -133,7 +133,8 @@ describe('Mobile Web UI/UX & Compact Header State Resolution', () => {
     expect(fileRowWebSource.includes('!isCompact && isHovered')).toBe(true);
 
     const pillBarSource = readApp('components/records/CategoryPillBar.tsx');
-    expect(pillBarSource.includes('useBreakpoint')).toBe(true);
+    expect(pillBarSource.includes('horizontal')).toBe(true);
+    expect(pillBarSource.includes("flexWrap: 'wrap'")).toBe(false);
   });
 
   test('Appointments.screen.web.tsx hides redundant hero header on compact screens and MainBottomTabs.web.tsx avoids truncating label', () => {
@@ -162,13 +163,45 @@ describe('Mobile Web UI/UX & Compact Header State Resolution', () => {
     const uploadWebSource = readApp('navigation/screens/files/FilesUpload.screen.web.tsx');
     expect(uploadWebSource.includes('Add Health Record')).toBe(false);
     expect(uploadWebSource.includes('typeList')).toBe(true);
-    expect(uploadWebSource.includes("flexWrap: 'wrap'")).toBe(true);
+    expect(uploadWebSource.includes('typeScroll')).toBe(true);
 
     const attachSource = readApp('navigation/screens/appointments/AttachFiles.screen.tsx');
     expect(attachSource.includes('<ThemedText variant="h2">Attach Files</ThemedText>')).toBe(false);
 
     const rescheduleSource = readApp('navigation/screens/appointments/Reschedule.screen.tsx');
     expect(rescheduleSource.includes('<ThemedText variant="h2">Request Reschedule</ThemedText>')).toBe(false);
+  });
+
+  test('Filter and category chip bars use horizontal ScrollView with flexShrink: 0 instead of wrapping', () => {
+    const pillBarSource = readApp('components/records/CategoryPillBar.tsx');
+    expect(pillBarSource.includes('<ScrollView')).toBe(true);
+    expect(pillBarSource.includes('horizontal')).toBe(true);
+    expect(pillBarSource.includes('flexShrink: 0')).toBe(true);
+    expect(pillBarSource.includes("flexWrap: 'wrap'")).toBe(false);
+
+    const apptsWebSource = readApp('navigation/screens/Appointments.screen.web.tsx');
+    expect(apptsWebSource.includes('tabsScrollDesktop')).toBe(true);
+    expect(apptsWebSource.includes('tabsContainer')).toBe(false);
+
+    const uploadWebSource = readApp('navigation/screens/files/FilesUpload.screen.web.tsx');
+    expect(uploadWebSource.includes('style={styles.typeScroll}')).toBe(true);
+    expect(uploadWebSource.includes('contentContainerStyle={[styles.typeList')).toBe(true);
+
+    const docsSource = readApp('navigation/screens/documents/Documents.screen.tsx');
+    expect(docsSource.includes('style={styles.tabsScroll}')).toBe(true);
+    expect(docsSource.includes('contentContainerStyle={[styles.tabs')).toBe(true);
+
+    const exploreClinicsWeb = readApp('navigation/screens/ExploreClinics.screen.web.tsx');
+    expect(exploreClinicsWeb.includes('style={styles.filterScroll}')).toBe(true);
+    expect(exploreClinicsWeb.includes('contentContainerStyle={[styles.filterRow')).toBe(true);
+
+    const exploreOrgsWeb = readApp('navigation/screens/ExploreOrgs.screen.web.tsx');
+    expect(exploreOrgsWeb.includes('style={styles.filterScroll}')).toBe(true);
+    expect(exploreOrgsWeb.includes('contentContainerStyle={[styles.filterRow')).toBe(true);
+
+    const notifWebSource = readApp('navigation/screens/Notification.screen.web.tsx');
+    expect(notifWebSource.includes('style={styles.filterScroll}')).toBe(true);
+    expect(notifWebSource.includes('flexShrink: 0')).toBe(true);
   });
 });
 

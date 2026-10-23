@@ -176,6 +176,7 @@ export default function NotificationScreenWeb() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
           contentContainerStyle={[styles.filterRow, { gap: spacing.sm, paddingVertical: spacing.xs }]}
         >
           {FILTERS.map((f) => {
@@ -356,13 +357,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
+  filterScroll: {
+    flexGrow: 0,
+  },
   filterRow: {
     flexDirection: 'row',
+    alignItems: 'center',
   },
   filterChip: {
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   sectionHeader: {
     textTransform: 'uppercase',

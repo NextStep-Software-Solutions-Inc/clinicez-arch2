@@ -383,18 +383,14 @@ export default function AppointmentsScreenWeb() {
 
         {/* Controls Row: Segmented tabs & search */}
         <View style={[styles.controlsRow, { gap: spacing.sm }]}>
-          {isCompact ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={[styles.tabsScrollRow, { gap: spacing.xs }]}
-              style={styles.fullCol}
-            >
-              {renderTabs()}
-            </ScrollView>
-          ) : (
-            <View style={[styles.tabsContainer, { gap: spacing.sm }]}>{renderTabs()}</View>
-          )}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.tabsScrollRow, { gap: isCompact ? spacing.xs : spacing.sm }]}
+            style={isCompact ? styles.fullCol : styles.tabsScrollDesktop}
+          >
+            {renderTabs()}
+          </ScrollView>
 
           <View style={[styles.searchRowWrap, { gap: spacing.xs }]}>
             <View
@@ -803,9 +799,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
   },
-  tabsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  tabsScrollDesktop: {
+    flexGrow: 0,
+    flexShrink: 1,
+    maxWidth: '100%',
   },
   tabsScrollRow: {
     flexDirection: 'row',
@@ -815,6 +812,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   searchRowWrap: {
     flex: 1,
