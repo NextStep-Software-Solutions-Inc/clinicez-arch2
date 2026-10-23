@@ -126,6 +126,7 @@ mock.module('../components/ui/Button', () => ({
 const {
   default: PatientDirectoryCard,
   PatientDirectoryTableHeader,
+  computePatientLocation,
   getPatientInitials,
   hasKnownAllergies,
   hasStatAllergy,
@@ -151,6 +152,10 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
     contactNumber: '09357506035',
     barangay: 'Poblacion',
     city: 'Biñan',
+    customFields: {
+      primary_barangay: 'Poblacion',
+      primary_city: 'Biñan',
+    },
     bloodType: 'B+',
     philHealthNumber: '12-121212121-7',
     seniorCitizenId: '98928398293293',
@@ -583,5 +588,100 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
 
     focusCallback();
     expect(fetchCount).toBe(2);
+  });
+
+  test('13. computePatientLocation resolves Philippine administrative hierarchy from customFields', () => {
+    // 1. Barangay, City, Province
+    expect(
+      computePatientLocation({
+        customFields: {
+          primary_barangay: 'San Vicente',
+          primary_city: 'Biñan',
+          primary_province: 'Laguna',
+        },
+      })
+    ).toBe('San Vicente, Biñan, Laguna');
+
+    // 2. Barangay, City
+    expect(
+      computePatientLocation({
+        customFields: {
+          primary_barangay: 'San Antonio',
+          primary_city: 'Pasig City',
+        },
+      })
+    ).toBe('San Antonio, Pasig City');
+
+    // 3. City, Province
+    expect(
+      computePatientLocation({
+        customFields: {
+          primary_city: 'Cebu City',
+          primary_province: 'Cebu',
+        },
+      })
+    ).toBe('Cebu City, Cebu');
+
+    // 4. City only
+    expect(
+      computePatientLocation({
+        customFields: {
+          primary_city: 'Davao City',
+        },
+      })
+    ).toBe('Davao City');
+
+    // 5. Barangay, Province
+    expect(
+      computePatientLocation({
+        customFields: {
+          primary_barangay: 'Lahug',
+          primary_province: 'Cebu',
+        },
+      })
+    ).toBe('Lahug, Cebu');
+
+    // 6. Barangay only
+    expect(
+      computePatientLocation({
+        customFields: {
+          primary_barangay: 'Poblacion',
+        },
+      })
+    ).toBe('Poblacion');
+
+    // 7. Province only
+    expect(
+      computePatientLocation({
+        customFields: {
+          primary_province: 'Batangas',
+        },
+      })
+    ).toBe('Batangas');
+
+    // 8. Address line only
+    expect(
+      computePatientLocation({
+        customFields: {
+          primary_address_line: 'Unit 402, Sunshine Tower',
+        },
+      })
+    ).toBe('Unit 402, Sunshine Tower');
+
+    // 9. Empty fallback
+    expect(computePatientLocation({})).toBe('');
+    expect(computePatientLocation(null)).toBe('');
+    expect(computePatientLocation(undefined)).toBe('');
+    expect(computePatientLocation({ customFields: {} })).toBe('');
+    expect(computePatientLocation({ customFields: null })).toBe('');
+
+    // 10. Does NOT read top-level legacy properties
+    expect(
+      computePatientLocation({
+        barangay: 'Legacy Brgy',
+        city: 'Legacy City',
+        customFields: {},
+      } as any)
+    ).toBe('');
   });
 });

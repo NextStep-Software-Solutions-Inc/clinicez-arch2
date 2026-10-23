@@ -122,6 +122,32 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         var year = DateTime.UtcNow.Year;
         var patientCode = await _codeGenerator.GenerateNextCodeAsync(_clinicContext.TenantId, _clinicContext.ClinicId, year, ct);
 
+        // Prepare custom fields dictionary and map intake address / emergency contact
+        var customFields = request.CustomFields != null
+            ? new System.Collections.Generic.Dictionary<string, object?>(request.CustomFields)
+            : new System.Collections.Generic.Dictionary<string, object?>();
+
+        if (!string.IsNullOrWhiteSpace(request.AddressLine) && !customFields.ContainsKey("primary_address_line"))
+            customFields["primary_address_line"] = request.AddressLine.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.Barangay) && !customFields.ContainsKey("primary_barangay"))
+            customFields["primary_barangay"] = request.Barangay.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.City) && !customFields.ContainsKey("primary_city"))
+            customFields["primary_city"] = request.City.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.Province) && !customFields.ContainsKey("primary_province"))
+            customFields["primary_province"] = request.Province.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactName) && !customFields.ContainsKey("emergency_contact_name"))
+            customFields["emergency_contact_name"] = request.EmergencyContactName.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactPhone) && !customFields.ContainsKey("emergency_contact_phone"))
+            customFields["emergency_contact_phone"] = request.EmergencyContactPhone.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.EmergencyContactRelationship) && !customFields.ContainsKey("emergency_contact_relationship"))
+            customFields["emergency_contact_relationship"] = request.EmergencyContactRelationship.Trim();
+
         var patient = new ClinicPatient
         {
             Id = Guid.NewGuid(),
@@ -137,13 +163,6 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             CivilStatus = request.CivilStatus,
             ContactNumber = request.ContactNumber.Trim(),
             Email = request.Email?.Trim(),
-            AddressLine = request.AddressLine?.Trim(),
-            Barangay = request.Barangay?.Trim(),
-            City = request.City?.Trim(),
-            Province = request.Province?.Trim(),
-            EmergencyContactName = request.EmergencyContactName?.Trim(),
-            EmergencyContactPhone = request.EmergencyContactPhone?.Trim(),
-            EmergencyContactRelationship = request.EmergencyContactRelationship?.Trim(),
             PhilHealthNumber = request.PhilHealthNumber?.Trim(),
             SeniorCitizenId = request.SeniorCitizenId?.Trim(),
             PwdId = request.PwdId?.Trim(),
@@ -152,7 +171,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             ChronicConditions = request.ChronicConditions?.Trim(),
             Alerts = request.Alerts?.Trim(),
             SyncPatientId = request.SyncPatientId,
-            CustomFields = request.CustomFields ?? new System.Collections.Generic.Dictionary<string, object?>(),
+            CustomFields = customFields,
             VerificationStatus = string.IsNullOrWhiteSpace(request.VerificationStatus) ? "Verified" : request.VerificationStatus,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicStaff"
@@ -431,13 +450,6 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             p.CivilStatus,
             p.ContactNumber,
             p.Email,
-            p.AddressLine,
-            p.Barangay,
-            p.City,
-            p.Province,
-            p.EmergencyContactName,
-            p.EmergencyContactPhone,
-            p.EmergencyContactRelationship,
             p.PhilHealthNumber,
             p.SeniorCitizenId,
             p.PwdId,

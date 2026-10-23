@@ -172,13 +172,6 @@ describe('Adversarial Demographic Stress Suite', () => {
       civilStatus: 'Widowed',
       contactNumber: '+63 917 555 1234',
       email: 'consuelo.v@example.com',
-      addressLine: '12 Emerald St, Villa Verde',
-      barangay: 'San Antonio',
-      city: 'Pasig City',
-      province: 'Metro Manila',
-      emergencyContactName: 'Rodrigo Villaruel',
-      emergencyContactPhone: '+63 918 555 4321',
-      emergencyContactRelationship: 'Son',
       philHealthNumber: '12-345678901-8',
       seniorCitizenId: 'SC-PASIG-2026-99',
       pwdId: 'PWD-PASIG-2026-11',
@@ -186,7 +179,16 @@ describe('Adversarial Demographic Stress Suite', () => {
       allergies: 'Penicillin, Shellfish',
       chronicConditions: 'Type 2 Diabetes, Hypertension',
       alerts: 'Fall Risk, Hard of Hearing',
-      customFields: { classification: 'General' },
+      customFields: {
+        primary_address_line: '12 Emerald St, Villa Verde',
+        primary_barangay: 'San Antonio',
+        primary_city: 'Pasig City',
+        primary_province: 'Metro Manila',
+        emergency_contact_name: 'Rodrigo Villaruel',
+        emergency_contact_phone: '+63 918 555 4321',
+        emergency_contact_relationship: 'Son',
+        classification: 'General',
+      },
       verificationStatus: 'Verified',
     };
 
@@ -195,7 +197,7 @@ describe('Adversarial Demographic Stress Suite', () => {
     expect(updated).not.toBeNull();
     expect(lastPutUrl).toBe(`/patients/${basePatient.id}`);
 
-    // Verify all 23 properties
+    // Verify properties
     expect(lastPutPayload.firstName).toBe('Consuelo');
     expect(lastPutPayload.lastName).toBe('Villaruel');
     expect(lastPutPayload.middleName).toBe('Alcantara');
@@ -205,13 +207,25 @@ describe('Adversarial Demographic Stress Suite', () => {
     expect(lastPutPayload.civilStatus).toBe('Widowed');
     expect(lastPutPayload.contactNumber).toBe('+63 917 555 1234');
     expect(lastPutPayload.email).toBe('consuelo.v@example.com');
-    expect(lastPutPayload.addressLine).toBe('12 Emerald St, Villa Verde');
-    expect(lastPutPayload.barangay).toBe('San Antonio');
-    expect(lastPutPayload.city).toBe('Pasig City');
-    expect(lastPutPayload.province).toBe('Metro Manila');
-    expect(lastPutPayload.emergencyContactName).toBe('Rodrigo Villaruel');
-    expect(lastPutPayload.emergencyContactPhone).toBe('+63 918 555 4321');
-    expect(lastPutPayload.emergencyContactRelationship).toBe('Son');
+
+    // Unified customFields assertions: address & emergency contact must NOT be top-level
+    expect(lastPutPayload.addressLine).toBeUndefined();
+    expect(lastPutPayload.barangay).toBeUndefined();
+    expect(lastPutPayload.city).toBeUndefined();
+    expect(lastPutPayload.province).toBeUndefined();
+    expect(lastPutPayload.emergencyContactName).toBeUndefined();
+    expect(lastPutPayload.emergencyContactPhone).toBeUndefined();
+    expect(lastPutPayload.emergencyContactRelationship).toBeUndefined();
+
+    expect(lastPutPayload.customFields.primary_address_line).toBe('12 Emerald St, Villa Verde');
+    expect(lastPutPayload.customFields.primary_barangay).toBe('San Antonio');
+    expect(lastPutPayload.customFields.primary_city).toBe('Pasig City');
+    expect(lastPutPayload.customFields.primary_province).toBe('Metro Manila');
+    expect(lastPutPayload.customFields.emergency_contact_name).toBe('Rodrigo Villaruel');
+    expect(lastPutPayload.customFields.emergency_contact_phone).toBe('+63 918 555 4321');
+    expect(lastPutPayload.customFields.emergency_contact_relationship).toBe('Son');
+    expect(lastPutPayload.customFields.classification).toBe('General');
+
     expect(lastPutPayload.philHealthNumber).toBe('12-345678901-8');
     expect(lastPutPayload.seniorCitizenId).toBe('SC-PASIG-2026-99');
     expect(lastPutPayload.pwdId).toBe('PWD-PASIG-2026-11');

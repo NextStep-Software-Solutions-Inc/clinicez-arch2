@@ -300,8 +300,9 @@ public class TenantCustomFieldsAndVerificationTests
 
         var intake = templates.FirstOrDefault(t => t.Key == "patient_intake_contacts");
         intake.Should().NotBeNull();
-        intake!.FieldCount.Should().Be(14);
+        intake!.FieldCount.Should().Be(15);
         intake.Fields.Should().Contain(f => f.FieldKey == "primary_address_line" && f.IsRequired && f.Category == "Address");
+        intake.Fields.Should().Contain(f => f.FieldKey == "primary_barangay" && f.Category == "Address");
         intake.Fields.Should().Contain(f => f.FieldKey == "emergency_contact_name" && f.IsRequired && f.Category == "Emergency Contacts");
     }
 

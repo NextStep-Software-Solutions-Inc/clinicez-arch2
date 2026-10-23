@@ -76,6 +76,16 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
             ct);
     }
 
+    public Task<PhilHealthPatientJourneyNumbers> AssignPatientJourneyNumbersAsync(
+        string tenantId,
+        Guid clinicId,
+        Guid patientId,
+        Guid? encounterId,
+        string accreditationNumber,
+        string effectiveYear,
+        CancellationToken ct) =>
+        AssignPatientJourneyNumbersAsync(tenantId, clinicId, patientId, encounterId, accreditationNumber, effectiveYear, referenceDate: null, ct);
+
     public async Task<PhilHealthPatientJourneyNumbers> AssignPatientJourneyNumbersAsync(
         string tenantId,
         Guid clinicId,
@@ -83,10 +93,9 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
         Guid? encounterId,
         string accreditationNumber,
         string effectiveYear,
+        DateTime? referenceDate = null,
         CancellationToken ct = default)
     {
-        var yearClean = string.IsNullOrWhiteSpace(effectiveYear) ? DateTime.UtcNow.Year.ToString() : effectiveYear;
-
         var patient = await _dbContext.Patients
             .FirstOrDefaultAsync(p => p.Id == patientId, ct);
 
@@ -95,81 +104,115 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
             throw new InvalidOperationException($"Patient {patientId} not found.");
         }
 
+        ConsultationEncounter? encounter = null;
+        if (encounterId.HasValue)
+        {
+            encounter = await _dbContext.Consultations
+                .FirstOrDefaultAsync(e => e.Id == encounterId.Value, ct);
+        }
+
+        int? requestedYear = int.TryParse(effectiveYear, out var ey) ? ey : null;
+        YakapEnlistmentEntry activeEntry;
+
+        if (encounter != null || referenceDate.HasValue)
+        {
+            // Encounter mode: refDate derived from encounter.EncounterDate -> referenceDate -> DateTime.UtcNow.Date
+            var refDate = encounter != null
+                ? DateOnly.FromDateTime(encounter.EncounterDate)
+                : (referenceDate.HasValue
+                    ? DateOnly.FromDateTime(referenceDate.Value)
+                    : DateOnly.FromDateTime(DateTime.UtcNow));
+
+            activeEntry = patient.ResolveActiveEnlistmentOrThrow(refDate, requestedYear);
+        }
+        else
+        {
+            // Patient Registration Mode: encounter == null && !referenceDate.HasValue
+            var targetYear = requestedYear ?? DateTime.UtcNow.Year;
+            activeEntry = patient.ResolveActiveEnlistmentForYearOrThrow(targetYear);
+        }
+
+        var yearClean = activeEntry.EffectiveYear > 0
+            ? activeEntry.EffectiveYear.ToString()
+            : (!string.IsNullOrWhiteSpace(effectiveYear) ? effectiveYear : DateTime.UtcNow.Year.ToString());
+
         bool patientModified = false;
 
-        // 1. Assign Patient Annual Case Number if missing
-        if (string.IsNullOrWhiteSpace(patient.PhilHealthCaseNo))
+        // 1. Assign Patient Annual Case Number if missing on active entry
+        var currentCaseNo = activeEntry.CaseNo;
+        if (string.IsNullOrWhiteSpace(currentCaseNo))
         {
-            patient.PhilHealthCaseNo = await GenerateCaseNumberAsync(tenantId, clinicId, accreditationNumber, yearClean, ct);
+            currentCaseNo = await GenerateCaseNumberAsync(tenantId, clinicId, accreditationNumber, yearClean, ct);
+            activeEntry.CaseNo = currentCaseNo;
             patientModified = true;
         }
 
-        // 2. Assign Enlistment Transaction Number if missing
-        if (string.IsNullOrWhiteSpace(patient.PhilHealthEnlistmentNo))
+        // 2. Assign Enlistment Transaction Number if missing on active entry
+        var currentEnlistNo = activeEntry.EnlistmentNo;
+        if (string.IsNullOrWhiteSpace(currentEnlistNo))
         {
-            patient.PhilHealthEnlistmentNo = await GenerateTransactionNumberAsync(
+            currentEnlistNo = await GenerateTransactionNumberAsync(
                 tenantId,
                 clinicId,
                 PhilHealthSequenceType.Enlistment,
                 accreditationNumber,
                 yearClean,
                 ct);
+            activeEntry.EnlistmentNo = currentEnlistNo;
             patientModified = true;
         }
 
-        // 3. Assign Profiling Transaction Number if missing
-        if (string.IsNullOrWhiteSpace(patient.PhilHealthProfilingTransNo))
+        // 3. Assign Profiling Transaction Number if missing on active entry
+        var currentProfNo = activeEntry.ProfilingTransNo;
+        if (string.IsNullOrWhiteSpace(currentProfNo))
         {
-            patient.PhilHealthProfilingTransNo = await GenerateTransactionNumberAsync(
+            currentProfNo = await GenerateTransactionNumberAsync(
                 tenantId,
                 clinicId,
                 PhilHealthSequenceType.Profiling,
                 accreditationNumber,
                 yearClean,
                 ct);
+            activeEntry.ProfilingTransNo = currentProfNo;
             patientModified = true;
         }
 
         if (patientModified)
         {
+            patient.AddOrRenewYakapEnlistment(activeEntry);
             await _dbContext.SaveChangesAsync(ct);
             _logger.LogInformation(
                 "Assigned PhilHealth Journey Numbers to patient {PatientId}: Case={CaseNo}, Enlist={EnlistNo}, Prof={ProfNo}",
-                patient.Id, patient.PhilHealthCaseNo, patient.PhilHealthEnlistmentNo, patient.PhilHealthProfilingTransNo);
+                patient.Id, currentCaseNo, currentEnlistNo, currentProfNo);
         }
 
         // 4. Assign Encounter SOAP Transaction Number if an encounter is specified
         string? soapTransNo = null;
-        if (encounterId.HasValue)
+        if (encounter != null)
         {
-            var encounter = await _dbContext.Consultations
-                .FirstOrDefaultAsync(e => e.Id == encounterId.Value, ct);
+            encounter.PhilHealthCaseNo = currentCaseNo;
+            encounter.HciCaseNo = currentCaseNo;
+            encounter.HciTransNo = currentEnlistNo;
 
-            if (encounter != null)
+            if (string.IsNullOrWhiteSpace(encounter.PhilHealthSoapTransNo))
             {
-                encounter.PhilHealthCaseNo = patient.PhilHealthCaseNo;
-                encounter.HciCaseNo = patient.PhilHealthCaseNo;
-                encounter.HciTransNo = patient.PhilHealthEnlistmentNo;
-                if (string.IsNullOrWhiteSpace(encounter.PhilHealthSoapTransNo))
-                {
-                    encounter.PhilHealthSoapTransNo = await GenerateTransactionNumberAsync(
-                        tenantId,
-                        clinicId,
-                        PhilHealthSequenceType.Soap,
-                        accreditationNumber,
-                        yearClean,
-                        ct);
-                }
-                encounter.SoapTransNo = encounter.PhilHealthSoapTransNo;
-                await _dbContext.SaveChangesAsync(ct);
-                soapTransNo = encounter.PhilHealthSoapTransNo;
+                encounter.PhilHealthSoapTransNo = await GenerateTransactionNumberAsync(
+                    tenantId,
+                    clinicId,
+                    PhilHealthSequenceType.Soap,
+                    accreditationNumber,
+                    yearClean,
+                    ct);
             }
+            encounter.SoapTransNo = encounter.PhilHealthSoapTransNo;
+            await _dbContext.SaveChangesAsync(ct);
+            soapTransNo = encounter.PhilHealthSoapTransNo;
         }
 
         return new PhilHealthPatientJourneyNumbers(
-            CaseNumber: patient.PhilHealthCaseNo,
-            EnlistmentTransactionNumber: patient.PhilHealthEnlistmentNo,
-            ProfilingTransactionNumber: patient.PhilHealthProfilingTransNo,
+            CaseNumber: currentCaseNo!,
+            EnlistmentTransactionNumber: currentEnlistNo!,
+            ProfilingTransactionNumber: currentProfNo!,
             SoapTransactionNumber: soapTransNo);
     }
 

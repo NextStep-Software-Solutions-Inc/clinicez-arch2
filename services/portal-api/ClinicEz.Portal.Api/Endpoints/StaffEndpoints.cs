@@ -240,6 +240,56 @@ public class StaffEndpoints : IEndpoint
         .WithDescription("Permanently removes a revoked staff member record from the workspace.")
         .WithTags("Staff");
 
+        // 3.5. Authoritative Pending Self-Invitation Lookup for authenticated user
+        async Task<IResult> HandlePendingSelfInvitation(
+            HttpContext httpContext,
+            ISender sender,
+            CancellationToken cancellationToken)
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var emails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void CollectClaim(string type)
+            {
+                foreach (var c in httpContext.User.FindAll(type))
+                {
+                    if (!string.IsNullOrWhiteSpace(c.Value))
+                    {
+                        emails.Add(c.Value.Trim());
+                    }
+                }
+            }
+
+            CollectClaim(ClaimTypes.Email);
+            CollectClaim("email");
+            CollectClaim("emails");
+            CollectClaim("email_address");
+            CollectClaim("primary_email_address");
+
+            var query = new GetPendingSelfInvitationQuery(clerkUserId, emails.ToList());
+            var result = await sender.Send(query, cancellationToken);
+
+            return result != null
+                ? Results.Ok(result)
+                : Results.NotFound(new { Message = "No pending invitations found." });
+        }
+
+        app.MapGet("/staff/invitations/pending-self", HandlePendingSelfInvitation)
+            .RequireAuthorization()
+            .WithName("GetPendingSelfInvitation")
+            .WithDescription("Retrieves the latest valid, unexpired pending invitation (workspace or platform admin) matching the authenticated user's verified identity.")
+            .WithTags("Staff");
+
+        app.MapGet("/invitations/pending-self", HandlePendingSelfInvitation)
+            .RequireAuthorization()
+            .WithName("GetPendingSelfInvitationAlias")
+            .WithDescription("Alias for pending self-invitation lookup.")
+            .WithTags("Staff");
+
         // 4. Get public invitation details by token
         app.MapGet("/staff/invitations/{token}", async (
             string token,

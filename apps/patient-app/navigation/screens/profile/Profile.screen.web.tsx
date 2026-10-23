@@ -1,12 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  View,
-  Pressable,
-  TextInput,
-  ActivityIndicator,
-} from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import NetInfo from '@react-native-community/netinfo';
 import { db } from '@db/index';
@@ -33,34 +26,18 @@ import {
   clinicalAssessments,
   patientPhysicalExamProfile,
   patientNcdQuestionnaire,
-  patients,
 } from '@db/schema/index';
-import { isNull, count, eq } from 'drizzle-orm';
-import ThemedText from '@ui/ThemedText';
-import { AppIcon, type IconName } from '@ui/Icon';
-import { Avatar, ProgressBar } from '@ui/Primitives';
-import Badge from '@ui/Badge';
+import { isNull, count } from 'drizzle-orm';
+import ProfileCard from 'components/ProfileCard';
+import { SettingsSection, SettingsRow } from '@ui/SettingsItem';
 import { useAppTheme } from 'contexts/ThemeContext';
-import { useBreakpoint } from 'hooks/useBreakpoint';
 import { useAuth } from 'contexts/AuthContext';
-import { useUser } from '@clerk/expo';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
+import { useBreakpoint } from 'hooks/useBreakpoint';
 import { syncFullProfile } from 'services/api/syncService';
 import { useProfileSync } from 'hooks/useProfileSync';
 
-export type ProfileSectionGroup = 'personal' | 'medical' | 'clinical' | 'settings';
-
-export interface ProfileCategoryItem {
-  id: string;
-  title: string;
-  subtitle: string;
-  icon: IconName;
-  screen: string;
-  section: ProfileSectionGroup;
-  countKey?: keyof Counts;
-}
-
-export type Counts = {
+type Counts = {
   addresses: number;
   emergency: number;
   providers: number;
@@ -84,310 +61,6 @@ export type Counts = {
   physicalExams: number;
   ncdQuestionnaires: number;
 };
-
-const CATEGORIES: ProfileCategoryItem[] = [
-  // ── Personal & Contacts ──────────────────────────────────────────
-  {
-    id: 'demographics',
-    title: 'Personal Demographics',
-    subtitle: 'Name, date of birth, biological sex, civil status',
-    icon: 'user',
-    screen: 'PersonalDemographicsScreen',
-    section: 'personal',
-  },
-  {
-    id: 'government-ids',
-    title: 'Government & Insurance IDs',
-    subtitle: 'PhilHealth PIN, SSS, GSIS, HMO memberships',
-    icon: 'badge',
-    screen: 'GovernmentIdsScreen',
-    section: 'personal',
-  },
-  {
-    id: 'contact',
-    title: 'Contact Information',
-    subtitle: 'Primary mobile, email, messenger addresses',
-    icon: 'phone',
-    screen: 'ContactInfoScreen',
-    section: 'personal',
-  },
-  {
-    id: 'addresses',
-    title: 'Addresses',
-    subtitle: 'Permanent and secondary residential addresses',
-    icon: 'location',
-    screen: 'AddressesScreen',
-    section: 'personal',
-    countKey: 'addresses',
-  },
-  {
-    id: 'emergency',
-    title: 'Emergency Contacts',
-    subtitle: 'Primary & secondary designated contacts',
-    icon: 'emergencyContact',
-    screen: 'EmergencyContactsScreen',
-    section: 'personal',
-    countKey: 'emergency',
-  },
-  {
-    id: 'providers',
-    title: 'Healthcare Providers',
-    subtitle: 'Primary care physicians & assigned clinics',
-    icon: 'stethoscope',
-    screen: 'HealthcareProvidersScreen',
-    section: 'personal',
-    countKey: 'providers',
-  },
-
-  // ── Medical Background & Lifestyle ──────────────────────────────
-  {
-    id: 'allergies',
-    title: 'Allergies & Sensitivities',
-    subtitle: 'Drug, food, and environmental allergies',
-    icon: 'warning',
-    screen: 'AllergiesScreen',
-    section: 'medical',
-    countKey: 'allergies',
-  },
-  {
-    id: 'medications',
-    title: 'Current Medications',
-    subtitle: 'Ongoing maintenance & self-reported medications',
-    icon: 'pill',
-    screen: 'MedicationsScreen',
-    section: 'medical',
-    countKey: 'medications',
-  },
-  {
-    id: 'surgical-history',
-    title: 'Surgical History',
-    subtitle: 'Prior surgeries, dates, and procedures',
-    icon: 'scissors',
-    screen: 'SurgicalHistoryScreen',
-    section: 'medical',
-    countKey: 'surgeries',
-  },
-  {
-    id: 'past-illnesses',
-    title: 'Past Illnesses',
-    subtitle: 'Resolved conditions, hospitalizations, childhood illnesses',
-    icon: 'activity',
-    screen: 'PastIllnessesScreen',
-    section: 'medical',
-    countKey: 'illnesses',
-  },
-  {
-    id: 'chronic-conditions',
-    title: 'Chronic Conditions',
-    subtitle: 'Hypertension, Diabetes, Asthma, ongoing diagnoses',
-    icon: 'heartPulse',
-    screen: 'ChronicConditionsScreen',
-    section: 'medical',
-    countKey: 'chronic',
-  },
-  {
-    id: 'disabilities',
-    title: 'Disabilities & Special Needs',
-    subtitle: 'Physical, sensory, or developmental support',
-    icon: 'accessibility',
-    screen: 'DisabilitiesScreen',
-    section: 'medical',
-    countKey: 'disabilities',
-  },
-  {
-    id: 'immunizations-self',
-    title: 'Immunizations (Self-Reported)',
-    subtitle: 'Vaccine history provided by patient',
-    icon: 'syringe',
-    screen: 'ImmunizationsSelfScreen',
-    section: 'medical',
-    countKey: 'immunizations',
-  },
-  {
-    id: 'family-history',
-    title: 'Family Health History',
-    subtitle: 'Hereditary conditions across direct relatives',
-    icon: 'family',
-    screen: 'FamilyHistoryScreen',
-    section: 'medical',
-    countKey: 'family',
-  },
-  {
-    id: 'social-history',
-    title: 'Social & Lifestyle History',
-    subtitle: 'Smoking, alcohol, diet, physical activity',
-    icon: 'wellness',
-    screen: 'SocialHistoryScreen',
-    section: 'medical',
-  },
-  {
-    id: 'occupation',
-    title: 'Occupational Health',
-    subtitle: 'Work hazards, industry, employment classification',
-    icon: 'briefcase',
-    screen: 'OccupationScreen',
-    section: 'medical',
-  },
-  {
-    id: 'travel-history',
-    title: 'Travel History',
-    subtitle: 'Recent domestic and international trips',
-    icon: 'flight',
-    screen: 'TravelHistoryScreen',
-    section: 'medical',
-    countKey: 'travel',
-  },
-  {
-    id: 'obstetric',
-    title: 'Obstetric Profile',
-    subtitle: 'Pregnancies, deliveries, maternal health history',
-    icon: 'heartPulse',
-    screen: 'ObstetricProfileScreen',
-    section: 'medical',
-    countKey: 'pregnancies',
-  },
-  {
-    id: 'male-reproductive',
-    title: 'Male Reproductive Health',
-    subtitle: 'Prostate, reproductive wellness, screenings',
-    icon: 'user',
-    screen: 'MaleReproductiveScreen',
-    section: 'medical',
-  },
-  {
-    id: 'dental-vision',
-    title: 'Dental & Vision Profile',
-    subtitle: 'Last dental exam, dentures, glasses / contacts',
-    icon: 'vision',
-    screen: 'DentalVisionScreen',
-    section: 'medical',
-  },
-  {
-    id: 'mental-health',
-    title: 'Mental Health History',
-    subtitle: 'Therapy, screenings, emotional wellness support',
-    icon: 'brain',
-    screen: 'MentalHealthScreen',
-    section: 'medical',
-  },
-
-  // ── Clinical Records ─────────────────────────────────────────────
-  {
-    id: 'vitals',
-    title: 'Vital Signs',
-    subtitle: 'Blood pressure, heart rate, temperature, BMI history',
-    icon: 'heartPulse',
-    screen: 'VitalSignsScreen',
-    section: 'clinical',
-    countKey: 'vitals',
-  },
-  {
-    id: 'consultations',
-    title: 'Consultations',
-    subtitle: 'Clinical notes & encounter summaries from doctors',
-    icon: 'chat',
-    screen: 'ConsultationsScreen',
-    section: 'clinical',
-    countKey: 'consults',
-  },
-  {
-    id: 'prescriptions',
-    title: 'Prescriptions & e-Rx',
-    subtitle: 'Active digital prescriptions with UPSC QR verification',
-    icon: 'pill',
-    screen: 'PrescriptionsScreen',
-    section: 'clinical',
-    countKey: 'rxs',
-  },
-  {
-    id: 'lab-results',
-    title: 'Laboratory Results',
-    subtitle: 'Blood work, urinalysis, pathology findings',
-    icon: 'lab',
-    screen: 'LabResultsScreen',
-    section: 'clinical',
-    countKey: 'labs',
-  },
-  {
-    id: 'imaging-results',
-    title: 'Imaging & Radiology',
-    subtitle: 'X-rays, ultrasounds, CT scans, MRIs',
-    icon: 'image',
-    screen: 'ImagingResultsScreen',
-    section: 'clinical',
-    countKey: 'imaging',
-  },
-  {
-    id: 'vaccinations-admin',
-    title: 'Administered Vaccinations',
-    subtitle: 'Clinic-administered vaccines with lot numbers & batch',
-    icon: 'shield',
-    screen: 'VaccinationsAdministeredScreen',
-    section: 'clinical',
-    countKey: 'vaccinations',
-  },
-  {
-    id: 'clinical-assessments',
-    title: 'Clinical Assessments',
-    subtitle: 'Formal diagnoses and physician evaluations',
-    icon: 'clipboard',
-    screen: 'ClinicalAssessmentsScreen',
-    section: 'clinical',
-    countKey: 'assessments',
-  },
-  {
-    id: 'physical-exam',
-    title: 'Physical Examination',
-    subtitle: 'HEENT, cardiovascular, respiratory findings',
-    icon: 'monitor',
-    screen: 'PhysicalExamScreen',
-    section: 'clinical',
-    countKey: 'physicalExams',
-  },
-  {
-    id: 'ncd-questionnaire',
-    title: 'NCD Risk Assessment',
-    subtitle: 'PhilHealth non-communicable disease questionnaire',
-    icon: 'checklist',
-    screen: 'NcdQuestionnaireScreen',
-    section: 'clinical',
-    countKey: 'ncdQuestionnaires',
-  },
-
-  // ── Settings Shortcuts ───────────────────────────────────────────
-  {
-    id: 'settings-appearance',
-    title: 'Appearance',
-    subtitle: 'Light, dark, or system matching theme',
-    icon: 'eye',
-    screen: 'AppearanceSettingsScreen',
-    section: 'settings',
-  },
-  {
-    id: 'settings-security',
-    title: 'Security & App Lock',
-    subtitle: 'PIN management and session locking',
-    icon: 'lock',
-    screen: 'SecuritySettingsScreen',
-    section: 'settings',
-  },
-  {
-    id: 'settings-notifications',
-    title: 'Notification Preferences',
-    subtitle: 'Appointment reminders, clinical updates',
-    icon: 'notifications',
-    screen: 'NotificationsSettingsScreen',
-    section: 'settings',
-  },
-  {
-    id: 'settings-about',
-    title: 'About Clinic EZ',
-    subtitle: 'App version, licensing, legal information',
-    icon: 'info',
-    screen: 'AboutSettingsScreen',
-    section: 'settings',
-  },
-];
 
 async function loadCounts(): Promise<Counts> {
   const [
@@ -447,47 +120,21 @@ async function loadCounts(): Promise<Counts> {
   };
 }
 
+function plural(n: number, noun: string) {
+  if (n === 0) return 'None';
+  return `${n} ${noun}${n !== 1 ? 's' : ''}`;
+}
+
 export default function ProfileScreenWeb() {
-  const { colors, radii, spacing, sizes, shadows } = useAppTheme();
-  const { isWorkstation, isWide, isCompact } = useBreakpoint();
   const navigation = useNavigation<any>();
   const { internalPatientId, getToken } = useAuth();
-  const { user } = useUser();
   const { showOfflineAlert } = useOfflineAlert();
+  const { colors, spacing, sizes } = useAppTheme();
+  const { isCompact } = useBreakpoint();
 
   const [counts, setCounts] = useState<Counts | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSection, setSelectedSection] = useState<'all' | ProfileSectionGroup>('all');
-  const [patientRecord, setPatientRecord] = useState<{ firstName?: string | null; lastName?: string | null } | null>(null);
   const hasBackgroundFetchedRef = useRef(false);
-
-  const loadPatientRecord = useCallback(async () => {
-    if (!internalPatientId) return;
-    try {
-      const p = await db.query.patients.findFirst({
-        where: eq(patients.id, internalPatientId),
-      });
-      if (p) {
-        setPatientRecord({ firstName: p.firstName, lastName: p.lastName });
-      }
-    } catch (err) {
-      console.warn('[ProfileScreenWeb] Failed to load patient record:', err);
-    }
-  }, [internalPatientId]);
-
-  const localDbName = [patientRecord?.firstName, patientRecord?.lastName]
-    .filter(Boolean)
-    .join(' ')
-    .trim() || null;
-
-  const clerkName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
-
-  const displayName =
-    clerkName ||
-    localDbName ||
-    user?.primaryEmailAddress?.emailAddress ||
-    'Patient';
 
   const reloadCounts = useCallback(() => {
     loadCounts().then(setCounts).catch(console.error);
@@ -496,20 +143,13 @@ export default function ProfileScreenWeb() {
   const fetchAndHydrateFullRecord = useCallback(async (): Promise<boolean> => {
     if (!internalPatientId) return false;
     const res = await syncFullProfile(internalPatientId, getToken);
-    await loadPatientRecord();
     return res.success;
-  }, [internalPatientId, getToken, loadPatientRecord]);
+  }, [internalPatientId, getToken]);
 
-  useProfileSync(
-    useCallback(() => {
-      reloadCounts();
-      loadPatientRecord();
-    }, [reloadCounts, loadPatientRecord])
-  );
+  useProfileSync(reloadCounts);
 
   useEffect(() => {
     reloadCounts();
-    loadPatientRecord();
     if (!hasBackgroundFetchedRef.current) {
       hasBackgroundFetchedRef.current = true;
       NetInfo.fetch()
@@ -521,7 +161,7 @@ export default function ProfileScreenWeb() {
         })
         .catch(() => {});
     }
-  }, [fetchAndHydrateFullRecord, reloadCounts, loadPatientRecord]);
+  }, [fetchAndHydrateFullRecord, reloadCounts]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -541,44 +181,7 @@ export default function ProfileScreenWeb() {
     }
   }, [fetchAndHydrateFullRecord, reloadCounts, showOfflineAlert]);
 
-  // Profile completeness score (0..1)
-  const completeness = useMemo(() => {
-    if (!counts) return 0.35;
-    const personalKeys: (keyof Counts)[] = [
-      'addresses',
-      'emergency',
-      'providers',
-      'allergies',
-      'medications',
-      'chronic',
-      'immunizations',
-    ];
-    let filled = 1; // 1 for account/name
-    personalKeys.forEach((k) => {
-      if (counts[k] > 0) filled += 1;
-    });
-    return Math.min(1, Math.max(0.2, filled / (personalKeys.length + 1)));
-  }, [counts]);
-
-  // Filtered categories
-  const filteredCategories = useMemo(() => {
-    return CATEGORIES.filter((cat) => {
-      const matchesSection = selectedSection === 'all' || cat.section === selectedSection;
-      const query = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        !query ||
-        cat.title.toLowerCase().includes(query) ||
-        cat.subtitle.toLowerCase().includes(query);
-      return matchesSection && matchesSearch;
-    });
-  }, [selectedSection, searchQuery]);
-
-  // Responsive card column basis: 3 col on >= 1280, 2 col on >= 768, 1 col compact
-  const cardWidthStyle = isWide
-    ? { width: '31.8%' as const }
-    : isWorkstation
-      ? { width: '48.5%' as const }
-      : { width: '100%' as const };
+  const c = counts;
 
   return (
     <ScrollView
@@ -586,245 +189,266 @@ export default function ProfileScreenWeb() {
       contentContainerStyle={[
         styles.scrollContent,
         {
-          padding: isCompact ? spacing.md : spacing['2xl'],
+          padding: isCompact ? spacing.lg : spacing['2xl'],
           paddingBottom: spacing['4xl'],
         },
       ]}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor={colors.primary}
+          colors={[colors.primary]}
+        />
+      }
     >
-      <View
-        style={[
-          styles.container,
-          { maxWidth: sizes.contentMaxWidth, gap: isCompact ? spacing.lg : spacing['2xl'] },
-        ]}
-      >
-        {/* Header Overview Card */}
-        <View
-          style={[
-            styles.headerCard,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderRadius: radii.xl,
-              padding: isCompact ? spacing.lg : spacing['2xl'],
-            },
-            shadows.sm,
-          ]}
+      <View style={[styles.container, { maxWidth: sizes.contentMaxWidth }]}>
+        <ProfileCard />
+
+        <SettingsSection title="About You">
+          <SettingsRow
+            title="Personal Info"
+            subtitle="Demographics, name, date of birth"
+            icon={{ android: 'person', ios: 'person.fill' }}
+            iconColor={colors.primary}
+            right={{ type: 'chevron' }}
+            onPress={() => navigation.navigate('Main', { screen: 'PersonalDemographicsScreen' })}
+          />
+          <SettingsRow
+            title="Government & Insurance IDs"
+            subtitle="PhilHealth, SSS, GSIS, HMO"
+            icon={{ android: 'badge', ios: 'creditcard.fill' }}
+            iconColor={colors.purple}
+            right={{ type: 'chevron' }}
+            onPress={() => navigation.navigate('Main', { screen: 'GovernmentIdsScreen' })}
+          />
+          <SettingsRow
+            title="Contact Info"
+            subtitle="Mobile, email, messenger"
+            icon={{ android: 'call', ios: 'phone.fill' }}
+            iconColor={colors.success}
+            right={{ type: 'chevron' }}
+            onPress={() => navigation.navigate('Main', { screen: 'ContactInfoScreen' })}
+          />
+          <SettingsRow
+            title="Addresses"
+            subtitle="Home, secondary"
+            icon={{ android: 'location_on', ios: 'location.fill' }}
+            iconColor={colors.warning}
+            right={c ? { type: 'value', label: plural(c.addresses, 'address') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'AddressesScreen' })}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Emergency">
+          <SettingsRow
+            title="Emergency Contacts"
+            icon={{ android: 'emergency', ios: 'person.crop.circle.badge.exclamationmark.fill' }}
+            iconColor={colors.emergency}
+            right={c ? { type: 'value', label: plural(c.emergency, 'contact') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'EmergencyContactsScreen' })}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Healthcare">
+          <SettingsRow
+            title="Healthcare Providers"
+            subtitle="Doctors, specialists"
+            icon={{ android: 'local_hospital', ios: 'stethoscope' }}
+            iconColor={colors.info}
+            right={c ? { type: 'value', label: plural(c.providers, 'provider') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'HealthcareProvidersScreen' })}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Medical History">
+          <SettingsRow
+            title="Allergies"
+            icon={{ android: 'warning', ios: 'exclamationmark.triangle.fill' }}
+            iconColor={colors.urgent}
+            right={c ? { type: 'value', label: plural(c.allergies, 'allergy') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'AllergiesScreen' })}
+          />
+          <SettingsRow
+            title="Medications"
+            icon={{ android: 'medication', ios: 'pills.fill' }}
+            iconColor={colors.success}
+            right={c ? { type: 'value', label: plural(c.medications, 'medication') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'MedicationsScreen' })}
+          />
+          <SettingsRow
+            title="Surgical History"
+            icon={{ android: 'content_cut', ios: 'scissors' }}
+            iconColor={colors.purple}
+            right={c ? { type: 'value', label: plural(c.surgeries, 'procedure') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'SurgicalHistoryScreen' })}
+          />
+          <SettingsRow
+            title="Past Illnesses"
+            icon={{ android: 'sick', ios: 'thermometer.medium' }}
+            iconColor={colors.textSecondary}
+            right={c ? { type: 'value', label: plural(c.illnesses, 'illness') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'PastIllnessesScreen' })}
+          />
+          <SettingsRow
+            title="Chronic Conditions"
+            icon={{ android: 'monitor_heart', ios: 'heart.text.clipboard.fill' }}
+            iconColor={colors.emergency}
+            right={c ? { type: 'value', label: plural(c.chronic, 'condition') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'ChronicConditionsScreen' })}
+          />
+          <SettingsRow
+            title="Disabilities"
+            icon={{ android: 'accessibility', ios: 'figure.roll' }}
+            iconColor={colors.purple}
+            right={c ? { type: 'value', label: plural(c.disabilities, 'entry') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'DisabilitiesScreen' })}
+          />
+          <SettingsRow
+            title="Self-Reported Immunizations"
+            icon={{ android: 'vaccines', ios: 'syringe.fill' }}
+            iconColor={colors.primary}
+            right={c ? { type: 'value', label: plural(c.immunizations, 'vaccine') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'ImmunizationsSelfScreen' })}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Lifestyle">
+          <SettingsRow
+            title="Social History"
+            subtitle="Tobacco, alcohol, exercise, diet"
+            icon={{ android: 'self_improvement', ios: 'leaf.fill' }}
+            iconColor={colors.success}
+            right={{ type: 'chevron' }}
+            onPress={() => navigation.navigate('Main', { screen: 'SocialHistoryScreen' })}
+          />
+          <SettingsRow
+            title="Occupation"
+            icon={{ android: 'work', ios: 'briefcase.fill' }}
+            iconColor={colors.warning}
+            right={{ type: 'chevron' }}
+            onPress={() => navigation.navigate('Main', { screen: 'OccupationScreen' })}
+          />
+          <SettingsRow
+            title="Travel History"
+            icon={{ android: 'flight', ios: 'airplane' }}
+            iconColor={colors.info}
+            right={c ? { type: 'value', label: plural(c.travel, 'trip') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'TravelHistoryScreen' })}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Family History">
+          <SettingsRow
+            title="Family Health History"
+            icon={{ android: 'family_restroom', ios: 'person.2.fill' }}
+            iconColor={colors.purple}
+            right={c ? { type: 'value', label: plural(c.family, 'entry') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'FamilyHistoryScreen' })}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Reproductive Health">
+          <SettingsRow
+            title="Obstetric Profile"
+            subtitle="Menstrual history, pregnancies"
+            icon={{ android: 'pregnant_woman', ios: 'waveform.path.ecg' }}
+            iconColor={colors.purple}
+            right={c ? { type: 'value', label: plural(c.pregnancies, 'pregnancy') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'ObstetricProfileScreen' })}
+          />
+          <SettingsRow
+            title="Male Reproductive Health"
+            icon={{ android: 'male', ios: 'person.fill' }}
+            iconColor={colors.primary}
+            right={{ type: 'chevron' }}
+            onPress={() => navigation.navigate('Main', { screen: 'MaleReproductiveScreen' })}
+          />
+          <SettingsRow
+            title="Dental & Vision"
+            icon={{ android: 'visibility', ios: 'eye.fill' }}
+            iconColor={colors.success}
+            right={{ type: 'chevron' }}
+            onPress={() => navigation.navigate('Main', { screen: 'DentalVisionScreen' })}
+          />
+          <SettingsRow
+            title="Mental Health"
+            icon={{ android: 'psychology', ios: 'brain.head.profile' }}
+            iconColor={colors.purple}
+            right={{ type: 'chevron' }}
+            onPress={() => navigation.navigate('Main', { screen: 'MentalHealthScreen' })}
+          />
+        </SettingsSection>
+
+        <SettingsSection
+          title="Health Records"
+          footer="These records are entered by your healthcare provider and cannot be edited here."
         >
-          <View style={[styles.headerCardTop, { gap: spacing.lg }]}>
-            <Avatar name={displayName} size="lg" />
-
-            <View style={styles.headerInfo}>
-              <View style={[styles.nameRow, { gap: spacing.sm }]}>
-                <ThemedText variant={isCompact ? 'h2' : 'h1'} numberOfLines={1}>
-                  {displayName}
-                </ThemedText>
-                <Badge
-                  tone="primary"
-                  label={`ID: ${internalPatientId ? internalPatientId.slice(0, 8) + '...' : 'Verified'}`}
-                  size="sm"
-                />
-              </View>
-
-              <ThemedText variant="small" color="textMuted">
-                Patient Account • Clinical Record & Medical Health Overview
-              </ThemedText>
-            </View>
-
-            <Pressable
-              onPress={handleRefresh}
-              disabled={isRefreshing}
-              style={({ pressed, hovered }: any) => [
-                styles.syncBtn,
-                {
-                  borderColor: hovered ? colors.primaryBorder : colors.border,
-                  backgroundColor: pressed || hovered ? colors.surfaceMuted : colors.surfaceSubtle,
-                  borderRadius: radii.md,
-                  paddingHorizontal: spacing.lg,
-                  paddingVertical: spacing.sm,
-                  gap: spacing.sm,
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Sync profile from server"
-            >
-              {isRefreshing ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <>
-                  <AppIcon name="sync" size={sizes.iconSm} color="primary" />
-                  <ThemedText variant="smallBold" color="primary">
-                    Sync Server
-                  </ThemedText>
-                </>
-              )}
-            </Pressable>
-          </View>
-
-          {/* Completeness bar */}
-          <View style={[styles.completenessSection, { marginTop: spacing.lg, gap: spacing.xs }]}>
-            <View style={styles.completenessRow}>
-              <ThemedText variant="smallBold">Profile Completeness</ThemedText>
-              <ThemedText variant="smallBold" color="primary">
-                {Math.round(completeness * 100)}%
-              </ThemedText>
-            </View>
-            <ProgressBar value={completeness} tone="primary" />
-          </View>
-        </View>
-
-        {/* Filter Controls & Search */}
-        <View style={[styles.controlsRow, { gap: spacing.md }]}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={[styles.tabsScrollContent, { gap: spacing.sm }]}
-            style={styles.tabsScrollView}
-          >
-            {(
-              [
-                { id: 'all', label: 'All' },
-                { id: 'personal', label: 'Personal' },
-                { id: 'medical', label: 'Medical History' },
-                { id: 'clinical', label: 'Clinical Records' },
-                { id: 'settings', label: 'Settings' },
-              ] as const
-            ).map((tab) => {
-              const isActive = selectedSection === tab.id;
-              return (
-                <Pressable
-                  key={tab.id}
-                  onPress={() => setSelectedSection(tab.id)}
-                  style={({ pressed, hovered }: any) => [
-                    styles.tabButton,
-                    {
-                      borderRadius: radii.full,
-                      borderColor: isActive
-                        ? colors.primary
-                        : hovered
-                          ? colors.borderDark
-                          : colors.border,
-                      backgroundColor: isActive
-                        ? colors.primary
-                        : pressed || hovered
-                          ? colors.surfaceMuted
-                          : colors.card,
-                      paddingHorizontal: spacing.lg,
-                      paddingVertical: spacing.sm,
-                    },
-                  ]}
-                  accessibilityRole="button"
-                >
-                  <ThemedText
-                    variant="smallBold"
-                    style={{ color: isActive ? colors.onPrimary : colors.textSecondary }}
-                  >
-                    {tab.label}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          <View
-            style={[
-              styles.searchBox,
-              {
-                borderColor: colors.border,
-                backgroundColor: colors.card,
-                borderRadius: radii.md,
-                paddingHorizontal: spacing.md,
-                paddingVertical: spacing.sm,
-                gap: spacing.sm,
-                maxWidth: isWorkstation ? 360 : '100%',
-              },
-            ]}
-          >
-            <AppIcon name="search" size={sizes.iconSm} color="textMuted" />
-            <TextInput
-              style={[styles.searchInput, { color: colors.text }, { outlineStyle: 'none' } as object]}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search profile sections..."
-              placeholderTextColor={colors.textMuted}
-            />
-            {searchQuery.length > 0 && (
-              <Pressable
-                onPress={() => setSearchQuery('')}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-              >
-                <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
-              </Pressable>
-            )}
-          </View>
-        </View>
-
-        {/* Section Cards Responsive Grid */}
-        <View style={[styles.grid, { gap: isCompact ? spacing.md : spacing.lg }]}>
-          {filteredCategories.map((cat) => {
-            const countValue = cat.countKey && counts ? counts[cat.countKey] : null;
-
-            return (
-              <Pressable
-                key={cat.id}
-                onPress={() => navigation.navigate('Main', { screen: cat.screen })}
-                style={({ pressed, hovered }: any) => [
-                  styles.categoryCard,
-                  cardWidthStyle,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: hovered ? colors.primaryBorder : colors.border,
-                    borderRadius: radii.lg,
-                    padding: isCompact ? spacing.lg : spacing.xl,
-                    gap: spacing.md,
-                  },
-                  shadows.sm,
-                  (pressed || hovered) && {
-                    backgroundColor: hovered ? colors.surfaceMuted : colors.card,
-                  },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`${cat.title}: ${cat.subtitle}`}
-              >
-                <View style={styles.cardTop}>
-                  <View
-                    style={[
-                      styles.cardIconCircle,
-                      {
-                        width: sizes.controlLg,
-                        height: sizes.controlLg,
-                        borderRadius: radii.md,
-                        backgroundColor: colors.primaryLight,
-                      },
-                    ]}
-                  >
-                    <AppIcon name={cat.icon} size={sizes.iconMd} color="primary" />
-                  </View>
-
-                  {countValue !== null ? (
-                    <Badge
-                      tone={countValue > 0 ? 'primary' : 'neutral'}
-                      label={`${countValue} ${countValue === 1 ? 'record' : 'records'}`}
-                      size="sm"
-                    />
-                  ) : (
-                    <AppIcon name="forward" size={sizes.iconSm} color="textLight" />
-                  )}
-                </View>
-
-                <View style={[styles.cardContent, { gap: spacing.xs }]}>
-                  <ThemedText variant="bodyBold" numberOfLines={1}>
-                    {cat.title}
-                  </ThemedText>
-                  <ThemedText variant="small" color="textMuted" numberOfLines={2}>
-                    {cat.subtitle}
-                  </ThemedText>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
+          <SettingsRow
+            title="Vital Signs"
+            icon={{ android: 'monitor_heart', ios: 'waveform.path.ecg' }}
+            iconColor={colors.emergency}
+            right={c ? { type: 'value', label: plural(c.vitals, 'record') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'VitalSignsScreen' })}
+          />
+          <SettingsRow
+            title="Consultations"
+            icon={{ android: 'chat_bubble', ios: 'stethoscope' }}
+            iconColor={colors.primary}
+            right={c ? { type: 'value', label: plural(c.consults, 'consult') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'ConsultationsScreen' })}
+          />
+          <SettingsRow
+            title="Prescriptions"
+            icon={{ android: 'receipt_long', ios: 'doc.text.fill' }}
+            iconColor={colors.purple}
+            right={c ? { type: 'value', label: plural(c.rxs, 'Rx') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'PrescriptionsScreen' })}
+          />
+          <SettingsRow
+            title="Lab Results"
+            icon={{ android: 'science', ios: 'flask.fill' }}
+            iconColor={colors.success}
+            right={c ? { type: 'value', label: plural(c.labs, 'result') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'LabResultsScreen' })}
+          />
+          <SettingsRow
+            title="Imaging Results"
+            icon={{ android: 'image', ios: 'photo.fill' }}
+            iconColor={colors.warning}
+            right={c ? { type: 'value', label: plural(c.imaging, 'image') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'ImagingResultsScreen' })}
+          />
+          <SettingsRow
+            title="Vaccinations (Provider)"
+            icon={{ android: 'vaccines', ios: 'syringe.fill' }}
+            iconColor={colors.info}
+            right={c ? { type: 'value', label: plural(c.vaccinations, 'vaccine') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'VaccinationsAdministeredScreen' })}
+          />
+          <SettingsRow
+            title="Clinical Assessments"
+            icon={{ android: 'assignment', ios: 'list.clipboard.fill' }}
+            iconColor={colors.textSecondary}
+            right={c ? { type: 'value', label: plural(c.assessments, 'assessment') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'ClinicalAssessmentsScreen' })}
+          />
+          <SettingsRow
+            title="Physical Exam"
+            icon={{ android: 'monitor', ios: 'stethoscope' }}
+            iconColor={colors.primary}
+            right={c ? { type: 'value', label: plural(c.physicalExams, 'record') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'PhysicalExamScreen' })}
+          />
+          <SettingsRow
+            title="NCD Questionnaire"
+            icon={{ android: 'quiz', ios: 'checklist' }}
+            iconColor={colors.purple}
+            right={c ? { type: 'value', label: plural(c.ncdQuestionnaires, 'record') } : { type: 'loading' }}
+            onPress={() => navigation.navigate('Main', { screen: 'NcdQuestionnaireScreen' })}
+          />
+        </SettingsSection>
       </View>
     </ScrollView>
   );
@@ -841,88 +465,5 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     alignSelf: 'center',
-  },
-  headerCard: {
-    borderWidth: 1,
-  },
-  headerCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  headerInfo: {
-    flex: 1,
-    minWidth: 180,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  syncBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  completenessSection: {
-    width: '100%',
-  },
-  completenessRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  tabsScrollView: {
-    flexGrow: 0,
-    maxWidth: '100%',
-  },
-  tabsScrollContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 2,
-  },
-  tabButton: {
-    borderWidth: 1,
-    flexShrink: 0,
-  },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    minWidth: 240,
-    flex: 1,
-  },
-  searchInput: {
-    flex: 1,
-    minWidth: 0,
-    padding: 0,
-    borderWidth: 0,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  categoryCard: {
-    borderWidth: 1,
-    flexGrow: 1,
-    minWidth: 260,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  cardIconCircle: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardContent: {
-    flex: 1,
   },
 });

@@ -197,7 +197,7 @@ public class PatientShareSnapshotHandlerTestsAdversarial
         patient.MiddleName.Should().Be("Dela");
         patient.LastName.Should().Be("Maureal");
         patient.Suffix.Should().Be("Jr.");
-        patient.AddressLine.Should().Be("123 Main St.");
+        patient.CustomFields["primary_address_line"].Should().Be("123 Main St.");
         patient.PhilHealthNumber.Should().Be("12-345678901-2");
     }
 

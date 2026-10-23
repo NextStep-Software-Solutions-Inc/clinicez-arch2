@@ -153,6 +153,13 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     alerts: 'High fall risk',
     verificationStatus: 'Verified',
     customFields: {
+      primary_address_line: '123 Rizal Ave',
+      primary_barangay: 'Barangay 10',
+      primary_city: 'San Pedro',
+      primary_province: 'Laguna',
+      emergency_contact_name: 'Juan Santos',
+      emergency_contact_phone: '0918-987-6543',
+      emergency_contact_relationship: 'Spouse',
       classification: 'Student',
       student_id: '2026-9042',
       college: 'College of Science',
@@ -191,13 +198,6 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       civilStatus: 'Separated',
       contactNumber: '0917-000-1111',
       email: 'juan.delacruz@example.com',
-      addressLine: 'Block 4 Lot 10 Phase 2',
-      barangay: 'San Vicente',
-      city: 'Biñan',
-      province: 'Laguna',
-      emergencyContactName: 'Elena Dela Cruz',
-      emergencyContactPhone: '0918-000-2222',
-      emergencyContactRelationship: 'Sister',
       philHealthNumber: '01-025000001-0',
       seniorCitizenId: 'SC-2026-001',
       pwdId: 'PWD-2026-002',
@@ -206,6 +206,13 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
       chronicConditions: 'Asthma',
       alerts: 'Hearing impaired',
       customFields: {
+        primary_address_line: 'Block 4 Lot 10 Phase 2',
+        primary_barangay: 'San Vicente',
+        primary_city: 'Biñan',
+        primary_province: 'Laguna',
+        emergency_contact_name: 'Elena Dela Cruz',
+        emergency_contact_phone: '0918-000-2222',
+        emergency_contact_relationship: 'Sister',
         classification: 'Employee',
         employee_id: 'EMP-2026-001',
         department: 'Registrar Office',
@@ -222,6 +229,23 @@ describe('Milestone M1 — Patient Demographics Editing & Missing Gender Restora
     expect(lastPutPayload.civilStatus).toBe('Separated');
     expect(lastPutPayload.bloodType).toBe('A+');
     expect(lastPutPayload.philHealthNumber).toBe('01-025000001-0');
+
+    // Unified customFields assertions: address & emergency contact must NOT be top-level
+    expect(lastPutPayload.addressLine).toBeUndefined();
+    expect(lastPutPayload.barangay).toBeUndefined();
+    expect(lastPutPayload.city).toBeUndefined();
+    expect(lastPutPayload.province).toBeUndefined();
+    expect(lastPutPayload.emergencyContactName).toBeUndefined();
+    expect(lastPutPayload.emergencyContactPhone).toBeUndefined();
+    expect(lastPutPayload.emergencyContactRelationship).toBeUndefined();
+
+    expect(lastPutPayload.customFields.primary_address_line).toBe('Block 4 Lot 10 Phase 2');
+    expect(lastPutPayload.customFields.primary_barangay).toBe('San Vicente');
+    expect(lastPutPayload.customFields.primary_city).toBe('Biñan');
+    expect(lastPutPayload.customFields.primary_province).toBe('Laguna');
+    expect(lastPutPayload.customFields.emergency_contact_name).toBe('Elena Dela Cruz');
+    expect(lastPutPayload.customFields.emergency_contact_phone).toBe('0918-000-2222');
+    expect(lastPutPayload.customFields.emergency_contact_relationship).toBe('Sister');
     expect(lastPutPayload.customFields.classification).toBe('Employee');
     expect(lastPutPayload.customFields.employee_id).toBe('EMP-2026-001');
     expect(lastPutPayload.verificationStatus).toBe('Verified');

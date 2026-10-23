@@ -68,6 +68,16 @@ public sealed class AuditablePhilHealthSequenceGenerator : IPhilHealthSequenceGe
         CancellationToken ct = default) =>
         _inner.GenerateTransmittalNumberAsync(tenantId, clinicId, accreditationNumber, effectiveYear, ct);
 
+    public Task<PhilHealthPatientJourneyNumbers> AssignPatientJourneyNumbersAsync(
+        string tenantId,
+        Guid clinicId,
+        Guid patientId,
+        Guid? encounterId,
+        string accreditationNumber,
+        string effectiveYear,
+        CancellationToken ct) =>
+        AssignPatientJourneyNumbersAsync(tenantId, clinicId, patientId, encounterId, accreditationNumber, effectiveYear, referenceDate: null, ct);
+
     public async Task<PhilHealthPatientJourneyNumbers> AssignPatientJourneyNumbersAsync(
         string tenantId,
         Guid clinicId,
@@ -75,10 +85,12 @@ public sealed class AuditablePhilHealthSequenceGenerator : IPhilHealthSequenceGe
         Guid? encounterId,
         string accreditationNumber,
         string effectiveYear,
+        DateTime? referenceDate = null,
         CancellationToken ct = default)
     {
-        var journeyNumbers = await _inner.AssignPatientJourneyNumbersAsync(
-            tenantId, clinicId, patientId, encounterId, accreditationNumber, effectiveYear, ct);
+        var journeyNumbers = referenceDate.HasValue
+            ? await _inner.AssignPatientJourneyNumbersAsync(tenantId, clinicId, patientId, encounterId, accreditationNumber, effectiveYear, referenceDate, ct)
+            : await _inner.AssignPatientJourneyNumbersAsync(tenantId, clinicId, patientId, encounterId, accreditationNumber, effectiveYear, ct);
 
         try
         {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { desc, eq } from 'drizzle-orm';
 import { format } from 'date-fns';
@@ -249,7 +249,13 @@ export default function DocumentsScreen() {
       refreshing={refreshing}
       contentContainerStyle={{ gap: spacing.md }}
     >
-      <View style={[styles.tabs, { gap: spacing.sm }]} accessibilityRole="tablist">
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabsScroll}
+        contentContainerStyle={[styles.tabs, { gap: spacing.sm }]}
+        accessibilityRole="tablist"
+      >
         {TABS.map((item) => {
           const selected = item.key === tab;
           return (
@@ -270,6 +276,7 @@ export default function DocumentsScreen() {
             >
               <ThemedText
                 variant="smallBold"
+                numberOfLines={1}
                 style={{ color: selected ? colors.onPrimary : colors.textSecondary }}
               >
                 {`${item.label} (${counts[item.key]})`}
@@ -277,7 +284,7 @@ export default function DocumentsScreen() {
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
 
       {!loaded ? (
         <Skeleton height={120} />
@@ -292,8 +299,9 @@ export default function DocumentsScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  tabs: { flexDirection: 'row', flexWrap: 'wrap' },
-  tab: { alignItems: 'center' },
+  tabsScroll: { flexGrow: 0 },
+  tabs: { flexDirection: 'row', alignItems: 'center' },
+  tab: { alignItems: 'center', flexShrink: 0 },
   rowTop: { flexDirection: 'row', alignItems: 'center' },
   iconBox: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap' },

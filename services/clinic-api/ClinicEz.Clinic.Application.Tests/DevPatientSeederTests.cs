@@ -59,6 +59,14 @@ public class DevPatientSeederTests
             Assert.False(string.IsNullOrWhiteSpace(p.BloodType));
             Assert.True(p.DateOfBirth < DateOnly.FromDateTime(DateTime.UtcNow));
             Assert.NotNull(p.CustomFields);
+            Assert.True(p.CustomFields.ContainsKey("primary_address_line"));
+            Assert.True(p.CustomFields.ContainsKey("primary_barangay"));
+            Assert.True(p.CustomFields.ContainsKey("primary_city"));
+            Assert.True(p.CustomFields.ContainsKey("primary_province"));
+            Assert.True(p.CustomFields.ContainsKey("emergency_contact_name"));
+            Assert.True(p.CustomFields.ContainsKey("emergency_contact_phone"));
+            Assert.True(p.CustomFields.ContainsKey("emergency_contact_relationship"));
+            Assert.True(p.CustomFields.ContainsKey("yakap_enlistments"));
 
             var age = DateTime.UtcNow.Year - p.DateOfBirth.Year;
             if (age >= 60)

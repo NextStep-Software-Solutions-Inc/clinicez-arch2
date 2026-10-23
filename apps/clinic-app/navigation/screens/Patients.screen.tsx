@@ -58,6 +58,7 @@ import StructuredMedicalHistoryModal, {
   formatMedicalHistoriesSummary,
 } from '../../components/patient/StructuredMedicalHistoryModal';
 import ClinicalAlertsSection from '../../components/patient/ClinicalAlertsSection';
+import YakapEnlistmentSection from '../../components/patient/YakapEnlistmentSection';
 import EditPatientModal from '../../components/patient/EditPatientModal';
 import PatientDirectoryCard, {
   PatientDirectoryTableHeader,
@@ -192,10 +193,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [formCivilStatus, setFormCivilStatus] = useState('Single');
   const [formPhone, setFormPhone] = useState('');
   const [formEmail, setFormEmail] = useState('');
-  const [formAddress, setFormAddress] = useState('');
-  const [formBarangay, setFormBarangay] = useState('');
-  const [formCity, setFormCity] = useState('');
-  const [formProvince, setFormProvince] = useState('');
   const [formPhilHealth, setFormPhilHealth] = useState('');
   const [formSeniorId, setFormSeniorId] = useState('');
   const [formPwdId, setFormPwdId] = useState('');
@@ -627,6 +624,10 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       }
     }
 
+    if (dynamicFieldValues['yakap_enlistments']) {
+      customFields['yakap_enlistments'] = dynamicFieldValues['yakap_enlistments'];
+    }
+
     customFields['member_type'] = formMemberType;
     if (formMemberType === 'DD') {
       customFields['principal_member_pin'] = formPrincipalPin.trim();
@@ -661,10 +662,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       civilStatus: formCivilStatus,
       contactNumber: formPhone.trim(),
       email: formEmail.trim() || undefined,
-      addressLine: formAddress.trim() || undefined,
-      barangay: formBarangay.trim() || undefined,
-      city: formCity.trim() || undefined,
-      province: formProvince.trim() || undefined,
       philHealthNumber: formPhilHealth.trim() || undefined,
       seniorCitizenId: formSeniorId.trim() || undefined,
       pwdId: formPwdId.trim() || undefined,
@@ -818,10 +815,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setFormCivilStatus('Single');
     setFormPhone('');
     setFormEmail('');
-    setFormAddress('');
-    setFormBarangay('');
-    setFormCity('');
-    setFormProvince('');
     setFormPhilHealth('');
     setFormSeniorId('');
     setFormPwdId('');
@@ -2060,6 +2053,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   />
                 </View>
               </View>
+
+              {/* PhilHealth YAKAP Annual Enlistment Lifecycle Section */}
+              <YakapEnlistmentSection
+                customFields={dynamicFieldValues}
+                onCustomFieldsChange={(next) => setDynamicFieldValues(next)}
+              />
 
               {/* Institutional & Custom Metadata Section */}
               {tenantCustomFields.length > 0 && (

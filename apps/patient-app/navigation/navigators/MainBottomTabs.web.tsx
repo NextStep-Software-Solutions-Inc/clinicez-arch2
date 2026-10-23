@@ -22,7 +22,7 @@ const MainBottomTabsWeb = createBottomTabNavigator({
     AppointmentsScreen: createBottomTabScreen({
       screen: AppointmentsStack,
       options: {
-        title: 'My Appointments',
+        title: 'Appointments',
       },
     }),
     FilesScreen: createBottomTabScreen({

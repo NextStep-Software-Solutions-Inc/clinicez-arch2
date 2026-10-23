@@ -128,6 +128,7 @@ public static class DependencyInjection
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ClinicEz.Clinic.Infrastructure.PhilHealth.Auditing.AuditablePhilHealthSequenceGenerator>>()));
 
         services.AddScoped<ClinicEz.Clinic.Application.Common.Interfaces.IPatientCodeGenerator, PatientCodeGenerator>();
+        services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthMasterlistSyncService, ClinicEz.Clinic.Infrastructure.Services.PhilHealthMasterlistSyncService>();
 
         // Interoperability: outbound messages are queued in the transactional interop outbox; inbound ones are
         // scoped to the clinic they are addressed to.

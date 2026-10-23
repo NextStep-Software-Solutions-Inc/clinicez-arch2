@@ -1,0 +1,13 @@
+version: 2
+secret:
+  ignored_paths:
+    - "services/clinic-api/ClinicEz.Clinic.Application.Tests/**/*"
+    - "apps/clinic-app/tests/**/*"
+    - "tests/**/*"
+  ignored_matches:
+    - match: "PWD-2020-002"
+      name: "Philippine RA 10754 Person With Disability ID"
+    - match: "PWD-8888"
+      name: "Philippine RA 10754 Person With Disability ID"
+    - match: "PWD-9999"
+      name: "Philippine RA 10754 Person With Disability ID"
