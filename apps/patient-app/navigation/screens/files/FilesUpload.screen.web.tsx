@@ -191,16 +191,7 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
         onChange: handleFileInputChange,
       })}
 
-      <View style={{ gap: spacing.xl, paddingVertical: spacing.md }}>
-        <View style={{ gap: spacing.xxs }}>
-          <ThemedText variant="h2" color="primary">
-            Add Health Record
-          </ThemedText>
-          <ThemedText variant="small" color="textSecondary">
-            Attach a lab result, prescription, certificate, or diagnostic image to your records.
-          </ThemedText>
-        </View>
-
+      <View style={{ gap: spacing.lg }}>
         {/* Error banner */}
         {errorBanner ? (
           <Card

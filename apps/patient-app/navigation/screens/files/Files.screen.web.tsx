@@ -242,389 +242,447 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
   };
 
   return (
-    <Screen width="full" scroll={true} padded={false}>
-      <View
-        {...(dropHandlers as any)}
-        style={[
-          styles.container,
-          {
-            padding: isCompact ? spacing.md : spacing['2xl'],
-            backgroundColor: isDraggingOver ? colors.surfaceHighlight : colors.background,
-          },
-        ]}
-      >
-        <View style={[styles.layoutWrapper, isDesktop && styles.layoutRow, { gap: spacing.xl }]}>
-          {/* Main Browser Column */}
-          <View style={[styles.mainColumn, { gap: spacing.lg }]}>
-            {/* Page Header + Primary Actions */}
-            <View style={[styles.headerRow, { gap: spacing.md }]}>
-              <View style={styles.headerTextWrap}>
-                <ThemedText variant={isCompact ? 'h1' : 'display'}>
-                  Health Records & Documents
-                </ThemedText>
-                <ThemedText variant="body" color="textSecondary">
-                  Access lab results, prescriptions, medical certificates, and uploaded clinical documents.
-                </ThemedText>
-              </View>
+    <View style={[styles.flex, { backgroundColor: colors.background }]}>
+      <Screen width="full" scroll={true} padded={false}>
+        <View
+          {...(dropHandlers as any)}
+          style={[
+            styles.container,
+            {
+              padding: isCompact ? spacing.md : spacing['2xl'],
+              paddingBottom: spacing['4xl'],
+              backgroundColor: isDraggingOver ? colors.surfaceHighlight : colors.background,
+            },
+          ]}
+        >
+          <View style={[styles.layoutWrapper, isDesktop && styles.layoutRow, { gap: spacing.xl }]}>
+            {/* Main Browser Column */}
+            <View style={[styles.mainColumn, { gap: isCompact ? spacing.md : spacing.lg }]}>
+              {/* Page Header + Primary Actions (Desktop / Tablet only; compact uses top WebPageHeader) */}
+              {!isCompact && (
+                <View style={[styles.headerRow, { gap: spacing.md }]}>
+                  <View style={styles.headerTextWrap}>
+                    <ThemedText variant="display">
+                      Health Records & Documents
+                    </ThemedText>
+                    <ThemedText variant="body" color="textSecondary">
+                      Access lab results, prescriptions, medical certificates, and uploaded clinical documents.
+                    </ThemedText>
+                  </View>
 
-              <View style={[styles.headerActions, { gap: spacing.sm }]}>
-                <Button
-                  label="Sync Now"
-                  variant="outline"
-                  size={isCompact ? 'sm' : 'md'}
-                  icon="sync"
-                  loading={isSyncing}
-                  onPress={handleSync}
-                />
-                <Button
-                  label="Add Record"
-                  variant="primary"
-                  size={isCompact ? 'sm' : 'md'}
-                  icon="plus"
-                  onPress={openUpload}
-                />
-              </View>
-            </View>
+                  <View style={[styles.headerActions, { gap: spacing.sm }]}>
+                    <Button
+                      label="Sync Now"
+                      variant="outline"
+                      size="md"
+                      icon="sync"
+                      loading={isSyncing}
+                      onPress={handleSync}
+                    />
+                    <Button
+                      label="Add Record"
+                      variant="primary"
+                      size="md"
+                      icon="plus"
+                      onPress={openUpload}
+                    />
+                  </View>
+                </View>
+              )}
 
-            {/* Search & View Controls Bar */}
-            <View
-              style={[
-                styles.filterBar,
-                {
-                  borderColor: colors.border,
-                  borderWidth: sizes.borderWidth,
-                  borderRadius: radii.lg,
-                  backgroundColor: colors.card,
-                  padding: spacing.md,
-                  gap: spacing.sm,
-                },
-                shadows.sm,
-              ]}
-            >
-              <Input
-                leftIcon="search"
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search records, facility, notes..."
-                containerStyle={styles.searchInputContainer}
-                right={
-                  query ? (
-                    <Pressable onPress={() => setQuery('')} accessibilityLabel="Clear search">
-                      <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
-                    </Pressable>
-                  ) : undefined
-                }
-              />
-
-              <View style={[styles.viewControlsRow, { gap: spacing.sm }]}>
-                {/* Grid / List Toggle */}
+              {/* Search & View Controls */}
+              {isCompact ? (
+                <View style={[styles.compactSearchRow, { gap: spacing.xs }]}>
+                  <Input
+                    leftIcon="search"
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="Search records, facility, notes..."
+                    containerStyle={styles.compactSearchInput}
+                    right={
+                      query ? (
+                        <Pressable onPress={() => setQuery('')} accessibilityLabel="Clear search">
+                          <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
+                        </Pressable>
+                      ) : undefined
+                    }
+                  />
+                  <IconButton
+                    icon="sync"
+                    accessibilityLabel="Sync records"
+                    tone="filled"
+                    color="primary"
+                    onPress={handleSync}
+                  />
+                </View>
+              ) : (
                 <View
                   style={[
-                    styles.toggleGroup,
+                    styles.filterBar,
                     {
                       borderColor: colors.border,
                       borderWidth: sizes.borderWidth,
-                      borderRadius: radii.md,
-                      backgroundColor: colors.surfaceSubtle,
-                    },
-                  ]}
-                >
-                  <IconButton
-                    icon="menu"
-                    accessibilityLabel="List view"
-                    color={viewMode === 'list' ? 'primary' : 'textMuted'}
-                    tone={viewMode === 'list' ? 'filled' : 'plain'}
-                    onPress={() => setViewMode('list')}
-                  />
-                  <IconButton
-                    icon="grid"
-                    accessibilityLabel="Grid view"
-                    color={viewMode === 'grid' ? 'primary' : 'textMuted'}
-                    tone={viewMode === 'grid' ? 'filled' : 'plain'}
-                    onPress={() => setViewMode('grid')}
-                  />
-                </View>
-
-                {/* Sort Toggle */}
-                <Pressable
-                  onPress={() => {
-                    setSortBy((curr) => {
-                      if (curr === 'date-desc') return 'name-asc';
-                      if (curr === 'name-asc') return 'name-desc';
-                      if (curr === 'name-desc') return 'size-desc';
-                      return 'date-desc';
-                    });
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Sort: ${sortBy}`}
-                  style={({ pressed }) => [
-                    styles.sortBtn,
-                    {
-                      borderColor: colors.border,
-                      borderWidth: sizes.borderWidth,
-                      borderRadius: radii.md,
-                      paddingHorizontal: spacing.md,
-                      minHeight: sizes.controlMd,
+                      borderRadius: radii.lg,
                       backgroundColor: colors.card,
-                      gap: spacing.xs,
-                      opacity: pressed ? 0.8 : 1,
+                      padding: spacing.md,
+                      gap: spacing.sm,
                     },
+                    shadows.sm,
                   ]}
                 >
-                  <AppIcon name="sort" size={sizes.iconSm} color="textSecondary" />
-                  <ThemedText variant="smallBold" color="textSecondary">
-                    {sortBy === 'date-desc'
-                      ? 'Newest Date'
-                      : sortBy === 'name-asc'
-                        ? 'Name (A-Z)'
-                        : sortBy === 'name-desc'
-                          ? 'Name (Z-A)'
-                          : 'File Size'}
-                  </ThemedText>
-                </Pressable>
-              </View>
+                  <Input
+                    leftIcon="search"
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="Search records, facility, notes..."
+                    containerStyle={styles.searchInputContainer}
+                    right={
+                      query ? (
+                        <Pressable onPress={() => setQuery('')} accessibilityLabel="Clear search">
+                          <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
+                        </Pressable>
+                      ) : undefined
+                    }
+                  />
+
+                  <View style={[styles.viewControlsRow, { gap: spacing.sm }]}>
+                    {/* Grid / List Toggle */}
+                    <View
+                      style={[
+                        styles.toggleGroup,
+                        {
+                          borderColor: colors.border,
+                          borderWidth: sizes.borderWidth,
+                          borderRadius: radii.md,
+                          backgroundColor: colors.surfaceSubtle,
+                        },
+                      ]}
+                    >
+                      <IconButton
+                        icon="menu"
+                        accessibilityLabel="List view"
+                        color={viewMode === 'list' ? 'primary' : 'textMuted'}
+                        tone={viewMode === 'list' ? 'filled' : 'plain'}
+                        onPress={() => setViewMode('list')}
+                      />
+                      <IconButton
+                        icon="grid"
+                        accessibilityLabel="Grid view"
+                        color={viewMode === 'grid' ? 'primary' : 'textMuted'}
+                        tone={viewMode === 'grid' ? 'filled' : 'plain'}
+                        onPress={() => setViewMode('grid')}
+                      />
+                    </View>
+
+                    {/* Sort Toggle */}
+                    <Pressable
+                      onPress={() => {
+                        setSortBy((curr) => {
+                          if (curr === 'date-desc') return 'name-asc';
+                          if (curr === 'name-asc') return 'name-desc';
+                          if (curr === 'name-desc') return 'size-desc';
+                          return 'date-desc';
+                        });
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Sort: ${sortBy}`}
+                      style={({ pressed }) => [
+                        styles.sortBtn,
+                        {
+                          borderColor: colors.border,
+                          borderWidth: sizes.borderWidth,
+                          borderRadius: radii.md,
+                          paddingHorizontal: spacing.md,
+                          minHeight: sizes.controlMd,
+                          backgroundColor: colors.card,
+                          gap: spacing.xs,
+                          opacity: pressed ? 0.8 : 1,
+                        },
+                      ]}
+                    >
+                      <AppIcon name="sort" size={sizes.iconSm} color="textSecondary" />
+                      <ThemedText variant="smallBold" color="textSecondary">
+                        {sortBy === 'date-desc'
+                          ? 'Newest Date'
+                          : sortBy === 'name-asc'
+                            ? 'Name (A-Z)'
+                            : sortBy === 'name-desc'
+                              ? 'Name (Z-A)'
+                              : 'File Size'}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+
+              {/* Category Filter Pills */}
+              <CategoryPillBar
+                selectedCategory={activeCategory}
+                onSelectCategory={setActiveCategory}
+                counts={categoryCounts}
+              />
+
+              {/* Sync and Offline Banner */}
+              <RecordsSyncBanner
+                patientId={patientId}
+                pendingCount={contents?.pendingSyncCount ?? 0}
+                failedCount={failedCount}
+                isSyncing={isSyncing}
+                onSync={handleSync}
+                onRetryFailed={handleRetryFailed}
+              />
+
+              {/* Browser Content */}
+              {isLoading && !contents ? (
+                <RecordSkeletonList count={4} />
+              ) : error && !contents ? (
+                <Card padding="lg">
+                  <View style={[styles.centerLoading, { gap: spacing.md }]}>
+                    <AppIcon name="alert" size={sizes.avatarMd} color="emergency" />
+                    <ThemedText variant="h3">Unable to load records</ThemedText>
+                    <ThemedText variant="body" color="textMuted" style={{ textAlign: 'center' }}>
+                      {error.message || 'An unexpected error occurred while accessing local records.'}
+                    </ThemedText>
+                    <Button label="Try Again" variant="outline" onPress={refresh} />
+                  </View>
+                </Card>
+              ) : filteredAndSortedRecords.length === 0 ? (
+                <EmptyState
+                  icon="files"
+                  title={query || activeCategory !== 'all' ? 'No matching records' : 'No health records yet'}
+                  message={
+                    query || activeCategory !== 'all'
+                      ? 'Try searching with a different keyword or select another category.'
+                      : 'Add diagnostic lab results, prescriptions, and certificates to access them offline anytime.'
+                  }
+                  actionLabel={query || activeCategory !== 'all' ? 'Reset Filters' : 'Add Record'}
+                  onActionPress={
+                    query || activeCategory !== 'all'
+                      ? () => {
+                          setQuery('');
+                          setActiveCategory('all');
+                        }
+                      : openUpload
+                  }
+                />
+              ) : (
+                <View style={{ gap: spacing.lg }}>
+                  <View style={{ gap: spacing.sm }}>
+                    <ThemedText variant="captionBold" color="textMuted" style={{ textTransform: 'uppercase' }}>
+                      Records ({filteredAndSortedRecords.length})
+                    </ThemedText>
+                    {viewMode === 'list' || isCompact ? (
+                      <View style={{ gap: spacing.xs }}>
+                        {filteredAndSortedRecords.map((file) => (
+                          <FileRow
+                            key={file.id}
+                            item={file}
+                            onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
+                            onDownload={() => handleDownloadFile(file.id)}
+                            onRename={() =>
+                              setRenameTarget({
+                                id: file.id,
+                                initialName: file.name,
+                              })
+                            }
+                            onDelete={() => handleDelete(file.id)}
+                          />
+                        ))}
+                      </View>
+                    ) : (
+                      <View style={[styles.gridRow, { gap: spacing.md }]}>
+                        {filteredAndSortedRecords.map((file) => {
+                          const meta = getFileMeta(file);
+                          const displayTitle = file.title?.trim() || file.name;
+                          const rawDate = file.documentDate || file.createdAt;
+                          const dateStr = rawDate
+                            ? new Date(rawDate).toLocaleDateString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })
+                            : '';
+
+                          return (
+                            <Pressable
+                              key={file.id}
+                              onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
+                              style={({ pressed }) => [
+                                styles.fileGridCard,
+                                {
+                                  backgroundColor: colors.card,
+                                  borderColor: colors.border,
+                                  borderWidth: sizes.borderWidth,
+                                  borderRadius: radii.lg,
+                                  padding: spacing.md,
+                                  gap: spacing.sm,
+                                  opacity: pressed ? 0.9 : 1,
+                                },
+                                shadows.sm,
+                              ]}
+                            >
+                              <View style={styles.gridCardTop}>
+                                <View
+                                  style={[
+                                    styles.cardIconBox,
+                                    {
+                                      width: sizes.controlLg,
+                                      height: sizes.controlLg,
+                                      borderRadius: radii.md,
+                                      backgroundColor: colors.surfaceSubtle,
+                                    },
+                                  ]}
+                                >
+                                  <AppIcon name={meta.icon} color={meta.colorToken} size={sizes.iconLg} />
+                                </View>
+                                <View style={{ flexDirection: 'row', gap: spacing.xxs }}>
+                                  <IconButton
+                                    icon="download"
+                                    accessibilityLabel="Download"
+                                    color="primary"
+                                    size={sizes.iconSm}
+                                    onPress={(e) => {
+                                      e.stopPropagation();
+                                      handleDownloadFile(file.id);
+                                    }}
+                                  />
+                                  <IconButton
+                                    icon="trash"
+                                    accessibilityLabel="Delete"
+                                    color="emergency"
+                                    size={sizes.iconSm}
+                                    onPress={(e) => {
+                                      e.stopPropagation();
+                                      handleDelete(file.id);
+                                    }}
+                                  />
+                                </View>
+                              </View>
+
+                              <ThemedText variant="bodyBold" numberOfLines={2}>
+                                {displayTitle}
+                              </ThemedText>
+
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+                                <Badge tone="neutral" label={meta.label} size="sm" />
+                                <ClinicalUrgencyBadge
+                                  urgency={(file as any).urgency}
+                                  isCritical={(file as any).isCritical}
+                                />
+                                <ProvenanceBadge
+                                  provenance={(file as any).provenance}
+                                  clinicId={file.clinicId}
+                                  facilityName={file.facilityName}
+                                  compact
+                                />
+                              </View>
+
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <ThemedText variant="caption" color="textMuted">
+                                  {file.facilityName || dateStr}
+                                </ThemedText>
+                                <ThemedText variant="caption" color="textMuted">
+                                  {formatBytes(file.sizeBytes)}
+                                </ThemedText>
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
             </View>
 
-            {/* Category Filter Pills */}
-            <CategoryPillBar
-              selectedCategory={activeCategory}
-              onSelectCategory={setActiveCategory}
-              counts={categoryCounts}
-            />
-
-            {/* Sync and Offline Banner */}
-            <RecordsSyncBanner
-              patientId={patientId}
-              pendingCount={contents?.pendingSyncCount ?? 0}
-              failedCount={failedCount}
-              isSyncing={isSyncing}
-              onSync={handleSync}
-              onRetryFailed={handleRetryFailed}
-            />
-
-            {/* Browser Content */}
-            {isLoading && !contents ? (
-              <RecordSkeletonList count={4} />
-            ) : error && !contents ? (
-              <Card padding="lg">
-                <View style={[styles.centerLoading, { gap: spacing.md }]}>
-                  <AppIcon name="alert" size={sizes.avatarMd} color="emergency" />
-                  <ThemedText variant="h3">Unable to load records</ThemedText>
-                  <ThemedText variant="body" color="textMuted" style={{ textAlign: 'center' }}>
-                    {error.message || 'An unexpected error occurred while accessing local records.'}
-                  </ThemedText>
-                  <Button label="Try Again" variant="outline" onPress={refresh} />
-                </View>
-              </Card>
-            ) : filteredAndSortedRecords.length === 0 ? (
-              <EmptyState
-                icon="files"
-                title={query || activeCategory !== 'all' ? 'No matching records' : 'No health records yet'}
-                message={
-                  query || activeCategory !== 'all'
-                    ? 'Try searching with a different keyword or select another category.'
-                    : 'Drop files here to upload, or click "Add Record" to attach clinical documents.'
-                }
-                actionLabel={query || activeCategory !== 'all' ? 'Reset Filters' : 'Add Record'}
-                onActionPress={
-                  query || activeCategory !== 'all'
-                    ? () => {
-                        setQuery('');
-                        setActiveCategory('all');
-                      }
-                    : openUpload
-                }
-              />
-            ) : (
-              <View style={{ gap: spacing.lg }}>
-                <View style={{ gap: spacing.sm }}>
-                  <ThemedText variant="captionBold" color="textMuted" style={{ textTransform: 'uppercase' }}>
-                    Records ({filteredAndSortedRecords.length})
-                  </ThemedText>
-                  {viewMode === 'list' ? (
-                    <View style={{ gap: spacing.xs }}>
-                      {filteredAndSortedRecords.map((file) => (
-                        <FileRow
-                          key={file.id}
-                          item={file}
-                          onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
-                          onDownload={() => handleDownloadFile(file.id)}
-                          onRename={() =>
-                            setRenameTarget({
-                              id: file.id,
-                              initialName: file.name,
-                            })
-                          }
-                          onDelete={() => handleDelete(file.id)}
-                        />
-                      ))}
+            {/* Right Rail: Health Records Hub (>= 1024 Desktop) */}
+            {isDesktop && (
+              <View style={[styles.sideRail, { width: 320, gap: spacing.lg }]}>
+                <Card padding="lg" elevation="sm">
+                  <View style={{ gap: spacing.md }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                      <AppIcon name="shield" size={sizes.iconMd} color="primary" />
+                      <ThemedText variant="h3">Health Records</ThemedText>
                     </View>
-                  ) : (
-                    <View style={[styles.gridRow, { gap: spacing.md }]}>
-                      {filteredAndSortedRecords.map((file) => {
-                        const meta = getFileMeta(file);
-                        const displayTitle = file.title?.trim() || file.name;
-                        const rawDate = file.documentDate || file.createdAt;
-                        const dateStr = rawDate
-                          ? new Date(rawDate).toLocaleDateString(undefined, {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })
-                          : '';
-
-                        return (
-                          <Pressable
-                            key={file.id}
-                            onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
-                            style={({ pressed }) => [
-                              styles.fileGridCard,
-                              {
-                                backgroundColor: colors.card,
-                                borderColor: colors.border,
-                                borderWidth: sizes.borderWidth,
-                                borderRadius: radii.lg,
-                                padding: spacing.md,
-                                gap: spacing.sm,
-                                opacity: pressed ? 0.9 : 1,
-                              },
-                              shadows.sm,
-                            ]}
-                          >
-                            <View style={styles.gridCardTop}>
-                              <View
-                                style={[
-                                  styles.cardIconBox,
-                                  {
-                                    width: sizes.controlLg,
-                                    height: sizes.controlLg,
-                                    borderRadius: radii.md,
-                                    backgroundColor: colors.surfaceSubtle,
-                                  },
-                                ]}
-                              >
-                                <AppIcon name={meta.icon} color={meta.colorToken} size={sizes.iconLg} />
-                              </View>
-                              <View style={{ flexDirection: 'row', gap: spacing.xxs }}>
-                                <IconButton
-                                  icon="download"
-                                  accessibilityLabel="Download"
-                                  color="primary"
-                                  size={sizes.iconSm}
-                                  onPress={(e) => {
-                                    e.stopPropagation();
-                                    handleDownloadFile(file.id);
-                                  }}
-                                />
-                                <IconButton
-                                  icon="trash"
-                                  accessibilityLabel="Delete"
-                                  color="emergency"
-                                  size={sizes.iconSm}
-                                  onPress={(e) => {
-                                    e.stopPropagation();
-                                    handleDelete(file.id);
-                                  }}
-                                />
-                              </View>
-                            </View>
-
-                            <ThemedText variant="bodyBold" numberOfLines={2}>
-                              {displayTitle}
-                            </ThemedText>
-
-                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
-                              <Badge tone="neutral" label={meta.label} size="sm" />
-                              <ClinicalUrgencyBadge
-                                urgency={(file as any).urgency}
-                                isCritical={(file as any).isCritical}
-                              />
-                              <ProvenanceBadge
-                                provenance={(file as any).provenance}
-                                clinicId={file.clinicId}
-                                facilityName={file.facilityName}
-                                compact
-                              />
-                            </View>
-
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <ThemedText variant="caption" color="textMuted">
-                                {file.facilityName || dateStr}
-                              </ThemedText>
-                              <ThemedText variant="caption" color="textMuted">
-                                {formatBytes(file.sizeBytes)}
-                              </ThemedText>
-                            </View>
-                          </Pressable>
-                        );
-                      })}
+                    <ThemedText variant="small" color="textMuted">
+                      Your clinical documents, lab results, and patient records are cached offline for instant access anywhere.
+                    </ThemedText>
+                    <Divider />
+                    <View style={{ gap: spacing.sm }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <AppIcon name="checkCircle" size={sizes.iconSm} color="success" />
+                        <ThemedText variant="small">Offline availability</ThemedText>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                        <AppIcon name="lock" size={sizes.iconSm} color="primary" />
+                        <ThemedText variant="small">Server-side PMK encryption</ThemedText>
+                      </View>
                     </View>
-                  )}
-                </View>
+                  </View>
+                </Card>
               </View>
             )}
           </View>
 
-          {/* Right Rail: Health Records Hub (>= 1024 Desktop) */}
-          {isDesktop && (
-            <View style={[styles.sideRail, { width: 320, gap: spacing.lg }]}>
-              <Card padding="lg" elevation="sm">
-                <View style={{ gap: spacing.md }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                    <AppIcon name="shield" size={sizes.iconMd} color="primary" />
-                    <ThemedText variant="h3">Health Records</ThemedText>
-                  </View>
-                  <ThemedText variant="small" color="textMuted">
-                    Your clinical documents, lab results, and patient records are cached offline for instant access anywhere.
-                  </ThemedText>
-                  <Divider />
-                  <View style={{ gap: spacing.sm }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                      <AppIcon name="checkCircle" size={sizes.iconSm} color="success" />
-                      <ThemedText variant="small">Offline availability</ThemedText>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                      <AppIcon name="lock" size={sizes.iconSm} color="primary" />
-                      <ThemedText variant="small">Server-side PMK encryption</ThemedText>
-                    </View>
-                  </View>
-                </View>
-              </Card>
+          {/* Drop zone visual hint when dragging */}
+          {isDraggingOver && (
+            <View
+              style={[
+                styles.dragOverlay,
+                {
+                  backgroundColor: colors.overlay,
+                  borderRadius: radii.xl,
+                },
+              ]}
+            >
+              <AppIcon name="upload" size={sizes.avatarLg} color={colors.onPrimary} />
+              <ThemedText variant="h2" color={colors.onPrimary} style={{ marginTop: spacing.md }}>
+                Drop files to upload
+              </ThemedText>
             </View>
           )}
         </View>
 
-        {/* Drop zone visual hint when dragging */}
-        {isDraggingOver && (
-          <View
-            style={[
-              styles.dragOverlay,
-              {
-                backgroundColor: colors.overlay,
-                borderRadius: radii.xl,
-              },
-            ]}
-          >
-            <AppIcon name="upload" size={sizes.avatarLg} color={colors.onPrimary} />
-            <ThemedText variant="h2" color={colors.onPrimary} style={{ marginTop: spacing.md }}>
-              Drop files to upload
-            </ThemedText>
-          </View>
-        )}
-      </View>
+        <RenameModal
+          visible={renameTarget !== null}
+          onClose={() => setRenameTarget(null)}
+          initialName={renameTarget?.initialName ?? ''}
+          onSave={handleRenameSave}
+          title="Rename Record"
+        />
+      </Screen>
 
-      <RenameModal
-        visible={renameTarget !== null}
-        onClose={() => setRenameTarget(null)}
-        initialName={renameTarget?.initialName ?? ''}
-        onSave={handleRenameSave}
-        title="Rename Record"
-      />
-    </Screen>
+      {/* Compact Floating Action Button (matches native FilesScreen) */}
+      {isCompact && (
+        <Pressable
+          onPress={openUpload}
+          accessibilityRole="button"
+          accessibilityLabel="Add health record"
+          style={({ pressed }) => [
+            styles.fab,
+            {
+              width: sizes.avatarMd + 16,
+              height: sizes.avatarMd + 16,
+              borderRadius: radii.full,
+              backgroundColor: colors.primary,
+              right: spacing.lg,
+              bottom: spacing.lg,
+              opacity: pressed ? 0.9 : 1,
+            },
+            shadows.lg,
+          ]}
+        >
+          <AppIcon name="plus" color={colors.onPrimary} size={sizes.iconLg} />
+        </Pressable>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     minHeight: '100%',
@@ -658,6 +716,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
+  },
+  compactSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  compactSearchInput: {
+    flex: 1,
+    marginBottom: 0,
   },
   filterBar: {
     flexDirection: 'row',
@@ -709,5 +775,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 999,
+  },
+  fab: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50,
   },
 });

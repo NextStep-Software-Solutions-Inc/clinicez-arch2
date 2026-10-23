@@ -3,8 +3,6 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { formatDistanceToNowStrict, isToday, isYesterday, format } from 'date-fns';
 import ThemedText from '../../components/ui/ThemedText';
-import Card from '../../components/ui/Card';
-import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import { AppIcon, type IconName } from '../../components/ui/Icon';
 import EmptyState from '../../components/ui/EmptyState';
@@ -161,69 +159,65 @@ export default function NotificationScreenWeb() {
 
   return (
     <Screen width="form" refreshing={isRefreshing} onRefresh={() => loadData(true)}>
-      {/* Page Header */}
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <ThemedText variant="display">Notifications</ThemedText>
-          <ThemedText variant="bodyLarge" color="textSecondary">
-            Updates regarding appointments, prescriptions, and clinics.
-          </ThemedText>
-        </View>
+      {/* Filter chips + Mark all as read */}
+      <View style={{ gap: spacing.xs, marginBottom: spacing.md }}>
         {unreadCount > 0 && (
-          <Button
-            label="Mark all as read"
-            variant="ghost"
-            size="sm"
-            icon="check"
-            onPress={handleMarkAllRead}
-          />
+          <View style={styles.markAllRow}>
+            <Button
+              label="Mark all as read"
+              variant="ghost"
+              size="sm"
+              icon="check"
+              onPress={handleMarkAllRead}
+            />
+          </View>
         )}
-      </View>
 
-      {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.filterRow, { gap: spacing.sm, paddingVertical: spacing.md }]}
-      >
-        {FILTERS.map((f) => {
-          const isActive = f.key === activeFilter;
-          return (
-            <Pressable
-              key={f.key}
-              onPress={() => setActiveFilter(f.key)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isActive }}
-              style={(state: any) => [
-                styles.filterChip,
-                {
-                  backgroundColor: isActive
-                    ? colors.primary
-                    : state.hovered
-                    ? colors.surfaceSubtle
-                    : colors.card,
-                  borderColor: isActive ? colors.primary : colors.border,
-                  borderRadius: radii.full,
-                  paddingHorizontal: spacing.md,
-                  paddingVertical: spacing.sm,
-                },
-              ]}
-            >
-              <ThemedText
-                variant="smallBold"
-                color={isActive ? 'onPrimary' : 'textSecondary'}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.filterRow, { gap: spacing.sm, paddingVertical: spacing.xs }]}
+        >
+          {FILTERS.map((f) => {
+            const isActive = f.key === activeFilter;
+            return (
+              <Pressable
+                key={f.key}
+                onPress={() => setActiveFilter(f.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
+                style={(state: any) => [
+                  styles.filterChip,
+                  {
+                    backgroundColor: isActive
+                      ? colors.primary
+                      : state.hovered
+                      ? colors.surfaceSubtle
+                      : colors.card,
+                    borderColor: isActive ? colors.primary : colors.border,
+                    borderRadius: radii.full,
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.sm,
+                  },
+                ]}
               >
-                {f.label}
-                {f.key === 'unread' && unreadCount > 0 ? ` (${unreadCount})` : ''}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                <ThemedText
+                  variant="smallBold"
+                  color={isActive ? 'onPrimary' : 'textSecondary'}
+                >
+                  {f.label}
+                  {f.key === 'unread' && unreadCount > 0 ? ` (${unreadCount})` : ''}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {/* Notification items */}
       {grouped.length === 0 && !isLoading ? (
         <EmptyState
+          icon="notifications"
           title={activeFilter === 'all' ? 'No notifications yet' : `No ${activeFilter} notifications`}
           message={
             activeFilter === 'all'
@@ -261,7 +255,7 @@ export default function NotificationScreenWeb() {
                       },
                     ]}
                   >
-                    <View style={styles.itemMainRow}>
+                    <View style={[styles.itemMainRow, { gap: spacing.md }]}>
                       <View
                         style={[
                           styles.categoryIconCircle,
@@ -276,8 +270,8 @@ export default function NotificationScreenWeb() {
                         <AppIcon name={meta.icon} size={sizes.iconMd} color={meta.color} />
                       </View>
 
-                      <View style={styles.itemContent}>
-                        <View style={styles.itemTitleRow}>
+                      <View style={[styles.itemContent, { gap: spacing.xxs }]}>
+                        <View style={[styles.itemTitleRow, { gap: spacing.sm }]}>
                           <ThemedText
                             variant={item.isRead ? 'body' : 'bodyBold'}
                             color="text"
@@ -303,8 +297,8 @@ export default function NotificationScreenWeb() {
                         </ThemedText>
                       </View>
 
-                      {/* Web inline actions on hover */}
-                      <View style={styles.itemActions}>
+                      {/* Web inline actions */}
+                      <View style={[styles.itemActions, { gap: spacing.xxs }]}>
                         {!item.isRead && (
                           <Pressable
                             onPress={(e) => handleMarkReadSingle(item.id, e)}
@@ -315,6 +309,7 @@ export default function NotificationScreenWeb() {
                               {
                                 backgroundColor: s.hovered ? colors.primaryLight : colors.transparent,
                                 borderRadius: radii.md,
+                                padding: spacing.xs,
                               },
                             ]}
                           >
@@ -330,6 +325,7 @@ export default function NotificationScreenWeb() {
                             {
                               backgroundColor: s.hovered ? colors.emergencyBg : colors.transparent,
                               borderRadius: radii.md,
+                              padding: spacing.xs,
                             },
                           ]}
                         >
@@ -356,16 +352,9 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  headerRow: {
+  markAllRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 8,
-  },
-  headerLeft: {
-    gap: 4,
+    justifyContent: 'flex-end',
   },
   filterRow: {
     flexDirection: 'row',
@@ -385,7 +374,6 @@ const styles = StyleSheet.create({
   itemMainRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
   },
   categoryIconCircle: {
     alignItems: 'center',
@@ -394,12 +382,11 @@ const styles = StyleSheet.create({
   },
   itemContent: {
     flex: 1,
-    gap: 4,
+    minWidth: 0,
   },
   itemTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   unreadIndicator: {
     width: 8,
@@ -408,10 +395,8 @@ const styles = StyleSheet.create({
   itemActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   actionBtn: {
-    padding: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },

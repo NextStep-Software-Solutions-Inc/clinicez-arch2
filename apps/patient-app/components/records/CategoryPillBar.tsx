@@ -1,6 +1,7 @@
 import React from 'react';
 import { Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import ThemedText from '../ui/ThemedText';
 import { AppIcon } from '../ui/Icon';
 import { CATEGORY_FILTERS, type CategoryFilterId } from '../../services/records/categories';
@@ -17,6 +18,7 @@ export const CategoryPillBar: React.FC<CategoryPillBarProps> = ({
   counts,
 }) => {
   const { colors, spacing, radii, sizes } = useAppTheme();
+  const { isCompact } = useBreakpoint();
 
   const renderPills = () =>
     CATEGORY_FILTERS.map((cat) => {
@@ -77,7 +79,7 @@ export const CategoryPillBar: React.FC<CategoryPillBarProps> = ({
       );
     });
 
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' && !isCompact) {
     return (
       <View style={[styles.webContainer, { gap: spacing.sm, paddingVertical: spacing.xs }]}>
         {renderPills()}
@@ -89,7 +91,13 @@ export const CategoryPillBar: React.FC<CategoryPillBarProps> = ({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerStyle={[styles.nativeContainer, { gap: spacing.sm, paddingHorizontal: spacing.lg }]}
+      contentContainerStyle={[
+        styles.nativeContainer,
+        {
+          gap: spacing.sm,
+          paddingHorizontal: Platform.OS === 'web' ? 0 : spacing.lg,
+        },
+      ]}
     >
       {renderPills()}
     </ScrollView>
@@ -102,7 +110,7 @@ const styles = StyleSheet.create({
   nativeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
   webContainer: {
     flexDirection: 'row',
