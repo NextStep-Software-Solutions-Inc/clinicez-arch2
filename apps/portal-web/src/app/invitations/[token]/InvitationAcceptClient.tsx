@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser, SignInButton, SignUpButton } from "@clerk/nextjs";
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { staffService, InvitationDetailsDto } from "@/services/staff.service";
 import { toast } from "sonner";
+import { setPendingInvitationCookie, clearPendingInvitationCookie } from "@/lib/invitationCookie";
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
     Owner: "Primary enterprise administrator with full authority over workspace settings and billing.",
@@ -39,9 +40,11 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [accepting, setAccepting] = useState(false);
+    const autoAcceptAttemptedRef = useRef(false);
 
     useEffect(() => {
         if (!token || !token.trim()) {
+            clearPendingInvitationCookie();
             setError("Invitation token is missing or invalid.");
             setLoading(false);
             return;
@@ -51,7 +54,13 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
             try {
                 const data = await staffService.getInvitationDetails(token);
                 setInvite(data);
+                if (data.isRevoked || data.isSuspended || data.isExpired || data.isAlreadyAccepted) {
+                    clearPendingInvitationCookie();
+                } else if (!isSignedIn) {
+                    setPendingInvitationCookie({ type: "workspace", token: token.trim() });
+                }
             } catch (err: any) {
+                clearPendingInvitationCookie();
                 setError(err.response?.data?.message || err.message || "Failed to load invitation.");
             } finally {
                 setLoading(false);
@@ -59,21 +68,40 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
         };
 
         fetchDetails();
-    }, [token]);
+    }, [token, isSignedIn]);
 
     const handleAccept = async () => {
         if (!invite) return;
         setAccepting(true);
         try {
             const res = await staffService.acceptInvitation(token);
+            clearPendingInvitationCookie();
             toast.success(`Welcome to ${res.workspaceName}!`);
             router.push(`/${res.tenantSlug}/dashboard/overview`);
         } catch (err: any) {
+            clearPendingInvitationCookie();
             const msg = err.response?.data?.message || err.message || "Failed to accept invitation.";
             toast.error(msg);
             setAccepting(false);
         }
     };
+
+    useEffect(() => {
+        if (!isLoaded || loading || !isSignedIn || !invite || accepting) {
+            return;
+        }
+
+        if (invite.isRevoked || invite.isSuspended || invite.isExpired || invite.isAlreadyAccepted || error) {
+            return;
+        }
+
+        if (autoAcceptAttemptedRef.current) {
+            return;
+        }
+
+        autoAcceptAttemptedRef.current = true;
+        handleAccept();
+    }, [isLoaded, loading, isSignedIn, invite, accepting, error]);
 
     const renderShell = (content: React.ReactNode) => (
         <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
@@ -342,15 +370,30 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
                         </p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                            <SignInButton mode="modal">
-                                <Button className="w-full h-10 rounded-xl text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground">
+                            <SignInButton
+                                mode="modal"
+                                forceRedirectUrl={`/invitations/${encodeURIComponent(token)}`}
+                                fallbackRedirectUrl={`/invitations/${encodeURIComponent(token)}`}
+                            >
+                                <Button
+                                    onClick={() => setPendingInvitationCookie({ type: "workspace", token: token.trim() })}
+                                    className="w-full h-10 rounded-xl text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground"
+                                >
                                     <span>Sign In to Accept</span>
                                     <IconArrowRight className="h-3.5 w-3.5" />
                                 </Button>
                             </SignInButton>
 
-                            <SignUpButton mode="modal">
-                                <Button variant="outline" className="w-full h-10 rounded-xl text-xs font-semibold">
+                            <SignUpButton
+                                mode="modal"
+                                forceRedirectUrl={`/invitations/${encodeURIComponent(token)}`}
+                                fallbackRedirectUrl={`/invitations/${encodeURIComponent(token)}`}
+                            >
+                                <Button
+                                    onClick={() => setPendingInvitationCookie({ type: "workspace", token: token.trim() })}
+                                    variant="outline"
+                                    className="w-full h-10 rounded-xl text-xs font-semibold"
+                                >
                                     Create New Account
                                 </Button>
                             </SignUpButton>

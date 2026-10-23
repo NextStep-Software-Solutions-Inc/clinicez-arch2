@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser, SignInButton, SignUpButton } from "@clerk/nextjs";
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { adminService, AdminInvitationDetailsDto } from "@/services/admin.service";
 import { toast } from "sonner";
+import { setPendingInvitationCookie, clearPendingInvitationCookie } from "@/lib/invitationCookie";
 
 export default function AdminInvitationAcceptClient({ token }: { token: string }) {
     const router = useRouter();
@@ -29,13 +30,20 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [accepting, setAccepting] = useState(false);
+    const autoAcceptAttemptedRef = useRef(false);
 
     useEffect(() => {
         const fetchDetails = async () => {
             try {
                 const data = await adminService.getInvitationDetails(token);
                 setInvite(data);
+                if (data.isSuspended || data.isRevoked || data.isExpired || data.isAlreadyAccepted) {
+                    clearPendingInvitationCookie();
+                } else if (!isSignedIn) {
+                    setPendingInvitationCookie({ type: "admin", token: token.trim() });
+                }
             } catch (err: any) {
+                clearPendingInvitationCookie();
                 setError(err.response?.data?.message || err.message || "Failed to load invitation.");
             } finally {
                 setLoading(false);
@@ -44,22 +52,44 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
 
         if (token) {
             fetchDetails();
+        } else {
+            clearPendingInvitationCookie();
+            setLoading(false);
         }
-    }, [token]);
+    }, [token, isSignedIn]);
 
     const handleAccept = async () => {
         if (!invite) return;
         setAccepting(true);
         try {
             await adminService.acceptInvitation(token);
+            clearPendingInvitationCookie();
             toast.success("Welcome to Clinic EZ Administration!");
             router.push("/admin");
         } catch (err: any) {
+            clearPendingInvitationCookie();
             const msg = err.response?.data?.message || err.message || "Failed to accept invitation.";
             toast.error(msg);
             setAccepting(false);
         }
     };
+
+    useEffect(() => {
+        if (!isLoaded || loading || !isSignedIn || !invite || accepting) {
+            return;
+        }
+
+        if (invite.isSuspended || invite.isRevoked || invite.isExpired || invite.isAlreadyAccepted || error) {
+            return;
+        }
+
+        if (autoAcceptAttemptedRef.current) {
+            return;
+        }
+
+        autoAcceptAttemptedRef.current = true;
+        handleAccept();
+    }, [isLoaded, loading, isSignedIn, invite, accepting, error]);
 
     const renderShell = (content: React.ReactNode) => (
         <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
@@ -259,13 +289,28 @@ export default function AdminInvitationAcceptClient({ token }: { token: string }
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
-                            <SignInButton mode="modal">
-                                <Button variant="outline" className="w-full rounded-2xl h-10 font-bold">
+                            <SignInButton
+                                mode="modal"
+                                forceRedirectUrl={`/admin/invitations/${encodeURIComponent(token)}`}
+                                fallbackRedirectUrl={`/admin/invitations/${encodeURIComponent(token)}`}
+                            >
+                                <Button
+                                    onClick={() => setPendingInvitationCookie({ type: "admin", token: token.trim() })}
+                                    variant="outline"
+                                    className="w-full rounded-2xl h-10 font-bold"
+                                >
                                     Sign In
                                 </Button>
                             </SignInButton>
-                            <SignUpButton mode="modal">
-                                <Button className="w-full rounded-2xl h-10 font-bold">
+                            <SignUpButton
+                                mode="modal"
+                                forceRedirectUrl={`/admin/invitations/${encodeURIComponent(token)}`}
+                                fallbackRedirectUrl={`/admin/invitations/${encodeURIComponent(token)}`}
+                            >
+                                <Button
+                                    onClick={() => setPendingInvitationCookie({ type: "admin", token: token.trim() })}
+                                    className="w-full rounded-2xl h-10 font-bold"
+                                >
                                     Create Account
                                 </Button>
                             </SignUpButton>
