@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
-import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, type StaticScreenProps } from '@react-navigation/native';
 import { ThemedText, Badge, Button, Input, Card, Icon, IconSlot, EmptyState, ErrorState, SkeletonList, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal } from '@ui';
 import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
 import * as DocumentPicker from 'expo-document-picker';
@@ -329,6 +329,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   // Queue Check-In Anti-Spam & Concurrency Guard states
   const isCheckingInRef = useRef(false);
   const isRegisteringRef = useRef(false);
+  const isFirstFocusRef = useRef(true);
   const [checkingInPatientId, setCheckingInPatientId] = useState<string | null>(null);
   const [checkInModalPatient, setCheckInModalPatient] = useState<ClinicPatient | null>(null);
   const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
@@ -518,6 +519,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     });
     return unsub;
   }, [fetchPatients]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocusRef.current) {
+        isFirstFocusRef.current = false;
+        return;
+      }
+      fetchPatients();
+    }, [fetchPatients])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -978,6 +989,16 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         tooth: undefined,
       });
       if (patient) {
+        setPatients((prev) => {
+          if (!prev) return [patient];
+          const index = prev.findIndex((p) => p.id === patient.id);
+          if (index >= 0) {
+            const next = [...prev];
+            next[index] = { ...next[index], ...patient };
+            return next;
+          }
+          return [patient, ...prev];
+        });
         const targetTab = routeTab || (routeToothNumber ? 'dental' : undefined);
         handleOpenChart(patient, targetTab, routeToothNumber);
       } else {

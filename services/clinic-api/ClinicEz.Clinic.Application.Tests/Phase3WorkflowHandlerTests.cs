@@ -385,7 +385,16 @@ public class PatientShareSnapshotHandlerTests
             Scopes = scopes,
             ExpiresAtUtc = DateTime.UtcNow.AddHours(1),
             Demographics = withDemographics
-                ? new ShareDemographicsDto { FullName = "Maria Luisa Santos", DateOfBirth = "1984-03-12", Sex = "F", MobileNumber = "0917-000-1111" }
+                ? new ShareDemographicsDto
+                {
+                    FirstName = "Maria",
+                    MiddleName = "Luisa",
+                    LastName = "Santos",
+                    FullName = "Maria Luisa Santos",
+                    DateOfBirth = "1984-03-12",
+                    Sex = "F",
+                    MobileNumber = "0917-000-1111"
+                }
                 : null,
             Items = new List<ShareItemDto>
             {
@@ -416,12 +425,14 @@ public class PatientShareSnapshotHandlerTests
         saved.Status.Should().Be(ShareImportStatus.Imported);
         saved.ItemsImported.Should().Be(2, "one demographics block and the allergy; conditions, medications and vitals were not granted");
         saved.ItemsJson.Should().BeNull();
+        saved.PatientName.Should().Be("Maria Luisa Santos");
 
         var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
         patient.ClinicId.Should().Be(_clinicId);
         patient.SyncPatientId.Should().Be(_patientPlaneId);
         patient.ClinicEzId.Should().Be("CEZ-1234");
         patient.FirstName.Should().Be("Maria");
+        patient.MiddleName.Should().Be("Luisa");
         patient.LastName.Should().Be("Santos");
         patient.Allergies.Should().Contain("Penicillin");
         patient.ChronicConditions.Should().BeNullOrEmpty();
@@ -640,5 +651,124 @@ public class PatientShareSnapshotHandlerTests
         var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync();
         patient.ShareGrantId.Should().Be(grantId);
         patient.Allergies.Should().Be("Penicillin");
+    }
+
+    [Fact]
+    public async Task Imports_Patient_With_Compound_Name_Preserving_Given_Name_And_Suffix()
+    {
+        var import = SeedImport(addToQueue: true, complaint: "Routine Checkup");
+
+        var snapshot = Snapshot(SharingScopes.Demographics);
+        snapshot = snapshot with
+        {
+            Demographics = new ShareDemographicsDto
+            {
+                FirstName = "Ely An",
+                MiddleName = "Dela",
+                LastName = "Maureal",
+                Suffix = "Jr.",
+                FullName = "Ely An Dela Maureal Jr.",
+                DateOfBirth = "1994-08-20",
+                Sex = "Male",
+                MobileNumber = "0917-555-0123"
+            }
+        };
+
+        await Deliver(import, snapshot);
+
+        var saved = await Reload(import);
+        saved.Status.Should().Be(ShareImportStatus.Imported);
+        saved.PatientName.Should().Be("Ely An Dela Maureal Jr.");
+
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        patient.FirstName.Should().Be("Ely An");
+        patient.MiddleName.Should().Be("Dela");
+        patient.LastName.Should().Be("Maureal");
+        patient.Suffix.Should().Be("Jr.");
+
+        var queueItem = await _db.QueueItems.IgnoreQueryFilters().SingleAsync(q => q.Id == saved.QueueItemId);
+        queueItem.PatientName.Should().Be("Ely An Dela Maureal Jr.");
+    }
+
+    [Fact]
+    public async Task Imports_Patient_With_Backward_Compatible_Fallback_Without_Dropping_Tokens()
+    {
+        var import = SeedImport();
+
+        var snapshot = Snapshot(SharingScopes.Demographics);
+        snapshot = snapshot with
+        {
+            Demographics = new ShareDemographicsDto
+            {
+                FirstName = null,
+                MiddleName = null,
+                LastName = null,
+                Suffix = null,
+                FullName = "Ely An Maureal",
+                DateOfBirth = "1994-08-20",
+                Sex = "Male"
+            }
+        };
+
+        await Deliver(import, snapshot);
+
+        var saved = await Reload(import);
+        saved.Status.Should().Be(ShareImportStatus.Imported);
+        saved.PatientName.Should().Be("Ely An Maureal");
+
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == saved.ClinicPatientId);
+        patient.FirstName.Should().Be("Ely An");
+        patient.LastName.Should().Be("Maureal");
+    }
+
+    [Fact]
+    public async Task Reimport_Heals_Previously_Truncated_Name_Dob_And_Sex_On_Existing_Patient()
+    {
+        var existingPatient = Phase3TestKit.NewPatient(_clinicId, Tenant);
+        existingPatient.ClinicEzId = "CE-WDP9-FMBJ";
+        existingPatient.FirstName = "Ely";
+        existingPatient.LastName = "Maureal";
+        existingPatient.MiddleName = null;
+        existingPatient.Suffix = null;
+        existingPatient.DateOfBirth = new DateOnly(2000, 1, 1);
+        existingPatient.Gender = "Other";
+        MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
+        _db.Patients.Add(existingPatient);
+        await _db.SaveChangesAsync();
+
+        var import = SeedImport();
+
+        var snapshot = Snapshot(SharingScopes.Demographics);
+        snapshot = snapshot with
+        {
+            ClinicEzId = "ce-wdp9-fmbj",
+            Demographics = new ShareDemographicsDto
+            {
+                FirstName = "Ely An",
+                MiddleName = "Dela",
+                LastName = "Maureal",
+                Suffix = "Jr.",
+                FullName = "Ely An Dela Maureal Jr.",
+                DateOfBirth = "1994-08-20",
+                Sex = "Male",
+                MobileNumber = "0917-999-8888"
+            }
+        };
+
+        await Deliver(import, snapshot);
+
+        var saved = await Reload(import);
+        saved.Status.Should().Be(ShareImportStatus.Imported);
+        saved.ClinicPatientId.Should().Be(existingPatient.Id);
+        saved.PatientName.Should().Be("Ely An Dela Maureal Jr.");
+
+        var healed = await _db.Patients.IgnoreQueryFilters().SingleAsync(p => p.Id == existingPatient.Id);
+        healed.FirstName.Should().Be("Ely An");
+        healed.MiddleName.Should().Be("Dela");
+        healed.LastName.Should().Be("Maureal");
+        healed.Suffix.Should().Be("Jr.");
+        healed.DateOfBirth.Should().Be(new DateOnly(1994, 8, 20));
+        healed.Gender.Should().Be("Male");
+        healed.ContactNumber.Should().Be("0917-999-8888");
     }
 }

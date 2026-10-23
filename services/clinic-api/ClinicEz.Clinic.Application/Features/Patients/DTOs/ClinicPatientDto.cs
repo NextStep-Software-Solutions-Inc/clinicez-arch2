@@ -42,4 +42,5 @@ public sealed record ClinicPatientDto(
     string VerificationStatus = "Verified",
     string? ActiveQueueTicket = null,
     Guid? ActiveQueueItemId = null,
-    List<PatientPastMedicalHistoryDto>? PastMedicalHistories = null);
+    List<PatientPastMedicalHistoryDto>? PastMedicalHistories = null,
+    string? ClinicEzId = null);

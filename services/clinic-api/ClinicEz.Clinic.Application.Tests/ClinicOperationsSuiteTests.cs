@@ -101,6 +101,128 @@ public class ClinicOperationsSuiteTests
     }
 
     [Fact]
+    public async Task SearchPatients_ShouldMatchExactPartialAndUnhyphenatedClinicEzId_AndProjectClinicEzId()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var searchHandler = new GetClinicPatientsQueryHandler(repo);
+
+        var patient = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-2026-00077",
+            FirstName = "Ely An",
+            LastName = "Maureal",
+            MiddleName = "Santos",
+            Suffix = "Jr.",
+            ClinicEzId = "CE-WDP9-FMBJ",
+            DateOfBirth = new DateOnly(1993, 4, 12),
+            Gender = "Male",
+            ContactNumber = "09171112233",
+            PhilHealthNumber = "12-345678901-2"
+        };
+        context.Patients.Add(patient);
+        await context.SaveChangesAsync();
+
+        // 1. Exact ClinicEzId
+        var exact = await searchHandler.Handle(new GetClinicPatientsQuery("CE-WDP9-FMBJ"), CancellationToken.None);
+        exact.Should().HaveCount(1);
+        exact[0].ClinicEzId.Should().Be("CE-WDP9-FMBJ");
+        exact[0].FirstName.Should().Be("Ely An");
+        exact[0].LastName.Should().Be("Maureal");
+
+        // 2. Partial ClinicEzId
+        var partial = await searchHandler.Handle(new GetClinicPatientsQuery("WDP9"), CancellationToken.None);
+        partial.Should().HaveCount(1);
+        partial[0].ClinicEzId.Should().Be("CE-WDP9-FMBJ");
+
+        // 3. Unhyphenated ClinicEzId (lowercase and uppercase)
+        var unhyphenatedLower = await searchHandler.Handle(new GetClinicPatientsQuery("cewdp9fmbj"), CancellationToken.None);
+        unhyphenatedLower.Should().HaveCount(1);
+        unhyphenatedLower[0].ClinicEzId.Should().Be("CE-WDP9-FMBJ");
+
+        var unhyphenatedUpper = await searchHandler.Handle(new GetClinicPatientsQuery("CEWDP9FMBJ"), CancellationToken.None);
+        unhyphenatedUpper.Should().HaveCount(1);
+        unhyphenatedUpper[0].ClinicEzId.Should().Be("CE-WDP9-FMBJ");
+    }
+
+    [Fact]
+    public async Task SearchPatients_ShouldMatchCompoundGivenNames_FullNames_AndInvertedNames()
+    {
+        var (context, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var repo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var searchHandler = new GetClinicPatientsQueryHandler(repo);
+
+        var patient = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _testTenantId,
+            ClinicId = _testClinicId,
+            PatientCode = "PAT-2026-00088",
+            FirstName = "Ely An",
+            LastName = "Maureal",
+            MiddleName = "Santos",
+            Suffix = "Jr.",
+            ClinicEzId = "CE-WDP9-FMBJ",
+            DateOfBirth = new DateOnly(1993, 4, 12),
+            Gender = "Male",
+            ContactNumber = "09171112233",
+            PhilHealthNumber = "12-345678901-2"
+        };
+        context.Patients.Add(patient);
+        await context.SaveChangesAsync();
+
+        // 1. Compound Given Name: "Ely An"
+        var compoundFirst = await searchHandler.Handle(new GetClinicPatientsQuery("Ely An"), CancellationToken.None);
+        compoundFirst.Should().HaveCount(1);
+        compoundFirst[0].LastName.Should().Be("Maureal");
+
+        // 2. Full Name: "Ely An Maureal"
+        var fullName = await searchHandler.Handle(new GetClinicPatientsQuery("Ely An Maureal"), CancellationToken.None);
+        fullName.Should().HaveCount(1);
+        fullName[0].LastName.Should().Be("Maureal");
+
+        // 3. Full Name with Middle: "Ely An Santos Maureal"
+        var fullNameWithMiddle = await searchHandler.Handle(new GetClinicPatientsQuery("Ely An Santos Maureal"), CancellationToken.None);
+        fullNameWithMiddle.Should().HaveCount(1);
+
+        // 4. Inverted Name with Comma: "Maureal, Ely An"
+        var invertedComma = await searchHandler.Handle(new GetClinicPatientsQuery("Maureal, Ely An"), CancellationToken.None);
+        invertedComma.Should().HaveCount(1);
+        invertedComma[0].FirstName.Should().Be("Ely An");
+
+        // 5. Inverted Name without Comma: "Maureal Ely An"
+        var invertedNoComma = await searchHandler.Handle(new GetClinicPatientsQuery("Maureal Ely An"), CancellationToken.None);
+        invertedNoComma.Should().HaveCount(1);
+        invertedNoComma[0].FirstName.Should().Be("Ely An");
+
+        // 6. Inverted Name with Middle: "Maureal, Ely An Santos" & "Maureal Ely An Santos"
+        var invertedMiddleComma = await searchHandler.Handle(new GetClinicPatientsQuery("Maureal, Ely An Santos"), CancellationToken.None);
+        invertedMiddleComma.Should().HaveCount(1);
+
+        var invertedMiddleNoComma = await searchHandler.Handle(new GetClinicPatientsQuery("Maureal Ely An Santos"), CancellationToken.None);
+        invertedMiddleNoComma.Should().HaveCount(1);
+
+        // 7. Middle name lookup: "Santos"
+        var middleOnly = await searchHandler.Handle(new GetClinicPatientsQuery("Santos"), CancellationToken.None);
+        middleOnly.Should().HaveCount(1);
+
+        // 8. Suffix lookup: "Jr." and "Jr"
+        var suffixDot = await searchHandler.Handle(new GetClinicPatientsQuery("Jr."), CancellationToken.None);
+        suffixDot.Should().HaveCount(1);
+
+        var suffixNoDot = await searchHandler.Handle(new GetClinicPatientsQuery("Jr"), CancellationToken.None);
+        suffixNoDot.Should().HaveCount(1);
+
+        // 9. Unhyphenated PhilHealthNumber: "123456789012"
+        var phUnhyphenated = await searchHandler.Handle(new GetClinicPatientsQuery("123456789012"), CancellationToken.None);
+        phUnhyphenated.Should().HaveCount(1);
+        phUnhyphenated[0].PhilHealthNumber.Should().Be("12-345678901-2");
+    }
+
+    [Fact]
     public async Task SearchPatients_FilterModeAndPaging_ShouldFilterCorrectly()
     {
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);

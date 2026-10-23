@@ -226,6 +226,9 @@ function PatientDirectoryCard({
               </Pressable>
               <View style={styles.inlineBadgesWrap}>
                 <Badge label={patient.patientCode} variant="neutral" size="sm" />
+                {patient.clinicEzId ? (
+                  <Badge label={patient.clinicEzId} variant="primary" size="sm" />
+                ) : null}
                 {isQueued ? (
                   <Badge label={`In Queue • ${patient.activeQueueTicket}`} variant="routine" size="sm" icon="ticket" />
                 ) : null}
@@ -393,6 +396,9 @@ function PatientDirectoryCard({
                 </ThemedText>
               </Pressable>
               <Badge label={patient.patientCode} variant="neutral" />
+              {patient.clinicEzId ? (
+                <Badge label={patient.clinicEzId} variant="primary" />
+              ) : null}
               {isQueued ? (
                 <Badge label={`In Queue • ${patient.activeQueueTicket}`} variant="routine" icon="ticket" />
               ) : null}

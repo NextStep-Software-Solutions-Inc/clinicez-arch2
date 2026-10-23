@@ -36,20 +36,11 @@ public sealed class PatientSearchProvider : ISearchProvider
         if (string.IsNullOrWhiteSpace(query))
             return Array.Empty<SearchResultItemDto>();
 
-        var term = query.Trim().ToLowerInvariant();
         var boundedLimit = limit <= 0 ? 10 : Math.Min(limit, 50);
 
         var patients = await _patientRepo.Query(e => !e.IsDeleted && e.ClinicId == tenantId, ignoreQueryFilters: true)
             .AsNoTracking()
-            .Where(p =>
-                p.FirstName.ToLower().Contains(term) ||
-                p.LastName.ToLower().Contains(term) ||
-                (p.MiddleName != null && p.MiddleName.ToLower().Contains(term)) ||
-                p.PatientCode.ToLower().Contains(term) ||
-                p.ContactNumber.Contains(term) ||
-                (p.PhilHealthNumber != null && p.PhilHealthNumber.Contains(term)) ||
-                (p.SeniorCitizenId != null && p.SeniorCitizenId.Contains(term)) ||
-                (p.PwdId != null && p.PwdId.Contains(term)))
+            .WhereMatchesSearchTerm(query)
             .OrderBy(p => p.LastName)
             .ThenBy(p => p.FirstName)
             .Take(boundedLimit)
@@ -58,15 +49,19 @@ public sealed class PatientSearchProvider : ISearchProvider
         return patients.Select(p =>
         {
             var (badgeText, badgeVariant) = ResolveBadge(p);
-            var fullName = string.IsNullOrWhiteSpace(p.MiddleName)
-                ? $"{p.LastName}, {p.FirstName}"
-                : $"{p.LastName}, {p.FirstName} {p.MiddleName}";
+            var middle = !string.IsNullOrWhiteSpace(p.MiddleName) ? $" {p.MiddleName.Trim()}" : "";
+            var suffix = !string.IsNullOrWhiteSpace(p.Suffix) ? $" {p.Suffix.Trim()}" : "";
+            var title = $"{p.LastName}, {p.FirstName}{middle}{suffix}";
+
+            var subtitle = string.IsNullOrWhiteSpace(p.ClinicEzId)
+                ? $"{p.PatientCode} • DOB: {p.DateOfBirth:yyyy-MM-dd} • {p.ContactNumber}"
+                : $"{p.PatientCode} • {p.ClinicEzId} • DOB: {p.DateOfBirth:yyyy-MM-dd} • {p.ContactNumber}";
 
             return new SearchResultItemDto(
                 id: p.Id.ToString(),
                 category: Category,
-                title: fullName,
-                subtitle: $"{p.PatientCode} • DOB: {p.DateOfBirth:yyyy-MM-dd} • {p.ContactNumber}",
+                title: title,
+                subtitle: subtitle,
                 badgeText: badgeText,
                 badgeVariant: badgeVariant,
                 targetRoute: "Patients",
