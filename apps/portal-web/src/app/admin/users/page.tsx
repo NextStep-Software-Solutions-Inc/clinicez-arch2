@@ -702,6 +702,17 @@ export default function AdminUsersPage() {
                                 <IconBan className="h-3.5 w-3.5" />
                                 <span>Revoke</span>
                               </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleDelete(u)}
+                                className="h-7 px-2 text-xs rounded-lg gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                title="Permanently Delete Admin Profile"
+                              >
+                                <IconTrash className="h-3.5 w-3.5" />
+                                <span>Remove</span>
+                              </Button>
                             </>
                           )}
 

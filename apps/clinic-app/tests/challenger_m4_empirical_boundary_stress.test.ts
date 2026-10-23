@@ -112,29 +112,28 @@ describe('Milestone 4 Empirical Challenger: Tier 3 Boundary Timestamps & Action 
       expect(actions).not.toContain('copy-invite');
     });
 
-    it('Active status: has edit, reset-pwd, suspend-staff', () => {
+    it('Active status: has edit, reset-pwd, suspend-staff, revoke-invite', () => {
       const actions = getAvailableStaffActions({
         status: 'Active',
         isActive: true,
       });
-      expect(actions).toEqual(['edit', 'reset-pwd', 'suspend-staff']);
+      expect(actions).toEqual(['edit', 'reset-pwd', 'suspend-staff', 'revoke-invite']);
     });
 
-    it('Suspended status: has reactivate-staff only', () => {
+    it('Suspended status: has reactivate-staff, revoke-invite, remove-staff', () => {
       const actions = getAvailableStaffActions({
         status: 'Suspended',
         isActive: false,
       });
-      expect(actions).toEqual(['reactivate-staff']);
+      expect(actions).toEqual(['reactivate-staff', 'revoke-invite', 'remove-staff']);
     });
 
-    it('Revoked status: strictly has ZERO actions', () => {
+    it('Revoked status: has reinvite-staff and remove-staff', () => {
       const actions = getAvailableStaffActions({
         status: 'Revoked',
         isActive: false,
       });
-      expect(actions).toEqual([]);
-      expect(actions.length).toBe(0);
+      expect(actions).toEqual(['reinvite-staff', 'remove-staff']);
     });
 
     it('Self-account protection strips self-destructive actions', () => {

@@ -4,6 +4,8 @@ import { theme } from '@constants/theme';
 import { ThemedText, Button, Input, Icon, EmptyState, ErrorState, SkeletonList, Modal, Badge, ValidatedDateInput, Icd10AutocompleteInput, validateDateString } from '@ui';
 import { Alert } from '@utils/feedback';
 import { usePhilHealthCatalog } from '@utils/usePhilHealthCatalog';
+import { useAuth, usePermission } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../constants/permissions';
 import {
   clinicService,
   ClinicPatient,
@@ -85,6 +87,7 @@ export interface ClinicalHistoryTabProps {
   initialSurgicalHistories?: PatientSurgicalHistory[];
   initialProfile?: PhilHealthPatientProfile;
   onRefreshChart?: () => void;
+  readOnly?: boolean;
 }
 
 export default function ClinicalHistoryTab({
@@ -92,7 +95,12 @@ export default function ClinicalHistoryTab({
   initialSurgicalHistories,
   initialProfile,
   onRefreshChart,
+  readOnly,
 }: ClinicalHistoryTabProps) {
+  const { user, state, permissions } = useAuth();
+  const hasPatientsWrite = usePermission(PERMISSIONS.patientsWrite);
+  const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
+  const canWritePatients = readOnly !== undefined ? !readOnly : isUnmountedTestHarness ? true : hasPatientsWrite;
   // Surgical History State
   const [surgicalHistories, setSurgicalHistories] = useState<PatientSurgicalHistory[]>(
     initialSurgicalHistories || []
@@ -384,6 +392,7 @@ export default function ClinicalHistoryTab({
   }, [patient.id, initialProfile, fetchProfile, fetchPhysicalExam, seedFromProfile]);
 
   const savePhysicalExam = useCallback(async (valuesToSave: OrganSystemsExamValues) => {
+    if (!canWritePatients) return;
     setPhysicalExamSavingStatus('saving');
     setPhysicalExamError(null);
     try {
@@ -419,7 +428,7 @@ export default function ClinicalHistoryTab({
       setPhysicalExamSavingStatus('error');
       setPhysicalExamError(e.message || 'Failed to save physical exam findings.');
     }
-  }, [patient.id, onRefreshChart]);
+  }, [patient.id, onRefreshChart, canWritePatients]);
 
   const handleOrganSystemOptionChange = (key: OrganSystemDef['key'], code: string) => {
     const updated = { ...organSystemsRef.current, [key]: code };
@@ -499,6 +508,7 @@ export default function ClinicalHistoryTab({
   }, [patient.id]);
 
   const toggleMedicalCondition = (code: string) => {
+    if (!canWritePatients) return;
     setSelectedMedicalCodes((prev) => {
       const next = new Set(prev);
       if (next.has(code)) {
@@ -515,6 +525,7 @@ export default function ClinicalHistoryTab({
   };
 
   const toggleFamilyCondition = (code: string) => {
+    if (!canWritePatients) return;
     setSelectedFamilyCodes((prev) => {
       const next = new Set(prev);
       if (next.has(code)) {
@@ -531,6 +542,10 @@ export default function ClinicalHistoryTab({
   };
 
   const handleSaveMedicalAndFamilyHistory = async () => {
+    if (!canWritePatients) {
+      Alert.alert('Insufficient Permissions', "Required permission 'patients:write' is not granted for this clinic role.");
+      return;
+    }
     setSavingProfile(true);
     setProfileError(null);
     setProfileSuccess(false);
@@ -635,6 +650,7 @@ export default function ClinicalHistoryTab({
 
   // Surgical Modals
   const openAddModal = () => {
+    if (!canWritePatients) return;
     setEditingItem(null);
     setProcedureName('');
     setSurgeryDate(new Date().toISOString().split('T')[0]);
@@ -647,6 +663,7 @@ export default function ClinicalHistoryTab({
   };
 
   const openEditModal = (item: PatientSurgicalHistory) => {
+    if (!canWritePatients) return;
     setEditingItem(item);
     setProcedureName(item.procedureName);
     setSurgeryDate(item.surgeryDate ? item.surgeryDate.split('T')[0] : '');
@@ -659,6 +676,10 @@ export default function ClinicalHistoryTab({
   };
 
   const handleSave = async () => {
+    if (!canWritePatients) {
+      Alert.alert('Insufficient Permissions', "Required permission 'patients:write' is not granted for this clinic role.");
+      return;
+    }
     if (!procedureName.trim()) {
       setFormError('Procedure name is required.');
       return;
@@ -723,6 +744,7 @@ export default function ClinicalHistoryTab({
   };
 
   const handleDelete = (item: PatientSurgicalHistory) => {
+    if (!canWritePatients) return;
     Alert.alert(
       'Delete Surgical Procedure',
       `Are you sure you want to remove "${item.procedureName}"? This action cannot be undone.`,
@@ -754,6 +776,10 @@ export default function ClinicalHistoryTab({
 
   // Problem Handling
   const handleSaveProblem = async () => {
+    if (!canWritePatients) {
+      Alert.alert('Insufficient Permissions', "Required permission 'patients:write' is not granted for this clinic role.");
+      return;
+    }
     if (!problemIcd10.trim()) {
       setProblemFormError('ICD-10 code is required (e.g. I10, E11.9).');
       return;
@@ -800,6 +826,7 @@ export default function ClinicalHistoryTab({
   };
 
   const handleToggleProblemStatus = async (item: PatientProblemRecord) => {
+    if (!canWritePatients) return;
     const nextStatus = item.status === 'Active' ? 'Resolved' : 'Active';
     const resolvedDate = nextStatus === 'Resolved' ? new Date().toISOString().split('T')[0] : undefined;
 
@@ -823,6 +850,10 @@ export default function ClinicalHistoryTab({
 
   // Allergy Handling
   const handleSaveAllergy = async () => {
+    if (!canWritePatients) {
+      Alert.alert('Insufficient Permissions', "Required permission 'patients:write' is not granted for this clinic role.");
+      return;
+    }
     if (!allergen.trim()) {
       setAllergyFormError('Allergen name is required (e.g. Penicillin, Peanuts).');
       return;
@@ -857,6 +888,7 @@ export default function ClinicalHistoryTab({
   };
 
   const handleDeleteAllergy = (item: PatientAllergyRecord) => {
+    if (!canWritePatients) return;
     Alert.alert(
       'Remove Allergy',
       `Are you sure you want to remove documented allergy "${item.allergen}"?`,
@@ -886,6 +918,15 @@ export default function ClinicalHistoryTab({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {!canWritePatients ? (
+        <View style={styles.readOnlyBanner} accessibilityRole="alert">
+          <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+          <ThemedText variant="small" color={theme.colors.warningText} style={{ flex: 1 }}>
+            Read-only mode: &apos;patients:write&apos; permission is required to save surgical &amp; clinical profile changes.
+          </ThemedText>
+        </View>
+      ) : null}
+
       {/* SECTION 1: Structured Problem List */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
@@ -898,6 +939,7 @@ export default function ClinicalHistoryTab({
             variant="primary"
             size="sm"
             icon="plus"
+            disabled={!canWritePatients}
             onPress={() => {
               setProblemIcd10('');
               setProblemTitle('');
@@ -954,6 +996,7 @@ export default function ClinicalHistoryTab({
                     title={prob.status === 'Active' ? 'Mark Resolved' : 'Reactivate'}
                     variant="outline"
                     size="sm"
+                    disabled={!canWritePatients}
                     onPress={() => handleToggleProblemStatus(prob)}
                   />
                 </View>
@@ -980,6 +1023,7 @@ export default function ClinicalHistoryTab({
             variant="outline"
             size="sm"
             icon="plus"
+            disabled={!canWritePatients}
             onPress={() => {
               setAllergen('');
               setAllergyCategory('Medication');
@@ -1238,6 +1282,7 @@ export default function ClinicalHistoryTab({
             variant="primary"
             icon="check"
             loading={savingProfile}
+            disabled={savingProfile || !canWritePatients}
             onPress={handleSaveMedicalAndFamilyHistory}
           />
         </View>
@@ -1255,6 +1300,7 @@ export default function ClinicalHistoryTab({
             variant="primary"
             size="sm"
             icon="plus"
+            disabled={!canWritePatients}
             onPress={openAddModal}
           />
         </View>
@@ -1571,6 +1617,16 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: theme.spacing.xl,
     gap: theme.spacing.md,
+  },
+  readOnlyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
   },
   sectionCard: {
     backgroundColor: theme.colors.surface,

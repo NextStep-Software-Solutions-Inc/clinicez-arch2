@@ -927,6 +927,16 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                                         <IconBan className="h-3.5 w-3.5" />
                                                                         <span className="hidden sm:inline">Revoke</span>
                                                                     </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => setDeleteTarget(member)}
+                                                                        title="Permanently remove from workspace"
+                                                                        className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                                    >
+                                                                        <IconTrash className="h-3.5 w-3.5" />
+                                                                        <span className="hidden sm:inline">Remove</span>
+                                                                    </Button>
                                                                 </>
                                                             )}
 

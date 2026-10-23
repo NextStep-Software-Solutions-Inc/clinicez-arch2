@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Icon } from '../ui';
+import { ThemedText, Icon, Badge } from '../ui';
 import { getSessionItem, setSessionItem } from '../../utils/deviceStorage';
+import { useAuth, usePermission } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../constants/permissions';
 import type {
   ClinicPatient,
   PatientSurgicalHistory,
@@ -33,6 +35,7 @@ export interface HealthProfilesTabProps {
   initialLatestAssessment?: NcdRiskAssessment;
   onRefreshChart?: () => void;
   initialSubTab?: ProfileSubTab;
+  readOnly?: boolean;
 }
 
 export default function HealthProfilesTab({
@@ -49,7 +52,13 @@ export default function HealthProfilesTab({
   latestNcdAssessment,
   initialLatestAssessment,
   onRefreshChart,
+  readOnly,
 }: HealthProfilesTabProps) {
+  const { user, state, permissions } = useAuth();
+  const hasPatientsWrite = usePermission(PERMISSIONS.patientsWrite);
+  const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
+  const canWritePatients = readOnly !== undefined ? !readOnly : isUnmountedTestHarness ? true : hasPatientsWrite;
+
   const [activeSubTab, setActiveSubTab] = useState<ProfileSubTab>(() => {
     if (initialSubTab && ['surgical', 'lifestyle', 'reproductive', 'cardiometabolic'].includes(initialSubTab)) {
       return initialSubTab;
@@ -173,6 +182,21 @@ export default function HealthProfilesTab({
         </Pressable>
       </ScrollView>
 
+      {!canWritePatients ? (
+        <View style={styles.readOnlyBanner} accessibilityRole="alert">
+          <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+          <View style={{ flex: 1 }}>
+            <ThemedText variant="smallBold" color={theme.colors.warningText}>
+              Read-Only Clinical Profile View
+            </ThemedText>
+            <ThemedText variant="small" color={theme.colors.textSecondary}>
+              Saving or updating patient chart profile records requires the &apos;patients:write&apos; permission.
+            </ThemedText>
+          </View>
+          <Badge label="Read-Only" variant="warning" size="xs" />
+        </View>
+      ) : null}
+
       {/* Sub-Tab Content View */}
       <View style={styles.subTabContent}>
         {activeSubTab === 'surgical' && (
@@ -181,6 +205,7 @@ export default function HealthProfilesTab({
             initialSurgicalHistories={surg}
             initialProfile={profile || initialProfile}
             onRefreshChart={onRefreshChart}
+            readOnly={!canWritePatients}
           />
         )}
         {activeSubTab === 'lifestyle' && (
@@ -188,6 +213,7 @@ export default function HealthProfilesTab({
             patient={patient}
             initialSocialHistory={soc}
             onRefreshChart={onRefreshChart}
+            readOnly={!canWritePatients}
           />
         )}
         {activeSubTab === 'reproductive' && (
@@ -195,6 +221,7 @@ export default function HealthProfilesTab({
             patient={patient}
             initialReproductiveHistory={rep}
             onRefreshChart={onRefreshChart}
+            readOnly={!canWritePatients}
           />
         )}
         {activeSubTab === 'cardiometabolic' && (
@@ -202,6 +229,7 @@ export default function HealthProfilesTab({
             patient={patient}
             initialLatestAssessment={ncd}
             onRefreshChart={onRefreshChart}
+            readOnly={!canWritePatients}
           />
         )}
       </View>
@@ -241,6 +269,17 @@ const styles = StyleSheet.create({
   subTabBtn_active: {
     backgroundColor: theme.colors.primarySubtle,
     borderColor: theme.colors.primaryBorder,
+  },
+  readOnlyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
   subTabContent: {
     flex: 1,

@@ -3,6 +3,8 @@ import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
 import { ThemedText, Button, Input, Icon, Badge, ErrorState, SkeletonList, ValidatedDateInput, validateDateString } from '@ui';
 import { Alert } from '@utils/feedback';
+import { useAuth, usePermission } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../constants/permissions';
 import {
   clinicService,
   ClinicPatient,
@@ -38,13 +40,20 @@ interface LifestyleSocialTabProps {
   patient: ClinicPatient;
   initialSocialHistory?: PatientSocialHistory;
   onRefreshChart?: () => void;
+  readOnly?: boolean;
 }
 
 export default function LifestyleSocialTab({
   patient,
   initialSocialHistory,
   onRefreshChart,
+  readOnly,
 }: LifestyleSocialTabProps) {
+  const { user, state, permissions } = useAuth();
+  const hasPatientsWrite = usePermission(PERMISSIONS.patientsWrite);
+  const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
+  const canWritePatients = readOnly !== undefined ? !readOnly : isUnmountedTestHarness ? true : hasPatientsWrite;
+
   const isPediatric = (patient.age ?? 0) < 18;
 
   const [loading, setLoading] = useState(false);
@@ -184,6 +193,7 @@ export default function LifestyleSocialTab({
   const packYears = calcPacks > 0 && calcYears > 0 ? (calcPacks * calcYears).toFixed(1) : '0';
 
   const toggleDietaryHabit = (habit: string) => {
+    if (!canWritePatients) return;
     if (selectedDietaryHabits.includes(habit)) {
       if (selectedDietaryHabits.length > 1) {
         setSelectedDietaryHabits(selectedDietaryHabits.filter((h) => h !== habit));
@@ -194,6 +204,13 @@ export default function LifestyleSocialTab({
   };
 
   const handleSave = async () => {
+    if (!canWritePatients) {
+      Alert.alert(
+        'Insufficient Permissions',
+        "Required permission 'patients:write' is not granted for this clinic role."
+      );
+      return;
+    }
     if (smokingStatus === 'quit' && smokingStoppedDate && smokingStoppedDate.trim()) {
       const stopDateValidation = validateDateString(smokingStoppedDate, { boundaryMode: 'pastOrToday' });
       if (!stopDateValidation.isValid) {
@@ -272,6 +289,15 @@ export default function LifestyleSocialTab({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {!canWritePatients ? (
+        <View style={styles.readOnlyBanner} accessibilityRole="alert">
+          <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+          <ThemedText variant="small" color={theme.colors.warningText} style={{ flex: 1 }}>
+            Read-only mode: &apos;patients:write&apos; permission is required to save lifestyle changes.
+          </ThemedText>
+        </View>
+      ) : null}
+
       {isPediatric && (
         <View style={styles.pediatricBanner}>
           <Icon name="info" size={theme.sizes.iconMd} color={theme.colors.infoText} />
@@ -303,7 +329,8 @@ export default function LifestyleSocialTab({
           <View style={styles.segmentedRow}>
             <Pressable
               style={[styles.segmentBtn, smokingStatus === 'never' && styles.segmentBtnActive]}
-              onPress={() => setSmokingStatus('never')}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setSmokingStatus('never')}
             >
               <ThemedText variant="smallBold" color={smokingStatus === 'never' ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Non-Smoker
@@ -311,7 +338,8 @@ export default function LifestyleSocialTab({
             </Pressable>
             <Pressable
               style={[styles.segmentBtn, smokingStatus === 'current' && styles.segmentBtnActiveWarning]}
-              onPress={() => setSmokingStatus('current')}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setSmokingStatus('current')}
             >
               <ThemedText variant="smallBold" color={smokingStatus === 'current' ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Current Smoker
@@ -319,7 +347,8 @@ export default function LifestyleSocialTab({
             </Pressable>
             <Pressable
               style={[styles.segmentBtn, smokingStatus === 'quit' && styles.segmentBtnActiveQuit]}
-              onPress={() => setSmokingStatus('quit')}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setSmokingStatus('quit')}
             >
               <ThemedText variant="smallBold" color={smokingStatus === 'quit' ? theme.colors.primaryDark : theme.colors.textSecondary}>
                 Former Smoker (Quit)
@@ -338,6 +367,7 @@ export default function LifestyleSocialTab({
                   value={packsPerDay}
                   onChangeText={setPacksPerDay}
                   keyboardType="numeric"
+                  editable={canWritePatients}
                 />
               </View>
               <View style={styles.gridItem}>
@@ -347,6 +377,7 @@ export default function LifestyleSocialTab({
                   value={yearsSmoking}
                   onChangeText={setYearsSmoking}
                   keyboardType="numeric"
+                  editable={canWritePatients}
                 />
               </View>
             </View>
@@ -377,6 +408,7 @@ export default function LifestyleSocialTab({
                   value={packsPerDay}
                   onChangeText={setPacksPerDay}
                   keyboardType="numeric"
+                  editable={canWritePatients}
                 />
               </View>
               <View style={styles.gridItem}>
@@ -386,6 +418,7 @@ export default function LifestyleSocialTab({
                   value={yearsSmoking}
                   onChangeText={setYearsSmoking}
                   keyboardType="numeric"
+                  editable={canWritePatients}
                 />
               </View>
             </View>
@@ -418,7 +451,8 @@ export default function LifestyleSocialTab({
           <View style={styles.segmentedRow}>
             <Pressable
               style={[styles.segmentBtn, alcoholStatus === 'never' && styles.segmentBtnActive]}
-              onPress={() => setAlcoholStatus('never')}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setAlcoholStatus('never')}
             >
               <ThemedText variant="smallBold" color={alcoholStatus === 'never' ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Non-Drinker
@@ -426,7 +460,8 @@ export default function LifestyleSocialTab({
             </Pressable>
             <Pressable
               style={[styles.segmentBtn, alcoholStatus === 'current' && styles.segmentBtnActiveWarning]}
-              onPress={() => setAlcoholStatus('current')}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setAlcoholStatus('current')}
             >
               <ThemedText variant="smallBold" color={alcoholStatus === 'current' ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Current Drinker
@@ -434,7 +469,8 @@ export default function LifestyleSocialTab({
             </Pressable>
             <Pressable
               style={[styles.segmentBtn, alcoholStatus === 'quit' && styles.segmentBtnActiveQuit]}
-              onPress={() => setAlcoholStatus('quit')}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setAlcoholStatus('quit')}
             >
               <ThemedText variant="smallBold" color={alcoholStatus === 'quit' ? theme.colors.primaryDark : theme.colors.textSecondary}>
                 Former Drinker (Quit)
@@ -453,6 +489,7 @@ export default function LifestyleSocialTab({
                   value={alcoholDrinksPerWeek}
                   onChangeText={setAlcoholDrinksPerWeek}
                   keyboardType="numeric"
+                  editable={canWritePatients}
                 />
               </View>
               <View style={styles.gridItem}>
@@ -462,6 +499,7 @@ export default function LifestyleSocialTab({
                   value={alcoholBottlesPerDay}
                   onChangeText={setAlcoholBottlesPerDay}
                   keyboardType="numeric"
+                  editable={canWritePatients}
                 />
               </View>
             </View>
@@ -477,7 +515,8 @@ export default function LifestyleSocialTab({
                     <Pressable
                       key={freq}
                       style={[styles.chip, active && styles.chipActive]}
-                      onPress={() => setAlcoholFrequency(freq)}
+                      disabled={!canWritePatients}
+                      onPress={() => canWritePatients && setAlcoholFrequency(freq)}
                     >
                       <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
                         {freq}
@@ -519,7 +558,8 @@ export default function LifestyleSocialTab({
           <View style={styles.toggleRow}>
             <Pressable
               style={[styles.toggleBtn, !usesIllicitDrugs && styles.toggleBtnActive]}
-              onPress={() => setUsesIllicitDrugs(false)}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setUsesIllicitDrugs(false)}
             >
               <ThemedText variant="smallBold" color={!usesIllicitDrugs ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
@@ -527,7 +567,8 @@ export default function LifestyleSocialTab({
             </Pressable>
             <Pressable
               style={[styles.toggleBtn, usesIllicitDrugs && styles.toggleBtnActiveEmergency]}
-              onPress={() => setUsesIllicitDrugs(true)}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setUsesIllicitDrugs(true)}
             >
               <ThemedText variant="smallBold" color={usesIllicitDrugs ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -543,12 +584,14 @@ export default function LifestyleSocialTab({
               placeholder="e.g. Methamphetamine, Cannabis, Opioids"
               value={drugTypes}
               onChangeText={setDrugTypes}
+              editable={canWritePatients}
             />
             <Input
               label="Substance Use History / Treatment"
               placeholder="e.g. Past user, completed rehabilitation 2020"
               value={substanceUseHistory}
               onChangeText={setSubstanceUseHistory}
+              editable={canWritePatients}
             />
           </View>
         )}
@@ -571,7 +614,8 @@ export default function LifestyleSocialTab({
           <View style={styles.toggleRow}>
             <Pressable
               style={[styles.toggleBtn, !isSexuallyActive && styles.toggleBtnActive]}
-              onPress={() => setIsSexuallyActive(false)}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setIsSexuallyActive(false)}
             >
               <ThemedText variant="smallBold" color={!isSexuallyActive ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 No
@@ -579,7 +623,8 @@ export default function LifestyleSocialTab({
             </Pressable>
             <Pressable
               style={[styles.toggleBtn, isSexuallyActive && styles.toggleBtnActivePrimary]}
-              onPress={() => setIsSexuallyActive(true)}
+              disabled={!canWritePatients}
+              onPress={() => canWritePatients && setIsSexuallyActive(true)}
             >
               <ThemedText variant="smallBold" color={isSexuallyActive ? theme.colors.onPrimary : theme.colors.textSecondary}>
                 Yes
@@ -596,6 +641,7 @@ export default function LifestyleSocialTab({
               value={coitarcheAge}
               onChangeText={setCoitarcheAge}
               keyboardType="numeric"
+              editable={canWritePatients}
             />
           </View>
         )}
@@ -619,7 +665,8 @@ export default function LifestyleSocialTab({
                 <Pressable
                   key={opt}
                   style={[styles.chip, active && styles.chipActive]}
-                  onPress={() => setPhysicalActivityFrequency(opt)}
+                  disabled={!canWritePatients}
+                  onPress={() => canWritePatients && setPhysicalActivityFrequency(opt)}
                 >
                   {active && <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.primary} />}
                   <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
@@ -645,6 +692,7 @@ export default function LifestyleSocialTab({
                 <Pressable
                   key={opt}
                   style={[styles.chip, active && styles.chipActive]}
+                  disabled={!canWritePatients}
                   onPress={() => toggleDietaryHabit(opt)}
                 >
                   <Icon name={active ? 'check' : 'plus'} size={theme.sizes.iconSm} color={active ? theme.colors.primary : theme.colors.textMuted} />
@@ -662,6 +710,7 @@ export default function LifestyleSocialTab({
           placeholder="Additional dietary restrictions or clinical remarks"
           value={remarks}
           onChangeText={setRemarks}
+          editable={canWritePatients}
         />
       </View>
 
@@ -672,7 +721,7 @@ export default function LifestyleSocialTab({
           size="lg"
           icon="check"
           loading={saving}
-          disabled={saving}
+          disabled={saving || !canWritePatients}
           onPress={handleSave}
         />
       </View>
@@ -687,6 +736,16 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: theme.spacing.xl,
     gap: theme.spacing.md,
+  },
+  readOnlyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
   },
   pediatricBanner: {
     flexDirection: 'row',

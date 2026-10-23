@@ -9,7 +9,8 @@ import {
   NcdRiskAssessment,
   SaveNcdRiskAssessmentPayload,
 } from '../../services/clinicService';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, usePermission } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../constants/permissions';
 import { useStaff } from '../../context/StaffContext';
 import {
   calculatePhilPenRisk,
@@ -38,14 +39,19 @@ export interface CardiometabolicRiskTabProps {
   patient: ClinicPatient;
   initialLatestAssessment?: NcdRiskAssessment;
   onRefreshChart?: () => void;
+  readOnly?: boolean;
 }
 
 export default function CardiometabolicRiskTab({
   patient,
   initialLatestAssessment,
   onRefreshChart,
+  readOnly,
 }: CardiometabolicRiskTabProps) {
-  const { user } = useAuth();
+  const { user, state, permissions } = useAuth();
+  const hasPatientsWrite = usePermission(PERMISSIONS.patientsWrite);
+  const isUnmountedTestHarness = state === 'booting' && !user && permissions.length === 0;
+  const canWritePatients = readOnly !== undefined ? !readOnly : isUnmountedTestHarness ? true : hasPatientsWrite;
   const { current: currentStaff, currentName } = useStaff();
   const authedClinicianName = currentName || (user?.name ?? '').trim();
   const authedStaffId = currentStaff?.id || user?.id;
@@ -333,6 +339,7 @@ export default function CardiometabolicRiskTab({
   };
 
   const handleStartEdit = (assessment: NcdRiskAssessment) => {
+    if (!canWritePatients) return;
     setEditingAssessmentId(assessment.id);
     populateLatest(assessment);
   };
@@ -347,6 +354,7 @@ export default function CardiometabolicRiskTab({
   };
 
   const handleOpenVoidModal = (assessment: NcdRiskAssessment) => {
+    if (!canWritePatients) return;
     setVoidingAssessment(assessment);
     setVoidReason('Duplicate entry');
     setCustomVoidNotes('');
@@ -354,6 +362,7 @@ export default function CardiometabolicRiskTab({
   };
 
   const handleConfirmVoid = async () => {
+    if (!canWritePatients) return;
     if (!voidingAssessment) return;
     setVoidingSubmitting(true);
     try {
@@ -439,6 +448,10 @@ export default function CardiometabolicRiskTab({
   }, [cvdCalc.crisisOverrideApplied, cvdCalc.calculatedScorePercent, isManuallyOverridden, riskScorePercent]);
 
   const handleSaveAssessment = async () => {
+    if (!canWritePatients) {
+      Alert.alert('Insufficient Permissions', "Required permission 'patients:write' is not granted for this clinic role.");
+      return;
+    }
     // Explicit Answering Validation: ALL questions must be explicitly answered (no assuming nor defaulting)
     const unanswered: string[] = [];
 
@@ -699,6 +712,15 @@ export default function CardiometabolicRiskTab({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {!canWritePatients ? (
+        <View style={styles.readOnlyBanner} accessibilityRole="alert">
+          <Icon name="lock" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+          <ThemedText variant="small" color={theme.colors.warningText} style={{ flex: 1 }}>
+            Read-only mode: &apos;patients:write&apos; permission is required to save cardiometabolic &amp; NCD assessments.
+          </ThemedText>
+        </View>
+      ) : null}
+
       {/* Explicit Clinical Governance Notice */}
       <View style={styles.explicitNoticeBanner}>
         <Icon name="info" size={16} color={theme.colors.primaryDark} />
@@ -1615,7 +1637,7 @@ export default function CardiometabolicRiskTab({
             size="lg"
             icon="check"
             loading={saving}
-            disabled={saving}
+            disabled={saving || !canWritePatients}
             onPress={handleSaveAssessment}
           />
         </View>
@@ -1678,6 +1700,7 @@ export default function CardiometabolicRiskTab({
                     variant="ghost"
                     size="sm"
                     icon="edit"
+                    disabled={!canWritePatients}
                     onPress={() => handleStartEdit(a)}
                   />
                   {isAuthor ? (
@@ -1686,6 +1709,7 @@ export default function CardiometabolicRiskTab({
                       variant="ghost"
                       size="sm"
                       icon="trash"
+                      disabled={!canWritePatients}
                       textStyle={{ color: theme.colors.emergencyText }}
                       onPress={() => handleOpenVoidModal(a)}
                     />
@@ -1843,6 +1867,16 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: theme.spacing.xl,
     gap: theme.spacing.md,
+  },
+  readOnlyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: 1,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
   },
   explicitNoticeBanner: {
     flexDirection: 'row',

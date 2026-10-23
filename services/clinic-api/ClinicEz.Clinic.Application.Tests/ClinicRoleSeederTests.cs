@@ -243,7 +243,7 @@ public class ClinicRoleSeederTests
 
         var (context, _, _) = TestDbHelper.CreateTestContext(clinicContext);
 
-        // Seed an outdated Attending Physician / Doctor role missing patients:write and triage:write (Issue #50 & #51)
+        // Seed an outdated Attending Physician / Doctor role missing patients:write and triage:write (Issues #50, #51 & #52 reproduction)
         var legacyDoctorPermissions = new List<string>
         {
             ClinicPermissions.AppointmentsRead,
@@ -303,6 +303,58 @@ public class ClinicRoleSeederTests
         };
 
         foreach (var (controller, actionName) in consultationEndpoints)
+        {
+            var method = controller.GetMethod(actionName);
+            method.Should().NotBeNull($"Expected endpoint {controller.Name}.{actionName} to exist");
+
+            var requiredPermissions = method!.GetCustomAttributes<HasPermissionAttribute>(true)
+                .Concat(controller.GetCustomAttributes<HasPermissionAttribute>(true))
+                .SelectMany(a => a.Permissions)
+                .ToList();
+
+            requiredPermissions.Should().NotBeEmpty($"{controller.Name}.{actionName} must be permission-guarded");
+            foreach (var perm in requiredPermissions)
+            {
+                doctorTemplate.Permissions.Should().Contain(perm,
+                    $"Doctor role must have '{perm}' required by {controller.Name}.{actionName}");
+            }
+        }
+    }
+
+    [Fact]
+    public void DoctorRoleTemplate_SatisfiesAllPatientChartProfileEndpointPermissions()
+    {
+        var doctorTemplate = ClinicRoleSeeder.GetCanonicalSystemRoleTemplates()
+            .Single(t => t.Name.Equals(ClinicRoleSeeder.DoctorRoleName, StringComparison.OrdinalIgnoreCase));
+
+        var profileEndpoints = new (Type Controller, string ActionName)[]
+        {
+            // 1. Surgical & Clinical
+            (typeof(PatientsController), nameof(PatientsController.AddSurgicalHistory)),
+            (typeof(PatientsController), nameof(PatientsController.UpdateSurgicalHistory)),
+            (typeof(PatientsController), nameof(PatientsController.DeleteSurgicalHistory)),
+            (typeof(PatientsController), nameof(PatientsController.UpdateMedicalHistory)),
+            (typeof(PatientsController), nameof(PatientsController.UpdateFamilyHistory)),
+            (typeof(PatientsController), nameof(PatientsController.UpdatePhysicalExam)),
+            (typeof(AllergiesController), nameof(AllergiesController.CreateAllergy)),
+            (typeof(AllergiesController), nameof(AllergiesController.DeleteAllergy)),
+            (typeof(ProblemsController), nameof(ProblemsController.CreateProblem)),
+            (typeof(ProblemsController), nameof(ProblemsController.UpdateProblemStatus)),
+            (typeof(YakapPatientProfileController), nameof(YakapPatientProfileController.UpdateProfile)),
+
+            // 2. Lifestyle & Social
+            (typeof(PatientsController), nameof(PatientsController.UpdateSocialHistory)),
+
+            // 3. Reproductive / OB-GYN
+            (typeof(PatientsController), nameof(PatientsController.UpdateReproductiveHistory)),
+
+            // 4. Cardiometabolic & NCD
+            (typeof(PatientsController), nameof(PatientsController.SaveNcdRiskAssessment)),
+            (typeof(PatientsController), nameof(PatientsController.UpdateNcdRiskAssessment)),
+            (typeof(PatientsController), nameof(PatientsController.VoidNcdRiskAssessment))
+        };
+
+        foreach (var (controller, actionName) in profileEndpoints)
         {
             var method = controller.GetMethod(actionName);
             method.Should().NotBeNull($"Expected endpoint {controller.Name}.{actionName} to exist");

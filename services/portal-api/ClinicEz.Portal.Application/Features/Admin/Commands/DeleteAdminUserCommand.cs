@@ -23,9 +23,9 @@ public class DeleteAdminUserCommandHandler(IApplicationDbContext context) : IReq
             throw new InvalidOperationException("You cannot delete your own admin account.");
         }
 
-        if (user.Status != AdminUserStatus.Revoked)
+        if (user.Status != AdminUserStatus.Revoked && user.Status != AdminUserStatus.Suspended)
         {
-            throw new InvalidOperationException("Only revoked admin accounts can be permanently removed. Please revoke their access first.");
+            throw new InvalidOperationException("Only revoked or suspended admin accounts can be permanently removed. Please revoke or suspend their access first.");
         }
 
         context.AdminUsers.Remove(user);
