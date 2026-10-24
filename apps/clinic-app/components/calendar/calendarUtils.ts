@@ -69,6 +69,130 @@ export function toDateString(d: Date): string {
   return formatDateString(year, month, day);
 }
 
+export interface AppointmentLocalDateTime {
+  dateStr: string;      // "YYYY-MM-DD" in clinic local timezone (Asia/Manila)
+  timeStr: string;      // "HH:MM" (24-hour) in clinic local timezone (Asia/Manila)
+  formattedTime: string; // "h:mm A" (e.g. "4:00 PM") in clinic local timezone
+}
+
+/**
+ * Resolves UTC ISO or local scheduledAt timestamp into clinic local timezone (default Asia/Manila, UTC+8).
+ */
+export function getAppointmentLocalDateTime(
+  scheduledAt: string,
+  timeZoneId: string = 'Asia/Manila'
+): AppointmentLocalDateTime {
+  if (!scheduledAt) {
+    return { dateStr: '', timeStr: '', formattedTime: '' };
+  }
+
+  let d: Date;
+  if (scheduledAt.includes('T') && !scheduledAt.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(scheduledAt)) {
+    d = new Date(`${scheduledAt}+08:00`);
+  } else {
+    d = new Date(scheduledAt);
+  }
+
+  if (isNaN(d.getTime())) {
+    const [dPart = '', tPart = ''] = scheduledAt.split('T');
+    const timeClean = tPart.slice(0, 5);
+    return {
+      dateStr: dPart,
+      timeStr: timeClean,
+      formattedTime: timeClean ? formatTime12(timeClean) : '',
+    };
+  }
+
+  if (timeZoneId === 'Asia/Manila') {
+    const manilaMs = d.getTime() + 8 * 60 * 60 * 1000;
+    const md = new Date(manilaMs);
+    const dateStr = `${md.getUTCFullYear()}-${padZero(md.getUTCMonth() + 1)}-${padZero(md.getUTCDate())}`;
+    const timeStr = `${padZero(md.getUTCHours())}:${padZero(md.getUTCMinutes())}`;
+    const formattedTime = formatTime12(timeStr);
+    return { dateStr, timeStr, formattedTime };
+  }
+
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZoneId,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(d);
+    const year = parts.find((p) => p.type === 'year')?.value;
+    const month = parts.find((p) => p.type === 'month')?.value;
+    const day = parts.find((p) => p.type === 'day')?.value;
+    let hour = parts.find((p) => p.type === 'hour')?.value || '00';
+    if (hour === '24') hour = '00';
+    const minute = parts.find((p) => p.type === 'minute')?.value || '00';
+    const dateStr = `${year}-${month}-${day}`;
+    const timeStr = `${hour}:${minute}`;
+    const formattedTime = formatTime12(timeStr);
+    return { dateStr, timeStr, formattedTime };
+  } catch {
+    const manilaMs = d.getTime() + 8 * 60 * 60 * 1000;
+    const md = new Date(manilaMs);
+    const dateStr = `${md.getUTCFullYear()}-${padZero(md.getUTCMonth() + 1)}-${padZero(md.getUTCDate())}`;
+    const timeStr = `${padZero(md.getUTCHours())}:${padZero(md.getUTCMinutes())}`;
+    const formattedTime = formatTime12(timeStr);
+    return { dateStr, timeStr, formattedTime };
+  }
+}
+
+/**
+ * Converts clinic local date (YYYY-MM-DD) and time (HH:MM) in Asia/Manila (UTC+8) into standard UTC ISO string.
+ * Returns an empty string if dateStr or timeStr is missing or out of valid calendar/clock bounds.
+ */
+export function manilaDateTimeToUtcIso(dateStr: string, timeStr: string): string {
+  if (!dateStr || !timeStr) return '';
+  const parts = timeStr.trim().split(':');
+  if (parts.length < 2) return '';
+  const hourNum = Number(parts[0]);
+  const minNum = Number(parts[1]);
+  if (
+    !Number.isInteger(hourNum) ||
+    !Number.isInteger(minNum) ||
+    hourNum < 0 ||
+    hourNum > 23 ||
+    minNum < 0 ||
+    minNum > 59
+  ) {
+    return '';
+  }
+  const hh = padZero(hourNum);
+  const mm = padZero(minNum);
+  const isoWithOffset = `${dateStr.trim()}T${hh}:${mm}:00+08:00`;
+  const parsed = new Date(isoWithOffset);
+  if (isNaN(parsed.getTime())) {
+    return '';
+  }
+  return parsed.toISOString();
+}
+
+/**
+ * Checks whether a local HH:MM time falls within a discrete slot [slotTimeStr, slotTimeStr + intervalMinutes).
+ */
+export function isTimeInSlotWindow(
+  localTimeStr: string,
+  slotTimeStr: string,
+  intervalMinutes: number = 30
+): boolean {
+  if (!localTimeStr || !slotTimeStr) return false;
+  if (localTimeStr === slotTimeStr) return true;
+  const [lh, lm] = localTimeStr.split(':').map(Number);
+  const [sh, sm] = slotTimeStr.split(':').map(Number);
+  if (Number.isNaN(lh) || Number.isNaN(lm) || Number.isNaN(sh) || Number.isNaN(sm)) {
+    return false;
+  }
+  const localTotal = lh * 60 + lm;
+  const slotTotal = sh * 60 + sm;
+  return localTotal >= slotTotal && localTotal < slotTotal + intervalMinutes;
+}
+
 /**
  * Generates 7-column Gregorian month grid adhering to Asia/Manila calendar rules.
  * Rows always form full 6 weeks (42 cells total) with leading/trailing days.
@@ -96,7 +220,9 @@ export function generateMonthGrid(
     const day = daysInPrevMonth - i;
     const dateString = formatDateString(prevYear, prevMonth, day);
     const cellDate = new Date(Date.UTC(prevYear, prevMonth - 1, day));
-    const cellAppts = appointments.filter((a) => a.scheduledAt.startsWith(dateString));
+    const cellAppts = appointments.filter(
+      (a) => getAppointmentLocalDateTime(a.scheduledAt).dateStr === dateString
+    );
     cells.push({
       date: cellDate,
       dateString,
@@ -111,7 +237,9 @@ export function generateMonthGrid(
   for (let day = 1; day <= daysInCurrentMonth; day++) {
     const dateString = formatDateString(year, month, day);
     const cellDate = new Date(Date.UTC(year, month - 1, day));
-    const cellAppts = appointments.filter((a) => a.scheduledAt.startsWith(dateString));
+    const cellAppts = appointments.filter(
+      (a) => getAppointmentLocalDateTime(a.scheduledAt).dateStr === dateString
+    );
     cells.push({
       date: cellDate,
       dateString,
@@ -128,7 +256,9 @@ export function generateMonthGrid(
   while (cells.length < totalCellsNeeded) {
     const dateString = formatDateString(nextYear, nextMonth, nextDay);
     const cellDate = new Date(Date.UTC(nextYear, nextMonth - 1, nextDay));
-    const cellAppts = appointments.filter((a) => a.scheduledAt.startsWith(dateString));
+    const cellAppts = appointments.filter(
+      (a) => getAppointmentLocalDateTime(a.scheduledAt).dateStr === dateString
+    );
     cells.push({
       date: cellDate,
       dateString,
@@ -161,7 +291,9 @@ export function getWeekDays(
   for (let i = 0; i < 7; i++) {
     const d = new Date(startOfWeek.getTime() + i * 86400000);
     const dateString = toDateString(d);
-    const cellAppts = appointments.filter((a) => a.scheduledAt.startsWith(dateString));
+    const cellAppts = appointments.filter(
+      (a) => getAppointmentLocalDateTime(a.scheduledAt).dateStr === dateString
+    );
     columns.push({
       date: d,
       dateString,

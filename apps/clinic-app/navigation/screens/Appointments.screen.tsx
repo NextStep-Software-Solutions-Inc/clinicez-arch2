@@ -61,6 +61,7 @@ import {
   parseDateOnly,
   formatDateString,
   getDaysInMonth,
+  manilaDateTimeToUtcIso,
   type CalendarViewMode,
   type ExtendedAppointmentItem,
   type DoctorShiftOverlay,
@@ -240,6 +241,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   );
 
   const isCheckingInRef = useRef(false);
+  const isBookingRef = useRef(false);
   const [conflictModal, setConflictModal] = useState<{
     visible: boolean;
     error?: any;
@@ -589,7 +591,7 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       setPatientSearch('');
       setPatientResults([]);
       setFormPatient(null);
-      setFormDoctorId(doctorId || null);
+      setFormDoctorId(!doctorId || doctorId === 'unassigned' ? null : doctorId);
       setFormDate(dateStr);
       setFormTime(timeStr);
       setFormServiceTypes(['Consultation']);
@@ -601,6 +603,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
   );
 
   const handleBookAppointment = async () => {
+    if (isBookingRef.current || booking || bookedAppointment) return;
+
     if (!formPatient) {
       notify.error('Select a patient for this appointment.');
       return;
@@ -610,35 +614,39 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
       notify.error(dateCheck.errorMessage || 'Enter a valid appointment date (today or in the future).');
       return;
     }
-    const scheduled = new Date(`${formDate}T${formTime}`);
-    if (isNaN(scheduled.getTime())) {
+    const scheduledAt = manilaDateTimeToUtcIso(formDate, formTime);
+    if (!scheduledAt) {
       notify.error('Enter a valid date (YYYY-MM-DD) and time (HH:MM).');
       return;
     }
     const doctor = doctors.find((d) => d.id === formDoctorId);
 
-    setBooking(true);
-    const [newApt, err] = await clinicService.createAppointment({
-      patientId: formPatient.id,
-      patientName: formPatient.fullName,
-      doctorId: doctor?.id,
-      doctorName: doctor ? formatStaffName(doctor) : undefined,
-      scheduledAt: scheduled.toISOString(),
-      serviceType: formServiceTypes.join(', ').trim() || undefined,
-      reason: formReason.trim() || 'General Consultation',
-      notes: formNotes.trim() || undefined,
-    });
-    setBooking(false);
+    try {
+      isBookingRef.current = true;
+      setBooking(true);
+      const [newApt, err] = await clinicService.createAppointment({
+        patientId: formPatient.id,
+        patientName: formPatient.fullName,
+        doctorId: doctor?.id,
+        doctorName: doctor ? formatStaffName(doctor) : undefined,
+        scheduledAt,
+        serviceType: formServiceTypes.join(', ').trim() || undefined,
+        reason: formReason.trim() || 'General Consultation',
+        notes: formNotes.trim() || undefined,
+      });
 
-    if (err || !newApt) {
-      notify.error(err?.message || 'The appointment could not be booked. Please try again.');
-      return;
+      if (err || !newApt) {
+        notify.error(err?.message || 'The appointment could not be booked. Please try again.');
+        return;
+      }
+
+      setAppointments((prev) => [newApt, ...prev]);
+      setBookedAppointment(newApt);
+      notify.success(`Appointment booked for ${formPatient.fullName}.`);
+    } finally {
+      setBooking(false);
+      isBookingRef.current = false;
     }
-
-    setAppointments((prev) => [newApt, ...prev]);
-    setBookedAppointment(newApt);
-    notify.success(`Appointment booked for ${formPatient.fullName}.`);
-    resetForm();
   };
 
   const handleCancelAppointment = async (item: AppointmentItem) => {
@@ -861,8 +869,8 @@ export default function AppointmentsScreen({ route }: Partial<AppointmentsScreen
             </View>
           ) : (
             <View style={styles.modalFooter}>
-              <Button title="Cancel" variant="secondary" onPress={closeBookModal} />
-              <Button title="Confirm and schedule" loading={booking} onPress={handleBookAppointment} />
+              <Button title="Cancel" variant="secondary" disabled={booking} onPress={closeBookModal} />
+              <Button title="Confirm and schedule" loading={booking} disabled={booking} onPress={handleBookAppointment} />
             </View>
           )
         }
