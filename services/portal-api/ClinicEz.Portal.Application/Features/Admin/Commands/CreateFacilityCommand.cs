@@ -206,7 +206,8 @@ public class CreateFacilityCommandHandler(
             Limits = limits,
             PlanTier = planTier,
             LicenseExpiresAt = licenseExpiresAt,
-            ConsoleUrl = consoleUrl
+            ConsoleUrl = consoleUrl,
+            IsWorkspaceEligible = facility.IsPatientDiscoveryEligible
         }, cancellationToken);
 
         // Customers' webhook endpoints learn about the facility, never about its licence.

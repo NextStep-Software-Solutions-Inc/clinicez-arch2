@@ -29,7 +29,7 @@ public class MessageCoverageTests
     [
         new(InteropTypes.FacilityLicenseIssued, [Portal], [Clinic, Lab, Pharmacy, Billing, Organization]),
         new(InteropTypes.FacilityProvisioned, [Lab, Pharmacy, Organization], [Portal]),
-        new(InteropTypes.FacilityDirectoryUpdated, [Portal], [Patient]),
+        new(InteropTypes.FacilityDirectoryUpdated, [Portal, Clinic], [Patient, Clinic]),
         new(InteropTypes.WorkspaceProfileUpdated, [Portal], [Clinic, Lab, Pharmacy, Organization]),
         new(InteropTypes.EntitlementsChanged, [Portal], [Clinic, Lab, Pharmacy, Billing, Organization]),
         new(InteropTypes.FacilityHeartbeat, [Clinic, Lab, Pharmacy, Organization], [Portal]),

@@ -913,6 +913,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.EnableQueuePushNotifications).HasDefaultValue(true);
             entity.Property(e => e.QueuePushNotificationThreshold).HasDefaultValue(2);
             entity.Property(e => e.EnableChipLevelQueueCalling).HasDefaultValue(false);
+            entity.Property(e => e.IsWorkspaceEligible).HasDefaultValue(false);
             entity.Property(e => e.IsDirectoryPublished).HasDefaultValue(false);
             entity.Property(e => e.IsOnlineBookingPaused).HasDefaultValue(false);
             entity.Property(e => e.DefaultApproverName).HasMaxLength(200);

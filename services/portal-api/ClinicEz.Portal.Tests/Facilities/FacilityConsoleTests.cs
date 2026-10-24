@@ -220,7 +220,8 @@ public class FacilityConsoleTests : IDisposable
 
         await handler.Handle(new CreateFacilityCommand(_tenantId.ToString(), FacilityType.Clinic, "Catalog Clinic"), CancellationToken.None);
 
-        var directory = Assert.Single(TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated));
+        var directory = TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated)
+            .Single(m => m.To.Kind == PartyKind.ControlPlane && m.To.Service == InteropServices.Patient);
         Assert.Equal(InteropServices.Patient, directory.To.Service);
         var payload = directory.GetPayload<FacilityCreatedEvent>();
         Assert.Equal("Catalog Clinic", payload.Name);

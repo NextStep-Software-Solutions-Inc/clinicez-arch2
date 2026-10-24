@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
@@ -112,8 +112,9 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.StaffNotificationRetentionDays,
             settings.EnableStatAudioAlert,
             settings.EnableStatVibrationAlert,
-            settings.IsDirectoryPublished,
-            settings.IsOnlineBookingPaused,
+            IsWorkspaceEligible: settings.IsWorkspaceEligible,
+            IsDirectoryPublished: settings.IsDirectoryPublished,
+            IsOnlineBookingPaused: settings.IsOnlineBookingPaused,
             settings.SpecialtyMode,
             settings.EnableDentalModule,
             settings.DefaultDoctorSharePercentage,

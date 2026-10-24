@@ -68,6 +68,9 @@ public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<Pub
         {
             // Enforce pre-flight readiness checklist
             var missingChecks = new List<string>();
+            if (!settings.IsWorkspaceEligible)
+                missingChecks.Add("Facility has not been granted workspace eligibility for patient app directory publishing in Portal");
+
             if (string.IsNullOrWhiteSpace(settings.OperatingHours))
                 missingChecks.Add("Operating hours must be configured");
 
@@ -134,7 +137,9 @@ public sealed class PublishClinicToDirectoryCommandHandler : IRequestHandler<Pub
             ContactNumber = settings.LetterheadContact,
             Classification = classification,
             IsPhilHealthAccredited = settings.IsPhilHealthConfigured,
-            IsPublic = settings.IsDirectoryPublished,
+            IsDirectoryPublished = settings.IsDirectoryPublished,
+            IsWorkspaceEligible = settings.IsWorkspaceEligible,
+            IsPublic = settings.IsWorkspaceEligible && settings.IsDirectoryPublished,
             IsBookingPaused = settings.IsOnlineBookingPaused,
             IsJoinGated = settings.IsJoinEnabled && !string.IsNullOrWhiteSpace(settings.JoinCode),
             JoinCode = settings.JoinCode,

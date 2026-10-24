@@ -174,6 +174,7 @@ public class ClinicEntitlementsTests
         var second = Guid.NewGuid();
         var first = Settings("a");
         first.LicenseExpiresAt = expiry;
+        first.IsWorkspaceEligible = true;
         db.ClinicSettings.AddRange(first, Settings("b", id: second, tenant: "tenant-two"), Settings("c", deleted: true, id: Guid.NewGuid()));
         await db.SaveChangesAsync();
 
@@ -181,8 +182,8 @@ public class ClinicEntitlementsTests
 
         entries.Should().BeEquivalentTo(new[]
         {
-            new FacilityRegistryEntry(Tenant, ClinicGuid, FacilityType.Clinic, expiry),
-            new FacilityRegistryEntry("tenant-two", second, FacilityType.Clinic, null)
+            new FacilityRegistryEntry(Tenant, ClinicGuid, FacilityType.Clinic, expiry, true),
+            new FacilityRegistryEntry("tenant-two", second, FacilityType.Clinic, null, false)
         });
     }
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace ClinicEz.Clinic.Application.Features.Settings.DTOs;
 
@@ -45,6 +45,7 @@ public sealed record ClinicSettingsDto(
     int StaffNotificationRetentionDays = 30,
     bool EnableStatAudioAlert = true,
     bool EnableStatVibrationAlert = true,
+    bool IsWorkspaceEligible = false,
     bool IsDirectoryPublished = false,
     bool IsOnlineBookingPaused = false,
     string? SpecialtyMode = "Medical",

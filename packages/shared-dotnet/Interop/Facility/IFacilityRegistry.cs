@@ -3,7 +3,7 @@ using ClinicEz.Shared.Common;
 namespace ClinicEz.Shared.Interop.Facility;
 
 /// <summary>One facility provisioned in a service, as reported in its heartbeat.</summary>
-public sealed record FacilityRegistryEntry(string TenantId, Guid FacilityId, FacilityType FacilityType, DateTime? LicenseExpiresAt);
+public sealed record FacilityRegistryEntry(string TenantId, Guid FacilityId, FacilityType FacilityType, DateTime? LicenseExpiresAt, bool? IsWorkspaceEligible = null);
 
 /// <summary>
 /// Per-service list of the facilities this service holds. Implemented once per service on its settings table; the shared

@@ -85,6 +85,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
             existingSettings.ClinicName = message.Name;
             existingSettings.TenantSlug = message.TenantSlug ?? existingSettings.TenantSlug;
             existingSettings.FacilitySlug = message.Slug ?? existingSettings.FacilitySlug;
+            existingSettings.IsWorkspaceEligible = message.IsWorkspaceEligible ?? false;
         }
         else
         {
@@ -101,6 +102,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 MaxStaffLimit = message.Limits?.MaxStaff ?? 5,
                 LicenseExpiresAt = message.LicenseExpiresAt,
                 EntitlementVersion = entitlementVersion,
+                IsWorkspaceEligible = message.IsWorkspaceEligible ?? false,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "SystemProvisioning"
             };

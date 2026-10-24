@@ -94,7 +94,8 @@ public sealed class FacilityHeartbeatService : BackgroundService
                 {
                     AppVersion = _appVersion,
                     LicenseExpiresAt = facility.LicenseExpiresAt,
-                    ClockUtc = clock
+                    ClockUtc = clock,
+                    IsWorkspaceEligible = facility.IsWorkspaceEligible
                 },
                 ttl: ttl);
         }
