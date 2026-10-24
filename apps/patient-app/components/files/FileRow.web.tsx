@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { View, Pressable, StyleSheet, ColorValue, DeviceEventEmitter } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ColorValue, DeviceEventEmitter, Pressable, StyleSheet, View } from 'react-native';
 import { AppIcon, type IconName } from '@ui/Icon';
-import IconButton from '@ui/IconButton';
 import ThemedText from '@ui/ThemedText';
-import Badge from '../ui/Badge';
 import { CircularProgress } from '../ui/CircularProgress';
-import { FileBrowserFile, formatBytes } from '../../services/files';
+import { FileBrowserFile } from '../../services/files';
+import {
+  formatRecordFileName,
+  formatRecordTimestamp,
+  getProvenanceIndicatorMeta,
+} from '../../services/files/recordPresentation';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import { useBreakpoint } from '../../hooks/useBreakpoint';
 import type { ColorToken } from '../../constants/theme';
-import { ProvenanceBadge } from '../records/ProvenanceBadge';
 import { ClinicalUrgencyBadge } from '../records/ClinicalUrgencyBadge';
+import { SyncStatusDot } from './SyncStatusDot';
+import { WebSwipeableRow } from './WebSwipeableRow.web';
 
 type BrowserItem = FileBrowserFile;
 
@@ -21,7 +24,10 @@ const TYPE_META: Record<string, { colorToken: ColorToken; icon: IconName }> = {
   'file-type-prescription': { colorToken: 'emergency', icon: 'pill' },
   'file-type-id': { colorToken: 'purple', icon: 'badge' },
 };
-const DEFAULT_META: { colorToken: ColorToken; icon: IconName } = { colorToken: 'textSecondary', icon: 'document' };
+const DEFAULT_META: { colorToken: ColorToken; icon: IconName } = {
+  colorToken: 'textSecondary',
+  icon: 'document',
+};
 
 function fileMeta(item: FileBrowserFile) {
   if (item.previewKind === 'image') return { colorToken: 'purple' as ColorToken, icon: 'image' as IconName };
@@ -45,29 +51,6 @@ export function Icon({
   return <AppIcon android={android} ios={ios} name={name} size={size} color={color} />;
 }
 
-function StatusDot({ status }: { status: string }) {
-  const { colors, radii, spacing } = useAppTheme();
-  const c: ColorToken =
-    status === 'synced' ? 'success' :
-      status === 'failed' ? 'emergency' :
-        status === 'syncing' ? 'info' : 'warning';
-  const bgToken: ColorToken =
-    status === 'synced' ? 'successBg' :
-      status === 'failed' ? 'emergencyBg' :
-        status === 'syncing' ? 'infoBg' : 'warningBg';
-  const l =
-    status === 'synced' ? 'Backed up' :
-      status === 'failed' ? 'Error' :
-        status === 'syncing' ? 'Syncing' : 'On device';
-
-  return (
-    <View style={[styles.dot, { backgroundColor: colors[bgToken], borderRadius: radii.full, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs }]}>
-      <View style={[styles.dotInner, { backgroundColor: colors[c], borderRadius: radii.full }]} />
-      <ThemedText variant="captionBold" color={c}>{l}</ThemedText>
-    </View>
-  );
-}
-
 export function FileRow({
   item,
   onPress,
@@ -87,9 +70,7 @@ export function FileRow({
   onErrorPress?: () => void;
 }) {
   const { colors, spacing, radii, sizes, shadows } = useAppTheme();
-  const { isCompact } = useBreakpoint();
   const [isHovered, setIsHovered] = useState(false);
-
   const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
@@ -104,23 +85,25 @@ export function FileRow({
   }, [item.id, item.syncStatus]);
 
   const meta = fileMeta(item);
-  const displayTitle = item.title?.trim() || item.name;
+  const displayFileName = formatRecordFileName(item);
+  const timestampSubtitle = formatRecordTimestamp(item);
+  const provenanceMeta = getProvenanceIndicatorMeta({
+    provenance: (item as any).provenance,
+    clinicId: item.clinicId,
+    facilityName: item.facilityName,
+  });
 
-  const rawDate = item.documentDate || item.createdAt;
-  const dateStr = rawDate
-    ? new Date(rawDate).toLocaleDateString(undefined, {
-      month: 'short', day: 'numeric', year: 'numeric',
-    })
-    : '';
+  const hasExportAction = Boolean(onShare || onDownload);
+  const preferShareLabel = Boolean(
+    onShare && typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+  );
+  const actionCount = (hasExportAction ? 1 : 0) + (onRename ? 1 : 0) + 1;
+  const actionWidth = actionCount * sizes.avatarLg;
 
-  const subtitle = [
-    item.facilityName,
-    formatBytes(item.sizeBytes),
-    dateStr,
-  ].filter(Boolean).join('  ·  ');
-
-  const handleDownloadClick = () => {
-    if (onDownload) {
+  const handleExportClick = () => {
+    if (preferShareLabel && onShare) {
+      onShare();
+    } else if (onDownload) {
       onDownload();
     } else if (onShare) {
       onShare();
@@ -128,134 +111,182 @@ export function FileRow({
   };
 
   return (
-    <Pressable
-      onPress={onPress}
-      onHoverIn={() => setIsHovered(true)}
-      onHoverOut={() => setIsHovered(false)}
-      accessibilityRole="button"
-      accessibilityLabel={displayTitle}
-      style={({ pressed }) => [
-        styles.row,
-        {
-          backgroundColor: isHovered ? colors.surfaceHighlight : colors.card,
-          padding: spacing.md,
-          borderRadius: radii.lg,
-          gap: spacing.md,
-          borderColor: isHovered ? colors.primaryBorder : colors.border,
-          borderWidth: sizes.borderWidth,
-          opacity: pressed ? 0.9 : 1,
-        },
-        shadows.sm,
-      ]}
-    >
-      <View
-        style={[
-          styles.rowIcon,
-          {
-            width: sizes.controlLg,
-            height: sizes.controlLg,
-            borderRadius: radii.md,
-            backgroundColor: colors[
-              meta.colorToken === 'info' ? 'infoBg' :
-                meta.colorToken === 'success' ? 'successBg' :
-                  meta.colorToken === 'warning' ? 'warningBg' :
-                    meta.colorToken === 'emergency' ? 'emergencyBg' :
-                      meta.colorToken === 'purple' ? 'purpleBg' : 'surfaceSubtle'
-            ],
-          },
-        ]}
-      >
-        <AppIcon name={meta.icon} color={meta.colorToken} size={sizes.iconLg} />
-      </View>
-
-      <View style={styles.rowBody}>
-        {/* Title and Badges */}
-        <View style={[styles.titleBadgeRow, { gap: spacing.xs, marginBottom: spacing.xxs }]}>
-          <ThemedText variant="bodyBold" numberOfLines={1} style={styles.titleText}>
-            {displayTitle}
-          </ThemedText>
-          {item.typeLabel ? (
-            <Badge label={item.typeLabel} tone="neutral" size="sm" />
-          ) : null}
-          <ClinicalUrgencyBadge
-            urgency={(item as any).urgency}
-            isCritical={(item as any).isCritical}
-          />
-          <ProvenanceBadge
-            provenance={(item as any).provenance}
-            clinicId={item.clinicId}
-            facilityName={item.facilityName}
-            compact
-          />
-        </View>
-
-        <ThemedText variant="small" color="textMuted" numberOfLines={1}>
-          {subtitle}
-        </ThemedText>
-
-        {item.syncStatus === 'failed' && (item.syncError || item.lastSyncError) && (
-          <ThemedText variant="caption" color="emergencyText" numberOfLines={2} style={{ marginTop: spacing.xxs }}>
-            {item.syncError || item.lastSyncError}
-          </ThemedText>
-        )}
-      </View>
-
-      {/* Status or syncing indicator */}
-      {item.syncStatus === 'failed' ? (
-        <Pressable onPress={onErrorPress} style={{ padding: spacing.xs, margin: -spacing.xs }} hitSlop={10}>
-          <StatusDot status={item.syncStatus} />
-        </Pressable>
-      ) : item.syncStatus === 'syncing' ? (
-        <CircularProgress
-          progress={uploadProgress}
-          size={sizes.iconXl}
-          color={colors.info}
-          trackColor={colors.surfaceSubtle}
-        />
-      ) : (
-        <StatusDot status={item.syncStatus} />
-      )}
-
-      {/* Hover quick action buttons on desktop/tablet web only (never reserve width when hidden) */}
-      {!isCompact && isHovered && (
-        <View style={[styles.quickActions, { gap: spacing.xs }]}>
-          {(onDownload || onShare) && (
-            <IconButton
-              icon="download"
-              accessibilityLabel="Download"
-              color="primary"
-              size={sizes.iconMd}
+    <WebSwipeableRow
+      rowId={item.id}
+      actionWidth={actionWidth}
+      renderRightActions={(close) => (
+        <View style={[styles.swipeWrap, { borderRadius: radii.lg }]}>
+          {hasExportAction ? (
+            <Pressable
               onPress={(e) => {
                 e.stopPropagation();
-                handleDownloadClick();
+                close();
+                handleExportClick();
               }}
-            />
-          )}
-          {onRename && (
-            <IconButton
-              icon="edit"
-              accessibilityLabel="Rename"
-              color="textSecondary"
-              size={sizes.iconMd}
+              accessibilityRole="button"
+              accessibilityLabel={preferShareLabel ? 'Share' : 'Download'}
+              style={[styles.swipeBtn, { backgroundColor: colors.infoBg, width: sizes.avatarLg }]}
+            >
+              <AppIcon
+                name={preferShareLabel ? 'share' : 'download'}
+                color="infoText"
+                size={sizes.iconMd}
+              />
+              <ThemedText variant="captionBold" color="infoText">
+                {preferShareLabel ? 'Share' : 'Download'}
+              </ThemedText>
+            </Pressable>
+          ) : null}
+          {onRename ? (
+            <Pressable
               onPress={(e) => {
                 e.stopPropagation();
+                close();
                 onRename();
               }}
-            />
-          )}
-          <IconButton
-            icon="trash"
-            accessibilityLabel="Delete"
-            color="emergency"
-            size={sizes.iconMd}
+              accessibilityRole="button"
+              accessibilityLabel="Rename"
+              style={[styles.swipeBtn, { backgroundColor: colors.surfaceSubtle, width: sizes.avatarLg }]}
+            >
+              <AppIcon name="edit" color="textSecondary" size={sizes.iconMd} />
+              <ThemedText variant="captionBold" color="textSecondary">
+                Rename
+              </ThemedText>
+            </Pressable>
+          ) : null}
+          <Pressable
             onPress={(e) => {
               e.stopPropagation();
+              close();
               onDelete();
             }}
-          />
+            accessibilityRole="button"
+            accessibilityLabel="Delete"
+            style={[styles.swipeBtn, { backgroundColor: colors.emergencyBg, width: sizes.avatarLg }]}
+          >
+            <AppIcon name="trash" color="emergencyText" size={sizes.iconMd} />
+            <ThemedText variant="captionBold" color="emergencyText">
+              Delete
+            </ThemedText>
+          </Pressable>
         </View>
       )}
-    </Pressable>
+    >
+      {({ isOpen, close, consumeDragGuard }) => (
+        <Pressable
+          onPress={() => {
+            if (consumeDragGuard()) return;
+            if (isOpen) {
+              close();
+              return;
+            }
+            onPress();
+          }}
+          onHoverIn={() => setIsHovered(true)}
+          onHoverOut={() => setIsHovered(false)}
+          accessibilityRole="button"
+          accessibilityLabel={displayFileName}
+          style={({ pressed }) => [
+            styles.row,
+            {
+              backgroundColor: isHovered ? colors.surfaceHighlight : colors.card,
+              padding: spacing.md,
+              borderRadius: radii.lg,
+              gap: spacing.md,
+              borderColor: isHovered ? colors.primaryBorder : colors.border,
+              borderWidth: sizes.borderWidth,
+              opacity: pressed ? 0.92 : 1,
+            },
+            shadows.sm,
+          ]}
+        >
+          <View
+            style={[
+              styles.rowIcon,
+              {
+                width: sizes.controlLg,
+                height: sizes.controlLg,
+                borderRadius: radii.md,
+                backgroundColor: colors[
+                  meta.colorToken === 'info' ? 'infoBg' :
+                    meta.colorToken === 'success' ? 'successBg' :
+                      meta.colorToken === 'warning' ? 'warningBg' :
+                        meta.colorToken === 'emergency' ? 'emergencyBg' :
+                          meta.colorToken === 'purple' ? 'purpleBg' : 'surfaceSubtle'
+                ],
+              },
+            ]}
+          >
+            <AppIcon name={meta.icon} color={meta.colorToken} size={sizes.iconLg} />
+          </View>
+
+          <View style={styles.rowBody}>
+            {/* Filename.ext + Urgent/STAT clinical indicator */}
+            <View style={[styles.titleRow, { gap: spacing.xs, marginBottom: spacing.xxs }]}>
+              <ThemedText variant="bodyBold" numberOfLines={1} style={styles.titleText}>
+                {displayFileName}
+              </ThemedText>
+              <ClinicalUrgencyBadge
+                urgency={(item as any).urgency}
+                isCritical={(item as any).isCritical}
+              />
+            </View>
+
+            {/* Timestamp subtitle + icon-only provenance indicator */}
+            <View style={[styles.subtitleRow, { gap: spacing.xs }]}>
+              {timestampSubtitle ? (
+                <ThemedText variant="small" color="textMuted" numberOfLines={1} style={styles.subtitleText}>
+                  {timestampSubtitle}
+                </ThemedText>
+              ) : null}
+              <View
+                accessible
+                accessibilityRole="image"
+                accessibilityLabel={provenanceMeta.accessibilityLabel}
+                style={styles.provenanceIconWrap}
+              >
+                <AppIcon
+                  name={provenanceMeta.icon}
+                  color={provenanceMeta.colorToken}
+                  size={sizes.iconSm}
+                />
+              </View>
+            </View>
+
+            {item.syncStatus === 'failed' && (item.syncError || item.lastSyncError) ? (
+              <ThemedText variant="caption" color="emergencyText" numberOfLines={2} style={{ marginTop: spacing.xxs }}>
+                {item.syncError || item.lastSyncError}
+              </ThemedText>
+            ) : null}
+          </View>
+
+          {/* Color-coded sync status dot (or progress ring while syncing) */}
+          {item.syncStatus === 'failed' ? (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation();
+                onErrorPress?.();
+              }}
+              style={{ padding: spacing.xs, margin: -spacing.xs }}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Sync error details"
+            >
+              <SyncStatusDot status={item.syncStatus} />
+            </Pressable>
+          ) : item.syncStatus === 'syncing' ? (
+            <CircularProgress
+              progress={uploadProgress}
+              size={sizes.iconLg}
+              color={colors.info}
+              trackColor={colors.surfaceSubtle}
+            />
+          ) : (
+            <SyncStatusDot status={item.syncStatus} />
+          )}
+        </Pressable>
+      )}
+    </WebSwipeableRow>
   );
 }
 
@@ -269,30 +300,40 @@ const styles = StyleSheet.create({
   rowIcon: {
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   rowBody: {
     flex: 1,
     minWidth: 0,
   },
-  titleBadgeRow: {
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
   },
   titleText: {
     flexShrink: 1,
   },
-  dot: {
+  subtitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
-  dotInner: {
-    width: 6,
-    height: 6,
+  subtitleText: {
+    flexShrink: 1,
   },
-  quickActions: {
-    flexDirection: 'row',
+  provenanceIconWrap: {
     alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  swipeWrap: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    overflow: 'hidden',
+    height: '100%',
+  },
+  swipeBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
   },
 });

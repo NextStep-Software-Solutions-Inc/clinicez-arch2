@@ -83,7 +83,7 @@ export default function WebPageHeader({
       ) : null}
 
       <View style={styles.titleWrap}>
-        <ThemedText variant={subtitle ? 'h3' : 'title'} numberOfLines={1}>
+        <ThemedText variant={subtitle ? (onBack ? 'bodyBold' : 'h3') : 'title'} numberOfLines={1}>
           {title ?? ''}
         </ThemedText>
         {subtitle ? (

@@ -10,7 +10,6 @@ import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import IconButton from '@ui/IconButton';
 import Card from '@ui/Card';
-import Badge from '@ui/Badge';
 import EmptyState from '@ui/EmptyState';
 import { AppIcon, type IconName } from '@ui/Icon';
 import { Divider } from '@ui/Primitives';
@@ -27,16 +26,20 @@ import {
   revokePreviewUri,
   renameFile,
   listFolderContents,
-  formatBytes,
 } from '../../../services/files';
+import {
+  formatRecordFileName,
+  formatRecordTimestamp,
+  getProvenanceIndicatorMeta,
+} from '../../../services/files/recordPresentation';
 import { resetAndRetryFailedUploads } from '../../../services/sync/uploadQueueService';
 import type { FilesScreenProps } from './navigationTypes';
 import { useFilesBrowser } from '../../../hooks/useFilesBrowser';
 import { FileRow } from '../../../components/files/FileRow.web';
+import { SyncStatusDot } from '../../../components/files/SyncStatusDot';
 import { CategoryPillBar } from '../../../components/records/CategoryPillBar';
 import { RecordsSyncBanner } from '../../../components/records/RecordsSyncBanner';
 import { RecordSkeletonList } from '../../../components/records/RecordSkeletonList';
-import { ProvenanceBadge } from '../../../components/records/ProvenanceBadge';
 import { ClinicalUrgencyBadge } from '../../../components/records/ClinicalUrgencyBadge';
 import {
   CATEGORY_FILTERS,
@@ -192,6 +195,35 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
     [patientId, getToken]
   );
 
+  const handleShareFile = useCallback(
+    async (fileId: string) => {
+      if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
+        await handleDownloadFile(fileId);
+        return;
+      }
+      try {
+        const preview = await preparePreviewFile(patientId, fileId, getToken);
+        try {
+          await navigator.share({
+            title: preview.name,
+            url: preview.uri,
+          });
+        } catch (err: any) {
+          if (err?.name !== 'AbortError') {
+            await handleDownloadFile(fileId);
+          }
+        } finally {
+          setTimeout(() => {
+            revokePreviewUri(fileId, preview.uri);
+          }, 10_000);
+        }
+      } catch (error) {
+        dialog.alert('Share Error', error instanceof Error ? error.message : 'Unable to share file.');
+      }
+    },
+    [patientId, getToken, handleDownloadFile]
+  );
+
   const openUpload = useCallback(() => {
     navigation.navigate('FilesUploadScreen');
   }, [navigation]);
@@ -217,20 +249,20 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
     const filtered = filterAndSearchRecords(contents?.files ?? [], activeCategory, query);
     filtered.sort((a, b) => {
       if (sortBy === 'name-desc') {
-        const nameA = a.title || a.name || '';
-        const nameB = b.title || b.name || '';
+        const nameA = formatRecordFileName(a);
+        const nameB = formatRecordFileName(b);
         return nameB.localeCompare(nameA);
       }
       if (sortBy === 'date-desc') {
-        const dateA = new Date(a.documentDate || a.createdAt || 0).getTime();
-        const dateB = new Date(b.documentDate || b.createdAt || 0).getTime();
+        const dateA = new Date(a.createdAt || a.documentDate || 0).getTime();
+        const dateB = new Date(b.createdAt || b.documentDate || 0).getTime();
         return dateB - dateA;
       }
       if (sortBy === 'size-desc') {
         return (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0);
       }
-      const nameA = a.title || a.name || '';
-      const nameB = b.title || b.name || '';
+      const nameA = formatRecordFileName(a);
+      const nameB = formatRecordFileName(b);
       return nameA.localeCompare(nameB);
     });
     return filtered;
@@ -461,12 +493,19 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                             key={file.id}
                             item={file}
                             onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
+                            onShare={() => handleShareFile(file.id)}
                             onDownload={() => handleDownloadFile(file.id)}
                             onRename={() =>
                               setRenameTarget({
                                 id: file.id,
-                                initialName: file.name,
+                                initialName: formatRecordFileName(file),
                               })
+                            }
+                            onErrorPress={() =>
+                              dialog.alert(
+                                'Upload Failed',
+                                file.syncError || file.lastSyncError || 'This record failed to upload to the cloud.'
+                              )
                             }
                             onDelete={() => handleDelete(file.id)}
                           />
@@ -476,15 +515,13 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                       <View style={[styles.gridRow, { gap: spacing.md }]}>
                         {filteredAndSortedRecords.map((file) => {
                           const meta = getFileMeta(file);
-                          const displayTitle = file.title?.trim() || file.name;
-                          const rawDate = file.documentDate || file.createdAt;
-                          const dateStr = rawDate
-                            ? new Date(rawDate).toLocaleDateString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })
-                            : '';
+                          const displayFileName = formatRecordFileName(file);
+                          const timestampStr = formatRecordTimestamp(file);
+                          const provenanceMeta = getProvenanceIndicatorMeta({
+                            provenance: (file as any).provenance,
+                            clinicId: file.clinicId,
+                            facilityName: file.facilityName,
+                          });
 
                           return (
                             <Pressable
@@ -518,7 +555,8 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                                 >
                                   <AppIcon name={meta.icon} color={meta.colorToken} size={sizes.iconLg} />
                                 </View>
-                                <View style={{ flexDirection: 'row', gap: spacing.xxs }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                                  <SyncStatusDot status={file.syncStatus} />
                                   <IconButton
                                     icon="download"
                                     accessibilityLabel="Download"
@@ -542,31 +580,27 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                                 </View>
                               </View>
 
-                              <ThemedText variant="bodyBold" numberOfLines={2}>
-                                {displayTitle}
-                              </ThemedText>
-
-                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
-                                <Badge tone="neutral" label={meta.label} size="sm" />
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                                <ThemedText variant="bodyBold" numberOfLines={2} style={{ flex: 1 }}>
+                                  {displayFileName}
+                                </ThemedText>
                                 <ClinicalUrgencyBadge
                                   urgency={(file as any).urgency}
                                   isCritical={(file as any).isCritical}
                                 />
-                                <ProvenanceBadge
-                                  provenance={(file as any).provenance}
-                                  clinicId={file.clinicId}
-                                  facilityName={file.facilityName}
-                                  compact
-                                />
                               </View>
 
-                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <ThemedText variant="caption" color="textMuted">
-                                  {file.facilityName || dateStr}
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                                <ThemedText variant="caption" color="textMuted" numberOfLines={1} style={{ flexShrink: 1 }}>
+                                  {timestampStr}
                                 </ThemedText>
-                                <ThemedText variant="caption" color="textMuted">
-                                  {formatBytes(file.sizeBytes)}
-                                </ThemedText>
+                                <View accessible accessibilityLabel={provenanceMeta.accessibilityLabel}>
+                                  <AppIcon
+                                    name={provenanceMeta.icon}
+                                    color={provenanceMeta.colorToken}
+                                    size={sizes.iconSm}
+                                  />
+                                </View>
                               </View>
                             </Pressable>
                           );

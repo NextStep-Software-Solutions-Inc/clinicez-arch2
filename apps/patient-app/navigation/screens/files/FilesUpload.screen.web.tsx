@@ -28,6 +28,7 @@ import {
   resolveDocumentTypeId,
 } from '../../../services/files/documentTypeMapping';
 import { enqueueOfflineRecordUpload } from '../../../services/sync/uploadQueueService';
+import { compressWebBlobForUpload } from '../../../services/files/fileCompression';
 import type { FilesScreenProps } from './navigationTypes';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 
@@ -136,19 +137,25 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
         : resolveDocumentTypeId(selectedDocumentTypeId, undefined, documentTypes);
       const category = inferCategoryFromDocumentType(selectedDocType);
 
+      const preparedUpload = await compressWebBlobForUpload({
+        blob: pickedFile.file,
+        fileName: pickedFile.name,
+        mimeType: pickedFile.mimeType,
+      });
+
       await enqueueOfflineRecordUpload(
         {
           patientId,
           documentTypeId: resolvedDocTypeId,
           category,
           title: title.trim(),
-          fileName: pickedFile.name,
-          mimeType: pickedFile.mimeType,
-          sizeBytes: pickedFile.size,
+          fileName: preparedUpload.fileName,
+          mimeType: preparedUpload.mimeType,
+          sizeBytes: preparedUpload.sizeBytes,
           documentDate: documentDate || undefined,
           facilityName: facilityName.trim() || undefined,
           notes: notes.trim() || undefined,
-          fileBlob: pickedFile.file,
+          fileBlob: preparedUpload.blob,
         },
         getToken
       );

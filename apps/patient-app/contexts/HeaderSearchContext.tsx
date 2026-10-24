@@ -5,16 +5,25 @@ export interface HeaderSearchEntry {
   hasActiveSearch: boolean;
 }
 
+export interface WebHeaderOverride {
+  title?: string;
+  subtitle?: string;
+}
+
 interface HeaderSearchContextValue {
   entries: Record<string, HeaderSearchEntry | undefined>;
   register: (tabKey: string, entry: HeaderSearchEntry) => void;
   unregister: (tabKey: string) => void;
+  headerOverrides: Record<string, WebHeaderOverride | undefined>;
+  registerHeaderOverride: (routeName: string, override: WebHeaderOverride) => void;
+  unregisterHeaderOverride: (routeName: string) => void;
 }
 
 const HeaderSearchContext = createContext<HeaderSearchContextValue | null>(null);
 
 export function HeaderSearchProvider({ children }: { children: React.ReactNode }) {
   const [entries, setEntries] = useState<Record<string, HeaderSearchEntry | undefined>>({});
+  const [headerOverrides, setHeaderOverrides] = useState<Record<string, WebHeaderOverride | undefined>>({});
 
   const register = useCallback((tabKey: string, entry: HeaderSearchEntry) => {
     setEntries((prev) => {
@@ -39,9 +48,35 @@ export function HeaderSearchProvider({ children }: { children: React.ReactNode }
     });
   }, []);
 
+  const registerHeaderOverride = useCallback((routeName: string, override: WebHeaderOverride) => {
+    setHeaderOverrides((prev) => {
+      const existing = prev[routeName];
+      if (existing && existing.title === override.title && existing.subtitle === override.subtitle) {
+        return prev;
+      }
+      return { ...prev, [routeName]: override };
+    });
+  }, []);
+
+  const unregisterHeaderOverride = useCallback((routeName: string) => {
+    setHeaderOverrides((prev) => {
+      if (!(routeName in prev)) return prev;
+      const next = { ...prev };
+      delete next[routeName];
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
-    () => ({ entries, register, unregister }),
-    [entries, register, unregister]
+    () => ({
+      entries,
+      register,
+      unregister,
+      headerOverrides,
+      registerHeaderOverride,
+      unregisterHeaderOverride,
+    }),
+    [entries, register, unregister, headerOverrides, registerHeaderOverride, unregisterHeaderOverride]
   );
 
   return <HeaderSearchContext.Provider value={value}>{children}</HeaderSearchContext.Provider>;
@@ -83,4 +118,36 @@ export function useHeaderSearchEntry(tabKey?: string): HeaderSearchEntry | undef
   const ctx = useContext(HeaderSearchContext);
   if (!ctx || !tabKey) return undefined;
   return ctx.entries[tabKey];
+}
+
+/**
+ * Allows nested stack screens on web (e.g. `FileViewerScreen` inside `FilesStackWeb`)
+ * to dynamically set the top `WebPageHeader` title and subtitle.
+ */
+export function useRegisterWebHeaderOverride(
+  routeName: string,
+  title?: string,
+  subtitle?: string
+) {
+  const ctx = useContext(HeaderSearchContext);
+
+  useEffect(() => {
+    if (!ctx) return;
+    if (!title && !subtitle) return;
+    ctx.registerHeaderOverride(routeName, { title, subtitle });
+  }, [ctx, routeName, title, subtitle]);
+
+  useEffect(() => {
+    if (!ctx) return;
+    return () => {
+      ctx.unregisterHeaderOverride(routeName);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeName]);
+}
+
+export function useWebHeaderOverride(routeName?: string): WebHeaderOverride | undefined {
+  const ctx = useContext(HeaderSearchContext);
+  if (!ctx || !routeName) return undefined;
+  return ctx.headerOverrides[routeName];
 }

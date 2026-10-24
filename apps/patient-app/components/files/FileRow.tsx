@@ -1,15 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { View, Pressable, StyleSheet, ColorValue, DeviceEventEmitter } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ColorValue, DeviceEventEmitter, Pressable, StyleSheet, View } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { AppIcon, type IconName } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
-import Badge from '../ui/Badge';
 import { CircularProgress } from '../ui/CircularProgress';
-import { FileBrowserFile, formatBytes } from '../../services/files';
+import { FileBrowserFile } from '../../services/files';
+import {
+  formatRecordFileName,
+  formatRecordTimestamp,
+  getProvenanceIndicatorMeta,
+} from '../../services/files/recordPresentation';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import type { ColorToken } from '../../constants/theme';
-import { ProvenanceBadge } from '../records/ProvenanceBadge';
 import { ClinicalUrgencyBadge } from '../records/ClinicalUrgencyBadge';
+import { SyncStatusDot } from './SyncStatusDot';
 
 type BrowserItem = FileBrowserFile;
 
@@ -20,7 +24,10 @@ const TYPE_META: Record<string, { colorToken: ColorToken; icon: IconName }> = {
   'file-type-prescription': { colorToken: 'emergency', icon: 'pill' },
   'file-type-id': { colorToken: 'purple', icon: 'badge' },
 };
-const DEFAULT_META: { colorToken: ColorToken; icon: IconName } = { colorToken: 'textSecondary', icon: 'document' };
+const DEFAULT_META: { colorToken: ColorToken; icon: IconName } = {
+  colorToken: 'textSecondary',
+  icon: 'document',
+};
 
 function fileMeta(item: FileBrowserFile) {
   if (item.previewKind === 'image') return { colorToken: 'purple' as ColorToken, icon: 'image' as IconName };
@@ -44,29 +51,6 @@ export function Icon({
   return <AppIcon android={android} ios={ios} name={name} size={size} color={color} />;
 }
 
-function StatusDot({ status }: { status: string }) {
-  const { colors, radii, spacing } = useAppTheme();
-  const c: ColorToken =
-    status === 'synced' ? 'success' :
-      status === 'failed' ? 'emergency' :
-        status === 'syncing' ? 'info' : 'warning';
-  const bgToken: ColorToken =
-    status === 'synced' ? 'successBg' :
-      status === 'failed' ? 'emergencyBg' :
-        status === 'syncing' ? 'infoBg' : 'warningBg';
-  const l =
-    status === 'synced' ? 'Backed up' :
-      status === 'failed' ? 'Error' :
-        status === 'syncing' ? 'Syncing' : 'On device';
-
-  return (
-    <View style={[styles.dot, { backgroundColor: colors[bgToken], borderRadius: radii.full, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs }]}>
-      <View style={[styles.dotInner, { backgroundColor: colors[c], borderRadius: radii.full }]} />
-      <ThemedText variant="captionBold" color={c}>{l}</ThemedText>
-    </View>
-  );
-}
-
 export function FileRow({
   item,
   onPress,
@@ -84,7 +68,6 @@ export function FileRow({
   onErrorPress?: () => void;
 }) {
   const { colors, spacing, radii, sizes, shadows } = useAppTheme();
-
   const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
@@ -99,27 +82,23 @@ export function FileRow({
   }, [item.id, item.syncStatus]);
 
   const meta = fileMeta(item);
-  const displayTitle = item.title?.trim() || item.name;
-
-  const rawDate = item.documentDate || item.createdAt;
-  const dateStr = rawDate
-    ? new Date(rawDate).toLocaleDateString(undefined, {
-      month: 'short', day: 'numeric', year: 'numeric',
-    })
-    : '';
-
-  const subtitleParts = [
-    item.facilityName,
-    formatBytes(item.sizeBytes),
-    dateStr,
-  ].filter(Boolean).join('  ·  ');
+  const displayFileName = formatRecordFileName(item);
+  const timestampSubtitle = formatRecordTimestamp(item);
+  const provenanceMeta = getProvenanceIndicatorMeta({
+    provenance: (item as any).provenance,
+    clinicId: item.clinicId,
+    facilityName: item.facilityName,
+  });
 
   const swipeableRef = React.useRef<any>(null);
 
   const renderRightActions = () => (
     <View style={[styles.swipeWrap, { borderRadius: radii.lg, marginLeft: spacing.xs }]}>
       <Pressable
-        onPress={() => { swipeableRef.current?.close(); onShare(); }}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onShare();
+        }}
         accessibilityRole="button"
         accessibilityLabel="Share"
         style={[styles.swipeBtn, { backgroundColor: colors.infoBg, width: sizes.avatarLg }]}
@@ -127,9 +106,12 @@ export function FileRow({
         <AppIcon name="share" color="infoText" size={sizes.iconMd} />
         <ThemedText variant="captionBold" color="infoText">Share</ThemedText>
       </Pressable>
-      {onRename && (
+      {onRename ? (
         <Pressable
-          onPress={() => { swipeableRef.current?.close(); onRename(); }}
+          onPress={() => {
+            swipeableRef.current?.close();
+            onRename();
+          }}
           accessibilityRole="button"
           accessibilityLabel="Rename"
           style={[styles.swipeBtn, { backgroundColor: colors.surfaceSubtle, width: sizes.avatarLg }]}
@@ -137,9 +119,12 @@ export function FileRow({
           <AppIcon name="edit" color="textSecondary" size={sizes.iconMd} />
           <ThemedText variant="captionBold" color="textSecondary">Rename</ThemedText>
         </Pressable>
-      )}
+      ) : null}
       <Pressable
-        onPress={() => { swipeableRef.current?.close(); onDelete(); }}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onDelete();
+        }}
         accessibilityRole="button"
         accessibilityLabel="Delete"
         style={[styles.swipeBtn, { backgroundColor: colors.emergencyBg, width: sizes.avatarLg }]}
@@ -155,7 +140,7 @@ export function FileRow({
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={displayTitle}
+        accessibilityLabel={displayFileName}
         style={({ pressed }) => [
           styles.row,
           {
@@ -191,51 +176,64 @@ export function FileRow({
         </View>
 
         <View style={styles.rowBody}>
-          {/* Title and Badges */}
-          <View style={[styles.titleBadgeRow, { gap: spacing.xs, marginBottom: spacing.xxs }]}>
+          {/* Filename.ext + Urgent/STAT clinical indicator */}
+          <View style={[styles.titleRow, { gap: spacing.xs, marginBottom: spacing.xxs }]}>
             <ThemedText variant="bodyBold" numberOfLines={1} style={styles.titleText}>
-              {displayTitle}
+              {displayFileName}
             </ThemedText>
-            {item.typeLabel ? (
-              <Badge label={item.typeLabel} tone="neutral" size="sm" />
-            ) : null}
             <ClinicalUrgencyBadge
               urgency={(item as any).urgency}
               isCritical={(item as any).isCritical}
             />
-            <ProvenanceBadge
-              provenance={(item as any).provenance}
-              clinicId={item.clinicId}
-              facilityName={item.facilityName}
-              compact
-            />
           </View>
 
-          {/* Subtitle */}
-          <ThemedText variant="small" color="textMuted" numberOfLines={1}>
-            {subtitleParts}
-          </ThemedText>
+          {/* Timestamp subtitle + icon-only provenance indicator */}
+          <View style={[styles.subtitleRow, { gap: spacing.xs }]}>
+            {timestampSubtitle ? (
+              <ThemedText variant="small" color="textMuted" numberOfLines={1} style={styles.subtitleText}>
+                {timestampSubtitle}
+              </ThemedText>
+            ) : null}
+            <View
+              accessible
+              accessibilityRole="image"
+              accessibilityLabel={provenanceMeta.accessibilityLabel}
+              style={styles.provenanceIconWrap}
+            >
+              <AppIcon
+                name={provenanceMeta.icon}
+                color={provenanceMeta.colorToken}
+                size={sizes.iconSm}
+              />
+            </View>
+          </View>
 
-          {item.syncStatus === 'failed' && (item.syncError || item.lastSyncError) && (
+          {item.syncStatus === 'failed' && (item.syncError || item.lastSyncError) ? (
             <ThemedText variant="caption" color="emergencyText" numberOfLines={2} style={{ marginTop: spacing.xxs }}>
               {item.syncError || item.lastSyncError}
             </ThemedText>
-          )}
+          ) : null}
         </View>
 
         {item.syncStatus === 'failed' ? (
-          <Pressable onPress={onErrorPress} style={{ padding: spacing.xs, margin: -spacing.xs }} hitSlop={10}>
-            <StatusDot status={item.syncStatus} />
+          <Pressable
+            onPress={onErrorPress}
+            style={{ padding: spacing.xs, margin: -spacing.xs }}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Sync error details"
+          >
+            <SyncStatusDot status={item.syncStatus} />
           </Pressable>
         ) : item.syncStatus === 'syncing' ? (
           <CircularProgress
             progress={uploadProgress}
-            size={sizes.iconXl}
+            size={sizes.iconLg}
             color={colors.info}
             trackColor={colors.surfaceSubtle}
           />
         ) : (
-          <StatusDot status={item.syncStatus} />
+          <SyncStatusDot status={item.syncStatus} />
         )}
       </Pressable>
     </Swipeable>
@@ -252,27 +250,30 @@ const styles = StyleSheet.create({
   rowIcon: {
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   rowBody: {
     flex: 1,
     minWidth: 0,
   },
-  titleBadgeRow: {
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
   },
   titleText: {
     flexShrink: 1,
   },
-  dot: {
+  subtitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
-  dotInner: {
-    width: 6,
-    height: 6,
+  subtitleText: {
+    flexShrink: 1,
+  },
+  provenanceIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   swipeWrap: {
     flexDirection: 'row',

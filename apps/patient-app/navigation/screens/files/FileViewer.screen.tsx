@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ZoomableImage from '../../../components/ui/ZoomableImage';
@@ -16,17 +16,19 @@ import { useContentInsets } from '../../../hooks/useContentInsets';
 import { cleanupPreviewCache, preparePreviewFile, getFileById, deleteItem, renameFile } from '../../../services/files';
 import type { PreparedPreviewFile } from '../../../services/files';
 import { formatRecordCategoryLabel } from '../../../services/files/documentTypeMapping';
+import {
+  formatRecordFileName,
+  formatRecordTimestamp,
+  formatViewerHeaderTitle,
+} from '../../../services/files/recordPresentation';
 import type { FilesScreenProps } from './navigationTypes';
 import RenameModal from '../../../components/ui/RenameModal';
-import Badge from '../../../components/ui/Badge';
-import { ProvenanceBadge } from '../../../components/records/ProvenanceBadge';
-import { ClinicalUrgencyBadge } from '../../../components/records/ClinicalUrgencyBadge';
 import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 
 export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewerScreen'>) {
   const { colors, spacing, radii, sizes, shadows } = useAppTheme();
-  const navigation = useNavigation('FileViewerScreen');
+  const navigation = useNavigation<any>('FileViewerScreen');
   const patientId = usePatientId();
   const { runWithAutoLockPaused } = useAppAuth();
   const { getToken } = useClerkAuth();
@@ -41,6 +43,43 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
+  const categoryLabel = useMemo(
+    () =>
+      formatRecordCategoryLabel(fileMetadata?.documentTypeId, documentTypes) ??
+      formatRecordCategoryLabel(fileMetadata?.type, documentTypes) ??
+      fileMetadata?.type ??
+      null,
+    [fileMetadata?.documentTypeId, fileMetadata?.type, documentTypes]
+  );
+
+  const viewerHeaderTitle = useMemo(() => {
+    if (!fileMetadata && !preview) return undefined;
+    return formatViewerHeaderTitle(fileMetadata ?? preview, categoryLabel);
+  }, [fileMetadata, preview, categoryLabel]);
+
+  const viewerHeaderSubtitle = useMemo(() => {
+    return formatRecordTimestamp(fileMetadata) || undefined;
+  }, [fileMetadata]);
+
+  useEffect(() => {
+    if (!viewerHeaderTitle) return;
+    navigation.setOptions({
+      title: viewerHeaderTitle,
+      headerTitle: () => (
+        <View style={styles.nativeHeaderTitleWrap}>
+          <ThemedText variant="bodyBold" numberOfLines={1}>
+            {viewerHeaderTitle}
+          </ThemedText>
+          {viewerHeaderSubtitle ? (
+            <ThemedText variant="caption" color="textMuted" numberOfLines={1}>
+              {viewerHeaderSubtitle}
+            </ThemedText>
+          ) : null}
+        </View>
+      ),
+    });
+  }, [navigation, viewerHeaderTitle, viewerHeaderSubtitle]);
+
   useEffect(() => {
     let mounted = true;
     Promise.all([
@@ -51,7 +90,6 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
         if (!mounted) return;
         setPreview(previewRes);
         setFileMetadata(fileRes);
-        navigation.setOptions({ title: fileRes?.name || previewRes.name });
       })
       .catch((err) => {
         if (mounted) setError(err instanceof Error ? err.message : 'Unable to open this preview.');
@@ -61,7 +99,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
       mounted = false;
       cleanupPreviewCache(patientId, fileId).catch(() => {});
     };
-  }, [fileId, navigation, patientId, getToken]);
+  }, [fileId, patientId, getToken]);
 
   const handleShare = async () => {
     if (!preview) return;
@@ -74,7 +112,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
       await runWithAutoLockPaused(() =>
         Sharing.shareAsync(preview.uri, {
           mimeType: preview.mimeType,
-          dialogTitle: preview.name,
+          dialogTitle: formatRecordFileName(fileMetadata ?? preview),
         })
       );
     } catch (err) {
@@ -85,7 +123,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const handleDelete = async () => {
     const confirmed = await dialog.confirm({
       title: 'Delete file?',
-      message: `Are you sure you want to delete "${fileMetadata?.name || preview?.name}"?`,
+      message: `Are you sure you want to delete "${formatRecordFileName(fileMetadata ?? preview)}"?`,
       confirmLabel: 'Delete',
       destructive: true,
     });
@@ -100,14 +138,10 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   };
 
   const handleRename = async (newName: string) => {
-    try {
-      await renameFile(patientId, fileId, newName);
-      setRenameModalOpen(false);
-      navigation.setOptions({ title: newName });
-      setFileMetadata((prev: any) => ({ ...prev, name: newName }));
-    } catch (err) {
-      throw err;
-    }
+    await renameFile(patientId, fileId, newName);
+    const updated = await getFileById(patientId, fileId);
+    setRenameModalOpen(false);
+    setFileMetadata((prev: any) => updated ?? { ...prev, name: newName });
   };
 
   if (error) {
@@ -133,92 +167,8 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     );
   }
 
-  const categoryBadgeLabel =
-    formatRecordCategoryLabel(fileMetadata?.documentTypeId, documentTypes) ??
-    formatRecordCategoryLabel(fileMetadata?.type, documentTypes) ??
-    fileMetadata?.type ??
-    null;
-
   return (
     <View style={[styles.viewer, { backgroundColor: colors.background }]}>
-      {/* Top Clinical Header Bar */}
-      <View
-        style={[
-          styles.clinicalHeaderCard,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            borderBottomWidth: sizes.borderWidth,
-            padding: spacing.md,
-            gap: spacing.xs,
-          },
-          shadows.sm,
-        ]}
-      >
-        <View style={styles.headerTitleRow}>
-          <ThemedText variant="bodyBold" numberOfLines={1} style={styles.headerTitleText}>
-            {fileMetadata?.title || fileMetadata?.name || preview?.name}
-          </ThemedText>
-          <View style={styles.headerBadgesRow}>
-            {categoryBadgeLabel ? (
-              <Badge label={categoryBadgeLabel} tone="neutral" size="sm" />
-            ) : null}
-            <ClinicalUrgencyBadge
-              urgency={fileMetadata?.urgency}
-              isCritical={fileMetadata?.isCritical}
-            />
-            <ProvenanceBadge
-              provenance={fileMetadata?.provenance}
-              clinicId={fileMetadata?.clinicId}
-              facilityName={fileMetadata?.facilityName}
-              compact
-            />
-          </View>
-        </View>
-
-        <View style={styles.headerMetaRow}>
-          {fileMetadata?.facilityName ? (
-            <View style={styles.metaItem}>
-              <AppIcon name="hospital" size={sizes.iconSm} color="textMuted" />
-              <ThemedText variant="caption" color="textMuted">
-                {fileMetadata.facilityName}
-              </ThemedText>
-            </View>
-          ) : null}
-          {(fileMetadata?.documentDate || fileMetadata?.createdAt) ? (
-            <View style={styles.metaItem}>
-              <AppIcon name="calendar" size={sizes.iconSm} color="textMuted" />
-              <ThemedText variant="caption" color="textMuted">
-                {fileMetadata.documentDate ||
-                  new Date(fileMetadata.createdAt).toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
-              </ThemedText>
-            </View>
-          ) : null}
-        </View>
-
-        {fileMetadata?.notes ? (
-          <View
-            style={[
-              styles.notesWrap,
-              {
-                backgroundColor: colors.surfaceSubtle,
-                borderRadius: radii.md,
-                paddingHorizontal: spacing.sm,
-                paddingVertical: spacing.xs,
-              },
-            ]}
-          >
-            <ThemedText variant="caption" color="textSecondary" numberOfLines={2}>
-              {fileMetadata.notes}
-            </ThemedText>
-          </View>
-        ) : null}
-      </View>
-
       <View style={styles.previewSurface}>
         {preview.previewKind === 'image' ? (
           <ZoomableImage uri={preview.uri} />
@@ -345,14 +295,14 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
         </GestureHandlerRootView>
       </Modal>
 
-      {renameModalOpen && fileMetadata && (
+      {renameModalOpen && (fileMetadata || preview) ? (
         <RenameModal
           visible={renameModalOpen}
-          initialName={fileMetadata.name}
+          initialName={formatRecordFileName(fileMetadata ?? preview)}
           onClose={() => setRenameModalOpen(false)}
           onSave={handleRename}
         />
-      )}
+      ) : null}
     </View>
   );
 }
@@ -362,6 +312,10 @@ const styles = StyleSheet.create({
   viewer: { flex: 1 },
   previewSurface: { flex: 1 },
   pdf: { flex: 1, width: '100%' },
+  nativeHeaderTitleWrap: {
+    minWidth: 0,
+    maxWidth: '100%',
+  },
   floatingToolbarWrap: {
     position: 'absolute',
     bottom: 0,
@@ -400,36 +354,5 @@ const styles = StyleSheet.create({
   closeOverlayBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  clinicalHeaderCard: {
-    width: '100%',
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  headerTitleText: {
-    flex: 1,
-    flexShrink: 1,
-  },
-  headerBadgesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  headerMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  notesWrap: {
-    marginTop: 2,
   },
 });

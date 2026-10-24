@@ -3,8 +3,12 @@ import { StyleSheet, View } from 'react-native';
 import type { NavigationState, ParamListBase } from '@react-navigation/native';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import { HeaderSearchProvider, useHeaderSearchEntry } from '../../contexts/HeaderSearchContext';
-import { resolveWebHeaderState } from '../../navigation/webSections';
+import {
+  HeaderSearchProvider,
+  useHeaderSearchEntry,
+  useWebHeaderOverride,
+} from '../../contexts/HeaderSearchContext';
+import { resolveFocusedScreenName, resolveWebHeaderState } from '../../navigation/webSections';
 import { useWebKeyboardShortcuts } from '../../hooks/useWebKeyboardShortcuts.web';
 import WebSidebar from './WebSidebar.web';
 import WebPageHeader from './WebPageHeader.web';
@@ -22,6 +26,8 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
   useWebKeyboardShortcuts(navigation);
 
   const headerInfo = resolveWebHeaderState(state, descriptors);
+  const focusedScreenName = resolveFocusedScreenName(state);
+  const headerOverride = useWebHeaderOverride(!headerInfo.isRootTab ? focusedScreenName : undefined);
   const showBackHeader = !headerInfo.isRootTab;
   const showCompactTabHeader = headerInfo.isRootTab && isCompact;
   const activeSearch = useHeaderSearchEntry(headerInfo.isRootTab ? headerInfo.tabKey : undefined);
@@ -41,7 +47,11 @@ function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFr
   const content = (
     <View style={styles.column}>
       {showBackHeader ? (
-        <WebPageHeader title={headerInfo.title} onBack={onBack} />
+        <WebPageHeader
+          title={headerOverride?.title || headerInfo.title}
+          subtitle={headerOverride?.subtitle ?? headerInfo.subtitle}
+          onBack={onBack}
+        />
       ) : showCompactTabHeader ? (
         <WebPageHeader
           title={headerInfo.title}

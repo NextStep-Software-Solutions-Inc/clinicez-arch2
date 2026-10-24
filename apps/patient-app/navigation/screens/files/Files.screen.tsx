@@ -28,6 +28,7 @@ import {
   listFolderContents,
 } from '../../../services/files';
 import { resetAndRetryFailedUploads } from '../../../services/sync/uploadQueueService';
+import { formatRecordFileName } from '../../../services/files/recordPresentation';
 import type { FilesScreenProps } from './navigationTypes';
 import { useFilesBrowser } from '../../../hooks/useFilesBrowser';
 import { FileRow } from '../../../components/files/FileRow';
@@ -300,7 +301,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
               onRename={() => {
                 setRenameTarget({
                   id: item.id,
-                  initialName: item.name,
+                  initialName: formatRecordFileName(item),
                 });
               }}
               onDelete={() => handleDelete(item.id)}

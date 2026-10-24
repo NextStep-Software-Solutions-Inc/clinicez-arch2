@@ -1,3 +1,4 @@
+import { compressWebBlobForUpload } from '../files/fileCompression';
 import { blobStorage } from '../storage';
 
 export interface UploadFile {
@@ -51,7 +52,12 @@ export async function appendFilePart(form: FormData, field: string, file: Upload
       !rawBlob.type || rawBlob.type === 'application/octet-stream'
         ? rawBlob.slice(0, rawBlob.size, contentType)
         : rawBlob;
-    form.append(field, typedBlob, file.name);
+    const prepared = await compressWebBlobForUpload({
+      blob: typedBlob,
+      fileName: file.name,
+      mimeType: typedBlob.type || contentType,
+    });
+    form.append(field, prepared.blob, prepared.fileName);
     return;
   }
   form.append(field, { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob);

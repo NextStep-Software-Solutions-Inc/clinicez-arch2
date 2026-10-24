@@ -97,6 +97,13 @@ mock.module('react-native-svg', () => ({
   Rect: createMockComponent('Rect'),
   Line: createMockComponent('Line'),
   default: createMockComponent('Svg'),
+  Polyline: createMockComponent('Polyline'),
+  Polygon: createMockComponent('Polygon'),
+  Defs: createMockComponent('Defs'),
+  LinearGradient: createMockComponent('LinearGradient'),
+  Stop: createMockComponent('Stop'),
+  G: createMockComponent('G'),
+  Text: createMockComponent('SvgText'),
 }));
 
 mock.module('@expo-google-fonts/geist', () => ({

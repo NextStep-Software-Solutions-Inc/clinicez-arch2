@@ -23,6 +23,7 @@ import {
   type RefreshDocumentTypesOptions,
 } from './filesShared';
 import { resolveDocumentTypeId } from './documentTypeMapping';
+import { compressWebBlobForUpload } from './fileCompression';
 import { getPatientRecordStreamUrl } from '../api/filesApi';
 import { blobStorage } from '../storage';
 import { enqueueOfflineRecordUpload, drainUploadQueue } from '../sync/uploadQueueService';
@@ -137,18 +138,24 @@ export async function importFiles(input: ImportFilesInput): Promise<string[]> {
     const mimeType = picked.mimeType || source.type || mimeFromExtension(extension);
     if (!extension && mimeType) extension = extensionFromMime(mimeType);
     const fileType = findBestFileType(input.documentTypeId, extension, mimeType, types);
-    const sizeBytes = picked.sizeBytes ?? source.size ?? 0;
     const arrayBuffer = await source.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
+    const rawBlob = new Blob([arrayBuffer], { type: mimeType || 'application/octet-stream' });
+    const prepared = await compressWebBlobForUpload({
+      blob: rawBlob,
+      fileName: requestedName,
+      mimeType: mimeType || 'application/octet-stream',
+    });
+    const compressedBuffer = await prepared.blob.arrayBuffer();
+    const bytes = new Uint8Array(compressedBuffer);
 
     const recordId = await enqueueOfflineRecordUpload(
       {
         patientId: input.patientId,
         documentTypeId: resolveDocumentTypeId(fileType?.id ?? input.documentTypeId, undefined, types),
         title: requestedName,
-        fileName: requestedName,
-        mimeType: mimeType || 'application/octet-stream',
-        sizeBytes,
+        fileName: prepared.fileName,
+        mimeType: prepared.mimeType,
+        sizeBytes: prepared.sizeBytes,
         fileBlob: bytes,
       },
       getToken

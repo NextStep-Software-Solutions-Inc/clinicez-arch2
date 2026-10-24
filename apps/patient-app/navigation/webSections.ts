@@ -150,6 +150,25 @@ export function resolveWebHeaderState(
   };
 }
 
+/**
+ * Resolves the leaf focused screen name (e.g. `FileViewerScreen` inside `FilesScreen`,
+ * or `NotificationScreen` on MainStack) for dynamic header overrides.
+ */
+export function resolveFocusedScreenName(state: NavigationState<ParamListBase>): string | undefined {
+  const route = state.routes[state.index];
+  if (!route) return undefined;
+
+  if (route.name === 'BottomTabs') {
+    const tabState = route.state as NavigationState<ParamListBase> | undefined;
+    const activeTabRoute = tabState?.routes[tabState.index ?? 0];
+    const nestedFromRoute = activeTabRoute ? getFocusedRouteNameFromRoute(activeTabRoute as any) : undefined;
+    const nestedFromParams = (route.params as any)?.params?.screen as string | undefined;
+    return nestedFromRoute ?? nestedFromParams ?? getFocusedRouteNameFromRoute(route as any);
+  }
+
+  return route.name;
+}
+
 /** Which sidebar item is active for the focused route of the Main stack. */
 export function resolveActiveSection(state: NavigationState<ParamListBase>): WebSectionKey {
   const route = state.routes[state.index];
