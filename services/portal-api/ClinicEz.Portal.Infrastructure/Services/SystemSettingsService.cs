@@ -203,6 +203,13 @@ public sealed class SystemSettingsService(
         );
     }
 
+    public async Task<BillingPublicConfigDto> GetBillingPublicConfigAsync(CancellationToken ct = default)
+    {
+        var trialDays = await GetSettingIntAsync("Billing:TrialDays", 14, ct);
+        var defaultBillingCadence = await GetSettingValueAsync("Billing:DefaultBillingCadence", "monthly", ct);
+        return new BillingPublicConfigDto(trialDays, defaultBillingCadence);
+    }
+
     public async Task<ContactPlatformConfigDto> GetContactPlatformConfigAsync(CancellationToken ct = default)
     {
         var hq = await GetSettingValueAsync(

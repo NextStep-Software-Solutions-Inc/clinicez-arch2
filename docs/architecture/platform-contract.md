@@ -72,7 +72,12 @@ Shared library: [`AddFacilityLocalAuth(configuration, audience)`](../../packages
 
 ## 3. Envelope handlers and the outbox/inbox
 
-All cross-service and cross-facility traffic is an [`InteropEnvelope`](../../packages/shared-dotnet/Interop/InteropEnvelope.cs) relayed by the hub. There is no broker and no direct HTTP between services (see [interop-hub.md](interop-hub.md)).
+All cross-service and cross-facility traffic is an [`InteropEnvelope`](../../packages/shared-dotnet/Interop/InteropEnvelope.cs) relayed by the hub. Direct inter-service HTTP communication is strictly forbidden across all services **except `portal <-> patient`**. Facility services (`clinic-api`, `laboratory-api`, `pharmacy-api`, `organization-api`, `billing-api`) run in outbound-only on-premise Edge Cells (`Hub:Mode=Local`, zero inbound ports) and MUST communicate exclusively via `services/interop-hub`. Next.js BFF proxy routes (`src/app/api/...`) over `portal-api` or `patient-api` are strictly forbidden in `apps/portal-web`.
+
+### Service boundary mandates and frontend integration
+
+- **No Inter-Service HTTP Between Facility Services**: Direct HTTP communication between microservices is an architectural violation. With the sole exception of cloud control plane `portal <-> patient` coordination, all services must use the Interop Hub. Facility services deployed in on-premise Edge Cells maintain zero open inbound ports and make only outbound HTTPS calls.
+- **Zero BFF Proxy Routes**: In `apps/portal-web`, Next.js BFF route handlers (`src/app/api/...`) proxying requests to `portal-api` or `patient-api` are strictly forbidden. Frontend clients connect directly to `portal-api` and `patient-api` using Clerk bearer authentication and domain-derived URLs.
 
 ### Wire up
 
@@ -199,7 +204,7 @@ The shared handler accepts the message only from the portal and only when addres
 
 ### Request-reply
 
-A service never calls another service over HTTP. When it needs an answer (GAMOT lookups clinic -> pharmacy, PhilHealth operations clinic -> proxy, PhilHealth credentials proxy -> portal) it sends a request envelope and awaits the reply envelope that carries the same `CorrelationId`. Both halves are normal outbox/hub messages, so signing, routing rules, at-least-once delivery and the edge store-and-forward path apply unchanged.
+A service never calls another service over HTTP (with the sole exception of cloud `portal <-> patient` coordination). When any facility service needs an answer (GAMOT lookups clinic -> pharmacy, PhilHealth operations clinic -> proxy, PhilHealth credentials proxy -> portal) it sends a request envelope and awaits the reply envelope that carries the same `CorrelationId`. Both halves are normal outbox/hub messages, so signing, routing rules, at-least-once delivery and the edge store-and-forward path apply unchanged.
 
 Requester (the type pair is declared in [`InteropTypes`](../../packages/shared-dotnet/Interop/InteropTypes.cs), payloads in [`PlatformServiceContracts.cs`](../../packages/shared-dotnet/Interoperability/PlatformServiceContracts.cs)):
 

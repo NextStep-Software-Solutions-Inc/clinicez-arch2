@@ -3,6 +3,7 @@
 import React, { useState, useRef } from "react";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2 } from "lucide-react";
+import { getPortalApiUrl } from "@/utils/domain";
 import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget";
 
 export function NewsletterForm() {
@@ -28,9 +29,12 @@ export function NewsletterForm() {
 
     try {
       setLoading(true);
-      const res = await fetch("/api/v1/public/newsletter", {
+      const res = await fetch(`${getPortalApiUrl()}/public/newsletter`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         body: JSON.stringify({
           email: cleanEmail,
           source: "footer",
