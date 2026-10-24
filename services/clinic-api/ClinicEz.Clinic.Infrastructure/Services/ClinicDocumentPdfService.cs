@@ -155,7 +155,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                         c.Item().Text(t =>
                         {
                             t.Span("Fitness Status: ").Bold().FontColor("#166534");
-                            t.Span(cert.FitnessStatus.ToUpperInvariant()).Bold().FontColor("#15803D");
+                            t.Span(MedicalCertificate.FormatFitnessStatus(cert.FitnessStatus)).Bold().FontColor("#15803D");
                         });
 
                         if (cert.RecommendedRestDays > 0)
