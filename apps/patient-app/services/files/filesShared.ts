@@ -492,11 +492,18 @@ export async function renameFile(patientId: string, fileId: string, name: string
     .limit(1);
   if (!file) return;
 
+  const existingExt =
+    normalizeExtension(file.extension) ||
+    extensionFromName(file.name) ||
+    extensionFromMime(file.mimeType ?? '');
+  const finalName =
+    existingExt && !extensionFromName(trimmedName) ? `${trimmedName}.${existingExt}` : trimmedName;
+
   const op = file.syncOperation === 'insert' && !file.serverId ? 'insert' : 'update';
 
   await targetDb
     .update(filesMetadata)
-    .set({ name: trimmedName, updatedAt: now(), syncStatus: 'queued', syncOperation: op, syncError: null })
+    .set({ name: finalName, updatedAt: now(), syncStatus: 'queued', syncOperation: op, syncError: null })
     .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, fileId)));
 }
 

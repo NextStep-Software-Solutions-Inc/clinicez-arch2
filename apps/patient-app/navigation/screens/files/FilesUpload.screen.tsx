@@ -33,6 +33,7 @@ import {
   resolveDocumentTypeId,
 } from '../../../services/files/documentTypeMapping';
 import { enqueueOfflineRecordUpload } from '../../../services/sync/uploadQueueService';
+import { IMAGE_UPLOAD_QUALITY } from '../../../services/files/fileCompression';
 
 export function sanitizeTitleFromFileName(fileName: string): string {
   const baseName = fileName.replace(/\.[^/.]+$/, '');
@@ -129,8 +130,8 @@ export default function FilesUploadScreen() {
       }
       const result = await runWithAutoLockPaused(() =>
         source === 'camera'
-          ? ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 })
-          : ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85, allowsMultipleSelection: false })
+          ? ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: IMAGE_UPLOAD_QUALITY })
+          : ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: IMAGE_UPLOAD_QUALITY, allowsMultipleSelection: false })
       );
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];

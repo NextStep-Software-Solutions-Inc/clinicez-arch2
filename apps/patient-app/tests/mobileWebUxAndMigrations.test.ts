@@ -130,7 +130,8 @@ describe('Mobile Web UI/UX & Compact Header State Resolution', () => {
     expect(filesWebSource.includes('Health Records & Documents')).toBe(true);
 
     const fileRowWebSource = readApp('components/files/FileRow.web.tsx');
-    expect(fileRowWebSource.includes('!isCompact && isHovered')).toBe(true);
+    expect(fileRowWebSource.includes('WebSwipeableRow')).toBe(true);
+    expect(fileRowWebSource.includes('!isCompact && isHovered')).toBe(false);
 
     const pillBarSource = readApp('components/records/CategoryPillBar.tsx');
     expect(pillBarSource.includes('FilterChipBar')).toBe(true);

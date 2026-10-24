@@ -1,6 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import type { UploadFile } from '../api/multipart';
+import { IMAGE_UPLOAD_QUALITY } from '../files/fileCompression';
 import { UPLOAD_ALLOWED_MIME_TYPES } from './uploadRules';
 
 export interface PickedFile {
@@ -42,7 +43,7 @@ export async function pickPhotoFile(): Promise<PickedFile | null> {
 
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
-    quality: 0.85,
+    quality: IMAGE_UPLOAD_QUALITY,
   });
   const asset = result.assets?.[0];
   if (result.canceled || !asset) return null;
