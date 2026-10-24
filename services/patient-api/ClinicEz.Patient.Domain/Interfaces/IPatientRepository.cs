@@ -7,6 +7,9 @@ public interface IPatientRepository : IBaseRepository<ClinicEz.Patient.Domain.En
     Task<ClinicEz.Patient.Domain.Entities.Patient?> GetByClerkUserIdAsync(string clerkUserId, CancellationToken cancellationToken = default);
     Task<ClinicEz.Patient.Domain.Entities.Patient?> GetByClerkUserIdWithDetailsAsync(string clerkUserId, CancellationToken cancellationToken = default);
 
+    /// <summary>Retrieves the caller's own patient record for intake autofill with data-minimized child collections (Addresses, GovernmentIds, Allergies).</summary>
+    Task<ClinicEz.Patient.Domain.Entities.Patient?> GetForMeByClerkUserIdAsync(string clerkUserId, CancellationToken cancellationToken = default);
+
     /// <summary>The patient with this ClinicEzId (as stored, e.g. <c>CE-AB12-CD34</c>), or null.</summary>
     Task<ClinicEz.Patient.Domain.Entities.Patient?> GetByClinicEzIdAsync(string clinicEzId, CancellationToken cancellationToken = default);
     Task<ClinicEz.Patient.Domain.Entities.Patient?> GetWithProfileAsync(Guid id, CancellationToken cancellationToken = default);

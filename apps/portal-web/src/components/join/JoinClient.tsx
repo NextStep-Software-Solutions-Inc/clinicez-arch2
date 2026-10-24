@@ -21,7 +21,7 @@ import {
   UserCheck,
   Smartphone,
 } from "lucide-react";
-import { useUser, SignInButton } from "@clerk/nextjs";
+import { useUser, SignInButton, useAuth } from "@clerk/nextjs";
 import {
   type PatientJoinRequestedPayload,
   type PatientJoinAllergyItem,
@@ -42,6 +42,7 @@ import { JoinCodeModal } from "@/components/join/JoinCodeModal";
 import { OutsideDocumentDropzone } from "@/components/join/OutsideDocumentDropzone";
 import { DigitalPassCard } from "@/components/join/DigitalPassCard";
 import { apiBaseUrl } from "@/transport/apiClient";
+import { getPatientApiUrl, getPortalApiUrl } from "@/utils/domain";
 import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget";
 
 interface JoinClientProps {
@@ -221,10 +222,13 @@ export default function JoinClient({
   let clerkUser: ReturnType<typeof useUser>["user"] = null;
   let isSignedIn = false;
   let isInsideClerk = false;
+  let getToken: (() => Promise<string | null>) | null = null;
   try {
     const userHook = useUser();
+    const authHook = useAuth();
     clerkUser = userHook.user;
     isSignedIn = Boolean(userHook.isSignedIn);
+    getToken = authHook.getToken;
     isInsideClerk = true;
   } catch {
     // Graceful fallback outside ClerkProvider (e.g. testing)
@@ -241,8 +245,12 @@ export default function JoinClient({
     setIsHydratingProfile(true);
 
     try {
-      const response = await fetch("/api/v1/patients/me", {
-        headers: { Accept: "application/json" },
+      const token = getToken ? await getToken() : null;
+      const response = await fetch(`${getPatientApiUrl()}/patients/me`, {
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
 
       if (response.ok) {
@@ -489,7 +497,7 @@ export default function JoinClient({
     setIsSubmitting(true);
 
     try {
-      const joinUrl = typeof window !== "undefined" ? "/api/v1/public/join" : `${apiBaseUrl}/public/join`;
+      const joinUrl = `${getPortalApiUrl()}/public/join`;
       const response = await fetch(joinUrl, {
         method: "POST",
         headers: {
