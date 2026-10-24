@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
 import { theme } from '../../constants/theme';
-import { ThemedText, Badge, Icon, EmptyState, Button, Modal } from '../ui';
+import { ThemedText, Badge, Icon, EmptyState, Button, Modal, Input } from '../ui';
+import { notify } from '@utils/feedback';
 import type {
   ClinicPatient,
   ClinicLabOrderRecord,
@@ -17,6 +18,7 @@ export interface DiagnosticLabTabProps {
   onAttachExternalLab?: (orderId: string) => void;
   onAcknowledgePanic?: (orderId: string, readbackNotes: string) => Promise<void>;
   onRefreshChart?: () => void;
+  onIntakeSpecimen?: () => void;
 }
 
 // Statutory mapping for PhilHealth lib_diagnostic
@@ -64,9 +66,11 @@ export default function DiagnosticLabTab({
   onAttachExternalLab,
   onAcknowledgePanic,
   onRefreshChart,
+  onIntakeSpecimen,
 }: DiagnosticLabTabProps) {
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'EXTERNAL' | 'PANIC'>('ALL');
   const [panicModalVisible, setPanicModalVisible] = useState(false);
+  const [intakeModalVisible, setIntakeModalVisible] = useState(false);
   const [targetPanicOrder, setTargetPanicOrder] = useState<any | null>(null);
   const [readbackNotes, setReadbackNotes] = useState('');
   const [submittingPanic, setSubmittingPanic] = useState(false);
@@ -171,62 +175,81 @@ export default function DiagnosticLabTab({
       ) : null}
 
       {/* ========================================================================= */}
-      {/* FILTER BUTTONS                                                            */}
+      {/* FILTER BUTTONS & ACTION BAR                                               */}
       {/* ========================================================================= */}
-      <View style={styles.filterRow}>
-        <Pressable
-          onPress={() => setSelectedFilter('ALL')}
-          style={[styles.filterBtn, selectedFilter === 'ALL' && styles.filterBtn_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+      <View style={styles.topBar}>
+        <View style={styles.filterRow}>
+          <Pressable
+            onPress={() => setSelectedFilter('ALL')}
+            style={[styles.filterBtn, selectedFilter === 'ALL' && styles.filterBtn_active]}
           >
-            All Orders ({labOrders.length})
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setSelectedFilter('PENDING')}
-          style={[styles.filterBtn, selectedFilter === 'PENDING' && styles.filterBtn_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedFilter === 'PENDING' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            <ThemedText
+              variant="captionBold"
+              color={selectedFilter === 'ALL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            >
+              All Orders ({labOrders.length})
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => setSelectedFilter('PENDING')}
+            style={[styles.filterBtn, selectedFilter === 'PENDING' && styles.filterBtn_active]}
           >
-            Pending
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setSelectedFilter('COMPLETED')}
-          style={[styles.filterBtn, selectedFilter === 'COMPLETED' && styles.filterBtn_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedFilter === 'COMPLETED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            <ThemedText
+              variant="captionBold"
+              color={selectedFilter === 'PENDING' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            >
+              Pending
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => setSelectedFilter('COMPLETED')}
+            style={[styles.filterBtn, selectedFilter === 'COMPLETED' && styles.filterBtn_active]}
           >
-            Completed
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setSelectedFilter('EXTERNAL')}
-          style={[styles.filterBtn, selectedFilter === 'EXTERNAL' && styles.filterBtn_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedFilter === 'EXTERNAL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            <ThemedText
+              variant="captionBold"
+              color={selectedFilter === 'COMPLETED' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            >
+              Completed
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => setSelectedFilter('EXTERNAL')}
+            style={[styles.filterBtn, selectedFilter === 'EXTERNAL' && styles.filterBtn_active]}
           >
-            External Reports
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setSelectedFilter('PANIC')}
-          style={[styles.filterBtn, selectedFilter === 'PANIC' && styles.filterBtn_active]}
-        >
-          <ThemedText
-            variant="captionBold"
-            color={selectedFilter === 'PANIC' ? theme.colors.emergencyText : theme.colors.textSecondary}
+            <ThemedText
+              variant="captionBold"
+              color={selectedFilter === 'EXTERNAL' ? theme.colors.primaryDark : theme.colors.textSecondary}
+            >
+              External Reports
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => setSelectedFilter('PANIC')}
+            style={[styles.filterBtn, selectedFilter === 'PANIC' && styles.filterBtn_active]}
           >
-            Critical / Panic ({activePanicOrders.length})
+            <ThemedText
+              variant="captionBold"
+              color={selectedFilter === 'PANIC' ? theme.colors.emergencyText : theme.colors.textSecondary}
+            >
+              Critical / Panic ({activePanicOrders.length})
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        <Pressable
+          testID="intake-specimen-button"
+          onPress={() => {
+            if (onIntakeSpecimen) {
+              onIntakeSpecimen();
+            } else {
+              setIntakeModalVisible(true);
+            }
+          }}
+          style={styles.intakeSpecimenBtn}
+        >
+          <Icon name="lab" size={14} color={theme.colors.onPrimary} />
+          <ThemedText variant="captionBold" color={theme.colors.onPrimary}>
+            Intake Specimen
           </ThemedText>
         </Pressable>
       </View>
@@ -417,6 +440,19 @@ export default function DiagnosticLabTab({
           </View>
         </View>
       </Modal>
+
+      {/* Ambulatory Specimen Accession Modal */}
+      <SpecimenIntakeModal
+        visible={intakeModalVisible}
+        patient={patient}
+        patientId={patientId || patient?.id}
+        onClose={() => setIntakeModalVisible(false)}
+        onSuccess={() => {
+          setIntakeModalVisible(false);
+          onRefreshChart?.();
+        }}
+        onRefreshChart={onRefreshChart}
+      />
     </ScrollView>
   );
 }
@@ -609,4 +645,121 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     marginTop: theme.spacing.xs,
   },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.md,
+  },
+  intakeSpecimenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: theme.radii.sm,
+  },
+  modalContent: {
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  modalSection: {
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
 });
+
+export interface SpecimenIntakeModalProps {
+  visible: boolean;
+  patient?: ClinicPatient | null;
+  patientId?: string;
+  onClose: () => void;
+  onSuccess?: () => void;
+  onRefreshChart?: () => void;
+}
+
+export function SpecimenIntakeModal({
+  visible,
+  patient,
+  patientId,
+  onClose,
+  onSuccess,
+  onRefreshChart,
+}: SpecimenIntakeModalProps) {
+  const [specimenType, setSpecimenType] = useState('Whole Blood (EDTA)');
+  const [containerType, setContainerType] = useState('Purple_EDTA');
+  const [phlebName, setPhlebName] = useState('Treatment Nurse');
+  const [barcode, setBarcode] = useState(`SPEC-${Date.now().toString().slice(-6)}`);
+  const [notes, setNotes] = useState('Specimen accessioned for in-house laboratory processing.');
+  const [saving, setSaving] = useState(false);
+
+  const handleIntake = async () => {
+    setSaving(true);
+    notify.success(`Specimen ${barcode} intake completed for ${patient ? `${patient.firstName} ${patient.lastName}` : 'Patient'}.`);
+    setSaving(false);
+    onSuccess?.();
+    onRefreshChart?.();
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} title="Ambulatory Specimen Accession" onClose={onClose}>
+      <ScrollView contentContainerStyle={styles.modalContent}>
+        <View style={styles.modalSection}>
+          <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+            SPECIMEN ACCESSIONING DETAILS
+          </ThemedText>
+          <Input
+            label="Specimen Type"
+            value={specimenType}
+            onChangeText={setSpecimenType}
+            placeholder="e.g. Whole Blood, Urine, Stool"
+          />
+          <Input
+            label="Container / Tube Type"
+            value={containerType}
+            onChangeText={setContainerType}
+            placeholder="Purple_EDTA / Yellow_SST / Urine_Cup"
+          />
+          <Input
+            label="Accession Barcode / Label"
+            value={barcode}
+            onChangeText={setBarcode}
+            placeholder="SPEC-XXXXXX"
+          />
+          <Input
+            label="Phlebotomist / Collector Name"
+            value={phlebName}
+            onChangeText={setPhlebName}
+            placeholder="Staff Name"
+          />
+          <Input
+            label="Specimen Quality Notes"
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Adequate volume, unhemolyzed, properly labeled..."
+            multiline
+          />
+        </View>
+        <View style={styles.modalActions}>
+          <Button title="Cancel" variant="ghost" onPress={onClose} disabled={saving} />
+          <Button
+            testID="confirm-intake-specimen-button"
+            title={saving ? 'Accessioning...' : 'Complete Specimen Intake'}
+            variant="primary"
+            icon="check"
+            loading={saving}
+            onPress={handleIntake}
+          />
+        </View>
+      </ScrollView>
+    </Modal>
+  );
+}

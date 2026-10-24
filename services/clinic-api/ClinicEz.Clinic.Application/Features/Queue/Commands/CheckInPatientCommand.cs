@@ -31,7 +31,8 @@ public sealed record CheckInPatientCommand(
     string? ChiefComplaint = null,
     string? RoomOrStation = null,
     Guid? RoomId = null,
-    DateOnly? QueueDate = null) : IRequest<QueueItemDto>;
+    DateOnly? QueueDate = null,
+    VisitType VisitType = VisitType.Consultation) : IRequest<QueueItemDto>;
 
 public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPatientCommand>
 {
@@ -40,6 +41,7 @@ public sealed class CheckInPatientCommandValidator : AbstractValidator<CheckInPa
         RuleFor(x => x.PatientId).NotEmpty();
         RuleFor(x => x.PatientName).NotEmpty().MaximumLength(150);
         RuleFor(x => x.Priority).IsInEnum();
+        RuleFor(x => x.VisitType).IsInEnum();
         RuleFor(x => x.ChiefComplaint)
             .MaximumLength(255)
             .WithMessage("Chief complaint must not exceed 255 characters.");
@@ -88,32 +90,38 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
         var today = request.QueueDate
             ?? await ClinicTimeZoneResolver.ResolveTodayAsync(_workspaceProfiles, _clinicContext.TenantId, cancellationToken, _settingsRepository);
 
-        // Enforce active queue day uniqueness: prevent duplicate active tickets today
-        QueueStatus[] activeStatuses =
-        [
-            QueueStatus.Waiting,
-            QueueStatus.Triaged,
-            QueueStatus.InConsultation,
-            QueueStatus.PendingProcedure,
-            QueueStatus.ReEvaluation,
-            QueueStatus.OnHold
-        ];
-
-        var activeTicket = await _queueRepository.Query(q =>
-            q.ClinicId == _clinicContext.ClinicId &&
-            q.QueueDate == today &&
-            q.PatientId == request.PatientId &&
-            activeStatuses.Contains(q.Status))
-            .OrderByDescending(q => q.CheckInTime)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (activeTicket != null)
+        // Enforce active queue day uniqueness: prevent duplicate active tickets today.
+        // Terminal tickets (Completed, Cancelled, NoShow, DischargedNonDoctor, Diverted) do not conflict.
+        // Non-consultation visits (e.g. retail purchase, cashier settlement, vitals check) do not conflict.
+        if (request.VisitType == VisitType.Consultation)
         {
-            throw new ActiveQueueTicketConflictException(
-                activeTicket.Id,
-                activeTicket.QueueNumber,
-                activeTicket.Status,
-                activeTicket.PatientName);
+            QueueStatus[] activeStatuses =
+            [
+                QueueStatus.Waiting,
+                QueueStatus.Triaged,
+                QueueStatus.InConsultation,
+                QueueStatus.PendingProcedure,
+                QueueStatus.ReEvaluation,
+                QueueStatus.OnHold
+            ];
+
+            var activeTicket = await _queueRepository.Query(q =>
+                q.ClinicId == _clinicContext.ClinicId &&
+                q.QueueDate == today &&
+                q.PatientId == request.PatientId &&
+                q.VisitType == VisitType.Consultation &&
+                activeStatuses.Contains(q.Status))
+                .OrderByDescending(q => q.CheckInTime)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (activeTicket != null)
+            {
+                throw new ActiveQueueTicketConflictException(
+                    activeTicket.Id,
+                    activeTicket.QueueNumber,
+                    activeTicket.Status,
+                    activeTicket.PatientName);
+            }
         }
 
         // Sequence number generation for today in this clinic
@@ -221,6 +229,7 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             RoomId = resolvedRoomId,
             Priority = request.Priority,
             Status = QueueStatus.Waiting,
+            VisitType = request.VisitType,
             CheckInTime = DateTime.UtcNow,
             ChiefComplaint = sanitizedComplaint,
             RoomOrStation = resolvedRoomOrStation,
@@ -290,7 +299,11 @@ public sealed class CheckInPatientCommandHandler : IRequestHandler<CheckInPatien
             false,
             null,
             queueItem.RoomOrStation,
-            queueItem.RoomId);
+            queueItem.RoomId,
+            queueItem.VisitType,
+            queueItem.DischargeNotes,
+            queueItem.DischargedAt,
+            queueItem.DischargedByStaffId);
     }
 
     private static string? SanitizeChiefComplaint(string? rawInput)

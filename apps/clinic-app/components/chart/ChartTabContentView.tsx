@@ -9,6 +9,7 @@ import NursingProceduresTab from './NursingProceduresTab';
 import StatutoryImmunizationsTab from './StatutoryImmunizationsTab';
 import HealthProfilesTab from './HealthProfilesTab';
 import ExternalDocumentVaultTab from './ExternalDocumentVaultTab';
+import AdministrativeDocumentsTab from './AdministrativeDocumentsTab';
 import DentalChartTab from './DentalChartTab';
 import type { ChartLayoutProps } from './types';
 
@@ -36,6 +37,8 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
     onAdministerVaccine,
     onRecordHistoricalVaccine,
     onRecordAefi,
+    onOrderProcedure,
+    onIntakeSpecimen,
   } = props;
 
   if (loadingChart) {
@@ -87,6 +90,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           onOpenLabSlip={(order: any) => onViewLabSlip?.(order.id)}
           onAttachExternalResult={onAttachExternalResult}
           onRefreshChart={onRefreshChart}
+          onIntakeSpecimen={onIntakeSpecimen}
         />
       )}
       {activeTab === 'procedures' && (
@@ -94,6 +98,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           patient={patient}
           patientId={patient?.id}
           procedures={patientChart?.proceduresHistory || []}
+          onOrderProcedure={onOrderProcedure}
           onRefreshChart={onRefreshChart}
         />
       )}
@@ -107,6 +112,7 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           onRecordHistoricalVaccine={onRecordHistoricalVaccine}
           onRecordAefi={onRecordAefi}
           onRefreshChart={onRefreshChart}
+          queueItemId={props.queueItemId}
         />
       )}
       {activeTab === 'profiles' && patient && (
@@ -127,6 +133,15 @@ export default function ChartTabContentView(props: ChartLayoutProps) {
           onUploadDocument={onUploadDocument}
           onVerifyAttachment={onVerifyAttachment}
           onDownloadAttachment={onDownloadAttachment}
+          onRefreshChart={onRefreshChart}
+        />
+      )}
+      {activeTab === 'documents' && (
+        <AdministrativeDocumentsTab
+          patient={patient}
+          patientId={patient?.id}
+          medicalCertificates={patientChart?.medicalCertificates || []}
+          referralLetters={patientChart?.referralLetters || []}
           onRefreshChart={onRefreshChart}
         />
       )}

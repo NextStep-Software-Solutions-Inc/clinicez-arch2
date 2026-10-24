@@ -14,6 +14,7 @@ import {
   ErrorState,
   SkeletonList,
   Modal,
+  Input,
   SegmentedControl,
   StatCard,
 } from '@ui';
@@ -39,6 +40,7 @@ import {
 } from '../../services/clinicService';
 import { ProcedureExecutionModal } from '../../components/chart/NursingProceduresTab';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
+import DivertEmergencyModal from '../../components/queue/DivertEmergencyModal';
 
 export default function QueueScreen() {
   const navigation = useNavigation<any>();
@@ -121,6 +123,14 @@ export default function QueueScreen() {
   // Procedure execution modal
   const [executingProc, setExecutingProc] = useState<ClinicalProcedureRecord | null>(null);
 
+  // Discharge non-doctor modal
+  const [dischargeModalItem, setDischargeModalItem] = useState<PatientQueueItem | null>(null);
+  const [dischargeRemarks, setDischargeRemarks] = useState<string>('');
+  const [isDischarging, setIsDischarging] = useState<boolean>(false);
+
+  // Emergency diversion modal
+  const [divertModalItem, setDivertModalItem] = useState<PatientQueueItem | null>(null);
+
   const loadData = useCallback(async () => {
     setError(null);
     const todayStr = getManilaTodayStr();
@@ -190,6 +200,24 @@ export default function QueueScreen() {
     loadData();
   };
 
+  const handleDischargeNonDoctor = async () => {
+    if (!dischargeModalItem) return;
+    setIsDischarging(true);
+    const [, err] = await clinicService.completeNonDoctorVisit(
+      dischargeModalItem.id,
+      dischargeRemarks.trim() || undefined,
+    );
+    setIsDischarging(false);
+    if (err) {
+      notify.error(err.message || 'Failed to discharge visit.');
+      return;
+    }
+    notify.success(`${dischargeModalItem.patientName} discharged successfully.`);
+    setDischargeModalItem(null);
+    setDischargeRemarks('');
+    loadData();
+  };
+
   const getStatusBadge = (status: QueueStatus): { label: string; variant: BadgeVariant } => {
     switch (status) {
       case 'Waiting':
@@ -204,6 +232,10 @@ export default function QueueScreen() {
         return { label: 'Re-Evaluation Ready', variant: 'emergency' };
       case 'Completed':
         return { label: 'Completed', variant: 'neutral' };
+      case 'DischargedNonDoctor':
+        return { label: 'Discharged (Non-Doctor)', variant: 'success' };
+      case 'Diverted':
+        return { label: 'Diverted (ER Transfer)', variant: 'emergency' };
       default:
         return { label: status, variant: 'neutral' };
     }
@@ -370,6 +402,13 @@ export default function QueueScreen() {
                           variant={getPriorityVariant(ticket.priority)}
                           size="sm"
                         />
+                        {ticket.visitType && ticket.visitType !== 'Consultation' ? (
+                          <Badge
+                            label={ticket.visitType}
+                            variant="neutral"
+                            size="sm"
+                          />
+                        ) : null}
                         <Badge
                           label={statusBadge.label}
                           variant={statusBadge.variant}
@@ -400,10 +439,51 @@ export default function QueueScreen() {
                           In: {ticket.checkInTime ? formatClinicTime(ticket.checkInTime) : '—'}
                         </ThemedText>
                       </View>
+                      {ticket.status === 'Diverted' && ticket.divertedToFacility ? (
+                        <View style={styles.metaItem}>
+                          <Icon name="alert" size={14} color={theme.colors.emergency} />
+                          <ThemedText variant="captionBold" color={theme.colors.emergency}>
+                            ER Diverted: {ticket.divertedToFacility}
+                          </ThemedText>
+                        </View>
+                      ) : null}
                     </View>
 
                     {/* ACTIONS BAR */}
                     <View style={styles.ticketActionsRow}>
+                      {ticket.status !== 'Completed' &&
+                        ticket.status !== 'DischargedNonDoctor' &&
+                        ticket.status !== 'Diverted' &&
+                        ticket.status !== 'Cancelled' &&
+                        ticket.status !== 'NoShow' && (
+                          <Button
+                            title="Transfer / Divert to ER"
+                            variant="danger"
+                            icon="alert"
+                            size="sm"
+                            testID="divert-emergency-button"
+                            onPress={() => setDivertModalItem(ticket)}
+                          />
+                        )}
+
+                      {(ticket.status === 'Triaged' || (ticket.visitType && ticket.visitType !== 'Consultation')) &&
+                        ticket.status !== 'Completed' &&
+                        ticket.status !== 'DischargedNonDoctor' &&
+                        ticket.status !== 'Diverted' &&
+                        ticket.status !== 'Cancelled' &&
+                        ticket.status !== 'NoShow' && (
+                          <Button
+                            title="Discharge / Complete Visit"
+                            variant="success"
+                            icon="check"
+                            size="sm"
+                            onPress={() => {
+                              setDischargeModalItem(ticket);
+                              setDischargeRemarks('');
+                            }}
+                          />
+                        )}
+
                       {ticket.status === 'Triaged' && (
                         <Button
                           title="Call to Room"
@@ -477,7 +557,7 @@ export default function QueueScreen() {
                         />
                       )}
 
-                      {ticket.status === 'Completed' && (
+                      {(ticket.status === 'Completed' || ticket.status === 'DischargedNonDoctor') && (
                         <Button
                           title="View Chart"
                           variant="ghost"
@@ -558,6 +638,52 @@ export default function QueueScreen() {
           </View>
         </Modal>
 
+        {/* DISCHARGE NON-DOCTOR MODAL */}
+        <Modal
+          visible={!!dischargeModalItem}
+          title={`Discharge Visit — ${dischargeModalItem?.patientName || ''}`}
+          onClose={() => {
+            if (!isDischarging) {
+              setDischargeModalItem(null);
+              setDischargeRemarks('');
+            }
+          }}
+        >
+          <View style={styles.modalContent}>
+            <ThemedText variant="body" color={theme.colors.text}>
+              Complete and discharge Ticket {dischargeModalItem?.queueNumber} ({dischargeModalItem?.patientName}). This marks the visit as finished without requiring a doctor consultation.
+            </ThemedText>
+
+            <Input
+              label="Discharge Remarks (Optional)"
+              placeholder="e.g. Vitals normal, patient counseled, OTC dispensed, specimen received..."
+              value={dischargeRemarks}
+              onChangeText={setDischargeRemarks}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancel"
+                variant="ghost"
+                disabled={isDischarging}
+                onPress={() => {
+                  setDischargeModalItem(null);
+                  setDischargeRemarks('');
+                }}
+              />
+              <Button
+                title="Confirm Discharge"
+                variant="success"
+                icon="check"
+                loading={isDischarging}
+                onPress={handleDischargeNonDoctor}
+              />
+            </View>
+          </View>
+        </Modal>
+
         {/* PROCEDURE EXECUTION MODAL */}
         <ProcedureExecutionModal
           visible={!!executingProc}
@@ -575,6 +701,17 @@ export default function QueueScreen() {
           onClose={() => setShowForceEodModal(false)}
           activeTicketCount={activeEodCount}
           onSuccess={loadData}
+        />
+
+        {/* EMERGENCY DIVERSION MODAL */}
+        <DivertEmergencyModal
+          visible={!!divertModalItem}
+          ticket={divertModalItem}
+          onClose={() => setDivertModalItem(null)}
+          onSuccess={() => {
+            setDivertModalItem(null);
+            loadData();
+          }}
         />
       </ScrollView>
     </ResponsiveLayout>

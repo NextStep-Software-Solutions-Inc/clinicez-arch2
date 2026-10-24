@@ -1244,6 +1244,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsNurseOrderable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsPhilHealthFormulary")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -4543,6 +4548,26 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("DischargeNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("DischargedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DischargedByStaffId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DivertedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DivertedByStaffId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DivertedToFacility")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
                     b.Property<Guid?>("DoctorId")
                         .HasColumnType("uuid");
 
@@ -4550,8 +4575,16 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<string>("HandoverSummary")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("ParamedicOrEscortName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
 
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");
@@ -4597,11 +4630,22 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("TransportMode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
+
+                    b.Property<string>("VisitType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Consultation");
 
                     b.HasKey("Id");
 
@@ -4612,6 +4656,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("TenantId", "ClinicId", "CheckInTime");
 
                     b.HasIndex("TenantId", "ClinicId", "QueueDate");
+
+                    b.HasIndex("TenantId", "ClinicId", "VisitType");
+
+                    b.HasIndex("TenantId", "ClinicId", "QueueDate", "Status");
 
                     b.ToTable("QueueItems", "public");
                 });

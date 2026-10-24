@@ -1,5 +1,16 @@
 namespace ClinicEz.Clinic.Domain.Enums;
 
+public enum VisitType
+{
+    Consultation = 1,
+    VitalsCheckOnly = 2,
+    RetailPurchase = 3,
+    StandaloneProcedure = 4,
+    LaboratorySpecimen = 5,
+    AdministrativeDocument = 6,
+    CashierSettlement = 7
+}
+
 public enum QueuePriority
 {
     Routine = 1,
@@ -17,5 +28,8 @@ public enum QueueStatus
     NoShow = 6,
     PendingProcedure = 7,
     ReEvaluation = 8,
-    OnHold = 9
+    OnHold = 9,
+    DischargedNonDoctor = 10,
+    Diverted = 11
 }
+

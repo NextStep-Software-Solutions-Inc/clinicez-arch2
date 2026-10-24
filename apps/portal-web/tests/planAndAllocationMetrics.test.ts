@@ -278,14 +278,18 @@ describe("Issue #61: Plan & Usage vs Facility Allocation Pool Metrics", () => {
 
   describe("Source Code Invariants", () => {
     test("PlanClient.tsx and AllocationEditor.tsx uphold pool metric clarity invariants", () => {
-      const planClientSource = fs.readFileSync(
-        path.join(__dirname, "../src/app/[tenant]/dashboard/plan/PlanClient.tsx"),
-        "utf8",
-      );
-      const allocationEditorSource = fs.readFileSync(
-        path.join(__dirname, "../src/app/[tenant]/dashboard/plan/AllocationEditor.tsx"),
-        "utf8",
-      );
+      const planClientSource = fs
+        .readFileSync(
+          path.join(__dirname, "../src/app/[tenant]/dashboard/plan/PlanClient.tsx"),
+          "utf8",
+        )
+        .replace(/\r\n/g, "\n");
+      const allocationEditorSource = fs
+        .readFileSync(
+          path.join(__dirname, "../src/app/[tenant]/dashboard/plan/AllocationEditor.tsx"),
+          "utf8",
+        )
+        .replace(/\r\n/g, "\n");
 
       // PlanClient uses activeStaff for staff usage rather than summing facility maxStaff in usageFor
       expect(planClientSource).toContain("case ENTITLEMENT_KEYS.staff:\n      return usage.activeStaff;");

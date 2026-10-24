@@ -367,24 +367,24 @@ describe('DentalChartTab — Patient Chart Odontogram & Layout Integration', () 
 
   // Test 6: getAvailableChartTabs dynamic registration
   test('6. getAvailableChartTabs dynamically appends DENTAL_CHART_TAB without mutating CHART_TABS', () => {
-    // Original CHART_TABS remains at 7 items
-    expect(CHART_TABS.length).toBe(7);
+    // Original CHART_TABS remains at 8 items
+    expect(CHART_TABS.length).toBe(8);
     expect(CHART_TABS.some((t) => t.value === 'dental')).toBe(false);
 
-    // Dental disabled -> returns 7 tabs
+    // Dental disabled -> returns 8 tabs
     const disabledTabs = getAvailableChartTabs(false, false);
-    expect(disabledTabs.length).toBe(7);
+    expect(disabledTabs.length).toBe(8);
     expect(disabledTabs.some((t) => t.value === 'dental')).toBe(false);
 
-    // Dental enabled via module setting -> returns 8 tabs
+    // Dental enabled via module setting -> returns 9 tabs
     const enabledTabs = getAvailableChartTabs(true, false);
-    expect(enabledTabs.length).toBe(8);
+    expect(enabledTabs.length).toBe(9);
     expect(enabledTabs.some((t) => t.value === 'dental')).toBe(true);
-    expect(enabledTabs[7]).toEqual(DENTAL_CHART_TAB);
+    expect(enabledTabs[8]).toEqual(DENTAL_CHART_TAB);
 
-    // Dental enabled via existing dental records -> returns 8 tabs
+    // Dental enabled via existing dental records -> returns 9 tabs
     const recordsTabs = getAvailableChartTabs(false, true);
-    expect(recordsTabs.length).toBe(8);
+    expect(recordsTabs.length).toBe(9);
     expect(recordsTabs.some((t) => t.value === 'dental')).toBe(true);
   });
 

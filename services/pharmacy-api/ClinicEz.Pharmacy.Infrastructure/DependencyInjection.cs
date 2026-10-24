@@ -82,6 +82,7 @@ public static class DependencyInjection
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
             .Handle<PrescriptionIssuedEvent, PrescriptionIssuedHandler>(InteropTypes.RxIssued)
+            .Handle<PharmacyOtcDispensedPayload, OtcDispensationHandler>(InteropTypes.PharmacyOtcDispensed)
             .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
             .HandleEntitlementsChanged()

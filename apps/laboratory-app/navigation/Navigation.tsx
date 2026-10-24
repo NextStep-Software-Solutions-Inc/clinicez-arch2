@@ -1,6 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStaticNavigation, type StaticParamList } from '@react-navigation/native';
 import WorklistScreen from './screens/Worklist.screen';
+import WalkInIntakeScreen from './screens/WalkInIntake.screen';
 import SpecimenScreen from './screens/Specimen.screen';
 import ClaimSlipScreen from './screens/ClaimSlip.screen';
 import ResultsScreen from './screens/Results.screen';
@@ -14,6 +15,13 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Worklist',
         headerTitle: 'Diagnostic Orders',
+      },
+    },
+    WalkInIntake: {
+      screen: WalkInIntakeScreen,
+      options: {
+        title: 'Walk-In Intake',
+        headerTitle: 'Walk-In Patient Intake & Accession',
       },
     },
     Specimen: {

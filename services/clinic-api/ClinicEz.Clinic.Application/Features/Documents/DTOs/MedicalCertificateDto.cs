@@ -25,4 +25,5 @@ public sealed record MedicalCertificateDto(
     string? Remarks,
     bool IsSigned,
     DateTime? SignedAt,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? SecurityDigest = null);

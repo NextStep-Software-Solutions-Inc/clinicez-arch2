@@ -327,6 +327,17 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.ApproachingNotificationSent).HasDefaultValue(false);
             entity.Property(e => e.CalledNotificationSent).HasDefaultValue(false);
 
+            entity.Property(e => e.VisitType)
+                .HasConversion<string>()
+                .HasMaxLength(50)
+                .HasDefaultValue(VisitType.Consultation)
+                .HasSentinel((VisitType)0);
+            entity.Property(e => e.DischargeNotes).HasMaxLength(1000);
+            entity.Property(e => e.DivertedToFacility).HasMaxLength(255);
+            entity.Property(e => e.TransportMode).HasMaxLength(100);
+            entity.Property(e => e.ParamedicOrEscortName).HasMaxLength(150);
+            entity.Property(e => e.HandoverSummary).HasMaxLength(2000);
+
             entity.HasOne(e => e.Appointment)
                 .WithMany()
                 .HasForeignKey(e => e.AppointmentId)
@@ -349,6 +360,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.QueueDate });
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.CheckInTime });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.QueueDate, e.Status });
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.VisitType });
         });
 
         modelBuilder.Entity<TriageVitals>(entity =>
@@ -436,6 +449,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.PhilHealthCode).HasMaxLength(50);
             entity.Property(e => e.PhilHealthDescription).HasMaxLength(255);
             entity.Property(e => e.IsPhilHealthFormulary).HasDefaultValue(false);
+            entity.Property(e => e.IsNurseOrderable).HasDefaultValue(false);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.Code }).IsUnique();
         });
 

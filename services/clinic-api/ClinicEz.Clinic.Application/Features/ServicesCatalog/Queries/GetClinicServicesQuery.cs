@@ -145,7 +145,8 @@ public class GetClinicServicesQueryHandler : IRequestHandler<GetClinicServicesQu
             s.IsActive,
             s.PhilHealthCode,
             s.PhilHealthDescription,
-            s.IsPhilHealthFormulary
+            s.IsPhilHealthFormulary,
+            s.IsNurseOrderable
         )).ToList();
     }
 }

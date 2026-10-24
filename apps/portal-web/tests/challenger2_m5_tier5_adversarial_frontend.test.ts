@@ -122,7 +122,7 @@ describe("Milestone 5 Tier 5: Adversarial Frontend & Routing Suite (Portal Web)"
     });
 
     test("2.6 Static source code audit of AdminLayoutClient.tsx confirms layout bypass guards", () => {
-      const layoutSource = fs.readFileSync(path.resolve(__dirname, "../src/app/admin/AdminLayoutClient.tsx"), "utf-8");
+      const layoutSource = fs.readFileSync(path.resolve(__dirname, "../src/app/admin/AdminLayoutClient.tsx"), "utf-8").replace(/\r\n/g, "\n");
       expect(layoutSource).toContain('if (pathname?.startsWith("/admin/invitations")) return;');
       expect(layoutSource).toContain('if (pathname?.startsWith("/admin/invitations")) {\n    return <>{children}</>;\n  }');
     });

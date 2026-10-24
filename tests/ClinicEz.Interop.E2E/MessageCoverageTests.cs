@@ -61,6 +61,7 @@ public class MessageCoverageTests
         new(InteropTypes.RxStatusChanged, [Pharmacy], [Clinic, Patient]),
         new(InteropTypes.RxDispensed, [Pharmacy], [Clinic]),
         new(InteropTypes.RxExternalDispensed, [Patient], [Clinic]),
+        new(InteropTypes.PharmacyOtcDispensed, [Clinic], [Pharmacy]),
 
         new(InteropTypes.GamotLookupRequested, [Clinic], [Pharmacy]),
         new(InteropTypes.GamotLookupResponded, [Pharmacy], [Clinic]),

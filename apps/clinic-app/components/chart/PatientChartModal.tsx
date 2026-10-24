@@ -60,6 +60,9 @@ export default function PatientChartModal({
   focusToothNumber,
   onOrderDentalProcedure,
   onVoidDentalCondition,
+  onOrderProcedure,
+  onIntakeSpecimen,
+  queueItemId,
 }: PatientChartModalProps) {
   const { settings } = useClinic();
   const configuredLayout: ChartLayoutMode =
@@ -185,6 +188,9 @@ export default function PatientChartModal({
     focusToothNumber,
     onOrderDentalProcedure,
     onVoidDentalCondition,
+    onOrderProcedure,
+    onIntakeSpecimen,
+    queueItemId: queueItemId ?? (patientChart as any)?.queueItemId ?? (displayPatient as any)?.queueItemId ?? null,
   };
 
   return (

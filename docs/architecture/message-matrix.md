@@ -64,6 +64,7 @@ Portal to hub. Handled inside the hub (`DirectoryService`), never stored in a ma
 | `rx.status.changed` | pharmacy (`RxStatusPublisher`) | clinic (`RxStatusChangedHandler`) and patient (`RxStatusChangedInteropHandler`, only with an account) | `RxStatusChangedPayload` | One message to the ordering clinic and one to the patient. Correlation = the order's correlation id. | OK |
 | `rx.dispensed` | pharmacy (`PrescriptionDispensedPublisher`) | clinic (`PrescriptionDispensedHandler`) | `PrescriptionDispensedEvent` | To the ordering clinic. Correlation = the order's correlation id, else its external prescription id. | OK |
 | `rx.external.dispensed` | patient (`MarkPrescriptionExternallyDispensedCommand`) | clinic (`ExternalPrescriptionDispensedHandler`) | `ExternalPrescriptionDispensedEvent` | Patient to the ordering clinic. Correlation = prescription id. | OK |
+| `pharmacy.otc.dispensed` | clinic (`RecordPaymentCommandHandler`) | pharmacy (`OtcDispensationHandler`) | `PharmacyOtcDispensedPayload` | Clinic cashier station to the tenant's pharmacy facility. Correlation = `InvoiceId`. Decrements medication lot stock via FEFO. | OK |
 
 ## Billing
 

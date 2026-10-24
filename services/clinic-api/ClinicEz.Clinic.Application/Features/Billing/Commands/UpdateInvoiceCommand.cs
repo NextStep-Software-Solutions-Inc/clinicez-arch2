@@ -189,7 +189,7 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
             isCashierCounter = string.Equals(mode, "CashierCounter", StringComparison.OrdinalIgnoreCase);
         }
 
-        if (isCashierCounter || invoice.BillingRequestedAt.HasValue)
+        if ((isCashierCounter || invoice.BillingRequestedAt.HasValue) && invoice.PatientId != Guid.Empty)
         {
             await RePublishInvoiceRequestAsync(invoice, ct);
         }
@@ -201,7 +201,7 @@ public class UpdateInvoiceCommandHandler : IRequestHandler<UpdateInvoiceCommand,
 
     private async Task RePublishInvoiceRequestAsync(Invoice invoice, CancellationToken ct)
     {
-        if (invoice.NetAmount <= 0m && !invoice.BillingRequestedAt.HasValue) return;
+        if (invoice.PatientId == Guid.Empty || (invoice.NetAmount <= 0m && !invoice.BillingRequestedAt.HasValue)) return;
 
         var visitKey = invoice.ConsultationId;
         if (visitKey is null && invoice.QueueItemId.HasValue)

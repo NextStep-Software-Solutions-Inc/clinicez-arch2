@@ -80,15 +80,26 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
         // Explicit Status or View Filter
         if (request.Status.HasValue)
         {
-            query = query.Where(q => q.Status == request.Status.Value);
+            if (request.Status.Value == QueueStatus.Completed)
+            {
+                query = query.Where(q => q.Status == QueueStatus.Completed || q.Status == QueueStatus.DischargedNonDoctor);
+            }
+            else
+            {
+                query = query.Where(q => q.Status == request.Status.Value);
+            }
         }
         else if (!string.IsNullOrWhiteSpace(request.View))
         {
             var view = request.View.Trim();
             if (view.Equals("MyRoom", StringComparison.OrdinalIgnoreCase))
             {
-                // Items assigned to the clinician or room that are actively in workflow (exclude cancelled, no-show, and completed)
-                query = query.Where(q => q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow && q.Status != QueueStatus.Completed);
+                // Items assigned to the clinician or room that are actively in workflow (exclude cancelled, no-show, completed, discharged non-doctor, and diverted)
+                query = query.Where(q => q.Status != QueueStatus.Cancelled &&
+                                         q.Status != QueueStatus.NoShow &&
+                                         q.Status != QueueStatus.Completed &&
+                                         q.Status != QueueStatus.DischargedNonDoctor &&
+                                         q.Status != QueueStatus.Diverted);
             }
             else if (view.Equals("WaitingForDoctor", StringComparison.OrdinalIgnoreCase))
             {
@@ -107,8 +118,8 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
             }
             else if (view.Equals("Completed", StringComparison.OrdinalIgnoreCase))
             {
-                // Patients whose encounters are completed
-                query = query.Where(q => q.Status == QueueStatus.Completed);
+                // Patients whose encounters are completed (including non-doctor discharges)
+                query = query.Where(q => q.Status == QueueStatus.Completed || q.Status == QueueStatus.DischargedNonDoctor);
             }
             else if (view.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
@@ -117,8 +128,12 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
         }
         else
         {
-            // Default: show active queue (not cancelled, no-show, or completed)
-            query = query.Where(q => q.Status != QueueStatus.Cancelled && q.Status != QueueStatus.NoShow && q.Status != QueueStatus.Completed);
+            // Default: show active queue (not cancelled, no-show, completed, discharged non-doctor, or diverted)
+            query = query.Where(q => q.Status != QueueStatus.Cancelled &&
+                                     q.Status != QueueStatus.NoShow &&
+                                     q.Status != QueueStatus.Completed &&
+                                     q.Status != QueueStatus.DischargedNonDoctor &&
+                                     q.Status != QueueStatus.Diverted);
         }
 
         var items = await query
@@ -153,7 +168,11 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
                 item.TriageVitals != null,
                 vitalsSummary,
                 item.RoomOrStation,
-                item.RoomId);
+                item.RoomId,
+                item.VisitType,
+                item.DischargeNotes,
+                item.DischargedAt,
+                item.DischargedByStaffId);
         }).ToList();
     }
 }

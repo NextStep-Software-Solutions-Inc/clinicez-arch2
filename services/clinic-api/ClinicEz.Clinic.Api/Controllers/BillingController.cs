@@ -148,7 +148,10 @@ public sealed class BillingController : ControllerBase
             request.CustomDiscountPercentage,
             request.Notes,
             request.LineItems,
-            request.AllowDuplicate
+            request.AllowDuplicate,
+            request.IsWalkInRetail,
+            request.WalkInCustomerName,
+            request.VisitType
         );
 
         var result = await _sender.Send(command, ct);

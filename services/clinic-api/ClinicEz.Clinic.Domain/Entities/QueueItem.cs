@@ -67,6 +67,56 @@ public sealed class QueueItem : BaseEntity
     /// </summary>
     public bool CalledNotificationSent { get; set; } = false;
 
+    /// <summary>
+    /// Outpatient visit intent classification: Consultation, VitalsCheckOnly, RetailPurchase, StandaloneProcedure, LaboratorySpecimen, AdministrativeDocument, CashierSettlement
+    /// </summary>
+    public VisitType VisitType { get; set; } = VisitType.Consultation;
+
+    /// <summary>
+    /// Optional clinical or administrative remarks upon non-doctor discharge or cancellation
+    /// </summary>
+    public string? DischargeNotes { get; set; }
+
+    /// <summary>
+    /// Timestamp when patient was discharged by non-doctor staff
+    /// </summary>
+    public DateTime? DischargedAt { get; set; }
+
+    /// <summary>
+    /// Staff ID of nurse, receptionist, or cashier who discharged the visit
+    /// </summary>
+    public Guid? DischargedByStaffId { get; set; }
+
+    /// <summary>
+    /// Target destination hospital / ER facility for emergency diversion
+    /// </summary>
+    public string? DivertedToFacility { get; set; }
+
+    /// <summary>
+    /// Transport mode (e.g. Ambulance, Private Vehicle, Clinic Van)
+    /// </summary>
+    public string? TransportMode { get; set; }
+
+    /// <summary>
+    /// Accompanying paramedic, nurse escort, or driver name
+    /// </summary>
+    public string? ParamedicOrEscortName { get; set; }
+
+    /// <summary>
+    /// Clinical handover summary and acuity findings upon emergency diversion
+    /// </summary>
+    public string? HandoverSummary { get; set; }
+
+    /// <summary>
+    /// Timestamp when patient was transferred/diverted to emergency facility
+    /// </summary>
+    public DateTime? DivertedAt { get; set; }
+
+    /// <summary>
+    /// Staff ID of healthcare worker who authorized and executed diversion
+    /// </summary>
+    public Guid? DivertedByStaffId { get; set; }
+
     // Navigations
     public TriageVitals? TriageVitals { get; set; }
     public ConsultationEncounter? Consultation { get; set; }

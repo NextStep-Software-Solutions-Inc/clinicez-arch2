@@ -57,6 +57,7 @@ import {
   getManilaTodayStr,
 } from '../../services/clinicService';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
+import DivertEmergencyModal from '../../components/queue/DivertEmergencyModal';
 
 type DashboardTab = 'QUEUE' | 'ANALYTICS' | 'REPORTS';
 type ReportType = 'DAILY_EOD' | 'MORBIDITY' | 'TAX_DISCOUNT' | 'DOCTOR_SHARES';
@@ -114,6 +115,10 @@ const statusBadge = (status: QueueStatus): { label: string; variant: BadgeVarian
       return { label: 'Re-evaluation', variant: 'emergency' };
     case 'Completed':
       return { label: 'Completed', variant: 'neutral' };
+    case 'DischargedNonDoctor':
+      return { label: 'Discharged (Non-Doctor)', variant: 'success', icon: 'check' };
+    case 'Diverted':
+      return { label: 'Diverted (ER Transfer)', variant: 'emergency', icon: 'alert' };
     default:
       return { label: status, variant: 'neutral' };
   }
@@ -237,6 +242,10 @@ export default function DashboardScreen() {
   const [reassignDoctorId, setReassignDoctorId] = useState<string>('');
   const [reassignRoomId, setReassignRoomId] = useState<string>('');
   const [savingReassignment, setSavingReassignment] = useState<boolean>(false);
+  const [dischargeModalItem, setDischargeModalItem] = useState<PatientQueueItem | null>(null);
+  const [dischargeRemarks, setDischargeRemarks] = useState<string>('');
+  const [savingDischarge, setSavingDischarge] = useState<boolean>(false);
+  const [divertModalItem, setDivertModalItem] = useState<PatientQueueItem | null>(null);
 
   const handleOpenTvDisplay = useCallback(() => {
     const portalBase = getPortalBaseUrl();
@@ -556,6 +565,37 @@ export default function DashboardScreen() {
     loadMetrics();
   };
 
+  const handleConfirmDischarge = async () => {
+    if (!dischargeModalItem || savingDischarge) return;
+    setSavingDischarge(true);
+    const [, err] = await clinicService.completeNonDoctorVisit(
+      dischargeModalItem.id,
+      dischargeRemarks.trim() || undefined,
+    );
+    setSavingDischarge(false);
+    if (err) {
+      notify.error(err.message || 'Could not discharge queue visit.');
+      return;
+    }
+    notify.success(`${dischargeModalItem.patientName} discharged successfully.`);
+    setQueue((prev) =>
+      (prev ?? []).map((q) =>
+        q.id === dischargeModalItem.id
+          ? {
+              ...q,
+              status: 'DischargedNonDoctor' as QueueStatus,
+              completedTime: new Date().toISOString(),
+              dischargeNotes: dischargeRemarks.trim() || undefined,
+              dischargedAt: new Date().toISOString(),
+            }
+          : q
+      )
+    );
+    setDischargeModalItem(null);
+    setDischargeRemarks('');
+    loadMetrics();
+  };
+
   const handleOpenReassign = (item: PatientQueueItem) => {
     setReassignModalItem(item);
     const docId = item.doctorId ?? '';
@@ -771,12 +811,18 @@ export default function DashboardScreen() {
       InConsultation: count('InConsultation'),
       OnHold: count('OnHold'),
       NoShow: count('NoShow'),
-      Completed: count('Completed'),
+      Completed: items.filter((q) => q.status === 'Completed' || q.status === 'DischargedNonDoctor').length,
     };
   }, [queue]);
 
   const filteredQueue = useMemo(() => {
-    const list = (queue ?? []).filter((item) => queueFilter === 'ALL' || item.status === queueFilter);
+    const list = (queue ?? []).filter((item) => {
+      if (queueFilter === 'ALL') return true;
+      if (queueFilter === 'Completed') {
+        return item.status === 'Completed' || item.status === 'DischargedNonDoctor';
+      }
+      return item.status === queueFilter;
+    });
     if (queueFilter === 'ALL') {
       const statusOrder: Record<string, number> = {
         InConsultation: 0,
@@ -786,8 +832,10 @@ export default function DashboardScreen() {
         ReEvaluation: 4,
         OnHold: 5,
         Completed: 6,
-        NoShow: 7,
-        Cancelled: 8,
+        DischargedNonDoctor: 6,
+        Diverted: 7,
+        NoShow: 8,
+        Cancelled: 9,
       };
       return [...list].sort((a, b) => {
         const orderA = statusOrder[a.status] ?? 99;
@@ -969,8 +1017,19 @@ export default function DashboardScreen() {
             const badge = statusBadge(item.status);
             const isActioning = actioningId === item.id;
             const canCall = item.status === 'Waiting' || item.status === 'Triaged';
-            const isCompleted = item.status === 'Completed';
-            const canTriage = !isCompleted && item.status !== 'Cancelled' && item.status !== 'NoShow';
+            const isCompleted = item.status === 'Completed' || item.status === 'DischargedNonDoctor';
+            const canTriage = !isCompleted && item.status !== 'Cancelled' && item.status !== 'NoShow' && item.status !== 'Diverted';
+            const canDischarge =
+              (item.status === 'Triaged' || (item.visitType && item.visitType !== 'Consultation')) &&
+              !isCompleted &&
+              item.status !== 'Cancelled' &&
+              item.status !== 'NoShow' &&
+              item.status !== 'Diverted';
+            const canDivert =
+              !isCompleted &&
+              item.status !== 'Cancelled' &&
+              item.status !== 'NoShow' &&
+              item.status !== 'Diverted';
 
             // Wait time calculation for all active waiting patients
             const isWaitingState = item.status === 'Waiting' || item.status === 'Triaged' || item.status === 'OnHold';
@@ -1000,6 +1059,9 @@ export default function DashboardScreen() {
                       </ThemedText>
                     </View>
                     <View style={styles.badgeRow}>
+                      {item.visitType && item.visitType !== 'Consultation' ? (
+                        <Badge label={item.visitType} variant="neutral" size="sm" />
+                      ) : null}
                       {item.roomOrStation ? (
                         <Badge label={item.roomOrStation} variant="outline" size="sm" icon="clinic" />
                       ) : null}
@@ -1026,6 +1088,14 @@ export default function DashboardScreen() {
                     <View style={styles.pendingStrip}>
                       <ThemedText variant="small" color={theme.colors.warningText}>
                         Vitals not recorded yet
+                      </ThemedText>
+                    </View>
+                  ) : null}
+
+                  {item.status === 'Diverted' && item.divertedToFacility ? (
+                    <View style={styles.vitalsStrip}>
+                      <ThemedText variant="small" color={theme.colors.emergencyText}>
+                        ER Transfer: {item.divertedToFacility} ({item.transportMode || 'Ambulance'})
                       </ThemedText>
                     </View>
                   ) : null}
@@ -1127,6 +1197,32 @@ export default function DashboardScreen() {
                         loading={isActioning}
                         disabled={isActioning}
                         onPress={() => handleCancelVisit(item)}
+                      />
+                    ) : null}
+                    {canDischarge ? (
+                      <Button
+                        title="Discharge visit"
+                        variant="outline"
+                        size="sm"
+                        icon="check"
+                        loading={isActioning}
+                        disabled={isActioning}
+                        onPress={() => {
+                          setDischargeModalItem(item);
+                          setDischargeRemarks('');
+                        }}
+                      />
+                    ) : null}
+                    {canDivert ? (
+                      <Button
+                        title="Divert to ER"
+                        variant="danger"
+                        size="sm"
+                        icon="alert"
+                        testID="divert-emergency-button"
+                        loading={isActioning}
+                        disabled={isActioning}
+                        onPress={() => setDivertModalItem(item)}
                       />
                     ) : null}
                     {isCompleted ? (
@@ -2322,6 +2418,60 @@ export default function DashboardScreen() {
           />
         </View>
       </Modal>
+
+      {/* Discharge / Complete Non-Doctor Visit Modal */}
+      <Modal
+        visible={!!dischargeModalItem}
+        onClose={() => !savingDischarge && setDischargeModalItem(null)}
+        title="Discharge / Complete Visit"
+        subtitle={
+          dischargeModalItem
+            ? `Ticket ${dischargeModalItem.queueNumber} · ${dischargeModalItem.patientName} (${dischargeModalItem.visitType ?? 'General Outpatient'})`
+            : ''
+        }
+        maxWidth={480}
+        footer={
+          <>
+            <Button
+              title="Cancel"
+              variant="ghost"
+              onPress={() => setDischargeModalItem(null)}
+              disabled={savingDischarge}
+            />
+            <Button
+              title="Confirm Discharge"
+              icon="check"
+              onPress={handleConfirmDischarge}
+              loading={savingDischarge}
+            />
+          </>
+        }
+      >
+        <View style={{ gap: theme.spacing.md }}>
+          <ThemedText variant="body" color={theme.colors.textSecondary}>
+            Complete this visit without physician consultation (e.g., triage vitals only, procedure, retail OTC, or specimen drop-off).
+          </ThemedText>
+          <Input
+            label="Discharge remarks (optional)"
+            placeholder="e.g. Vitals normal, patient advised home care..."
+            value={dischargeRemarks}
+            onChangeText={setDischargeRemarks}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+      </Modal>
+
+      {/* Divert Emergency Patient Modal */}
+      <DivertEmergencyModal
+        visible={!!divertModalItem}
+        ticket={divertModalItem}
+        onClose={() => setDivertModalItem(null)}
+        onSuccess={() => {
+          setDivertModalItem(null);
+          loadData();
+        }}
+      />
     </ResponsiveLayout>
   );
 }

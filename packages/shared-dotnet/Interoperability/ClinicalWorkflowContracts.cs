@@ -161,6 +161,85 @@ public record RxStatusChangedPayload
 }
 
 // ---------------------------------------------------------------------------------------------
+// Pharmacy OTC / Retail Counter Dispensation (clinic -> pharmacy: `pharmacy.otc.dispensed`).
+// Sent when an in-clinic cashier settles retail medications or OTC supplies, decrements pharmacy lots via FEFO.
+// ---------------------------------------------------------------------------------------------
+
+public record OtcDispensedItemDto
+{
+    public Guid? ServiceItemId { get; init; }
+    public string? ItemCode { get; init; }
+    public string Description { get; init; } = string.Empty;
+    public string Category { get; init; } = string.Empty;
+    public int Quantity { get; init; } = 1;
+    public decimal UnitPrice { get; init; }
+    public decimal TotalPrice { get; init; }
+
+    public OtcDispensedItemDto() { }
+
+    public OtcDispensedItemDto(
+        Guid? serviceItemId,
+        string? itemCode,
+        string description,
+        string category,
+        int quantity,
+        decimal unitPrice,
+        decimal totalPrice)
+    {
+        ServiceItemId = serviceItemId;
+        ItemCode = itemCode;
+        Description = description;
+        Category = category;
+        Quantity = quantity;
+        UnitPrice = unitPrice;
+        TotalPrice = totalPrice;
+    }
+}
+
+public record PharmacyOtcDispensedItemDto : OtcDispensedItemDto
+{
+    public PharmacyOtcDispensedItemDto() { }
+
+    public PharmacyOtcDispensedItemDto(
+        Guid? serviceItemId,
+        string? itemCode,
+        string description,
+        string category,
+        int quantity,
+        decimal unitPrice,
+        decimal totalPrice)
+        : base(serviceItemId, itemCode, description, category, quantity, unitPrice, totalPrice) { }
+}
+
+public record PharmacyOtcDispensedPayload
+{
+    public Guid EventId { get; init; } = Guid.NewGuid();
+    public Guid InvoiceId { get; init; }
+    public string InvoiceNumber { get; init; } = string.Empty;
+    public Guid ClinicId { get; init; }
+    public DateTime DispensedAtUtc { get; init; } = DateTime.UtcNow;
+    public IReadOnlyList<OtcDispensedItemDto> Items { get; init; } = new List<OtcDispensedItemDto>();
+
+    public PharmacyOtcDispensedPayload() { }
+
+    public PharmacyOtcDispensedPayload(
+        Guid eventId,
+        Guid invoiceId,
+        string invoiceNumber,
+        Guid clinicId,
+        DateTime dispensedAtUtc,
+        IReadOnlyList<OtcDispensedItemDto> items)
+    {
+        EventId = eventId;
+        InvoiceId = invoiceId;
+        InvoiceNumber = invoiceNumber;
+        ClinicId = clinicId;
+        DispensedAtUtc = dispensedAtUtc;
+        Items = items;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Documents to the patient (patient-api keeps a copy of everything issued to the patient: right of access).
 // Any issuing facility -> Party.ForPatient(patientId), type `patient.document.issued`.
 // ---------------------------------------------------------------------------------------------

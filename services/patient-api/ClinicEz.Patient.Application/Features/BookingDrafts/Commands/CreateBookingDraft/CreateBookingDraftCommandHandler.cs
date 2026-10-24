@@ -1,28 +1,53 @@
-using ClinicEz.Shared.Exceptions;
-using MediatR;
 using ClinicEz.Patient.Application.Features.Sharing;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Enums;
 using ClinicEz.Patient.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Security.Turnstile;
+using MediatR;
 
 namespace ClinicEz.Patient.Application.Features.BookingDrafts.Commands.CreateBookingDraft;
 
 public sealed class CreateBookingDraftCommandHandler : IRequestHandler<CreateBookingDraftCommand, Guid>
 {
+    public const int MaxActiveDraftsPerPatient = 5;
+
     private readonly IPatientRepository _patientRepo;
     private readonly IBookingDraftRepository _draftRepo;
     private readonly IUnitOfWork _uow;
+    private readonly ITurnstileValidator? _turnstileValidator;
 
     public CreateBookingDraftCommandHandler(
-        IPatientRepository patientRepo, IBookingDraftRepository draftRepo, IUnitOfWork uow)
+        IPatientRepository patientRepo,
+        IBookingDraftRepository draftRepo,
+        IUnitOfWork uow,
+        ITurnstileValidator? turnstileValidator = null)
     {
-        _patientRepo = patientRepo; _draftRepo = draftRepo; _uow = uow;
+        _patientRepo = patientRepo;
+        _draftRepo = draftRepo;
+        _uow = uow;
+        _turnstileValidator = turnstileValidator;
     }
 
     public async Task<Guid> Handle(CreateBookingDraftCommand request, CancellationToken cancellationToken)
     {
         _ = await _patientRepo.GetByIdAsync(request.PatientId, cancellationToken)
             ?? throw new NotFoundException($"Patient '{request.PatientId}' was not found.");
+
+        if (_turnstileValidator is not null)
+        {
+            var isTurnstileValid = await _turnstileValidator.ValidateAsync(request.TurnstileToken, request.RemoteIp, cancellationToken);
+            if (!isTurnstileValid)
+            {
+                throw new ForbiddenException("Turnstile bot verification failed.");
+            }
+        }
+
+        var existingDrafts = await _draftRepo.GetByPatientAsync(request.PatientId, BookingDraftStatus.Draft, cancellationToken);
+        if (existingDrafts.Count >= MaxActiveDraftsPerPatient)
+        {
+            throw new BadRequestException("Maximum active booking drafts reached.");
+        }
 
         var draft = new BookingDraft
         {

@@ -23,7 +23,8 @@ public record RecordProcedureExecutionCommand(
     DateTime? ExpirationDate = null,
     string? SiteRoute = null,
     string? ClinicalNotes = null,
-    string? Complications = null
+    string? Complications = null,
+    bool? RequiresDoctorReEvaluation = null
 ) : IRequest<ClinicalProcedureDto>;
 
 public class RecordProcedureExecutionCommandHandler : IRequestHandler<RecordProcedureExecutionCommand, ClinicalProcedureDto>
@@ -80,30 +81,40 @@ public class RecordProcedureExecutionCommandHandler : IRequestHandler<RecordProc
                 .FirstOrDefaultAsync(cancellationToken);
             if (queueItem != null && queueItem.Status == QueueStatus.PendingProcedure)
             {
-                queueItem.Status = QueueStatus.ReEvaluation;
-                var targetDoctorId = queueItem.DoctorId ?? proc.OrderedByDoctorId;
-                if (targetDoctorId.HasValue && _staffRepo != null)
-                {
-                    var doctor = await _staffRepo
-                        .Query(s => s.Id == targetDoctorId.Value && s.ClinicId == _clinicContext.ClinicId)
-                        .FirstOrDefaultAsync(cancellationToken);
-                    if (doctor != null)
-                    {
-                        var doctorRoomIds = doctor.GetAssignedRoomIds();
-                        if (doctorRoomIds.Count > 0 && _roomRepo != null)
-                        {
-                            var activeRooms = await _roomRepo
-                                .Query(r => r.ClinicId == _clinicContext.ClinicId && doctorRoomIds.Contains(r.Id) && r.IsActive)
-                                .OrderBy(r => r.DisplayOrder)
-                                .ToListAsync(cancellationToken);
+                var shouldReEvaluate = request.RequiresDoctorReEvaluation ?? (queueItem.DoctorId.HasValue || proc.OrderedByDoctorId.HasValue);
 
-                            var firstRoom = activeRooms.FirstOrDefault();
-                            if (firstRoom != null)
+                if (shouldReEvaluate)
+                {
+                    queueItem.Status = QueueStatus.ReEvaluation;
+                    var targetDoctorId = queueItem.DoctorId ?? proc.OrderedByDoctorId;
+                    if (targetDoctorId.HasValue && _staffRepo != null)
+                    {
+                        var doctor = await _staffRepo
+                            .Query(s => s.Id == targetDoctorId.Value && s.ClinicId == _clinicContext.ClinicId)
+                            .FirstOrDefaultAsync(cancellationToken);
+                        if (doctor != null)
+                        {
+                            var doctorRoomIds = doctor.GetAssignedRoomIds();
+                            if (doctorRoomIds.Count > 0 && _roomRepo != null)
                             {
-                                queueItem.RoomId = firstRoom.Id;
-                                queueItem.RoomOrStation = firstRoom.Name;
+                                var activeRooms = await _roomRepo
+                                    .Query(r => r.ClinicId == _clinicContext.ClinicId && doctorRoomIds.Contains(r.Id) && r.IsActive)
+                                    .OrderBy(r => r.DisplayOrder)
+                                    .ToListAsync(cancellationToken);
+
+                                var firstRoom = activeRooms.FirstOrDefault();
+                                if (firstRoom != null)
+                                {
+                                    queueItem.RoomId = firstRoom.Id;
+                                    queueItem.RoomOrStation = firstRoom.Name;
+                                }
+                                else
+                                {
+                                    queueItem.RoomId = null;
+                                    queueItem.RoomOrStation = null;
+                                }
                             }
-                            else
+                            else if (queueItem.RoomId == proc.TargetRoomId || queueItem.RoomOrStation == proc.TargetRoomName)
                             {
                                 queueItem.RoomId = null;
                                 queueItem.RoomOrStation = null;
@@ -115,12 +126,22 @@ public class RecordProcedureExecutionCommandHandler : IRequestHandler<RecordProc
                             queueItem.RoomOrStation = null;
                         }
                     }
-                    else if (queueItem.RoomId == proc.TargetRoomId || queueItem.RoomOrStation == proc.TargetRoomName)
+                }
+                else
+                {
+                    queueItem.Status = QueueStatus.DischargedNonDoctor;
+                    queueItem.CompletedTime = DateTime.UtcNow;
+                    queueItem.DischargedAt = DateTime.UtcNow;
+                    queueItem.DischargedByStaffId = proc.PerformedByStaffId;
+                    queueItem.DischargeNotes = !string.IsNullOrWhiteSpace(request.ClinicalNotes)
+                        ? request.ClinicalNotes.Trim()
+                        : "Discharged following nurse procedure execution.";
+                    if (!string.IsNullOrWhiteSpace(proc.TargetRoomName))
                     {
-                        queueItem.RoomId = null;
-                        queueItem.RoomOrStation = null;
+                        queueItem.RoomOrStation = proc.TargetRoomName;
                     }
                 }
+
                 queueItem.UpdatedAt = DateTime.UtcNow;
                 _queueRepo.Update(queueItem);
             }

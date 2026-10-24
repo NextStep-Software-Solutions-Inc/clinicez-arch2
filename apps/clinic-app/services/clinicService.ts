@@ -12,7 +12,18 @@ export type QueueStatus =
   | 'NoShow'
   | 'PendingProcedure'
   | 'ReEvaluation'
-  | 'OnHold';
+  | 'OnHold'
+  | 'DischargedNonDoctor'
+  | 'Diverted';
+
+export type VisitType =
+  | 'Consultation'
+  | 'VitalsCheckOnly'
+  | 'RetailPurchase'
+  | 'StandaloneProcedure'
+  | 'LaboratorySpecimen'
+  | 'AdministrativeDocument'
+  | 'CashierSettlement';
 export type QueueView =
   | 'All'
   | 'MyRoom'
@@ -218,6 +229,16 @@ export interface PatientQueueItem {
   vitalsSummary?: string;
   roomOrStation?: string;
   roomId?: string | null;
+  visitType?: VisitType | string;
+  dischargeNotes?: string;
+  dischargedAt?: string;
+  dischargedByStaffId?: string;
+  divertedToFacility?: string;
+  transportMode?: string;
+  paramedicOrEscortName?: string;
+  handoverSummary?: string;
+  divertedAt?: string;
+  divertedByStaffId?: string;
 }
 
 export interface GetQueueParams {
@@ -534,8 +555,11 @@ export interface InvoiceRecord {
   clinicId: string;
   invoiceNumber: string;
   invoiceDate: string;
-  patientId: string;
+  patientId?: string;
   patientName: string;
+  isWalkInRetail?: boolean;
+  walkInCustomerName?: string;
+  visitType?: VisitType;
   queueItemId?: string;
   appointmentId?: string;
   consultationId?: string;
@@ -1470,6 +1494,8 @@ export interface AdministerVaccinePayload {
   administeredByStaffName: string;
   administeredByPrcLicense?: string | null;
   remarks?: string | null;
+  queueItemId?: string | null;
+  completeVisit?: boolean;
 }
 
 export interface RecordHistoricalImmunizationPayload {
@@ -1517,6 +1543,8 @@ export interface PatientChart {
   dentalChart?: DentalChart | null;
   dentalTeeth?: DentalToothRecord[];
   dentalProcedures?: ClinicalProcedureRecord[];
+  medicalCertificates?: MedicalCertificateRecord[];
+  referralLetters?: ReferralLetterRecord[];
 }
 
 export type ToothStatus =
@@ -1781,6 +1809,7 @@ export interface MedicalCertificateRecord {
   remarks?: string;
   isSigned: boolean;
   signedAt?: string;
+  securityDigest?: string;
   createdAt: string;
 }
 
@@ -1806,6 +1835,7 @@ export interface ReferralLetterRecord {
   attachedDiagnostics?: string;
   isSigned: boolean;
   signedAt?: string;
+  securityDigest?: string;
   createdAt: string;
 }
 
@@ -2026,6 +2056,7 @@ export interface CheckInRequest {
   roomOrStation?: string;
   roomId?: string;
   queueDate?: string;
+  visitType?: VisitType | string;
 }
 
 export interface RecordTriageRequest {
@@ -2104,8 +2135,11 @@ export interface CreateConsultationRequest {
 }
 
 export interface CreateInvoiceRequest {
-  patientId: string;
-  patientName: string;
+  patientId?: string;
+  patientName?: string;
+  isWalkInRetail?: boolean;
+  walkInCustomerName?: string;
+  visitType?: VisitType;
   queueItemId?: string;
   appointmentId?: string;
   consultationId?: string;
@@ -2227,6 +2261,22 @@ export const clinicService = {
 
   async completeQueueItem(id: string) {
     return clinicApiClient.post<boolean>(`/queue/${id}/complete`);
+  },
+
+  async completeNonDoctorVisit(id: string, dischargeRemarks?: string) {
+    return clinicApiClient.post<boolean>(`/queue/${id}/discharge-non-doctor`, { dischargeRemarks });
+  },
+
+  async divertEmergencyPatient(
+    id: string,
+    payload: {
+      destinationHospital: string;
+      transportMode: string;
+      paramedicOrEscortName: string;
+      clinicalHandoverSummary: string;
+    }
+  ) {
+    return clinicApiClient.post<boolean>(`/queue/${id}/divert`, payload);
   },
 
   async markNoShow(id: string) {
@@ -2500,6 +2550,7 @@ export const clinicService = {
     siteRoute?: string;
     clinicalNotes?: string;
     complications?: string;
+    requiresDoctorReEvaluation?: boolean;
   }) {
     return clinicApiClient.post<ClinicalProcedureRecord>(`/procedures/${id}/complete`, payload);
   },

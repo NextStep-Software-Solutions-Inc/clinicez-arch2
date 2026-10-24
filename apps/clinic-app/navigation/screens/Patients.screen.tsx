@@ -92,10 +92,21 @@ import {
   ClinicRecordAttachmentRecord,
   ClinicCustomFieldDefinition,
   DuplicateMatch,
+  VisitType,
 } from '../../services/clinicService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 import { getSetting } from '../../services/runtimeConfig';
 import { shouldQueueOffline } from '../../services/outboxPolicy';
+
+const VISIT_TYPE_OPTIONS: Array<{ key: VisitType; label: string }> = [
+  { key: 'Consultation', label: 'Consultation' },
+  { key: 'VitalsCheckOnly', label: 'Vitals Check' },
+  { key: 'RetailPurchase', label: 'Retail OTC' },
+  { key: 'StandaloneProcedure', label: 'Procedure' },
+  { key: 'LaboratorySpecimen', label: 'Specimen Drop-Off' },
+  { key: 'AdministrativeDocument', label: 'Administrative' },
+  { key: 'CashierSettlement', label: 'Cashier' },
+];
 
 const humanizeKey = (key: string) => {
   const words = key.replace(/_/g, ' ');
@@ -335,6 +346,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [checkInDoctorId, setCheckInDoctorId] = useState<string>('');
   const [checkInRoomId, setCheckInRoomId] = useState<string>('');
   const [checkInPriority, setCheckInPriority] = useState<'Routine' | 'Urgent' | 'Emergency'>('Routine');
+  const [checkInVisitType, setCheckInVisitType] = useState<VisitType>('Consultation');
   const [checkInComplaint, setCheckInComplaint] = useState<string>('');
   const [conflictModal, setConflictModal] = useState<{
     visible: boolean;
@@ -1327,6 +1339,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
     setCheckInDoctorId(defaultDoc?.id ?? '');
     setCheckInRoomId(defaultDocRooms[0] ?? '');
     setCheckInPriority(isUrgent ? 'Urgent' : 'Routine');
+    setCheckInVisitType('Consultation');
     setCheckInComplaint(
       patient.chronicConditions
         ? `Follow-up: ${patient.chronicConditions}`
@@ -1368,6 +1381,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         roomId: chosenRoom?.id,
         roomOrStation: chosenRoom?.name,
         priority: checkInPriority,
+        visitType: checkInVisitType,
         chiefComplaint: checkInComplaint.trim() || 'General consultation',
         queueDate: getManilaTodayStr(),
       });
@@ -2733,6 +2747,45 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
             formatStaffName={formatStaffName}
           />
 
+          {/* Visit Type Picker */}
+          <View style={{ gap: theme.spacing.xs }}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+              Visit Type / Purpose
+            </ThemedText>
+            <View style={styles.visitTypeGrid}>
+              {VISIT_TYPE_OPTIONS.map((opt) => {
+                const isSelected = checkInVisitType === opt.key;
+                return (
+                  <Pressable
+                    key={opt.key}
+                    accessibilityRole="button"
+                    accessibilityLabel={opt.label}
+                    onPress={() => setCheckInVisitType(opt.key)}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                    style={[
+                      styles.visitTypeChip,
+                      isSelected ? styles.visitTypeChip_selected : null,
+                    ]}
+                  >
+                    {isSelected && (
+                      <IconSlot
+                        value="check"
+                        size={12}
+                        color={theme.colors.primary}
+                      />
+                    )}
+                    <ThemedText
+                      variant="smallBold"
+                      color={isSelected ? theme.colors.primary : theme.colors.text}
+                    >
+                      {opt.label}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
           {/* Priority Picker */}
           <View style={{ gap: theme.spacing.xs }}>
             <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
@@ -3725,6 +3778,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   relationshipChip_selected: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+    borderWidth: 1.5,
+  },
+  visitTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+  },
+  visitTypeChip: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: theme.radii.full,
+    borderWidth: 1,
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.surface,
+  },
+  visitTypeChip_selected: {
     backgroundColor: theme.colors.primaryLight,
     borderColor: theme.colors.primary,
     borderWidth: 1.5,

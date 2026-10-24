@@ -115,7 +115,8 @@ public sealed class SeedDentalServicesCommandHandler : IRequestHandler<SeedDenta
             s.IsActive,
             s.PhilHealthCode,
             s.PhilHealthDescription,
-            s.IsPhilHealthFormulary
+            s.IsPhilHealthFormulary,
+            s.IsNurseOrderable
         )).ToList();
     }
 }

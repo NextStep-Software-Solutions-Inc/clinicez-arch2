@@ -4,6 +4,7 @@ using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
 using ClinicEz.Clinic.Application.Features.Billing.DTOs;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
 using ClinicEz.Clinic.Application.Features.Dental.DTOs;
+using ClinicEz.Clinic.Application.Features.Documents.DTOs;
 using ClinicEz.Clinic.Application.Features.Immunizations.DTOs;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
 using ClinicEz.Clinic.Application.Features.Problems.Dtos;
@@ -37,5 +38,7 @@ public record PatientChartDto(
     string? FamilyMedicalHistoryNotes = null,
     PatientPhysicalExamProfileDto? PhysicalExamProfile = null,
     List<DentalToothRecordDto>? DentalTeeth = null,
-    List<ClinicalProcedureDto>? DentalProcedures = null
+    List<ClinicalProcedureDto>? DentalProcedures = null,
+    IReadOnlyList<MedicalCertificateDto>? MedicalCertificates = null,
+    IReadOnlyList<ReferralLetterDto>? ReferralLetters = null
 );

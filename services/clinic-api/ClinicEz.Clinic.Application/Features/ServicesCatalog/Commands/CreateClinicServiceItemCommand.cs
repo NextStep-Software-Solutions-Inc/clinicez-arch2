@@ -18,7 +18,8 @@ public record CreateClinicServiceItemCommand(
     string? Description = null,
     string? PhilHealthCode = null,
     string? PhilHealthDescription = null,
-    bool IsPhilHealthFormulary = false
+    bool IsPhilHealthFormulary = false,
+    bool IsNurseOrderable = false
 ) : IRequest<ClinicServiceItemDto>;
 
 public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClinicServiceItemCommand, ClinicServiceItemDto>
@@ -69,7 +70,8 @@ public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClini
             IsActive = true,
             PhilHealthCode = philHealthCode,
             PhilHealthDescription = philHealthDescription,
-            IsPhilHealthFormulary = request.IsPhilHealthFormulary || philHealthCode != null
+            IsPhilHealthFormulary = request.IsPhilHealthFormulary || philHealthCode != null,
+            IsNurseOrderable = request.IsNurseOrderable
         };
 
         await _serviceRepo.AddAsync(entity, cancellationToken);
@@ -87,7 +89,8 @@ public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClini
             entity.IsActive,
             entity.PhilHealthCode,
             entity.PhilHealthDescription,
-            entity.IsPhilHealthFormulary
+            entity.IsPhilHealthFormulary,
+            entity.IsNurseOrderable
         );
     }
 }

@@ -45,13 +45,15 @@ public sealed record RecordTriageVitalsCommand(
     decimal? LimbsCircumferenceCm = null,
     string? PreAssessmentNotes = null,
     string? PreAssessmentRemarks = null,
-    string? TriageAcuityReason = null) : IRequest<TriageVitalsDto>;
+    string? TriageAcuityReason = null,
+    QueuePriority? Priority = null) : IRequest<TriageVitalsDto>;
 
 public sealed class RecordTriageVitalsCommandValidator : AbstractValidator<RecordTriageVitalsCommand>
 {
     public RecordTriageVitalsCommandValidator()
     {
         RuleFor(x => x.QueueItemId).NotEmpty();
+        When(x => x.Priority.HasValue, () => RuleFor(x => x.Priority!.Value).IsInEnum());
         When(x => x.SystolicBp.HasValue, () => RuleFor(x => x.SystolicBp).InclusiveBetween(50, 300));
         When(x => x.DiastolicBp.HasValue, () => RuleFor(x => x.DiastolicBp).InclusiveBetween(30, 200));
         When(x => x.HeartRateBpm.HasValue, () => RuleFor(x => x.HeartRateBpm).InclusiveBetween(30, 250));
@@ -225,11 +227,26 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             _vitalsRepository.Update(vitals);
         }
 
+        bool queueItemModified = false;
+
+        // Persist priority change to PostgreSQL if provided
+        if (request.Priority.HasValue && queueItem.Priority != request.Priority.Value)
+        {
+            queueItem.Priority = request.Priority.Value;
+            queueItemModified = true;
+        }
+
         // Transition queue status to Triaged if waiting
         if (queueItem.Status == QueueStatus.Waiting)
         {
             queueItem.Status = QueueStatus.Triaged;
+            queueItemModified = true;
+        }
+
+        if (queueItemModified)
+        {
             queueItem.UpdatedAt = DateTime.UtcNow;
+            queueItem.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Nurse";
             _queueRepository.Update(queueItem);
         }
 

@@ -65,6 +65,7 @@ public sealed class GetReferralLettersQueryHandler : IRequestHandler<GetReferral
             referral.AttachedDiagnostics,
             referral.IsSigned,
             referral.SignedAt,
-            referral.CreatedAt)).ToList().AsReadOnly();
+            referral.CreatedAt,
+            referral.SecurityDigest)).ToList().AsReadOnly();
     }
 }

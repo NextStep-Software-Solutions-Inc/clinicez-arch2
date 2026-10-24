@@ -61,6 +61,8 @@ public static class InteropTypes
     public const string RxStatusChanged = "rx.status.changed";
     public const string RxDispensed = "rx.dispensed";
     public const string RxExternalDispensed = "rx.external.dispensed";
+    /// <summary>Clinic -> pharmacy. Payload: <c>PharmacyOtcDispensedPayload</c>. Decrements retail/OTC medication and supply lots via FEFO.</summary>
+    public const string PharmacyOtcDispensed = "pharmacy.otc.dispensed";
 
     // Platform services (request/reply through the hub; replace direct service-to-service HTTP)
     /// <summary>Clinic -> pharmacy. Payload: <c>GamotLookupRequestedPayload</c>. Reply type: <see cref="GamotLookupResponded"/>.</summary>

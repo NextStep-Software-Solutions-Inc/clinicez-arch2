@@ -24,6 +24,7 @@ export interface StatutoryImmunizationsTabProps {
   onRecordHistoricalVaccine?: (payload: RecordHistoricalImmunizationPayload) => Promise<void>;
   onRecordAefi?: (immunizationId: string, payload: RecordAefiPayload) => Promise<void>;
   onRefreshChart?: () => void;
+  queueItemId?: string | null;
 }
 
 export const PHILHEALTH_STATUTORY_VACCINES = {
@@ -75,6 +76,7 @@ export default function StatutoryImmunizationsTab({
   onRecordHistoricalVaccine,
   onRecordAefi,
   onRefreshChart,
+  queueItemId,
 }: StatutoryImmunizationsTabProps) {
   const [selectedCohort, setSelectedCohort] = useState<string>('ALL');
   const [administerModalVisible, setAdministerModalVisible] = useState(false);
@@ -456,6 +458,7 @@ export default function StatutoryImmunizationsTab({
         patient={patient}
         patientId={patientId || patient?.id}
         demographics={demoProp}
+        queueItemId={queueItemId}
         onAdministerVaccine={async (payload) => {
           if (onAdministerVaccine) {
             await onAdministerVaccine(payload);

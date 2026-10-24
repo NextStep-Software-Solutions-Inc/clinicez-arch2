@@ -104,10 +104,23 @@ public sealed class QueueController : ControllerBase
             request.LimbsCircumferenceCm,
             request.PreAssessmentNotes,
             request.PreAssessmentRemarks,
-            request.TriageAcuityReason);
+            request.TriageAcuityReason,
+            request.Priority);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<TriageVitalsDto>.Success(result, "Triage vitals recorded successfully."));
+    }
+
+    [HttpPost("{id:guid}/escalate-priority")]
+    [HasPermission(ClinicPermissions.TriageWrite)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> EscalatePriority(
+        Guid id,
+        [FromBody] EscalatePriorityRequest request,
+        CancellationToken ct)
+    {
+        var command = new EscalateQueueItemPriorityCommand(id, request.NewPriority, request.EscalationReason ?? "Clinical acuity escalation");
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Queue ticket priority escalated successfully."));
     }
 
     [HttpGet("{id:guid}/triage")]
@@ -143,6 +156,17 @@ public sealed class QueueController : ControllerBase
     {
         var result = await _sender.Send(new CompleteQueueItemCommand(id), ct);
         return Ok(ApiResponse<bool>.Success(result, "Queue item completed."));
+    }
+
+    [HttpPost("{id:guid}/discharge-non-doctor")]
+    [HasPermission(ClinicPermissions.QueueCompleteNonDoctor)]
+    public async Task<ActionResult<ApiResponse<bool>>> DischargeNonDoctorVisit(
+        Guid id,
+        [FromBody] DischargeNonDoctorRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new CompleteNonDoctorVisitCommand(id, request?.DischargeRemarks), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Non-doctor visit discharged successfully."));
     }
 
     [HttpPost("{id:guid}/no-show")]
@@ -197,6 +221,24 @@ public sealed class QueueController : ControllerBase
         return Ok(ApiResponse<QueueItemDto>.Success(result, "Queue ticket reassigned successfully."));
     }
 
+    [HttpPost("{id:guid}/divert")]
+    [HasPermission(ClinicPermissions.TriageWrite)]
+    public async Task<ActionResult<ApiResponse<bool>>> DivertEmergencyPatient(
+        Guid id,
+        [FromBody] DivertEmergencyPatientRequest request,
+        CancellationToken ct)
+    {
+        var command = new DivertEmergencyPatientCommand(
+            id,
+            request.DestinationHospital,
+            request.TransportMode,
+            request.ParamedicOrEscortName,
+            request.ClinicalHandoverSummary);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<bool>.Success(result, "Emergency patient diverted successfully."));
+    }
+
     [HttpPost("reconcile-eod")]
     [HasPermission(ClinicPermissions.QueueComplete)]
     public async Task<ActionResult<ApiResponse<ReconcileEodResultDto>>> ReconcileEod(
@@ -245,8 +287,21 @@ public sealed record RecordTriageRequest(
     decimal? LimbsCircumferenceCm = null,
     string? PreAssessmentNotes = null,
     string? PreAssessmentRemarks = null,
-    string? TriageAcuityReason = null);
+    string? TriageAcuityReason = null,
+    QueuePriority? Priority = null);
+
+public sealed record EscalatePriorityRequest(
+    QueuePriority NewPriority,
+    string? EscalationReason = null);
 
 public sealed record CallQueueRequest(Guid? DoctorId, string? DoctorName, string? RoomOrStation = null, Guid? RoomId = null);
 
 public sealed record ReassignQueueRequest(Guid? DoctorId, string? DoctorName, string? RoomOrStation = null, Guid? RoomId = null);
+ 
+public sealed record DischargeNonDoctorRequest(string? DischargeRemarks = null);
+
+public sealed record DivertEmergencyPatientRequest(
+    string DestinationHospital,
+    string TransportMode,
+    string ParamedicOrEscortName,
+    string ClinicalHandoverSummary);

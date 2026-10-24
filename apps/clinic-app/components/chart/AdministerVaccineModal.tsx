@@ -24,6 +24,7 @@ export interface AdministerVaccineModalProps {
   patient?: ClinicPatient | null;
   patientId?: string;
   demographics?: PatientDemographics | null;
+  queueItemId?: string | null;
   onAdministerVaccine: (payload: AdministerVaccinePayload) => Promise<void>;
   onSuccess?: () => void;
 }
@@ -56,6 +57,7 @@ export default function AdministerVaccineModal({
   patient,
   patientId,
   demographics,
+  queueItemId,
   onAdministerVaccine,
   onSuccess,
 }: AdministerVaccineModalProps) {
@@ -85,6 +87,7 @@ export default function AdministerVaccineModal({
   const [staffName, setStaffName] = useState('');
   const [prcLicense, setPrcLicense] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [completeVisit, setCompleteVisit] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -108,6 +111,7 @@ export default function AdministerVaccineModal({
       setStaffName(currentName || '');
       setPrcLicense(currentStaff?.prcLicenseNumber || '');
       setRemarks('');
+      setCompleteVisit(false);
       setValidationError(null);
     }
   }, [visible, currentName, currentStaff]);
@@ -177,6 +181,8 @@ export default function AdministerVaccineModal({
         administeredByStaffName: adminName,
         administeredByPrcLicense: prcLicense.trim() || undefined,
         remarks: remarks.trim() || undefined,
+        queueItemId: queueItemId || undefined,
+        completeVisit: completeVisit,
       };
 
       await onAdministerVaccine(payload);
@@ -470,6 +476,32 @@ export default function AdministerVaccineModal({
                 value={remarks}
                 onChangeText={setRemarks}
               />
+            </View>
+
+            {/* Auto-Discharge / Complete Visit Toggle */}
+            <View style={styles.fieldSection}>
+              <View style={styles.switchContainer}>
+                <View style={{ flex: 1, paddingRight: theme.spacing.sm }}>
+                  <ThemedText variant="captionBold" color={theme.colors.text}>
+                    Complete & Discharge Visit?
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    Automatically mark queue visit as completed and discharged
+                  </ThemedText>
+                </View>
+                <Pressable
+                  testID="complete-visit-toggle"
+                  style={[styles.toggleBtn, completeVisit && styles.toggleBtnActive]}
+                  onPress={() => setCompleteVisit(!completeVisit)}
+                >
+                  <ThemedText
+                    variant="captionBold"
+                    color={completeVisit ? theme.colors.onPrimary : theme.colors.textSecondary}
+                  >
+                    {completeVisit ? 'Yes' : 'No'}
+                  </ThemedText>
+                </Pressable>
+              </View>
             </View>
           </ScrollView>
 
