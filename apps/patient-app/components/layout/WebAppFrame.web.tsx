@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import type { NavigationState, ParamListBase } from '@react-navigation/native';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { HeaderSearchProvider, useHeaderSearchEntry } from '../../contexts/HeaderSearchContext';
 import { resolveWebHeaderState } from '../../navigation/webSections';
 import { useWebKeyboardShortcuts } from '../../hooks/useWebKeyboardShortcuts.web';
 import WebSidebar from './WebSidebar.web';
@@ -15,17 +16,7 @@ interface WebAppFrameProps {
   children: ReactNode;
 }
 
-/**
- * Navigator `layout` for the web Main stack.
- *
- * >= 768px  : persistent sidebar + content column (centered, max width from tokens)
- * <  768px  : full-width content with a persistent top header and compact bottom tab bar
- *
- * Pushed (non-tab) pages and nested tab sub-pages (e.g. Add Health Record) get a header
- * with back + title on all viewports. Root tab pages get the compact header with brand mark,
- * title, and Notification/Settings actions when < 768px (where the sidebar is hidden).
- */
-export default function WebAppFrame({ state, navigation, descriptors, children }: WebAppFrameProps) {
+function WebAppFrameInner({ state, navigation, descriptors, children }: WebAppFrameProps) {
   const { colors, sizes } = useAppTheme();
   const { isWorkstation, isDesktop, isCompact } = useBreakpoint();
   useWebKeyboardShortcuts(navigation);
@@ -33,6 +24,7 @@ export default function WebAppFrame({ state, navigation, descriptors, children }
   const headerInfo = resolveWebHeaderState(state, descriptors);
   const showBackHeader = !headerInfo.isRootTab;
   const showCompactTabHeader = headerInfo.isRootTab && isCompact;
+  const activeSearch = useHeaderSearchEntry(headerInfo.isRootTab ? headerInfo.tabKey : undefined);
 
   const onBack = () => {
     if (headerInfo.isNestedTabPush && headerInfo.tabKey === 'FilesScreen') {
@@ -56,6 +48,8 @@ export default function WebAppFrame({ state, navigation, descriptors, children }
           subtitle={headerInfo.subtitle}
           showBrand
           showAccountActions
+          onOpenSearch={activeSearch?.openSearch}
+          hasActiveSearch={activeSearch?.hasActiveSearch}
           onOpenNotifications={() => navigation.navigate('NotificationScreen')}
           onOpenSettings={() => navigation.navigate('SettingsScreen')}
         />
@@ -71,6 +65,24 @@ export default function WebAppFrame({ state, navigation, descriptors, children }
       {isWorkstation ? <WebSidebar state={state} navigation={navigation} collapsed={!isDesktop} /> : null}
       {content}
     </View>
+  );
+}
+
+/**
+ * Navigator `layout` for the web Main stack.
+ *
+ * >= 768px  : persistent sidebar + content column (centered, max width from tokens)
+ * <  768px  : full-width content with a persistent top header and compact bottom tab bar
+ *
+ * Pushed (non-tab) pages and nested tab sub-pages (e.g. Add Health Record) get a header
+ * with back + title on all viewports. Root tab pages get the compact header with brand mark,
+ * title, optional Search button, and Notification/Settings actions when < 768px.
+ */
+export default function WebAppFrame(props: WebAppFrameProps) {
+  return (
+    <HeaderSearchProvider>
+      <WebAppFrameInner {...props} />
+    </HeaderSearchProvider>
   );
 }
 

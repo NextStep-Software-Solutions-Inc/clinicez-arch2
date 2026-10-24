@@ -220,7 +220,7 @@ export default function ExploreOrgsScreenWeb() {
             ]}
         >
             {/* Top Toolbar: Search + Filter Chips */}
-            <View style={[styles.toolbar, { gap: spacing.md, marginBottom: spacing.xl }]}>
+            <View style={[styles.toolbar, { gap: spacing.md, marginBottom: spacing.md }]}>
                 <View style={[styles.searchRow, { gap: spacing.md }]}>
                     <View
                         style={[

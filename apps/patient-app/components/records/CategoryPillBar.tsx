@@ -1,8 +1,7 @@
-import React from 'react';
-import { Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { Platform } from 'react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
-import ThemedText from '../ui/ThemedText';
-import { AppIcon } from '../ui/Icon';
+import { FilterChipBar, type FilterChipItem } from '../ui/FilterChipBar';
 import { CATEGORY_FILTERS, type CategoryFilterId } from '../../services/records/categories';
 
 export interface CategoryPillBarProps {
@@ -16,102 +15,28 @@ export const CategoryPillBar: React.FC<CategoryPillBarProps> = ({
   onSelectCategory,
   counts,
 }) => {
-  const { colors, spacing, radii, sizes } = useAppTheme();
+  const { spacing } = useAppTheme();
+
+  const items: ReadonlyArray<FilterChipItem<CategoryFilterId>> = useMemo(
+    () =>
+      CATEGORY_FILTERS.map((cat) => ({
+        key: cat.id,
+        label: cat.label,
+        count: counts?.[cat.id],
+      })),
+    [counts]
+  );
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.scroll}
-      contentContainerStyle={[
-        styles.container,
-        {
-          gap: spacing.sm,
-          paddingHorizontal: Platform.OS === 'web' ? 0 : spacing.lg,
-        },
-      ]}
-    >
-      {CATEGORY_FILTERS.map((cat) => {
-        const isSelected = selectedCategory === cat.id;
-        const count = counts?.[cat.id];
-
-        return (
-          <TouchableOpacity
-            key={cat.id}
-            onPress={() => onSelectCategory(cat.id)}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: isSelected }}
-            activeOpacity={0.75}
-            style={[
-              styles.pill,
-              {
-                borderRadius: radii.full,
-                paddingHorizontal: spacing.md,
-                paddingVertical: spacing.xs + 2,
-                backgroundColor: isSelected ? colors.primary : colors.card,
-                borderColor: isSelected ? colors.primary : colors.border,
-                borderWidth: sizes.borderWidth,
-                gap: spacing.xs,
-              },
-            ]}
-          >
-            <AppIcon
-              name={cat.icon}
-              size={sizes.iconSm}
-              color={isSelected ? colors.onPrimary : colors.textSecondary}
-            />
-            <ThemedText
-              variant="captionBold"
-              numberOfLines={1}
-              style={{ color: isSelected ? colors.onPrimary : colors.textSecondary }}
-            >
-              {cat.label}
-            </ThemedText>
-            {count !== undefined && count > 0 && (
-              <View
-                style={[
-                  styles.badgeCount,
-                  {
-                    backgroundColor: isSelected ? colors.primaryHover : colors.surfaceSubtle,
-                    borderRadius: radii.full,
-                    paddingHorizontal: spacing.xs,
-                  },
-                ]}
-              >
-                <ThemedText
-                  variant="caption"
-                  style={{ color: isSelected ? colors.onPrimary : colors.textMuted }}
-                >
-                  {count}
-                </ThemedText>
-              </View>
-            )}
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
+    <FilterChipBar
+      items={items}
+      selectedKey={selectedCategory}
+      onSelect={onSelectCategory}
+      contentContainerStyle={{
+        paddingHorizontal: Platform.OS === 'web' ? 0 : spacing.lg,
+      }}
+    />
   );
 };
 
 export default CategoryPillBar;
-
-const styles = StyleSheet.create({
-  scroll: {
-    flexGrow: 0,
-  },
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  badgeCount: {
-    minWidth: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

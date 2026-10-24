@@ -11,13 +11,14 @@ import Button from '@ui/Button';
 import IconButton from '@ui/IconButton';
 import Card from '@ui/Card';
 import Badge from '@ui/Badge';
-import Input from '@ui/Input';
 import EmptyState from '@ui/EmptyState';
 import { AppIcon, type IconName } from '@ui/Icon';
 import { Divider } from '@ui/Primitives';
+import { ActiveSearchBanner, SearchModal } from '@ui/SearchModal';
 import Screen from '../../../components/layout/Screen';
 import { usePatientId } from 'hooks/usePatientId';
 import { useBreakpoint } from '../../../hooks/useBreakpoint';
+import { useRegisterHeaderSearch } from '../../../contexts/HeaderSearchContext';
 import {
   FileBrowserFile,
   deleteItem,
@@ -77,6 +78,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
   const { isDesktop, isCompact } = useBreakpoint();
 
   const [query, setQuery] = useState('');
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<CategoryFilterId>('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [sortBy, setSortBy] = useState<SortOption>('date-desc');
@@ -86,6 +88,16 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
     id: string;
     initialName: string;
   } | null>(null);
+
+  const openSearchDialog = useCallback(() => {
+    setIsSearchModalOpen(true);
+  }, []);
+
+  useRegisterHeaderSearch(
+    'FilesScreen',
+    openSearchDialog,
+    query.trim().length > 0
+  );
 
   // Browser state
   const { contents, isLoading, error, refresh, mutate } = useFilesBrowser(
@@ -272,6 +284,13 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
 
                   <View style={[styles.headerActions, { gap: spacing.sm }]}>
                     <Button
+                      label="Search"
+                      variant={query.trim() ? 'secondary' : 'outline'}
+                      size="md"
+                      icon="search"
+                      onPress={openSearchDialog}
+                    />
+                    <Button
                       label="Sync Now"
                       variant="outline"
                       size="md"
@@ -290,63 +309,24 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                 </View>
               )}
 
-              {/* Search & View Controls */}
+              {/* Category Filter Chips + Desktop View Controls (symmetrical top === bottom spacing) */}
               {isCompact ? (
-                <View style={[styles.compactSearchRow, { gap: spacing.xs }]}>
-                  <Input
-                    leftIcon="search"
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder="Search records, facility, notes..."
-                    containerStyle={styles.compactSearchInput}
-                    right={
-                      query ? (
-                        <Pressable onPress={() => setQuery('')} accessibilityLabel="Clear search">
-                          <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
-                        </Pressable>
-                      ) : undefined
-                    }
-                  />
-                  <IconButton
-                    icon="sync"
-                    accessibilityLabel="Sync records"
-                    tone="filled"
-                    color="primary"
-                    onPress={handleSync}
-                  />
-                </View>
+                <CategoryPillBar
+                  selectedCategory={activeCategory}
+                  onSelectCategory={setActiveCategory}
+                  counts={categoryCounts}
+                />
               ) : (
-                <View
-                  style={[
-                    styles.filterBar,
-                    {
-                      borderColor: colors.border,
-                      borderWidth: sizes.borderWidth,
-                      borderRadius: radii.lg,
-                      backgroundColor: colors.card,
-                      padding: spacing.md,
-                      gap: spacing.sm,
-                    },
-                    shadows.sm,
-                  ]}
-                >
-                  <Input
-                    leftIcon="search"
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder="Search records, facility, notes..."
-                    containerStyle={styles.searchInputContainer}
-                    right={
-                      query ? (
-                        <Pressable onPress={() => setQuery('')} accessibilityLabel="Clear search">
-                          <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
-                        </Pressable>
-                      ) : undefined
-                    }
-                  />
+                <View style={[styles.chipsAndControlsRow, { gap: spacing.sm }]}>
+                  <View style={styles.chipsFlex}>
+                    <CategoryPillBar
+                      selectedCategory={activeCategory}
+                      onSelectCategory={setActiveCategory}
+                      counts={categoryCounts}
+                    />
+                  </View>
 
                   <View style={[styles.viewControlsRow, { gap: spacing.sm }]}>
-                    {/* Grid / List Toggle */}
                     <View
                       style={[
                         styles.toggleGroup,
@@ -374,7 +354,6 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                       />
                     </View>
 
-                    {/* Sort Toggle */}
                     <Pressable
                       onPress={() => {
                         setSortBy((curr) => {
@@ -415,11 +394,11 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                 </View>
               )}
 
-              {/* Category Filter Pills */}
-              <CategoryPillBar
-                selectedCategory={activeCategory}
-                onSelectCategory={setActiveCategory}
-                counts={categoryCounts}
+              {/* Active Search Pill (shown only when a keyword filter is active) */}
+              <ActiveSearchBanner
+                query={query}
+                onEdit={openSearchDialog}
+                onClear={() => setQuery('')}
               />
 
               {/* Sync and Offline Banner */}
@@ -449,15 +428,15 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
               ) : filteredAndSortedRecords.length === 0 ? (
                 <EmptyState
                   icon="files"
-                  title={query || activeCategory !== 'all' ? 'No matching records' : 'No health records yet'}
+                  title={query.trim() || activeCategory !== 'all' ? 'No matching records' : 'No health records yet'}
                   message={
-                    query || activeCategory !== 'all'
+                    query.trim() || activeCategory !== 'all'
                       ? 'Try searching with a different keyword or select another category.'
                       : 'Add diagnostic lab results, prescriptions, and certificates to access them offline anytime.'
                   }
-                  actionLabel={query || activeCategory !== 'all' ? 'Reset Filters' : 'Add Record'}
+                  actionLabel={query.trim() || activeCategory !== 'all' ? 'Reset Filters' : 'Add Record'}
                   onActionPress={
-                    query || activeCategory !== 'all'
+                    query.trim() || activeCategory !== 'all'
                       ? () => {
                           setQuery('');
                           setActiveCategory('all');
@@ -650,6 +629,15 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
           onSave={handleRenameSave}
           title="Rename Record"
         />
+
+        <SearchModal
+          visible={isSearchModalOpen}
+          title="Search Health Records"
+          placeholder="Search records, facility, notes..."
+          value={query}
+          onApply={setQuery}
+          onClose={() => setIsSearchModalOpen(false)}
+        />
       </Screen>
 
       {/* Compact Floating Action Button (matches native FilesScreen) */}
@@ -717,28 +705,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
   },
-  compactSearchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  compactSearchInput: {
-    flex: 1,
-    marginBottom: 0,
-  },
-  filterBar: {
+  chipsAndControlsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
   },
-  searchInputContainer: {
-    marginBottom: 0,
+  chipsFlex: {
     flex: 1,
-    minWidth: 220,
+    minWidth: 0,
   },
   viewControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
   },
   toggleGroup: {
     flexDirection: 'row',
@@ -770,16 +750,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dragOverlay: {
-    ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 999,
-  },
   fab: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 50,
+  },
+  dragOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
   },
 });

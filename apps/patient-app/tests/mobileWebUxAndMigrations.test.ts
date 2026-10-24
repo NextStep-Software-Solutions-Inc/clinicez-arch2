@@ -133,7 +133,7 @@ describe('Mobile Web UI/UX & Compact Header State Resolution', () => {
     expect(fileRowWebSource.includes('!isCompact && isHovered')).toBe(true);
 
     const pillBarSource = readApp('components/records/CategoryPillBar.tsx');
-    expect(pillBarSource.includes('horizontal')).toBe(true);
+    expect(pillBarSource.includes('FilterChipBar')).toBe(true);
     expect(pillBarSource.includes("flexWrap: 'wrap'")).toBe(false);
   });
 
@@ -172,16 +172,32 @@ describe('Mobile Web UI/UX & Compact Header State Resolution', () => {
     expect(rescheduleSource.includes('<ThemedText variant="h2">Request Reschedule</ThemedText>')).toBe(false);
   });
 
-  test('Filter and category chip bars use horizontal ScrollView with flexShrink: 0 instead of wrapping', () => {
+  test('Records, Notifications, and Appointments share identical horizontal FilterChipBar with symmetrical top/bottom spacing', () => {
+    const filterChipBarSource = readApp('components/ui/FilterChipBar.tsx');
+    expect(filterChipBarSource.includes('<ScrollView')).toBe(true);
+    expect(filterChipBarSource.includes('horizontal')).toBe(true);
+    expect(filterChipBarSource.includes('flexShrink: 0')).toBe(true);
+    expect(filterChipBarSource.includes('variant="smallBold"')).toBe(true);
+    expect(filterChipBarSource.includes("flexWrap: 'wrap'")).toBe(false);
+
     const pillBarSource = readApp('components/records/CategoryPillBar.tsx');
-    expect(pillBarSource.includes('<ScrollView')).toBe(true);
-    expect(pillBarSource.includes('horizontal')).toBe(true);
-    expect(pillBarSource.includes('flexShrink: 0')).toBe(true);
-    expect(pillBarSource.includes("flexWrap: 'wrap'")).toBe(false);
+    expect(pillBarSource.includes('<FilterChipBar')).toBe(true);
+    expect(pillBarSource.includes('badgeCount')).toBe(false);
+
+    const notifWebSource = readApp('navigation/screens/Notification.screen.web.tsx');
+    expect(notifWebSource.includes('<FilterChipBar')).toBe(true);
+    expect(notifWebSource.includes('paddingTop: verticalRhythm')).toBe(true);
+    expect(notifWebSource.includes('gap: verticalRhythm')).toBe(true);
+
+    const notifNativeSource = readApp('navigation/screens/Notification.screen.tsx');
+    expect(notifNativeSource.includes('<FilterChipBar')).toBe(true);
 
     const apptsWebSource = readApp('navigation/screens/Appointments.screen.web.tsx');
-    expect(apptsWebSource.includes('tabsScrollDesktop')).toBe(true);
-    expect(apptsWebSource.includes('tabsContainer')).toBe(false);
+    expect(apptsWebSource.includes('<FilterChipBar')).toBe(true);
+
+    const offlineBannerSource = readApp('components/appointments/OfflineBanner.tsx');
+    expect(offlineBannerSource.includes('if (!rendered && !shouldShow)')).toBe(true);
+    expect(offlineBannerSource.includes('return null;')).toBe(true);
 
     const uploadWebSource = readApp('navigation/screens/files/FilesUpload.screen.web.tsx');
     expect(uploadWebSource.includes('style={styles.typeScroll}')).toBe(true);
@@ -193,15 +209,44 @@ describe('Mobile Web UI/UX & Compact Header State Resolution', () => {
 
     const exploreClinicsWeb = readApp('navigation/screens/ExploreClinics.screen.web.tsx');
     expect(exploreClinicsWeb.includes('style={styles.filterScroll}')).toBe(true);
-    expect(exploreClinicsWeb.includes('contentContainerStyle={[styles.filterRow')).toBe(true);
+    expect(exploreClinicsWeb.includes('gap: spacing.md, marginBottom: spacing.md')).toBe(true);
 
     const exploreOrgsWeb = readApp('navigation/screens/ExploreOrgs.screen.web.tsx');
     expect(exploreOrgsWeb.includes('style={styles.filterScroll}')).toBe(true);
-    expect(exploreOrgsWeb.includes('contentContainerStyle={[styles.filterRow')).toBe(true);
+    expect(exploreOrgsWeb.includes('gap: spacing.md, marginBottom: spacing.md')).toBe(true);
+  });
 
-    const notifWebSource = readApp('navigation/screens/Notification.screen.web.tsx');
-    expect(notifWebSource.includes('style={styles.filterScroll}')).toBe(true);
-    expect(notifWebSource.includes('flexShrink: 0')).toBe(true);
+  test('Appointments and Health Records trigger SearchModal popup dialog from header search icon button', () => {
+    const webPageHeader = readApp('components/layout/WebPageHeader.web.tsx');
+    expect(webPageHeader.includes('onOpenSearch')).toBe(true);
+    expect(webPageHeader.includes('hasActiveSearch')).toBe(true);
+
+    const webAppFrame = readApp('components/layout/WebAppFrame.web.tsx');
+    expect(webAppFrame.includes('HeaderSearchProvider')).toBe(true);
+    expect(webAppFrame.includes('useHeaderSearchEntry')).toBe(true);
+    expect(webAppFrame.includes('onOpenSearch={activeSearch?.openSearch}')).toBe(true);
+
+    const searchModalSource = readApp('components/ui/SearchModal.tsx');
+    expect(searchModalSource.includes('<Modal')).toBe(true);
+    expect(searchModalSource.includes('ActiveSearchBanner')).toBe(true);
+
+    const apptsWebSource = readApp('navigation/screens/Appointments.screen.web.tsx');
+    expect(apptsWebSource.includes("useRegisterHeaderSearch(\n    'AppointmentsScreen'")).toBe(true);
+    expect(apptsWebSource.includes('<SearchModal')).toBe(true);
+    expect(apptsWebSource.includes('searchRowWrap')).toBe(false);
+
+    const filesWebSource = readApp('navigation/screens/files/Files.screen.web.tsx');
+    expect(filesWebSource.includes("useRegisterHeaderSearch(\n    'FilesScreen'")).toBe(true);
+    expect(filesWebSource.includes('<SearchModal')).toBe(true);
+    expect(filesWebSource.includes('compactSearchRow')).toBe(false);
+
+    const apptsNativeSource = readApp('navigation/screens/Appointments.screen.tsx');
+    expect(apptsNativeSource.includes('onOpenSearch={openSearchDialog}')).toBe(true);
+    expect(apptsNativeSource.includes('<SearchModal')).toBe(true);
+
+    const filesNativeSource = readApp('navigation/screens/files/Files.screen.tsx');
+    expect(filesNativeSource.includes('onOpenSearch={openSearchDialog}')).toBe(true);
+    expect(filesNativeSource.includes('<SearchModal')).toBe(true);
   });
 });
 
