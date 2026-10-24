@@ -7,7 +7,6 @@ using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Enums;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
-using ClinicEz.Shared.Security.Turnstile;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -19,7 +18,6 @@ public sealed class CreateBookingDraftCommandHandlerTests
     private readonly IPatientRepository _patientRepo = Substitute.For<IPatientRepository>();
     private readonly IBookingDraftRepository _draftRepo = Substitute.For<IBookingDraftRepository>();
     private readonly IUnitOfWork _uow = Substitute.For<IUnitOfWork>();
-    private readonly ITurnstileValidator _turnstile = Substitute.For<ITurnstileValidator>();
 
     private readonly Guid _patientId = Guid.NewGuid();
     private readonly Guid _clinicId = Guid.NewGuid();
@@ -34,7 +32,7 @@ public sealed class CreateBookingDraftCommandHandlerTests
     {
         // Arrange
         _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>()).Returns((Domain.Entities.Patient?)null);
-        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, _turnstile);
+        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow);
         var cmd = new CreateBookingDraftCommand(_patientId, _clinicId, null, null, null, "Flu", "Notes", "[]", "[]");
 
         // Act
@@ -46,36 +44,11 @@ public sealed class CreateBookingDraftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenTurnstileFails_ThrowsForbiddenException()
-    {
-        // Arrange
-        _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>())
-            .Returns(new Domain.Entities.Patient { Id = _patientId, FirstName = "Juan", LastName = "Dela Cruz" });
-        _turnstile.ValidateAsync("invalid-token", Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
-        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, _turnstile);
-        var cmd = new CreateBookingDraftCommand(
-            _patientId, _clinicId, null, null, null, "Headache", "Severe", "[]", "[]",
-            TurnstileToken: "invalid-token", RemoteIp: "127.0.0.1");
-
-        // Act
-        Func<Task> act = () => handler.Handle(cmd, CancellationToken.None);
-
-        // Assert
-        await act.Should().ThrowAsync<ForbiddenException>()
-            .WithMessage("*Turnstile bot verification failed*");
-        await _draftRepo.DidNotReceive().AddAsync(Arg.Any<BookingDraft>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task Handle_WhenActiveDraftVelocityCapExceeded_ThrowsBadRequestException()
     {
         // Arrange
         _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>())
             .Returns(new Domain.Entities.Patient { Id = _patientId, FirstName = "Juan", LastName = "Dela Cruz" });
-        _turnstile.ValidateAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(true);
 
         var activeDrafts = new List<BookingDraft>
         {
@@ -88,7 +61,7 @@ public sealed class CreateBookingDraftCommandHandlerTests
         _draftRepo.GetByPatientAsync(_patientId, BookingDraftStatus.Draft, Arg.Any<CancellationToken>())
             .Returns(activeDrafts);
 
-        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, _turnstile);
+        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow);
         var cmd = new CreateBookingDraftCommand(_patientId, _clinicId, null, null, null, "Routine checkup", null, "[]", "[]");
 
         // Act
@@ -101,13 +74,11 @@ public sealed class CreateBookingDraftCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenUnderCapAndTurnstileValid_CreatesBookingDraftSuccessfully()
+    public async Task Handle_WhenUnderCap_CreatesBookingDraftSuccessfully()
     {
         // Arrange
         _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>())
             .Returns(new Domain.Entities.Patient { Id = _patientId, FirstName = "Juan", LastName = "Dela Cruz" });
-        _turnstile.ValidateAsync("1x00000000000000000000AA", "10.0.0.1", Arg.Any<CancellationToken>())
-            .Returns(true);
 
         var activeDrafts = new List<BookingDraft>
         {
@@ -120,7 +91,7 @@ public sealed class CreateBookingDraftCommandHandlerTests
         BookingDraft? captured = null;
         await _draftRepo.AddAsync(Arg.Do<BookingDraft>(d => captured = d), Arg.Any<CancellationToken>());
 
-        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, _turnstile);
+        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow);
         var cmd = new CreateBookingDraftCommand(
             _patientId, _clinicId, null,
             PreferredDate: new DateOnly(2026, 11, 1),
@@ -130,7 +101,6 @@ public sealed class CreateBookingDraftCommandHandlerTests
             ShareFieldsJson: "[\"fullName\",\"birthDate\"]",
             AttachedFileIdsJson: "[]",
             ShareSections: new[] { "Allergies" },
-            TurnstileToken: "1x00000000000000000000AA",
             RemoteIp: "10.0.0.1");
 
         // Act
@@ -147,84 +117,6 @@ public sealed class CreateBookingDraftCommandHandlerTests
     }
 
     [Theory]
-    [InlineData("1x00000000000000000000AA")]
-    [InlineData("test-pass-token")]
-    [InlineData("LOCAL-OFFLINE-BYPASS")]
-    [InlineData("XXXX.DUMMY.PASS.TEST")]
-    public async Task Handle_WithValidTurnstileTokens_Succeeds(string validToken)
-    {
-        // Arrange
-        _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>())
-            .Returns(new Domain.Entities.Patient { Id = _patientId, FirstName = "Juan", LastName = "Dela Cruz" });
-        _turnstile.ValidateAsync(validToken, "192.168.1.50", Arg.Any<CancellationToken>())
-            .Returns(true);
-        _draftRepo.GetByPatientAsync(_patientId, BookingDraftStatus.Draft, Arg.Any<CancellationToken>())
-            .Returns(new List<BookingDraft>());
-
-        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, _turnstile);
-        var cmd = new CreateBookingDraftCommand(
-            _patientId, _clinicId, null, null, null, "Routine checkup", null, "[]", "[]",
-            TurnstileToken: validToken, RemoteIp: "192.168.1.50");
-
-        // Act
-        var result = await handler.Handle(cmd, CancellationToken.None);
-
-        // Assert
-        result.Should().NotBeEmpty();
-        await _draftRepo.Received(1).AddAsync(Arg.Any<BookingDraft>(), Arg.Any<CancellationToken>());
-    }
-
-    [Theory]
-    [InlineData("fail-bot-token")]
-    [InlineData("1x00000000000000000000BB")]
-    [InlineData("test-fail-token")]
-    [InlineData("XXXX.DUMMY.FAIL.BOT")]
-    public async Task Handle_WithInvalidOrBotTurnstileTokens_ThrowsForbiddenException(string botToken)
-    {
-        // Arrange
-        _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>())
-            .Returns(new Domain.Entities.Patient { Id = _patientId, FirstName = "Juan", LastName = "Dela Cruz" });
-        _turnstile.ValidateAsync(botToken, Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
-        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, _turnstile);
-        var cmd = new CreateBookingDraftCommand(
-            _patientId, _clinicId, null, null, null, "Bot request", null, "[]", "[]",
-            TurnstileToken: botToken, RemoteIp: "203.0.113.1");
-
-        // Act
-        Func<Task> act = () => handler.Handle(cmd, CancellationToken.None);
-
-        // Assert
-        await act.Should().ThrowAsync<ForbiddenException>()
-            .WithMessage("*Turnstile bot verification failed*");
-        await _draftRepo.DidNotReceive().AddAsync(Arg.Any<BookingDraft>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_WhenTurnstileValidatorIsNull_BypassesValidationAndSucceeds()
-    {
-        // Arrange
-        _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>())
-            .Returns(new Domain.Entities.Patient { Id = _patientId, FirstName = "Juan", LastName = "Dela Cruz" });
-        _draftRepo.GetByPatientAsync(_patientId, BookingDraftStatus.Draft, Arg.Any<CancellationToken>())
-            .Returns(new List<BookingDraft>());
-
-        // null turnstile validator simulates turned-off bot verification / air-gapped clinic
-        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, turnstileValidator: null);
-        var cmd = new CreateBookingDraftCommand(
-            _patientId, _clinicId, null, null, null, "Offline clinic checkup", null, "[]", "[]",
-            TurnstileToken: null, RemoteIp: "127.0.0.1");
-
-        // Act
-        var draftId = await handler.Handle(cmd, CancellationToken.None);
-
-        // Assert
-        draftId.Should().NotBeEmpty();
-        await _draftRepo.Received(1).AddAsync(Arg.Any<BookingDraft>(), Arg.Any<CancellationToken>());
-    }
-
-    [Theory]
     [InlineData(0, true)]   // 1st draft succeeds
     [InlineData(1, true)]   // 2nd draft succeeds
     [InlineData(2, true)]   // 3rd draft succeeds
@@ -237,8 +129,6 @@ public sealed class CreateBookingDraftCommandHandlerTests
         // Arrange
         _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>())
             .Returns(new Domain.Entities.Patient { Id = _patientId, FirstName = "Juan", LastName = "Dela Cruz" });
-        _turnstile.ValidateAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(true);
 
         var existingList = new List<BookingDraft>();
         for (var i = 0; i < existingDraftCount; i++)
@@ -254,7 +144,7 @@ public sealed class CreateBookingDraftCommandHandlerTests
         _draftRepo.GetByPatientAsync(_patientId, BookingDraftStatus.Draft, Arg.Any<CancellationToken>())
             .Returns(existingList);
 
-        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, _turnstile);
+        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow);
         var cmd = new CreateBookingDraftCommand(_patientId, _clinicId, null, null, null, $"Draft step {existingDraftCount}", null, "[]", "[]");
 
         // Act
@@ -280,8 +170,6 @@ public sealed class CreateBookingDraftCommandHandlerTests
         // Arrange
         _patientRepo.GetByIdAsync(_patientId, Arg.Any<CancellationToken>())
             .Returns(new Domain.Entities.Patient { Id = _patientId, FirstName = "Juan", LastName = "Dela Cruz" });
-        _turnstile.ValidateAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(true);
 
         // 3 active drafts remain in Draft status (2 were previously submitted and are Ready)
         var activeDrafts = new List<BookingDraft>
@@ -295,7 +183,7 @@ public sealed class CreateBookingDraftCommandHandlerTests
         _draftRepo.GetByPatientAsync(_patientId, BookingDraftStatus.Draft, Arg.Any<CancellationToken>())
             .Returns(activeDrafts);
 
-        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, _turnstile);
+        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow);
         var cmd = new CreateBookingDraftCommand(_patientId, _clinicId, null, null, null, "Followup draft", null, "[]", "[]");
 
         // Act
@@ -318,9 +206,6 @@ public sealed class CreateBookingDraftCommandHandlerTests
         _patientRepo.GetByIdAsync(patientB, Arg.Any<CancellationToken>())
             .Returns(new Domain.Entities.Patient { Id = patientB, FirstName = "Patient", LastName = "B" });
 
-        _turnstile.ValidateAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(true);
-
         // Patient A has reached cap (5 active drafts)
         _draftRepo.GetByPatientAsync(patientA, BookingDraftStatus.Draft, Arg.Any<CancellationToken>())
             .Returns(new List<BookingDraft>
@@ -336,7 +221,7 @@ public sealed class CreateBookingDraftCommandHandlerTests
         _draftRepo.GetByPatientAsync(patientB, BookingDraftStatus.Draft, Arg.Any<CancellationToken>())
             .Returns(new List<BookingDraft>());
 
-        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow, _turnstile);
+        var handler = new CreateBookingDraftCommandHandler(_patientRepo, _draftRepo, _uow);
 
         // Act & Assert
         // Patient A is blocked

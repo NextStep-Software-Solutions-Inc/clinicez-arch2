@@ -61,10 +61,6 @@ public sealed record ClinicSettingsDto(
     bool AppointmentReminder24hEnabled = true,
     bool AppointmentReminder2hEnabled = true,
     bool EnableStaffAppointmentNotifications = true,
-    bool TurnstileEnabled = false,
-    string? TurnstileSiteKey = null,
-    bool IsTurnstileOverriddenByEnv = false,
-    bool? TurnstileEnvOverrideValue = null,
     string? TimeZoneId = null,
     string? DateFormat = null,
     string? TimeFormat = null);

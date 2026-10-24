@@ -1,16 +1,14 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2 } from "lucide-react";
-import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget";
+import { apiBaseUrl } from "@/transport/apiClient";
 
 export function NewsletterForm() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const turnstileRef = useRef<TurnstileWidgetHandle>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,13 +26,12 @@ export function NewsletterForm() {
 
     try {
       setLoading(true);
-      const res = await fetch("/api/v1/public/newsletter", {
+      const res = await fetch(`${apiBaseUrl}/public/newsletter`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: cleanEmail,
           source: "footer",
-          turnstileToken: turnstileToken || undefined,
         }),
       });
 
@@ -43,17 +40,11 @@ export function NewsletterForm() {
       if (res.ok && data.success) {
         setSubscribed(true);
         setEmail("");
-        setTurnstileToken(null);
-        turnstileRef.current?.reset();
         toast.success(data.message || "Thank you for subscribing to Clinic EZ updates!");
       } else {
-        turnstileRef.current?.reset();
-        setTurnstileToken(null);
         toast.error(data.message || "Unable to subscribe. Please try again later.");
       }
     } catch {
-      turnstileRef.current?.reset();
-      setTurnstileToken(null);
       toast.error("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
@@ -97,16 +88,6 @@ export function NewsletterForm() {
           )}
         </button>
       </form>
-      <div className="w-full flex justify-start">
-        <TurnstileWidget
-          ref={turnstileRef}
-          action="newsletter_signup"
-          size="compact"
-          onSuccess={(token) => setTurnstileToken(token)}
-          onExpire={() => setTurnstileToken(null)}
-          onError={() => setTurnstileToken(null)}
-        />
-      </div>
     </div>
   );
 }

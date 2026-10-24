@@ -8,7 +8,6 @@ using ClinicEz.Clinic.Application.Features.ServicesCatalog.Common;
 using ClinicEz.Clinic.Application.Features.Settings.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
-using ClinicEz.Shared.Security.Turnstile;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -61,8 +60,6 @@ public sealed record UpdateClinicSettingsCommand(
     bool? AppointmentReminder24hEnabled = null,
     bool? AppointmentReminder2hEnabled = null,
     bool? EnableStaffAppointmentNotifications = null,
-    bool? TurnstileEnabled = null,
-    string? TurnstileSiteKey = null,
     string? TimeZoneId = null,
     string? DateFormat = null,
     string? TimeFormat = null) : IRequest<ClinicSettingsDto>;
@@ -73,20 +70,17 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IRepository<ClinicServiceItem>? _serviceRepo;
-    private readonly ITurnstileSettingResolver? _turnstileResolver;
 
     public UpdateClinicSettingsCommandHandler(
         IRepository<ClinicSettings> settingsRepo,
         IClinicContext clinicContext,
         IUnitOfWork unitOfWork,
-        IRepository<ClinicServiceItem>? serviceRepo = null,
-        ITurnstileSettingResolver? turnstileResolver = null)
+        IRepository<ClinicServiceItem>? serviceRepo = null)
     {
         _settingsRepo = settingsRepo;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
         _serviceRepo = serviceRepo;
-        _turnstileResolver = turnstileResolver;
     }
 
     public async Task<ClinicSettingsDto> Handle(UpdateClinicSettingsCommand request, CancellationToken ct)
@@ -269,12 +263,6 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         if (request.EnableStaffAppointmentNotifications.HasValue)
             settings.EnableStaffAppointmentNotifications = request.EnableStaffAppointmentNotifications.Value;
 
-        if (request.TurnstileEnabled.HasValue)
-            settings.TurnstileEnabled = request.TurnstileEnabled.Value;
-
-        if (request.TurnstileSiteKey != null)
-            settings.TurnstileSiteKey = string.IsNullOrWhiteSpace(request.TurnstileSiteKey) ? null : request.TurnstileSiteKey.Trim();
-
         if (request.TimeZoneId != null)
         {
             var trimmed = request.TimeZoneId.Trim();
@@ -304,10 +292,6 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         settings.UpdatedBy = "ClinicAdmin";
 
         await _unitOfWork.SaveChangesAsync(ct);
-
-        var (isOverridden, overrideVal) = _turnstileResolver?.GetEnvironmentOverride() ?? (false, null);
-        var effectiveTurnstile = _turnstileResolver?.IsEnabled(settings.TurnstileEnabled) ?? settings.TurnstileEnabled;
-        var effectiveSiteKey = _turnstileResolver?.GetSiteKey(settings.TurnstileSiteKey) ?? settings.TurnstileSiteKey;
 
         return new ClinicSettingsDto(
             settings.Id,
@@ -368,10 +352,6 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             AppointmentReminder24hEnabled: settings.AppointmentReminder24hEnabled,
             AppointmentReminder2hEnabled: settings.AppointmentReminder2hEnabled,
             EnableStaffAppointmentNotifications: settings.EnableStaffAppointmentNotifications,
-            TurnstileEnabled: effectiveTurnstile,
-            TurnstileSiteKey: effectiveSiteKey,
-            IsTurnstileOverriddenByEnv: isOverridden,
-            TurnstileEnvOverrideValue: overrideVal,
             TimeZoneId: settings.TimeZoneId,
             DateFormat: settings.DateFormat,
             TimeFormat: settings.TimeFormat);

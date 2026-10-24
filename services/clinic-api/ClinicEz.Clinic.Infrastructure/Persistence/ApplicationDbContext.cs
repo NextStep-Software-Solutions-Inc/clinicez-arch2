@@ -937,8 +937,6 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.AppointmentReminder24hEnabled).HasDefaultValue(true);
             entity.Property(e => e.AppointmentReminder2hEnabled).HasDefaultValue(true);
             entity.Property(e => e.EnableStaffAppointmentNotifications).HasDefaultValue(true);
-            entity.Property(e => e.TurnstileEnabled).HasDefaultValue(false);
-            entity.Property(e => e.TurnstileSiteKey).HasMaxLength(150);
 
             entity.Property(e => e.TimeZoneId).HasMaxLength(100);
             entity.Property(e => e.DateFormat).HasMaxLength(50);

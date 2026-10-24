@@ -1,26 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Check, CheckCircle2, Copy, Loader2, Mail, MapPin, Phone } from "lucide-react";
-import { siteEmails } from "@/config/site";
-import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget";
-
-interface PublicContactInfo {
-  headquartersAddress: string;
-  supportEmail: string;
-  salesEmail: string;
-  phoneNumber: string;
-  operatingHours: string;
-}
-
-const DEFAULT_CONTACT_INFO: PublicContactInfo = {
-  headquartersAddress:
-    "San Juan 2, Sto Nino\nLapasan, Cagayan de Oro City\nMisamis Oriental\nPhilippines 9000",
-  supportEmail: siteEmails.support || "support@clinicez.com",
-  salesEmail: siteEmails.sales || "sales@clinicez.com",
-  phoneNumber: "+63 (965) 429-7640",
-  operatingHours: "Mon - Fri, 8am - 5pm (PHT)",
-};
+import {
+  PublicContactInfo,
+  DEFAULT_CONTACT_INFO,
+  getPublicContactInfo,
+  sendContactUsMessage,
+} from "@/services/contact.service";
 
 export function ContactUsClient() {
   const [contactInfo, setContactInfo] = useState<PublicContactInfo>(DEFAULT_CONTACT_INFO);
@@ -31,8 +18,6 @@ export function ContactUsClient() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const turnstileRef = useRef<TurnstileWidgetHandle>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -42,18 +27,9 @@ export function ContactUsClient() {
     let isMounted = true;
     async function loadContactInfo() {
       try {
-        const res = await fetch("/api/v1/public/contact", { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && data) {
-            setContactInfo({
-              headquartersAddress: data.headquartersAddress || DEFAULT_CONTACT_INFO.headquartersAddress,
-              supportEmail: data.supportEmail || DEFAULT_CONTACT_INFO.supportEmail,
-              salesEmail: data.salesEmail || DEFAULT_CONTACT_INFO.salesEmail,
-              phoneNumber: data.phoneNumber || DEFAULT_CONTACT_INFO.phoneNumber,
-              operatingHours: data.operatingHours || DEFAULT_CONTACT_INFO.operatingHours,
-            });
-          }
+        const info = await getPublicContactInfo();
+        if (isMounted && info) {
+          setContactInfo(info);
         }
       } catch {
         // Fall back gracefully to DEFAULT_CONTACT_INFO
@@ -87,32 +63,19 @@ export function ContactUsClient() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/v1/public/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          email: email.trim(),
-          message: message.trim(),
-          turnstileToken,
-        }),
+      const name = `${firstName} ${lastName}`.trim();
+      const res = await sendContactUsMessage({
+        name,
+        email: email.trim(),
+        message: message.trim(),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        turnstileRef.current?.reset();
-        setTurnstileToken(null);
-        throw new Error(data.message || "Unable to send your message right now.");
-      }
       setSubmitSuccess(
-        data.message || "Thank you for reaching out. Our team will respond within 1 business day."
+        res.message || "Thank you for reaching out. Our team will respond within 1 business day."
       );
       setFirstName("");
       setLastName("");
       setEmail("");
       setMessage("");
-      setTurnstileToken(null);
-      turnstileRef.current?.reset();
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : "Unable to send your message right now.");
     } finally {
@@ -311,14 +274,6 @@ export function ContactUsClient() {
                 placeholder="How can we help you today?"
               />
             </div>
-
-            <TurnstileWidget
-              ref={turnstileRef}
-              action="contact_us"
-              onSuccess={(token) => setTurnstileToken(token)}
-              onExpire={() => setTurnstileToken(null)}
-              onError={() => setTurnstileToken(null)}
-            />
 
             <button
               type="submit"

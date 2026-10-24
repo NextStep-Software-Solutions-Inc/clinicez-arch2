@@ -183,12 +183,6 @@ public static class DependencyInjection
             ? ActivatorUtilities.CreateInstance<LogEmailSender>(sp)
             : ActivatorUtilities.CreateInstance<SmtpEmailSender>(sp));
 
-        // Bot challenge verification for public entry points (Cloudflare Turnstile)
-        services.AddHttpClient<ITurnstileValidator, CloudflareTurnstileValidator>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(10);
-        });
-
         return services;
     }
 }

@@ -1974,12 +1974,6 @@ export interface ClinicSettingsRecord {
   appointmentReminder2hEnabled?: boolean;
   enableStaffAppointmentNotifications?: boolean;
 
-  // Bot Challenge Protection (Turnstile)
-  turnstileEnabled?: boolean;
-  turnstileSiteKey?: string | null;
-  isTurnstileOverriddenByEnv?: boolean;
-  turnstileEnvOverrideValue?: boolean | null;
-
   // Regional Timezone, Date & Time Format Overrides (null/undefined = inherit from WorkspaceProfile)
   timeZoneId?: string | null;
   dateFormat?: string | null;
