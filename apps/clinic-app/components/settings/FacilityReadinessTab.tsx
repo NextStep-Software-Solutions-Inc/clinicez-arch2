@@ -56,6 +56,7 @@ export interface FacilityReadinessTabProps {
   letterheadAddress: string;
   letterheadContact: string;
   accreditationNumber: string;
+  isPhilHealthConfigured?: boolean;
   operatingHours?: string;
   staff: StaffMember[];
   services: ClinicServiceItem[];
@@ -80,6 +81,7 @@ export default function FacilityReadinessTab({
   letterheadAddress,
   letterheadContact,
   accreditationNumber,
+  isPhilHealthConfigured = false,
   operatingHours = '',
   staff,
   services,
@@ -129,8 +131,8 @@ export default function FacilityReadinessTab({
   const activeServices = services.filter((s) => s.isActive);
   const hasServices = activeServices.length > 0;
 
-  // 7. PhilHealth (Optional)
-  const hasPhilHealth = Boolean(accreditationNumber?.trim());
+  // 7. PhilHealth (Optional — requires accreditation number and configured credentials)
+  const hasPhilHealth = Boolean(accreditationNumber?.trim()) && Boolean(isPhilHealthConfigured);
 
   // 8. Contact / Official details (Optional)
   const hasOfficialDetails = Boolean(letterheadAddress?.trim() && letterheadContact?.trim());
@@ -214,6 +216,8 @@ export default function FacilityReadinessTab({
       title: 'PhilHealth Konsulta Accreditation',
       description: hasPhilHealth
         ? `Accreditation number ${accreditationNumber} configured for Konsulta primary care benefits.`
+        : Boolean(accreditationNumber?.trim())
+        ? `Accreditation number ${accreditationNumber} entered, but PhilHealth credentials are still pending configuration.`
         : 'Configure your DOH/PhilHealth accreditation code to submit Yakap claims (optional for private clinics).',
       status: hasPhilHealth ? 'passed' : 'warning',
       required: false,
