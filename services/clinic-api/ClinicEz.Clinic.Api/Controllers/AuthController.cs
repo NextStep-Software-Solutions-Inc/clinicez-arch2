@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading;
@@ -136,12 +136,10 @@ public sealed class AuthController : ControllerBase
             AuthFailure.ActivationRequired => StatusCodes.Status403Forbidden,
             AuthFailure.LicenseTampered => StatusCodes.Status403Forbidden,
             AuthFailure.AlreadyBootstrapped => StatusCodes.Status409Conflict,
-            AuthFailure.BotChallengeFailed => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status400BadRequest
         };
 
-        var fieldName = outcome.Failure == AuthFailure.BotChallengeFailed ? "TurnstileToken" : "Password";
-        var errors = outcome.Errors?.Select(e => new ApiFieldError(fieldName, outcome.Failure.ToString().ToUpperInvariant(), e)).ToArray();
+        var errors = outcome.Errors?.Select(e => new ApiFieldError("Password", outcome.Failure.ToString().ToUpperInvariant(), e)).ToArray();
         return StatusCode(status, ApiResponse<object>.Fail(outcome.Message ?? "Request failed.", errors));
     }
 }

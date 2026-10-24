@@ -6,10 +6,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { RocketIcon } from "lucide-react"
-import { useState, useRef } from "react"
+import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -50,8 +49,6 @@ type ContactUsFormSchema = z.infer<typeof contactUseFormSchema>
 export const ContactUsForm = () => {
   const [status, setStatus] = useState(false)
   const [prevName, setPrevName] = useState("")
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
-  const turnstileRef = useRef<TurnstileWidgetHandle>(null)
 
   const form = useForm<ContactUsFormSchema>({
     resolver: zodResolver(contactUseFormSchema),
@@ -67,8 +64,9 @@ export const ContactUsForm = () => {
       setStatus(false)
       toast.promise(
         sendContactUsMessage({
-          ...data,
-          turnstileToken: turnstileToken || undefined,
+          name: data.name,
+          email: data.email,
+          message: data.message,
         }),
         {
           loading: "Sending message...",
@@ -76,14 +74,10 @@ export const ContactUsForm = () => {
             setStatus(true)
             form.reset()
             setPrevName(data.name)
-            setTurnstileToken(null)
-            turnstileRef.current?.reset()
             return "Message sent successfully"
           },
-          error: () => {
-            turnstileRef.current?.reset()
-            setTurnstileToken(null)
-            return "An error occurred while sending message"
+          error: (err: unknown) => {
+            return err instanceof Error ? err.message : "An error occurred while sending message"
           },
         }
       )
@@ -101,10 +95,10 @@ export const ContactUsForm = () => {
           </AlertDescription>
         </Alert>
       </ConditionalRender>
-      <div className="bg-white/75 rounded-lg shadow-lg border border-gray-200 p-8 w-full max-w-lg">
+      <div className="bg-card/75 backdrop-blur-sm rounded-lg shadow-lg border border-border p-8 w-full max-w-lg">
         <div className="mb-8 text-center mx-auto">
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">Contact Us</h2>
-          <p className="text-slate-600">Fill out the form below our team will get back to you as soon as possible</p>
+          <h2 className="text-3xl font-bold text-foreground mb-2">Contact Us</h2>
+          <p className="text-muted-foreground">Fill out the form below our team will get back to you as soon as possible</p>
         </div>
         <form autoComplete="off" action={action}>
           <div className="space-y-6">
@@ -143,13 +137,6 @@ export const ContactUsForm = () => {
                   </FormControl>
                 </FormItem>
               )}
-            />
-            <TurnstileWidget
-              ref={turnstileRef}
-              action="contact_us"
-              onSuccess={(token) => setTurnstileToken(token)}
-              onExpire={() => setTurnstileToken(null)}
-              onError={() => setTurnstileToken(null)}
             />
             <ActionButton type="submit">Submit message</ActionButton>
           </div>
