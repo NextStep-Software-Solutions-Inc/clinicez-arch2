@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useUser } from '@clerk/expo';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAppearance } from '../../../contexts/AppearanceContext';
@@ -18,9 +19,12 @@ const THEME_LABELS: Record<string, string> = {
 export default function SettingsScreenWeb() {
   const navigation = useNavigation<any>();
   const { colors, spacing, sizes } = useAppTheme();
+  const { user, isLoaded: isUserLoaded } = useUser();
   const { logout, hasPIN } = useAuth();
   const { themePreference } = useAppearance();
   const [changePwdPinVisible, setChangePwdPinVisible] = useState(false);
+
+  const isPasswordEnabled = isUserLoaded ? user?.passwordEnabled !== false : true;
 
   const handleLogout = () => {
     dialog.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -98,7 +102,8 @@ export default function SettingsScreenWeb() {
           />
         )}
         <SettingsRow
-          title="Change Password"
+          title={isPasswordEnabled ? 'Change Password' : 'Set Password'}
+          subtitle={isPasswordEnabled ? 'Update your account password' : 'Add a password to your account'}
           icon={{ android: 'manage_accounts', ios: 'lock.rotation' }}
           iconColor={colors.urgent}
           right={{ type: 'chevron' }}
@@ -157,7 +162,11 @@ export default function SettingsScreenWeb() {
       <PinModal
         visible={changePwdPinVisible}
         title="Confirm PIN"
-        subtitle="Enter your PIN before changing your password."
+        subtitle={
+          isPasswordEnabled
+            ? 'Enter your PIN before changing your password.'
+            : 'Enter your PIN before setting your password.'
+        }
         onSuccess={() => {
           setChangePwdPinVisible(false);
           navigation.navigate('Main', { screen: 'ChangePasswordScreen' });

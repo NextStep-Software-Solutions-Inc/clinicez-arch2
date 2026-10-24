@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import * as Updates from 'expo-updates';
+import { useUser } from '@clerk/expo';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAppearance } from '../../../contexts/AppearanceContext';
@@ -19,9 +20,12 @@ const THEME_LABELS: Record<string, string> = {
 export default function SettingsScreen() {
   const navigation = useNavigation<any>();
   const { colors, spacing } = useAppTheme();
+  const { user, isLoaded: isUserLoaded } = useUser();
   const { logout, hasPIN } = useAuth();
   const { themePreference } = useAppearance();
   const [changePwdPinVisible, setChangePwdPinVisible] = useState(false);
+
+  const isPasswordEnabled = isUserLoaded ? user?.passwordEnabled !== false : true;
 
   // OTA updates (native only)
   const { isChecking, isDownloading, isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
@@ -111,7 +115,8 @@ export default function SettingsScreen() {
           />
         )}
         <SettingsRow
-          title="Change Password"
+          title={isPasswordEnabled ? 'Change Password' : 'Set Password'}
+          subtitle={isPasswordEnabled ? 'Update your account password' : 'Add a password to your account'}
           icon={{ android: 'manage_accounts', ios: 'lock.rotation' }}
           iconColor={colors.urgent}
           right={{ type: 'chevron' }}
@@ -206,7 +211,11 @@ export default function SettingsScreen() {
       <PinModal
         visible={changePwdPinVisible}
         title="Confirm PIN"
-        subtitle="Enter your PIN before changing your password."
+        subtitle={
+          isPasswordEnabled
+            ? 'Enter your PIN before changing your password.'
+            : 'Enter your PIN before setting your password.'
+        }
         onSuccess={() => {
           setChangePwdPinVisible(false);
           navigation.navigate('Main', { screen: 'ChangePasswordScreen' });
