@@ -50,6 +50,11 @@ mock.module('react-native', () => ({
   Alert: { alert: () => {} },
 }));
 
+mock.module('../constants/fonts', () => ({
+  applyFontFamily: (s: any) => s,
+  fontAssets: {},
+}));
+
 mock.module('expo-crypto', () => ({
   randomUUID: () => 'uuid-' + Math.random().toString(36).substring(2, 9),
 }));
@@ -1149,6 +1154,147 @@ describe('E2E Test Suite: DynamicCustomFieldsRenderer Intake & Validation Engine
       expect(harness.values['affiliation']).toBe('Employee/Faculty');
       expect(harness.visibleDefinitions.map((f) => f.fieldKey)).toContain('employee_id');
       expect(harness.visibleDefinitions.map((f) => f.fieldKey)).not.toContain('student_id');
+    });
+  });
+
+  // =========================================================================
+  // TIER 6: Issue #77 Date Boundary & Custom Field Validation
+  // =========================================================================
+
+  describe('Tier 6: Issue #77 Date Boundary & Custom Field Validation', () => {
+    test('T6-1: resolveEffectiveBoundaryMode respects explicit boundaryMode or defaults Clinical to pastOrToday', async () => {
+      const { resolveEffectiveBoundaryMode } = await import('../components/custom-fields');
+
+      // 1. Explicit boundaryMode overrides everything
+      expect(resolveEffectiveBoundaryMode({ boundaryMode: 'futureOrToday', category: 'Clinical' })).toBe('futureOrToday');
+      expect(resolveEffectiveBoundaryMode({ boundaryMode: 'futureOnly', category: 'Clinical' })).toBe('futureOnly');
+      expect(resolveEffectiveBoundaryMode({ boundaryMode: 'any', category: 'Clinical' })).toBe('any');
+      expect(resolveEffectiveBoundaryMode({ boundaryMode: 'pastOrToday', category: 'Demographics' })).toBe('pastOrToday');
+
+      // 2. Clinical category defaults to pastOrToday when boundaryMode is null or undefined
+      expect(resolveEffectiveBoundaryMode({ boundaryMode: null, category: 'Clinical' })).toBe('pastOrToday');
+      expect(resolveEffectiveBoundaryMode({ category: 'clinical' })).toBe('pastOrToday');
+      expect(resolveEffectiveBoundaryMode({ category: '  CLINICAL  ' })).toBe('pastOrToday');
+
+      // 3. Non-clinical categories default to any
+      expect(resolveEffectiveBoundaryMode({ category: 'Academic' })).toBe('any');
+      expect(resolveEffectiveBoundaryMode({ category: 'Demographics' })).toBe('any');
+      expect(resolveEffectiveBoundaryMode({ category: undefined })).toBe('any');
+      expect(resolveEffectiveBoundaryMode({ boundaryMode: null, category: null as any })).toBe('any');
+    });
+
+    test('T6-2: TC-IF-007 - Clinical Date field rejects future dates and accepts past/today dates', async () => {
+      const { validateCustomFields } = await import('../components/custom-fields');
+
+      const clinicalDateField: any = {
+        id: 'cf-last-pe',
+        fieldKey: 'last_physical_exam_date',
+        label: 'Date of Last Physical Examination',
+        dataType: 'Date',
+        category: 'Clinical',
+        isRequired: false,
+        displayOrder: 1,
+        isActive: true,
+      };
+
+      const refDate = new Date('2026-10-24T12:00:00Z');
+
+      // 1. Optional empty date is valid
+      const resEmpty = validateCustomFields([clinicalDateField], { last_physical_exam_date: '' }, {}, { now: refDate });
+      expect(resEmpty.isValid).toBe(true);
+      expect(resEmpty.errors).toEqual({});
+
+      // 2. Past date is valid
+      const resPast = validateCustomFields([clinicalDateField], { last_physical_exam_date: '2025-06-15' }, {}, { now: refDate });
+      expect(resPast.isValid).toBe(true);
+
+      // 3. Today date is valid
+      const resToday = validateCustomFields([clinicalDateField], { last_physical_exam_date: '2026-10-24' }, {}, { now: refDate });
+      expect(resToday.isValid).toBe(true);
+
+      // 4. Future date (TC-IF-007) is REJECTED
+      const resFuture = validateCustomFields([clinicalDateField], { last_physical_exam_date: '2027-02-28' }, {}, { now: refDate });
+      expect(resFuture.isValid).toBe(false);
+      expect(resFuture.errors['last_physical_exam_date']).toBeDefined();
+      expect(resFuture.errors['last_physical_exam_date']).toContain('Future date not permitted');
+    });
+
+    test('T6-3: validateCustomFields rejects malformed or impossible dates', async () => {
+      const { validateCustomFields } = await import('../components/custom-fields');
+
+      const dateField: any = {
+        id: 'cf-date',
+        fieldKey: 'event_date',
+        label: 'Event Date',
+        dataType: 'Date',
+        category: 'Demographics',
+        isRequired: false,
+        displayOrder: 1,
+        isActive: true,
+      };
+
+      // Incomplete date
+      const resIncomplete = validateCustomFields([dateField], { event_date: '2026-10' });
+      expect(resIncomplete.isValid).toBe(false);
+      expect(resIncomplete.errors['event_date']).toContain('Incomplete date');
+
+      // Invalid leap year day
+      const resLeap = validateCustomFields([dateField], { event_date: '2026-02-29' }); // 2026 not leap
+      expect(resLeap.isValid).toBe(false);
+      expect(resLeap.errors['event_date']).toContain('February 2026 has only 28 days');
+
+      // Non-numeric malformed text
+      const resMalformed = validateCustomFields([dateField], { event_date: '2026-10asaasoalkslak' });
+      expect(resMalformed.isValid).toBe(false);
+    });
+
+    test('T6-4: Explicit futureOrToday allows future and blocks past dates', async () => {
+      const { validateCustomFields } = await import('../components/custom-fields');
+
+      const futureField: any = {
+        id: 'cf-future',
+        fieldKey: 'next_review_date',
+        label: 'Next Review Date',
+        dataType: 'Date',
+        category: 'Clinical',
+        boundaryMode: 'futureOrToday',
+        isRequired: false,
+        displayOrder: 1,
+        isActive: true,
+      };
+
+      const refDate = new Date('2026-10-24T12:00:00Z');
+
+      const resPast = validateCustomFields([futureField], { next_review_date: '2020-01-01' }, {}, { now: refDate });
+      expect(resPast.isValid).toBe(false);
+      expect(resPast.errors['next_review_date']).toContain('Date must be today or in the future');
+
+      const resFuture = validateCustomFields([futureField], { next_review_date: '2027-01-01' }, {}, { now: refDate });
+      expect(resFuture.isValid).toBe(true);
+    });
+
+    test('T6-5: Conditionally hidden Date field never blocks validation even if containing invalid date', async () => {
+      const { validateCustomFields } = await import('../components/custom-fields');
+
+      const hiddenDateField: any = {
+        id: 'cf-hidden-date',
+        fieldKey: 'marriage_date',
+        label: 'Marriage Date',
+        dataType: 'Date',
+        isRequired: true,
+        category: 'Demographics',
+        visibilityRuleJson: JSON.stringify({
+          source: 'static',
+          field: 'civilStatus',
+          operator: 'equals',
+          value: 'Married',
+        }),
+      };
+
+      // When Single, marriage_date is hidden: invalid or empty date does NOT block
+      const res = validateCustomFields([hiddenDateField], { marriage_date: 'invalid-date' }, { civilStatus: 'Single' });
+      expect(res.isValid).toBe(true);
+      expect(res.errors).toEqual({});
     });
   });
 });
