@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
@@ -7,9 +7,11 @@ import Button from '@ui/Button';
 import { AppIcon } from '@ui/Icon';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { usePatientId } from 'hooks/usePatientId';
+import { useDocumentTypes } from '../../../hooks/useDocumentTypes';
 import { useContentInsets } from '../../../hooks/useContentInsets';
-import { cleanupPreviewCache, preparePreviewFile, getFileById, deleteItem, renameFile } from '../../../services/files';
+import { preparePreviewFile, revokePreviewUri, getFileById, deleteItem, renameFile } from '../../../services/files';
 import type { PreparedPreviewFile } from '../../../services/files';
+import { formatRecordCategoryLabel } from '../../../services/files/documentTypeMapping';
 import type { FilesScreenProps } from './navigationTypes';
 import RenameModal from '../../../components/ui/RenameModal';
 import Badge from '../../../components/ui/Badge';
@@ -25,6 +27,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
   const { getToken } = useClerkAuth();
   const { fileId } = route.params;
   const contentInsets = useContentInsets();
+  const { documentTypes } = useDocumentTypes(patientId);
 
   const [preview, setPreview] = useState<PreparedPreviewFile | null>(null);
   const [fileMetadata, setFileMetadata] = useState<any>(null);
@@ -33,7 +36,12 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
 
-  const loadFile = () => {
+  const mountedRef = useRef(true);
+  const requestIdRef = useRef(0);
+  const activeUriRef = useRef<string | null>(null);
+
+  const loadFile = useCallback(() => {
+    const reqId = ++requestIdRef.current;
     setIsRetrying(true);
     setError(null);
     Promise.all([
@@ -41,25 +49,42 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
       getFileById(patientId, fileId),
     ])
       .then(([previewRes, fileRes]) => {
+        if (!mountedRef.current || reqId !== requestIdRef.current) {
+          revokePreviewUri(fileId, previewRes.uri);
+          return;
+        }
+        if (activeUriRef.current && activeUriRef.current !== previewRes.uri) {
+          revokePreviewUri(fileId, activeUriRef.current);
+        }
+        activeUriRef.current = previewRes.uri;
         setPreview(previewRes);
         setFileMetadata(fileRes);
         navigation.setOptions({ title: fileRes?.name || previewRes.name });
       })
       .catch((err) => {
+        if (!mountedRef.current || reqId !== requestIdRef.current) return;
         setError(err instanceof Error ? err.message : 'Unable to decrypt or load this file.');
       })
       .finally(() => {
-        setIsRetrying(false);
+        if (mountedRef.current && reqId === requestIdRef.current) {
+          setIsRetrying(false);
+        }
       });
-  };
+  }, [fileId, getToken, navigation, patientId]);
 
   useEffect(() => {
+    mountedRef.current = true;
     loadFile();
 
     return () => {
-      cleanupPreviewCache(patientId, fileId).catch(() => {});
+      mountedRef.current = false;
+      requestIdRef.current += 1;
+      if (activeUriRef.current) {
+        revokePreviewUri(fileId, activeUriRef.current);
+        activeUriRef.current = null;
+      }
     };
-  }, [fileId, patientId]);
+  }, [fileId, loadFile]);
 
   const handleDownload = () => {
     if (!preview) return;
@@ -114,8 +139,6 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
     }
   };
 
-
-
   const handleRename = async (newName: string) => {
     try {
       await renameFile(patientId, fileId, newName);
@@ -154,6 +177,11 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
   }
 
   const isShareSupported = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  const categoryBadgeLabel =
+    formatRecordCategoryLabel(fileMetadata?.documentTypeId, documentTypes) ??
+    formatRecordCategoryLabel(fileMetadata?.type, documentTypes) ??
+    fileMetadata?.type ??
+    null;
 
   return (
     <View style={[styles.viewer, { backgroundColor: colors.background }]}>
@@ -176,8 +204,8 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
             {fileMetadata?.title || fileMetadata?.name || preview?.name}
           </ThemedText>
           <View style={styles.headerBadgesRow}>
-            {fileMetadata?.type ? (
-              <Badge label={fileMetadata.type} tone="neutral" size="sm" />
+            {categoryBadgeLabel ? (
+              <Badge label={categoryBadgeLabel} tone="neutral" size="sm" />
             ) : null}
             <ClinicalUrgencyBadge
               urgency={fileMetadata?.urgency}
@@ -354,8 +382,6 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
               {isShareSupported ? 'Share' : 'Download'}
             </ThemedText>
           </Pressable>
-
-
 
           <Pressable
             onPress={() => setRenameModalOpen(true)}

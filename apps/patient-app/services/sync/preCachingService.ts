@@ -1,7 +1,9 @@
 import { and, eq, isNotNull, isNull, or } from 'drizzle-orm';
+import { joinApiUrl } from '@shared/safe';
 import { localHealthRecords } from '@db/schema/localHealthRecords';
 import { inboxLabResults } from '@db/schema/inboxLabResults';
 import { filesMetadata } from '@db/schema/filesMetadata';
+import { getPatientRecordStreamUrl } from '../api/filesApi';
 import { blobStorage } from '../storage';
 import { checkIsOnline, type GetToken } from './uploadQueueService';
 
@@ -81,7 +83,7 @@ export async function getUncachedDocumentTargets(patientId: string, dbOverride?:
     if (!lab.fileUrl) continue;
     const streamUrl = lab.fileUrl.startsWith('http')
       ? lab.fileUrl
-      : `${apiUrl}${lab.fileUrl.startsWith('/') ? '' : '/'}${lab.fileUrl}`;
+      : joinApiUrl(apiUrl, lab.fileUrl);
 
     targets.push({
       id: lab.id,
@@ -110,7 +112,7 @@ export async function getUncachedDocumentTargets(patientId: string, dbOverride?:
 
   for (const record of uncachedRecords) {
     if (!record.serverId) continue;
-    const streamUrl = `${apiUrl}/api/v1/patients/${patientId}/records/${record.serverId}/stream`;
+    const streamUrl = getPatientRecordStreamUrl(patientId, record.serverId);
     targets.push({
       id: record.id,
       kind: 'health_record',

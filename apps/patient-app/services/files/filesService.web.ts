@@ -1,9 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { mutate } from 'swr';
-import { db } from '@db/index';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import type {
-  FileItemKind,
   ImportFilesInput,
   PreparedPreviewFile,
   SyncPendingFilesResult,
@@ -22,7 +20,10 @@ import {
   normalizeExtension,
   pullRemoteChanges,
   pushPendingMetadata,
+  type RefreshDocumentTypesOptions,
 } from './filesShared';
+import { resolveDocumentTypeId } from './documentTypeMapping';
+import { getPatientRecordStreamUrl } from '../api/filesApi';
 import { blobStorage } from '../storage';
 import { enqueueOfflineRecordUpload, drainUploadQueue } from '../sync/uploadQueueService';
 
@@ -40,7 +41,15 @@ const FILES_KEY = (key: unknown) => Array.isArray(key) && key[0] === 'files-brow
 // Shared pass-through exports (identical API to the native service)
 // ---------------------------------------------------------------------------
 
-export { getFileById, formatBytes, getFileConfig, getTypeExtensions } from './filesShared';
+export {
+  getFileById,
+  formatBytes,
+  getFileConfig,
+  getTypeExtensions,
+  getCachedDocumentTypes,
+  getActiveDocumentTypes,
+  reconcileDocumentTypes,
+} from './filesShared';
 
 let lastGetToken: GetToken | undefined;
 const rememberToken = (getToken?: GetToken) => {
@@ -58,9 +67,13 @@ function scheduleSync(patientId: string) {
   }, 250);
 }
 
-export async function refreshDocumentTypes(patientId: string, getToken?: GetToken) {
+export async function refreshDocumentTypes(
+  patientId: string,
+  getToken?: GetToken,
+  options?: RefreshDocumentTypesOptions
+) {
   rememberToken(getToken);
-  return shared.refreshDocumentTypes(patientId, getToken);
+  return shared.refreshDocumentTypes(patientId, getToken, options);
 }
 
 export async function listFolderContents(
@@ -107,7 +120,7 @@ export async function importFiles(input: ImportFilesInput): Promise<string[]> {
 
   const [config, types] = await Promise.all([
     shared.getFileConfig(input.patientId, getToken),
-    getCachedDocumentTypes(),
+    shared.refreshDocumentTypes(input.patientId, getToken),
   ]);
   const sizeOf = (item: ImportFilesInput['files'][number]) => item.sizeBytes ?? item.file.size ?? 0;
 
@@ -131,7 +144,7 @@ export async function importFiles(input: ImportFilesInput): Promise<string[]> {
     const recordId = await enqueueOfflineRecordUpload(
       {
         patientId: input.patientId,
-        documentTypeId: fileType?.id ?? input.documentTypeId ?? 'other',
+        documentTypeId: resolveDocumentTypeId(fileType?.id ?? input.documentTypeId, undefined, types),
         title: requestedName,
         fileName: requestedName,
         mimeType: mimeType || 'application/octet-stream',
@@ -180,7 +193,7 @@ export async function preparePreviewFile(
 
   let uri: string | null = null;
   if (file.localPath) {
-    uri = await blobStorage.getBlobUri(file.localPath);
+    uri = await blobStorage.getBlobUri(file.localPath, mimeType);
   }
 
   if (!uri) {
@@ -190,10 +203,12 @@ export async function preparePreviewFile(
     const token = await getToken();
     const serverId = file.serverId ?? file.id;
     const blobKey = `${patientId}/records/${fileId}.${extension || 'bin'}`;
-    const streamUrl = `/patients/${patientId}/records/${serverId}/stream`;
+    const streamUrl = getPatientRecordStreamUrl(patientId, serverId);
     const localKey = await blobStorage.downloadAndSaveBlob(blobKey, streamUrl, token);
-    await db.update(filesMetadata).set({ localPath: localKey, isCached: true }).where(eq(filesMetadata.id, file.id));
-    uri = await blobStorage.getBlobUri(localKey);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const targetDb = require('@db/index').db;
+    await targetDb.update(filesMetadata).set({ localPath: localKey, isCached: true }).where(eq(filesMetadata.id, file.id));
+    uri = await blobStorage.getBlobUri(localKey, mimeType);
   }
 
   if (!uri) {
@@ -210,12 +225,37 @@ export async function preparePreviewFile(
   };
 }
 
+export function revokePreviewUri(fileId: string | undefined, uri: string) {
+  if (fileId) {
+    const urls = previewUrls.get(fileId);
+    if (urls) {
+      urls.delete(uri);
+      if (urls.size === 0) {
+        previewUrls.delete(fileId);
+      }
+    }
+  }
+  try {
+    if (typeof blobStorage.revokeBlobUri === 'function') {
+      blobStorage.revokeBlobUri(uri);
+    } else if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(uri);
+    }
+  } catch {
+    // Ignored
+  }
+}
+
 export async function cleanupPreviewCache(_patientId: string, fileId?: string) {
   const ids = fileId ? [fileId] : Array.from(previewUrls.keys());
   for (const id of ids) {
     previewUrls.get(id)?.forEach((url) => {
       try {
-        URL.revokeObjectURL(url);
+        if (typeof blobStorage.revokeBlobUri === 'function') {
+          blobStorage.revokeBlobUri(url);
+        } else if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+          URL.revokeObjectURL(url);
+        }
       } catch {
         // Ignored
       }
@@ -244,6 +284,12 @@ export async function syncPendingFiles(
   let synced = 0;
   let failed = 0;
   const cleanupPreview = (fileId: string) => cleanupPreviewCache(patientId, fileId);
+
+  try {
+    await shared.refreshDocumentTypes(patientId, getToken, { force: retryFailed });
+  } catch (err) {
+    console.warn('Document types sync failed', err);
+  }
 
   try {
     synced += await pullRemoteChanges(patientId, getToken, cleanupPreview);

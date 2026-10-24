@@ -69,13 +69,13 @@ export interface DocumentTypeResponse {
   id: string;
   code: string;
   label: string;
-  description?: string;
+  description?: string | null;
   supportedExtensions: string[];
   supportedMimeTypes: string[];
   nativePreviewKind: string;
   sortOrder: number;
   isActive: boolean;
-  serverUpdatedAt?: number;
+  serverUpdatedAt?: number | string | null;
 }
 
 export interface SyncPendingFilesResult {

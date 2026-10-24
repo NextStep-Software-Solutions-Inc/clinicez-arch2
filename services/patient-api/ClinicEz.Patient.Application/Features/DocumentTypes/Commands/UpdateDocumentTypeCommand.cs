@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using MediatR;
 using ClinicEz.Patient.Domain.Interfaces;
 
@@ -39,6 +43,7 @@ public class UpdateDocumentTypeCommandHandler : IRequestHandler<UpdateDocumentTy
         entity.NativePreviewKind = request.NativePreviewKind;
         entity.SortOrder = request.SortOrder;
         entity.IsActive = request.IsActive;
+        entity.UpdatedAt = DateTime.UtcNow;
 
         _repository.Update(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

@@ -76,6 +76,10 @@ export const nativeBlobStorage: IBlobStorage = {
     return file.exists ? file.uri : null;
   },
 
+  revokeBlobUri(_uri: string): void {
+    // Native file:// URIs do not require revocation
+  },
+
   async getBlobBytes(blobKey: string): Promise<Uint8Array | null> {
     const { patientId, subfolder, fileName } = parseBlobKey(blobKey);
     const dir = getPatientDir(patientId, subfolder);

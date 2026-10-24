@@ -14,7 +14,6 @@ import {
   extensionFromName,
   findBestFileType,
   formatBytes,
-  getCachedDocumentTypes,
   getFileById,
   getFileConfig,
   getPreviewKind,
@@ -22,12 +21,18 @@ import {
   normalizeExtension,
   pullRemoteChanges,
   pushPendingMetadata,
+  refreshDocumentTypes,
 } from './filesShared';
+import { resolveDocumentTypeId } from './documentTypeMapping';
+import { getPatientRecordStreamUrl } from '../api/filesApi';
 import { blobStorage } from '../storage';
 import { enqueueOfflineRecordUpload, drainUploadQueue } from '../sync/uploadQueueService';
 
 export {
   refreshDocumentTypes,
+  getCachedDocumentTypes,
+  getActiveDocumentTypes,
+  reconcileDocumentTypes,
   getFileConfig,
   listFolderContents,
   getStorageOverview,
@@ -58,7 +63,10 @@ function ensureDirectory(directory: Directory) {
 export async function importFiles(input: ImportFilesInput): Promise<string[]> {
   if (!input.files.length) throw new Error('Choose at least one file to upload.');
 
-  const [config, types] = await Promise.all([getFileConfig(input.patientId, input.getToken), getCachedDocumentTypes()]);
+  const [config, types] = await Promise.all([
+    getFileConfig(input.patientId, input.getToken),
+    refreshDocumentTypes(input.patientId, input.getToken),
+  ]);
 
   if (input.files.some((item) => (item.sizeBytes ?? item.file.size ?? 0) > config.maxFileSizeBytes)) {
     throw new Error(`A file is larger than the configured ${formatBytes(config.maxFileSizeBytes)} limit.`);
@@ -93,7 +101,7 @@ export async function importFiles(input: ImportFilesInput): Promise<string[]> {
     const recordId = await enqueueOfflineRecordUpload(
       {
         patientId: input.patientId,
-        documentTypeId: fileType?.id ?? input.documentTypeId ?? 'other',
+        documentTypeId: resolveDocumentTypeId(fileType?.id ?? input.documentTypeId, undefined, types),
         title: requestedName,
         fileName: requestedName,
         mimeType: mimeType || 'application/octet-stream',
@@ -147,7 +155,7 @@ export async function preparePreviewFile(
     const token = await getToken();
     const serverId = file.serverId ?? file.id;
     const blobKey = `${patientId}/records/${fileId}.${extension || 'bin'}`;
-    const streamUrl = `/patients/${patientId}/records/${serverId}/stream`;
+    const streamUrl = getPatientRecordStreamUrl(patientId, serverId);
 
     localUri = await blobStorage.downloadAndSaveBlob(blobKey, streamUrl, token);
     await db.update(filesMetadata).set({ localPath: localUri, isCached: true }).where(eq(filesMetadata.id, file.id));
@@ -160,6 +168,10 @@ export async function preparePreviewFile(
     extension,
     previewKind: getPreviewKind(extension, file.mimeType),
   };
+}
+
+export function revokePreviewUri(_fileId: string | undefined, _uri: string) {
+  // Native file:// URIs do not require revocation
 }
 
 export async function cleanupPreviewCache(patientId: string, _fileId?: string) {
@@ -190,6 +202,12 @@ export async function syncPendingFiles(
   let synced = 0;
   let failed = 0;
   const cleanupPreview = (fileId: string) => cleanupPreviewCache(patientId, fileId);
+
+  try {
+    await refreshDocumentTypes(patientId, getToken, { force: retryFailed });
+  } catch (err) {
+    console.warn('Document types sync failed', err);
+  }
 
   // Downstream pull
   try {

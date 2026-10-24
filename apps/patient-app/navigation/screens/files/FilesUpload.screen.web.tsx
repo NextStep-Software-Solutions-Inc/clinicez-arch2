@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -11,36 +11,25 @@ import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import Input from '@ui/Input';
 import Card from '@ui/Card';
-import { AppIcon, type IconName } from '@ui/Icon';
+import { AppIcon } from '@ui/Icon';
 import Screen from '../../../components/layout/Screen';
 import ProfileDatePicker from '../../../components/profile/ProfileDatePicker';
 import { usePatientId } from 'hooks/usePatientId';
+import { useDocumentTypes } from '../../../hooks/useDocumentTypes';
 import {
   formatBytes,
   validateUploadFile,
   UPLOAD_ALLOWED_MIME_TYPES,
 } from '../../../services/documents/uploadRules';
+import {
+  getDocumentTypeVisualMeta,
+  inferCategoryFromDocumentType,
+  inferDocumentTypeFromFileName,
+  resolveDocumentTypeId,
+} from '../../../services/files/documentTypeMapping';
 import { enqueueOfflineRecordUpload } from '../../../services/sync/uploadQueueService';
-import type { HealthRecordCategory } from '../../../db/schema/localHealthRecords';
 import type { FilesScreenProps } from './navigationTypes';
 import { useAppTheme } from '../../../contexts/ThemeContext';
-import type { ColorToken } from '../../../constants/theme';
-
-interface CategoryOption {
-  id: HealthRecordCategory;
-  label: string;
-  icon: IconName;
-  colorToken: ColorToken;
-}
-
-const CATEGORIES: CategoryOption[] = [
-  { id: 'lab_result', label: 'Lab Result', icon: 'lab', colorToken: 'success' },
-  { id: 'imaging', label: 'Imaging / X-Ray', icon: 'activity', colorToken: 'info' },
-  { id: 'prescription', label: 'Prescription', icon: 'pill', colorToken: 'emergency' },
-  { id: 'vaccine_card', label: 'Vaccine Card', icon: 'badge', colorToken: 'purple' },
-  { id: 'certificate', label: 'Certificate', icon: 'document', colorToken: 'warning' },
-  { id: 'other', label: 'Other', icon: 'folder', colorToken: 'textSecondary' },
-];
 
 export function sanitizeTitleFromFileName(fileName: string): string {
   const baseName = fileName.replace(/\.[^/.]+$/, '');
@@ -48,31 +37,12 @@ export function sanitizeTitleFromFileName(fileName: string): string {
   return withSpaces.trim().replace(/\s+/g, ' ').slice(0, 200) || 'Medical Record';
 }
 
-function inferCategoryFromName(fileName: string): HealthRecordCategory | null {
-  const lower = fileName.toLowerCase();
-  if (lower.includes('cbc') || lower.includes('urinalysis') || lower.includes('blood') || lower.includes('lab')) {
-    return 'lab_result';
-  }
-  if (lower.includes('xray') || lower.includes('cxr') || lower.includes('mri') || lower.includes('scan') || lower.includes('ultrasound')) {
-    return 'imaging';
-  }
-  if (lower.includes('rx') || lower.includes('prescription')) {
-    return 'prescription';
-  }
-  if (lower.includes('vaccine') || lower.includes('immunization') || lower.includes('vax')) {
-    return 'vaccine_card';
-  }
-  if (lower.includes('cert') || lower.includes('clearance') || lower.includes('fit-to-work')) {
-    return 'certificate';
-  }
-  return null;
-}
-
 export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesUploadScreen'>) {
   const { colors, spacing, radii, sizes, shadows } = useAppTheme();
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
+  const { documentTypes } = useDocumentTypes(patientId);
 
   const [pickedFile, setPickedFile] = useState<{
     file: File | Blob;
@@ -81,7 +51,7 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
     size: number;
   } | null>(null);
 
-  const [category, setCategory] = useState<HealthRecordCategory>('lab_result');
+  const [selectedDocumentTypeId, setSelectedDocumentTypeId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [facilityName, setFacilityName] = useState('');
@@ -92,6 +62,17 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Keep selectedDocumentTypeId synchronized with active backend DocumentTypes
+  useEffect(() => {
+    if (!documentTypes.length) return;
+    const stillValid = documentTypes.some((dt) => dt.id === selectedDocumentTypeId);
+    if (!stillValid) {
+      const preferred =
+        documentTypes.find((dt) => dt.code.toLowerCase() === 'lab-result') ?? documentTypes[0];
+      setSelectedDocumentTypeId(preferred.id);
+    }
+  }, [documentTypes, selectedDocumentTypeId]);
 
   const handleSelectedFile = (file: File) => {
     setErrorBanner(null);
@@ -113,9 +94,9 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
     if (!title) {
       setTitle(sanitizeTitleFromFileName(file.name));
     }
-    const inferred = inferCategoryFromName(file.name);
+    const inferred = inferDocumentTypeFromFileName(file.name, documentTypes);
     if (inferred) {
-      setCategory(inferred);
+      setSelectedDocumentTypeId(inferred.id);
     }
   };
 
@@ -148,10 +129,17 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
     setErrorBanner(null);
 
     try {
+      const selectedDocType =
+        documentTypes.find((dt) => dt.id === selectedDocumentTypeId) ?? documentTypes[0] ?? null;
+      const resolvedDocTypeId = selectedDocType
+        ? selectedDocType.id
+        : resolveDocumentTypeId(selectedDocumentTypeId, undefined, documentTypes);
+      const category = inferCategoryFromDocumentType(selectedDocType);
+
       await enqueueOfflineRecordUpload(
         {
           patientId,
-          documentTypeId: category,
+          documentTypeId: resolvedDocTypeId,
           category,
           title: title.trim(),
           fileName: pickedFile.name,
@@ -323,7 +311,7 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
           </View>
         )}
 
-        {/* Category selection */}
+        {/* Document Type selection (synced from backend & cached in SQLite) */}
         <View style={{ gap: spacing.sm }}>
           <ThemedText variant="smallBold" color="textSecondary">
             RECORD CATEGORY *
@@ -334,14 +322,15 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
             style={styles.typeScroll}
             contentContainerStyle={[styles.typeList, { gap: spacing.sm }]}
           >
-            {CATEGORIES.map((cat) => {
-              const selected = cat.id === category;
+            {documentTypes.map((docType) => {
+              const selected = docType.id === selectedDocumentTypeId;
+              const visual = getDocumentTypeVisualMeta(docType);
               return (
                 <Pressable
-                  key={cat.id}
-                  onPress={() => setCategory(cat.id)}
+                  key={docType.id}
+                  onPress={() => setSelectedDocumentTypeId(docType.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={cat.label}
+                  accessibilityLabel={docType.label}
                   accessibilityState={{ selected }}
                   style={[
                     styles.typeChip,
@@ -356,9 +345,13 @@ export default function FilesUploadScreenWeb({ route }: FilesScreenProps<'FilesU
                     },
                   ]}
                 >
-                  <AppIcon name={cat.icon} color={selected ? 'primary' : cat.colorToken} size={sizes.iconSm} />
+                  <AppIcon
+                    name={visual.icon}
+                    color={selected ? 'primary' : visual.colorToken}
+                    size={sizes.iconSm}
+                  />
                   <ThemedText variant="smallBold" numberOfLines={1} color={selected ? 'primary' : 'text'}>
-                    {cat.label}
+                    {docType.label}
                   </ThemedText>
                 </Pressable>
               );

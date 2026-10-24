@@ -49,6 +49,7 @@ export const RecordsSyncBanner: React.FC<RecordsSyncBannerProps> = ({
 
   const isWeb = Platform.OS === 'web';
   const isOffline = isWeb ? !webOnline : netInfo.isConnected === false;
+  const horizontalMargin = isWeb ? 0 : spacing.lg;
 
   // 1. Offline Mode Priority
   if (isOffline) {
@@ -63,7 +64,7 @@ export const RecordsSyncBanner: React.FC<RecordsSyncBannerProps> = ({
             borderRadius: radii.md,
             paddingHorizontal: spacing.md,
             paddingVertical: spacing.sm,
-            marginHorizontal: spacing.lg,
+            marginHorizontal: horizontalMargin,
             marginBottom: spacing.sm,
           },
         ]}
@@ -89,7 +90,7 @@ export const RecordsSyncBanner: React.FC<RecordsSyncBannerProps> = ({
             borderRadius: radii.md,
             paddingHorizontal: spacing.md,
             paddingVertical: spacing.sm,
-            marginHorizontal: spacing.lg,
+            marginHorizontal: horizontalMargin,
             marginBottom: spacing.sm,
           },
         ]}
@@ -140,7 +141,7 @@ export const RecordsSyncBanner: React.FC<RecordsSyncBannerProps> = ({
             borderRadius: radii.md,
             paddingHorizontal: spacing.md,
             paddingVertical: spacing.sm,
-            marginHorizontal: spacing.lg,
+            marginHorizontal: horizontalMargin,
             marginBottom: spacing.sm,
           },
         ]}

@@ -10,10 +10,12 @@ import ThemedText from '@ui/ThemedText';
 import { AppIcon } from '@ui/Icon';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { usePatientId } from 'hooks/usePatientId';
+import { useDocumentTypes } from '../../../hooks/useDocumentTypes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useContentInsets } from '../../../hooks/useContentInsets';
 import { cleanupPreviewCache, preparePreviewFile, getFileById, deleteItem, renameFile } from '../../../services/files';
 import type { PreparedPreviewFile } from '../../../services/files';
+import { formatRecordCategoryLabel } from '../../../services/files/documentTypeMapping';
 import type { FilesScreenProps } from './navigationTypes';
 import RenameModal from '../../../components/ui/RenameModal';
 import Badge from '../../../components/ui/Badge';
@@ -31,6 +33,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const { fileId } = route.params;
   const insets = useSafeAreaInsets();
   const contentInsets = useContentInsets();
+  const { documentTypes } = useDocumentTypes(patientId);
 
   const [preview, setPreview] = useState<PreparedPreviewFile | null>(null);
   const [fileMetadata, setFileMetadata] = useState<any>(null);
@@ -96,8 +99,6 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     }
   };
 
-
-
   const handleRename = async (newName: string) => {
     try {
       await renameFile(patientId, fileId, newName);
@@ -132,6 +133,12 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     );
   }
 
+  const categoryBadgeLabel =
+    formatRecordCategoryLabel(fileMetadata?.documentTypeId, documentTypes) ??
+    formatRecordCategoryLabel(fileMetadata?.type, documentTypes) ??
+    fileMetadata?.type ??
+    null;
+
   return (
     <View style={[styles.viewer, { backgroundColor: colors.background }]}>
       {/* Top Clinical Header Bar */}
@@ -153,8 +160,8 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
             {fileMetadata?.title || fileMetadata?.name || preview?.name}
           </ThemedText>
           <View style={styles.headerBadgesRow}>
-            {fileMetadata?.type ? (
-              <Badge label={fileMetadata.type} tone="neutral" size="sm" />
+            {categoryBadgeLabel ? (
+              <Badge label={categoryBadgeLabel} tone="neutral" size="sm" />
             ) : null}
             <ClinicalUrgencyBadge
               urgency={fileMetadata?.urgency}
@@ -275,8 +282,6 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
               Share
             </ThemedText>
           </Pressable>
-
-
 
           <Pressable
             onPress={() => setRenameModalOpen(true)}

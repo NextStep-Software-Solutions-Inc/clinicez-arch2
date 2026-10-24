@@ -1,9 +1,11 @@
-import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
-import { localHealthRecords, type HealthRecordCategory, type LocalHealthRecord } from '@db/schema/localHealthRecords';
+import { and, asc, eq, inArray, or } from 'drizzle-orm';
+import { documentTypes } from '@db/schema/documentTypes';
+import { localHealthRecords, type HealthRecordCategory } from '@db/schema/localHealthRecords';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import { uploadQueue, type UploadQueueItem } from '@db/schema/uploadQueue';
-import { api, type ApiError } from '../api/apiClient';
+import { api } from '../api/apiClient';
 import { appendFilePart } from '../api/multipart';
+import { isUuid, resolveDocumentTypeId, type DocumentTypeLike } from '../files/documentTypeMapping';
 import { blobStorage } from '../storage';
 
 export const RECORDS_SYNCED_EVENT = 'records-synced';
@@ -60,6 +62,16 @@ function emitEvent(event: string, payload?: any) {
   }
 }
 
+function revalidateFilesBrowser() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const swr = require('swr');
+    void swr.mutate?.((key: unknown) => Array.isArray(key) && key[0] === 'files-browser');
+  } catch {
+    // Ignored in non-SWR test runners
+  }
+}
+
 async function safeFlushDatabase() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -67,6 +79,28 @@ async function safeFlushDatabase() {
     await dbModule.flushDatabaseSnapshot?.();
   } catch {
     // Ignored in non-web test runners
+  }
+}
+
+async function loadSyncedDocumentTypeCatalog(
+  patientId: string,
+  getToken: GetToken,
+  targetDb: any,
+  hasDbOverride: boolean
+): Promise<DocumentTypeLike[]> {
+  try {
+    if (!hasDbOverride) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { refreshDocumentTypes } = require('../files/filesShared');
+      return await refreshDocumentTypes(patientId, getToken);
+    }
+    return await targetDb.select().from(documentTypes).orderBy(asc(documentTypes.sortOrder));
+  } catch {
+    try {
+      return await targetDb.select().from(documentTypes).orderBy(asc(documentTypes.sortOrder));
+    } catch {
+      return [];
+    }
   }
 }
 
@@ -210,6 +244,7 @@ export async function enqueueOfflineRecordUpload(
 
   await safeFlushDatabase();
   emitEvent(RECORDS_SYNCED_EVENT, { patientId: params.patientId, recordId });
+  revalidateFilesBrowser();
 
   // 5. Trigger immediate drain if online and token provider is available
   if (getToken) {
@@ -427,6 +462,10 @@ async function executeDrainPass(
     return { drained: 0, failed: 0, pending: pendingCount };
   }
 
+  const syncedDocTypes = options?.uploadFn
+    ? []
+    : await loadSyncedDocumentTypeCatalog(patientId, getToken, targetDb, Boolean(options?.db));
+
   let drained = 0;
   let failed = 0;
 
@@ -471,6 +510,26 @@ async function executeDrainPass(
 
       const token = await getToken();
 
+      // Resolve against synced backend document_types catalog (also heals legacy queued slugs)
+      let normalizedDocTypeId = job.documentTypeId;
+      if (!options?.uploadFn) {
+        normalizedDocTypeId = resolveDocumentTypeId(job.documentTypeId, undefined, syncedDocTypes);
+        // If a previously queued UUID was deleted/replaced on the backend, remap via active catalog
+        if (
+          isUuid(job.documentTypeId) &&
+          syncedDocTypes.length > 0 &&
+          !syncedDocTypes.some((t) => t.id.toLowerCase() === job.documentTypeId.toLowerCase())
+        ) {
+          const fallbackActive =
+            syncedDocTypes.find((t) => t.isActive !== false && t.code === 'other') ??
+            syncedDocTypes.find((t) => t.isActive !== false) ??
+            syncedDocTypes[0];
+          if (fallbackActive) {
+            normalizedDocTypeId = fallbackActive.id;
+          }
+        }
+      }
+
       let uploadResult: { id: string; storageKey: string };
 
       if (options?.uploadFn) {
@@ -482,7 +541,7 @@ async function executeDrainPass(
           name: job.fileName,
           mimeType: job.mimeType,
         });
-        form.append('documentTypeId', job.documentTypeId);
+        form.append('documentTypeId', normalizedDocTypeId);
         form.append('title', job.title);
         if (job.documentDate) form.append('documentDate', job.documentDate);
         if (job.facilityName) form.append('facilityName', job.facilityName);
@@ -501,6 +560,7 @@ async function executeDrainPass(
       await targetDb
         .update(uploadQueue)
         .set({
+          documentTypeId: normalizedDocTypeId,
           status: 'completed',
           errorMessage: null,
           fatalError: 0,
@@ -511,6 +571,7 @@ async function executeDrainPass(
       await targetDb
         .update(localHealthRecords)
         .set({
+          documentTypeId: normalizedDocTypeId,
           serverId: uploadResult.id,
           storageKey: uploadResult.storageKey,
           syncStatus: 'synced',
@@ -525,9 +586,11 @@ async function executeDrainPass(
         await targetDb
           .update(filesMetadata)
           .set({
+            documentTypeId: normalizedDocTypeId,
             serverId: uploadResult.id,
             cloudObjectKey: uploadResult.storageKey,
             syncStatus: 'synced',
+            syncOperation: 'update',
             syncError: null,
             lastSyncError: null,
             syncedAt: syncTime,
@@ -591,6 +654,7 @@ async function executeDrainPass(
   await safeFlushDatabase();
   if (drained > 0 || failed > 0) {
     emitEvent(RECORDS_SYNCED_EVENT, { patientId });
+    revalidateFilesBrowser();
   }
 
   const remainingPending = await getPendingUploadCount(patientId, options?.db);
@@ -672,6 +736,6 @@ export async function resetAndRetryFailedUploads(
 
   await safeFlushDatabase();
   emitEvent(RECORDS_SYNCED_EVENT, { patientId });
+  revalidateFilesBrowser();
   return drainUploadQueue(patientId, getToken, { ...options, forceRetry: true });
 }
-

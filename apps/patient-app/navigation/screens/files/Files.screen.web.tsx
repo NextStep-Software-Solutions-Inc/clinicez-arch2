@@ -24,6 +24,7 @@ import {
   deleteItem,
   syncPendingFiles,
   preparePreviewFile,
+  revokePreviewUri,
   renameFile,
   listFolderContents,
   formatBytes,
@@ -181,6 +182,9 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
         } else {
           window.open(preview.uri, '_blank');
         }
+        setTimeout(() => {
+          revokePreviewUri(fileId, preview.uri);
+        }, 10_000);
       } catch (error) {
         dialog.alert('Download Error', error instanceof Error ? error.message : 'Unable to download file.');
       }

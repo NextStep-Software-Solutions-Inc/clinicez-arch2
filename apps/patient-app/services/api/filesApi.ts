@@ -1,9 +1,9 @@
+import { ensureApiPrefix, joinApiUrl } from '@shared/safe';
+import type { DocumentTypeResponse } from '../files/types';
 import { api } from './apiClient';
 
-const baseUrl = process.env.EXPO_PUBLIC_API_URL?.replace(/\/+$/, '') ?? '';
-
 export function hasFileApi(): boolean {
-  return baseUrl.length > 0;
+  return ensureApiPrefix(process.env.EXPO_PUBLIC_API_URL ?? '').length > 0;
 }
 
 export interface RemoteFileRecordDto {
@@ -21,6 +21,12 @@ export interface RemoteFileRecordDto {
   notes?: string | null;
   uploadedAt: string;
   storageKey: string;
+}
+
+export function fetchDocumentTypes(
+  getToken: () => Promise<string | null>
+): Promise<DocumentTypeResponse[]> {
+  return api.get<DocumentTypeResponse[]>(getToken, '/document-types');
 }
 
 export function fetchPatientRecords(
@@ -44,5 +50,6 @@ export function deletePatientRecord(
 }
 
 export function getPatientRecordStreamUrl(patientId: string, fileId: string): string {
-  return `${baseUrl}/patients/${patientId}/records/${fileId}/stream`;
+  const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? '';
+  return joinApiUrl(baseUrl, `/api/v1/patients/${patientId}/records/${fileId}/stream`);
 }
