@@ -2092,6 +2092,45 @@ export interface RecordTriageRequest {
   preAssessmentNotes?: string;
   preAssessmentRemarks?: string;
   triageAcuityReason?: string;
+  priority?: QueuePriority;
+}
+
+export interface UpdateTriageRequest {
+  nurseId?: string;
+  recordedByNurseName?: string;
+  systolicBp?: number | null;
+  diastolicBp?: number | null;
+  heartRateBpm?: number | null;
+  temperatureCelsius?: number | null;
+  respiratoryRateBreathsPerMin?: number | null;
+  oxygenSaturationPercent?: number | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
+  painScore?: number | null;
+  notes?: string | null;
+  visualAcuityLeft?: string | null;
+  visualAcuityRight?: string | null;
+  headCircumferenceCm?: number | null;
+  midUpperArmCircumferenceCm?: number | null;
+  isMeasuredRecumbent?: boolean | null;
+  zScoreWeightForAge?: number | null;
+  zScoreLengthForAge?: number | null;
+  zScoreWeightForLength?: number | null;
+  philHealthZScoreCategory?: string | null;
+  philHealthZScoreCode?: string | null;
+  growthZScoreCategory?: string | null;
+  growthZScoreCode?: string | null;
+  waistCircumferenceCm?: number | null;
+  hipCircumferenceCm?: number | null;
+  bodyLengthCm?: number | null;
+  skinfoldThicknessMm?: number | null;
+  limbsCircumferenceCm?: number | null;
+  preAssessmentNotes?: string | null;
+  preAssessmentRemarks?: string | null;
+  triageAcuityReason?: string | null;
+  priority?: QueuePriority;
+  clearHeight?: boolean;
+  clearWeight?: boolean;
 }
 
 export interface CreateConsultationRequest {
@@ -2313,6 +2352,10 @@ export const clinicService = {
 
   async getTriage(queueItemId: string) {
     return clinicApiClient.get<TriageVitals>(`/queue/${queueItemId}/triage`);
+  },
+
+  async updateTriage(queueItemId: string, payload: UpdateTriageRequest) {
+    return clinicApiClient.put<TriageVitals>(`/queue/${queueItemId}/triage`, payload);
   },
 
   // Appointments

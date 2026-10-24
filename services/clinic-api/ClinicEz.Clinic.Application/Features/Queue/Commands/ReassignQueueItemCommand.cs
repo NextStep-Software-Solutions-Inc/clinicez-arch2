@@ -115,32 +115,6 @@ public sealed class ReassignQueueItemCommandHandler : IRequestHandler<ReassignQu
         _queueRepository.Update(item);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        string? vitalsSummary = item.TriageVitals != null
-            ? $"BP: {item.TriageVitals.SystolicBp}/{item.TriageVitals.DiastolicBp}, HR: {item.TriageVitals.HeartRateBpm}"
-            : null;
-
-        return new QueueItemDto(
-            item.Id,
-            item.TenantId,
-            item.ClinicId,
-            item.QueueNumber,
-            item.SequenceNumber,
-            item.QueueDate,
-            item.PatientId,
-            item.PatientName,
-            item.AppointmentId,
-            item.DoctorId,
-            item.DoctorName,
-            item.Priority,
-            item.Status,
-            item.CheckInTime,
-            item.CalledTime,
-            item.CompletedTime,
-            item.ChiefComplaint,
-            item.TriageVitals != null,
-            vitalsSummary,
-            item.RoomOrStation,
-            item.RoomId
-        );
+        return item.ToDto();
     }
 }

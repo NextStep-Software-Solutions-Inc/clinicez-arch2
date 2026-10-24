@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 
@@ -39,11 +40,42 @@ public sealed record QueueItemDto(
 
 public static class QueueItemMappingExtensions
 {
+    public static string? FormatVitalsSummary(TriageVitals? vitals)
+    {
+        if (vitals == null) return null;
+
+        var parts = new List<string>();
+
+        if (vitals.SystolicBp.HasValue && vitals.DiastolicBp.HasValue)
+            parts.Add($"BP {vitals.SystolicBp.Value}/{vitals.DiastolicBp.Value}");
+        else if (vitals.SystolicBp.HasValue)
+            parts.Add($"BP {vitals.SystolicBp.Value}");
+
+        if (vitals.HeartRateBpm.HasValue)
+            parts.Add($"HR {vitals.HeartRateBpm.Value}");
+
+        if (vitals.RespiratoryRateBreathsPerMin.HasValue)
+            parts.Add($"RR {vitals.RespiratoryRateBreathsPerMin.Value}/min");
+
+        if (vitals.TemperatureCelsius.HasValue)
+            parts.Add($"Temp {vitals.TemperatureCelsius.Value}°C");
+
+        if (vitals.OxygenSaturationPercent.HasValue)
+            parts.Add($"SpO2 {vitals.OxygenSaturationPercent.Value}%");
+
+        if (vitals.Bmi.HasValue)
+            parts.Add($"BMI {vitals.Bmi.Value}");
+
+        var zCategory = vitals.GrowthZScoreCategory ?? vitals.PhilHealthZScoreCategory;
+        if (!string.IsNullOrWhiteSpace(zCategory))
+            parts.Add($"Z: {zCategory.Trim()}");
+
+        return parts.Count > 0 ? string.Join(" • ", parts) : null;
+    }
+
     public static QueueItemDto ToDto(this QueueItem item)
     {
-        string? vitalsSummary = item.TriageVitals != null
-            ? $"BP: {item.TriageVitals.SystolicBp}/{item.TriageVitals.DiastolicBp} • HR: {item.TriageVitals.HeartRateBpm}"
-            : null;
+        string? vitalsSummary = FormatVitalsSummary(item.TriageVitals);
 
         return new QueueItemDto(
             item.Id,

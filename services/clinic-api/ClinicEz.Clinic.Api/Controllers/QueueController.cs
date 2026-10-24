@@ -111,6 +111,55 @@ public sealed class QueueController : ControllerBase
         return Ok(ApiResponse<TriageVitalsDto>.Success(result, "Triage vitals recorded successfully."));
     }
 
+    [HttpPut("{id:guid}/triage")]
+    [HasPermission(ClinicPermissions.TriageWrite)]
+    public async Task<ActionResult<ApiResponse<TriageVitalsDto>>> UpdateTriage(
+        Guid id,
+        [FromBody] UpdateTriageRequest request,
+        CancellationToken ct)
+    {
+        var command = new UpdateTriageVitalsCommand(
+            id,
+            request.NurseId,
+            request.RecordedByNurseName,
+            request.SystolicBp,
+            request.DiastolicBp,
+            request.HeartRateBpm,
+            request.TemperatureCelsius,
+            request.RespiratoryRateBreathsPerMin,
+            request.OxygenSaturationPercent,
+            request.HeightCm,
+            request.WeightKg,
+            request.PainScore,
+            request.Notes,
+            request.VisualAcuityLeft,
+            request.VisualAcuityRight,
+            request.HeadCircumferenceCm,
+            request.MidUpperArmCircumferenceCm,
+            request.IsMeasuredRecumbent,
+            request.ZScoreWeightForAge,
+            request.ZScoreLengthForAge,
+            request.ZScoreWeightForLength,
+            request.GrowthZScoreCategory ?? request.PhilHealthZScoreCategory,
+            request.GrowthZScoreCode ?? request.PhilHealthZScoreCode,
+            request.PhilHealthZScoreCategory,
+            request.PhilHealthZScoreCode,
+            request.WaistCircumferenceCm,
+            request.HipCircumferenceCm,
+            request.BodyLengthCm,
+            request.SkinfoldThicknessMm,
+            request.LimbsCircumferenceCm,
+            request.PreAssessmentNotes,
+            request.PreAssessmentRemarks,
+            request.TriageAcuityReason,
+            request.Priority,
+            request.ClearHeight,
+            request.ClearWeight);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<TriageVitalsDto>.Success(result, "Triage vitals updated successfully."));
+    }
+
     [HttpPost("{id:guid}/escalate-priority")]
     [HasPermission(ClinicPermissions.TriageWrite)]
     public async Task<ActionResult<ApiResponse<QueueItemDto>>> EscalatePriority(
@@ -289,6 +338,43 @@ public sealed record RecordTriageRequest(
     string? PreAssessmentRemarks = null,
     string? TriageAcuityReason = null,
     QueuePriority? Priority = null);
+
+public sealed record UpdateTriageRequest(
+    Guid? NurseId = null,
+    string? RecordedByNurseName = null,
+    int? SystolicBp = null,
+    int? DiastolicBp = null,
+    int? HeartRateBpm = null,
+    decimal? TemperatureCelsius = null,
+    int? RespiratoryRateBreathsPerMin = null,
+    decimal? OxygenSaturationPercent = null,
+    decimal? HeightCm = null,
+    decimal? WeightKg = null,
+    int? PainScore = null,
+    string? Notes = null,
+    string? VisualAcuityLeft = null,
+    string? VisualAcuityRight = null,
+    decimal? HeadCircumferenceCm = null,
+    decimal? MidUpperArmCircumferenceCm = null,
+    bool? IsMeasuredRecumbent = null,
+    decimal? ZScoreWeightForAge = null,
+    decimal? ZScoreLengthForAge = null,
+    decimal? ZScoreWeightForLength = null,
+    string? GrowthZScoreCategory = null,
+    string? GrowthZScoreCode = null,
+    string? PhilHealthZScoreCategory = null,
+    string? PhilHealthZScoreCode = null,
+    decimal? WaistCircumferenceCm = null,
+    decimal? HipCircumferenceCm = null,
+    decimal? BodyLengthCm = null,
+    decimal? SkinfoldThicknessMm = null,
+    decimal? LimbsCircumferenceCm = null,
+    string? PreAssessmentNotes = null,
+    string? PreAssessmentRemarks = null,
+    string? TriageAcuityReason = null,
+    QueuePriority? Priority = null,
+    bool ClearHeight = false,
+    bool ClearWeight = false);
 
 public sealed record EscalatePriorityRequest(
     QueuePriority NewPriority,

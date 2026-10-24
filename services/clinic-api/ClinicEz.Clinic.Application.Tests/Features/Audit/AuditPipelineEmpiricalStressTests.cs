@@ -373,6 +373,13 @@ public class AuditPipelineEmpiricalStressTests
         auditQueryDescriptor.IsAuditable.Should().BeTrue();
         auditQueryDescriptor.Action.Should().Be("audit.log.viewed");
 
+        var updateTriageDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(ClinicEz.Clinic.Application.Features.Triage.Commands.UpdateTriageVitalsCommand));
+        updateTriageDescriptor.IsAuditable.Should().BeTrue();
+        updateTriageDescriptor.Action.Should().Be("clinical.triage_vitals.updated");
+        updateTriageDescriptor.Category.Should().Be(ClinicAuditCategories.Clinical);
+        updateTriageDescriptor.Severity.Should().Be(ClinicAuditSeverities.Routine);
+        updateTriageDescriptor.TargetEntityType.Should().Be("TriageVitals");
+
         // 2. Unmapped command with heuristic fallback
         var unmappedDescriptor = AuditRequestMetadataRegistry.GetDescriptor(typeof(StressTestCommand));
         unmappedDescriptor.IsAuditable.Should().BeTrue();
