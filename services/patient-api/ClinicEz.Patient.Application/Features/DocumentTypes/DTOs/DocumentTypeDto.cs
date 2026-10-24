@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace ClinicEz.Patient.Application.Features.DocumentTypes.DTOs;
 
 public sealed record DocumentTypeDto(
@@ -9,4 +12,5 @@ public sealed record DocumentTypeDto(
     List<string> SupportedMimeTypes,
     string NativePreviewKind,
     int SortOrder,
-    bool IsActive);
+    bool IsActive,
+    DateTime? ServerUpdatedAt = null);

@@ -2,7 +2,7 @@ import type { IBlobStorage } from './blobStorage';
 
 const IDB_BLOB_DB = 'ClinicEzPatientBlobs';
 const IDB_BLOB_STORE = 'blobs';
-const activeObjectUrls = new Map<string, string>();
+const activeObjectUrls = new Map<string, Set<string>>();
 const inMemoryStore = new Map<string, { blob: Blob; mimeType: string; size: number }>();
 
 function hasIndexedDb(): boolean {
@@ -25,9 +25,31 @@ function openBlobIdb(): Promise<IDBDatabase> {
   });
 }
 
+function revokeUrlSafe(url: string): void {
+  if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // Ignore already-revoked or invalid object URLs
+    }
+  }
+}
+
+function ensureBlobMimeType(blob: Blob, fallbackMimeType?: string): Blob {
+  if (
+    fallbackMimeType &&
+    fallbackMimeType !== 'application/octet-stream' &&
+    (!blob.type || blob.type === 'application/octet-stream')
+  ) {
+    return blob.slice(0, blob.size, fallbackMimeType);
+  }
+  return blob;
+}
+
 export const webBlobStorage: IBlobStorage = {
   async saveBlob(blobKey: string, data: ArrayBuffer | Uint8Array | Blob, mimeType: string): Promise<string> {
-    const blob = data instanceof Blob ? data : new Blob([data as any], { type: mimeType });
+    const rawBlob = data instanceof Blob ? data : new Blob([data as any], { type: mimeType });
+    const blob = ensureBlobMimeType(rawBlob, mimeType);
     if (!hasIndexedDb()) {
       inMemoryStore.set(blobKey, { blob, mimeType, size: blob.size });
       return blobKey;
@@ -61,10 +83,9 @@ export const webBlobStorage: IBlobStorage = {
   },
 
   async getBlobUri(blobKey: string, mimeType?: string): Promise<string | null> {
-    if (activeObjectUrls.has(blobKey)) {
-      return activeObjectUrls.get(blobKey)!;
-    }
     let blob: Blob | null = null;
+    let storedMimeType: string | undefined;
+
     if (hasIndexedDb()) {
       try {
         const idb = await openBlobIdb();
@@ -77,23 +98,43 @@ export const webBlobStorage: IBlobStorage = {
         });
         idb.close();
         if (record?.blob) {
-          blob = record.blob instanceof Blob ? record.blob : new Blob([record.blob], { type: mimeType || record.mimeType });
+          storedMimeType = record.mimeType;
+          blob =
+            record.blob instanceof Blob
+              ? record.blob
+              : new Blob([record.blob], { type: mimeType || record.mimeType });
         }
       } catch {
         // Fall back to in-memory store
       }
     }
+
     if (!blob && inMemoryStore.has(blobKey)) {
-      blob = inMemoryStore.get(blobKey)!.blob;
+      const entry = inMemoryStore.get(blobKey)!;
+      blob = entry.blob;
+      storedMimeType = entry.mimeType;
     }
     if (!blob) return null;
 
+    const typedBlob = ensureBlobMimeType(blob, mimeType || storedMimeType);
+
     if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
-      const objectUrl = URL.createObjectURL(blob);
-      activeObjectUrls.set(blobKey, objectUrl);
+      const objectUrl = URL.createObjectURL(typedBlob);
+      const urls = activeObjectUrls.get(blobKey) ?? new Set<string>();
+      urls.add(objectUrl);
+      activeObjectUrls.set(blobKey, urls);
       return objectUrl;
     }
     return blobKey;
+  },
+
+  revokeBlobUri(uri: string): void {
+    revokeUrlSafe(uri);
+    for (const [key, urls] of activeObjectUrls.entries()) {
+      if (urls.delete(uri) && urls.size === 0) {
+        activeObjectUrls.delete(key);
+      }
+    }
   },
 
   async getBlobBytes(blobKey: string): Promise<Uint8Array | null> {
@@ -144,10 +185,9 @@ export const webBlobStorage: IBlobStorage = {
 
   async deleteBlob(blobKey: string): Promise<void> {
     inMemoryStore.delete(blobKey);
-    if (activeObjectUrls.has(blobKey)) {
-      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
-        URL.revokeObjectURL(activeObjectUrls.get(blobKey)!);
-      }
+    const urls = activeObjectUrls.get(blobKey);
+    if (urls) {
+      urls.forEach(revokeUrlSafe);
       activeObjectUrls.delete(blobKey);
     }
     if (!hasIndexedDb()) return;
@@ -167,11 +207,9 @@ export const webBlobStorage: IBlobStorage = {
   },
 
   async clearCache(patientId?: string): Promise<void> {
-    for (const [key, url] of activeObjectUrls.entries()) {
+    for (const [key, urls] of activeObjectUrls.entries()) {
       if (!patientId || key.startsWith(`${patientId}/`)) {
-        if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
-          URL.revokeObjectURL(url);
-        }
+        urls.forEach(revokeUrlSafe);
         activeObjectUrls.delete(key);
       }
     }

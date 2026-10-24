@@ -14,6 +14,9 @@ export interface IBlobStorage {
   /** Retrieves a local URI or Object URL suitable for <Image>, <PDF>, or external viewing */
   getBlobUri(blobKey: string, mimeType?: string): Promise<string | null>;
 
+  /** Releases a previously minted transient Object URL (no-op on native file URIs) */
+  revokeBlobUri?(uri: string): void;
+
   /** Reads raw bytes of a cached blob */
   getBlobBytes(blobKey: string): Promise<Uint8Array | null>;
 

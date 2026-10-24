@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Patient.Application.Common.Interfaces;
@@ -50,6 +51,24 @@ public sealed class UploadPatientRecordCommandHandler : IRequestHandler<UploadPa
         }
 
         var documentType = await _documentTypeRepository.GetByIdAsync(request.DocumentTypeId, cancellationToken);
+        if (documentType is null)
+        {
+            var activeTypes = await _documentTypeRepository.GetAllActiveAsync(cancellationToken);
+            if (activeTypes is { Count: > 0 })
+            {
+                if (!string.IsNullOrWhiteSpace(request.DocumentTypeCode))
+                {
+                    documentType = activeTypes.FirstOrDefault(t =>
+                        string.Equals(t.Code, request.DocumentTypeCode, StringComparison.OrdinalIgnoreCase));
+                }
+
+                documentType ??= activeTypes.FirstOrDefault(t =>
+                        string.Equals(t.Code, "other", StringComparison.OrdinalIgnoreCase))
+                    ?? activeTypes[0];
+            }
+        }
+
+        var effectiveDocumentTypeId = documentType?.Id ?? request.DocumentTypeId;
 
         // Encrypt with PMK using AES-256-GCM envelope encryption
         var encrypted = await _encryptionService.EncryptAsync(
@@ -69,7 +88,7 @@ public sealed class UploadPatientRecordCommandHandler : IRequestHandler<UploadPa
             Id = fileId,
             ClientId = request.ClientFileId ?? fileId,
             PatientId = request.PatientId,
-            DocumentTypeId = request.DocumentTypeId,
+            DocumentTypeId = effectiveDocumentTypeId,
             DocumentType = documentType!,
             Title = request.Title,
             FileName = safeFileName,

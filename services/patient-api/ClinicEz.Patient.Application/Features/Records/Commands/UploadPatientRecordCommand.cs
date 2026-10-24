@@ -16,5 +16,6 @@ public sealed record UploadPatientRecordCommand(
     DateOnly? DocumentDate,
     string? FacilityName,
     string? Notes,
-    Guid? ClientFileId = null
+    Guid? ClientFileId = null,
+    string? DocumentTypeCode = null
 ) : IRequest<FileRecordDto>;

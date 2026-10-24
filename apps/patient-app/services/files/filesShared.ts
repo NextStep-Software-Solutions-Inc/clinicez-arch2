@@ -1,20 +1,17 @@
-import { and, asc, desc, eq, isNull, or, isNotNull } from 'drizzle-orm';
-import { randomUUID } from 'expo-crypto';
+import { and, asc, desc, eq, isNull, notInArray, or } from 'drizzle-orm';
 import { mutate } from 'swr';
-import { db } from '@db/index';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import type { FileMetadata } from '@db/schema/filesMetadata';
-import { documentTypes } from '@db/schema/documentTypes';
-import { fetchPatientRecords, hasFileApi } from '../api/filesApi';
+import { documentTypes, type DocumentType } from '@db/schema/documentTypes';
+import { fetchDocumentTypes, fetchPatientRecords, hasFileApi } from '../api/filesApi';
 import { pushSyncPayload, type SyncItemRequest } from '../api/patientApi';
-import { deleteHealthRecord } from './recordDeletionService';
+import { formatRecordCategoryLabel, resolveDocumentTypeId } from './documentTypeMapping';
 import {
   DEFAULT_MAX_FILE_SIZE_BYTES,
   FileApiConfigResponse,
   DocumentTypeResponse,
   FileBrowserContents,
   FileBrowserFile,
-  FileItemKind,
   FilePreviewKind,
 } from './types';
 
@@ -26,7 +23,7 @@ import {
 
 export const DEFAULT_NATIVE_PREVIEW_EXTENSIONS = ['jpg', 'jpeg', 'png', 'heic', 'webp', 'pdf'];
 
-const DEFAULT_FILE_TYPES: DocumentTypeResponse[] = [
+export const DEFAULT_FILE_TYPES: DocumentTypeResponse[] = [
   {
     id: '11111111-1111-1111-1111-111111111111',
     code: 'xray',
@@ -95,12 +92,46 @@ const DEFAULT_FILE_TYPES: DocumentTypeResponse[] = [
   },
 ];
 
+function resolveDb(dbOverride?: any) {
+  if (dbOverride) return dbOverride;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('@db/index').db;
+}
+
+function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('expo-crypto').randomUUID();
+}
+
+async function safeFlushDatabase() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const dbModule = require('@db/index');
+    await dbModule.flushDatabaseSnapshot?.();
+  } catch {
+    // Ignored in non-web test runners
+  }
+}
+
+function revalidateDocumentTypeViews() {
+  try {
+    void mutate((key: unknown) =>
+      Array.isArray(key) && (key[0] === 'document-types' || key[0] === 'files-browser')
+    );
+  } catch {
+    // Ignored in non-SWR test runners
+  }
+}
+
 export function now() {
   return new Date();
 }
 
-export function makeId(prefix: string) {
-  return randomUUID();
+export function makeId(_prefix: string) {
+  return generateUuid();
 }
 
 export const KEY_PREFIX = 'patient_file_key';
@@ -196,52 +227,190 @@ export function getPreviewKind(extension: string, mimeType: string | null | unde
   return 'external';
 }
 
-function getTypeLabel(typeId: string | null | undefined, types: Awaited<ReturnType<typeof getCachedDocumentTypes>>) {
-  return types.find((type) => type.id === typeId)?.label ?? 'Medical file';
+function getTypeLabel(
+  typeId: string | null | undefined,
+  types: readonly DocumentType[],
+  fallbackType?: string | null
+) {
+  if (typeId) {
+    const direct = types.find((type) => type.id.toLowerCase() === typeId.toLowerCase());
+    if (direct) return direct.label;
+    const formatted = formatRecordCategoryLabel(typeId, types);
+    if (formatted) {
+      const resolvedId = resolveDocumentTypeId(typeId, undefined, types);
+      const mapped = types.find((type) => type.id.toLowerCase() === resolvedId.toLowerCase());
+      if (mapped) return mapped.label;
+      return formatted;
+    }
+  }
+  return formatRecordCategoryLabel(fallbackType, types) ?? 'Medical file';
 }
 
-export async function getCachedDocumentTypes() {
-  const rows = await db.select().from(documentTypes).orderBy(asc(documentTypes.sortOrder), asc(documentTypes.label));
-  if (rows.length) return rows;
-  await upsertDocumentTypes(DEFAULT_FILE_TYPES);
-  return db.select().from(documentTypes).orderBy(asc(documentTypes.sortOrder), asc(documentTypes.label));
+function normalizePreviewKind(kind?: string | null): 'image' | 'pdf' | 'external' | 'none' {
+  switch ((kind ?? '').toLowerCase()) {
+    case 'image':
+      return 'image';
+    case 'pdf':
+      return 'pdf';
+    case 'none':
+      return 'none';
+    default:
+      return 'external';
+  }
 }
 
-async function upsertDocumentTypes(rows: DocumentTypeResponse[]) {
+async function upsertDocumentTypes(rows: DocumentTypeResponse[], dbOverride?: any) {
+  const targetDb = resolveDb(dbOverride);
   const timestamp = now();
-  await Promise.all(
-    rows.map((row) => {
-      const value = {
-        id: row.id,
-        code: row.code,
-        label: row.label,
-        description: row.description ?? null,
-        supportedExtensionsJson: JSON.stringify(row.supportedExtensions ?? []),
-        supportedMimeTypesJson: JSON.stringify(row.supportedMimeTypes ?? []),
-        nativePreviewKind: (row.nativePreviewKind ?? 'external') as any,
-        isActive: row.isActive ?? true,
-        sortOrder: row.sortOrder ?? 0,
-        fetchedAt: timestamp,
-        serverUpdatedAt: row.serverUpdatedAt ? new Date(row.serverUpdatedAt) : null,
-      };
+  for (const row of rows) {
+    const parsedUpdatedAt = row.serverUpdatedAt ? new Date(row.serverUpdatedAt) : null;
+    const serverUpdatedAt =
+      parsedUpdatedAt && !Number.isNaN(parsedUpdatedAt.getTime()) ? parsedUpdatedAt : null;
 
-      return db.insert(documentTypes).values(value).onConflictDoUpdate({ target: documentTypes.id, set: value });
-    }),
-  );
+    const value = {
+      id: row.id,
+      code: row.code,
+      label: row.label,
+      description: row.description ?? null,
+      supportedExtensionsJson: JSON.stringify(row.supportedExtensions ?? []),
+      supportedMimeTypesJson: JSON.stringify(row.supportedMimeTypes ?? []),
+      nativePreviewKind: normalizePreviewKind(row.nativePreviewKind),
+      isActive: row.isActive ?? true,
+      sortOrder: row.sortOrder ?? 0,
+      fetchedAt: timestamp,
+      serverUpdatedAt,
+    };
+
+    await targetDb
+      .insert(documentTypes)
+      .values(value)
+      .onConflictDoUpdate({ target: documentTypes.id, set: value });
+  }
 }
 
-async function getLocalTotalStorageBytes(patientId: string) {
-  const files = await db
-    .select({ sizeBytes: filesMetadata.sizeBytes })
-    .from(filesMetadata)
-    .where(
-      and(
-        eq(filesMetadata.patientId, patientId),
-        isNull(filesMetadata.deletedAt)
-      )
-    );
+/**
+ * Reconciles the local `document_types` SQLite table against authoritative backend rows:
+ * - Inserts new backend types
+ * - Updates existing types whose code, label, extensions, MIME types, sortOrder, or isActive changed
+ * - Prunes local rows that were deleted on the backend
+ */
+export async function reconcileDocumentTypes(
+  remoteRows: DocumentTypeResponse[],
+  dbOverride?: any
+): Promise<DocumentType[]> {
+  const targetDb = resolveDb(dbOverride);
 
-  return files.reduce((acc, f) => acc + (f.sizeBytes ?? 0), 0);
+  if (remoteRows.length > 0) {
+    await upsertDocumentTypes(remoteRows, targetDb);
+    const remoteIds = remoteRows.map((row) => row.id);
+    await targetDb.delete(documentTypes).where(notInArray(documentTypes.id, remoteIds));
+    if (!dbOverride) {
+      await safeFlushDatabase();
+      revalidateDocumentTypeViews();
+    }
+  }
+
+  return targetDb
+    .select()
+    .from(documentTypes)
+    .orderBy(asc(documentTypes.sortOrder), asc(documentTypes.label));
+}
+
+export async function getCachedDocumentTypes(dbOverride?: any): Promise<DocumentType[]> {
+  const targetDb = resolveDb(dbOverride);
+  const rows = await targetDb
+    .select()
+    .from(documentTypes)
+    .orderBy(asc(documentTypes.sortOrder), asc(documentTypes.label));
+  if (rows.length > 0) return rows;
+
+  await upsertDocumentTypes(DEFAULT_FILE_TYPES, targetDb);
+  return targetDb
+    .select()
+    .from(documentTypes)
+    .orderBy(asc(documentTypes.sortOrder), asc(documentTypes.label));
+}
+
+export async function getActiveDocumentTypes(dbOverride?: any): Promise<DocumentType[]> {
+  const rows = await getCachedDocumentTypes(dbOverride);
+  return rows.filter((row) => row.isActive);
+}
+
+export interface RefreshDocumentTypesOptions {
+  force?: boolean;
+  db?: any;
+  fetchFn?: () => Promise<DocumentTypeResponse[]>;
+}
+
+let inFlightDocumentTypesRefresh: Promise<DocumentType[]> | null = null;
+let lastDocumentTypesSyncedAtMs = 0;
+const DOCUMENT_TYPES_SYNC_TTL_MS = 15_000;
+
+/**
+ * Downloads `GET /api/v1/document-types` from the backend and reconciles the local SQLite
+ * `document_types` table so backend additions, updates, deactivations, and deletions are
+ * reflected locally while remaining 100% available offline.
+ */
+export async function refreshDocumentTypes(
+  _patientId: string,
+  getToken?: () => Promise<string | null>,
+  options?: RefreshDocumentTypesOptions
+): Promise<DocumentType[]> {
+  const targetDb = options?.db;
+  const isCustomRun = Boolean(options?.db || options?.fetchFn);
+
+  if (!isCustomRun && !options?.force && Date.now() - lastDocumentTypesSyncedAtMs < DOCUMENT_TYPES_SYNC_TTL_MS) {
+    const existing = await resolveDb(targetDb)
+      .select()
+      .from(documentTypes)
+      .orderBy(asc(documentTypes.sortOrder), asc(documentTypes.label));
+    if (existing.length > 0) {
+      return existing;
+    }
+  }
+
+  const canFetchRemote = Boolean(
+    options?.fetchFn ||
+      (getToken &&
+        hasFileApi() &&
+        (typeof navigator === 'undefined' || navigator.onLine !== false))
+  );
+
+  if (!canFetchRemote) {
+    return getCachedDocumentTypes(targetDb);
+  }
+
+  const runSync = async (): Promise<DocumentType[]> => {
+    try {
+      const remoteRows = options?.fetchFn
+        ? await options.fetchFn()
+        : await fetchDocumentTypes(getToken!);
+
+      if (Array.isArray(remoteRows) && remoteRows.length > 0) {
+        const reconciled = await reconcileDocumentTypes(remoteRows, targetDb);
+        if (!isCustomRun) {
+          lastDocumentTypesSyncedAtMs = Date.now();
+        }
+        return reconciled;
+      }
+    } catch (err) {
+      console.warn('Failed to refresh document types from backend; using local SQLite cache.', err);
+    }
+
+    return getCachedDocumentTypes(targetDb);
+  };
+
+  if (isCustomRun) {
+    return runSync();
+  }
+
+  if (!inFlightDocumentTypesRefresh) {
+    inFlightDocumentTypesRefresh = runSync().finally(() => {
+      inFlightDocumentTypesRefresh = null;
+    });
+  }
+
+  return inFlightDocumentTypesRefresh;
 }
 
 function toConfigValue(patientId: string, response?: FileApiConfigResponse) {
@@ -255,11 +424,6 @@ function toConfigValue(patientId: string, response?: FileApiConfigResponse) {
   };
 }
 
-export async function refreshDocumentTypes(_patientId: string, _getToken?: () => Promise<string | null>) {
-  await upsertDocumentTypes(DEFAULT_FILE_TYPES);
-  return getCachedDocumentTypes();
-}
-
 export async function getFileConfig(patientId: string, _getToken?: () => Promise<string | null>) {
   return toConfigValue(patientId);
 }
@@ -270,16 +434,17 @@ export async function listFolderContents(
   query = '',
   getToken?: () => Promise<string | null>,
 ): Promise<FileBrowserContents> {
+  const targetDb = resolveDb();
   const normalizedQuery = query.trim().toLowerCase();
   const [fileRows, config, types, pendingRows] = await Promise.all([
-    db
+    targetDb
       .select()
       .from(filesMetadata)
       .where(and(eq(filesMetadata.patientId, patientId), isNull(filesMetadata.deletedAt)))
       .orderBy(desc(filesMetadata.updatedAt), desc(filesMetadata.createdAt)),
     getFileConfig(patientId, getToken),
     getCachedDocumentTypes(),
-    db
+    targetDb
       .select({ id: filesMetadata.id })
       .from(filesMetadata)
       .where(
@@ -292,11 +457,11 @@ export async function listFolderContents(
   ]);
 
   const browserFiles: FileBrowserFile[] = fileRows
-    .filter((file) => !normalizedQuery || file.name.toLowerCase().includes(normalizedQuery))
-    .map((file) => ({
+    .filter((file: FileMetadata) => !normalizedQuery || file.name.toLowerCase().includes(normalizedQuery))
+    .map((file: FileMetadata) => ({
       ...file,
       kind: 'file',
-      typeLabel: getTypeLabel(file.documentTypeId, types),
+      typeLabel: getTypeLabel(file.documentTypeId, types, file.type),
       previewKind: getPreviewKind(file.extension ?? '', file.mimeType),
     }));
 
@@ -316,10 +481,11 @@ export async function getStorageOverview(
 }
 
 export async function renameFile(patientId: string, fileId: string, name: string) {
+  const targetDb = resolveDb();
   const trimmedName = name.trim();
   if (!trimmedName) throw new Error('File name is required.');
 
-  const [file] = await db
+  const [file] = await targetDb
     .select()
     .from(filesMetadata)
     .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, fileId)))
@@ -328,7 +494,7 @@ export async function renameFile(patientId: string, fileId: string, name: string
 
   const op = file.syncOperation === 'insert' && !file.serverId ? 'insert' : 'update';
 
-  await db
+  await targetDb
     .update(filesMetadata)
     .set({ name: trimmedName, updatedAt: now(), syncStatus: 'queued', syncOperation: op, syncError: null })
     .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, fileId)));
@@ -340,6 +506,8 @@ export async function deleteItem(
   maybeId?: string | (() => Promise<string | null>),
   maybeGetToken?: () => Promise<string | null>
 ): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { deleteHealthRecord } = require('./recordDeletionService');
   const targetId = typeof maybeId === 'string' ? maybeId : _itemKindOrId;
   const getToken = typeof maybeId === 'function' ? maybeId : maybeGetToken;
   await deleteHealthRecord({
@@ -353,22 +521,33 @@ export function findBestFileType(
   selectedTypeId: string | null | undefined,
   extension: string,
   mimeType: string,
-  types: Awaited<ReturnType<typeof getCachedDocumentTypes>>,
+  types: readonly DocumentType[],
 ) {
-  const selected = types.find((type) => type.id === selectedTypeId);
-  if (selected) return selected;
+  const activeTypes = types.filter((t) => t.isActive);
+  const pool = activeTypes.length > 0 ? activeTypes : types;
+
+  if (selectedTypeId) {
+    const selected = pool.find((type) => type.id.toLowerCase() === selectedTypeId.toLowerCase());
+    if (selected) return selected;
+    if (formatRecordCategoryLabel(selectedTypeId, pool)) {
+      const resolvedId = resolveDocumentTypeId(selectedTypeId, undefined, pool);
+      const resolved = pool.find((type) => type.id.toLowerCase() === resolvedId.toLowerCase());
+      if (resolved) return resolved;
+    }
+  }
 
   return (
-    types.find((type) => {
+    pool.find((type) => {
       const extensions = parseJsonArray<string>(type.supportedExtensionsJson, []);
       const mimeTypes = parseJsonArray<string>(type.supportedMimeTypesJson, []);
       return extensions.includes(extension) || mimeTypes.includes(mimeType) || mimeTypes.includes('*/*') || (mimeType.startsWith('image/') && mimeTypes.includes('image/*'));
-    }) ?? types.find((type) => type.code === 'other') ?? types[0]
+    }) ?? pool.find((type) => type.code === 'other') ?? pool[0]
   );
 }
 
 export async function getFileById(patientId: string, fileId: string) {
-  const [file] = await db
+  const targetDb = resolveDb();
+  const [file] = await targetDb
     .select()
     .from(filesMetadata)
     .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, fileId), isNull(filesMetadata.deletedAt)))
@@ -395,27 +574,32 @@ export function getTypeExtensions(type: { supportedExtensionsJson: string }) {
 export async function pullRemoteChanges(
   patientId: string,
   getToken: () => Promise<string | null>,
-  cleanupPreview: (fileId: string) => Promise<void>,
+  _cleanupPreview: (fileId: string) => Promise<void>,
 ): Promise<number> {
+  const targetDb = resolveDb();
   let synced = 0;
   try {
     const records = await fetchPatientRecords(patientId, getToken);
 
     for (const remoteFile of records) {
       try {
-        const [existing] = await db.select().from(filesMetadata).where(eq(filesMetadata.id, remoteFile.id)).limit(1);
+        const [existing] = await targetDb.select().from(filesMetadata).where(eq(filesMetadata.id, remoteFile.id)).limit(1);
 
         if (!existing) {
-          await db.insert(filesMetadata).values({
+          await targetDb.insert(filesMetadata).values({
             id: remoteFile.id,
             patientId,
             clinicId: null,
             documentTypeId: remoteFile.documentTypeId,
             name: remoteFile.fileName,
+            title: remoteFile.title ?? remoteFile.fileName,
             type: null,
             mimeType: remoteFile.mimeType,
             extension: remoteFile.extension,
             sizeBytes: remoteFile.sizeBytes,
+            documentDate: remoteFile.documentDate ?? null,
+            facilityName: remoteFile.facilityName ?? null,
+            notes: remoteFile.notes ?? null,
             localPath: null,
             isCached: false,
             cloudObjectKey: remoteFile.storageKey,
@@ -429,6 +613,7 @@ export async function pullRemoteChanges(
           synced++;
         } else if (
           existing.name !== remoteFile.fileName ||
+          existing.documentTypeId !== remoteFile.documentTypeId ||
           existing.deletedAt !== null
         ) {
           // Protect local pending changes from being overwritten by downstream pull
@@ -439,8 +624,9 @@ export async function pullRemoteChanges(
           if (existing.updatedAt && existing.updatedAt.getTime() > new Date(remoteFile.uploadedAt).getTime()) {
             continue;
           }
-          await db.update(filesMetadata).set({
+          await targetDb.update(filesMetadata).set({
             name: remoteFile.fileName,
+            documentTypeId: remoteFile.documentTypeId,
             deletedAt: null,
             syncStatus: 'synced',
           }).where(eq(filesMetadata.id, remoteFile.id));
@@ -474,10 +660,11 @@ export async function pushPendingMetadata(
   retryFailed: boolean,
   cleanupPreview: (fileId: string) => Promise<void>,
 ): Promise<PushMetadataResult> {
+  const targetDb = resolveDb();
   let synced = 0;
   let failed = 0;
 
-  const pendingFiles = await db
+  const pendingFiles = await targetDb
     .select()
     .from(filesMetadata)
     .where(
@@ -498,13 +685,13 @@ export async function pushPendingMetadata(
     } else {
       const op = file.syncOperation === 'insert' && file.serverId ? 'update' : file.syncOperation;
       syncRequests.push({
-        idempotencyKey: randomUUID(),
+        idempotencyKey: generateUuid(),
         entityType: 'file',
         operation: op,
         clientTimestamp: (file.updatedAt ?? new Date()).toISOString(),
         entityId: file.id,
         payloadJson: JSON.stringify({
-          clientId: randomUUID(),
+          clientId: generateUuid(),
           fileName: file.name,
           updatedAt: (file.updatedAt ?? new Date()).toISOString()
         })
@@ -526,7 +713,7 @@ export async function pushPendingMetadata(
         if (file.syncOperation === 'delete') {
           await cleanupPreview(file.id);
         }
-        await db.update(filesMetadata).set({ syncStatus: 'synced', syncError: null }).where(eq(filesMetadata.id, file.id));
+        await targetDb.update(filesMetadata).set({ syncStatus: 'synced', syncError: null }).where(eq(filesMetadata.id, file.id));
       }
       synced += syncRequests.length;
       mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');

@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,9 +14,10 @@ import ThemedText from '@ui/ThemedText';
 import Button from '@ui/Button';
 import Input from '@ui/Input';
 import Card from '@ui/Card';
-import { AppIcon, type IconName } from '@ui/Icon';
+import { AppIcon } from '@ui/Icon';
 import ProfileDatePicker from '../../../components/profile/ProfileDatePicker';
 import { usePatientId } from 'hooks/usePatientId';
+import { useDocumentTypes } from '../../../hooks/useDocumentTypes';
 import { useContentInsets } from '../../../hooks/useContentInsets';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
@@ -26,50 +26,18 @@ import {
   validateUploadFile,
   UPLOAD_ALLOWED_MIME_TYPES,
 } from '../../../services/documents/uploadRules';
+import {
+  getDocumentTypeVisualMeta,
+  inferCategoryFromDocumentType,
+  inferDocumentTypeFromFileName,
+  resolveDocumentTypeId,
+} from '../../../services/files/documentTypeMapping';
 import { enqueueOfflineRecordUpload } from '../../../services/sync/uploadQueueService';
-import type { HealthRecordCategory } from '../../../db/schema/localHealthRecords';
-import type { ColorToken } from '../../../constants/theme';
-
-interface CategoryOption {
-  id: HealthRecordCategory;
-  label: string;
-  icon: IconName;
-  colorToken: ColorToken;
-}
-
-const CATEGORIES: CategoryOption[] = [
-  { id: 'lab_result', label: 'Lab Result', icon: 'lab', colorToken: 'success' },
-  { id: 'imaging', label: 'Imaging / X-Ray', icon: 'activity', colorToken: 'info' },
-  { id: 'prescription', label: 'Prescription', icon: 'pill', colorToken: 'emergency' },
-  { id: 'vaccine_card', label: 'Vaccine Card', icon: 'badge', colorToken: 'purple' },
-  { id: 'certificate', label: 'Certificate', icon: 'document', colorToken: 'warning' },
-  { id: 'other', label: 'Other', icon: 'folder', colorToken: 'textSecondary' },
-];
 
 export function sanitizeTitleFromFileName(fileName: string): string {
   const baseName = fileName.replace(/\.[^/.]+$/, '');
   const withSpaces = baseName.replace(/[_\-.]+/g, ' ');
   return withSpaces.trim().replace(/\s+/g, ' ').slice(0, 200) || 'Medical Record';
-}
-
-function inferCategoryFromName(fileName: string): HealthRecordCategory | null {
-  const lower = fileName.toLowerCase();
-  if (lower.includes('cbc') || lower.includes('urinalysis') || lower.includes('blood') || lower.includes('lab')) {
-    return 'lab_result';
-  }
-  if (lower.includes('xray') || lower.includes('cxr') || lower.includes('mri') || lower.includes('scan') || lower.includes('ultrasound')) {
-    return 'imaging';
-  }
-  if (lower.includes('rx') || lower.includes('prescription')) {
-    return 'prescription';
-  }
-  if (lower.includes('vaccine') || lower.includes('immunization') || lower.includes('vax')) {
-    return 'vaccine_card';
-  }
-  if (lower.includes('cert') || lower.includes('clearance') || lower.includes('fit-to-work')) {
-    return 'certificate';
-  }
-  return null;
 }
 
 export default function FilesUploadScreen() {
@@ -79,6 +47,7 @@ export default function FilesUploadScreen() {
   const { getToken } = useClerkAuth();
   const { runWithAutoLockPaused } = useAppAuth();
   const insets = useContentInsets();
+  const { documentTypes } = useDocumentTypes(patientId);
 
   const [pickedFile, setPickedFile] = useState<{
     uri: string;
@@ -87,13 +56,24 @@ export default function FilesUploadScreen() {
     size: number;
   } | null>(null);
 
-  const [category, setCategory] = useState<HealthRecordCategory>('lab_result');
+  const [selectedDocumentTypeId, setSelectedDocumentTypeId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [facilityName, setFacilityName] = useState('');
   const [notes, setNotes] = useState('');
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Keep selectedDocumentTypeId synchronized with active backend DocumentTypes
+  useEffect(() => {
+    if (!documentTypes.length) return;
+    const stillValid = documentTypes.some((dt) => dt.id === selectedDocumentTypeId);
+    if (!stillValid) {
+      const preferred =
+        documentTypes.find((dt) => dt.code.toLowerCase() === 'lab-result') ?? documentTypes[0];
+      setSelectedDocumentTypeId(preferred.id);
+    }
+  }, [documentTypes, selectedDocumentTypeId]);
 
   const handlePickDocument = async () => {
     setErrorBanner(null);
@@ -126,9 +106,9 @@ export default function FilesUploadScreen() {
       if (!title) {
         setTitle(sanitizeTitleFromFileName(asset.name));
       }
-      const inferred = inferCategoryFromName(asset.name);
+      const inferred = inferDocumentTypeFromFileName(asset.name, documentTypes);
       if (inferred) {
-        setCategory(inferred);
+        setSelectedDocumentTypeId(inferred.id);
       }
     } catch (err: any) {
       setErrorBanner(err.message || 'Unable to pick document.');
@@ -174,9 +154,9 @@ export default function FilesUploadScreen() {
       if (!title) {
         setTitle(sanitizeTitleFromFileName(fileName));
       }
-      const inferred = inferCategoryFromName(fileName);
+      const inferred = inferDocumentTypeFromFileName(fileName, documentTypes);
       if (inferred) {
-        setCategory(inferred);
+        setSelectedDocumentTypeId(inferred.id);
       }
     } catch (err: any) {
       setErrorBanner(err.message || 'Unable to pick photo.');
@@ -195,10 +175,17 @@ export default function FilesUploadScreen() {
     setIsSaving(true);
     setErrorBanner(null);
     try {
+      const selectedDocType =
+        documentTypes.find((dt) => dt.id === selectedDocumentTypeId) ?? documentTypes[0] ?? null;
+      const resolvedDocTypeId = selectedDocType
+        ? selectedDocType.id
+        : resolveDocumentTypeId(selectedDocumentTypeId, undefined, documentTypes);
+      const category = inferCategoryFromDocumentType(selectedDocType);
+
       await enqueueOfflineRecordUpload(
         {
           patientId,
-          documentTypeId: category,
+          documentTypeId: resolvedDocTypeId,
           category,
           title: title.trim(),
           fileName: pickedFile.name,
@@ -367,7 +354,7 @@ export default function FilesUploadScreen() {
         )}
       </View>
 
-      {/* Category Selection */}
+      {/* Document Type Selection (synced from backend & cached in SQLite) */}
       <View style={{ gap: spacing.sm }}>
         <ThemedText variant="smallBold" color="textSecondary">
           CATEGORY *
@@ -377,14 +364,16 @@ export default function FilesUploadScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={[styles.categoryList, { gap: spacing.sm }]}
         >
-          {CATEGORIES.map((cat) => {
-            const isSelected = category === cat.id;
+          {documentTypes.map((docType) => {
+            const isSelected = selectedDocumentTypeId === docType.id;
+            const visual = getDocumentTypeVisualMeta(docType);
             return (
               <Pressable
-                key={cat.id}
-                onPress={() => setCategory(cat.id)}
+                key={docType.id}
+                onPress={() => setSelectedDocumentTypeId(docType.id)}
                 accessibilityRole="button"
-                accessibilityLabel={cat.label}
+                accessibilityLabel={docType.label}
+                accessibilityState={{ selected: isSelected }}
                 style={[
                   styles.categoryChip,
                   {
@@ -398,9 +387,13 @@ export default function FilesUploadScreen() {
                   },
                 ]}
               >
-                <AppIcon name={cat.icon} color={isSelected ? 'primary' : cat.colorToken} size={sizes.iconSm} />
+                <AppIcon
+                  name={visual.icon}
+                  color={isSelected ? 'primary' : visual.colorToken}
+                  size={sizes.iconSm}
+                />
                 <ThemedText variant="smallBold" color={isSelected ? 'primary' : 'text'}>
-                  {cat.label}
+                  {docType.label}
                 </ThemedText>
               </Pressable>
             );
