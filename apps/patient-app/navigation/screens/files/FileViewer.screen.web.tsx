@@ -15,7 +15,7 @@ import type { PreparedPreviewFile } from '../../../services/files';
 import { formatRecordCategoryLabel } from '../../../services/files/documentTypeMapping';
 import {
   formatRecordFileName,
-  formatRecordTimestamp,
+  formatRecordSubtitle,
   formatViewerHeaderTitle,
 } from '../../../services/files/recordPresentation';
 import type { FilesScreenProps } from './navigationTypes';
@@ -58,7 +58,7 @@ export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileVie
   }, [fileMetadata, preview, categoryLabel]);
 
   const viewerHeaderSubtitle = useMemo(() => {
-    return formatRecordTimestamp(fileMetadata) || undefined;
+    return formatRecordSubtitle(fileMetadata) || undefined;
   }, [fileMetadata]);
 
   useRegisterWebHeaderOverride('FileViewerScreen', viewerHeaderTitle, viewerHeaderSubtitle);

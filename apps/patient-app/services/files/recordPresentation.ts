@@ -1,7 +1,7 @@
 import { getProvenanceMeta } from '../records/categories';
 import type { IconName } from '../../components/ui/iconNames';
 import type { ColorToken } from '../../constants/theme';
-import { extensionFromMime, extensionFromName, normalizeExtension } from './filesShared';
+import { extensionFromMime, extensionFromName, formatBytes, normalizeExtension } from './filesShared';
 
 export interface SyncStatusMeta {
   dotColor: ColorToken;
@@ -51,6 +51,10 @@ export interface RecordTimestampFields {
   updatedAt?: Date | string | number | null;
   uploadedAt?: Date | string | number | null;
   documentDate?: string | null;
+}
+
+export interface RecordSubtitleFields extends RecordTimestampFields {
+  sizeBytes?: number | null;
 }
 
 export interface RecordProvenanceFields {
@@ -214,6 +218,24 @@ export function formatRecordTimestamp(record: RecordTimestampFields | null | und
   }
 
   return '';
+}
+
+/**
+ * Formats a record's subtitle for list rows, grid cards, and the viewer top header as:
+ * `24 Oct 2026, 12:54 PM · 245 KB`
+ * Gracefully omits either part when unavailable (e.g. `sizeBytes <= 0` or missing timestamp).
+ */
+export function formatRecordSubtitle(record: RecordSubtitleFields | null | undefined): string {
+  if (!record) return '';
+
+  const timestamp = formatRecordTimestamp(record);
+  const rawSize = record.sizeBytes;
+  const sizeLabel =
+    typeof rawSize === 'number' && Number.isFinite(rawSize) && rawSize > 0
+      ? formatBytes(rawSize)
+      : '';
+
+  return [timestamp, sizeLabel].filter(Boolean).join(' · ');
 }
 
 /**

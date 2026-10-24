@@ -7,7 +7,7 @@ import { CircularProgress } from '../ui/CircularProgress';
 import { FileBrowserFile } from '../../services/files';
 import {
   formatRecordFileName,
-  formatRecordTimestamp,
+  formatRecordSubtitle,
   getProvenanceIndicatorMeta,
 } from '../../services/files/recordPresentation';
 import { useAppTheme } from '../../contexts/ThemeContext';
@@ -83,7 +83,7 @@ export function FileRow({
 
   const meta = fileMeta(item);
   const displayFileName = formatRecordFileName(item);
-  const timestampSubtitle = formatRecordTimestamp(item);
+  const recordSubtitle = formatRecordSubtitle(item);
   const provenanceMeta = getProvenanceIndicatorMeta({
     provenance: (item as any).provenance,
     clinicId: item.clinicId,
@@ -187,11 +187,11 @@ export function FileRow({
             />
           </View>
 
-          {/* Timestamp subtitle + icon-only provenance indicator */}
+          {/* Timestamp + file size subtitle + icon-only provenance indicator */}
           <View style={[styles.subtitleRow, { gap: spacing.xs }]}>
-            {timestampSubtitle ? (
+            {recordSubtitle ? (
               <ThemedText variant="small" color="textMuted" numberOfLines={1} style={styles.subtitleText}>
-                {timestampSubtitle}
+                {recordSubtitle}
               </ThemedText>
             ) : null}
             <View

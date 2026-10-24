@@ -12,6 +12,7 @@ import {
   compactFileNameMiddle,
   formatCategoryTitleCase,
   formatRecordFileName,
+  formatRecordSubtitle,
   formatRecordTimestamp,
   formatViewerHeaderTitle,
   getProvenanceIndicatorMeta,
@@ -139,6 +140,35 @@ describe('3 & 4. Record Filename, Timestamp Subtitle, Icon-Only Provenance, & Vi
     expect(fallback.includes('2026')).toBe(true);
   });
 
+  test('formatRecordSubtitle combines timestamp and formatted file size, gracefully omitting missing parts', () => {
+    const withKb = formatRecordSubtitle({
+      createdAt: new Date('2026-10-24T04:54:00.000Z'),
+      sizeBytes: 250_880, // 245 KB
+    });
+    expect(withKb.includes('2026')).toBe(true);
+    expect(withKb.endsWith(' · 245 KB')).toBe(true);
+
+    const withMb = formatRecordSubtitle({
+      createdAt: new Date('2026-10-24T04:54:00.000Z'),
+      sizeBytes: Math.round(1.5 * 1024 * 1024),
+    });
+    expect(withMb.endsWith(' · 1.5 MB')).toBe(true);
+
+    const unknownSize = formatRecordSubtitle({
+      createdAt: new Date('2026-10-24T04:54:00.000Z'),
+      sizeBytes: 0,
+    });
+    expect(unknownSize.includes('2026')).toBe(true);
+    expect(unknownSize.includes(' · ')).toBe(false);
+    expect(unknownSize.includes('0 B')).toBe(false);
+
+    const sizeOnly = formatRecordSubtitle({
+      createdAt: null,
+      sizeBytes: 512,
+    });
+    expect(sizeOnly).toBe('512 B');
+  });
+
   test('getProvenanceIndicatorMeta returns icon-only upload indicator for patient-uploaded records', () => {
     expect(getProvenanceIndicatorMeta({ provenance: 'patient_uploaded' })).toEqual({
       icon: 'upload',
@@ -163,11 +193,14 @@ describe('3 & 4. Record Filename, Timestamp Subtitle, Icon-Only Provenance, & Vi
     expect(fileRowNative.includes('ProvenanceBadge')).toBe(false);
     expect(fileRowWeb.includes('formatRecordFileName')).toBe(true);
     expect(fileRowNative.includes('formatRecordFileName')).toBe(true);
-    expect(fileRowWeb.includes('formatRecordTimestamp')).toBe(true);
-    expect(fileRowNative.includes('formatRecordTimestamp')).toBe(true);
+    expect(fileRowWeb.includes('formatRecordSubtitle')).toBe(true);
+    expect(fileRowNative.includes('formatRecordSubtitle')).toBe(true);
+
+    const filesScreenWeb = readApp('navigation/screens/files/Files.screen.web.tsx');
+    expect(filesScreenWeb.includes('formatRecordSubtitle')).toBe(true);
   });
 
-  test('FileViewer removes redundant clinicalHeaderCard and Uploaded by You badge, wiring title + timestamp subtitle into top header', () => {
+  test('FileViewer removes redundant clinicalHeaderCard and Uploaded by You badge, wiring title + timestamp/size subtitle into top header', () => {
     const viewerWeb = readApp('navigation/screens/files/FileViewer.screen.web.tsx');
     const viewerNative = readApp('navigation/screens/files/FileViewer.screen.tsx');
 
@@ -178,6 +211,8 @@ describe('3 & 4. Record Filename, Timestamp Subtitle, Icon-Only Provenance, & Vi
     expect(viewerWeb.includes('useRegisterWebHeaderOverride')).toBe(true);
     expect(viewerWeb.includes('formatViewerHeaderTitle')).toBe(true);
     expect(viewerNative.includes('formatViewerHeaderTitle')).toBe(true);
+    expect(viewerWeb.includes('formatRecordSubtitle')).toBe(true);
+    expect(viewerNative.includes('formatRecordSubtitle')).toBe(true);
 
     const webAppFrame = readApp('components/layout/WebAppFrame.web.tsx');
     expect(webAppFrame.includes('useWebHeaderOverride')).toBe(true);
