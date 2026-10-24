@@ -29,7 +29,7 @@ import {
 } from '../../../services/files';
 import {
   formatRecordFileName,
-  formatRecordTimestamp,
+  formatRecordSubtitle,
   getProvenanceIndicatorMeta,
 } from '../../../services/files/recordPresentation';
 import { resetAndRetryFailedUploads } from '../../../services/sync/uploadQueueService';
@@ -516,7 +516,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
                         {filteredAndSortedRecords.map((file) => {
                           const meta = getFileMeta(file);
                           const displayFileName = formatRecordFileName(file);
-                          const timestampStr = formatRecordTimestamp(file);
+                          const subtitleStr = formatRecordSubtitle(file);
                           const provenanceMeta = getProvenanceIndicatorMeta({
                             provenance: (file as any).provenance,
                             clinicId: file.clinicId,
@@ -592,7 +592,7 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
 
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                                 <ThemedText variant="caption" color="textMuted" numberOfLines={1} style={{ flexShrink: 1 }}>
-                                  {timestampStr}
+                                  {subtitleStr}
                                 </ThemedText>
                                 <View accessible accessibilityLabel={provenanceMeta.accessibilityLabel}>
                                   <AppIcon

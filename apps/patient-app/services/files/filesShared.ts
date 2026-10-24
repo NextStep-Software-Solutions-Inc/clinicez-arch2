@@ -621,6 +621,7 @@ export async function pullRemoteChanges(
         } else if (
           existing.name !== remoteFile.fileName ||
           existing.documentTypeId !== remoteFile.documentTypeId ||
+          (remoteFile.sizeBytes > 0 && existing.sizeBytes !== remoteFile.sizeBytes) ||
           existing.deletedAt !== null
         ) {
           // Protect local pending changes from being overwritten by downstream pull
@@ -634,6 +635,7 @@ export async function pullRemoteChanges(
           await targetDb.update(filesMetadata).set({
             name: remoteFile.fileName,
             documentTypeId: remoteFile.documentTypeId,
+            sizeBytes: remoteFile.sizeBytes > 0 ? remoteFile.sizeBytes : existing.sizeBytes,
             deletedAt: null,
             syncStatus: 'synced',
           }).where(eq(filesMetadata.id, remoteFile.id));
