@@ -189,7 +189,7 @@ export default function ExploreClinicsScreenWeb() {
             ]}
         >
             {/* Top Toolbar: Search + Filter Chips */}
-            <View style={[styles.toolbar, { gap: spacing.md, marginBottom: spacing.xl }]}>
+            <View style={[styles.toolbar, { gap: spacing.md, marginBottom: spacing.md }]}>
                 {organizationName ? (
                     <ThemedText variant="h2" color="text">
                         {organizationName} Clinics

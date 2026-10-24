@@ -1,5 +1,4 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
 import { RecordsSyncBanner } from '../records/RecordsSyncBanner';
 
 export type BrowserContents = {
@@ -29,23 +28,15 @@ export function FilesHeader({
   const pendingCount = contents?.pendingSyncCount ?? 0;
 
   return (
-    <View style={styles.header}>
-      <RecordsSyncBanner
-        patientId={patientId}
-        pendingCount={pendingCount}
-        failedCount={failedCount}
-        isSyncing={isSyncing}
-        onSync={onSync}
-        onRetryFailed={onRetryFailed}
-      />
-    </View>
+    <RecordsSyncBanner
+      patientId={patientId}
+      pendingCount={pendingCount}
+      failedCount={failedCount}
+      isSyncing={isSyncing}
+      onSync={onSync}
+      onRetryFailed={onRetryFailed}
+    />
   );
 }
 
 export default FilesHeader;
-
-const styles = StyleSheet.create({
-  header: {
-    width: '100%',
-  },
-});

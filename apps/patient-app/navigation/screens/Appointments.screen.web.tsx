@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState, useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useNetInfo } from '@react-native-community/netinfo';
@@ -11,11 +11,13 @@ import { SkeletonCard } from '../../components/ui/Skeleton';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
-import IconButton from '../../components/ui/IconButton';
 import { AppIcon } from '../../components/ui/Icon';
 import { SectionHeader } from '../../components/ui/Primitives';
+import { FilterChipBar, type FilterChipItem } from '../../components/ui/FilterChipBar';
+import { ActiveSearchBanner, SearchModal } from '../../components/ui/SearchModal';
 import OfflineBanner from '../../components/appointments/OfflineBanner';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { useRegisterHeaderSearch } from '../../contexts/HeaderSearchContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { usePatientId } from '../../hooks/usePatientId';
 import { db } from '../../db/index';
@@ -84,7 +86,18 @@ export default function AppointmentsScreenWeb() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTab, setSelectedTab] = useState<TabKey>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+
+  const openSearchDialog = useCallback(() => {
+    setIsSearchModalOpen(true);
+  }, []);
+
+  useRegisterHeaderSearch(
+    'AppointmentsScreen',
+    openSearchDialog,
+    searchQuery.trim().length > 0
+  );
 
   const dbRef = useRef(db);
   const getTokenRef = useRef(getToken);
@@ -250,43 +263,15 @@ export default function AppointmentsScreenWeb() {
     return appointments.find((a) => a.id === selectedAppointmentId) ?? displayedList[0] ?? null;
   }, [selectedAppointmentId, displayedList, appointments]);
 
-  const tabs: Array<{ key: TabKey; label: string; count: number }> = [
-    { key: 'upcoming', label: 'Upcoming', count: upcomingItems.length },
-    { key: 'past', label: 'Past Visits', count: pastItems.length },
-    { key: 'cancelled', label: 'Cancelled', count: cancelledItems.length },
-    { key: 'drafts', label: 'Drafts', count: drafts.length },
-  ];
-
-  const renderTabs = () =>
-    tabs.map((tab) => {
-      const isActive = selectedTab === tab.key;
-      return (
-        <Pressable
-          key={tab.key}
-          onPress={() => setSelectedTab(tab.key)}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: isActive }}
-          style={(state: any) => [
-            styles.tabItem,
-            {
-              backgroundColor: isActive
-                ? colors.primary
-                : state.hovered
-                ? colors.surfaceSubtle
-                : colors.surface,
-              borderColor: isActive ? colors.primary : colors.border,
-              borderRadius: radii.full,
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.sm,
-            },
-          ]}
-        >
-          <ThemedText variant="smallBold" color={isActive ? 'onPrimary' : 'textSecondary'}>
-            {tab.label} ({tab.count})
-          </ThemedText>
-        </Pressable>
-      );
-    });
+  const tabs: ReadonlyArray<FilterChipItem<TabKey>> = useMemo(
+    () => [
+      { key: 'upcoming', label: 'Upcoming', count: upcomingItems.length },
+      { key: 'past', label: 'Past Visits', count: pastItems.length },
+      { key: 'cancelled', label: 'Cancelled', count: cancelledItems.length },
+      { key: 'drafts', label: 'Drafts', count: drafts.length },
+    ],
+    [upcomingItems.length, pastItems.length, cancelledItems.length, drafts.length]
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -296,7 +281,7 @@ export default function AppointmentsScreenWeb() {
           styles.scrollContent,
           {
             padding: isCompact ? spacing.md : spacing['2xl'],
-            gap: isCompact ? spacing.md : spacing['2xl'],
+            gap: isCompact ? spacing.md : spacing.lg,
             paddingBottom: spacing['4xl'],
           },
         ]}
@@ -319,6 +304,13 @@ export default function AppointmentsScreenWeb() {
             </View>
 
             <View style={[styles.headerActions, { gap: spacing.sm }]}>
+              <Button
+                label="Search"
+                variant={query ? 'secondary' : 'outline'}
+                size="md"
+                icon="search"
+                onPress={openSearchDialog}
+              />
               <Button
                 label="Refresh"
                 variant="outline"
@@ -381,57 +373,20 @@ export default function AppointmentsScreenWeb() {
           </Card>
         )}
 
-        {/* Controls Row: Segmented tabs & search */}
-        <View style={[styles.controlsRow, { gap: spacing.sm }]}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={[styles.tabsScrollRow, { gap: isCompact ? spacing.xs : spacing.sm }]}
-            style={isCompact ? styles.fullCol : styles.tabsScrollDesktop}
-          >
-            {renderTabs()}
-          </ScrollView>
+        {/* Filter Chips (symmetrical top === bottom spacing) */}
+        <FilterChipBar
+          items={tabs}
+          selectedKey={selectedTab}
+          onSelect={setSelectedTab}
+          showZeroCount
+        />
 
-          <View style={[styles.searchRowWrap, { gap: spacing.xs }]}>
-            <View
-              style={[
-                styles.searchBox,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  borderRadius: radii.md,
-                  paddingHorizontal: spacing.md,
-                  paddingVertical: spacing.sm,
-                },
-              ]}
-            >
-              <AppIcon name="search" size={sizes.iconSm} color="textMuted" />
-              <TextInput
-                style={[styles.searchInput, { color: colors.text }, { outlineStyle: 'none' } as object]}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search by clinic, doctor, or reason..."
-                placeholderTextColor={colors.textMuted}
-                accessibilityLabel="Search appointments"
-              />
-              {searchQuery.length > 0 && (
-                <Pressable onPress={() => setSearchQuery('')} accessibilityRole="button">
-                  <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
-                </Pressable>
-              )}
-            </View>
-
-            {isCompact && (
-              <IconButton
-                icon="refresh"
-                accessibilityLabel="Refresh appointments"
-                tone="filled"
-                color="primary"
-                onPress={loadAppointments}
-              />
-            )}
-          </View>
-        </View>
+        {/* Active Search Pill (shown only when a keyword filter is active) */}
+        <ActiveSearchBanner
+          query={searchQuery}
+          onEdit={openSearchDialog}
+          onClear={() => setSearchQuery('')}
+        />
 
         {/* Main Content Area */}
         {isLoading ? (
@@ -494,10 +449,18 @@ export default function AppointmentsScreenWeb() {
           ) : (
             <EmptyState
               icon="calendar"
-              title="No booking drafts"
-              message="You don't have any pending drafts. Choose a clinic to start booking an appointment."
-              actionLabel="Find a Clinic"
-              onActionPress={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })}
+              title={query ? 'No matching drafts' : 'No booking drafts'}
+              message={
+                query
+                  ? 'No booking drafts matched your search keyword.'
+                  : "You don't have any pending drafts. Choose a clinic to start booking an appointment."
+              }
+              actionLabel={query ? 'Clear Search' : 'Find a Clinic'}
+              onActionPress={
+                query
+                  ? () => setSearchQuery('')
+                  : () => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })
+              }
             />
           )
         ) : displayedList.length > 0 ? (
@@ -555,13 +518,13 @@ export default function AppointmentsScreenWeb() {
                     </View>
                     <View style={[styles.metaItemsRow, { gap: spacing.lg }]}>
                       <View style={styles.metaRow}>
-                        <AppIcon name="calendar" size={16} color="primary" />
+                        <AppIcon name="calendar" size={sizes.iconSm} color="primary" />
                         <ThemedText variant="bodyBold">
                           {format(parseISO(item.scheduledAt), 'EEE, MMM d, yyyy')}
                         </ThemedText>
                       </View>
                       <View style={styles.metaRow}>
-                        <AppIcon name="clock" size={16} color="textMuted" />
+                        <AppIcon name="clock" size={sizes.iconSm} color="textMuted" />
                         <ThemedText variant="body" color="textSecondary">
                           {format(parseISO(item.scheduledAt), 'h:mm a')}
                         </ThemedText>
@@ -569,7 +532,7 @@ export default function AppointmentsScreenWeb() {
                     </View>
                     {item.provider && (
                       <View style={styles.metaRow}>
-                        <AppIcon name="user" size={16} color="textMuted" />
+                        <AppIcon name="user" size={sizes.iconSm} color="textMuted" />
                         <ThemedText variant="small" color="textSecondary">
                           {item.provider.name}
                           {item.provider.specialty ? ` • ${item.provider.specialty}` : ''}
@@ -707,14 +670,35 @@ export default function AppointmentsScreenWeb() {
             title={query ? 'No matching appointments' : `No ${selectedTab} visits`}
             message={
               query
-                ? 'No appointments matched your search query.'
+                ? 'No appointments matched your search keyword.'
                 : `You don't have any ${selectedTab} visits recorded.`
             }
-            actionLabel={selectedTab === 'upcoming' && !query ? 'Book an Appointment' : undefined}
-            onActionPress={selectedTab === 'upcoming' && !query ? handleBookNew : undefined}
+            actionLabel={
+              query
+                ? 'Clear Search'
+                : selectedTab === 'upcoming'
+                  ? 'Book an Appointment'
+                  : undefined
+            }
+            onActionPress={
+              query
+                ? () => setSearchQuery('')
+                : selectedTab === 'upcoming'
+                  ? handleBookNew
+                  : undefined
+            }
           />
         )}
       </ScrollView>
+
+      <SearchModal
+        visible={isSearchModalOpen}
+        title="Search Appointments"
+        placeholder="Search by clinic, doctor, or reason..."
+        value={searchQuery}
+        onApply={setSearchQuery}
+        onClose={() => setIsSearchModalOpen(false)}
+      />
 
       {/* Compact Floating Action Button (matches native AppointmentsScreen) */}
       {isCompact && (
@@ -792,44 +776,6 @@ const styles = StyleSheet.create({
   },
   todayActions: {
     flexDirection: 'row',
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  tabsScrollDesktop: {
-    flexGrow: 0,
-    flexShrink: 1,
-    maxWidth: '100%',
-  },
-  tabsScrollRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  tabItem: {
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  searchRowWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    minWidth: 240,
-  },
-  searchBox: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    minWidth: 0,
   },
   grid: {
     flexDirection: 'row',

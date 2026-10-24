@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useNetInfo } from '@react-native-community/netinfo';
@@ -10,6 +10,8 @@ import ThemedView from '../../components/ui/ThemedView';
 import EmptyState from '../../components/ui/EmptyState';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 import { AppIcon } from '../../components/ui/Icon';
+import { ActiveSearchBanner, SearchModal } from '../../components/ui/SearchModal';
+import BottomTabsHeaderRight from '../../components/BottomTabsHeaderRight';
 import AppointmentCard from '../../components/appointments/AppointmentCard';
 import SegmentedControl from '../../components/appointments/SegmentedControl';
 import OfflineBanner from '../../components/appointments/OfflineBanner';
@@ -157,11 +159,29 @@ export default function AppointmentsScreen() {
   const [isFromCache, setIsFromCache] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [segment, setSegment] = useState<Segment>(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
   const dbRef = useRef(db);
 
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
+
+  const hasActiveSearch = searchQuery.trim().length > 0;
+  const openSearchDialog = useCallback(() => {
+    setIsSearchModalOpen(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <BottomTabsHeaderRight
+          onOpenSearch={openSearchDialog}
+          hasActiveSearch={hasActiveSearch}
+        />
+      ),
+    });
+  }, [navigation, openSearchDialog, hasActiveSearch]);
 
   const loadDrafts = useCallback(async () => {
     try {
@@ -239,8 +259,38 @@ export default function AppointmentsScreen() {
     }, [loadAppointments, loadDrafts]),
   );
 
-  const upcomingItems = appointments.filter(isUpcoming);
-  const pastItems = appointments.filter(isPastItem);
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
+  const matchesSearch = useCallback(
+    (item: AppointmentItem) => {
+      if (!normalizedQuery) return true;
+      return (
+        item.clinic.name.toLowerCase().includes(normalizedQuery) ||
+        (item.provider?.name?.toLowerCase().includes(normalizedQuery) ?? false) ||
+        (item.chiefComplaint?.toLowerCase().includes(normalizedQuery) ?? false) ||
+        (item.subject?.toLowerCase().includes(normalizedQuery) ?? false)
+      );
+    },
+    [normalizedQuery],
+  );
+
+  const upcomingItems = useMemo(
+    () => appointments.filter(isUpcoming).filter(matchesSearch),
+    [appointments, matchesSearch],
+  );
+  const pastItems = useMemo(
+    () => appointments.filter(isPastItem).filter(matchesSearch),
+    [appointments, matchesSearch],
+  );
+  const filteredDrafts = useMemo(() => {
+    if (!normalizedQuery) return drafts;
+    return drafts.filter(
+      (d) =>
+        (d.clinicName?.toLowerCase().includes(normalizedQuery) ?? false) ||
+        (d.reason?.toLowerCase().includes(normalizedQuery) ?? false),
+    );
+  }, [drafts, normalizedQuery]);
+
   const activeTodayItem = upcomingItems.find(isActiveTodayItem) ?? null;
   const listItems = segment === 0 ? upcomingItems : pastItems;
 
@@ -290,8 +340,18 @@ export default function AppointmentsScreen() {
         <SegmentedControl options={['Upcoming', 'Past']} selectedIndex={segment} onChange={setSegment} />
       </View>
 
+      {hasActiveSearch ? (
+        <View style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.md }}>
+          <ActiveSearchBanner
+            query={searchQuery}
+            onEdit={openSearchDialog}
+            onClear={() => setSearchQuery('')}
+          />
+        </View>
+      ) : null}
+
       {/* Drafts - only in Upcoming tab */}
-      {segment === 0 && drafts.length > 0 && (
+      {segment === 0 && filteredDrafts.length > 0 && (
         <View style={[styles.draftSection, { gap: spacing.sm, marginBottom: spacing.sm }]}>
           <ThemedText
             variant="captionBold"
@@ -300,7 +360,7 @@ export default function AppointmentsScreen() {
           >
             DRAFTS
           </ThemedText>
-          {drafts.map((draft) => (
+          {filteredDrafts.map((draft) => (
             <View key={draft.id} style={[styles.cardWrapper, { paddingHorizontal: spacing.lg }]}>
               <DraftCard
                 draft={draft}
@@ -377,14 +437,34 @@ export default function AppointmentsScreen() {
         ListEmptyComponent={
           <View style={[styles.emptyWrapper, { paddingHorizontal: spacing.lg, paddingTop: spacing.sm }]}>
             <EmptyState
-              title={segment === 0 ? 'No upcoming appointments' : 'No past appointments'}
-              message={
-                segment === 0
-                  ? "You don't have any scheduled appointments. Book one to get started."
-                  : 'Your previous visit history will appear here.'
+              title={
+                hasActiveSearch
+                  ? 'No matching appointments'
+                  : segment === 0
+                    ? 'No upcoming appointments'
+                    : 'No past appointments'
               }
-              actionLabel={segment === 0 ? 'Book an Appointment' : undefined}
-              onActionPress={segment === 0 ? handleBookNew : undefined}
+              message={
+                hasActiveSearch
+                  ? 'No appointments matched your search keyword.'
+                  : segment === 0
+                    ? "You don't have any scheduled appointments. Book one to get started."
+                    : 'Your previous visit history will appear here.'
+              }
+              actionLabel={
+                hasActiveSearch
+                  ? 'Clear Search'
+                  : segment === 0
+                    ? 'Book an Appointment'
+                    : undefined
+              }
+              onActionPress={
+                hasActiveSearch
+                  ? () => setSearchQuery('')
+                  : segment === 0
+                    ? handleBookNew
+                    : undefined
+              }
             />
           </View>
         }
@@ -427,6 +507,15 @@ export default function AppointmentsScreen() {
           Book
         </ThemedText>
       </Pressable>
+
+      <SearchModal
+        visible={isSearchModalOpen}
+        title="Search Appointments"
+        placeholder="Search by clinic, doctor, or reason..."
+        value={searchQuery}
+        onApply={setSearchQuery}
+        onClose={() => setIsSearchModalOpen(false)}
+      />
     </ThemedView>
   );
 }

@@ -1,11 +1,9 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   FlatList,
-  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -16,7 +14,9 @@ import EmptyState from '@ui/EmptyState';
 import Button from '@ui/Button';
 import ThemedText from '@ui/ThemedText';
 import { AppIcon } from '@ui/Icon';
+import { ActiveSearchBanner, SearchModal } from '@ui/SearchModal';
 import RenameModal from '../../../components/ui/RenameModal';
+import BottomTabsHeaderRight from '../../../components/BottomTabsHeaderRight';
 import { usePatientId } from 'hooks/usePatientId';
 import { useContentInsets } from '../../../hooks/useContentInsets';
 import {
@@ -44,7 +44,7 @@ import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../../../contexts/ThemeContext';
 
 export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScreen'>) {
-  const { colors, spacing, radii, sizes, typography, shadows } = useAppTheme();
+  const { colors, spacing, radii, sizes, shadows } = useAppTheme();
   const navigation = useNavigation<any>('FilesBrowserScreen');
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
@@ -53,7 +53,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
 
   const [renameTarget, setRenameTarget] = useState<{ id: string; initialName: string } | null>(null);
   const [query, setQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeCategory, setActiveCategory] = useState<CategoryFilterId>('all');
 
@@ -61,6 +61,11 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
   const { contents, isLoading, isRefreshing, error, refresh, mutate } = useFilesBrowser(patientId, null, '');
 
   const headerTitleText = 'Health Records & Documents';
+  const hasActiveSearch = query.trim().length > 0;
+
+  const openSearchDialog = useCallback(() => {
+    setIsSearchModalOpen(true);
+  }, []);
 
   const handleRenameSave = async (newName: string) => {
     if (!renameTarget) return;
@@ -77,51 +82,16 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerLargeTitleEnabled: !isSearching,
-      headerTitle: isSearching ? () => (
-        <View style={styles.searchHeaderWrap}>
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search records, facility, notes…"
-            placeholderTextColor={colors.textLight}
-            autoFocus
-            style={[
-              styles.searchHeaderInput,
-              typography.body,
-              {
-                color: colors.text,
-                backgroundColor: colors.card,
-                borderRadius: radii.md,
-                borderWidth: sizes.borderWidth,
-                borderColor: colors.border,
-                paddingHorizontal: spacing.md,
-              },
-            ]}
-          />
-        </View>
-      ) : headerTitleText,
+      headerLargeTitleEnabled: true,
+      headerTitle: headerTitleText,
       headerRight: () => (
-        <View style={[styles.headerRightWrap, { gap: spacing.xs }]}>
-          <Pressable
-            onPress={() => {
-              if (isSearching) {
-                setQuery('');
-                setIsSearching(false);
-              } else {
-                setIsSearching(true);
-              }
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={isSearching ? 'Close search' : 'Search records'}
-            style={({ pressed }) => [{ padding: spacing.sm, opacity: pressed ? 0.7 : 1 }]}
-          >
-            <AppIcon name={isSearching ? 'close' : 'search'} color="text" size={sizes.iconLg} />
-          </Pressable>
-        </View>
+        <BottomTabsHeaderRight
+          onOpenSearch={openSearchDialog}
+          hasActiveSearch={hasActiveSearch}
+        />
       ),
     });
-  }, [navigation, headerTitleText, colors, isSearching, query, radii, sizes, spacing, typography]);
+  }, [navigation, headerTitleText, openSearchDialog, hasActiveSearch]);
 
   // Derive counts per category pill
   const categoryCounts = useMemo(() => {
@@ -262,18 +232,27 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         contentContainerStyle={[
           styles.listContent,
           {
-            padding: spacing.lg,
+            paddingTop: spacing.md,
             paddingBottom: contentInsets.bottom + spacing['3xl'],
           },
         ]}
         ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
         ListHeaderComponent={
-          <View style={{ gap: spacing.sm, marginBottom: spacing.sm }}>
+          <View style={{ gap: spacing.md, marginBottom: spacing.md }}>
             <CategoryPillBar
               selectedCategory={activeCategory}
               onSelectCategory={setActiveCategory}
               counts={categoryCounts}
             />
+            {hasActiveSearch ? (
+              <View style={{ paddingHorizontal: spacing.lg }}>
+                <ActiveSearchBanner
+                  query={query}
+                  onEdit={openSearchDialog}
+                  onClear={() => setQuery('')}
+                />
+              </View>
+            ) : null}
             <FilesHeader
               contents={contents ?? null}
               failedCount={failedCount}
@@ -285,45 +264,49 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
           </View>
         }
         ListEmptyComponent={
-          <EmptyState
-            title={query || activeCategory !== 'all' ? 'No matching records' : 'No health records yet'}
-            message={
-              query || activeCategory !== 'all'
-                ? 'Try searching with another keyword or select a different category.'
-                : 'Add diagnostic lab results, prescriptions, and certificates to access them offline anytime.'
-            }
-            actionLabel={query || activeCategory !== 'all' ? 'Reset Filters' : 'Add Record'}
-            onActionPress={
-              query || activeCategory !== 'all'
-                ? () => {
-                    setQuery('');
-                    setActiveCategory('all');
-                  }
-                : openUpload
-            }
-          />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <EmptyState
+              title={hasActiveSearch || activeCategory !== 'all' ? 'No matching records' : 'No health records yet'}
+              message={
+                hasActiveSearch || activeCategory !== 'all'
+                  ? 'Try searching with another keyword or select a different category.'
+                  : 'Add diagnostic lab results, prescriptions, and certificates to access them offline anytime.'
+              }
+              actionLabel={hasActiveSearch || activeCategory !== 'all' ? 'Reset Filters' : 'Add Record'}
+              onActionPress={
+                hasActiveSearch || activeCategory !== 'all'
+                  ? () => {
+                      setQuery('');
+                      setActiveCategory('all');
+                    }
+                  : openUpload
+              }
+            />
+          </View>
         }
         renderItem={({ item }) => (
-          <FileRow
-            item={item}
-            onPress={() => {
-              navigation.navigate('FileViewerScreen', { fileId: item.id });
-            }}
-            onErrorPress={() => {
-              dialog.alert(
-                'Upload Failed',
-                item.syncError || item.lastSyncError || 'This record failed to upload to the cloud.'
-              );
-            }}
-            onRename={() => {
-              setRenameTarget({
-                id: item.id,
-                initialName: item.name,
-              });
-            }}
-            onDelete={() => handleDelete(item.id)}
-            onShare={() => shareFile(item.id)}
-          />
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <FileRow
+              item={item}
+              onPress={() => {
+                navigation.navigate('FileViewerScreen', { fileId: item.id });
+              }}
+              onErrorPress={() => {
+                dialog.alert(
+                  'Upload Failed',
+                  item.syncError || item.lastSyncError || 'This record failed to upload to the cloud.'
+                );
+              }}
+              onRename={() => {
+                setRenameTarget({
+                  id: item.id,
+                  initialName: item.name,
+                });
+              }}
+              onDelete={() => handleDelete(item.id)}
+              onShare={() => shareFile(item.id)}
+            />
+          </View>
         )}
       />
 
@@ -363,6 +346,15 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         onSave={handleRenameSave}
         title="Rename record"
       />
+
+      <SearchModal
+        visible={isSearchModalOpen}
+        title="Search Health Records"
+        placeholder="Search records, facility, notes..."
+        value={query}
+        onApply={setQuery}
+        onClose={() => setIsSearchModalOpen(false)}
+      />
     </View>
   );
 }
@@ -371,23 +363,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   listContent: {},
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  searchHeaderWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    paddingRight: 8,
-  },
-  searchHeaderInput: {
-    flex: 1,
-    height: 38,
-    paddingVertical: Platform.select({ ios: 6, android: 4 }),
-  },
-  headerRightWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 8,
-  },
   fabWrap: {
     position: 'absolute',
     alignItems: 'flex-end',

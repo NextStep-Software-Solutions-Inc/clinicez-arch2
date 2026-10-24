@@ -12,6 +12,8 @@ interface WebPageHeaderProps {
   onBack?: () => void;
   showBrand?: boolean;
   showAccountActions?: boolean;
+  onOpenSearch?: () => void;
+  hasActiveSearch?: boolean;
   onOpenNotifications?: () => void;
   onOpenSettings?: () => void;
   right?: React.ReactNode;
@@ -21,7 +23,7 @@ interface WebPageHeaderProps {
  * Top bar for web pages:
  *  - Pushed / nested pages: back button, title, and optional trailing actions.
  *  - Compact (< 768px) bottom-tab pages: ClinicEzMark brand icon, screen title + subtitle,
- *    and Notifications + Settings action buttons.
+ *    optional Search trigger, and Notifications + Settings action buttons.
  */
 export default function WebPageHeader({
   title,
@@ -29,6 +31,8 @@ export default function WebPageHeader({
   onBack,
   showBrand,
   showAccountActions,
+  onOpenSearch,
+  hasActiveSearch,
   onOpenNotifications,
   onOpenSettings,
   right,
@@ -91,6 +95,44 @@ export default function WebPageHeader({
 
       {showAccountActions ? (
         <View style={[styles.actionsRow, { gap: spacing.xs }]}>
+          {onOpenSearch ? (
+            <Pressable
+              onPress={onOpenSearch}
+              accessibilityRole="button"
+              accessibilityLabel={hasActiveSearch ? 'Search (filter active)' : 'Search'}
+              style={(s) => {
+                const hovered = (s as { hovered?: boolean }).hovered;
+                return [
+                  styles.actionBtn,
+                  {
+                    width: sizes.controlMd,
+                    height: sizes.controlMd,
+                    borderRadius: radii.md,
+                    borderColor: hasActiveSearch ? colors.primary : colors.border,
+                    backgroundColor: hasActiveSearch
+                      ? colors.primaryLight
+                      : hovered
+                        ? colors.surfaceSubtle
+                        : colors.transparent,
+                  },
+                ];
+              }}
+            >
+              <AppIcon
+                name="search"
+                size={sizes.iconMd}
+                color={hasActiveSearch ? 'primary' : 'text'}
+              />
+              {hasActiveSearch ? (
+                <View
+                  style={[
+                    styles.searchDot,
+                    { backgroundColor: colors.primary, borderRadius: radii.full },
+                  ]}
+                />
+              ) : null}
+            </Pressable>
+          ) : null}
           {onOpenNotifications ? (
             <Pressable
               onPress={onOpenNotifications}
@@ -179,5 +221,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
+  },
+  searchDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
   },
 });

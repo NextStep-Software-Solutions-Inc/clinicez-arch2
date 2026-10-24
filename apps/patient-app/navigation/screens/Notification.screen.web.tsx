@@ -1,14 +1,16 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { formatDistanceToNowStrict, isToday, isYesterday, format } from 'date-fns';
 import ThemedText from '../../components/ui/ThemedText';
 import Button from '../../components/ui/Button';
 import { AppIcon, type IconName } from '../../components/ui/Icon';
 import EmptyState from '../../components/ui/EmptyState';
+import { FilterChipBar, type FilterChipItem } from '../../components/ui/FilterChipBar';
 import Screen from '../../components/layout/Screen';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { useNotificationContext } from '../../contexts/NotificationContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { usePatientId } from '../../hooks/usePatientId';
 import {
   getNotifications,
@@ -62,6 +64,7 @@ function relativeTime(date: Date): string {
 
 export default function NotificationScreenWeb() {
   const { colors, spacing, radii, sizes } = useAppTheme();
+  const { isCompact } = useBreakpoint();
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { unreadCount, refreshNotifications } = useNotificationContext();
@@ -144,6 +147,16 @@ export default function NotificationScreenWeb() {
     [refreshNotifications]
   );
 
+  const filterItems: ReadonlyArray<FilterChipItem<NotificationFilter>> = useMemo(
+    () =>
+      FILTERS.map((f) => ({
+        key: f.key,
+        label: f.label,
+        count: f.key === 'unread' ? unreadCount : undefined,
+      })),
+    [unreadCount]
+  );
+
   // Group items by date
   const grouped: Array<{ title: string; data: NotificationRow[] }> = useMemo(() => {
     const groups = new Map<string, NotificationRow[]>();
@@ -157,63 +170,38 @@ export default function NotificationScreenWeb() {
     return Array.from(groups.entries()).map(([title, data]) => ({ title, data }));
   }, [items]);
 
-  return (
-    <Screen width="form" refreshing={isRefreshing} onRefresh={() => loadData(true)}>
-      {/* Filter chips + Mark all as read */}
-      <View style={{ gap: spacing.xs, marginBottom: spacing.md }}>
-        {unreadCount > 0 && (
-          <View style={styles.markAllRow}>
-            <Button
-              label="Mark all as read"
-              variant="ghost"
-              size="sm"
-              icon="check"
-              onPress={handleMarkAllRead}
-            />
-          </View>
-        )}
+  const verticalRhythm = isCompact ? spacing.md : spacing.lg;
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterScroll}
-          contentContainerStyle={[styles.filterRow, { gap: spacing.sm, paddingVertical: spacing.xs }]}
-        >
-          {FILTERS.map((f) => {
-            const isActive = f.key === activeFilter;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setActiveFilter(f.key)}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: isActive }}
-                style={(state: any) => [
-                  styles.filterChip,
-                  {
-                    backgroundColor: isActive
-                      ? colors.primary
-                      : state.hovered
-                      ? colors.surfaceSubtle
-                      : colors.card,
-                    borderColor: isActive ? colors.primary : colors.border,
-                    borderRadius: radii.full,
-                    paddingHorizontal: spacing.md,
-                    paddingVertical: spacing.sm,
-                  },
-                ]}
-              >
-                <ThemedText
-                  variant="smallBold"
-                  color={isActive ? 'onPrimary' : 'textSecondary'}
-                >
-                  {f.label}
-                  {f.key === 'unread' && unreadCount > 0 ? ` (${unreadCount})` : ''}
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
+  return (
+    <Screen
+      width="form"
+      padded={false}
+      refreshing={isRefreshing}
+      onRefresh={() => loadData(true)}
+      contentContainerStyle={{
+        paddingHorizontal: verticalRhythm,
+        paddingTop: verticalRhythm,
+        gap: verticalRhythm,
+      }}
+    >
+      {/* Filter chips (symmetrical top === bottom spacing via verticalRhythm) */}
+      <FilterChipBar
+        items={filterItems}
+        selectedKey={activeFilter}
+        onSelect={setActiveFilter}
+      />
+
+      {unreadCount > 0 && (
+        <View style={styles.markAllRow}>
+          <Button
+            label="Mark all as read"
+            variant="ghost"
+            size="sm"
+            icon="check"
+            onPress={handleMarkAllRead}
+          />
+        </View>
+      )}
 
       {/* Notification items */}
       {grouped.length === 0 && !isLoading ? (
@@ -356,19 +344,6 @@ const styles = StyleSheet.create({
   markAllRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-  },
-  filterScroll: {
-    flexGrow: 0,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  filterChip: {
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
   },
   sectionHeader: {
     textTransform: 'uppercase',
