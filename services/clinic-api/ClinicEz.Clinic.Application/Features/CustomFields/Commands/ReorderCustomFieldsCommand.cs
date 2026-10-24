@@ -129,7 +129,8 @@ public sealed class ReorderCustomFieldsCommandHandler : IRequestHandler<ReorderC
                 f.IsActive,
                 f.CreatedAt,
                 f.VisibilityRuleJson,
-                f.ConditionalOptionsJson
+                f.ConditionalOptionsJson,
+                f.BoundaryMode
             )).ToList().AsReadOnly();
     }
 }

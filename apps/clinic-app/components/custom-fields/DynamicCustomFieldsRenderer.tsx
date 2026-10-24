@@ -2,11 +2,12 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Input from '../ui/Input';
-import ValidatedDateInput from '../ui/ValidatedDateInput';
+import ValidatedDateInput, { validateDateString } from '../ui/ValidatedDateInput';
 import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import type {
   ClinicCustomFieldDefinition,
+  BoundaryMode,
   VisibilityRule,
   ConditionalOptionsConfig,
 } from '../../services/clinicService';
@@ -26,6 +27,24 @@ export interface DynamicCustomFieldsRendererProps {
   errors?: Record<string, string>;
   staticValues?: StaticPatientValues;
   disabled?: boolean;
+}
+
+/**
+ * Resolves the effective boundary mode for a custom Date field:
+ * - If field.boundaryMode is configured, uses it.
+ * - If field.category (case-insensitive) is 'Clinical', defaults to 'pastOrToday'.
+ * - Otherwise defaults to 'any'.
+ */
+export function resolveEffectiveBoundaryMode(
+  field: Pick<ClinicCustomFieldDefinition, 'boundaryMode' | 'category'>
+): BoundaryMode {
+  if (field.boundaryMode) {
+    return field.boundaryMode;
+  }
+  if (field.category && field.category.trim().toLowerCase() === 'clinical') {
+    return 'pastOrToday';
+  }
+  return 'any';
 }
 
 /**
@@ -118,12 +137,14 @@ export function getAvailableOptions(
 
 /**
  * Validates custom fields: enforces isRequired only on currently VISIBLE fields.
+ * Validates Date fields for calendar validity and boundary constraints.
  * Hidden fields never block validation.
  */
 export function validateCustomFields(
   definitions: ClinicCustomFieldDefinition[],
   values: Record<string, any>,
-  staticValues: StaticPatientValues = {}
+  staticValues: StaticPatientValues = {},
+  options?: { now?: Date }
 ): { isValid: boolean; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   let isValid = true;
@@ -133,16 +154,28 @@ export function validateCustomFields(
     .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
 
   for (const def of visibleFields) {
-    if (def.isRequired) {
-      const val = values[def.fieldKey];
-      const isEmpty =
-        val === null ||
-        val === undefined ||
-        (typeof val === 'string' && val.trim() === '') ||
-        (typeof val === 'boolean' && val === false && def.dataType !== 'Boolean');
+    const val = values[def.fieldKey];
+    const isEmpty =
+      val === null ||
+      val === undefined ||
+      (typeof val === 'string' && val.trim() === '') ||
+      (typeof val === 'boolean' && val === false && def.dataType !== 'Boolean');
 
-      if (isEmpty) {
-        errors[def.fieldKey] = `${def.label} is required.`;
+    if (def.isRequired && isEmpty) {
+      errors[def.fieldKey] = `${def.label} is required.`;
+      isValid = false;
+      continue;
+    }
+
+    if (def.dataType === 'Date' && !isEmpty) {
+      const boundaryMode = resolveEffectiveBoundaryMode(def);
+      const res = validateDateString(String(val).trim(), {
+        boundaryMode,
+        now: options?.now,
+      });
+
+      if (!res.isValid) {
+        errors[def.fieldKey] = `${def.label}: ${res.errorMessage || 'Invalid date'}`;
         isValid = false;
       }
     }
@@ -267,7 +300,8 @@ export default function DynamicCustomFieldsRenderer({
               </View>
             );
 
-          case 'Date':
+          case 'Date': {
+            const effectiveBoundaryMode = resolveEffectiveBoundaryMode(field);
             return (
               <View key={field.id || field.fieldKey} style={styles.fieldWrapper}>
                 <ValidatedDateInput
@@ -277,11 +311,12 @@ export default function DynamicCustomFieldsRenderer({
                   value={val !== undefined && val !== null ? String(val) : ''}
                   onChangeText={(text) => handleFieldChange(field.fieldKey, text)}
                   error={error}
-                  boundaryMode="any"
+                  boundaryMode={effectiveBoundaryMode}
                   disabled={disabled}
                 />
               </View>
             );
+          }
 
           case 'Boolean':
             return (

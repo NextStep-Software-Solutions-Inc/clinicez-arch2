@@ -891,6 +891,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.FieldKey).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Label).IsRequired().HasMaxLength(150);
             entity.Property(e => e.Category).HasMaxLength(50);
+            entity.Property(e => e.BoundaryMode).HasMaxLength(50);
             entity.Property(e => e.Placeholder).HasMaxLength(200);
             entity.Property(e => e.OptionsJson).HasColumnType("text");
             entity.Property(e => e.VisibilityRuleJson).HasColumnType("text");
