@@ -34,6 +34,10 @@ env:
   DEPLOY_DIR: "/opt/docker-stack/pharmacy-api"
   ENVIRONMENT: Development
 
+concurrency:
+  group: deploy-pharmacy-api-dev-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: Build Docker Image
@@ -74,6 +78,9 @@ jobs:
     name: Deploy to Server
     runs-on: ubuntu-latest
     environment: Development
+    concurrency:
+      group: deploy-pharmacy-api-dev-deploy
+      cancel-in-progress: false
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 

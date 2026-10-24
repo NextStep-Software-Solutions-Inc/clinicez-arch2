@@ -18,6 +18,10 @@ env:
   DEPLOY_DIR: /opt/clinicez/apps/interop-hub
   ASPNETCORE_ENVIRONMENT: Production
 
+concurrency:
+  group: deploy-interop-hub-prod-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
     name: Build and Test
@@ -83,6 +87,9 @@ jobs:
     name: Deploy to Production Server
     runs-on: ubuntu-latest
     environment: Production
+    concurrency:
+      group: deploy-interop-hub-prod-deploy
+      cancel-in-progress: false
     needs: build
     if: >-
       github.event_name == 'workflow_dispatch' ||

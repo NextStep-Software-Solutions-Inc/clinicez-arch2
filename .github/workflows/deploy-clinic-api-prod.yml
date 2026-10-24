@@ -18,6 +18,10 @@ env:
   DEPLOY_DIR: /opt/clinicez/apps/clinic-api
   ENVIRONMENT: Production
 
+concurrency:
+  group: deploy-clinic-api-prod-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
     name: Run Unit Tests & Verify Migrations
@@ -86,6 +90,9 @@ jobs:
     name: Deploy to Production Server
     runs-on: ubuntu-latest
     environment: Production
+    concurrency:
+      group: deploy-clinic-api-prod-deploy
+      cancel-in-progress: false
     needs: build
     if: >-
       github.event_name == 'workflow_dispatch' ||

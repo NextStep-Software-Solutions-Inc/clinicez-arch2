@@ -599,7 +599,7 @@ public class WalkInRetailBillingAdversarialTests
         payment1.BalanceDue.Should().Be(300m);
         payment1.Status.Should().Be(InvoiceStatus.PartiallyPaid);
         payment1.Payments.Should().HaveCount(1);
-        payment1.Payments[0].PaymentNumber.Should().Be("OR-20261023-001");
+        payment1.Payments[0].PaymentNumber.Should().Be($"OR-{payment1.Payments[0].PaymentDate:yyyyMMdd}-001");
 
         // 2nd Partial Payment: 300m (completes balance)
         var payment2 = await paymentHandler.Handle(
@@ -610,7 +610,7 @@ public class WalkInRetailBillingAdversarialTests
         payment2.BalanceDue.Should().Be(0m);
         payment2.Status.Should().Be(InvoiceStatus.Paid);
         payment2.Payments.Should().HaveCount(2);
-        payment2.Payments[1].PaymentNumber.Should().Be("OR-20261023-002");
+        payment2.Payments[1].PaymentNumber.Should().Be($"OR-{payment2.Payments[1].PaymentDate:yyyyMMdd}-002");
     }
 
     [Fact]

@@ -35,6 +35,10 @@ env:
   # The hub's Development environment seeds well-known dev-* clients, so the container always runs as Production.
   ASPNETCORE_ENVIRONMENT: Production
 
+concurrency:
+  group: deploy-interop-hub-dev-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: Build and Test
@@ -92,6 +96,9 @@ jobs:
     name: Deploy to Server
     runs-on: ubuntu-latest
     environment: Development
+    concurrency:
+      group: deploy-interop-hub-dev-deploy
+      cancel-in-progress: false
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
