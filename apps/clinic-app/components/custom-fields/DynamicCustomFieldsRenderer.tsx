@@ -29,6 +29,23 @@ export interface DynamicCustomFieldsRendererProps {
 }
 
 /**
+ * Normalizes primitive booleans and boolean-like strings ('true', 'false', 'yes', 'no')
+ * into canonical boolean primitive (true | false), or null if undefined, empty, or non-boolean.
+ * Rejects numeric inputs (0, 1, '0', '1') and arbitrary strings to prevent false matches.
+ */
+export function parseBooleanState(value: any): boolean | null {
+  if (value === true || value === false) return value;
+  if (typeof value === 'string') {
+    const s = value.trim().toLowerCase();
+    if (s === 'true' || s === 'yes') return true;
+    if (s === 'false' || s === 'no') return false;
+  }
+  return null;
+}
+
+export const parseBooleanValue = parseBooleanState;
+
+/**
  * Pure evaluation function for conditional visibility.
  * Evaluates visibilityRuleJson against current form values and static patient properties.
  * Fails open (returns true) if rule is absent or malformed.
@@ -54,18 +71,48 @@ export function isFieldVisible(
       actualValue = values[rule.field];
     }
 
+    const isUnanswered =
+      actualValue === null ||
+      actualValue === undefined ||
+      (typeof actualValue === 'string' && actualValue.trim() === '');
+
     switch (rule.operator) {
-      case 'equals':
+      case 'equals': {
+        const ruleBool = parseBooleanState(rule.value);
+        if (ruleBool !== null) {
+          if (isUnanswered) return false;
+          const actualBool = parseBooleanState(actualValue);
+          return actualBool === ruleBool;
+        }
         return String(actualValue ?? '').trim().toLowerCase() === String(rule.value ?? '').trim().toLowerCase();
+      }
 
-      case 'not_equals':
+      case 'not_equals': {
+        const ruleBool = parseBooleanState(rule.value);
+        if (ruleBool !== null) {
+          if (isUnanswered) return false;
+          const actualBool = parseBooleanState(actualValue);
+          if (actualBool === null) return false;
+          return actualBool !== ruleBool;
+        }
         return String(actualValue ?? '').trim().toLowerCase() !== String(rule.value ?? '').trim().toLowerCase();
+      }
 
-      case 'in':
+      case 'in': {
         if (Array.isArray(rule.value)) {
-          return rule.value.map((v) => String(v).trim().toLowerCase()).includes(String(actualValue ?? '').trim().toLowerCase());
+          const ruleBools = rule.value.map(parseBooleanState);
+          const isAllBooleanRule = rule.value.length > 0 && ruleBools.every((b) => b !== null);
+          if (isAllBooleanRule) {
+            if (isUnanswered) return false;
+            const actualBool = parseBooleanState(actualValue);
+            return actualBool !== null && ruleBools.includes(actualBool);
+          }
+          return rule.value
+            .map((v) => String(v).trim().toLowerCase())
+            .includes(String(actualValue ?? '').trim().toLowerCase());
         }
         return false;
+      }
 
       case 'contains':
         return String(actualValue ?? '').toLowerCase().includes(String(rule.value ?? '').toLowerCase());
@@ -283,7 +330,11 @@ export default function DynamicCustomFieldsRenderer({
               </View>
             );
 
-          case 'Boolean':
+          case 'Boolean': {
+            const boolVal = parseBooleanState(val);
+            const isYes = boolVal === true;
+            const isNo = boolVal === false;
+
             return (
               <View key={field.id || field.fieldKey} style={styles.fieldWrapper}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.label}>
@@ -296,15 +347,15 @@ export default function DynamicCustomFieldsRenderer({
                     onPress={() => handleFieldChange(field.fieldKey, true)}
                     style={[
                       styles.choicePill,
-                      val === true && styles.choicePillActive,
+                      isYes && styles.choicePillActive,
                       disabled && styles.pillDisabled,
                     ]}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: val === true }}
+                    accessibilityState={{ selected: isYes }}
                   >
                     <ThemedText
-                      variant={val === true ? 'smallBold' : 'small'}
-                      color={val === true ? theme.colors.primary : theme.colors.textSecondary}
+                      variant={isYes ? 'smallBold' : 'small'}
+                      color={isYes ? theme.colors.primary : theme.colors.textSecondary}
                     >
                       Yes
                     </ThemedText>
@@ -314,15 +365,15 @@ export default function DynamicCustomFieldsRenderer({
                     onPress={() => handleFieldChange(field.fieldKey, false)}
                     style={[
                       styles.choicePill,
-                      val === false && styles.choicePillActive,
+                      isNo && styles.choicePillActive,
                       disabled && styles.pillDisabled,
                     ]}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: val === false }}
+                    accessibilityState={{ selected: isNo }}
                   >
                     <ThemedText
-                      variant={val === false ? 'smallBold' : 'small'}
-                      color={val === false ? theme.colors.primary : theme.colors.textSecondary}
+                      variant={isNo ? 'smallBold' : 'small'}
+                      color={isNo ? theme.colors.primary : theme.colors.textSecondary}
                     >
                       No
                     </ThemedText>
@@ -338,6 +389,7 @@ export default function DynamicCustomFieldsRenderer({
                 ) : null}
               </View>
             );
+          }
 
           case 'Select': {
             const availableOptions = getAvailableOptions(field, values);

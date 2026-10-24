@@ -107,13 +107,69 @@ const STATIC_FIELD_OPTIONS = [
   { key: 'age', label: 'Patient Age' },
 ];
 
-const OPERATORS = [
+export const OPERATORS = [
   { key: 'equals', label: 'Equals (==)' },
   { key: 'not_equals', label: 'Not Equals (!=)' },
   { key: 'in', label: 'In List (comma separated)' },
   { key: 'contains', label: 'Contains Substring' },
   { key: 'not_empty', label: 'Has Any Value (Not Empty)' },
 ] as const;
+
+export const BOOLEAN_OPERATORS = [
+  { key: 'equals', label: 'Equals (==)' },
+  { key: 'not_equals', label: 'Not Equals (!=)' },
+  { key: 'not_empty', label: 'Has Any Value (Not Empty)' },
+] as const;
+
+export function normalizeBooleanRuleValue(rawVal: any): 'true' | 'false' {
+  if (rawVal === true) return 'true';
+  if (rawVal === false) return 'false';
+  const str = String(rawVal ?? '').trim().toLowerCase();
+  if (str === 'true' || str === 'yes') return 'true';
+  if (str === 'false' || str === 'no') return 'false';
+  return 'true';
+}
+
+export function isValidBooleanRuleValue(rawVal: any): boolean {
+  if (rawVal === true || rawVal === false) return true;
+  const str = String(rawVal ?? '').trim().toLowerCase();
+  return str === 'true' || str === 'false' || str === 'yes' || str === 'no';
+}
+
+export function isBooleanTriggerField(
+  fieldKey: string,
+  existingFields: Array<Pick<ClinicCustomFieldDefinition, 'fieldKey' | 'dataType'>>,
+  source: 'custom_field' | 'static' = 'custom_field'
+): boolean {
+  if (source !== 'custom_field') return false;
+  const match = existingFields.find((f) => f.fieldKey === fieldKey);
+  return match?.dataType === 'Boolean';
+}
+
+export function formatLiveRulePreview(
+  ruleField: string,
+  ruleOperator: VisibilityRule['operator'],
+  ruleValue: string,
+  isParentBoolean: boolean
+): string {
+  if (!ruleField) return '';
+  if (ruleOperator === 'not_empty') {
+    return `If ${ruleField} is not empty`;
+  }
+  if (isParentBoolean) {
+    let displayVal = '...';
+    const s = ruleValue?.trim().toLowerCase();
+    if (s === 'true' || s === 'yes') {
+      displayVal = 'Yes';
+    } else if (s === 'false' || s === 'no') {
+      displayVal = 'No';
+    } else if (ruleValue) {
+      displayVal = ruleValue;
+    }
+    return `Visible when [${ruleField}] ${ruleOperator} '${displayVal}'`;
+  }
+  return `Visible when [${ruleField}] ${ruleOperator} '${ruleValue || '...'}'`;
+}
 
 export default function AddEditFieldModal({
   visible,
@@ -156,6 +212,16 @@ export default function AddEditFieldModal({
   const [error, setError] = useState<string | null>(null);
   const [dismissedSaveError, setDismissedSaveError] = useState(false);
 
+  // Preceding fields candidate list for visibility/cascading
+  const candidateParentFields = existingFields.filter(
+    (f) => !fieldToEdit || f.id !== fieldToEdit.id
+  );
+
+  const selectedParentField = ruleSource === 'custom_field'
+    ? candidateParentFields.find((f) => f.fieldKey === ruleField)
+    : undefined;
+  const isParentBoolean = selectedParentField?.dataType === 'Boolean';
+
   // Initialize form when fieldToEdit changes or modal opens
   useEffect(() => {
     if (!visible) return;
@@ -187,10 +253,26 @@ export default function AddEditFieldModal({
         try {
           const rule = JSON.parse(fieldToEdit.visibilityRuleJson);
           setHasVisibilityRule(true);
-          setRuleSource(rule.source || 'custom_field');
-          setRuleField(rule.field || rule.parentFieldKey || '');
-          setRuleOperator(rule.operator || 'equals');
-          if (Array.isArray(rule.value)) {
+          const src = rule.source || 'custom_field';
+          setRuleSource(src);
+          const parentKey = rule.field || rule.parentFieldKey || '';
+          setRuleField(parentKey);
+
+          const parentDef = src === 'custom_field'
+            ? existingFields.find((f) => (!fieldToEdit || f.id !== fieldToEdit.id) && f.fieldKey === parentKey)
+            : undefined;
+          const isBooleanParent = parentDef?.dataType === 'Boolean';
+
+          let op: VisibilityRule['operator'] = rule.operator || 'equals';
+          if (isBooleanParent && (op === 'in' || op === 'contains')) {
+            op = 'equals';
+          }
+          setRuleOperator(op);
+
+          if (isBooleanParent) {
+            const raw = rule.value !== undefined ? rule.value : (rule.expectedValue !== undefined ? rule.expectedValue : '');
+            setRuleValue(normalizeBooleanRuleValue(raw));
+          } else if (Array.isArray(rule.value)) {
             setRuleValue(rule.value.join(', '));
           } else {
             setRuleValue(rule.value !== undefined ? String(rule.value) : (rule.expectedValue !== undefined ? String(rule.expectedValue) : ''));
@@ -346,6 +428,42 @@ export default function AddEditFieldModal({
     );
   };
 
+  const handleSelectRuleField = (key: string) => {
+    const target = candidateParentFields.find((f) => f.fieldKey === key);
+    const isTargetBoolean = target?.dataType === 'Boolean';
+
+    if (isTargetBoolean) {
+      if (ruleOperator === 'in' || ruleOperator === 'contains') {
+        setRuleOperator('equals');
+      }
+      if (!isValidBooleanRuleValue(ruleValue)) {
+        setRuleValue('true');
+      } else {
+        setRuleValue(normalizeBooleanRuleValue(ruleValue));
+      }
+    } else {
+      if (ruleValue === 'true' || ruleValue === 'false') {
+        setRuleValue('');
+      }
+    }
+    setRuleField(key);
+  };
+
+  const handleSelectStaticField = (key: string) => {
+    if (ruleValue === 'true' || ruleValue === 'false') {
+      setRuleValue('');
+    }
+    setRuleField(key);
+  };
+
+  const handleRuleSourceChange = (src: 'custom_field' | 'static') => {
+    setRuleSource(src);
+    setRuleField('');
+    if (ruleValue === 'true' || ruleValue === 'false') {
+      setRuleValue('');
+    }
+  };
+
   const handleSave = async () => {
     const trimmedLabel = label.trim();
     if (!trimmedLabel) {
@@ -392,14 +510,38 @@ export default function AddEditFieldModal({
         return;
       }
 
-      let val: any = ruleValue.trim();
-      if (ruleOperator === 'in') {
+      if (isParentBoolean) {
+        if (ruleOperator === 'in' || ruleOperator === 'contains') {
+          const errorMsg = 'Comparison operator for Boolean fields must be Equals, Not Equals, or Has Any Value.';
+          setError(errorMsg);
+          Alert.alert('Validation Error', errorMsg);
+          setSaving(false);
+          return;
+        }
+
+        if (ruleOperator !== 'not_empty') {
+          if (!isValidBooleanRuleValue(ruleValue)) {
+            const errorMsg = 'Please select Yes or No for the expected Boolean condition.';
+            setError(errorMsg);
+            Alert.alert('Validation Error', errorMsg);
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
+      let val: any;
+      if (isParentBoolean && ruleOperator !== 'not_empty') {
+        val = normalizeBooleanRuleValue(ruleValue);
+      } else if (ruleOperator === 'in') {
         val = ruleValue
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean);
       } else if (ruleOperator === 'not_empty') {
         val = undefined;
+      } else {
+        val = ruleValue.trim();
       }
 
       const ruleObj: VisibilityRule = {
@@ -460,11 +602,6 @@ export default function AddEditFieldModal({
       onClose();
     }
   };
-
-  // Preceding fields candidate list for visibility/cascading
-  const candidateParentFields = existingFields.filter(
-    (f) => !fieldToEdit || f.id !== fieldToEdit.id
-  );
 
   const displayedError = error || (!dismissedSaveError ? saveError : null);
 
@@ -641,12 +778,12 @@ export default function AddEditFieldModal({
                   <Chip
                     label="Custom Intake Field"
                     active={ruleSource === 'custom_field'}
-                    onPress={() => setRuleSource('custom_field')}
+                    onPress={() => handleRuleSourceChange('custom_field')}
                   />
                   <Chip
                     label="Static Patient Demographic"
                     active={ruleSource === 'static'}
-                    onPress={() => setRuleSource('static')}
+                    onPress={() => handleRuleSourceChange('static')}
                   />
                 </View>
               </FieldGroup>
@@ -660,7 +797,7 @@ export default function AddEditFieldModal({
                         key={opt.key}
                         label={opt.label}
                         active={ruleField === opt.key}
-                        onPress={() => setRuleField(opt.key)}
+                        onPress={() => handleSelectStaticField(opt.key)}
                       />
                     ))}
                   </View>
@@ -676,7 +813,7 @@ export default function AddEditFieldModal({
                           key={f.fieldKey}
                           label={`${f.label} (${f.fieldKey})`}
                           active={ruleField === f.fieldKey}
-                          onPress={() => setRuleField(f.fieldKey)}
+                          onPress={() => handleSelectRuleField(f.fieldKey)}
                         />
                       ))
                     )}
@@ -687,7 +824,7 @@ export default function AddEditFieldModal({
               {/* Operator Selector */}
               <FieldGroup label="Comparison Operator">
                 <View style={styles.chipRow}>
-                  {OPERATORS.map((op) => (
+                  {(isParentBoolean ? BOOLEAN_OPERATORS : OPERATORS).map((op) => (
                     <Chip
                       key={op.key}
                       label={op.label}
@@ -700,16 +837,33 @@ export default function AddEditFieldModal({
 
               {/* Expected Value Input */}
               {ruleOperator !== 'not_empty' && (
-                <Input
-                  label="Expected Value to Trigger Visibility"
-                  value={ruleValue}
-                  onChangeText={setRuleValue}
-                  placeholder={
-                    ruleOperator === 'in'
-                      ? 'e.g. 4th Year, 5th Year / Grad (comma separated)'
-                      : 'e.g. Student, Married, Female'
-                  }
-                />
+                isParentBoolean ? (
+                  <FieldGroup label="Expected Value to Trigger Visibility">
+                    <View style={styles.chipRow}>
+                      <Chip
+                        label="Yes"
+                        active={ruleValue === 'true'}
+                        onPress={() => setRuleValue('true')}
+                      />
+                      <Chip
+                        label="No"
+                        active={ruleValue === 'false'}
+                        onPress={() => setRuleValue('false')}
+                      />
+                    </View>
+                  </FieldGroup>
+                ) : (
+                  <Input
+                    label="Expected Value to Trigger Visibility"
+                    value={ruleValue}
+                    onChangeText={setRuleValue}
+                    placeholder={
+                      ruleOperator === 'in'
+                        ? 'e.g. 4th Year, 5th Year / Grad (comma separated)'
+                        : 'e.g. Student, Married, Female'
+                    }
+                  />
+                )
               )}
 
               {/* Live Preview Badge */}
@@ -719,11 +873,7 @@ export default function AddEditFieldModal({
                 </ThemedText>
                 {ruleField ? (
                   <Badge
-                    label={
-                      ruleOperator === 'not_empty'
-                        ? `If ${ruleField} is not empty`
-                        : `Visible when [${ruleField}] ${ruleOperator} '${ruleValue || '...'}'`
-                    }
+                    label={formatLiveRulePreview(ruleField, ruleOperator, ruleValue, isParentBoolean)}
                     variant="warning"
                     size="md"
                   />
