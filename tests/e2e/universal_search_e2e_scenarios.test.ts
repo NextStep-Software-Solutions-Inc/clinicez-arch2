@@ -46,6 +46,14 @@ mock.module('react-native-svg', () => ({
   Circle: 'Circle',
   Rect: 'Rect',
   default: 'Svg',
+  Line: 'Line',
+  Polyline: 'Polyline',
+  Polygon: 'Polygon',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
 }));
 
 mock.module('@react-navigation/native', () => ({
