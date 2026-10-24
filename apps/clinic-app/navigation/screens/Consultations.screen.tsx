@@ -57,6 +57,7 @@ import {
   YakapClaimReadinessCard,
   StatutorySectionKey,
   RecordVitalsModal,
+  EditVitalsModal,
   OrderCatalogSearchModal,
   OrderCatalogItemPayload,
   InlineDentalChartCard,
@@ -512,7 +513,11 @@ export default function ConsultationsScreen() {
 
   const handleJumpToSection = (section: StatutorySectionKey) => {
     if (section === 'vitals' && canRecordVitals) {
-      setRecordVitalsModalVisible(true);
+      if (vitals) {
+        setEditVitalsModalVisible(true);
+      } else {
+        setRecordVitalsModalVisible(true);
+      }
     }
     if (mobileWorkstationView !== 'soap') {
       setMobileWorkstationView('soap');
@@ -594,6 +599,7 @@ export default function ConsultationsScreen() {
   const [orderSearchInitialCategory, setOrderSearchInitialCategory] = useState<'Diagnostic' | 'Procedure' | 'Dental' | 'All'>('All');
   const [editPatientModalVisible, setEditPatientModalVisible] = useState(false);
   const [recordVitalsModalVisible, setRecordVitalsModalVisible] = useState(false);
+  const [editVitalsModalVisible, setEditVitalsModalVisible] = useState(false);
 
   // New Prescription Form State
   const [showAddRx, setShowAddRx] = useState(false);
@@ -3561,11 +3567,17 @@ export default function ConsultationsScreen() {
                   rightAction={
                     !isSigned && canRecordVitals ? (
                       <Button
-                        title="Record Vitals"
+                        title={vitals ? 'Update Vitals' : 'Record Vitals'}
                         icon="activity"
                         size="sm"
                         variant="outline"
-                        onPress={() => setRecordVitalsModalVisible(true)}
+                        onPress={() => {
+                          if (vitals) {
+                            setEditVitalsModalVisible(true);
+                          } else {
+                            setRecordVitalsModalVisible(true);
+                          }
+                        }}
                       />
                     ) : undefined
                   }
@@ -4932,7 +4944,17 @@ export default function ConsultationsScreen() {
                 loading={contextLoading}
                 onPressRefresh={() => loadPatientContext(selectedPatient)}
                 onPressEdit={() => setEditPatientModalVisible(true)}
-                onPressRecordVitals={!isSigned && canRecordVitals ? () => setRecordVitalsModalVisible(true) : undefined}
+                onPressRecordVitals={
+                  !isSigned && canRecordVitals
+                    ? () => {
+                        if (vitals) {
+                          setEditVitalsModalVisible(true);
+                        } else {
+                          setRecordVitalsModalVisible(true);
+                        }
+                      }
+                    : undefined
+                }
               />
             </View>
 
@@ -5628,11 +5650,26 @@ export default function ConsultationsScreen() {
             queueItemId={selectedPatient.id}
             currentStaffId={signer?.id}
             currentStaffName={signerStaff ? formatStaffName(signerStaff) : signer?.name}
-            existingVitals={vitals}
+
             onSuccess={(recordedVitals) => {
               setVitals(recordedVitals);
-              notify.success('Vitals recorded successfully.');
               setRecordVitalsModalVisible(false);
+            }}
+          />
+        )}
+
+        {/* Edit Vitals Modal */}
+        {selectedPatient && (
+          <EditVitalsModal
+            visible={editVitalsModalVisible}
+            onClose={() => setEditVitalsModalVisible(false)}
+            patient={patientRecord}
+            queueItemId={selectedPatient.id}
+            currentStaffId={signer?.id}
+            currentStaffName={signerStaff ? formatStaffName(signerStaff) : signer?.name}
+            onSuccess={(updatedVitals) => {
+              setVitals(updatedVitals);
+              setEditVitalsModalVisible(false);
             }}
           />
         )}

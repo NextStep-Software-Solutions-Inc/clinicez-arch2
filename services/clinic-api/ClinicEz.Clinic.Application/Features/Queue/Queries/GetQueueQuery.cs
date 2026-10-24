@@ -141,39 +141,7 @@ public sealed class GetQueueQueryHandler : IRequestHandler<GetQueueQuery, IReadO
             .ThenBy(q => q.SequenceNumber)
             .ToListAsync(cancellationToken);
 
-        return items.Select(item =>
-        {
-            string? vitalsSummary = item.TriageVitals != null
-                ? $"BP: {item.TriageVitals.SystolicBp}/{item.TriageVitals.DiastolicBp} • HR: {item.TriageVitals.HeartRateBpm}"
-                : null;
-
-            return new QueueItemDto(
-                item.Id,
-                item.TenantId,
-                item.ClinicId,
-                item.QueueNumber,
-                item.SequenceNumber,
-                item.QueueDate,
-                item.PatientId,
-                item.PatientName,
-                item.AppointmentId,
-                item.DoctorId,
-                item.DoctorName,
-                item.Priority,
-                item.Status,
-                item.CheckInTime,
-                item.CalledTime,
-                item.CompletedTime,
-                item.ChiefComplaint,
-                item.TriageVitals != null,
-                vitalsSummary,
-                item.RoomOrStation,
-                item.RoomId,
-                item.VisitType,
-                item.DischargeNotes,
-                item.DischargedAt,
-                item.DischargedByStaffId);
-        }).ToList();
+        return items.Select(item => item.ToDto()).ToList();
     }
 }
 

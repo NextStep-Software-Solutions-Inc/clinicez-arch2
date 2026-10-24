@@ -216,6 +216,8 @@ public static class AuditRequestMetadataRegistry
             // Clinical
             case "RecordTriageVitalsCommand":
                 return (ClinicAuditCategories.Clinical, "clinical.triage_vitals.recorded", ClinicAuditSeverities.Routine, "TriageVitals", "Nurse recorded triage vitals and WHO Z-scores");
+            case "UpdateTriageVitalsCommand":
+                return (ClinicAuditCategories.Clinical, "clinical.triage_vitals.updated", ClinicAuditSeverities.Routine, "TriageVitals", "Nurse updated triage vitals and WHO Z-scores");
             case "CreateConsultationCommand":
                 return (ClinicAuditCategories.Clinical, "clinical.consultation.created", ClinicAuditSeverities.Routine, "ConsultationEncounter", "Initiated clinical consultation encounter");
             case "UpdateConsultationCommand":

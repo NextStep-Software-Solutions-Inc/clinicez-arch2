@@ -48,6 +48,7 @@ import {
   QueueMetrics,
   QueueStatus,
   QueuePriority,
+  TriageVitals,
   RecordTriageRequest,
   ClinicAnalytics,
   DailyEodReport,
@@ -58,6 +59,7 @@ import {
 } from '../../services/clinicService';
 import ForceEodConfirmationModal from '../../components/queue/ForceEodConfirmationModal';
 import DivertEmergencyModal from '../../components/queue/DivertEmergencyModal';
+import { EditVitalsModal } from '../../components/consultation';
 
 type DashboardTab = 'QUEUE' | 'ANALYTICS' | 'REPORTS';
 type ReportType = 'DAILY_EOD' | 'MORBIDITY' | 'TAX_DISCOUNT' | 'DOCTOR_SHARES';
@@ -281,6 +283,7 @@ export default function DashboardScreen() {
   const [zScorePreview, setZScorePreview] = useState<PediatricZScoreResult | null>(null);
   const [triage, setTriage] = useState<TriageForm>(EMPTY_TRIAGE);
   const [savingTriage, setSavingTriage] = useState(false);
+  const [editVitalsItem, setEditVitalsItem] = useState<PatientQueueItem | null>(null);
 
   // Statutory reports and analytics state
   const [reportType, setReportType] = useState<ReportType>('DAILY_EOD');
@@ -461,6 +464,32 @@ export default function DashboardScreen() {
         setTriage((prev) => ({ ...prev, posture: 'RECUMBENT' }));
       }
     }
+  };
+
+  const handleOpenEditVitals = (item: PatientQueueItem) => {
+    setEditVitalsItem(item);
+  };
+
+  const handleEditVitalsSuccess = (
+    _updatedVitals: TriageVitals,
+    summaryData?: { priority?: QueuePriority; vitalsSummary?: string; chiefComplaint?: string }
+  ) => {
+    if (!editVitalsItem) return;
+    setQueue((prev) =>
+      (prev ?? []).map((q) =>
+        q.id === editVitalsItem.id
+          ? {
+              ...q,
+              status: q.status === 'Waiting' ? ('Triaged' as QueueStatus) : q.status,
+              priority: summaryData?.priority ?? q.priority,
+              hasVitals: true,
+              vitalsSummary: summaryData?.vitalsSummary || q.vitalsSummary,
+              chiefComplaint: summaryData?.chiefComplaint || q.chiefComplaint,
+            }
+          : q
+      )
+    );
+    setEditVitalsItem(null);
   };
 
   const handlePutOnHold = async (item: PatientQueueItem) => {
@@ -760,6 +789,7 @@ export default function DashboardScreen() {
       preAssessmentNotes: triage.preAssessmentNotes.trim() || undefined,
       preAssessmentRemarks: triage.preAssessmentRemarks.trim() || undefined,
       triageAcuityReason: triage.priority,
+      priority: triage.priority,
     };
 
     setSavingTriage(true);
@@ -786,7 +816,7 @@ export default function DashboardScreen() {
         q.id === triageItem.id
           ? {
               ...q,
-              status: 'Triaged' as QueueStatus,
+              status: q.status === 'Waiting' ? ('Triaged' as QueueStatus) : q.status,
               priority: triage.priority,
               hasVitals: true,
               vitalsSummary: summary || q.vitalsSummary,
@@ -1107,7 +1137,13 @@ export default function DashboardScreen() {
                         variant="outline"
                         size="sm"
                         icon="activity"
-                        onPress={() => handleOpenTriage(item)}
+                        onPress={() => {
+                          if (item.hasVitals) {
+                            handleOpenEditVitals(item);
+                          } else {
+                            handleOpenTriage(item);
+                          }
+                        }}
                       />
                     ) : null}
                     {item.status !== 'Completed' && item.status !== 'Cancelled' && item.status !== 'NoShow' ? (
@@ -2366,6 +2402,17 @@ export default function DashboardScreen() {
           numberOfLines={2}
         />
       </Modal>
+
+      {/* Edit vitals modal */}
+      <EditVitalsModal
+        visible={!!editVitalsItem}
+        queueItemId={editVitalsItem?.id ?? null}
+        patientId={editVitalsItem?.patientId}
+        currentStaffId={currentStaff?.id}
+        currentStaffName={currentName}
+        onClose={() => setEditVitalsItem(null)}
+        onSuccess={handleEditVitalsSuccess}
+      />
 
 
 

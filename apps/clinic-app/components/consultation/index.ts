@@ -21,6 +21,34 @@ export type {
 export { default as RecordVitalsModal } from './RecordVitalsModal';
 export type { RecordVitalsModalProps } from './RecordVitalsModal';
 
+export { default as EditVitalsModal } from './EditVitalsModal';
+export type { EditVitalsModalProps } from './EditVitalsModal';
+
+export {
+  EMPTY_VITALS_FORM,
+  PRE_ASSESSMENT_OBSERVATION_CHIPS,
+  parseOptionalInt,
+  parseOptionalFloat,
+  resolveCohort,
+  evaluateBmi,
+  evaluateCentralObesity,
+  formatVitalsSummary,
+  togglePreAssessmentChip,
+  CohortBanner,
+  StandardVitalsSection,
+  AnthropometricsSection,
+  VisualAcuitySection,
+  PreAssessmentSection,
+} from './VitalsFormFields';
+export type {
+  VitalsFormState,
+  MeasurementPosture,
+  DemographicCohort,
+  BmiEvaluation,
+  CentralObesityEvaluation,
+  VitalsSummaryData,
+} from './VitalsFormFields';
+
 export {
   OrderCatalogSearchModal,
   default as OrderCatalogSearchModalComponent,
@@ -51,5 +79,3 @@ export type {
   DentalToothState,
   InlineDentalChartCardProps,
 } from './InlineDentalChartCard';
-
-
