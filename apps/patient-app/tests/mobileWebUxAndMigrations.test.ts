@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { resolveWebHeaderState } from '../navigation/webSections';
 
 const APP_ROOT = join(import.meta.dir, '..');
-const readApp = (rel: string): string => readFileSync(join(APP_ROOT, rel), 'utf8');
+const readApp = (rel: string): string => readFileSync(join(APP_ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 
 describe('Mobile Web UI/UX & Compact Header State Resolution', () => {
   test('resolveWebHeaderState returns isRootTab=true for Home, Appointments, Records root, and Profile', () => {
