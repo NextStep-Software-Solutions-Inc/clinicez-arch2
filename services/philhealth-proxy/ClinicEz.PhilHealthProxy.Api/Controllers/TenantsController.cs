@@ -8,6 +8,7 @@ using ClinicEz.Shared.Common;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.PhilHealthProxy.Api.Controllers;
@@ -42,17 +43,52 @@ public sealed class TenantsController : ControllerBase
     private readonly IPhilHealthSoapClient _soapClient;
     private readonly IDataProtector _protector;
     private readonly ILogger<TenantsController> _logger;
+    private readonly IHostEnvironment? _environment;
 
     public TenantsController(
         ITenantRepository tenantRepository,
         IPhilHealthSoapClient soapClient,
         IDataProtectionProvider dataProtectionProvider,
-        ILogger<TenantsController> logger)
+        ILogger<TenantsController> logger,
+        IHostEnvironment? environment = null)
     {
         _tenantRepository = tenantRepository;
         _soapClient = soapClient;
         _protector = dataProtectionProvider.CreateProtector("ClinicEz.PhilHealthProxy.TenantCredentials");
         _logger = logger;
+        _environment = environment;
+    }
+
+    private static bool IsStagingOrSandbox(string? endpoint)
+    {
+        if (string.IsNullOrWhiteSpace(endpoint)) return true;
+        var trimmed = endpoint.Trim();
+
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        {
+            var host = uri.DnsSafeHost;
+            var isPhilHealth = host.Equals("philhealth.gov.ph", StringComparison.OrdinalIgnoreCase) ||
+                               host.EndsWith(".philhealth.gov.ph", StringComparison.OrdinalIgnoreCase);
+
+            if (isPhilHealth)
+            {
+                return host.Equals("staging.philhealth.gov.ph", StringComparison.OrdinalIgnoreCase) ||
+                       host.EndsWith(".staging.philhealth.gov.ph", StringComparison.OrdinalIgnoreCase) ||
+                       host.EndsWith("-staging.philhealth.gov.ph", StringComparison.OrdinalIgnoreCase);
+            }
+
+            var normalizedPath = uri.AbsolutePath.TrimEnd('/');
+            return host.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
+                   host.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
+                   normalizedPath.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase) ||
+                   normalizedPath.Equals("/soap/konsulta", StringComparison.OrdinalIgnoreCase);
+        }
+
+        var normalized = trimmed.TrimEnd('/');
+        return normalized.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
+               normalized.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Equals("/soap/konsulta", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -71,20 +107,30 @@ public sealed class TenantsController : ControllerBase
             return BadRequest(ApiResponse<TenantConfigurationStatusResponse>.Fail("Invalid TenantId."));
         }
 
-        if (string.IsNullOrWhiteSpace(request.AccreditationNumber) ||
-            string.IsNullOrWhiteSpace(request.Username) ||
-            string.IsNullOrWhiteSpace(request.Password))
+        if (string.IsNullOrWhiteSpace(request.AccreditationNumber))
         {
-            return BadRequest(ApiResponse<TenantConfigurationStatusResponse>.Fail("Accreditation number, username, and password are required."));
+            return BadRequest(ApiResponse<TenantConfigurationStatusResponse>.Fail("Accreditation number is required."));
+        }
+
+        var endpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
+            ? request.KonsultaEndpoint.Trim()
+            : "/soap/konsulta";
+
+        var isProduction = _environment != null && _environment.IsProduction();
+        var isStagingOrSandbox = IsStagingOrSandbox(endpoint);
+
+        if (isProduction && !isStagingOrSandbox)
+        {
+            if (string.IsNullOrWhiteSpace(request.Username) ||
+                string.IsNullOrWhiteSpace(request.Password))
+            {
+                return BadRequest(ApiResponse<TenantConfigurationStatusResponse>.Fail("Accreditation number, username, and password are required."));
+            }
         }
 
         var cipherKey = !string.IsNullOrWhiteSpace(request.CipherKey)
             ? request.CipherKey
             : "CLINICEZ-YAKAP-DEV-KEY-32BYTES!";
-
-        var endpoint = !string.IsNullOrWhiteSpace(request.KonsultaEndpoint)
-            ? request.KonsultaEndpoint
-            : "/soap/konsulta";
 
         var tenant = new PhilHealthTenant
         {
@@ -93,8 +139,8 @@ public sealed class TenantsController : ControllerBase
             AccreditationNumber = request.AccreditationNumber.Trim(),
             PmccNumber = request.PmccNumber ?? string.Empty,
             SoftwareCertificateId = request.SoftwareCertificateId ?? string.Empty,
-            EncryptedUsername = _protector.Protect(request.Username.Trim()),
-            EncryptedPassword = _protector.Protect(request.Password),
+            EncryptedUsername = _protector.Protect(request.Username?.Trim() ?? string.Empty),
+            EncryptedPassword = _protector.Protect(request.Password ?? string.Empty),
             EncryptedCipherKey = _protector.Protect(cipherKey),
             KonsultaEndpoint = endpoint,
             IsActive = true

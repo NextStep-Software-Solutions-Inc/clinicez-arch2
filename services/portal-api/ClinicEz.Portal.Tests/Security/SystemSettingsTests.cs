@@ -186,7 +186,8 @@ public class SystemSettingsTests
             Name = "BGC Main Branch",
             City = "Taguig City",
             Province = "Metro Manila",
-            IsPhilHealthAccredited = true
+            IsPhilHealthAccredited = true,
+            PhilHealthAccreditationNumber = "P123456789"
         };
         var clinic = new Facility
         {

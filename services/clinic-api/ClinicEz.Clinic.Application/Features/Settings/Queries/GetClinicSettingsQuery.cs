@@ -134,6 +134,14 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             TurnstileEnvOverrideValue: overrideVal,
             TimeZoneId: settings.TimeZoneId,
             DateFormat: settings.DateFormat,
-            TimeFormat: settings.TimeFormat);
+            TimeFormat: settings.TimeFormat,
+            IsPhilHealthOverridden: settings.IsPhilHealthOverridden,
+            BranchId: settings.BranchId,
+            BranchName: settings.BranchName,
+            IsBranchPhilHealthAccredited: settings.IsBranchPhilHealthAccredited,
+            BranchPhilHealthAccreditationNumber: settings.BranchPhilHealthAccreditationNumber,
+            BranchPmccNumber: settings.BranchPmccNumber,
+            BranchSoftwareCertificateId: settings.BranchSoftwareCertificateId,
+            BranchKonsultaEndpoint: settings.BranchKonsultaEndpoint);
     }
 }
