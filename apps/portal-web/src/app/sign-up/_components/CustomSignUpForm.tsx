@@ -22,8 +22,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FcGoogle } from "react-icons/fc";
-
-type SignUpStep = "sign-up" | "verify-email" | "complete-requirements";
+import { usePublicConfig } from "@/hooks/usePublicConfig";
+import {
+  type SignUpStep,
+  shouldResumeOAuthUsernameStep,
+  parseSignUpError,
+  resolvePostVerificationAction,
+  buildSignInHref,
+} from "../_lib/signUpFlow";
 
 interface CustomSignUpFormProps {
   initialTrialDays?: number;
@@ -34,10 +40,20 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get("redirect_url") || "/sync-auth";
 
+  const { trialDays: liveTrialDays, isError: isPublicConfigError } = usePublicConfig(
+    initialTrialDays !== undefined
+      ? { trialDays: initialTrialDays, defaultBillingCadence: "monthly" }
+      : undefined
+  );
+  const trialDays = isPublicConfigError ? undefined : (liveTrialDays ?? initialTrialDays);
+
   const { isLoaded, signUp, setActive } = useSignUp();
   const { isLoaded: isSignInLoaded, signIn } = useSignIn();
 
-  const [step, setStep] = useState<SignUpStep>("sign-up");
+  const [explicitStep, setStep] = useState<SignUpStep | null>(null);
+  const step: SignUpStep =
+    explicitStep ??
+    (isLoaded && shouldResumeOAuthUsernameStep(signUp) ? "complete-requirements" : "sign-up");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
@@ -52,63 +68,30 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
   const [isLoading, setIsLoading] = useState(false);
   const [isSocialLoading, setIsSocialLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isExistingAccountConflict, setIsExistingAccountConflict] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Check if sign-up is already in progress and missing requirements (e.g. after Google OAuth)
-  // or if an OAuth sign-up transferred to an existing account that requires MFA second factor.
+  // Redirect to sign-in if an OAuth sign-up transferred to an existing account requiring MFA.
   useEffect(() => {
-    if (isLoaded && signUp && signUp.status === "missing_requirements") {
-      setStep("complete-requirements");
-      return;
-    }
     if (
       isSignInLoaded &&
       signIn &&
       (signIn.status === "needs_second_factor" ||
         (signIn.status as string | null) === "needs_client_trust")
     ) {
-      const target =
-        redirectUrl !== "/sync-auth"
-          ? `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`
-          : "/sign-in";
+      const target = buildSignInHref(redirectUrl);
       router.replace(target);
     }
-  }, [isLoaded, signUp, isSignInLoaded, signIn, redirectUrl, router]);
-
-  const getErrorMessage = (err: any): string => {
-    if (err?.errors && err.errors.length > 0) {
-      const code = err.errors[0]?.code;
-      const message = err.errors[0]?.longMessage || err.errors[0]?.message;
-
-      if (code === "form_identifier_exists" || code === "form_username_exists") {
-        return "An account with this email or username already exists. Please choose a different one or sign in.";
-      }
-      if (code === "form_username_invalid_character") {
-        return "Username may only contain lowercase letters, numbers, underscores, and periods.";
-      }
-      if (code === "form_username_invalid_length") {
-        return "Username must be between 3 and 30 characters long.";
-      }
-      if (code === "form_password_length_too_short") {
-        return "Password must be at least 8 characters long.";
-      }
-      if (code === "form_password_pwned") {
-        return "This password has been compromised in a breach. Please choose a different password.";
-      }
-      if (code === "form_code_incorrect") {
-        return "The verification code is incorrect. Please check your inbox and try again.";
-      }
-      return message || "An error occurred during registration. Please try again.";
-    }
-    return err?.message || "Something went wrong. Please try again.";
-  };
+  }, [isSignInLoaded, signIn, redirectUrl, router]);
 
   // Google OAuth SSO
   const handleGoogleSignUp = async () => {
-    if (!isLoaded || !signUp) return;
+    if (!isLoaded || !signUp || isLoading || isSocialLoading) return;
 
     setIsSocialLoading(true);
     setError(null);
+    setSuccessMessage(null);
+    setIsExistingAccountConflict(false);
 
     try {
       await signUp.authenticateWithRedirect({
@@ -116,8 +99,11 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
         redirectUrl: "/sign-up/sso-callback",
         redirectUrlComplete: redirectUrl,
       });
-    } catch (err: any) {
-      setError(getErrorMessage(err));
+    } catch (err: unknown) {
+      const parsed = parseSignUpError(err);
+      setError(parsed.message);
+      setIsExistingAccountConflict(parsed.isExistingAccountConflict);
+      setSuccessMessage(null);
       setIsSocialLoading(false);
     }
   };
@@ -125,7 +111,11 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
   // Initial Sign Up submission
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoaded || !signUp) return;
+    if (!isLoaded || !signUp || isLoading || isSocialLoading) return;
+
+    setError(null);
+    setSuccessMessage(null);
+    setIsExistingAccountConflict(false);
 
     if (!firstName.trim()) {
       setError("Please enter your first name.");
@@ -145,10 +135,9 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
     }
 
     setIsLoading(true);
-    setError(null);
 
     try {
-      await signUp.create({
+      const createdSignUp = await signUp.create({
         username: username.trim().toLowerCase(),
         firstName: firstName.trim(),
         lastName: lastName.trim() || undefined,
@@ -156,13 +145,32 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
         password,
       });
 
+      if (createdSignUp.status === "complete") {
+        if (createdSignUp.createdSessionId) {
+          await setActive({ session: createdSignUp.createdSessionId });
+          router.push(redirectUrl);
+          return;
+        }
+        setError("Registration completed but no active session was returned. Please sign in.");
+        setIsExistingAccountConflict(true);
+        return;
+      }
+
       // Send the email verification code
-      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+      const targetSignUp =
+        createdSignUp && typeof createdSignUp.prepareEmailAddressVerification === "function"
+          ? createdSignUp
+          : signUp;
+      await targetSignUp.prepareEmailAddressVerification({ strategy: "email_code" });
 
       setSuccessMessage(`Verification code sent to ${emailAddress.trim()}`);
       setStep("verify-email");
-    } catch (err: any) {
-      setError(getErrorMessage(err));
+    } catch (err: unknown) {
+      const parsed = parseSignUpError(err);
+      setStep("sign-up");
+      setError(parsed.message);
+      setIsExistingAccountConflict(parsed.isExistingAccountConflict);
+      setSuccessMessage(null);
     } finally {
       setIsLoading(false);
     }
@@ -171,34 +179,89 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
   // Verify Email Code
   const handleVerifyEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoaded || !signUp) return;
+    if (!isLoaded || !signUp || isLoading) return;
 
-    if (!verificationCode.trim()) {
+    setError(null);
+    setSuccessMessage(null);
+    setIsExistingAccountConflict(false);
+
+    const cleanCode = verificationCode.replace(/[\s\-_—–]+/g, "");
+    if (!cleanCode) {
       setError("Please enter the 6-digit verification code.");
       return;
     }
 
     setIsLoading(true);
-    setError(null);
 
     try {
       const completeSignUp = await signUp.attemptEmailAddressVerification({
-        code: verificationCode.trim(),
+        code: cleanCode,
       });
 
-      if (completeSignUp.status === "complete") {
-        await setActive({ session: completeSignUp.createdSessionId });
+      const action = resolvePostVerificationAction(completeSignUp, username);
+
+      if (action.type === "complete") {
+        await setActive({ session: action.sessionId });
         router.push(redirectUrl);
-      } else if (completeSignUp.status === "missing_requirements") {
-        setStep("complete-requirements");
-        if (completeSignUp.missingFields?.includes("username")) {
-          setError("A username is required to complete your registration.");
-        }
-      } else {
-        setError(`Registration status: ${completeSignUp.status}. Additional information required.`);
+        return;
       }
-    } catch (err: any) {
-      setError(getErrorMessage(err));
+
+      if (action.type === "auto-apply-retained-username") {
+        try {
+          const updateTarget =
+            completeSignUp && typeof completeSignUp.update === "function"
+              ? completeSignUp
+              : signUp;
+          const updatedSignUp = await updateTarget.update({
+            username: action.username,
+          });
+
+          if (updatedSignUp.status === "complete") {
+            if (updatedSignUp.createdSessionId) {
+              await setActive({ session: updatedSignUp.createdSessionId });
+              router.push(redirectUrl);
+              return;
+            }
+            setError("Registration completed but no active session was returned. Please sign in.");
+            setIsExistingAccountConflict(true);
+            return;
+          }
+
+          if (updatedSignUp.unverifiedFields?.includes("email_address")) {
+            setStep("verify-email");
+            setError("Please complete email verification before continuing.");
+            return;
+          }
+
+          if (updatedSignUp.missingFields?.includes("username") || updatedSignUp.status === "missing_requirements") {
+            setStep("complete-requirements");
+          } else {
+            setError("Additional registration requirements are pending. Please verify your details.");
+          }
+        } catch (updateErr: unknown) {
+          const parsed = parseSignUpError(updateErr);
+          setError(parsed.message);
+          setIsExistingAccountConflict(parsed.isExistingAccountConflict);
+          setSuccessMessage(null);
+          setStep("complete-requirements");
+        }
+        return;
+      }
+
+      if (action.type === "prompt-username") {
+        setStep("complete-requirements");
+        return;
+      }
+
+      setError(action.error);
+      if (action.isExistingAccountConflict) {
+        setIsExistingAccountConflict(true);
+      }
+    } catch (err: unknown) {
+      const parsed = parseSignUpError(err);
+      setError(parsed.message);
+      setIsExistingAccountConflict(parsed.isExistingAccountConflict);
+      setSuccessMessage(null);
     } finally {
       setIsLoading(false);
     }
@@ -207,15 +270,46 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
   // Complete missing requirements (e.g. setting username)
   const handleCompleteRequirements = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isLoaded || !signUp) return;
+    if (!isLoaded || !signUp || isLoading) return;
+
+    setError(null);
+    setSuccessMessage(null);
+    setIsExistingAccountConflict(false);
 
     if (!username.trim() || username.trim().length < 3) {
       setError("Please choose a username with at least 3 characters.");
       return;
     }
 
+    // Defensive guard: if email_address is unverified or identity unverified, route back to verify-email
+    const isEmailVerified =
+      signUp.verifications?.emailAddress?.status === "verified" ||
+      signUp.verifications?.externalAccount?.status === "verified";
+    const hasUnverifiedEmail =
+      signUp.unverifiedFields?.includes("email_address") || !isEmailVerified;
+
+    if (hasUnverifiedEmail) {
+      try {
+        const prepTarget =
+          typeof signUp.prepareEmailAddressVerification === "function"
+            ? signUp
+            : undefined;
+        if (prepTarget) {
+          await prepTarget.prepareEmailAddressVerification({ strategy: "email_code" });
+          setSuccessMessage(`Verification code sent to ${signUp.emailAddress || emailAddress || "your email"}`);
+        }
+        setStep("verify-email");
+        return;
+      } catch (prepErr: unknown) {
+        const parsed = parseSignUpError(prepErr);
+        setError(parsed.message);
+        setIsExistingAccountConflict(parsed.isExistingAccountConflict);
+        setSuccessMessage(null);
+        return;
+      }
+    }
+
     setIsLoading(true);
-    setError(null);
 
     try {
       const updatedSignUp = await signUp.update({
@@ -223,13 +317,29 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
       });
 
       if (updatedSignUp.status === "complete") {
-        await setActive({ session: updatedSignUp.createdSessionId });
-        router.push(redirectUrl);
+        if (updatedSignUp.createdSessionId) {
+          await setActive({ session: updatedSignUp.createdSessionId });
+          router.push(redirectUrl);
+          return;
+        }
+        setError("Registration completed but no active session was returned. Please sign in.");
+        setIsExistingAccountConflict(true);
+      } else if (updatedSignUp.unverifiedFields?.includes("email_address")) {
+        const targetSignUp =
+          updatedSignUp && typeof updatedSignUp.prepareEmailAddressVerification === "function"
+            ? updatedSignUp
+            : signUp;
+        await targetSignUp.prepareEmailAddressVerification({ strategy: "email_code" });
+        setSuccessMessage(`Verification code sent to ${updatedSignUp.emailAddress || emailAddress || "your email"}`);
+        setStep("verify-email");
       } else {
-        setError(`Status: ${updatedSignUp.status}. Additional requirements still pending.`);
+        setError("Additional registration requirements are pending. Please verify your details.");
       }
-    } catch (err: any) {
-      setError(getErrorMessage(err));
+    } catch (err: unknown) {
+      const parsed = parseSignUpError(err);
+      setError(parsed.message);
+      setIsExistingAccountConflict(parsed.isExistingAccountConflict);
+      setSuccessMessage(null);
     } finally {
       setIsLoading(false);
     }
@@ -237,16 +347,20 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
 
   // Resend code
   const handleResendCode = async () => {
-    if (!isLoaded || !signUp) return;
+    if (!isLoaded || !signUp || isResending || isLoading) return;
 
     setIsResending(true);
     setError(null);
+    setIsExistingAccountConflict(false);
 
     try {
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
       setSuccessMessage("A fresh verification code has been sent to your email.");
-    } catch (err: any) {
-      setError(getErrorMessage(err));
+    } catch (err: unknown) {
+      const parsed = parseSignUpError(err);
+      setError(parsed.message);
+      setIsExistingAccountConflict(parsed.isExistingAccountConflict);
+      setSuccessMessage(null);
     } finally {
       setIsResending(false);
     }
@@ -258,14 +372,27 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
       {error && (
         <div className="mb-5 p-3.5 sm:p-4 bg-destructive/10 text-destructive text-sm rounded-2xl border border-destructive/20 flex items-start gap-3 animate-in fade-in duration-200">
           <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-destructive" />
-          <span className="leading-snug">{error}</span>
+          <div className="space-y-1.5 leading-snug">
+            <p>{error}</p>
+            {isExistingAccountConflict && (
+              <div>
+                <Link
+                  href={buildSignInHref(redirectUrl)}
+                  className="font-semibold underline underline-offset-4 hover:opacity-80 inline-flex items-center gap-1"
+                >
+                  <span>Sign in to your account</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* Success notification */}
       {successMessage && (
-        <div className="mb-5 p-3.5 sm:p-4 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-sm rounded-2xl border border-emerald-500/20 flex items-start gap-3 animate-in fade-in duration-200">
-          <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+        <div className="mb-5 p-3.5 sm:p-4 bg-primary/10 text-primary text-sm rounded-2xl border border-primary/20 flex items-start gap-3 animate-in fade-in duration-200">
+          <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-primary" />
           <span className="leading-snug">{successMessage}</span>
         </div>
       )}
@@ -278,8 +405,8 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
               Create your account
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {initialTrialDays && initialTrialDays > 0
-                ? `Start your ${initialTrialDays}-day free trial and access Clinic EZ workspaces.`
+              {trialDays && trialDays > 0
+                ? `Start your ${trialDays}-day free trial and access Clinic EZ workspaces.`
                 : "Create an account to access Clinic EZ workspaces."}
             </p>
           </div>
@@ -308,6 +435,9 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
           </div>
 
           <form onSubmit={handleSignUp} className="space-y-3.5">
+            {/* Mount for Clerk v6 Smart CAPTCHA */}
+            <div id="clerk-captcha" />
+
             {/* Name Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -432,7 +562,7 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
           <div className="text-center text-sm text-muted-foreground pt-1">
             Already have an account?{" "}
             <Link
-              href="/sign-in"
+              href={buildSignInHref(redirectUrl)}
               className="font-semibold text-primary hover:underline inline-flex items-center gap-1"
             >
               Sign In
@@ -450,6 +580,7 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
               onClick={() => {
                 setError(null);
                 setSuccessMessage(null);
+                setIsExistingAccountConflict(false);
                 setStep("sign-up");
               }}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground mb-3 transition-colors cursor-pointer"
@@ -461,7 +592,7 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
               Verify your email
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              We sent a 6-digit code to <span className="font-semibold text-foreground">{emailAddress}</span>.
+              We sent a 6-digit code to <span className="font-semibold text-foreground">{emailAddress || signUp?.emailAddress || "your email"}</span>.
             </p>
           </div>
 
@@ -518,6 +649,19 @@ export function CustomSignUpForm({ initialTrialDays }: CustomSignUpFormProps = {
       {step === "complete-requirements" && (
         <div className="space-y-5 animate-in fade-in duration-300">
           <div>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setSuccessMessage(null);
+                setIsExistingAccountConflict(false);
+                setStep("sign-up");
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground mb-3 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to registration
+            </button>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-2">
               <Sparkles className="h-3.5 w-3.5" />
               Final Step

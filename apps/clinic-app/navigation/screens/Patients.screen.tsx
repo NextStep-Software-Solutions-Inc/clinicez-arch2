@@ -571,7 +571,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       const { isValid, errors } = validateCustomFields(tenantCustomFields, dynamicFieldValues, staticValues);
       if (!isValid) {
         setDynamicFieldErrors(errors);
-        Alert.alert('Missing Required Custom Fields', Object.values(errors).join('\n'));
+        Alert.alert('Invalid Custom Fields', Object.values(errors).join('\n'));
         return;
       }
     }

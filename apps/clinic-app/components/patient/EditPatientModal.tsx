@@ -9,7 +9,7 @@ import {
 import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl } from '../ui';
 import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition } from '../../services/clinicService';
-import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../custom-fields';
+import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload, mergeCustomFieldsForUpdate } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
 import {
   type MemberType,
@@ -499,21 +499,20 @@ export function EditPatientModal({
       const { isValid, errors } = validateCustomFields(effectiveCustomFields, customFieldValues, staticValues);
       if (!isValid) {
         setCustomFieldErrors(errors);
-        Alert.alert('Missing Required Custom Fields', Object.values(errors).join('\n'));
+        Alert.alert('Invalid Custom Fields', Object.values(errors).join('\n'));
         return;
       }
     }
 
-    setSaving(true);
-
-    const mergedCustomFields: Record<string, any> = {
-      ...(patient.customFields || {}),
-    };
-
-    if (effectiveCustomFields.length > 0) {
-      const cleanCustom = sanitizeCustomFieldsPayload(effectiveCustomFields, customFieldValues, staticValues);
-      Object.assign(mergedCustomFields, cleanCustom);
-    }
+    const mergedCustomFields: Record<string, any> = effectiveCustomFields.length > 0
+      ? mergeCustomFieldsForUpdate(
+          patient.customFields,
+          effectiveCustomFields,
+          customFieldValues,
+          staticValues,
+          { emitNullTombstones: true }
+        )
+      : { ...(patient.customFields || {}) };
 
     // Explicit handling for the 7 address & emergency contact keys
     const addressAndContactKeys = [
@@ -657,6 +656,7 @@ export function EditPatientModal({
       medicalHistories: structuredMedicalHistories,
     };
 
+    setSaving(true);
     const [updated, err] = await clinicService.updatePatient(patient.id, payload);
     setSaving(false);
 

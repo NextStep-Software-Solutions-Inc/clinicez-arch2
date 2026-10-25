@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.CustomFields.DTOs;
+using ClinicEz.Clinic.Application.Features.CustomFields.Helpers;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
@@ -118,6 +119,12 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
             throw new ConflictException("A custom field with this machine key already exists.");
         }
 
+        var normalizedVisibilityRule = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
+            request.VisibilityRuleJson,
+            targetEntityType,
+            _repo,
+            ct);
+
         var entity = new ClinicCustomFieldDefinition
         {
             Id = Guid.NewGuid(),
@@ -132,7 +139,7 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
             DisplayOrder = request.DisplayOrder,
             OptionsJson = request.OptionsJson,
             Placeholder = request.Placeholder?.Trim(),
-            VisibilityRuleJson = request.VisibilityRuleJson,
+            VisibilityRuleJson = normalizedVisibilityRule,
             ConditionalOptionsJson = request.ConditionalOptionsJson,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,

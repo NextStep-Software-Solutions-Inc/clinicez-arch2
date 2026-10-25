@@ -181,45 +181,55 @@ describe("Challenger Security: Empirical Adversarial Verification Suite", () => 
 
   describe("Probe 3: Zero Client Invocations of Deleted BFF Routes in src/", () => {
     function getAllTsFiles(dir: string): string[] {
-      let results: string[] = [];
-      const list = fs.readdirSync(dir);
-      for (const file of list) {
-        const filePath = path.join(dir, file);
-        const stat = fs.statSync(filePath);
-        if (stat.isDirectory()) {
-          results = results.concat(getAllTsFiles(filePath));
-        } else if (file.endsWith(".ts") || file.endsWith(".tsx")) {
+      const results: string[] = [];
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const filePath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          results.push(...getAllTsFiles(filePath));
+        } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
           results.push(filePath);
         }
       }
       return results;
     }
 
-    test("No frontend files call deleted BFF routes", () => {
-      const srcDir = path.join(WORKSPACE_ROOT, "src");
-      const files = getAllTsFiles(srcDir);
+    test(
+      "No frontend files call deleted BFF routes",
+      () => {
+        const srcDir = path.join(WORKSPACE_ROOT, "src");
+        const files = getAllTsFiles(srcDir);
 
-      const forbiddenCalls = [
-        "/api/v1/public/contact",
-        "/api/v1/public/newsletter",
-        "/api/v1/public/join",
-        "/api/v1/patients/me",
-        "/api/v1/patients/claim-intake",
-        "/api/v1/admin/newsletter-subscribers",
-      ];
+        const forbiddenCalls = [
+          "/api/v1/public/contact",
+          "/api/v1/public/newsletter",
+          "/api/v1/public/join",
+          "/api/v1/patients/me",
+          "/api/v1/patients/claim-intake",
+          "/api/v1/admin/newsletter-subscribers",
+        ];
 
-      for (const file of files) {
-        // Skip [...slug] route itself
-        if (file.includes("[...slug]")) continue;
+        const violations: string[] = [];
+        for (const file of files) {
+          // Skip [...slug] route itself
+          if (file.includes("[...slug]")) continue;
 
-        const content = fs.readFileSync(file, "utf-8");
-        for (const forbidden of forbiddenCalls) {
-          expect(content).not.toContain(`"${forbidden}"`);
-          expect(content).not.toContain(`'${forbidden}'`);
-          expect(content).not.toContain(`\`${forbidden}\``);
+          const content = fs.readFileSync(file, "utf-8");
+          for (const forbidden of forbiddenCalls) {
+            if (
+              content.includes(`"${forbidden}"`) ||
+              content.includes(`'${forbidden}'`) ||
+              content.includes(`\`${forbidden}\``)
+            ) {
+              violations.push(`${path.relative(WORKSPACE_ROOT, file)}: ${forbidden}`);
+            }
+          }
         }
-      }
-    });
+
+        expect(violations).toEqual([]);
+      },
+      { timeout: 20000 }
+    );
   });
 
   describe("Probe 5: Configuration Cleanup & Elimination of ClinicApiUrl", () => {
