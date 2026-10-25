@@ -47,6 +47,11 @@ public record ContactPlatformConfigDto(
     string OperatingHours
 );
 
+public record BillingPublicConfigDto(
+    int TrialDays,
+    string DefaultBillingCadence
+);
+
 public interface ISystemSettingsService
 {
     Task<IReadOnlyList<SystemSettingDto>> GetAllSettingsAsync(CancellationToken ct = default);
@@ -56,6 +61,7 @@ public interface ISystemSettingsService
     Task<bool> GetSettingBoolAsync(string key, bool defaultValue, CancellationToken ct = default);
     Task<decimal> GetSettingDecimalAsync(string key, decimal defaultValue, CancellationToken ct = default);
     Task<BillingPaymentConfigDto> GetBillingPaymentConfigAsync(CancellationToken ct = default);
+    Task<BillingPublicConfigDto> GetBillingPublicConfigAsync(CancellationToken ct = default);
     Task<ContactPlatformConfigDto> GetContactPlatformConfigAsync(CancellationToken ct = default);
     Task UpdateSettingsAsync(IDictionary<string, string> settings, string updatedBy, CancellationToken ct = default);
 }

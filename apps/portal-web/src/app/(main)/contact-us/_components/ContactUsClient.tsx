@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Check, CheckCircle2, Copy, Loader2, Mail, MapPin, Phone } from "lucide-react";
 import { siteEmails } from "@/config/site";
+import { getPortalApiUrl } from "@/utils/domain";
 import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget";
 
 interface PublicContactInfo {
@@ -42,7 +43,10 @@ export function ContactUsClient() {
     let isMounted = true;
     async function loadContactInfo() {
       try {
-        const res = await fetch("/api/v1/public/contact", { cache: "no-store" });
+        const res = await fetch(`${getPortalApiUrl()}/contact/info`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
         if (res.ok) {
           const data = await res.json();
           if (isMounted && data) {
@@ -87,15 +91,19 @@ export function ContactUsClient() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/v1/public/contact", {
+      const res = await fetch(`${getPortalApiUrl()}/contact`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         body: JSON.stringify({
+          name: `${firstName} ${lastName}`.trim(),
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           email: email.trim(),
           message: message.trim(),
-          turnstileToken,
+          turnstileToken: turnstileToken || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));

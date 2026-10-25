@@ -17,6 +17,7 @@ import {
 import { useUser, useAuth, SignInButton } from "@clerk/nextjs";
 import { type DigitalRegistrationPass } from "./types";
 import { MobileAppStoreBadges } from "./MobileAppStoreBadges";
+import { getPatientApiUrl } from "@/utils/domain";
 
 export interface ProgressiveClaimBenefit {
   id: string;
@@ -102,10 +103,13 @@ export function ProgressiveClaimCard({
   let clerkUser: ReturnType<typeof useUser>["user"] = null;
   let isSignedIn = false;
   let isInsideClerk = false;
+  let getToken: (() => Promise<string | null>) | null = null;
   try {
     const userHook = useUser();
+    const authHook = useAuth();
     clerkUser = userHook.user;
     isSignedIn = Boolean(userHook.isSignedIn);
+    getToken = authHook.getToken;
     isInsideClerk = true;
   } catch {
     // Outside ClerkProvider (e.g. headless unit tests)
@@ -188,12 +192,14 @@ export function ProgressiveClaimCard({
     setInternalError(null);
 
     try {
+      const token = getToken ? await getToken() : null;
       // Dispatch claim-intake command to backend
-      const res = await fetch("/api/v1/patients/claim-intake", {
+      const res = await fetch(`${getPatientApiUrl()}/patients/claim-intake`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           claimToken,

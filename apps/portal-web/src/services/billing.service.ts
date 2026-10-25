@@ -1,4 +1,4 @@
-import { apiClient } from "@/transport/apiClient"
+import { apiClient, apiBaseUrl } from "@/transport/apiClient"
 
 export interface BillingPlan {
   id: string
@@ -84,6 +84,11 @@ export interface PlatformBankAccount {
   isActive?: boolean
 }
 
+export interface BillingPublicConfig {
+  trialDays: number
+  defaultBillingCadence?: "monthly" | "annually" | string
+}
+
 export interface BillingPaymentConfig {
   bankAccounts: PlatformBankAccount[]
   birTaxExempt: boolean
@@ -153,6 +158,17 @@ export const billingService = {
   getPlans: async (): Promise<BillingPlan[]> => {
     const res = await apiClient.get<BillingPlan[]>("/billing/plans")
     return res.data
+  },
+  getPublicConfig: async (): Promise<BillingPublicConfig> => {
+    const url = `${apiBaseUrl.replace(/\/+$/, "")}/billing/public-config`
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    })
+    if (!res.ok) {
+      throw new Error(`Failed to load public config: HTTP ${res.status}`)
+    }
+    return res.json()
   },
   getPaymentConfig: async (): Promise<BillingPaymentConfig> => {
     const res = await apiClient.get<BillingPaymentConfig>("/billing/payment-config")
