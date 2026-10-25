@@ -19,8 +19,16 @@ const LEGACY_FIELD_MAP: Record<string, string> = {
 export function hasPreviousValue(patient: Partial<ClinicPatient> | null | undefined, key: string): boolean {
   if (!patient) return false;
   const cf = patient.customFields;
-  if (cf && cf[key] !== undefined && cf[key] !== null && cf[key] !== '') {
-    return true;
+  if (cf) {
+    if (cf[key] !== undefined && cf[key] !== null && cf[key] !== '') {
+      return true;
+    }
+    const matchingKey = Object.keys(cf).find(
+      (k) => k !== key && k.toLowerCase() === key.toLowerCase()
+    );
+    if (matchingKey && cf[matchingKey] !== undefined && cf[matchingKey] !== null && cf[matchingKey] !== '') {
+      return true;
+    }
   }
   const legacyProp = LEGACY_FIELD_MAP[key];
   if (legacyProp && (patient as any)[legacyProp] != null && String((patient as any)[legacyProp]).trim() !== '') {
@@ -62,7 +70,7 @@ export interface MergePatientCustomFieldsInput {
 
 /**
  * Pure helper function to compute the exact customFields dictionary for PUT /patients/{id}.
- * 
+ *
  * Rules:
  * 1. For every field in effectiveCustomFields:
  *    - If visible & non-empty: assign trimmed value.
@@ -111,6 +119,19 @@ export function mergePatientCustomFields(input: MergePatientCustomFieldsInput): 
   // 3. Process every effective custom field (both tenant custom fields and baseline address/contact)
   for (const field of effectiveCustomFields) {
     const key = field.fieldKey;
+    if (!key || key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
+
+    // Remove any case-mismatched legacy keys from merged
+    if (patient?.customFields) {
+      for (const existingKey of Object.keys(patient.customFields)) {
+        if (existingKey !== key && existingKey.toLowerCase() === key.toLowerCase()) {
+          delete merged[existingKey];
+        }
+      }
+    }
+
     const rawVal = cleanCustom[key];
     const isPresent =
       key in cleanCustom &&

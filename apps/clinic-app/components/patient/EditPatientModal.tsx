@@ -9,7 +9,7 @@ import {
 import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl } from '../ui';
 import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition } from '../../services/clinicService';
-import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload } from '../custom-fields';
+import { DynamicCustomFieldsRenderer, validateCustomFields } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
 import {
   type MemberType,
@@ -503,7 +503,7 @@ export function EditPatientModal({
         const errorMessages = Object.values(errors);
         const hasFormatOrBoundaryError = errorMessages.some((msg) => !msg.endsWith('is required.'));
         Alert.alert(
-          hasFormatOrBoundaryError ? 'Custom Field Validation Error' : 'Missing Required Custom Fields',
+          hasFormatOrBoundaryError ? 'Invalid Custom Fields' : 'Missing Required Custom Fields',
           errorMessages.join('\n')
         );
         return;
@@ -531,8 +531,6 @@ export function EditPatientModal({
         }
       }
     }
-
-    setSaving(true);
 
     const mergedCustomFields = mergePatientCustomFields({
       patient,
@@ -586,6 +584,7 @@ export function EditPatientModal({
       medicalHistories: structuredMedicalHistories,
     };
 
+    setSaving(true);
     const [updated, err] = await clinicService.updatePatient(patient.id, payload);
     setSaving(false);
 

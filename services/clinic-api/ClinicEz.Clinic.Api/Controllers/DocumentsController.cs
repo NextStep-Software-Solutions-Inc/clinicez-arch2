@@ -156,7 +156,7 @@ public sealed class DocumentsController : ControllerBase
                 Status: "Officially Valid",
                 SecurityDigest: medCert.SecurityDigest ?? trimmed,
                 VerificationMessage: "This Medical Certificate is cryptographically verified and authentic on the Clinic EZ national healthcare registry.",
-                Notes: $"Fitness Status: {medCert.FitnessStatus} • Rest Recommended: {medCert.RecommendedRestDays ?? 0} day(s)"
+                Notes: $"Fitness Status: {MedicalCertificate.FormatFitnessStatus(medCert.FitnessStatus)} • Rest Recommended: {medCert.RecommendedRestDays ?? 0} day(s)"
             )));
         }
 

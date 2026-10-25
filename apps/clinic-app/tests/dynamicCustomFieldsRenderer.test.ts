@@ -6,18 +6,37 @@
  */
 
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 (globalThis as any).__DEV__ = true;
+
+const MockPressable = ({ children, accessibilityState, disabled, testID, ...rest }: any) => {
+  return React.createElement(
+    'button',
+    {
+      'data-component': 'Pressable',
+      ...(testID ? { 'data-testid': testID } : {}),
+      'aria-selected': accessibilityState?.selected ? 'true' : 'false',
+      'data-selected': accessibilityState?.selected ? 'true' : 'false',
+      disabled,
+    },
+    children
+  );
+};
+
+const MockView = ({ children, style, ...rest }: any) => React.createElement('div', rest, children);
+const MockText = ({ children, style, allowFontScaling, ...rest }: any) => React.createElement('span', rest, children);
 
 // 1. Mock React Native modules
 mock.module('react-native', () => ({
   Linking: { openURL: () => Promise.resolve(), canOpenURL: () => Promise.resolve(true) },
   StyleSheet: { create: (s: any) => s, flatten: (s: any) => s },
-  View: 'View',
-  Pressable: 'Pressable',
+  View: MockView,
+  Pressable: MockPressable,
   ScrollView: 'ScrollView',
   TextInput: 'TextInput',
-  Text: 'Text',
+  Text: MockText,
   ActivityIndicator: 'ActivityIndicator',
   Modal: 'Modal',
   KeyboardAvoidingView: 'KeyboardAvoidingView',
@@ -50,11 +69,6 @@ mock.module('react-native', () => ({
   Alert: { alert: () => {} },
 }));
 
-mock.module('../constants/fonts', () => ({
-  applyFontFamily: (s: any) => s,
-  fontAssets: {},
-}));
-
 mock.module('expo-crypto', () => ({
   randomUUID: () => 'uuid-' + Math.random().toString(36).substring(2, 9),
 }));
@@ -72,6 +86,19 @@ mock.module('react-native-svg', () => ({
   G: ({ children }: any) => children,
   Text: ({ children }: any) => children,
   Polyline: 'Polyline',
+}));
+
+mock.module('@expo-google-fonts/geist', () => ({
+  useFonts: () => [true],
+}));
+
+mock.module('@expo-google-fonts/geist-mono', () => ({
+  useFonts: () => [true],
+}));
+
+mock.module('../constants/fonts', () => ({
+  applyFontFamily: (s: any) => s,
+  fontAssets: {},
 }));
 
 export interface VisibilityRule {
@@ -112,10 +139,19 @@ export interface StaticPatientValues {
   age?: number;
 }
 
+const {
+  isFieldVisible,
+  getAvailableOptions,
+  validateCustomFields,
+  sanitizeCustomFieldsPayload,
+  parseBooleanState,
+  parseBooleanValue,
+  default: DynamicCustomFieldsRenderer,
+} = await import('../components/custom-fields/DynamicCustomFieldsRenderer');
+
 /**
  * Pure Behavioral Engine Test Harness for DynamicCustomFieldsRenderer
- * Encapsulates the visibility evaluation, cascading dropdown resolution,
- * defensive validation, and payload sanitization contracts.
+ * Delegates directly to production implementation.
  */
 class DynamicCustomFieldsRendererHarness {
   public definitions: ClinicCustomFieldDefinition[] = [];
@@ -138,10 +174,10 @@ class DynamicCustomFieldsRendererHarness {
    */
   public get sortedDefinitions(): ClinicCustomFieldDefinition[] {
     return [...this.definitions].sort((a, b) => {
-      if (a.displayOrder !== b.displayOrder) {
-        return a.displayOrder - b.displayOrder;
+      if ((a.displayOrder ?? 0) !== (b.displayOrder ?? 0)) {
+        return (a.displayOrder ?? 0) - (b.displayOrder ?? 0);
       }
-      return a.label.localeCompare(b.label);
+      return (a.label || '').localeCompare(b.label || '');
     });
   }
 
@@ -149,48 +185,7 @@ class DynamicCustomFieldsRendererHarness {
    * Evaluates visibility condition rule for a given definition
    */
   public isFieldVisible(field: ClinicCustomFieldDefinition): boolean {
-    if (!field.visibilityRuleJson) return true;
-
-    try {
-      const rule: VisibilityRule = JSON.parse(field.visibilityRuleJson);
-      let actualValue: any;
-
-      if (rule.source === 'static') {
-        if (rule.field === 'gender') actualValue = this.staticValues.gender;
-        else if (rule.field === 'civilStatus') actualValue = this.staticValues.civilStatus;
-        else if (rule.field === 'dateOfBirth') actualValue = this.staticValues.dateOfBirth;
-        else if (rule.field === 'age') actualValue = this.staticValues.age;
-        else actualValue = (this.staticValues as any)[rule.field];
-      } else {
-        actualValue = this.values[rule.field];
-      }
-
-      switch (rule.operator) {
-        case 'equals':
-          return String(actualValue ?? '').toLowerCase() === String(rule.value ?? '').toLowerCase();
-
-        case 'not_equals':
-          return String(actualValue ?? '').toLowerCase() !== String(rule.value ?? '').toLowerCase();
-
-        case 'in':
-          if (Array.isArray(rule.value)) {
-            return rule.value.map((v) => String(v).toLowerCase()).includes(String(actualValue ?? '').toLowerCase());
-          }
-          return false;
-
-        case 'contains':
-          return String(actualValue ?? '').toLowerCase().includes(String(rule.value ?? '').toLowerCase());
-
-        case 'not_empty':
-          return actualValue !== null && actualValue !== undefined && String(actualValue).trim() !== '';
-
-        default:
-          return true;
-      }
-    } catch {
-      // Malformed rule fails open to visible
-      return true;
-    }
+    return isFieldVisible(field, this.values, this.staticValues);
   }
 
   /**
@@ -204,30 +199,7 @@ class DynamicCustomFieldsRendererHarness {
    * Derives cascading select options for a child select field based on its parent value
    */
   public getAvailableOptions(field: ClinicCustomFieldDefinition): string[] {
-    if (field.dataType !== 'Select') return [];
-
-    if (field.conditionalOptionsJson) {
-      try {
-        const config: ConditionalOptionsConfig = JSON.parse(field.conditionalOptionsJson);
-        const parentVal = this.values[config.parentField];
-        if (parentVal && config.mapping[parentVal]) {
-          return config.mapping[parentVal];
-        }
-        return config.defaultOptions || [];
-      } catch {
-        // Fallback to static options if any
-      }
-    }
-
-    if (field.optionsJson) {
-      try {
-        return JSON.parse(field.optionsJson);
-      } catch {
-        return [];
-      }
-    }
-
-    return [];
+    return getAvailableOptions(field, this.values);
   }
 
   /**
@@ -259,42 +231,16 @@ class DynamicCustomFieldsRendererHarness {
    * Does NOT block for hidden fields.
    */
   public validate(): boolean {
-    this.validationErrors = {};
-    let isValid = true;
-
-    for (const def of this.visibleDefinitions) {
-      if (def.isRequired) {
-        const val = this.values[def.fieldKey];
-        const isEmpty =
-          val === null ||
-          val === undefined ||
-          (typeof val === 'string' && val.trim() === '') ||
-          (typeof val === 'boolean' && val === false && def.dataType !== 'Boolean');
-
-        if (isEmpty) {
-          this.validationErrors[def.fieldKey] = `${def.label} is required.`;
-          isValid = false;
-        }
-      }
-    }
-
-    return isValid;
+    const result = validateCustomFields(this.definitions, this.values, this.staticValues);
+    this.validationErrors = result.errors;
+    return result.isValid;
   }
 
   /**
    * Sanitizes values before submission by stripping keys of all currently hidden fields
    */
   public getCleanSubmissionPayload(): Record<string, any> {
-    const cleanPayload: Record<string, any> = {};
-    const visibleKeys = new Set(this.visibleDefinitions.map((f) => f.fieldKey));
-
-    for (const [k, v] of Object.entries(this.values)) {
-      if (visibleKeys.has(k) && v !== null && v !== undefined && v !== '') {
-        cleanPayload[k] = v;
-      }
-    }
-
-    return cleanPayload;
+    return sanitizeCustomFieldsPayload(this.definitions, this.values, this.staticValues);
   }
 }
 
@@ -1158,11 +1104,410 @@ describe('E2E Test Suite: DynamicCustomFieldsRenderer Intake & Validation Engine
   });
 
   // =========================================================================
-  // TIER 6: Issue #77 Date Boundary & Custom Field Validation
+  // TIER 6: Issue #82 / Features F12–F17: Boolean Visibility & Pill Pre-population
   // =========================================================================
 
-  describe('Tier 6: Issue #77 Date Boundary & Custom Field Validation', () => {
-    test('T6-1: resolveEffectiveBoundaryMode respects explicit boundaryMode or defaults Clinical to pastOrToday', async () => {
+  describe('Tier 6: Issue #82 — Features F12-F17 Boolean Evaluation & Pill Pre-population', () => {
+    describe('Feature 12: parseBooleanState & parseBooleanValue Contract', () => {
+      test('F12-1: Parses boolean primitives true and false directly', () => {
+        expect(parseBooleanState(true)).toBe(true);
+        expect(parseBooleanState(false)).toBe(false);
+      });
+
+      test('F12-2: Parses case-insensitive string booleans ("true", "TRUE", "false", "FALSE")', () => {
+        expect(parseBooleanState('true')).toBe(true);
+        expect(parseBooleanState('TRUE')).toBe(true);
+        expect(parseBooleanState('True')).toBe(true);
+        expect(parseBooleanState('false')).toBe(false);
+        expect(parseBooleanState('FALSE')).toBe(false);
+        expect(parseBooleanState('False')).toBe(false);
+      });
+
+      test('F12-3: Parses legacy case-insensitive affirmative/negative strings ("yes", "YES", "no", "NO")', () => {
+        expect(parseBooleanState('yes')).toBe(true);
+        expect(parseBooleanState('YES')).toBe(true);
+        expect(parseBooleanState('Yes')).toBe(true);
+        expect(parseBooleanState('no')).toBe(false);
+        expect(parseBooleanState('NO')).toBe(false);
+        expect(parseBooleanState('No')).toBe(false);
+      });
+
+      test('F12-4: Handles leading and trailing whitespace gracefully in boolean strings', () => {
+        expect(parseBooleanState('   true   ')).toBe(true);
+        expect(parseBooleanState('  false  ')).toBe(false);
+        expect(parseBooleanState('\tYes\n')).toBe(true);
+        expect(parseBooleanState(' No ')).toBe(false);
+      });
+
+      test('F12-5: Returns null for unanswered states: undefined, null, empty string, whitespace', () => {
+        expect(parseBooleanState(undefined)).toBeNull();
+        expect(parseBooleanState(null)).toBeNull();
+        expect(parseBooleanState('')).toBeNull();
+        expect(parseBooleanState('   ')).toBeNull();
+      });
+
+      test('F12-6: Returns null for numeric inputs (0, 1, "0", "1") to protect non-boolean counters', () => {
+        expect(parseBooleanState(0)).toBeNull();
+        expect(parseBooleanState(1)).toBeNull();
+        expect(parseBooleanState('0')).toBeNull();
+        expect(parseBooleanState('1')).toBeNull();
+      });
+
+      test('F12-7: Returns null for arbitrary non-boolean strings, objects, arrays', () => {
+        expect(parseBooleanState('maybe')).toBeNull();
+        expect(parseBooleanState('unknown')).toBeNull();
+        expect(parseBooleanState('trueish')).toBeNull();
+        expect(parseBooleanState({})).toBeNull();
+        expect(parseBooleanState([])).toBeNull();
+        expect(parseBooleanState(['true'])).toBeNull();
+      });
+
+      test('F12-8: parseBooleanValue is an exact alias of parseBooleanState', () => {
+        expect(parseBooleanValue).toBe(parseBooleanState);
+        expect(parseBooleanValue('true')).toBe(true);
+        expect(parseBooleanValue('no')).toBe(false);
+        expect(parseBooleanValue(null)).toBeNull();
+      });
+    });
+
+    describe('Feature 13: isFieldVisible Boolean Evaluation (equals, not_equals, in)', () => {
+      const createChildField = (rule: VisibilityRule): ClinicCustomFieldDefinition => ({
+        id: 'child1',
+        tenantId: 't',
+        clinicId: 'c',
+        entityType: 'ClinicPatient',
+        fieldKey: 'child_field',
+        label: 'Child Field',
+        dataType: 'Text',
+        isRequired: false,
+        displayOrder: 2,
+        isActive: true,
+        visibilityRuleJson: JSON.stringify(rule),
+      });
+
+      test('F13-1: equals operator matches boolean primitive parent value against canonical rule value', () => {
+        const field = createChildField({ source: 'custom_field', field: 'is_enrolled', operator: 'equals', value: 'true' });
+        expect(isFieldVisible(field, { is_enrolled: true })).toBe(true);
+        expect(isFieldVisible(field, { is_enrolled: false })).toBe(false);
+      });
+
+      test('F13-2: equals operator matches stringified parent value against canonical rule value', () => {
+        const field = createChildField({ source: 'custom_field', field: 'is_enrolled', operator: 'equals', value: 'true' });
+        expect(isFieldVisible(field, { is_enrolled: 'true' })).toBe(true);
+        expect(isFieldVisible(field, { is_enrolled: 'false' })).toBe(false);
+      });
+
+      test('F13-3: equals operator matches legacy "Yes"/"No" rule values symmetrically with primitives and strings', () => {
+        const fieldYesRule = createChildField({ source: 'custom_field', field: 'is_enrolled', operator: 'equals', value: 'Yes' });
+        expect(isFieldVisible(fieldYesRule, { is_enrolled: true })).toBe(true);
+        expect(isFieldVisible(fieldYesRule, { is_enrolled: 'true' })).toBe(true);
+        expect(isFieldVisible(fieldYesRule, { is_enrolled: 'Yes' })).toBe(true);
+        expect(isFieldVisible(fieldYesRule, { is_enrolled: false })).toBe(false);
+        expect(isFieldVisible(fieldYesRule, { is_enrolled: 'No' })).toBe(false);
+
+        const fieldNoRule = createChildField({ source: 'custom_field', field: 'is_enrolled', operator: 'equals', value: 'No' });
+        expect(isFieldVisible(fieldNoRule, { is_enrolled: false })).toBe(true);
+        expect(isFieldVisible(fieldNoRule, { is_enrolled: 'false' })).toBe(true);
+        expect(isFieldVisible(fieldNoRule, { is_enrolled: 'No' })).toBe(true);
+        expect(isFieldVisible(fieldNoRule, { is_enrolled: true })).toBe(false);
+        expect(isFieldVisible(fieldNoRule, { is_enrolled: 'Yes' })).toBe(false);
+      });
+
+      test('F13-4: not_equals operator matches affirmative when rule is "false" or "No"', () => {
+        const field = createChildField({ source: 'custom_field', field: 'is_enrolled', operator: 'not_equals', value: 'false' });
+        expect(isFieldVisible(field, { is_enrolled: true })).toBe(true);
+        expect(isFieldVisible(field, { is_enrolled: 'true' })).toBe(true);
+        expect(isFieldVisible(field, { is_enrolled: 'Yes' })).toBe(true);
+        expect(isFieldVisible(field, { is_enrolled: false })).toBe(false);
+        expect(isFieldVisible(field, { is_enrolled: 'false' })).toBe(false);
+        expect(isFieldVisible(field, { is_enrolled: 'No' })).toBe(false);
+      });
+
+      test('F13-5: not_equals operator matches negative when rule is "true" or "Yes"', () => {
+        const field = createChildField({ source: 'custom_field', field: 'is_enrolled', operator: 'not_equals', value: 'true' });
+        expect(isFieldVisible(field, { is_enrolled: false })).toBe(true);
+        expect(isFieldVisible(field, { is_enrolled: 'false' })).toBe(true);
+        expect(isFieldVisible(field, { is_enrolled: 'No' })).toBe(true);
+        expect(isFieldVisible(field, { is_enrolled: true })).toBe(false);
+        expect(isFieldVisible(field, { is_enrolled: 'Yes' })).toBe(false);
+      });
+
+      test('F13-6: in operator matches when parent boolean matches boolean array rule', () => {
+        const field = createChildField({ source: 'custom_field', field: 'is_enrolled', operator: 'in', value: ['true', 'yes'] });
+        expect(isFieldVisible(field, { is_enrolled: true })).toBe(true);
+        expect(isFieldVisible(field, { is_enrolled: 'Yes' })).toBe(true);
+        expect(isFieldVisible(field, { is_enrolled: false })).toBe(false);
+      });
+    });
+
+    describe('Feature 14: Unanswered Trigger Field Protection (BUG-IF-011 Prevention)', () => {
+      const createChildField = (rule: VisibilityRule): ClinicCustomFieldDefinition => ({
+        id: 'child1',
+        tenantId: 't',
+        clinicId: 'c',
+        entityType: 'ClinicPatient',
+        fieldKey: 'child_field',
+        label: 'Child Field',
+        dataType: 'Text',
+        isRequired: false,
+        displayOrder: 2,
+        isActive: true,
+        visibilityRuleJson: JSON.stringify(rule),
+      });
+
+      test('F14-1: not_equals rule keeps child hidden when parent is undefined', () => {
+        const field = createChildField({ source: 'custom_field', field: 'has_allergy', operator: 'not_equals', value: 'false' });
+        expect(isFieldVisible(field, {})).toBe(false);
+        expect(isFieldVisible(field, { has_allergy: undefined })).toBe(false);
+      });
+
+      test('F14-2: not_equals rule keeps child hidden when parent is null or empty string', () => {
+        const field = createChildField({ source: 'custom_field', field: 'has_allergy', operator: 'not_equals', value: 'false' });
+        expect(isFieldVisible(field, { has_allergy: null })).toBe(false);
+        expect(isFieldVisible(field, { has_allergy: '' })).toBe(false);
+        expect(isFieldVisible(field, { has_allergy: '   ' })).toBe(false);
+      });
+
+      test('F14-3: equals rule keeps child hidden when parent is undefined, null, or empty string', () => {
+        const field = createChildField({ source: 'custom_field', field: 'has_allergy', operator: 'equals', value: 'true' });
+        expect(isFieldVisible(field, {})).toBe(false);
+        expect(isFieldVisible(field, { has_allergy: undefined })).toBe(false);
+        expect(isFieldVisible(field, { has_allergy: null })).toBe(false);
+        expect(isFieldVisible(field, { has_allergy: '' })).toBe(false);
+      });
+
+      test('F14-4: in rule with boolean array keeps child hidden when parent is unanswered', () => {
+        const field = createChildField({ source: 'custom_field', field: 'has_allergy', operator: 'in', value: ['true', 'yes'] });
+        expect(isFieldVisible(field, {})).toBe(false);
+        expect(isFieldVisible(field, { has_allergy: undefined })).toBe(false);
+        expect(isFieldVisible(field, { has_allergy: null })).toBe(false);
+        expect(isFieldVisible(field, { has_allergy: '' })).toBe(false);
+      });
+
+      test('F14-5: Arbitrary non-boolean parent value does not trigger visibility under not_equals', () => {
+        const field = createChildField({ source: 'custom_field', field: 'has_allergy', operator: 'not_equals', value: 'false' });
+        expect(isFieldVisible(field, { has_allergy: 'invalid_data' })).toBe(false);
+      });
+    });
+
+    describe('Feature 15: Non-Boolean Invariant Preservation (Zero Regressions)', () => {
+      const createChildField = (rule: VisibilityRule): ClinicCustomFieldDefinition => ({
+        id: 'child1',
+        tenantId: 't',
+        clinicId: 'c',
+        entityType: 'ClinicPatient',
+        fieldKey: 'child_field',
+        label: 'Child Field',
+        dataType: 'Text',
+        isRequired: false,
+        displayOrder: 2,
+        isActive: true,
+        visibilityRuleJson: JSON.stringify(rule),
+      });
+
+      test('F15-1: Numeric 0 in count field does NOT get parsed as boolean and evaluates numeric equality', () => {
+        const field = createChildField({ source: 'custom_field', field: 'dependents_count', operator: 'equals', value: '0' });
+        expect(isFieldVisible(field, { dependents_count: 0 })).toBe(true);
+        expect(isFieldVisible(field, { dependents_count: '0' })).toBe(true);
+        expect(isFieldVisible(field, { dependents_count: 1 })).toBe(false);
+      });
+
+      test('F15-2: Numeric 1 in count field evaluates correctly without boolean coercion', () => {
+        const field = createChildField({ source: 'custom_field', field: 'dependents_count', operator: 'equals', value: '1' });
+        expect(isFieldVisible(field, { dependents_count: 1 })).toBe(true);
+        expect(isFieldVisible(field, { dependents_count: '1' })).toBe(true);
+        expect(isFieldVisible(field, { dependents_count: 0 })).toBe(false);
+      });
+
+      test('F15-3: ADV-RULE-5 empty-string comparison invariant: rule.value="" on empty values returns true', () => {
+        const field = createChildField({ source: 'custom_field', field: 'notes', operator: 'equals', value: '' });
+        expect(isFieldVisible(field, {})).toBe(true);
+        expect(isFieldVisible(field, { notes: '' })).toBe(true);
+        expect(isFieldVisible(field, { notes: 'hello' })).toBe(false);
+      });
+
+      test('F15-4: Non-boolean text rules (equals, not_equals, in, contains, not_empty) continue to work flawlessly', () => {
+        const equalsField = createChildField({ source: 'custom_field', field: 'affiliation', operator: 'equals', value: 'Student' });
+        expect(isFieldVisible(equalsField, { affiliation: 'Student' })).toBe(true);
+        expect(isFieldVisible(equalsField, { affiliation: 'Employee' })).toBe(false);
+
+        const notEqualsField = createChildField({ source: 'custom_field', field: 'affiliation', operator: 'not_equals', value: 'Guest' });
+        expect(isFieldVisible(notEqualsField, { affiliation: 'Student' })).toBe(true);
+        expect(isFieldVisible(notEqualsField, { affiliation: 'Guest' })).toBe(false);
+
+        const inField = createChildField({ source: 'custom_field', field: 'affiliation', operator: 'in', value: ['Student', 'Faculty'] });
+        expect(isFieldVisible(inField, { affiliation: 'Student' })).toBe(true);
+        expect(isFieldVisible(inField, { affiliation: 'Faculty' })).toBe(true);
+        expect(isFieldVisible(inField, { affiliation: 'Guest' })).toBe(false);
+
+        const containsField = createChildField({ source: 'custom_field', field: 'email', operator: 'contains', value: '@ustp.edu.ph' });
+        expect(isFieldVisible(containsField, { email: 'student@ustp.edu.ph' })).toBe(true);
+        expect(isFieldVisible(containsField, { email: 'user@gmail.com' })).toBe(false);
+
+        const notEmptyField = createChildField({ source: 'custom_field', field: 'emergency_contact', operator: 'not_empty' });
+        expect(isFieldVisible(notEmptyField, { emergency_contact: '09123456789' })).toBe(true);
+        expect(isFieldVisible(notEmptyField, { emergency_contact: '' })).toBe(false);
+        expect(isFieldVisible(notEmptyField, {})).toBe(false);
+      });
+    });
+
+    describe('Feature 16: Boolean Pill Pre-population & Highlighting in Component Rendering', () => {
+      const boolField: ClinicCustomFieldDefinition = {
+        id: 'bf1',
+        tenantId: 't1',
+        clinicId: 'c1',
+        entityType: 'ClinicPatient',
+        fieldKey: 'has_scholarship',
+        label: 'Has Scholarship',
+        dataType: 'Boolean',
+        isRequired: false,
+        displayOrder: 1,
+        isActive: true,
+      };
+
+      const renderAndInspectPills = (val: any) => {
+        const html = renderToStaticMarkup(
+          React.createElement(DynamicCustomFieldsRenderer, {
+            fields: [boolField],
+            values: val !== undefined ? { has_scholarship: val } : {},
+            onChange: () => {},
+          })
+        );
+        const buttonMatches = [...html.matchAll(/<button[^>]*data-selected="([^"]+)"[^>]*>/g)];
+        const yesSelected = buttonMatches[0] ? buttonMatches[0][1] === 'true' : false;
+        const noSelected = buttonMatches[1] ? buttonMatches[1][1] === 'true' : false;
+
+        return {
+          yesSelected,
+          noSelected,
+          html,
+        };
+      };
+
+      test('F16-1: Pre-populating primitive true highlights Yes pill and selects it', () => {
+        const state = renderAndInspectPills(true);
+        expect(state.yesSelected).toBe(true);
+        expect(state.noSelected).toBe(false);
+      });
+
+      test('F16-2: Pre-populating string "true" highlights Yes pill and selects it', () => {
+        const state = renderAndInspectPills('true');
+        expect(state.yesSelected).toBe(true);
+        expect(state.noSelected).toBe(false);
+      });
+
+      test('F16-3: Pre-populating legacy string "Yes" highlights Yes pill and selects it', () => {
+        const state = renderAndInspectPills('Yes');
+        expect(state.yesSelected).toBe(true);
+        expect(state.noSelected).toBe(false);
+      });
+
+      test('F16-4: Pre-populating primitive false highlights No pill and selects it', () => {
+        const state = renderAndInspectPills(false);
+        expect(state.yesSelected).toBe(false);
+        expect(state.noSelected).toBe(true);
+      });
+
+      test('F16-5: Pre-populating string "false" highlights No pill and selects it', () => {
+        const state = renderAndInspectPills('false');
+        expect(state.yesSelected).toBe(false);
+        expect(state.noSelected).toBe(true);
+      });
+
+      test('F16-6: Pre-populating legacy string "No" highlights No pill and selects it', () => {
+        const state = renderAndInspectPills('No');
+        expect(state.yesSelected).toBe(false);
+        expect(state.noSelected).toBe(true);
+      });
+
+      test('F16-7: Unanswered (undefined or null) highlights neither pill', () => {
+        const stateUndef = renderAndInspectPills(undefined);
+        expect(stateUndef.yesSelected).toBe(false);
+        expect(stateUndef.noSelected).toBe(false);
+
+        const stateNull = renderAndInspectPills(null);
+        expect(stateNull.yesSelected).toBe(false);
+        expect(stateNull.noSelected).toBe(false);
+      });
+    });
+
+    describe('Feature 17: Unmounting & Payload Sanitization Invariant', () => {
+      const boolParent: ClinicCustomFieldDefinition = {
+        id: 'p1',
+        tenantId: 't',
+        clinicId: 'c',
+        entityType: 'ClinicPatient',
+        fieldKey: 'has_special_needs',
+        label: 'Special Needs',
+        dataType: 'Boolean',
+        isRequired: true,
+        displayOrder: 1,
+        isActive: true,
+      };
+
+      const childRequiredField: ClinicCustomFieldDefinition = {
+        id: 'c1',
+        tenantId: 't',
+        clinicId: 'c',
+        entityType: 'ClinicPatient',
+        fieldKey: 'special_needs_details',
+        label: 'Details of Special Needs',
+        dataType: 'Text',
+        isRequired: true,
+        displayOrder: 2,
+        visibilityRuleJson: JSON.stringify({ source: 'custom_field', field: 'has_special_needs', operator: 'equals', value: 'true' }),
+        isActive: true,
+      };
+
+      test('F17-1: Child field unmounts from visible fields when parent is false or "No"', () => {
+        const defs = [boolParent, childRequiredField];
+        const harness = new DynamicCustomFieldsRendererHarness(defs, { has_special_needs: false });
+        expect(harness.visibleDefinitions.map((f) => f.fieldKey)).toEqual(['has_special_needs']);
+      });
+
+      test('F17-2: Hidden required child does NOT block validation when parent is false or unanswered', () => {
+        const defs = [boolParent, childRequiredField];
+        const harness = new DynamicCustomFieldsRendererHarness(defs, { has_special_needs: false });
+        expect(harness.validate()).toBe(true);
+
+        const harnessBlank = new DynamicCustomFieldsRendererHarness(defs, {});
+        expect(harnessBlank.validate()).toBe(false);
+        expect(harnessBlank.validationErrors['has_special_needs']).toBeDefined();
+        expect(harnessBlank.validationErrors['special_needs_details']).toBeUndefined();
+      });
+
+      test('F17-3: sanitizeCustomFieldsPayload strips child value when parent is toggled from true to false', () => {
+        const defs = [boolParent, childRequiredField];
+        const dirtyValues = {
+          has_special_needs: false,
+          special_needs_details: 'Stale residual explanation',
+        };
+        const cleanPayload = sanitizeCustomFieldsPayload(defs, dirtyValues);
+        expect(cleanPayload['special_needs_details']).toBeUndefined();
+        expect(cleanPayload['has_special_needs']).toBe(false);
+      });
+
+      test('F17-4: Visible required child blocks validation when empty if parent is true or "Yes"', () => {
+        const defs = [boolParent, childRequiredField];
+        const harness = new DynamicCustomFieldsRendererHarness(defs, { has_special_needs: 'Yes' });
+        expect(harness.validate()).toBe(false);
+        expect(harness.validationErrors['special_needs_details']).toBe('Details of Special Needs is required.');
+
+        harness.setValue('special_needs_details', 'Visual impairment requires large fonts');
+        expect(harness.validate()).toBe(true);
+        const payload = harness.getCleanSubmissionPayload();
+        expect(payload['has_special_needs']).toBe('Yes');
+        expect(payload['special_needs_details']).toBe('Visual impairment requires large fonts');
+      });
+    });
+  });
+
+  // =========================================================================
+  // TIER 7: Issue #77 Date Boundary & Custom Field Validation
+  // =========================================================================
+
+  describe('Tier 7: Issue #77 Date Boundary & Custom Field Validation', () => {
+    test('T7-1: resolveEffectiveBoundaryMode respects explicit boundaryMode or defaults Clinical to pastOrToday', async () => {
       const { resolveEffectiveBoundaryMode } = await import('../components/custom-fields');
 
       // 1. Explicit boundaryMode overrides everything
@@ -1183,7 +1528,7 @@ describe('E2E Test Suite: DynamicCustomFieldsRenderer Intake & Validation Engine
       expect(resolveEffectiveBoundaryMode({ boundaryMode: null, category: null as any })).toBe('any');
     });
 
-    test('T6-2: TC-IF-007 - Clinical Date field rejects future dates and accepts past/today dates', async () => {
+    test('T7-2: TC-IF-007 - Clinical Date field rejects future dates and accepts past/today dates', async () => {
       const { validateCustomFields } = await import('../components/custom-fields');
 
       const clinicalDateField: any = {
@@ -1219,7 +1564,7 @@ describe('E2E Test Suite: DynamicCustomFieldsRenderer Intake & Validation Engine
       expect(resFuture.errors['last_physical_exam_date']).toContain('Future date not permitted');
     });
 
-    test('T6-3: validateCustomFields rejects malformed or impossible dates', async () => {
+    test('T7-3: validateCustomFields rejects malformed or impossible dates', async () => {
       const { validateCustomFields } = await import('../components/custom-fields');
 
       const dateField: any = {
@@ -1248,7 +1593,7 @@ describe('E2E Test Suite: DynamicCustomFieldsRenderer Intake & Validation Engine
       expect(resMalformed.isValid).toBe(false);
     });
 
-    test('T6-4: Explicit futureOrToday allows future and blocks past dates', async () => {
+    test('T7-4: Explicit futureOrToday allows future and blocks past dates', async () => {
       const { validateCustomFields } = await import('../components/custom-fields');
 
       const futureField: any = {
@@ -1273,7 +1618,7 @@ describe('E2E Test Suite: DynamicCustomFieldsRenderer Intake & Validation Engine
       expect(resFuture.isValid).toBe(true);
     });
 
-    test('T6-5: Conditionally hidden Date field never blocks validation even if containing invalid date', async () => {
+    test('T7-5: Conditionally hidden Date field never blocks validation even if containing invalid date', async () => {
       const { validateCustomFields } = await import('../components/custom-fields');
 
       const hiddenDateField: any = {

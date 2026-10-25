@@ -574,7 +574,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         const errorMessages = Object.values(errors);
         const hasFormatOrBoundaryError = errorMessages.some((msg) => !msg.endsWith('is required.'));
         Alert.alert(
-          hasFormatOrBoundaryError ? 'Custom Field Validation Error' : 'Missing Required Custom Fields',
+          hasFormatOrBoundaryError ? 'Invalid Custom Fields' : 'Missing Required Custom Fields',
           errorMessages.join('\n')
         );
         return;

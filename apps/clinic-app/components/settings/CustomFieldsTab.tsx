@@ -30,6 +30,56 @@ const FIELD_TYPE_BADGE: Record<ClinicCustomFieldDefinition['dataType'], BadgeVar
   Select: 'purple',
 };
 
+export function formatRuleBadgeLabel(
+  rule: VisibilityRule,
+  fields: ClinicCustomFieldDefinition[]
+): string {
+  const target = fields.find((f) => f.fieldKey === rule.field);
+  const isBoolean = target?.dataType === 'Boolean';
+
+  if (rule.operator === 'not_empty') {
+    return `If ${rule.field} is not empty`;
+  }
+
+  const opSymbol =
+    rule.operator === 'equals'
+      ? '=='
+      : rule.operator === 'not_equals'
+      ? '!='
+      : rule.operator;
+
+  let displayVal = '';
+  const raw = rule.value !== undefined ? rule.value : (rule as any).expectedValue;
+
+  if (isBoolean) {
+    if (
+      raw === true ||
+      raw === 'true' ||
+      raw === 'Yes' ||
+      String(raw).toLowerCase() === 'yes' ||
+      String(raw).toLowerCase() === 'true'
+    ) {
+      displayVal = 'Yes';
+    } else if (
+      raw === false ||
+      raw === 'false' ||
+      raw === 'No' ||
+      String(raw).toLowerCase() === 'no' ||
+      String(raw).toLowerCase() === 'false'
+    ) {
+      displayVal = 'No';
+    } else {
+      displayVal = String(raw ?? '');
+    }
+  } else {
+    displayVal = Array.isArray(raw)
+      ? raw.join(', ')
+      : String(raw ?? '');
+  }
+
+  return `If ${rule.field} ${opSymbol} '${displayVal}'`;
+}
+
 export interface TemplateBundlePreset {
   key: string;
   title: string;
@@ -546,21 +596,7 @@ export default function CustomFieldsTab({
                         />
                         {visibilityRule ? (
                           <Badge
-                            label={
-                              visibilityRule.operator === 'not_empty'
-                                ? `If ${visibilityRule.field} is not empty`
-                                : `If ${visibilityRule.field} ${
-                                    visibilityRule.operator === 'equals'
-                                      ? '=='
-                                      : visibilityRule.operator === 'not_equals'
-                                      ? '!='
-                                      : visibilityRule.operator
-                                  } '${
-                                    Array.isArray(visibilityRule.value)
-                                      ? visibilityRule.value.join(', ')
-                                      : visibilityRule.value ?? ''
-                                  }'`
-                            }
+                            label={formatRuleBadgeLabel(visibilityRule, fields)}
                             variant="warning"
                             size="sm"
                           />

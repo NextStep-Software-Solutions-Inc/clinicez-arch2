@@ -540,8 +540,8 @@ describe('Challenger M3 Retry 1: Empirical Verification & Stress Test Suite', ()
       capturedCalls = [];
 
       // Invert dates
-      h.result.setStartDate('2026-10-25');
-      h.result.setEndDate('2026-10-15');
+      h.result.setStartDate('2099-12-31');
+      h.result.setEndDate('2099-12-01');
       await flushPromises();
 
       // Verify that API query was NOT dispatched

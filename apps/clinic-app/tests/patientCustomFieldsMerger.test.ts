@@ -55,7 +55,16 @@ mock.module('expo-crypto', () => ({
 mock.module('react-native-svg', () => ({
   Svg: 'Svg',
   Path: 'Path',
+  Circle: 'Circle',
+  Rect: 'Rect',
+  Line: 'Line',
   default: 'Svg',
+  Defs: ({ children }: any) => children,
+  LinearGradient: ({ children }: any) => children,
+  Stop: () => null,
+  G: ({ children }: any) => children,
+  Text: ({ children }: any) => children,
+  Polyline: 'Polyline',
 }));
 
 const {
