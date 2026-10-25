@@ -46,3 +46,6 @@ export function useBillingInfo(tenantId: string) {
     mutate
   }
 }
+
+export { usePublicConfig } from "./usePublicConfig"
+

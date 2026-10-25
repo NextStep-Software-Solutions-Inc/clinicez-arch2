@@ -28,6 +28,14 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
                 .ThenInclude(d => d.ClinicMemberships)
             .FirstOrDefaultAsync(p => p.ClerkUserId == clerkUserId, cancellationToken);
 
+    public Task<Patient?> GetForMeByClerkUserIdAsync(string clerkUserId, CancellationToken cancellationToken = default)
+        => Context.Patients
+            .AsNoTracking()
+            .Include(p => p.Addresses)
+            .Include(p => p.GovernmentIds)
+            .Include(p => p.Allergies)
+            .FirstOrDefaultAsync(p => p.ClerkUserId == clerkUserId, cancellationToken);
+
     public Task<Patient?> GetByClinicEzIdAsync(string clinicEzId, CancellationToken cancellationToken = default)
         => Context.Patients
             .FirstOrDefaultAsync(p => p.ClinicEzId == clinicEzId, cancellationToken);

@@ -9,6 +9,7 @@ import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import {
   ClinicCustomFieldDefinition,
+  BoundaryMode,
   VisibilityRule,
   ConditionalOptionsConfig,
 } from '../../services/clinicService';
@@ -191,6 +192,8 @@ export default function AddEditFieldModal({
   const [placeholder, setPlaceholder] = useState('');
   const [isRequired, setIsRequired] = useState(false);
   const [options, setOptions] = useState('');
+  const [boundaryMode, setBoundaryMode] = useState<BoundaryMode>('any');
+  const [isBoundaryModeManuallySet, setIsBoundaryModeManuallySet] = useState(false);
 
   // Live Rule Builder state
   const [hasVisibilityRule, setHasVisibilityRule] = useState(false);
@@ -235,6 +238,15 @@ export default function AddEditFieldModal({
       setCategory(fieldToEdit.category || 'Demographics');
       setPlaceholder(fieldToEdit.placeholder || '');
       setIsRequired(Boolean(fieldToEdit.isRequired));
+
+      if (fieldToEdit.boundaryMode) {
+        setBoundaryMode(fieldToEdit.boundaryMode);
+        setIsBoundaryModeManuallySet(true);
+      } else {
+        const isClinical = (fieldToEdit.category || '').trim().toLowerCase() === 'clinical';
+        setBoundaryMode(isClinical ? 'pastOrToday' : 'any');
+        setIsBoundaryModeManuallySet(false);
+      }
 
       // Parse flat options
       if (fieldToEdit.optionsJson) {
@@ -335,6 +347,8 @@ export default function AddEditFieldModal({
       setPlaceholder('');
       setIsRequired(false);
       setOptions('');
+      setBoundaryMode('any');
+      setIsBoundaryModeManuallySet(false);
       setHasVisibilityRule(false);
       setRuleSource('custom_field');
       setRuleField('');
@@ -349,6 +363,17 @@ export default function AddEditFieldModal({
     setDismissedSaveError(false);
     setSaving(false);
   }, [visible, fieldToEdit]);
+
+  const handleCategoryChange = (newCat: string) => {
+    setCategory(newCat);
+    if (!isBoundaryModeManuallySet) {
+      if (newCat.trim().toLowerCase() === 'clinical') {
+        setBoundaryMode('pastOrToday');
+      } else {
+        setBoundaryMode('any');
+      }
+    }
+  };
 
   // Handle label change and auto-generate key in Create mode
   const handleLabelChange = (text: string) => {
@@ -591,6 +616,7 @@ export default function AddEditFieldModal({
       category,
       placeholder: placeholder.trim() || undefined,
       isRequired,
+      boundaryMode: dataType === 'Date' ? boundaryMode : null,
       optionsJson,
       visibilityRuleJson,
       conditionalOptionsJson,
@@ -704,11 +730,44 @@ export default function AddEditFieldModal({
                 key={cat}
                 label={cat}
                 active={category === cat}
-                onPress={() => setCategory(cat)}
+                onPress={() => handleCategoryChange(cat)}
               />
             ))}
           </View>
         </FieldGroup>
+
+        {/* Date Boundary Rule */}
+        {dataType === 'Date' && (
+          <FieldGroup label="Date Boundary Rule">
+            <View style={styles.chipRow}>
+              {([
+                { key: 'pastOrToday', label: 'Past or Today' },
+                { key: 'futureOrToday', label: 'Today or Future' },
+                { key: 'futureOnly', label: 'Future Only' },
+                { key: 'any', label: 'Any Date' },
+              ] as const).map((mode) => (
+                <Chip
+                  key={mode.key}
+                  label={mode.label}
+                  active={boundaryMode === mode.key}
+                  onPress={() => {
+                    setBoundaryMode(mode.key);
+                    setIsBoundaryModeManuallySet(true);
+                  }}
+                />
+              ))}
+            </View>
+            <ThemedText variant="caption" color={theme.colors.textMuted}>
+              {boundaryMode === 'pastOrToday'
+                ? 'Restricts input to past dates or today (recommended for clinical history, past examinations, onset dates).'
+                : boundaryMode === 'futureOrToday'
+                ? 'Restricts input to today or future dates (recommended for expiry dates, follow-up scheduling).'
+                : boundaryMode === 'futureOnly'
+                ? 'Restricts input strictly to future dates.'
+                : 'Permits any calendar date without restriction.'}
+            </ThemedText>
+          </FieldGroup>
+        )}
 
         {/* Mandatory / Required Toggle */}
         <View style={styles.toggleRowContainer}>

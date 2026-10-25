@@ -4,8 +4,28 @@ import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { ClinicEzLogo } from "@/components/ClinicEzLogo";
 import { CustomSignUpForm } from "../_components/CustomSignUpForm";
 import { SignUpTrialBadge } from "../_components/SignUpTrialBadge";
+import { getPortalApiUrl } from "@/utils/domain";
+import { type BillingPublicConfig } from "@/services/billing.service";
 
-export default function SignUpPage() {
+export const dynamic = "force-dynamic";
+
+async function fetchServerPublicConfig(): Promise<BillingPublicConfig | null> {
+  try {
+    const apiBase = getPortalApiUrl();
+    const res = await fetch(`${apiBase}/billing/public-config`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export default async function SignUpPage() {
+  const publicConfig = await fetchServerPublicConfig();
+
   return (
     <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
       {/* Decorative background glows */}
@@ -30,7 +50,7 @@ export default function SignUpPage() {
         <div className="flex w-full items-center justify-center gap-12 lg:gap-16">
           {/* Left Side: Brand Context (Desktop Only) */}
           <div className="hidden lg:flex flex-col w-1/2 pr-6">
-            <SignUpTrialBadge />
+            <SignUpTrialBadge initialConfig={publicConfig} />
 
             <h1 className="text-4xl xl:text-5xl font-extrabold tracking-tight mb-6 leading-tight">
               Start Your Journey with <br />
@@ -68,12 +88,17 @@ export default function SignUpPage() {
           {/* Right Side: Custom Form Card */}
           <div className="w-full lg:w-1/2 flex justify-center">
             <div className="w-full max-w-md rounded-2xl sm:rounded-3xl border border-border bg-card/70 backdrop-blur-2xl p-5 sm:p-8 lg:p-10 shadow-2xl shadow-primary/5">
+              {/* Mobile Viewport Parity Badge (< lg) */}
+              <div className="lg:hidden mb-4">
+                <SignUpTrialBadge initialConfig={publicConfig} />
+              </div>
+
               <Suspense fallback={
                 <div className="h-72 flex items-center justify-center">
                   <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                 </div>
               }>
-                <CustomSignUpForm />
+                <CustomSignUpForm initialTrialDays={publicConfig?.trialDays} />
               </Suspense>
             </div>
           </div>

@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2 } from "lucide-react";
-import { apiBaseUrl } from "@/transport/apiClient";
+import { getPortalApiUrl } from "@/utils/domain";
 
 export function NewsletterForm() {
   const [email, setEmail] = useState("");
@@ -26,9 +26,12 @@ export function NewsletterForm() {
 
     try {
       setLoading(true);
-      const res = await fetch(`${apiBaseUrl}/public/newsletter`, {
+      const res = await fetch(`${getPortalApiUrl()}/public/newsletter`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         body: JSON.stringify({
           email: cleanEmail,
           source: "footer",
@@ -55,7 +58,7 @@ export function NewsletterForm() {
     return (
       <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium animate-in fade-in">
         <CheckCircle2 className="h-4 w-4 shrink-0" />
-        <span>You're subscribed to Clinic EZ updates!</span>
+        <span>You&apos;re subscribed to Clinic EZ updates!</span>
       </div>
     );
   }
