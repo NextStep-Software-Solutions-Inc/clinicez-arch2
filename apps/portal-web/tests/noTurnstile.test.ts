@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test";
+import { describe, expect, test, mock, beforeAll, beforeEach, afterEach } from "bun:test";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
@@ -60,6 +60,8 @@ describe("Cloudflare Turnstile Complete Removal & Direct Transport Suite", () =>
   });
 
   describe("Static Source Code Residue Audit", () => {
+    let cachedSrcFiles: Array<{ path: string; content: string; lowerContent: string }> = [];
+
     function getAllFiles(dir: string, extensions: string[]): string[] {
       let results: string[] = [];
       if (!existsSync(dir)) return results;
@@ -76,47 +78,35 @@ describe("Cloudflare Turnstile Complete Removal & Direct Transport Suite", () =>
       return results;
     }
 
-    test("T2.1: apps/portal-web/src contains zero references to challenges.cloudflare.com", () => {
+    beforeAll(() => {
       const srcDir = join(portalWebRoot, "src");
       const files = getAllFiles(srcDir, [".ts", ".tsx", ".js", ".jsx", ".json", ".mjs"]);
-      const matches: string[] = [];
+      cachedSrcFiles = files.map((path) => {
+        const content = readFileSync(path, "utf-8");
+        return { path, content, lowerContent: content.toLowerCase() };
+      });
+    });
 
-      for (const file of files) {
-        const content = readFileSync(file, "utf-8");
-        if (content.toLowerCase().includes("challenges.cloudflare.com")) {
-          matches.push(file);
-        }
-      }
+    test("T2.1: apps/portal-web/src contains zero references to challenges.cloudflare.com", () => {
+      const matches = cachedSrcFiles
+        .filter((f) => f.lowerContent.includes("challenges.cloudflare.com"))
+        .map((f) => f.path);
 
       expect(matches).toEqual([]);
     });
 
     test("T2.2: apps/portal-web/src contains zero references to LOCAL-OFFLINE-BYPASS", () => {
-      const srcDir = join(portalWebRoot, "src");
-      const files = getAllFiles(srcDir, [".ts", ".tsx", ".js", ".jsx", ".json", ".mjs"]);
-      const matches: string[] = [];
-
-      for (const file of files) {
-        const content = readFileSync(file, "utf-8");
-        if (content.includes("LOCAL-OFFLINE-BYPASS")) {
-          matches.push(file);
-        }
-      }
+      const matches = cachedSrcFiles
+        .filter((f) => f.content.includes("LOCAL-OFFLINE-BYPASS"))
+        .map((f) => f.path);
 
       expect(matches).toEqual([]);
     });
 
     test("T2.3: apps/portal-web/src contains zero occurrences of 'turnstile'", () => {
-      const srcDir = join(portalWebRoot, "src");
-      const files = getAllFiles(srcDir, [".ts", ".tsx", ".js", ".jsx", ".json", ".mjs"]);
-      const matches: string[] = [];
-
-      for (const file of files) {
-        const content = readFileSync(file, "utf-8");
-        if (content.toLowerCase().includes("turnstile")) {
-          matches.push(file);
-        }
-      }
+      const matches = cachedSrcFiles
+        .filter((f) => f.lowerContent.includes("turnstile"))
+        .map((f) => f.path);
 
       expect(matches).toEqual([]);
     });

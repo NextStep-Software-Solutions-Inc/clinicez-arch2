@@ -19,6 +19,7 @@ namespace ClinicEz.Clinic.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/settings")]
+[Route("api/v1/clinic/settings")]
 public sealed class SettingsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -125,5 +126,23 @@ public sealed class SettingsController : ControllerBase
     {
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicSettingsDto>.Success(result, "Clinic preferences updated successfully."));
+    }
+
+    [HttpPost("philhealth/override")]
+    [HasPermission(ClinicPermissions.SettingsManage)]
+    public async Task<ActionResult<ApiResponse<ClinicSettingsDto>>> OverridePhilHealth(
+        [FromBody] OverridePhilHealthSettingsCommand command,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<ClinicSettingsDto>.Success(result, "Clinic PhilHealth credentials overridden successfully."));
+    }
+
+    [HttpPost("philhealth/revert")]
+    [HasPermission(ClinicPermissions.SettingsManage)]
+    public async Task<ActionResult<ApiResponse<ClinicSettingsDto>>> RevertPhilHealthToBranch(CancellationToken ct)
+    {
+        var result = await _sender.Send(new RevertPhilHealthToBranchCommand(), ct);
+        return Ok(ApiResponse<ClinicSettingsDto>.Success(result, "Clinic PhilHealth settings reverted to branch baseline."));
     }
 }

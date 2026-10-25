@@ -539,8 +539,9 @@ describe('Challenger M3 Retry 1: Empirical Verification & Stress Test Suite', ()
       await flushPromises();
       capturedCalls = [];
 
-      // Invert dates
-      h.result.setStartDate('2026-10-25');
+      // Invert dates (dynamic future start avoids matching today default endDate)
+      const futureStart = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+      h.result.setStartDate(futureStart);
       h.result.setEndDate('2026-10-15');
       await flushPromises();
 

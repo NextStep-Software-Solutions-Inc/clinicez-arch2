@@ -23,6 +23,18 @@ public sealed class ClinicSettings : BaseEntity
     public string? KonsultaEndpoint { get; set; } = "/soap/konsulta";
     public bool IsPhilHealthConfigured { get; set; }
 
+    // Branch Inheritance & Clinic Override (Issue #70)
+    public bool IsPhilHealthOverridden { get; set; } = false;
+
+    // Stored Central Branch Baseline (Synchronized via Interop)
+    public Guid? BranchId { get; set; }
+    public string? BranchName { get; set; }
+    public string? BranchPhilHealthAccreditationNumber { get; set; }
+    public string? BranchPmccNumber { get; set; }
+    public string? BranchSoftwareCertificateId { get; set; }
+    public string? BranchKonsultaEndpoint { get; set; }
+    public bool IsBranchPhilHealthAccredited { get; set; } = false;
+
     // Cryptographic License & Hard Limit Profile
     public string? LicenseToken { get; set; }
     public string PlanTier { get; set; } = "Community";

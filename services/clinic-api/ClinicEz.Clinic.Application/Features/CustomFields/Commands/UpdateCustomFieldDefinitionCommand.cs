@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.CustomFields.DTOs;
+using ClinicEz.Clinic.Application.Features.CustomFields.Helpers;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
@@ -129,6 +130,12 @@ public sealed class UpdateCustomFieldDefinitionCommandHandler : IRequestHandler<
             }
         }
 
+        var normalizedVisibilityRule = await CustomFieldVisibilityRuleNormalizer.NormalizeAndValidateAsync(
+            request.VisibilityRuleJson,
+            field.EntityType,
+            _repo,
+            ct);
+
         field.Label = request.Label.Trim();
         field.DataType = request.DataType;
         field.Category = request.Category?.Trim();
@@ -137,7 +144,7 @@ public sealed class UpdateCustomFieldDefinitionCommandHandler : IRequestHandler<
         field.OptionsJson = request.OptionsJson;
         field.Placeholder = request.Placeholder?.Trim();
         field.IsActive = request.IsActive;
-        field.VisibilityRuleJson = request.VisibilityRuleJson;
+        field.VisibilityRuleJson = normalizedVisibilityRule;
         field.ConditionalOptionsJson = request.ConditionalOptionsJson;
         field.UpdatedAt = DateTime.UtcNow;
         field.UpdatedBy = "ClinicAdmin";
