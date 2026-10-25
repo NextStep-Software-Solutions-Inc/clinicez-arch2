@@ -106,13 +106,19 @@ mock.module('../constants/fonts', () => ({
 }));
 
 const { clinicService } = await import('../services/clinicService');
-const { default: CustomFieldsTab } = await import('../components/settings/CustomFieldsTab');
+const { default: CustomFieldsTab, formatRuleBadgeLabel } = await import('../components/settings/CustomFieldsTab');
 const {
   default: AddEditFieldModal,
   slugifyMachineKey,
   normalizeMachineKeyOnBlur,
   validateMachineKey,
   MACHINE_KEY_REGEX,
+  OPERATORS,
+  BOOLEAN_OPERATORS,
+  normalizeBooleanRuleValue,
+  isValidBooleanRuleValue,
+  isBooleanTriggerField,
+  formatLiveRulePreview,
 } = await import('../components/settings/AddEditFieldModal');
 const { default: SortableCustomFieldsList } = await import('../components/settings/SortableCustomFieldsList');
 const { default: SortableCustomFieldsListWeb } = await import('../components/settings/SortableCustomFieldsList.web');
@@ -229,9 +235,53 @@ class CustomFieldsTabHarness {
     this.draftRequired = field.isRequired;
     this.draftOptions = field.optionsJson ? JSON.parse(field.optionsJson).join(', ') : '';
     this.draftVisibilityRule = field.visibilityRuleJson ? JSON.parse(field.visibilityRuleJson) : null;
+    if (this.draftVisibilityRule) {
+      const parentDef = this.fields.find(
+        (f) => f.id !== field.id && f.fieldKey === this.draftVisibilityRule!.field
+      );
+      if (parentDef?.dataType === 'Boolean') {
+        if (this.draftVisibilityRule.operator === 'in' || this.draftVisibilityRule.operator === 'contains') {
+          this.draftVisibilityRule.operator = 'equals';
+        }
+        if (this.draftVisibilityRule.value !== undefined) {
+          this.draftVisibilityRule.value = normalizeBooleanRuleValue(this.draftVisibilityRule.value);
+        }
+      }
+    }
     this.draftConditionalOptions = field.conditionalOptionsJson ? JSON.parse(field.conditionalOptionsJson) : null;
     this.modalError = null;
     this.showAddModal = true;
+  }
+
+  public selectParentTriggerField(fieldKey: string) {
+    const parentDef = this.fields.find((f) => f.id !== this.draftId && f.fieldKey === fieldKey);
+    const isTargetBoolean = parentDef?.dataType === 'Boolean';
+
+    if (!this.draftVisibilityRule) {
+      this.draftVisibilityRule = {
+        source: 'custom_field',
+        field: fieldKey,
+        operator: 'equals',
+        value: isTargetBoolean ? 'true' : '',
+      };
+      return;
+    }
+
+    this.draftVisibilityRule.field = fieldKey;
+    if (isTargetBoolean) {
+      if (this.draftVisibilityRule.operator === 'in' || this.draftVisibilityRule.operator === 'contains') {
+        this.draftVisibilityRule.operator = 'equals';
+      }
+      if (!isValidBooleanRuleValue(this.draftVisibilityRule.value)) {
+        this.draftVisibilityRule.value = 'true';
+      } else {
+        this.draftVisibilityRule.value = normalizeBooleanRuleValue(this.draftVisibilityRule.value);
+      }
+    } else {
+      if (this.draftVisibilityRule.value === 'true' || this.draftVisibilityRule.value === 'false') {
+        this.draftVisibilityRule.value = '';
+      }
+    }
   }
 
   public toggleRequired(val?: boolean) {
@@ -276,10 +326,34 @@ class CustomFieldsTabHarness {
         ? JSON.stringify(this.draftOptions.split(',').map((s) => s.trim()).filter(Boolean))
         : undefined;
 
-    if (this.draftVisibilityRule && !this.draftVisibilityRule.field?.trim()) {
-      this.modalError = 'Please select a trigger field for the conditional visibility rule, or turn the toggle off.';
-      this.saving = false;
-      return null;
+    if (this.draftVisibilityRule) {
+      if (!this.draftVisibilityRule.field?.trim()) {
+        this.modalError = 'Please select a trigger field for the conditional visibility rule, or turn the toggle off.';
+        this.saving = false;
+        return null;
+      }
+
+      const parentDef = this.fields.find(
+        (f) => f.id !== this.draftId && f.fieldKey === this.draftVisibilityRule!.field.trim()
+      );
+      if (parentDef?.dataType === 'Boolean') {
+        if (this.draftVisibilityRule.operator === 'in' || this.draftVisibilityRule.operator === 'contains') {
+          this.modalError = 'Comparison operator for Boolean fields must be Equals, Not Equals, or Has Any Value.';
+          this.saving = false;
+          return null;
+        }
+
+        if (this.draftVisibilityRule.operator !== 'not_empty') {
+          if (!isValidBooleanRuleValue(this.draftVisibilityRule.value)) {
+            this.modalError = 'Please select Yes or No for the expected Boolean condition.';
+            this.saving = false;
+            return null;
+          }
+          this.draftVisibilityRule.value = normalizeBooleanRuleValue(this.draftVisibilityRule.value);
+        } else {
+          delete this.draftVisibilityRule.value;
+        }
+      }
     }
 
     const visibilityRuleJson = this.draftVisibilityRule
@@ -1804,6 +1878,480 @@ describe('E2E Test Suite: CustomFieldsTab Settings & Template Management', () =>
       expect(updated).toBeNull();
       expect(harness.modalError).toBe('Machine key is required.');
       expect(harness.fields[0].fieldKey).toBe('student_id');
+    });
+  });
+
+  describe('Issue #82: Boolean Trigger Fields Conditional Visibility (Features F1–F6)', () => {
+    const booleanField: CustomFieldDefinition = {
+      id: 'f-bool',
+      tenantId: 'tenant-test',
+      clinicId: 'clinic-test',
+      entityType: 'ClinicPatient',
+      fieldKey: 'is_pregnant',
+      label: 'Is Pregnant',
+      dataType: 'Boolean',
+      displayOrder: 1,
+      isRequired: false,
+      isActive: true,
+    };
+
+    const textField: CustomFieldDefinition = {
+      id: 'f-text',
+      tenantId: 'tenant-test',
+      clinicId: 'clinic-test',
+      entityType: 'ClinicPatient',
+      fieldKey: 'affiliation',
+      label: 'Affiliation',
+      dataType: 'Text',
+      displayOrder: 2,
+      isRequired: false,
+      isActive: true,
+    };
+
+    // --- F1: Operator Restriction & Auto-Reset ---
+    test('F1-1: BOOLEAN_OPERATORS is restricted to equals, not_equals, and not_empty', () => {
+      const boolOpKeys = BOOLEAN_OPERATORS.map((op: any) => op.key);
+      expect(boolOpKeys).toEqual(['equals', 'not_equals', 'not_empty']);
+      expect(boolOpKeys).not.toContain('in');
+      expect(boolOpKeys).not.toContain('contains');
+
+      const allOpKeys = OPERATORS.map((op: any) => op.key);
+      expect(allOpKeys).toContain('in');
+      expect(allOpKeys).toContain('contains');
+      expect(allOpKeys.length).toBe(5);
+    });
+
+    test('F1-2: isBooleanTriggerField accurately identifies Boolean parent fields', () => {
+      expect(isBooleanTriggerField('is_pregnant', [booleanField, textField])).toBe(true);
+      expect(isBooleanTriggerField('affiliation', [booleanField, textField])).toBe(false);
+      expect(isBooleanTriggerField('non_existent', [booleanField, textField])).toBe(false);
+      expect(isBooleanTriggerField('gender', [booleanField, textField], 'static')).toBe(false);
+    });
+
+    test('F1-3: Switching trigger field to Boolean auto-resets operator from "in" or "contains" to "equals"', () => {
+      const harness = new CustomFieldsTabHarness([booleanField, textField]);
+      harness.openAddModal();
+      harness.draftLabel = 'Trimester';
+      harness.draftFieldKey = 'trimester';
+
+      // Start with text parent and "in" operator
+      harness.selectParentTriggerField('affiliation');
+      harness.draftVisibilityRule!.operator = 'in';
+      harness.draftVisibilityRule!.value = 'Student, Employee';
+
+      // Switch to Boolean trigger field
+      harness.selectParentTriggerField('is_pregnant');
+      expect(harness.draftVisibilityRule!.operator).toBe('equals');
+      expect(harness.draftVisibilityRule!.value).toBe('true');
+
+      // Switch to "contains" on text field and back
+      harness.selectParentTriggerField('affiliation');
+      harness.draftVisibilityRule!.operator = 'contains';
+      harness.selectParentTriggerField('is_pregnant');
+      expect(harness.draftVisibilityRule!.operator).toBe('equals');
+    });
+
+    // --- F2: Closed-Set Yes/No Choice Chips & Helpers ---
+    test('F2-1: isValidBooleanRuleValue strictly accepts valid boolean representations and rejects arbitrary strings', () => {
+      expect(isValidBooleanRuleValue(true)).toBe(true);
+      expect(isValidBooleanRuleValue(false)).toBe(true);
+      expect(isValidBooleanRuleValue('true')).toBe(true);
+      expect(isValidBooleanRuleValue('false')).toBe(true);
+      expect(isValidBooleanRuleValue('Yes')).toBe(true);
+      expect(isValidBooleanRuleValue('No')).toBe(true);
+      expect(isValidBooleanRuleValue('yes')).toBe(true);
+      expect(isValidBooleanRuleValue('no')).toBe(true);
+
+      expect(isValidBooleanRuleValue('maybe')).toBe(false);
+      expect(isValidBooleanRuleValue('Student')).toBe(false);
+      expect(isValidBooleanRuleValue('')).toBe(false);
+      expect(isValidBooleanRuleValue(123)).toBe(false);
+      expect(isValidBooleanRuleValue(null)).toBe(false);
+      expect(isValidBooleanRuleValue(undefined)).toBe(false);
+    });
+
+    test('F2-2: normalizeBooleanRuleValue maps truthy and falsy representations to canonical "true" or "false"', () => {
+      expect(normalizeBooleanRuleValue(true)).toBe('true');
+      expect(normalizeBooleanRuleValue('true')).toBe('true');
+      expect(normalizeBooleanRuleValue('Yes')).toBe('true');
+      expect(normalizeBooleanRuleValue('yes')).toBe('true');
+      expect(normalizeBooleanRuleValue('  TRUE  ')).toBe('true');
+
+      expect(normalizeBooleanRuleValue(false)).toBe('false');
+      expect(normalizeBooleanRuleValue('false')).toBe('false');
+      expect(normalizeBooleanRuleValue('No')).toBe('false');
+      expect(normalizeBooleanRuleValue('no')).toBe('false');
+      expect(normalizeBooleanRuleValue('  FALSE  ')).toBe('false');
+
+      // Unknown fallback defaults to 'true' ('Yes')
+      expect(normalizeBooleanRuleValue('invalid')).toBe('true');
+      expect(normalizeBooleanRuleValue('')).toBe('true');
+    });
+
+    // --- F3: Field Switch Sanitization ---
+    test('F3-1: Switching to Boolean sanitizes/defaults ruleValue to "true" when current value is not valid boolean', () => {
+      const harness = new CustomFieldsTabHarness([booleanField, textField]);
+      harness.openAddModal();
+      harness.draftLabel = 'Child Field';
+      harness.draftFieldKey = 'child_field';
+
+      harness.selectParentTriggerField('affiliation');
+      harness.draftVisibilityRule!.value = 'Arbitrary Text';
+
+      harness.selectParentTriggerField('is_pregnant');
+      expect(harness.draftVisibilityRule!.value).toBe('true');
+    });
+
+    test('F3-2: Switching away from Boolean resets "true" or "false" back to empty string', () => {
+      const harness = new CustomFieldsTabHarness([booleanField, textField]);
+      harness.openAddModal();
+      harness.draftLabel = 'Child Field';
+      harness.draftFieldKey = 'child_field';
+
+      harness.selectParentTriggerField('is_pregnant');
+      harness.draftVisibilityRule!.value = 'false';
+
+      harness.selectParentTriggerField('affiliation');
+      expect(harness.draftVisibilityRule!.value).toBe('');
+    });
+
+    // --- F4: Edit Mode Legacy Normalization ---
+    test('F4-1: Loading field with legacy "Yes" normalizes to canonical "true"', () => {
+      const childWithLegacyYes: CustomFieldDefinition = {
+        id: 'f-child-1',
+        tenantId: 'tenant-test',
+        clinicId: 'clinic-test',
+        entityType: 'ClinicPatient',
+        fieldKey: 'due_date',
+        label: 'Expected Due Date',
+        dataType: 'Date',
+        displayOrder: 3,
+        isRequired: false,
+        isActive: true,
+        visibilityRuleJson: JSON.stringify({
+          source: 'custom_field',
+          field: 'is_pregnant',
+          operator: 'equals',
+          value: 'Yes',
+        }),
+      };
+
+      const harness = new CustomFieldsTabHarness([booleanField, childWithLegacyYes]);
+      harness.openEditModal(childWithLegacyYes);
+
+      expect(harness.draftVisibilityRule?.value).toBe('true');
+      expect(harness.draftVisibilityRule?.operator).toBe('equals');
+    });
+
+    test('F4-2: Loading field with legacy "No" normalizes to canonical "false"', () => {
+      const childWithLegacyNo: CustomFieldDefinition = {
+        id: 'f-child-2',
+        tenantId: 'tenant-test',
+        clinicId: 'clinic-test',
+        entityType: 'ClinicPatient',
+        fieldKey: 'menopause_status',
+        label: 'Menopause Status',
+        dataType: 'Text',
+        displayOrder: 4,
+        isRequired: false,
+        isActive: true,
+        visibilityRuleJson: JSON.stringify({
+          source: 'custom_field',
+          field: 'is_pregnant',
+          operator: 'equals',
+          value: 'No',
+        }),
+      };
+
+      const harness = new CustomFieldsTabHarness([booleanField, childWithLegacyNo]);
+      harness.openEditModal(childWithLegacyNo);
+
+      expect(harness.draftVisibilityRule?.value).toBe('false');
+    });
+
+    test('F4-3: Loading field with boolean primitives (true/false) normalizes to canonical strings', () => {
+      const childWithPrimTrue: CustomFieldDefinition = {
+        id: 'f-child-3',
+        tenantId: 'tenant-test',
+        clinicId: 'clinic-test',
+        entityType: 'ClinicPatient',
+        fieldKey: 'ob_notes',
+        label: 'OB Notes',
+        dataType: 'Text',
+        displayOrder: 5,
+        isRequired: false,
+        isActive: true,
+        visibilityRuleJson: JSON.stringify({
+          source: 'custom_field',
+          field: 'is_pregnant',
+          operator: 'equals',
+          value: true,
+        }),
+      };
+
+      const harness = new CustomFieldsTabHarness([booleanField, childWithPrimTrue]);
+      harness.openEditModal(childWithPrimTrue);
+
+      expect(harness.draftVisibilityRule?.value).toBe('true');
+    });
+
+    test('F4-4: Loading field with invalid operator "in" or "contains" auto-resets operator to "equals"', () => {
+      const childWithInvalidOp: CustomFieldDefinition = {
+        id: 'f-child-4',
+        tenantId: 'tenant-test',
+        clinicId: 'clinic-test',
+        entityType: 'ClinicPatient',
+        fieldKey: 'ob_details',
+        label: 'OB Details',
+        dataType: 'Text',
+        displayOrder: 6,
+        isRequired: false,
+        isActive: true,
+        visibilityRuleJson: JSON.stringify({
+          source: 'custom_field',
+          field: 'is_pregnant',
+          operator: 'contains',
+          value: 'true',
+        }),
+      };
+
+      const harness = new CustomFieldsTabHarness([booleanField, childWithInvalidOp]);
+      harness.openEditModal(childWithInvalidOp);
+
+      expect(harness.draftVisibilityRule?.operator).toBe('equals');
+      expect(harness.draftVisibilityRule?.value).toBe('true');
+    });
+
+    test('F4-5: Loading non-boolean parent fields preserves original operator and value unchanged', () => {
+      const childOfText: CustomFieldDefinition = {
+        id: 'f-child-5',
+        tenantId: 'tenant-test',
+        clinicId: 'clinic-test',
+        entityType: 'ClinicPatient',
+        fieldKey: 'student_id',
+        label: 'Student ID',
+        dataType: 'Text',
+        displayOrder: 7,
+        isRequired: true,
+        isActive: true,
+        visibilityRuleJson: JSON.stringify({
+          source: 'custom_field',
+          field: 'affiliation',
+          operator: 'contains',
+          value: 'Stud',
+        }),
+      };
+
+      const harness = new CustomFieldsTabHarness([textField, childOfText]);
+      harness.openEditModal(childOfText);
+
+      expect(harness.draftVisibilityRule?.operator).toBe('contains');
+      expect(harness.draftVisibilityRule?.value).toBe('Stud');
+    });
+
+    // --- F5: Save Validation & Serialization ---
+    test('F5-1: Rejects saving invalid operator ("in" or "contains") for Boolean parent field', async () => {
+      const harness = new CustomFieldsTabHarness([booleanField]);
+      harness.openAddModal();
+      harness.draftLabel = 'Invalid Op Child';
+      harness.draftFieldKey = 'invalid_op_child';
+      harness.draftVisibilityRule = {
+        source: 'custom_field',
+        field: 'is_pregnant',
+        operator: 'in' as any,
+        value: 'true',
+      };
+
+      const saved = await harness.saveField();
+      expect(saved).toBeNull();
+      expect(harness.modalError).toBe(
+        'Comparison operator for Boolean fields must be Equals, Not Equals, or Has Any Value.'
+      );
+    });
+
+    test('F5-2: Rejects saving invalid non-boolean value for Boolean parent field', async () => {
+      const harness = new CustomFieldsTabHarness([booleanField]);
+      harness.openAddModal();
+      harness.draftLabel = 'Invalid Val Child';
+      harness.draftFieldKey = 'invalid_val_child';
+      harness.draftVisibilityRule = {
+        source: 'custom_field',
+        field: 'is_pregnant',
+        operator: 'equals',
+        value: 'maybe',
+      };
+
+      const saved = await harness.saveField();
+      expect(saved).toBeNull();
+      expect(harness.modalError).toBe(
+        'Please select Yes or No for the expected Boolean condition.'
+      );
+    });
+
+    test('F5-3: Allows saving "not_empty" operator for Boolean parent field without value', async () => {
+      const harness = new CustomFieldsTabHarness([booleanField]);
+      harness.openAddModal();
+      harness.draftLabel = 'Not Empty Child';
+      harness.draftFieldKey = 'not_empty_child';
+      harness.draftVisibilityRule = {
+        source: 'custom_field',
+        field: 'is_pregnant',
+        operator: 'not_empty',
+      };
+
+      const saved = await harness.saveField();
+      expect(saved).not.toBeNull();
+      expect(saved?.visibilityRuleJson).toBeDefined();
+      const parsed = JSON.parse(saved!.visibilityRuleJson!);
+      expect(parsed.operator).toBe('not_empty');
+      expect(parsed.field).toBe('is_pregnant');
+      expect(parsed.value).toBeUndefined();
+    });
+
+    test('F5-4: Successfully serializes canonical "true" or "false" string on save', async () => {
+      const harness = new CustomFieldsTabHarness([booleanField]);
+      harness.openAddModal();
+      harness.draftLabel = 'Canonical True Child';
+      harness.draftFieldKey = 'canonical_true_child';
+      harness.draftVisibilityRule = {
+        source: 'custom_field',
+        field: 'is_pregnant',
+        operator: 'equals',
+        value: 'Yes',
+      };
+
+      const saved = await harness.saveField();
+      expect(saved).not.toBeNull();
+      const parsed = JSON.parse(saved!.visibilityRuleJson!);
+      expect(parsed.value).toBe('true');
+      expect(parsed.operator).toBe('equals');
+    });
+
+    // --- F6: Rule Badges Formatting ---
+    test('F6-1: formatRuleBadgeLabel renders human-readable "Yes" / "No" for Boolean parent equals/not_equals', () => {
+      const fields = [booleanField, textField];
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'is_pregnant', operator: 'equals', value: 'true' },
+          fields
+        )
+      ).toBe("If is_pregnant == 'Yes'");
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'is_pregnant', operator: 'equals', value: 'false' },
+          fields
+        )
+      ).toBe("If is_pregnant == 'No'");
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'is_pregnant', operator: 'not_equals', value: 'true' },
+          fields
+        )
+      ).toBe("If is_pregnant != 'Yes'");
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'is_pregnant', operator: 'not_equals', value: 'false' },
+          fields
+        )
+      ).toBe("If is_pregnant != 'No'");
+    });
+
+    test('F6-2: formatRuleBadgeLabel handles legacy boolean representations and primitives seamlessly', () => {
+      const fields = [booleanField, textField];
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'is_pregnant', operator: 'equals', value: 'Yes' },
+          fields
+        )
+      ).toBe("If is_pregnant == 'Yes'");
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'is_pregnant', operator: 'equals', value: 'No' },
+          fields
+        )
+      ).toBe("If is_pregnant == 'No'");
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'is_pregnant', operator: 'equals', value: true },
+          fields
+        )
+      ).toBe("If is_pregnant == 'Yes'");
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'is_pregnant', operator: 'equals', value: false },
+          fields
+        )
+      ).toBe("If is_pregnant == 'No'");
+    });
+
+    test('F6-3: formatRuleBadgeLabel handles "not_empty" for Boolean parent', () => {
+      const fields = [booleanField, textField];
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'is_pregnant', operator: 'not_empty' },
+          fields
+        )
+      ).toBe('If is_pregnant is not empty');
+    });
+
+    test('F6-4: formatRuleBadgeLabel preserves all non-boolean badges exactly unchanged', () => {
+      const fields = [booleanField, textField];
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'affiliation', operator: 'equals', value: 'Student' },
+          fields
+        )
+      ).toBe("If affiliation == 'Student'");
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'affiliation', operator: 'not_equals', value: 'Faculty' },
+          fields
+        )
+      ).toBe("If affiliation != 'Faculty'");
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'affiliation', operator: 'in', value: ['Student', 'Faculty'] },
+          fields
+        )
+      ).toBe("If affiliation in 'Student, Faculty'");
+
+      expect(
+        formatRuleBadgeLabel(
+          { source: 'custom_field', field: 'affiliation', operator: 'not_empty' },
+          fields
+        )
+      ).toBe('If affiliation is not empty');
+    });
+
+    test('F6-5: formatLiveRulePreview produces human-readable live preview text in AddEditFieldModal', () => {
+      expect(formatLiveRulePreview('is_pregnant', 'equals', 'true', true)).toBe(
+        "Visible when [is_pregnant] equals 'Yes'"
+      );
+      expect(formatLiveRulePreview('is_pregnant', 'equals', 'false', true)).toBe(
+        "Visible when [is_pregnant] equals 'No'"
+      );
+      expect(formatLiveRulePreview('is_pregnant', 'not_equals', 'true', true)).toBe(
+        "Visible when [is_pregnant] not_equals 'Yes'"
+      );
+      expect(formatLiveRulePreview('is_pregnant', 'not_empty', '', true)).toBe(
+        'If is_pregnant is not empty'
+      );
+      expect(formatLiveRulePreview('affiliation', 'equals', 'Student', false)).toBe(
+        "Visible when [affiliation] equals 'Student'"
+      );
+      expect(formatLiveRulePreview('', 'equals', '', false)).toBe('');
     });
   });
 });
