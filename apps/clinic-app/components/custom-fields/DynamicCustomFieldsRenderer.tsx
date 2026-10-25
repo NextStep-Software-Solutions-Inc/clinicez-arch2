@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Input from '../ui/Input';
-import ValidatedDateInput from '../ui/ValidatedDateInput';
+import ValidatedDateInput, { validateDateString } from '../ui/ValidatedDateInput';
 import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import type {
@@ -117,8 +117,146 @@ export function getAvailableOptions(
 }
 
 /**
+ * Sanitizes real-time numeric keyboard input by stripping non-numeric/non-decimal characters,
+ * allowing at most one leading negative sign, and at most one decimal point.
+ * Preserves interim typing inputs ('-', '.', '-.') so user typing is not blocked.
+ */
+export function sanitizeNumericInput(text: string): string {
+  if (text === null || text === undefined) return '';
+  const str = String(text);
+  if (!str) return '';
+
+  let hasDecimal = false;
+  let result = '';
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if (char === '-' && result.length === 0) {
+      result += '-';
+    } else if (char === '.' && !hasDecimal) {
+      hasDecimal = true;
+      result += '.';
+    } else if (char >= '0' && char <= '9') {
+      result += char;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Validates whether a value is a complete, finite, well-formed number.
+ * Accepts finite numbers and numeric strings matching /^-?\d+(\.\d+)?$/.
+ * Rejects incomplete typing states ('-', '.', '-.', '12.'), symbols, alphabetic strings, and booleans.
+ */
+export function isValidCustomNumber(val: any): boolean {
+  if (val === null || val === undefined || typeof val === 'boolean') {
+    return false;
+  }
+  if (typeof val === 'number') {
+    return Number.isFinite(val);
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return false;
+    if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return false;
+    const num = Number(trimmed);
+    return Number.isFinite(num);
+  }
+  return false;
+}
+
+export interface MergeCustomFieldsOptions {
+  /**
+   * When true, any defined custom field key that previously existed in `existingCustomFields`
+   * and is now cleared or conditionally hidden is emitted as `null` instead of omitted.
+   * Required for HTTP PUT payloads where backend `UpdateClinicPatientCommand` uses additive
+   * JSON merge semantics (`null` tombstone signals server-side key deletion).
+   */
+  emitNullTombstones?: boolean;
+}
+
+/**
+ * Merges form custom field values into existing custom fields on update.
+ * Explicitly removes cleared or conditionally hidden custom fields (or emits `null` tombstones
+ * when `options.emitNullTombstones` is enabled for HTTP PUT additive merge endpoints) while
+ * preserving unrelated system metadata keys (e.g., member_type, principal_member_pin, philhealth_profile).
+ */
+export function mergeCustomFieldsForUpdate(
+  existingCustomFields: Record<string, any> | undefined,
+  definitions: ClinicCustomFieldDefinition[],
+  values: Record<string, any>,
+  staticValues: StaticPatientValues = {},
+  options?: MergeCustomFieldsOptions
+): Record<string, any> {
+  const merged: Record<string, any> = { ...(existingCustomFields || {}) };
+  const emitTombstones = options?.emitNullTombstones === true;
+
+  const clearOrTombstone = (key: string) => {
+    const existingKeysMatching = existingCustomFields
+      ? Object.keys(existingCustomFields).filter((k) => k.toLowerCase() === key.toLowerCase())
+      : [];
+    for (const k of existingKeysMatching) {
+      delete merged[k];
+    }
+    delete merged[key];
+    if (emitTombstones && existingKeysMatching.length > 0) {
+      merged[key] = null;
+    }
+  };
+
+  const assignCanonicalValue = (key: string, nextVal: any) => {
+    if (existingCustomFields) {
+      for (const k of Object.keys(existingCustomFields)) {
+        if (k !== key && k.toLowerCase() === key.toLowerCase()) {
+          delete merged[k];
+        }
+      }
+    }
+    merged[key] = nextVal;
+  };
+
+  for (const def of definitions) {
+    const key = def.fieldKey;
+    if (!key || key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
+
+    const isVisible = isFieldVisible(def, values, staticValues);
+
+    if (!isVisible) {
+      clearOrTombstone(key);
+      continue;
+    }
+
+    const val = values[key];
+    if (val === null || val === undefined) {
+      clearOrTombstone(key);
+    } else if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (trimmed === '') {
+        clearOrTombstone(key);
+      } else {
+        assignCanonicalValue(key, trimmed);
+      }
+    } else if (typeof val === 'number') {
+      if (Number.isFinite(val)) {
+        assignCanonicalValue(key, val);
+      } else {
+        clearOrTombstone(key);
+      }
+    } else {
+      assignCanonicalValue(key, val);
+    }
+  }
+
+  return merged;
+}
+
+/**
  * Validates custom fields: enforces isRequired only on currently VISIBLE fields.
  * Hidden fields never block validation.
+ * Validates non-empty Number fields against isValidCustomNumber, and Date fields against validateDateString.
  */
 export function validateCustomFields(
   definitions: ClinicCustomFieldDefinition[],
@@ -133,17 +271,31 @@ export function validateCustomFields(
     .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
 
   for (const def of visibleFields) {
-    if (def.isRequired) {
-      const val = values[def.fieldKey];
-      const isEmpty =
-        val === null ||
-        val === undefined ||
-        (typeof val === 'string' && val.trim() === '') ||
-        (typeof val === 'boolean' && val === false && def.dataType !== 'Boolean');
+    const val = values[def.fieldKey];
+    const isEmpty =
+      val === null ||
+      val === undefined ||
+      (typeof val === 'string' && val.trim() === '') ||
+      (typeof val === 'boolean' && val === false && def.dataType !== 'Boolean');
 
-      if (isEmpty) {
-        errors[def.fieldKey] = `${def.label} is required.`;
-        isValid = false;
+    if (def.isRequired && isEmpty) {
+      errors[def.fieldKey] = `${def.label} is required.`;
+      isValid = false;
+      continue;
+    }
+
+    if (!isEmpty) {
+      if (def.dataType === 'Number') {
+        if (!isValidCustomNumber(val)) {
+          errors[def.fieldKey] = `${def.label} must be a valid number.`;
+          isValid = false;
+        }
+      } else if (def.dataType === 'Date') {
+        const dateCheck = validateDateString(String(val), { boundaryMode: 'any' });
+        if (!dateCheck.isValid) {
+          errors[def.fieldKey] = `${def.label} must be a valid date (YYYY-MM-DD).`;
+          isValid = false;
+        }
       }
     }
   }
@@ -152,7 +304,8 @@ export function validateCustomFields(
 }
 
 /**
- * Sanitizes submission payload by stripping keys of all currently hidden fields and empty strings.
+ * Sanitizes submission payload by stripping keys of all currently hidden fields,
+ * trimming strings, and omitting whitespace-only strings while preserving valid 0 and false.
  */
 export function sanitizeCustomFieldsPayload(
   definitions: ClinicCustomFieldDefinition[],
@@ -166,8 +319,20 @@ export function sanitizeCustomFieldsPayload(
       .map((f) => f.fieldKey)
   );
 
-  for (const [k, v] of Object.entries(values)) {
-    if (visibleKeys.has(k) && v !== null && v !== undefined && v !== '') {
+  for (const [k, v] of Object.entries(values || {})) {
+    if (!visibleKeys.has(k)) continue;
+    if (v === null || v === undefined) continue;
+
+    if (typeof v === 'string') {
+      const trimmed = v.trim();
+      if (trimmed !== '') {
+        cleanPayload[k] = trimmed;
+      }
+    } else if (typeof v === 'number') {
+      if (Number.isFinite(v)) {
+        cleanPayload[k] = v;
+      }
+    } else {
       cleanPayload[k] = v;
     }
   }
@@ -188,6 +353,8 @@ export default function DynamicCustomFieldsRenderer({
   staticValues = {},
   disabled = false,
 }: DynamicCustomFieldsRendererProps) {
+  const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
+
   // 1. Sort definitions deterministically by displayOrder, then label
   const sortedFields = useMemo(() => {
     return [...fields].sort((a, b) => {
@@ -232,7 +399,7 @@ export default function DynamicCustomFieldsRenderer({
   return (
     <View style={styles.container}>
       {visibleFields.map((field) => {
-        const error = errors[field.fieldKey];
+        const error = errors[field.fieldKey] || localErrors[field.fieldKey];
         const val = values[field.fieldKey];
 
         switch (field.dataType) {
@@ -251,21 +418,55 @@ export default function DynamicCustomFieldsRenderer({
               </View>
             );
 
-          case 'Number':
+          case 'Number': {
+            const handleNumberChange = (text: string) => {
+              const sanitized = sanitizeNumericInput(text);
+              if (localErrors[field.fieldKey]) {
+                setLocalErrors((prev) => {
+                  const next = { ...prev };
+                  delete next[field.fieldKey];
+                  return next;
+                });
+              }
+              handleFieldChange(field.fieldKey, sanitized);
+            };
+
+            const handleNumberBlur = () => {
+              const currentVal = values[field.fieldKey];
+              if (currentVal !== undefined && currentVal !== null && String(currentVal).trim() !== '') {
+                if (!isValidCustomNumber(currentVal)) {
+                  setLocalErrors((prev) => ({
+                    ...prev,
+                    [field.fieldKey]: `${field.label} must be a valid number.`,
+                  }));
+                  return;
+                }
+              }
+              setLocalErrors((prev) => {
+                if (!prev[field.fieldKey]) return prev;
+                const next = { ...prev };
+                delete next[field.fieldKey];
+                return next;
+              });
+            };
+
             return (
               <View key={field.id || field.fieldKey} style={styles.fieldWrapper}>
                 <Input
                   label={field.label}
                   required={field.isRequired}
                   keyboardType="numeric"
+                  inputMode="decimal"
                   placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
                   value={val !== undefined && val !== null ? String(val) : ''}
-                  onChangeText={(text) => handleFieldChange(field.fieldKey, text)}
+                  onChangeText={handleNumberChange}
+                  onBlur={handleNumberBlur}
                   error={error}
                   editable={!disabled}
                 />
               </View>
             );
+          }
 
           case 'Date':
             return (

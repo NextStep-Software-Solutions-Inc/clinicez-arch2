@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Helpers;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Allergies.Dtos;
+using ClinicEz.Clinic.Application.Features.CustomFields.Validation;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
@@ -67,6 +68,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
     private readonly IRepository<ClinicRoom>? _roomRepo;
     private readonly IWorkspaceProfileProvider? _workspaceProfiles;
     private readonly IRepository<ClinicSettings>? _settingsRepo;
+    private readonly IRepository<ClinicCustomFieldDefinition>? _customFieldRepo;
 
     public RegisterClinicPatientCommandHandler(
         IRepository<ClinicPatient> patientRepo,
@@ -79,7 +81,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         IRepository<StaffMember>? staffRepo = null,
         IRepository<ClinicRoom>? roomRepo = null,
         IWorkspaceProfileProvider? workspaceProfiles = null,
-        IRepository<ClinicSettings>? settingsRepo = null)
+        IRepository<ClinicSettings>? settingsRepo = null,
+        IRepository<ClinicCustomFieldDefinition>? customFieldRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
@@ -92,6 +95,7 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         _roomRepo = roomRepo;
         _workspaceProfiles = workspaceProfiles;
         _settingsRepo = settingsRepo;
+        _customFieldRepo = customFieldRepo;
     }
 
     private static IPatientCodeGenerator ResolveFallbackCodeGenerator(
@@ -126,6 +130,15 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
         var customFields = request.CustomFields != null
             ? new System.Collections.Generic.Dictionary<string, object?>(request.CustomFields)
             : new System.Collections.Generic.Dictionary<string, object?>();
+
+        if (_customFieldRepo != null && customFields.Count > 0)
+        {
+            await CustomFieldValueValidator.ValidateAndNormalizeAsync(
+                customFields,
+                _customFieldRepo,
+                "ClinicPatient",
+                ct);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.AddressLine) && !customFields.ContainsKey("primary_address_line"))
             customFields["primary_address_line"] = request.AddressLine.Trim();

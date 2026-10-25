@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.CustomFields.Validation;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -45,17 +46,20 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
     private readonly IUnitOfWork _unitOfWork;
     private readonly IRepository<PatientPastMedicalHistory>? _medicalRepo;
     private readonly IClinicContext? _clinicContext;
+    private readonly IRepository<ClinicCustomFieldDefinition>? _customFieldRepo;
 
     public UpdateClinicPatientCommandHandler(
         IRepository<ClinicPatient> patientRepo,
         IUnitOfWork unitOfWork,
         IRepository<PatientPastMedicalHistory>? medicalRepo = null,
-        IClinicContext? clinicContext = null)
+        IClinicContext? clinicContext = null,
+        IRepository<ClinicCustomFieldDefinition>? customFieldRepo = null)
     {
         _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
         _medicalRepo = medicalRepo;
         _clinicContext = clinicContext;
+        _customFieldRepo = customFieldRepo;
     }
 
     public async Task<ClinicPatientDto> Handle(UpdateClinicPatientCommand request, CancellationToken ct)
@@ -68,6 +72,56 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
         {
             throw new KeyNotFoundException($"Patient with ID {request.Id} was not found.");
         }
+
+        // Safely merge and validate CustomFields on a cloned dictionary first so validation failures
+        // never partially mutate the tracked entity, and assigning a new reference guarantees EF Core
+        // ChangeTracker persists key removals and updates to PostgreSQL.
+        var nextCustomFields = patient.CustomFields != null
+            ? new System.Collections.Generic.Dictionary<string, object?>(patient.CustomFields)
+            : new System.Collections.Generic.Dictionary<string, object?>();
+
+        // 1. If explicit CustomFields dictionary is provided in request, merge keys to preserve existing data (e.g. yakap_enlistments)
+        if (request.CustomFields != null)
+        {
+            if (_customFieldRepo != null)
+            {
+                await CustomFieldValueValidator.MergeAndValidateForUpdateAsync(
+                    nextCustomFields,
+                    request.CustomFields,
+                    _customFieldRepo,
+                    "ClinicPatient",
+                    ct);
+            }
+            else
+            {
+                foreach (var kvp in request.CustomFields)
+                {
+                    nextCustomFields[kvp.Key] = kvp.Value;
+                }
+            }
+        }
+
+        // 2. If address/contact parameters are explicitly passed, update them in nextCustomFields
+        if (request.AddressLine != null)
+            nextCustomFields["primary_address_line"] = string.IsNullOrWhiteSpace(request.AddressLine) ? null : request.AddressLine.Trim();
+
+        if (request.Barangay != null)
+            nextCustomFields["primary_barangay"] = string.IsNullOrWhiteSpace(request.Barangay) ? null : request.Barangay.Trim();
+
+        if (request.City != null)
+            nextCustomFields["primary_city"] = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
+
+        if (request.Province != null)
+            nextCustomFields["primary_province"] = string.IsNullOrWhiteSpace(request.Province) ? null : request.Province.Trim();
+
+        if (request.EmergencyContactName != null)
+            nextCustomFields["emergency_contact_name"] = string.IsNullOrWhiteSpace(request.EmergencyContactName) ? null : request.EmergencyContactName.Trim();
+
+        if (request.EmergencyContactPhone != null)
+            nextCustomFields["emergency_contact_phone"] = string.IsNullOrWhiteSpace(request.EmergencyContactPhone) ? null : request.EmergencyContactPhone.Trim();
+
+        if (request.EmergencyContactRelationship != null)
+            nextCustomFields["emergency_contact_relationship"] = string.IsNullOrWhiteSpace(request.EmergencyContactRelationship) ? null : request.EmergencyContactRelationship.Trim();
 
         patient.FirstName = request.FirstName.Trim();
         patient.LastName = request.LastName.Trim();
@@ -85,40 +139,7 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
         patient.BloodType = request.BloodType?.Trim();
         patient.Allergies = request.Allergies?.Trim();
         patient.Alerts = request.Alerts?.Trim();
-
-        // Safely merge CustomFields
-        patient.CustomFields ??= new System.Collections.Generic.Dictionary<string, object?>();
-
-        // 1. If explicit CustomFields dictionary is provided in request, merge keys to preserve existing data (e.g. yakap_enlistments)
-        if (request.CustomFields != null)
-        {
-            foreach (var kvp in request.CustomFields)
-            {
-                patient.CustomFields[kvp.Key] = kvp.Value;
-            }
-        }
-
-        // 2. If address/contact parameters are explicitly passed, update them in patient.CustomFields
-        if (request.AddressLine != null)
-            patient.CustomFields["primary_address_line"] = string.IsNullOrWhiteSpace(request.AddressLine) ? null : request.AddressLine.Trim();
-
-        if (request.Barangay != null)
-            patient.CustomFields["primary_barangay"] = string.IsNullOrWhiteSpace(request.Barangay) ? null : request.Barangay.Trim();
-
-        if (request.City != null)
-            patient.CustomFields["primary_city"] = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
-
-        if (request.Province != null)
-            patient.CustomFields["primary_province"] = string.IsNullOrWhiteSpace(request.Province) ? null : request.Province.Trim();
-
-        if (request.EmergencyContactName != null)
-            patient.CustomFields["emergency_contact_name"] = string.IsNullOrWhiteSpace(request.EmergencyContactName) ? null : request.EmergencyContactName.Trim();
-
-        if (request.EmergencyContactPhone != null)
-            patient.CustomFields["emergency_contact_phone"] = string.IsNullOrWhiteSpace(request.EmergencyContactPhone) ? null : request.EmergencyContactPhone.Trim();
-
-        if (request.EmergencyContactRelationship != null)
-            patient.CustomFields["emergency_contact_relationship"] = string.IsNullOrWhiteSpace(request.EmergencyContactRelationship) ? null : request.EmergencyContactRelationship.Trim();
+        patient.CustomFields = nextCustomFields;
 
         if (!string.IsNullOrWhiteSpace(request.VerificationStatus))
         {
