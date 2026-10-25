@@ -27,10 +27,19 @@ public sealed record CreateCustomFieldDefinitionCommand(
     string? OptionsJson = null,
     string? Placeholder = null,
     string? VisibilityRuleJson = null,
-    string? ConditionalOptionsJson = null) : IRequest<ClinicCustomFieldDefinitionDto>;
+    string? ConditionalOptionsJson = null,
+    string? BoundaryMode = null) : IRequest<ClinicCustomFieldDefinitionDto>;
 
 public sealed class CreateCustomFieldDefinitionCommandValidator : AbstractValidator<CreateCustomFieldDefinitionCommand>
 {
+    private static readonly System.Collections.Generic.HashSet<string> AllowedBoundaryModes = new(StringComparer.Ordinal)
+    {
+        "pastOrToday",
+        "futureOrToday",
+        "futureOnly",
+        "any"
+    };
+
     public CreateCustomFieldDefinitionCommandValidator()
     {
         RuleFor(x => x.FieldKey)
@@ -62,6 +71,11 @@ public sealed class CreateCustomFieldDefinitionCommandValidator : AbstractValida
 
         RuleFor(x => x.ConditionalOptionsJson)
             .Must(BeValidJsonOrNull).WithMessage("ConditionalOptionsJson must be a valid JSON string or null.");
+
+        RuleFor(x => x.BoundaryMode)
+            .MaximumLength(50).WithMessage("BoundaryMode cannot exceed 50 characters.")
+            .Must(mode => string.IsNullOrWhiteSpace(mode) || AllowedBoundaryModes.Contains(mode.Trim()))
+            .WithMessage("BoundaryMode must be one of: pastOrToday, futureOrToday, futureOnly, any.");
     }
 
     private static bool BeValidJsonOrNull(string? json)
@@ -141,6 +155,7 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
             Placeholder = request.Placeholder?.Trim(),
             VisibilityRuleJson = normalizedVisibilityRule,
             ConditionalOptionsJson = request.ConditionalOptionsJson,
+            BoundaryMode = string.IsNullOrWhiteSpace(request.BoundaryMode) ? null : request.BoundaryMode.Trim(),
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "ClinicAdmin"
@@ -172,7 +187,8 @@ public sealed class CreateCustomFieldDefinitionCommandHandler : IRequestHandler<
             entity.IsActive,
             entity.CreatedAt,
             entity.VisibilityRuleJson,
-            entity.ConditionalOptionsJson);
+            entity.ConditionalOptionsJson,
+            entity.BoundaryMode);
     }
 
     internal static bool IsUniqueConstraintViolation(DbUpdateException ex)

@@ -207,7 +207,14 @@ public class CreateFacilityCommandHandler(
             PlanTier = planTier,
             LicenseExpiresAt = licenseExpiresAt,
             ConsoleUrl = consoleUrl,
-            IsWorkspaceEligible = facility.IsPatientDiscoveryEligible
+            IsWorkspaceEligible = facility.IsPatientDiscoveryEligible,
+            BranchId = targetBranch?.Id,
+            BranchName = targetBranch?.Name,
+            BranchPhilHealthAccreditationNumber = targetBranch?.PhilHealthAccreditationNumber,
+            BranchPmccNumber = targetBranch?.PhilHealthPmccNumber,
+            BranchSoftwareCertificateId = targetBranch?.PhilHealthSoftwareCertificateId,
+            BranchKonsultaEndpoint = targetBranch?.PhilHealthKonsultaEndpoint,
+            IsBranchPhilHealthAccredited = targetBranch != null && targetBranch.IsPhilHealthAccredited && !string.IsNullOrWhiteSpace(targetBranch.PhilHealthAccreditationNumber)
         }, cancellationToken);
 
         // Customers' webhook endpoints learn about the facility, never about its licence.

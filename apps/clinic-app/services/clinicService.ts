@@ -1767,6 +1767,8 @@ export interface ConditionalOptionsConfig {
   defaultOptions?: string[];
 }
 
+export type BoundaryMode = 'pastOrToday' | 'futureOrToday' | 'futureOnly' | 'any';
+
 export interface ClinicCustomFieldDefinition {
   id: string;
   tenantId: string;
@@ -1784,6 +1786,7 @@ export interface ClinicCustomFieldDefinition {
   createdAt?: string;
   visibilityRuleJson?: string;
   conditionalOptionsJson?: string;
+  boundaryMode?: BoundaryMode | null;
 }
 
 export interface MedicalCertificateRecord {
@@ -1985,6 +1988,19 @@ export interface ClinicSettingsRecord {
   dateFormat?: string | null;
   timeFormat?: '12h' | '24h' | string | null;
 
+  // Branch Baseline & Explicit PhilHealth Override (Milestone 2 Issue #70)
+  pmccNumber?: string | null;
+  softwareCertificateId?: string | null;
+  konsultaEndpoint?: string | null;
+  isPhilHealthConfigured?: boolean;
+  isPhilHealthOverridden?: boolean;
+  branchId?: string | null;
+  branchName?: string | null;
+  branchPhilHealthAccreditationNumber?: string | null;
+  branchPmccNumber?: string | null;
+  branchSoftwareCertificateId?: string | null;
+  branchKonsultaEndpoint?: string | null;
+  isBranchPhilHealthAccredited?: boolean;
 }
 
 export interface DocumentSignatoryItemConfig {
@@ -3392,6 +3408,22 @@ export const clinicService = {
       finalPayload.dohLicenseToOperate = finalPayload.letterheadDohLto;
     }
     return clinicApiClient.put<ClinicSettingsRecord>('/settings', finalPayload);
+  },
+
+  async overridePhilHealthSettings(payload: {
+    accreditationNumber: string;
+    pmccNumber: string;
+    softwareCertificateId: string;
+    username?: string;
+    password?: string;
+    cipherKey?: string;
+    konsultaEndpoint?: string;
+  }) {
+    return clinicApiClient.post<ClinicSettingsRecord>('/settings/philhealth/override', payload);
+  },
+
+  async revertPhilHealthToBranch() {
+    return clinicApiClient.post<ClinicSettingsRecord>('/settings/philhealth/revert', {});
   },
 
   getSampleDocumentPdfUrl(docType: string, options?: { wet?: boolean; paperSize?: string }) {
