@@ -382,4 +382,54 @@ describe('FacilityReadinessTab — Milestone 2 Directory Readiness & Governance'
     // Should render skeletons and not the main check list cards
     expect(markup).not.toContain('Operating Hours');
   });
+
+  test('8. Displays pending credentials message when accreditation is present but not configured', () => {
+    const markupPending = renderToStaticMarkup(
+      React.createElement(FacilityReadinessTab, {
+        license: mockActiveLicense as any,
+        clinicName: 'St. Jude Health Hub',
+        letterheadAddress: '123 Rizal Ave, Manila',
+        letterheadContact: '0917-000-0000',
+        accreditationNumber: 'PHIC-1234',
+        isPhilHealthConfigured: false,
+        operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
+        staff: mockStaff as any,
+        services: mockServices as any,
+        roles: mockRoles as any,
+        isDirectoryPublished: false,
+        isOnlineBookingPaused: false,
+        isWorkspaceEligible: true,
+        onNavigateTab: () => {},
+        onOpenAddStaff: () => {},
+        onOpenAddService: () => {},
+        onOpenLicenseModal: () => {},
+      })
+    );
+
+    expect(markupPending).toContain('Accreditation number PHIC-1234 entered, but PhilHealth credentials are still pending configuration.');
+
+    const markupConfigured = renderToStaticMarkup(
+      React.createElement(FacilityReadinessTab, {
+        license: mockActiveLicense as any,
+        clinicName: 'St. Jude Health Hub',
+        letterheadAddress: '123 Rizal Ave, Manila',
+        letterheadContact: '0917-000-0000',
+        accreditationNumber: 'PHIC-1234',
+        isPhilHealthConfigured: true,
+        operatingHours: 'Mon-Sat 8:00 AM - 5:00 PM',
+        staff: mockStaff as any,
+        services: mockServices as any,
+        roles: mockRoles as any,
+        isDirectoryPublished: false,
+        isOnlineBookingPaused: false,
+        isWorkspaceEligible: true,
+        onNavigateTab: () => {},
+        onOpenAddStaff: () => {},
+        onOpenAddService: () => {},
+        onOpenLicenseModal: () => {},
+      })
+    );
+
+    expect(markupConfigured).toContain('Accreditation number PHIC-1234 configured for Konsulta primary care benefits.');
+  });
 });

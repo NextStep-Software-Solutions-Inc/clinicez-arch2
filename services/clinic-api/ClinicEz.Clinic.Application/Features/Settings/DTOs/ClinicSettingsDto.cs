@@ -67,4 +67,12 @@ public sealed record ClinicSettingsDto(
     bool? TurnstileEnvOverrideValue = null,
     string? TimeZoneId = null,
     string? DateFormat = null,
-    string? TimeFormat = null);
+    string? TimeFormat = null,
+    bool IsPhilHealthOverridden = false,
+    Guid? BranchId = null,
+    string? BranchName = null,
+    bool IsBranchPhilHealthAccredited = false,
+    string? BranchPhilHealthAccreditationNumber = null,
+    string? BranchPmccNumber = null,
+    string? BranchSoftwareCertificateId = null,
+    string? BranchKonsultaEndpoint = null);

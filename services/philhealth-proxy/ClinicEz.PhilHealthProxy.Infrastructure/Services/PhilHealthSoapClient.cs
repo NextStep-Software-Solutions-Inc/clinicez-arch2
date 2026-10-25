@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.DataProtection;
@@ -254,6 +255,23 @@ public sealed class PhilHealthSoapClient(
         return isoDate;
     }
 
+    private string SafeUnprotect(string? encrypted)
+    {
+        if (string.IsNullOrEmpty(encrypted)) return string.Empty;
+        try
+        {
+            return _protector.Unprotect(encrypted);
+        }
+        catch (CryptographicException)
+        {
+            return string.Empty;
+        }
+        catch (FormatException)
+        {
+            return string.Empty;
+        }
+    }
+
     private async Task<TenantCredentials?> ResolveTenantCredentialsAsync(CancellationToken ct)
     {
         PhilHealthTenant? tenant = null;
@@ -270,8 +288,8 @@ public sealed class PhilHealthSoapClient(
         if (tenant is null) return null;
 
         return new TenantCredentials(
-            Username: _protector.Unprotect(tenant.EncryptedUsername),
-            Password: _protector.Unprotect(tenant.EncryptedPassword),
+            Username: SafeUnprotect(tenant.EncryptedUsername),
+            Password: SafeUnprotect(tenant.EncryptedPassword),
             SoftwareCertificateId: tenant.SoftwareCertificateId,
             AccreditationNumber: tenant.AccreditationNumber,
             Endpoint: tenant.KonsultaEndpoint);

@@ -56,5 +56,14 @@ public record FacilityCreatedEvent
     public bool? IsBookingPaused { get; init; }
     public bool? IsJoinGated { get; init; }
     public string? JoinCode { get; init; }
+
+    // Central Workspace Branch baseline (non-secret metadata propagated from Portal)
+    public Guid? BranchId { get; init; }
+    public string? BranchName { get; init; }
+    public string? BranchPhilHealthAccreditationNumber { get; init; }
+    public string? BranchPmccNumber { get; init; }
+    public string? BranchSoftwareCertificateId { get; init; }
+    public string? BranchKonsultaEndpoint { get; init; }
+    public bool IsBranchPhilHealthAccredited { get; init; } = false;
 }
 

@@ -34,6 +34,38 @@ public sealed class PhilHealthSoapTester : IPhilHealthSoapTester
         _environment = environment;
     }
 
+    public static bool IsStagingOrSandbox(string? endpoint)
+    {
+        if (string.IsNullOrWhiteSpace(endpoint)) return true;
+        var trimmed = endpoint.Trim();
+
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        {
+            var host = uri.DnsSafeHost;
+            var isPhilHealth = host.Equals("philhealth.gov.ph", StringComparison.OrdinalIgnoreCase) ||
+                               host.EndsWith(".philhealth.gov.ph", StringComparison.OrdinalIgnoreCase);
+
+            if (isPhilHealth)
+            {
+                return host.Equals("staging.philhealth.gov.ph", StringComparison.OrdinalIgnoreCase) ||
+                       host.EndsWith(".staging.philhealth.gov.ph", StringComparison.OrdinalIgnoreCase) ||
+                       host.EndsWith("-staging.philhealth.gov.ph", StringComparison.OrdinalIgnoreCase);
+            }
+
+            var normalizedPath = uri.AbsolutePath.TrimEnd('/');
+            return host.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
+                   host.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
+                   normalizedPath.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase) ||
+                   normalizedPath.Equals("/soap/konsulta", StringComparison.OrdinalIgnoreCase);
+        }
+
+        var normalized = trimmed.TrimEnd('/');
+        return normalized.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
+               normalized.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Equals("/soap/konsulta", StringComparison.OrdinalIgnoreCase);
+    }
+
     public async Task<PhilHealthTestConnectionResult> TestConnectionAsync(
         string accreditationNumber,
         string username,
@@ -47,27 +79,33 @@ public sealed class PhilHealthSoapTester : IPhilHealthSoapTester
             return new PhilHealthTestConnectionResult(false, "PhilHealth Accreditation Number (Hospital Code) is required.");
         }
 
-        if (string.IsNullOrWhiteSpace(username))
-        {
-            return new PhilHealthTestConnectionResult(false, "SOAP Username is required to authenticate with PhilHealth.");
-        }
-
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            return new PhilHealthTestConnectionResult(false, "SOAP Password is required to authenticate with PhilHealth.");
-        }
-
         var targetEndpoint = !string.IsNullOrWhiteSpace(endpoint)
             ? endpoint.Trim()
             : PhilHealthDefaults.KonsultaEndpoint;
 
         var isProduction = _environment != null && _environment.IsProduction();
+        var isStagingOrSandbox = IsStagingOrSandbox(targetEndpoint);
+
+        if (isProduction && !isStagingOrSandbox)
+        {
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                return new PhilHealthTestConnectionResult(false, "SOAP Username is required to authenticate with PhilHealth.");
+            }
+
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                return new PhilHealthTestConnectionResult(false, "SOAP Password is required to authenticate with PhilHealth.");
+            }
+        }
 
         // 1. In-memory / simulation sandbox check (Development / Testing only)
+        var normalizedTarget = targetEndpoint.TrimEnd('/');
         if (!isProduction &&
-            (targetEndpoint.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
-             targetEndpoint.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
-             targetEndpoint.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase)))
+            (normalizedTarget.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
+             normalizedTarget.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
+             normalizedTarget.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase) ||
+             normalizedTarget.Equals("/soap/konsulta", StringComparison.OrdinalIgnoreCase)))
         {
             _logger.LogInformation("Testing connection against PhilHealth simulation sandbox for {Accreditation}", accreditationNumber);
             var simToken = $"PKA-SIM-{accreditationNumber.Trim()}-{Guid.NewGuid():N}"[..28];
@@ -92,8 +130,8 @@ public sealed class PhilHealthSoapTester : IPhilHealthSoapTester
                     new XElement(SoapNs + "Header"),
                     new XElement(SoapNs + "Body",
                         new XElement(PhilHealthNs + "getToken",
-                            new XElement(PhilHealthNs + "pUsername", username.Trim()),
-                            new XElement(PhilHealthNs + "pUserPassword", password),
+                            new XElement(PhilHealthNs + "pUsername", username?.Trim() ?? string.Empty),
+                            new XElement(PhilHealthNs + "pUserPassword", password ?? string.Empty),
                             new XElement(PhilHealthNs + "pSoftwareCertificationId", softwareCertificateId?.Trim() ?? string.Empty),
                             new XElement(PhilHealthNs + "pHospitalCode", accreditationNumber.Trim())))));
 

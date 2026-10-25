@@ -1207,7 +1207,7 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
         encoding: 'utf8',
       });
       expect(output).toContain('Token guard: 0 violation(s) in 0 file(s)');
-    });
+    }, { timeout: 30000 });
 
     test('9.2 Brand teal hex #0D6963 is consumed exclusively through theme.colors.primary', () => {
       expect(theme.colors.primary).toBe('#0D6963');

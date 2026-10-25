@@ -89,6 +89,59 @@ public sealed class FacilityDirectoryUpdatedHandler : IInteropHandler<FacilityCr
         if (!string.IsNullOrWhiteSpace(message.TenantSlug))
             settings.TenantSlug = message.TenantSlug;
 
+        // Synchronize Branch Baseline Metadata if branch assigned or previously assigned
+        if (message.BranchId != null)
+        {
+            settings.BranchId = message.BranchId;
+            settings.BranchName = message.BranchName;
+            settings.BranchPhilHealthAccreditationNumber = message.BranchPhilHealthAccreditationNumber;
+            settings.BranchPmccNumber = message.BranchPmccNumber;
+            settings.BranchSoftwareCertificateId = message.BranchSoftwareCertificateId;
+            settings.BranchKonsultaEndpoint = message.BranchKonsultaEndpoint;
+            settings.IsBranchPhilHealthAccredited = message.IsBranchPhilHealthAccredited;
+
+            // If not overridden by clinic administrator, inherit branch PhilHealth parameters
+            if (!settings.IsPhilHealthOverridden)
+            {
+                if (message.IsBranchPhilHealthAccredited && !string.IsNullOrWhiteSpace(message.BranchPhilHealthAccreditationNumber))
+                {
+                    settings.AccreditationNumber = message.BranchPhilHealthAccreditationNumber;
+                    settings.PmccNumber = message.BranchPmccNumber;
+                    settings.SoftwareCertificateId = message.BranchSoftwareCertificateId;
+                    settings.KonsultaEndpoint = !string.IsNullOrWhiteSpace(message.BranchKonsultaEndpoint) ? message.BranchKonsultaEndpoint : "/soap/konsulta";
+                    settings.IsPhilHealthConfigured = true;
+                }
+                else
+                {
+                    settings.AccreditationNumber = null;
+                    settings.PmccNumber = null;
+                    settings.SoftwareCertificateId = null;
+                    settings.KonsultaEndpoint = "/soap/konsulta";
+                    settings.IsPhilHealthConfigured = false;
+                }
+            }
+        }
+        else if (settings.BranchId != null)
+        {
+            // Specifically unlinked from branch: clear branch metadata and reset if not overridden
+            settings.BranchId = null;
+            settings.BranchName = null;
+            settings.BranchPhilHealthAccreditationNumber = null;
+            settings.BranchPmccNumber = null;
+            settings.BranchSoftwareCertificateId = null;
+            settings.BranchKonsultaEndpoint = null;
+            settings.IsBranchPhilHealthAccredited = false;
+
+            if (!settings.IsPhilHealthOverridden)
+            {
+                settings.AccreditationNumber = null;
+                settings.PmccNumber = null;
+                settings.SoftwareCertificateId = null;
+                settings.KonsultaEndpoint = "/soap/konsulta";
+                settings.IsPhilHealthConfigured = false;
+            }
+        }
+
         settings.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(ct);

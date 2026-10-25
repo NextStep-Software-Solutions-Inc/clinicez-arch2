@@ -155,8 +155,7 @@ public sealed class PublicDirectoryEndpoints : IEndpoint
             var resolvedStreet = FirstNonEmpty(f.StreetAddress, f.Branch?.StreetAddress, f.Tenant.StreetLine1);
             var resolvedBarangay = FirstNonEmpty(f.Barangay, f.Branch?.Barangay);
             var resolvedAddress = BuildAddress(resolvedStreet, resolvedBarangay, resolvedCity, resolvedProvince);
-            var isYakap = !string.IsNullOrWhiteSpace(f.PhilHealthAccreditationNumber)
-                          || (f.Branch?.IsPhilHealthAccredited ?? false);
+            var isYakap = f.Branch != null && f.Branch.IsPhilHealthAccredited && !string.IsNullOrWhiteSpace(f.Branch.PhilHealthAccreditationNumber);
 
             var providerCount = staffMembers.Count(s =>
                 (s.FacilityId == f.Id || (s.FacilityId == null && s.TenantId == f.TenantId))
