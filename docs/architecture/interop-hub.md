@@ -113,7 +113,7 @@ Client secrets prove *which client is calling*; a **signature proves the envelop
 
 4. `ControlPlane` and `PatientPlane` senders are trusted relays and are not link-checked.
 5. A link authorised on the way in records a conversation entry, which is what later lets the other side reply.
-6. Limits: `Hub:MaxEnvelopeBytes` (1 MiB) per envelope, `Hub:MaxSendBatch` (100) per request, expired envelopes rejected, required fields validated. Each envelope in a batch gets its own verdict; **a rejection is final** (the SDK dead-letters its outbox row and never retries it).
+6. Limits: `Hub:MaxEnvelopeBytes` (8 MiB) per envelope, `Hub:MaxSendBatch` (100) per request, expired envelopes rejected, required fields validated. Each envelope in a batch gets its own verdict; **a rejection is final** (the SDK dead-letters its outbox row and never retries it).
 
 Directory visibility (`GET /v1/directory/facilities`): a caller sees its own workspace's facilities, `Public` facilities, and `Network` facilities it has an `Active` link to. `Private` facilities are visible only inside their workspace.
 

@@ -2,14 +2,21 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldAlert, KeyRound, ArrowRight, RefreshCw, Building2 } from "lucide-react";
+import { ShieldAlert, KeyRound, ArrowRight, RefreshCw, Building2, Clock, Ban, HelpCircle } from "lucide-react";
 
 interface JoinCodeErrorCardProps {
   initialCode: string;
   errorMessage: string;
+  errorCode?: string;
+  statusCode?: number;
 }
 
-export function JoinCodeErrorCard({ initialCode, errorMessage }: JoinCodeErrorCardProps) {
+export function JoinCodeErrorCard({
+  initialCode,
+  errorMessage,
+  errorCode,
+  statusCode,
+}: JoinCodeErrorCardProps) {
   const router = useRouter();
   const [retryCode, setRetryCode] = useState("");
   const [isNavigating, setIsNavigating] = useState(false);
@@ -22,22 +29,52 @@ export function JoinCodeErrorCard({ initialCode, errorMessage }: JoinCodeErrorCa
     router.push(`/join/${encodeURIComponent(clean)}`);
   };
 
+  const isExpired = statusCode === 410 || errorCode === "JOIN_CODE_EXPIRED";
+  const isDisabled = statusCode === 403 || errorCode === "JOIN_DISABLED";
+  const isAmbiguous = statusCode === 409 || errorCode === "JOIN_CODE_AMBIGUOUS";
+
+  const title = isExpired
+    ? "Join Code Expired"
+    : isDisabled
+    ? "Self-Registration Disabled"
+    : isAmbiguous
+    ? "Ambiguous Join Code"
+    : "Invalid Clinic Join Code";
+
+  const guidance = isExpired
+    ? "This clinic join passcode has expired. Please ask clinic reception for a new code or scan their latest QR code."
+    : isDisabled
+    ? "This clinic is not currently accepting public online self-registrations. Please speak directly with the receptionist on duty."
+    : isAmbiguous
+    ? "This join code matches multiple organizations. Please scan the facility-specific QR code or use the branch direct link."
+    : "Clinic intake links are protected by time-limited passcodes. If your code is invalid, please request an updated code or QR slip from clinic reception.";
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8">
       <div className="max-w-md w-full bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 text-center">
         {/* Error Icon Badge */}
         <div className="w-16 h-16 rounded-2xl bg-destructive/10 text-destructive flex items-center justify-center mx-auto border border-destructive/20">
-          <ShieldAlert className="w-8 h-8" />
+          {isExpired ? (
+            <Clock className="w-8 h-8" />
+          ) : isDisabled ? (
+            <Ban className="w-8 h-8" />
+          ) : isAmbiguous ? (
+            <HelpCircle className="w-8 h-8" />
+          ) : (
+            <ShieldAlert className="w-8 h-8" />
+          )}
         </div>
 
         {/* Heading & Reason */}
         <div className="space-y-2">
           <h1 className="text-xl font-black tracking-tight text-foreground">
-            Invalid or Expired Join Code
+            {title}
           </h1>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            The code <span className="font-mono font-bold text-foreground bg-muted px-1.5 py-0.5 rounded">{initialCode}</span> could not be verified.
-          </p>
+          {initialCode ? (
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              The code <span className="font-mono font-bold text-foreground bg-muted px-1.5 py-0.5 rounded">{initialCode}</span> could not be verified.
+            </p>
+          ) : null}
           <div className="p-3 bg-destructive/5 border border-destructive/20 rounded-xl text-destructive text-xs font-medium">
             {errorMessage}
           </div>
@@ -45,7 +82,7 @@ export function JoinCodeErrorCard({ initialCode, errorMessage }: JoinCodeErrorCa
 
         {/* Guidance */}
         <p className="text-xs text-muted-foreground">
-          Clinic intake links are protected by time-limited passcodes configured by clinic administration. If your code has expired, please request an updated code or QR slip from clinic reception.
+          {guidance}
         </p>
 
         {/* Re-enter Form */}

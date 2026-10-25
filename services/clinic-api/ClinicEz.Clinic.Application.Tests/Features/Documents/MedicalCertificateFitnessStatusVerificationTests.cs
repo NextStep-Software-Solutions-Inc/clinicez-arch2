@@ -417,9 +417,19 @@ public class MedicalCertificateFitnessStatusVerificationTests
                 int endStreamInBody = body.LastIndexOf("endstream", StringComparison.Ordinal);
                 if (endStreamInBody > streamPos)
                 {
-                    int dataEnd = objMatch.Groups[2].Index + endStreamInBody;
-                    while (dataEnd > dataStart && (pdfBytes[dataEnd - 1] == '\r' || pdfBytes[dataEnd - 1] == '\n'))
+                    int rawEnd = objMatch.Groups[2].Index + endStreamInBody;
+                    int rawLen = rawEnd - dataStart;
+                    int dataEnd = rawEnd;
+                    if (dataEnd > dataStart && pdfBytes[dataEnd - 1] == '\n')
+                    {
                         dataEnd--;
+                        if (dataEnd > dataStart && pdfBytes[dataEnd - 1] == '\r')
+                            dataEnd--;
+                    }
+                    else if (dataEnd > dataStart && pdfBytes[dataEnd - 1] == '\r')
+                    {
+                        dataEnd--;
+                    }
 
                     int len = dataEnd - dataStart;
                     if (len > 0)
@@ -433,7 +443,24 @@ public class MedicalCertificateFitnessStatusVerificationTests
                         }
                         catch
                         {
-                            // Non-Flate stream (e.g. raw image data); safely ignore.
+                            if (rawLen > 6 &&
+                                (pdfBytes[dataStart] & 0x0F) == 8 &&
+                                (pdfBytes[dataStart] >> 4) <= 7 &&
+                                ((pdfBytes[dataStart] * 256 + pdfBytes[dataStart + 1]) % 31) == 0 &&
+                                (pdfBytes[dataStart + 1] & 0x20) == 0)
+                            {
+                                try
+                                {
+                                    using var deflateMem = new MemoryStream(pdfBytes, dataStart + 2, rawLen - 2);
+                                    using var deflate = new DeflateStream(deflateMem, CompressionMode.Decompress);
+                                    using var reader = new StreamReader(deflate, Encoding.UTF8);
+                                    objectStreams[objId] = reader.ReadToEnd();
+                                }
+                                catch
+                                {
+                                    // Non-Flate stream (e.g. raw image data); safely ignore.
+                                }
+                            }
                         }
                     }
                 }
@@ -556,10 +583,11 @@ public class MedicalCertificateFitnessStatusVerificationTests
                 var dstSb = new StringBuilder();
                 for (int i = 0; i + 4 <= dstHex.Length; i += 4)
                 {
-                    if (int.TryParse(dstHex.Substring(i, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int cp))
+                    if (int.TryParse(dstHex.Substring(i, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int cp) && cp != 0)
                         dstSb.Append((char)cp);
                 }
-                cmap[src] = dstSb.ToString();
+                if (dstSb.Length > 0)
+                    cmap[src] = dstSb.ToString();
             }
             idx = end + 9;
         }
@@ -577,7 +605,10 @@ public class MedicalCertificateFitnessStatusVerificationTests
                     int.TryParse(m.Groups[3].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int sDst))
                 {
                     for (int s = sSrc, d = sDst; s <= eSrc; s++, d++)
-                        cmap[s.ToString("X4")] = ((char)d).ToString();
+                    {
+                        if (d != 0)
+                            cmap[s.ToString("X4")] = ((char)d).ToString();
+                    }
                 }
             }
             idx = end + 10;

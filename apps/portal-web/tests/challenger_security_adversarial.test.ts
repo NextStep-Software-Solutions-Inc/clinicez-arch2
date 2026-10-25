@@ -27,7 +27,7 @@ const ROUTE_FILE_PATH = path.join(
 );
 
 describe("Challenger Security: Empirical Adversarial Verification Suite", () => {
-  describe("Probe 4: Non-Allowlisted Public Slug Lockdown & Enumeration", () => {
+  describe("Probe 4: Non-Allowlisted Public Slug Lockdown & Elimination", () => {
     interface RouteModule {
       GET?: (
         request: NextRequest,
@@ -54,6 +54,21 @@ describe("Challenger Security: Empirical Adversarial Verification Suite", () => 
 
     afterEach(() => {
       globalThis.fetch = originalFetch;
+    });
+
+    test("Probe 4.1: The legacy public/[...slug]/route.ts file is permanently deleted", () => {
+      expect(fs.existsSync(ROUTE_FILE_PATH)).toBe(false);
+      expect(routeHandler).toBeNull();
+    });
+
+    test("Probe 4.2: apps/portal-web/src/app/api contains strictly 0 files on disk", () => {
+      const apiDir = path.join(WORKSPACE_ROOT, "src", "app", "api");
+      if (fs.existsSync(apiDir)) {
+        const files = fs.readdirSync(apiDir, { recursive: true });
+        expect(files.length).toBe(0);
+      } else {
+        expect(fs.existsSync(apiDir)).toBe(false);
+      }
     });
 
     const adversarialNonAllowlistedSlugs = [
@@ -83,57 +98,35 @@ describe("Challenger Security: Empirical Adversarial Verification Suite", () => 
       ["queue-display-attack"],
     ];
 
+    const isAllowlistedPath = (slugArray: string[]) => {
+      const subPath = slugArray.join("/");
+      if (subPath.includes("..")) return false;
+      const allowed = ["rx-upload", "queue/display"];
+      return allowed.some((prefix) => subPath === prefix || subPath.startsWith(`${prefix}/`));
+    };
+
     for (const slug of adversarialNonAllowlistedSlugs) {
-      test(`GET /public/${slug.join("/")} unconditionally returns 404`, async () => {
-        expect(routeHandler?.GET).toBeDefined();
-
-        const req = new NextRequest(`http://localhost:3000/api/v1/public/${slug.join("/")}`);
-        const res = await routeHandler!.GET!(req, {
-          params: Promise.resolve({ slug }),
-        });
-
-        expect(res.status).toBe(404);
-        const data = await res.json();
-        expect(data.success).toBe(false);
-        expect(data.message).toMatch(/deprecated|not found/i);
+      test(`GET /public/${slug.join("/")} cannot be serviced because route is deleted and allowlist rejects`, () => {
+        expect(isAllowlistedPath(slug)).toBe(false);
+        expect(fs.existsSync(ROUTE_FILE_PATH)).toBe(false);
       });
 
-      test(`POST /public/${slug.join("/")} unconditionally returns 404`, async () => {
-        expect(routeHandler?.POST).toBeDefined();
-
-        const req = new NextRequest(`http://localhost:3000/api/v1/public/${slug.join("/")}`, {
-          method: "POST",
-          body: JSON.stringify({ exploit: true }),
-        });
-        const res = await routeHandler!.POST!(req, {
-          params: Promise.resolve({ slug }),
-        });
-
-        expect(res.status).toBe(404);
-        const data = await res.json();
-        expect(data.success).toBe(false);
-        expect(data.message).toMatch(/deprecated|not found/i);
+      test(`POST /public/${slug.join("/")} cannot be serviced because route is deleted and allowlist rejects`, () => {
+        expect(isAllowlistedPath(slug)).toBe(false);
+        expect(fs.existsSync(ROUTE_FILE_PATH)).toBe(false);
       });
     }
 
-    test("ADVERSARIAL STRESS: Path traversal through allowlisted prefix 'rx-upload/../../patients'", async () => {
+    test("ADVERSARIAL STRESS: Path traversal through allowlisted prefix 'rx-upload/../../patients'", () => {
       // Stress-testing assumption: Can an attacker escape rx-upload prefix using ../ segments?
       const traversalSlug = ["rx-upload", "..", "..", "patients"];
-      const subPath = traversalSlug.join("/");
-      
-      // Let's verify what isAllowlistedPath does with rx-upload/../../patients
-      const allowed = ["rx-upload", "queue/display"];
-      const bypassesAllowlist = allowed.some(
-        (prefix) => subPath === prefix || subPath.startsWith(`${prefix}/`)
-      );
-
-      // Observation: 'rx-upload/../../patients' starts with 'rx-upload/'!
-      expect(bypassesAllowlist).toBe(true);
+      const isAllowed = isAllowlistedPath(traversalSlug);
+      expect(isAllowed).toBe(false);
     });
 
-    test("Mitigation verification: routeHandler strictly rejects path traversal with 404", async () => {
-      expect(routeHandler?.GET).toBeDefined();
-      expect(routeHandler?.POST).toBeDefined();
+    test("Mitigation verification: routeHandler is permanently absent and cannot process path traversal", () => {
+      expect(fs.existsSync(ROUTE_FILE_PATH)).toBe(false);
+      expect(routeHandler).toBeNull();
 
       const traversalSlugs = [
         ["rx-upload", "..", "..", "patients"],
@@ -142,20 +135,7 @@ describe("Challenger Security: Empirical Adversarial Verification Suite", () => 
       ];
 
       for (const slug of traversalSlugs) {
-        const reqGet = new NextRequest(`http://localhost:3000/api/v1/public/${slug.join("/")}`);
-        const resGet = await routeHandler!.GET!(reqGet, {
-          params: Promise.resolve({ slug }),
-        });
-        expect(resGet.status).toBe(404);
-
-        const reqPost = new NextRequest(`http://localhost:3000/api/v1/public/${slug.join("/")}`, {
-          method: "POST",
-          body: JSON.stringify({ exploit: true }),
-        });
-        const resPost = await routeHandler!.POST!(reqPost, {
-          params: Promise.resolve({ slug }),
-        });
-        expect(resPost.status).toBe(404);
+        expect(isAllowlistedPath(slug)).toBe(false);
       }
     });
   });
@@ -169,6 +149,7 @@ describe("Challenger Security: Empirical Adversarial Verification Suite", () => 
       "src/app/api/v1/public/join/validate/[code]/route.ts",
       "src/app/api/v1/patients/me/route.ts",
       "src/app/api/v1/patients/claim-intake/route.ts",
+      "src/app/api/v1/public/[...slug]/route.ts",
     ];
 
     for (const relPath of deletedBffRoutes) {
@@ -211,9 +192,6 @@ describe("Challenger Security: Empirical Adversarial Verification Suite", () => 
 
         const violations: string[] = [];
         for (const file of files) {
-          // Skip [...slug] route itself
-          if (file.includes("[...slug]")) continue;
-
           const content = fs.readFileSync(file, "utf-8");
           for (const forbidden of forbiddenCalls) {
             if (

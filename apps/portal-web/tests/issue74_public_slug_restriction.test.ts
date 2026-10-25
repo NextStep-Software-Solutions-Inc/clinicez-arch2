@@ -4,14 +4,13 @@ import * as path from "path";
 import { NextRequest } from "next/server";
 
 /**
- * Issue #74 Test Suite: public/[...slug]/route.ts Route Restriction & Deprecation
+ * Issue #74 Test Suite: public/[...slug]/route.ts Route Elimination & Decoupling Guard
  *
  * Requirements Covered:
- * - R2: Strip PORTAL_API_URL from public/[...slug]/route.ts
- * - R2: 404 Not Found for any non-allowlisted path (contact, newsletter, join, settings, directory/*)
- * - R2: Only rx-upload/* and queue/display/* are forwarded to CLINIC_API_URL
- * - R2: Explicit @deprecated notice in route header
- * - Adversarial prefix lookalikes and path traversal protection
+ * - Milestone 5: Legacy BFF Catch-All Proxy Deletion (0 files under apps/portal-web/src/app/api)
+ * - Verification that public/[...slug]/route.ts is permanently eliminated from disk
+ * - Allowlist logic boundary tests confirming rejection of adversarial slugs
+ * - Verification that direct portal-api communication replaces all legacy BFF proxy forwarding
  */
 
 const WORKSPACE_ROOT = path.resolve(__dirname, "..");
@@ -26,27 +25,25 @@ const ROUTE_FILE_PATH = path.join(
   "route.ts"
 );
 
-describe("Issue #74: public/[...slug]/route.ts Route Restriction & Deprecation", () => {
-  describe("Tier 1: Source Code Static Analysis", () => {
-    test("T1.1: Source code contains zero references to PORTAL_API_URL", () => {
-      expect(fs.existsSync(ROUTE_FILE_PATH)).toBe(true);
-      const content = fs.readFileSync(ROUTE_FILE_PATH, "utf-8");
-
-      expect(content).not.toContain("PORTAL_API_URL");
-      expect(content).not.toContain("SERVICES_PORTAL_API_URL");
-      expect(content).not.toContain("directory/");
+describe("Issue #74: public/[...slug]/route.ts Route Elimination & Decoupling Guard", () => {
+  describe("Tier 1: Elimination & Deprecation Static Analysis", () => {
+    test("T1.1: The legacy public/[...slug]/route.ts file is permanently deleted", () => {
+      expect(fs.existsSync(ROUTE_FILE_PATH)).toBe(false);
     });
 
-    test("T1.2: Source code declares explicit @deprecated architectural notice", () => {
-      const content = fs.readFileSync(ROUTE_FILE_PATH, "utf-8");
-      expect(content).toMatch(/@deprecated/i);
-      expect(content).toMatch(/BFF/i);
+    test("T1.2: apps/portal-web/src/app/api contains strictly 0 files on disk", () => {
+      const apiDir = path.join(WORKSPACE_ROOT, "src", "app", "api");
+      if (fs.existsSync(apiDir)) {
+        const files = fs.readdirSync(apiDir, { recursive: true });
+        expect(files.length).toBe(0);
+      } else {
+        expect(fs.existsSync(apiDir)).toBe(false);
+      }
     });
 
-    test("T1.3: Source code strictly declares allowlisted prefixes (rx-upload, queue/display)", () => {
-      const content = fs.readFileSync(ROUTE_FILE_PATH, "utf-8");
-      expect(content).toContain("rx-upload");
-      expect(content).toContain("queue/display");
+    test("T1.3: Zero Next.js BFF route files exist anywhere in src/app/api", () => {
+      const apiDir = path.join(WORKSPACE_ROOT, "src", "app", "api");
+      expect(fs.existsSync(apiDir)).toBe(false);
     });
   });
 
@@ -120,174 +117,65 @@ describe("Issue #74: public/[...slug]/route.ts Route Restriction & Deprecation",
     });
   });
 
-  describe("Tier 3 & Tier 4: Live HTTP Route Handler Invocations (GET & POST)", () => {
-    interface RouteModule {
-      GET?: (
-        request: NextRequest,
-        context: { params: Promise<{ slug: string[] }> }
-      ) => Promise<Response>;
-      POST?: (
-        request: NextRequest,
-        context: { params: Promise<{ slug: string[] }> }
-      ) => Promise<Response>;
-    }
-
-    let routeHandler: RouteModule | null = null;
-    const originalFetch = globalThis.fetch;
+  describe("Tier 3 & Tier 4: Route Module Absence & Decoupling Invariants", () => {
+    let routeHandler: any = null;
 
     beforeEach(async () => {
-      // Dynamic import to test the actual route module
       try {
-        routeHandler = (await import(
+        routeHandler = await import(
           "../src/app/api/v1/public/[...slug]/route"
-        )) as RouteModule;
+        );
       } catch {
         routeHandler = null;
       }
     });
 
-    afterEach(() => {
-      globalThis.fetch = originalFetch;
+    test("T3.1: Dynamic import of legacy route fails because file is deleted", () => {
+      expect(routeHandler).toBeNull();
+      expect(fs.existsSync(ROUTE_FILE_PATH)).toBe(false);
     });
 
-    test("T3.1: GET handler returns 404 for forbidden non-allowlisted slugs", async () => {
-      if (!routeHandler?.GET) {
-        throw new Error("GET export not found in public/[...slug]/route.ts");
-      }
-
-      const req = new NextRequest("http://localhost:3000/api/v1/public/contact");
-      const res = await routeHandler.GET(req, {
-        params: Promise.resolve({ slug: ["contact"] }),
-      });
-
-      expect(res.status).toBe(404);
-      const json = await res.json();
-      expect(json.success).toBe(false);
-      expect(json.message).toMatch(/deprecated|not found/i);
+    test("T3.2: Calling /api/v1/public/* route handler is impossible because module is absent", () => {
+      expect(routeHandler?.GET).toBeUndefined();
+      expect(routeHandler?.POST).toBeUndefined();
     });
 
-    test("T3.2: POST handler returns 404 for forbidden non-allowlisted slugs", async () => {
-      if (!routeHandler?.POST) {
-        throw new Error("POST export not found in public/[...slug]/route.ts");
+    test("T3.3: apps/portal-web/src contains zero active calls to /api/v1/public", () => {
+      const srcDir = path.join(WORKSPACE_ROOT, "src");
+      const files: string[] = [];
+      const collectFiles = (dir: string) => {
+        if (!fs.existsSync(dir)) return;
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) collectFiles(full);
+          else if (/\.(ts|tsx)$/.test(entry.name)) files.push(full);
+        }
+      };
+      collectFiles(srcDir);
+      const violations: string[] = [];
+      for (const file of files) {
+        const content = fs.readFileSync(file, "utf-8");
+        for (const line of content.split("\n")) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
+          if (trimmed.includes("'/api/v1/public") || trimmed.includes('"/api/v1/public') || trimmed.includes("`/api/v1/public")) {
+            violations.push(`${path.relative(WORKSPACE_ROOT, file)}: ${trimmed}`);
+          }
+        }
       }
-
-      const req = new NextRequest("http://localhost:3000/api/v1/public/newsletter", {
-        method: "POST",
-        body: JSON.stringify({ email: "test@example.com" }),
-      });
-      const res = await routeHandler.POST(req, {
-        params: Promise.resolve({ slug: ["newsletter"] }),
-      });
-
-      expect(res.status).toBe(404);
-      const json = await res.json();
-      expect(json.success).toBe(false);
-      expect(json.message).toMatch(/deprecated|not found/i);
+      expect(violations).toEqual([]);
     });
 
-    test("T3.3: GET handler forwards allowlisted rx-upload to CLINIC_API_URL", async () => {
-      if (!routeHandler?.GET) {
-        throw new Error("GET export not found in public/[...slug]/route.ts");
-      }
-
-      let forwardedUrl = "";
-      globalThis.fetch = mock((url: string | URL | Request) => {
-        forwardedUrl = String(url);
-        return Promise.resolve(
-          new Response(JSON.stringify({ status: "ready" }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          })
-        );
-      }) as unknown as typeof globalThis.fetch;
-
-      const req = new NextRequest("http://localhost:3000/api/v1/public/rx-upload/status");
-      const res = await routeHandler.GET(req, {
-        params: Promise.resolve({ slug: ["rx-upload", "status"] }),
-      });
-
-      expect(res.status).toBe(200);
-      expect(forwardedUrl).toContain("/public/rx-upload/status");
-      expect(forwardedUrl).not.toContain("localhost:5238"); // Not portal-api
+    test("T4.1: Downstream decoupled architecture uses portal-api directly via getPortalApiUrl", async () => {
+      const { getPortalApiUrl } = await import("../src/utils/domain");
+      const portalUrl = getPortalApiUrl();
+      expect(portalUrl).toBeDefined();
+      expect(portalUrl).not.toContain(":5245"); // Not clinic-api
     });
 
-    test("T3.4: GET handler forwards allowlisted queue/display to CLINIC_API_URL with query string", async () => {
-      if (!routeHandler?.GET) {
-        throw new Error("GET export not found in public/[...slug]/route.ts");
-      }
-
-      let forwardedUrl = "";
-      globalThis.fetch = mock((url: string | URL | Request) => {
-        forwardedUrl = String(url);
-        return Promise.resolve(
-          new Response(JSON.stringify({ nowServing: [] }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          })
-        );
-      }) as unknown as typeof globalThis.fetch;
-
-      const req = new NextRequest("http://localhost:3000/api/v1/public/queue/display/metro-health?station=Room1");
-      const res = await routeHandler.GET(req, {
-        params: Promise.resolve({ slug: ["queue", "display", "metro-health"] }),
-      });
-
-      expect(res.status).toBe(200);
-      expect(forwardedUrl).toContain("/public/queue/display/metro-health?station=Room1");
-    });
-
-    test("T4.1 (Scenario & Resilience): Downstream network failure returns HTTP 502 Bad Gateway", async () => {
-      if (!routeHandler?.GET) {
-        throw new Error("GET export not found in public/[...slug]/route.ts");
-      }
-
-      globalThis.fetch = mock(() => {
-        return Promise.reject(new Error("Connection refused to clinic-api"));
-      }) as unknown as typeof globalThis.fetch;
-
-      const req = new NextRequest("http://localhost:3000/api/v1/public/rx-upload/ping");
-      const res = await routeHandler.GET(req, {
-        params: Promise.resolve({ slug: ["rx-upload", "ping"] }),
-      });
-
-      expect(res.status).toBe(502);
-      const json = await res.json();
-      expect(json.success).toBe(false);
-      expect(json.message).toContain("clinic");
-    });
-
-    test("T4.2 (Security Hardening): Path traversal attempts through allowlisted prefixes are rejected with HTTP 404", async () => {
-      if (!routeHandler?.GET || !routeHandler?.POST) {
-        throw new Error("Route exports not found in public/[...slug]/route.ts");
-      }
-
-      const traversalSlugs = [
-        ["rx-upload", "..", "..", "patients"],
-        ["queue", "display", "..", "..", "admin"],
-      ];
-
-      for (const slug of traversalSlugs) {
-        const reqGet = new NextRequest(`http://localhost:3000/api/v1/public/${slug.join("/")}`);
-        const resGet = await routeHandler.GET(reqGet, {
-          params: Promise.resolve({ slug }),
-        });
-        expect(resGet.status).toBe(404);
-        const jsonGet = await resGet.json();
-        expect(jsonGet.success).toBe(false);
-        expect(jsonGet.message).toMatch(/deprecated|not found/i);
-
-        const reqPost = new NextRequest(`http://localhost:3000/api/v1/public/${slug.join("/")}`, {
-          method: "POST",
-          body: JSON.stringify({ exploit: true }),
-        });
-        const resPost = await routeHandler.POST(reqPost, {
-          params: Promise.resolve({ slug }),
-        });
-        expect(resPost.status).toBe(404);
-        const jsonPost = await resPost.json();
-        expect(jsonPost.success).toBe(false);
-        expect(jsonPost.message).toMatch(/deprecated|not found/i);
-      }
+    test("T4.2 (Security Hardening): Path traversal attempts cannot exploit BFF as route is eliminated", () => {
+      expect(fs.existsSync(ROUTE_FILE_PATH)).toBe(false);
+      expect(routeHandler).toBeNull();
     });
   });
 });

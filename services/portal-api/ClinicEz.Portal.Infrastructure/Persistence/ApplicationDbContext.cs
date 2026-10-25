@@ -44,6 +44,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SystemSetting> SystemSettings { get; set; }
     public DbSet<PortalNotification> PortalNotifications { get; set; }
     public DbSet<NewsletterSubscriber> NewsletterSubscribers { get; set; }
+    public DbSet<DocumentAttestation> DocumentAttestations { get; set; }
+    public DbSet<FacilityQueueBoard> FacilityQueueBoards { get; set; }
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
@@ -220,9 +222,86 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasFilter("\"IsDeleted\" = false")
                 .IsUnique();
 
+            entity.Property(e => e.IsJoinEnabled).HasDefaultValue(true);
+            entity.Property(e => e.JoinCode).HasMaxLength(64);
+            entity.HasIndex(e => e.JoinCode)
+                .HasFilter("\"IsDeleted\" = false AND \"JoinCode\" IS NOT NULL");
+
             entity.HasIndex(e => new { e.BranchId, e.FacilityType })
                 .HasFilter("\"IsDeleted\" = false AND \"BranchId\" IS NOT NULL")
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<DocumentAttestation>(entity =>
+        {
+            entity.ToTable("DocumentAttestations");
+
+            entity.Property(e => e.DocumentKind).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.DocumentNumber).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.SecurityDigest).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.VerificationTokenHash).HasMaxLength(128);
+            entity.Property(e => e.ClinicName).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.ClinicAddress).HasMaxLength(512);
+            entity.Property(e => e.ClinicContact).HasMaxLength(128);
+            entity.Property(e => e.DoctorName).HasMaxLength(256);
+            entity.Property(e => e.DoctorPrcLicense).HasMaxLength(64);
+            entity.Property(e => e.DoctorPtr).HasMaxLength(64);
+            entity.Property(e => e.DoctorS2License).HasMaxLength(64);
+            entity.Property(e => e.Status).HasMaxLength(32).IsRequired().HasDefaultValue("VALID");
+            entity.Property(e => e.DispenseStatus).HasMaxLength(64);
+            entity.Property(e => e.DispensedPharmacyName).HasMaxLength(256);
+            entity.Property(e => e.DispensedReceiptFileName).HasMaxLength(256);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Facility)
+                .WithMany()
+                .HasForeignKey(e => e.FacilityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Composite unique index for idempotent outbox upserts
+            entity.HasIndex(e => new { e.TenantId, e.FacilityId, e.DocumentKind, e.SourceDocumentId })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            // Fast lookup for prescription verification and dispense
+            entity.HasIndex(e => new { e.DocumentKind, e.VerificationTokenHash })
+                .HasFilter("\"IsDeleted\" = false AND \"VerificationTokenHash\" IS NOT NULL");
+
+            // Fast lookup for cryptographic signature verification
+            entity.HasIndex(e => new { e.DocumentKind, e.SecurityDigest })
+                .HasFilter("\"IsDeleted\" = false");
+
+            // Fast lookup for document number searches
+            entity.HasIndex(e => new { e.DocumentKind, e.DocumentNumber })
+                .HasFilter("\"IsDeleted\" = false");
+        });
+
+        modelBuilder.Entity<FacilityQueueBoard>(entity =>
+        {
+            entity.ToTable("FacilityQueueBoards");
+            entity.HasKey(e => new { e.TenantId, e.FacilityId });
+
+            entity.Property(e => e.NowServingJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.UpNextJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.EmergencyJson).HasColumnType("jsonb");
+            entity.Property(e => e.IsAcceptingWalkIns).HasDefaultValue(true);
+            entity.Property(e => e.PatientsWaitingCount).HasDefaultValue(0);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Facility)
+                .WithMany()
+                .HasForeignKey(e => e.FacilityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.FacilityId, e.QueueDate });
         });
 
         modelBuilder.Entity<WorkspaceMember>(entity =>

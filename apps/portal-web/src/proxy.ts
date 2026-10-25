@@ -9,11 +9,10 @@ const isProtectedRoute = createRouteMatcher([
     '/admin(.*)'
 ]);
 
-// Anonymous pages (external labs / pharmacies upload through a link, public patient join link, public API relay): no tenant resolution, no sign-in.
+// Anonymous pages (external labs / pharmacies upload through a link, public patient join link): no tenant resolution, no sign-in.
 const isPublicRoute = createRouteMatcher([
     '/upload(.*)',
     '/join(.*)',
-    '/api/v1/public(.*)',
     '/admin/invitations(.*)',
     '/invitations(.*)',
     '/reset-password(.*)'

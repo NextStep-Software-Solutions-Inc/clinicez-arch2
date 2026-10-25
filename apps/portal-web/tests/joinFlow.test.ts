@@ -46,7 +46,7 @@ describe('Feature 3: Proxy & Clerk Authentication Bypass', () => {
     expect(isProxyPublicRoute('/join/ustp')).toBe(true);
     expect(isProxyPublicRoute('/join/ustp/main-clinic')).toBe(true);
     expect(isProxyPublicRoute('/join/health-org/branch-1?code=TEST')).toBe(true);
-    expect(isProxyPublicRoute('/api/v1/public/join')).toBe(true);
+    expect(isProxyPublicRoute('/api/v1/public/join')).toBe(false);
     expect(isProxyPublicRoute('/favicon.ico')).toBe(true);
   });
 

@@ -368,9 +368,6 @@ describe("Challenger UI Empirical Verification Suite (Issue #74)", () => {
       const violations: { file: string; line: number; endpoint: string; lineText: string }[] = [];
 
       for (const filePath of allSrcFiles) {
-        // Skip the [...slug] route itself as it contains route definitions
-        if (filePath.includes(path.join("public", "[...slug]"))) continue;
-
         const content = fs.readFileSync(filePath, "utf-8");
         const lines = content.split("\n");
 

@@ -41,6 +41,7 @@ services:
       - DbSchema=${DB_SCHEMA:-public}
       - Hub__Mode=Cloud
       - Hub__Database__AutoMigrate=${HUB_AUTO_MIGRATE:-true}
+      - Hub__MaxEnvelopeBytes=${HUB_MAX_ENVELOPE_BYTES:-8388608}
       # Optional AES-256-GCM encryption of stored envelopes: base64 of 32 random bytes. Empty stores plain JSON.
       - Hub__PayloadEncryptionKey=${HUB_PAYLOAD_ENCRYPTION_KEY:-}
       # Declarative bootstrap: the cloud cell and clients for each cloud service.

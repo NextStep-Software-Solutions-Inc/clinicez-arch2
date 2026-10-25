@@ -433,7 +433,12 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             slip.PrescriptionNumber,
             digest);
 
-        var qrBytes = _qrCodeService.GenerateQrCodePng(slip.QrPayload ?? verifyUrl, 4);
+        var portalBase = string.IsNullOrWhiteSpace(_verificationBaseUrl) ? "" : _verificationBaseUrl.TrimEnd('/');
+        var rxVerifyUrl = !string.IsNullOrWhiteSpace(slip.PublicVerificationToken)
+            ? $"{portalBase}/rx-verify/{slip.PublicVerificationToken}"
+            : (!string.IsNullOrWhiteSpace(slip.QrPayload) && !slip.QrPayload.StartsWith("CLINICEZ:RX:") ? slip.QrPayload : verifyUrl);
+
+        var qrBytes = _qrCodeService.GenerateQrCodePng(rxVerifyUrl, 4);
 
         var patientAge = ChronologicalAgeCalculator.FormatLongAge(
             slip.PatientDateOfBirth,
