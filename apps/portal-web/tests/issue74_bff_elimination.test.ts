@@ -15,7 +15,7 @@ import * as path from "path";
 const WORKSPACE_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(WORKSPACE_ROOT, "src");
 
-// 7 Target BFF routes to be completely deleted
+// 8 Target BFF routes to be completely deleted (including legacy public catch-all proxy)
 const ELIMINATED_BFF_ROUTES = [
   "src/app/api/v1/admin/newsletter-subscribers/route.ts",
   "src/app/api/v1/public/contact/route.ts",
@@ -24,6 +24,7 @@ const ELIMINATED_BFF_ROUTES = [
   "src/app/api/v1/public/join/validate/[code]/route.ts",
   "src/app/api/v1/patients/me/route.ts",
   "src/app/api/v1/patients/claim-intake/route.ts",
+  "src/app/api/v1/public/[...slug]/route.ts",
 ];
 
 // Disallowed BFF route fetch patterns
@@ -60,10 +61,20 @@ describe("Issue #74: BFF Route Elimination & Direct API Audit", () => {
         const exists = fs.existsSync(fullPath);
         expect(exists).toBe(
           false,
-          `Redundant BFF route handler still exists on disk: ${routeRelPath}. All 7 target BFF routes must be deleted per R2.`
+          `Redundant BFF route handler still exists on disk: ${routeRelPath}. All target BFF routes must be deleted.`
         );
       });
     }
+
+    test("T1.3: apps/portal-web/src/app/api contains strictly 0 files on disk", () => {
+      const apiDir = path.join(WORKSPACE_ROOT, "src", "app", "api");
+      if (fs.existsSync(apiDir)) {
+        const files = getAllSourceFiles(apiDir);
+        expect(files.length).toBe(0);
+      } else {
+        expect(fs.existsSync(apiDir)).toBe(false);
+      }
+    });
   });
 
   describe("Tier 1 & Tier 2: Static Codebase Audit (Zero Remaining BFF Fetch Calls)", () => {
@@ -74,9 +85,6 @@ describe("Issue #74: BFF Route Elimination & Direct API Audit", () => {
       const violations: { file: string; line: number; match: string }[] = [];
 
       for (const filePath of sourceFiles) {
-        // Skip [...slug]/route.ts itself if testing internal logic
-        if (filePath.includes(path.join("public", "[...slug]"))) continue;
-
         const content = fs.readFileSync(filePath, "utf-8");
         const lines = content.split("\n");
 
@@ -118,7 +126,6 @@ describe("Issue #74: BFF Route Elimination & Direct API Audit", () => {
       const suspiciousConcatenations: string[] = [];
 
       for (const filePath of sourceFiles) {
-        if (filePath.includes(path.join("public", "[...slug]"))) continue;
         const content = fs.readFileSync(filePath, "utf-8");
         // Look for expressions like "/api/v1/" + "patients/me" or similar evasions
         if (content.includes('"/api/v1/" +') || content.includes("'/api/v1/' +")) {

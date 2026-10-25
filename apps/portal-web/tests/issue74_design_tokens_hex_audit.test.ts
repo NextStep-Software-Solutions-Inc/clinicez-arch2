@@ -14,7 +14,6 @@ import * as path from "path";
 const WORKSPACE_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(WORKSPACE_ROOT, "src");
 
-// Complete inventory of frontend component files touched/modified for Issue #74
 const ISSUE_74_FRONTEND_COMPONENTS = [
   "app/sign-up/[[...sign-up]]/page.tsx",
   "app/sign-up/_components/SignUpTrialBadge.tsx",
@@ -27,6 +26,18 @@ const ISSUE_74_FRONTEND_COMPONENTS = [
   "app/(main)/contact-us/_components/ContactUsClient.tsx",
   "components/NewsletterForm.tsx",
   "components/join/MobileAppStoreBadges.tsx",
+  "app/join/[code]/page.tsx",
+  "app/join/[tenantSlug]/[facilitySlug]/page.tsx",
+  "components/join/JoinCodeErrorCard.tsx",
+  "app/rx-verify/[token]/page.tsx",
+  "app/rx-verify/[token]/RxVerifyClient.tsx",
+  "app/upload/rx/[token]/RxUploadClient.tsx",
+  "app/verify/[token]/page.tsx",
+  "app/verify/[token]/VerifyClient.tsx",
+  "app/verify/[kind]/[token]/page.tsx",
+  "app/queue-display/[tenantSlug]/[facilitySlug]/page.tsx",
+  "app/queue-tv/[facilitySlug]/page.tsx",
+  "components/queue-display/QueueDisplayClient.tsx",
 ];
 
 // Regex matching raw 3, 4, 6, or 8 digit hex color codes: #fff, #ffffff, #ffffff80

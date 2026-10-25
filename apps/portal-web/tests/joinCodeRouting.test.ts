@@ -14,7 +14,7 @@ describe("Direct /join/{code} Zero-Enumeration Security & Routing", () => {
   test("C1.2: Direct /join/{code} is recognized as a public join route", () => {
     expect(isProxyPublicRoute("/join/APEX2026")).toBe(true);
     expect(isProxyPublicRoute("/join/K8P2MN9X")).toBe(true);
-    expect(isProxyPublicRoute("/api/v1/public/join/validate/APEX2026")).toBe(true);
+    expect(isProxyPublicRoute("/api/v1/public/join/validate/APEX2026")).toBe(false);
   });
 
   test("C1.3: Non-join private paths are strictly blocked from auth bypass", () => {

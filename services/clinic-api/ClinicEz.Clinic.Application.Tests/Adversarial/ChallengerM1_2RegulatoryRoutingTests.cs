@@ -901,35 +901,66 @@ public class ChallengerM1_2RegulatoryRoutingTests
 
             var endIdx = span.Slice(streamStart).IndexOf(endStreamToken);
             if (endIdx < 0) break;
-            int streamLength = endIdx;
-
-            while (streamLength > 0 && (pdfBytes[streamStart + streamLength - 1] == '\r' || pdfBytes[streamStart + streamLength - 1] == '\n'))
+            int rawLength = endIdx;
+            int streamLength = rawLength;
+            if (streamLength > 0 && pdfBytes[streamStart + streamLength - 1] == '\n')
+            {
+                streamLength--;
+                if (streamLength > 0 && pdfBytes[streamStart + streamLength - 1] == '\r')
+                {
+                    streamLength--;
+                }
+            }
+            else if (streamLength > 0 && pdfBytes[streamStart + streamLength - 1] == '\r')
             {
                 streamLength--;
             }
 
+            string? content = null;
             try
             {
                 using var mem = new MemoryStream(pdfBytes, streamStart, streamLength);
                 using var zlib = new ZLibStream(mem, CompressionMode.Decompress);
                 using var reader = new StreamReader(zlib, Encoding.UTF8);
-                var content = reader.ReadToEnd();
-                sb.Append(content);
-                decompressedStreams.Add(content);
+                content = reader.ReadToEnd();
             }
             catch
             {
-                // Stream is not zlib or raw uncompressed image data, continue safely
+                if (rawLength > 6 &&
+                    (pdfBytes[streamStart] & 0x0F) == 8 &&
+                    (pdfBytes[streamStart] >> 4) <= 7 &&
+                    ((pdfBytes[streamStart] * 256 + pdfBytes[streamStart + 1]) % 31) == 0 &&
+                    (pdfBytes[streamStart + 1] & 0x20) == 0)
+                {
+                    try
+                    {
+                        using var deflateMem = new MemoryStream(pdfBytes, streamStart + 2, rawLength - 2);
+                        using var deflate = new DeflateStream(deflateMem, CompressionMode.Decompress);
+                        using var reader = new StreamReader(deflate, Encoding.UTF8);
+                        content = reader.ReadToEnd();
+                    }
+                    catch
+                    {
+                        // Non-Flate stream; ignore safely.
+                    }
+                }
+            }
+
+            if (content is not null)
+            {
+                sb.Append(content);
+                decompressedStreams.Add(content);
             }
 
             pos = streamStart + endIdx + endStreamToken.Length;
         }
 
-        // Parse ToUnicode CMaps
-        var cmap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Parse ToUnicode CMaps per font subset so later subsets never overwrite earlier glyph IDs
+        var cmaps = new List<Dictionary<string, string>>();
         foreach (var stream in decompressedStreams)
         {
             if (!stream.Contains("begincmap")) continue;
+            var cmap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             // 1. beginbfchar ... endbfchar
             int bfCharIdx = 0;
@@ -980,10 +1011,15 @@ public class ChallengerM1_2RegulatoryRoutingTests
                 }
                 bfRangeIdx = endBfRange + 10;
             }
+
+            if (cmap.Count > 0)
+            {
+                cmaps.Add(cmap);
+            }
         }
 
-        // If we have CMap entries, decode hex strings in content streams
-        if (cmap.Count > 0)
+        // If we have CMap entries, decode hex strings in content streams across each font subset CMap
+        if (cmaps.Count > 0)
         {
             var decodedSb = new StringBuilder();
             foreach (var stream in decompressedStreams)
@@ -992,21 +1028,22 @@ public class ChallengerM1_2RegulatoryRoutingTests
 
                 // Match <00240033...>
                 var hexMatches = System.Text.RegularExpressions.Regex.Matches(stream, @"<([0-9A-Fa-f]{4,})>");
-                foreach (System.Text.RegularExpressions.Match m in hexMatches)
+                foreach (var cmap in cmaps)
                 {
-                    var hex = m.Groups[1].Value;
-                    for (int i = 0; i + 4 <= hex.Length; i += 4)
+                    foreach (System.Text.RegularExpressions.Match m in hexMatches)
                     {
-                        if (i + 4 <= hex.Length)
+                        var hex = m.Groups[1].Value;
+                        for (int i = 0; i + 4 <= hex.Length; i += 4)
                         {
                             var code = hex.Substring(i, 4);
-                            if (cmap.TryGetValue(code, out var ch))
+                            if (cmap.TryGetValue(code, out var ch) && ch.Length > 0 && ch[0] != (char)0)
                             {
                                 decodedSb.Append(ch);
                             }
                         }
+                        decodedSb.Append(' ');
                     }
-                    decodedSb.Append(' ');
+                    decodedSb.AppendLine();
                 }
 
                 // Also match literal strings (text)

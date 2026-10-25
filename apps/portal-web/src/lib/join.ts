@@ -59,7 +59,6 @@ export function isProxyPublicRoute(pathname: string): boolean {
   // Routes whitelisted from Clerk auth middleware
   const publicPatterns = [
     /^\/join(\/.*)?$/,
-    /^\/api\/v1\/public(\/.*)?$/,
     /^\/favicon\.ico$/,
   ];
   return publicPatterns.some((pattern) => pattern.test(pathname));

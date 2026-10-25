@@ -1,5 +1,6 @@
 import React from 'react';
 import { joinApiUrl } from '@shared/safe';
+import { getPortalApiUrl } from '@/utils/domain';
 import RxVerifyClient, { RxVerificationData } from './RxVerifyClient';
 
 interface PageProps {
@@ -20,13 +21,14 @@ export default async function RxVerifyPage({ params }: PageProps) {
   let verificationData: RxVerificationData;
 
   try {
-    const apiUrl = process.env.CLINIC_API_URL || process.env.NEXT_PUBLIC_CLINIC_API_URL || 'http://localhost:5245';
-    const response = await fetch(joinApiUrl(apiUrl, `/public/rx-verify/${encodeURIComponent(token)}`), {
+    const portalApiUrl = getPortalApiUrl();
+    const response = await fetch(joinApiUrl(portalApiUrl, `/public/rx-verify/${encodeURIComponent(token)}`), {
       cache: 'no-store',
     });
 
     if (response.ok) {
-      verificationData = await response.json();
+      const payload = await response.json();
+      verificationData = payload.data || payload;
     } else {
       throw new Error(`API returned ${response.status}`);
     }
@@ -51,6 +53,10 @@ export default async function RxVerifyPage({ params }: PageProps) {
       dispenseStatus: 'Unverified',
       isValid: false,
       isAlreadyDispensed: false,
+      hasDangerousDrug: false,
+      itemCount: 0,
+      syncStatus: 'Unknown',
+      isOfflinePending: false,
     };
   }
 

@@ -10,7 +10,7 @@ import { ToggleSwitch } from './AddEditFieldModal';
 import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
 import { clinicService, ClinicSettingsRecord } from '../../services/clinicService';
-import { getPortalBaseUrl } from '../../services/runtimeConfig';
+import { getPortalBaseUrl, getApiBaseUrl } from '../../services/runtimeConfig';
 import { resolveTenantContext } from '@shared/safe';
 
 export interface WaitingAreaTvSettingsCardProps {
@@ -26,7 +26,8 @@ export default function WaitingAreaTvSettingsCard({
 }: WaitingAreaTvSettingsCardProps) {
   const [maskNames, setMaskNames] = useState<boolean>(true);
   const [, setSaving] = useState<boolean>(false);
-  const [copied, setCopied] = useState<boolean>(false);
+  const [copiedLan, setCopiedLan] = useState<boolean>(false);
+  const [copiedCloud, setCopiedCloud] = useState<boolean>(false);
 
   useEffect(() => {
     if (settings) {
@@ -34,7 +35,25 @@ export default function WaitingAreaTvSettingsCard({
     }
   }, [settings]);
 
-  const tvDisplayUrl = useMemo<string>(() => {
+  // 1. Local LAN Kiosk URL: runs on the clinic server / Edge Cell port 3000
+  const localLanUrl = useMemo<string>(() => {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}/#/queue-display`;
+    }
+    const apiBase = getApiBaseUrl();
+    if (apiBase) {
+      try {
+        const u = new URL(apiBase);
+        return `http://${u.hostname}:3000/#/queue-display`;
+      } catch {
+        return '/#/queue-display';
+      }
+    }
+    return '/#/queue-display';
+  }, []);
+
+  // 2. Public Cloud TV URL: routed via portal-web and portal-api
+  const publicCloudTvUrl = useMemo<string>(() => {
     const portalBase = getPortalBaseUrl();
     const ctx = resolveTenantContext();
     const tenantSlug = ctx.tenantSlug || settings?.tenantSlug || settings?.tenantId || 'clinic';
@@ -71,30 +90,35 @@ export default function WaitingAreaTvSettingsCard({
     [onSettingsUpdated]
   );
 
-  const handleOpenTv = useCallback(() => {
+  const openUrl = useCallback((url: string) => {
     if (typeof window !== 'undefined' && window.open) {
-      window.open(tvDisplayUrl, '_blank');
+      window.open(url, '_blank');
     } else {
-      Linking.openURL(tvDisplayUrl).catch(() => {
+      Linking.openURL(url).catch(() => {
         notify.error('Could not open TV display.');
       });
     }
-  }, [tvDisplayUrl]);
+  }, []);
 
-  const handleCopyUrl = useCallback(async () => {
+  const copyToClipboard = useCallback(async (text: string, isLan: boolean) => {
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(tvDisplayUrl);
-        setCopied(true);
-        notify.success('TV display URL copied to clipboard!');
-        setTimeout(() => setCopied(false), 2500);
+        await navigator.clipboard.writeText(text);
+        if (isLan) {
+          setCopiedLan(true);
+          setTimeout(() => setCopiedLan(false), 2500);
+        } else {
+          setCopiedCloud(true);
+          setTimeout(() => setCopiedCloud(false), 2500);
+        }
+        notify.success('Display URL copied to clipboard!');
       } else {
         notify.info('Clipboard access unavailable. Please copy the URL manually.');
       }
     } catch {
       notify.error('Could not copy TV display URL to clipboard.');
     }
-  }, [tvDisplayUrl]);
+  }, []);
 
   return (
     <Card>
@@ -110,7 +134,7 @@ export default function WaitingAreaTvSettingsCard({
       />
       <CardContent>
         {showSkeletons ? (
-          <SkeletonList rows={3} />
+          <SkeletonList rows={4} />
         ) : (
           <View style={styles.container}>
             {/* Privacy Masking Toggle Row */}
@@ -133,40 +157,84 @@ export default function WaitingAreaTvSettingsCard({
               />
             </View>
 
-            {/* TV Display Launch & URL Box */}
+            {/* 1. Local LAN Kiosk URL Card */}
             <View style={styles.urlCard}>
               <View style={styles.urlHeader}>
-                <View style={styles.iconWrap}>
-                  <Icon name="ticket" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
+                <View style={styles.iconWrapLan}>
+                  <Icon name="monitor" size={theme.sizes.iconMd} color={theme.colors.primaryDark} />
                 </View>
                 <View style={styles.urlInfo}>
-                  <ThemedText variant="bodyBold" color={theme.colors.text}>
-                    Public TV Board URL
-                  </ThemedText>
+                  <View style={styles.cardTitleBadgeRow}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      Local LAN Kiosk Display URL
+                    </ThemedText>
+                    <Badge label="Offline-Ready (LAN)" variant="primary" />
+                  </View>
                   <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.urlSubtitle}>
-                    Open this URL on any smart TV (LG webOS, Samsung Tizen, Android TV, kiosk browser) in the waiting room.
+                    Recommended for waiting room smart TVs (LG webOS, Samsung Tizen, Android TV, HDMI kiosks) connected to the local clinic Wi-Fi. Works 100% offline during internet/ISP outages.
                   </ThemedText>
                 </View>
               </View>
 
               <View style={styles.urlBadge}>
                 <ThemedText variant="captionBold" color={theme.colors.textSecondary} numberOfLines={1}>
-                  {tvDisplayUrl}
+                  {localLanUrl}
                 </ThemedText>
               </View>
 
               <View style={styles.actionRow}>
                 <Button
-                  title="Open TV Board"
+                  title="Open LAN Display"
                   variant="primary"
                   icon="maximize"
-                  onPress={handleOpenTv}
+                  onPress={() => openUrl(localLanUrl)}
                 />
                 <Button
-                  title={copied ? 'Copied' : 'Copy Link'}
+                  title={copiedLan ? 'Copied' : 'Copy LAN Link'}
                   variant="outline"
                   icon="copy"
-                  onPress={handleCopyUrl}
+                  onPress={() => copyToClipboard(localLanUrl, true)}
+                />
+              </View>
+            </View>
+
+            {/* 2. Public Cloud TV URL Card */}
+            <View style={styles.urlCard}>
+              <View style={styles.urlHeader}>
+                <View style={styles.iconWrapCloud}>
+                  <Icon name="cloud" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
+                </View>
+                <View style={styles.urlInfo}>
+                  <View style={styles.cardTitleBadgeRow}>
+                    <ThemedText variant="bodyBold" color={theme.colors.text}>
+                      Public Cloud TV Board URL
+                    </ThemedText>
+                    <Badge label="Cloud Hosted" variant="neutral" />
+                  </View>
+                  <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.urlSubtitle}>
+                    For external waiting areas, patient companions, or multi-branch lobby monitors accessing the cloud-hosted ClinicEZ control plane via public internet.
+                  </ThemedText>
+                </View>
+              </View>
+
+              <View style={styles.urlBadge}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary} numberOfLines={1}>
+                  {publicCloudTvUrl}
+                </ThemedText>
+              </View>
+
+              <View style={styles.actionRow}>
+                <Button
+                  title="Open Cloud Board"
+                  variant="secondary"
+                  icon="maximize"
+                  onPress={() => openUrl(publicCloudTvUrl)}
+                />
+                <Button
+                  title={copiedCloud ? 'Copied' : 'Copy Cloud Link'}
+                  variant="outline"
+                  icon="copy"
+                  onPress={() => copyToClipboard(publicCloudTvUrl, false)}
                 />
               </View>
             </View>
@@ -212,7 +280,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  iconWrap: {
+  iconWrapLan: {
     width: theme.sizes.iconLg,
     height: theme.sizes.iconLg,
     borderRadius: theme.radii.sm,
@@ -220,9 +288,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconWrapCloud: {
+    width: theme.sizes.iconLg,
+    height: theme.sizes.iconLg,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   urlInfo: {
     flex: 1,
     gap: theme.spacing.xs,
+  },
+  cardTitleBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
   urlSubtitle: {
     lineHeight: theme.spacing.md,

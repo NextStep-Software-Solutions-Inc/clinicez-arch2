@@ -63,6 +63,10 @@ export function getPortalApiUrl(): string {
     const configured = process.env.NEXT_PUBLIC_PORTAL_API_URL.trim().replace(/\/+$/, "");
     return configured.endsWith("/api/v1") ? configured : `${configured}/api/v1`;
   }
+  if (process.env.PORTAL_API_URL) {
+    const configured = process.env.PORTAL_API_URL.trim().replace(/\/+$/, "");
+    return configured.endsWith("/api/v1") ? configured : `${configured}/api/v1`;
+  }
   if (process.env.NEXT_PUBLIC_API_URL) {
     const configured = process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/+$/, "");
     return configured.endsWith("/api/v1") ? configured : `${configured}/api/v1`;

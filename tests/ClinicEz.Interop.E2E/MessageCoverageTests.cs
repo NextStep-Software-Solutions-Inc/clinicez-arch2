@@ -33,6 +33,9 @@ public class MessageCoverageTests
         new(InteropTypes.WorkspaceProfileUpdated, [Portal], [Clinic, Lab, Pharmacy, Organization]),
         new(InteropTypes.EntitlementsChanged, [Portal], [Clinic, Lab, Pharmacy, Billing, Organization]),
         new(InteropTypes.FacilityHeartbeat, [Clinic, Lab, Pharmacy, Organization], [Portal]),
+        new(InteropTypes.FacilityJoinSettingsUpdated, [Clinic], [Portal]),
+        new(InteropTypes.DocumentAttestationPublished, [Clinic, Lab], [Portal]),
+        new(InteropTypes.QueueBoardUpdated, [Clinic], [Portal]),
 
         new(InteropTypes.DirectoryCellUpserted, [Portal], [Hub]),
         new(InteropTypes.DirectoryFacilityUpserted, [Portal], [Hub]),
@@ -60,7 +63,7 @@ public class MessageCoverageTests
         new(InteropTypes.RxIssued, [Clinic], [Pharmacy]),
         new(InteropTypes.RxStatusChanged, [Pharmacy], [Clinic, Patient]),
         new(InteropTypes.RxDispensed, [Pharmacy], [Clinic]),
-        new(InteropTypes.RxExternalDispensed, [Patient], [Clinic]),
+        new(InteropTypes.RxExternalDispensed, [Patient, Portal], [Clinic]),
         new(InteropTypes.PharmacyOtcDispensed, [Clinic], [Pharmacy]),
 
         new(InteropTypes.GamotLookupRequested, [Clinic], [Pharmacy]),

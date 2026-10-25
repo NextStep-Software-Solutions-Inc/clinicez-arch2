@@ -90,7 +90,7 @@ public class PrescriptionInteroperabilityTests
         slip.Should().NotBeNull();
         slip.PrescriptionNumber.Should().StartWith("RX-");
         slip.PublicVerificationToken.Should().NotBeNullOrWhiteSpace();
-        slip.QrPayload.Should().StartWith("CLINICEZ:RX:");
+        slip.QrPayload.Should().Contain($"/rx-verify/{slip.PublicVerificationToken}");
         slip.QrPayload.Should().Contain(slip.PublicVerificationToken);
         slip.DoctorPrcLicense.Should().Be("0149281");
         slip.Items.Should().HaveCount(1);

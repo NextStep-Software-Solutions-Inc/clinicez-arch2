@@ -11,10 +11,14 @@ using ClinicEz.Laboratory.Application.Features.Requisitions.Queries;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Services;
+using ClinicEz.Laboratory.Infrastructure.Services;
+using ClinicEz.Shared.Documents.Security;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 
@@ -318,5 +322,59 @@ public class LaboratoryInteroperabilityTests
         worklistA.Should().HaveCount(1);
         worklistA[0].AccessionNumber.Should().Be("REQ-BRANCH-A-01");
         worklistA[0].BranchId.Should().Be(branchAId);
+    }
+
+    [Fact]
+    public void DiagnosticReportPublisher_EnqueuesDocumentAttestation_ToPartyPortal_WithMatchingDigest()
+    {
+        var publisher = Substitute.For<IInteropPublisher>();
+        var securityService = new DocumentSecurityService();
+        var reportPublisher = new DiagnosticReportPublisher(
+            publisher, NullLogger<DiagnosticReportPublisher>.Instance, securityService);
+
+        var reportId = Guid.NewGuid();
+        var requisitionId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var releasedAt = DateTime.UtcNow;
+
+        var reportEvent = new DiagnosticReportFinalizedEvent
+        {
+            ReportId = reportId,
+            RequisitionId = requisitionId,
+            AccessionNumber = "ACC-20261025-0012",
+            LaboratoryTenantId = "tenant-lab-01",
+            LaboratoryFacilityId = Guid.NewGuid().ToString(),
+            LaboratoryName = "EZ Diagnostics Lab",
+            OrderingTenantId = "tenant-clinic-01",
+            OrderingFacilityId = Guid.NewGuid().ToString(),
+            PatientId = patientId,
+            PathologistName = "Dr. Clara Pathologist",
+            PathologistPrcLicense = "PRC-998877",
+            ReleasedAt = releasedAt,
+            Observations = new List<AnalyteObservationDto>
+            {
+                new() { AnalyteCode = "HGB", Value = "14.0", Flag = "Normal" }
+            }
+        };
+
+        reportPublisher.EnqueueReportFinalized(reportEvent);
+
+        var expectedDigest = securityService.ComputeDocumentDigest(
+            "tenant-lab-01", "LAB-REPORT", "ACC-20261025-0012", patientId, "PRC-998877", releasedAt);
+
+        publisher.Received(1).Enqueue(
+            InteropTypes.DocumentAttestationPublished,
+            Arg.Any<Party>(),
+            Party.Portal,
+            reportId,
+            Arg.Is<DocumentAttestationPublishedPayload>(p =>
+                p.SourceDocumentId == reportId &&
+                p.DocumentKind == "lab-report" &&
+                p.DocumentNumber == "ACC-20261025-0012" &&
+                p.SecurityDigest == expectedDigest &&
+                p.DoctorName == "Dr. Clara Pathologist" &&
+                p.DoctorPrcLicense == "PRC-998877" &&
+                p.Status == "VALID" &&
+                p.ItemCount == 1));
     }
 }

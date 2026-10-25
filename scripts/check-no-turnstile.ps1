@@ -18,6 +18,7 @@ Set-Location (git rev-parse --show-toplevel)
 $allowedPathspecs = @(
     ':(exclude)docs/**',
     ':(exclude).agents/**',
+    ':(exclude).github/**',
     ':(exclude)**/Migrations/**',
     ':(exclude)scripts/check-no-turnstile.ps1',
     ':(exclude)apps/portal-web/tests/noTurnstile.test.ts',

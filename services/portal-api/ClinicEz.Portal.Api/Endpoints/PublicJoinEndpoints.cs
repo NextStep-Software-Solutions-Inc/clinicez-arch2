@@ -23,24 +23,154 @@ using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Portal.Api.Endpoints;
 
-/// <summary>
-/// Anonymous endpoint for public patient self-intake registration.
-/// Verifies facility routing viability, issues cryptographically signed claim tokens,
-/// transactionally enqueues the <see cref="InteropTypes.PatientJoinRequested"/> envelope
-/// to the target clinic facility, and conditionally dispatches <see cref="InteropTypes.NotificationEmailRequested"/>
-/// for progressive account claiming (strictly 0 SMS).
-/// </summary>
+public sealed record PublicFacilityJoinData(
+    bool IsValid,
+    string TenantSlug,
+    string TenantName,
+    string FacilitySlug,
+    string FacilityName,
+    string? FacilityAddress,
+    string? OperatingHours,
+    DateTime? ExpiresAt
+);
+
 public sealed class PublicJoinEndpoints : IEndpoint
 {
+    public const string RateLimitPolicy = "PublicApi";
+
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPost("/public/join", HandleAsync)
+        var group = app.MapGroup("/public/join")
             .AllowAnonymous()
             .DisableAntiforgery()
-            .RequireRateLimiting("PublicApi")
-            .WithName("RelayPublicPatientJoin")
-            .WithDescription("Public, unauthenticated patient self-intake endpoint. Verifies routing viability, issues claim token, and enqueues envelope to clinic facility.")
+            .RequireRateLimiting(RateLimitPolicy)
             .WithTags("PublicJoin");
+
+        group.MapGet("/validate/{code}", ValidateJoinCodeAsync)
+            .WithName("ValidateJoinCode")
+            .WithDescription("Validates an alphanumeric clinic join code, enforcing active intake status, expiration, and multi-tenant collision guards.");
+
+        group.MapGet("/facility/{tenantSlug}/{facilitySlug}", GetFacilityJoinDataAsync)
+            .WithName("GetFacilityJoinData")
+            .WithDescription("Retrieves public facility join metadata by tenant and facility slug.");
+
+        group.MapPost("", HandleAsync)
+            .WithName("RelayPublicPatientJoin")
+            .WithDescription("Public, unauthenticated patient self-intake endpoint. Verifies routing viability, issues claim token, and enqueues envelope to clinic facility.");
+    }
+
+    public static async Task<IResult> ValidateJoinCodeAsync(
+        string code,
+        IApplicationDbContext context,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return Results.BadRequest(ApiResponse<PublicFacilityJoinData>.Fail("Join code is required.", "REQUIRED_FIELD_MISSING"));
+        }
+
+        var normalizedCode = code.Trim().ToUpperInvariant();
+        var facilities = await context.Facilities.AsNoTracking()
+            .Include(f => f.Tenant)
+            .Where(f => !f.IsDeleted && f.JoinCode != null && f.JoinCode.ToUpper() == normalizedCode)
+            .ToListAsync(ct);
+
+        if (facilities.Count == 0)
+        {
+            return Results.NotFound(ApiResponse<PublicFacilityJoinData>.Fail("Invalid clinic join code.", "NOT_FOUND"));
+        }
+
+        if (facilities.Select(f => f.TenantId).Distinct().Count() > 1)
+        {
+            return Results.Conflict(ApiResponse<PublicFacilityJoinData>.Fail(
+                "Join code matches multiple organizations. Please use the facility-specific QR code or link.",
+                "JOIN_CODE_AMBIGUOUS"));
+        }
+
+        var facility = facilities[0];
+        if (!facility.IsJoinEnabled)
+        {
+            return Results.Json(ApiResponse<PublicFacilityJoinData>.Fail(
+                "Clinic self-registration is currently disabled.", "JOIN_DISABLED"),
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        if (facility.JoinCodeExpiresAtUtc.HasValue && facility.JoinCodeExpiresAtUtc.Value < DateTime.UtcNow)
+        {
+            return Results.Json(ApiResponse<PublicFacilityJoinData>.Fail(
+                "This clinic join code has expired. Please ask clinic reception for a new code.", "JOIN_CODE_EXPIRED"),
+                statusCode: StatusCodes.Status410Gone);
+        }
+
+        var data = new PublicFacilityJoinData(
+            IsValid: true,
+            TenantSlug: facility.Tenant.TenantSlug,
+            TenantName: facility.Tenant.Name,
+            FacilitySlug: facility.Slug,
+            FacilityName: facility.Name,
+            FacilityAddress: facility.StreetAddress,
+            OperatingHours: facility.OperatingHours,
+            ExpiresAt: facility.JoinCodeExpiresAtUtc
+        );
+
+        return Results.Ok(ApiResponse<PublicFacilityJoinData>.Success(data, "Join code verified successfully."));
+    }
+
+    public static async Task<IResult> GetFacilityJoinDataAsync(
+        string tenantSlug,
+        string facilitySlug,
+        IApplicationDbContext context,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantSlug) || string.IsNullOrWhiteSpace(facilitySlug))
+        {
+            return Results.BadRequest(ApiResponse<PublicFacilityJoinData>.Fail("Tenant slug and facility slug are required.", "REQUIRED_FIELD_MISSING"));
+        }
+
+        var normalizedTenant = tenantSlug.Trim().ToLowerInvariant();
+        var tenant = await context.Tenants.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == normalizedTenant && t.ArchivedAt == null, ct);
+
+        if (tenant == null)
+        {
+            return Results.NotFound(ApiResponse<PublicFacilityJoinData>.Fail($"Tenant '{tenantSlug}' not found.", "NOT_FOUND"));
+        }
+
+        var normalizedFacility = facilitySlug.Trim().ToLowerInvariant();
+        var facility = await context.Facilities.AsNoTracking()
+            .FirstOrDefaultAsync(f => f.TenantId == tenant.Id && f.Slug.ToLower() == normalizedFacility && !f.IsDeleted, ct);
+
+        if (facility == null)
+        {
+            return Results.NotFound(ApiResponse<PublicFacilityJoinData>.Fail($"Facility '{facilitySlug}' not found under tenant '{tenantSlug}'.", "NOT_FOUND"));
+        }
+
+        if (!facility.IsJoinEnabled)
+        {
+            return Results.Json(ApiResponse<PublicFacilityJoinData>.Fail(
+                "Patient self-registration is currently disabled for this clinic.", "JOIN_DISABLED"),
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        if (facility.JoinCodeExpiresAtUtc.HasValue && facility.JoinCodeExpiresAtUtc.Value < DateTime.UtcNow)
+        {
+            return Results.Json(ApiResponse<PublicFacilityJoinData>.Fail(
+                "This clinic's registration intake has expired.", "JOIN_CODE_EXPIRED"),
+                statusCode: StatusCodes.Status410Gone);
+        }
+
+        var data = new PublicFacilityJoinData(
+            IsValid: true,
+            TenantSlug: tenant.TenantSlug,
+            TenantName: tenant.Name,
+            FacilitySlug: facility.Slug,
+            FacilityName: facility.Name,
+            FacilityAddress: facility.StreetAddress,
+            OperatingHours: facility.OperatingHours,
+            ExpiresAt: facility.JoinCodeExpiresAtUtc
+        );
+
+        return Results.Ok(ApiResponse<PublicFacilityJoinData>.Success(data));
     }
 
     public static async Task<IResult> HandleAsync(
@@ -71,7 +201,6 @@ public sealed class PublicJoinEndpoints : IEndpoint
             return Results.BadRequest(new { Success = false, Message = "Date of birth cannot be in the future." });
         }
 
-        // PhilHealth PIN validation if provided
         if (!string.IsNullOrWhiteSpace(payload.PhilHealthPin))
         {
             if (!PhilHealthMod11Validator.Validate(payload.PhilHealthPin))
@@ -80,7 +209,6 @@ public sealed class PublicJoinEndpoints : IEndpoint
             }
         }
 
-        // Dependent statutory verification
         if (string.Equals(payload.MemberType, "DD", StringComparison.OrdinalIgnoreCase))
         {
             if (string.IsNullOrWhiteSpace(payload.PrincipalMemberPin) ||
@@ -101,7 +229,6 @@ public sealed class PublicJoinEndpoints : IEndpoint
             }
         }
 
-        // Attachments limits & size check
         if (payload.Attachments != null && payload.Attachments.Count > 0)
         {
             if (payload.Attachments.Count > 5)
@@ -130,7 +257,7 @@ public sealed class PublicJoinEndpoints : IEndpoint
 
         var normalizedFacilitySlug = payload.FacilitySlug.Trim().ToLowerInvariant();
         var facility = await context.Facilities.AsNoTracking()
-            .FirstOrDefaultAsync(f => f.TenantId == tenant.Id && f.Slug.ToLower() == normalizedFacilitySlug, ct);
+            .FirstOrDefaultAsync(f => f.TenantId == tenant.Id && f.Slug.ToLower() == normalizedFacilitySlug && !f.IsDeleted, ct);
 
         if (facility == null)
         {
@@ -147,6 +274,16 @@ public sealed class PublicJoinEndpoints : IEndpoint
             logger.LogWarning("Rejecting public join relay: facility {FacilitySlug} has status {Status} and is unroutable.",
                 facility.Slug, facility.Status);
             return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (!facility.IsJoinEnabled)
+        {
+            return Results.Json(new { Success = false, Message = "Patient self-registration is currently disabled for this clinic." }, statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        if (facility.JoinCodeExpiresAtUtc.HasValue && facility.JoinCodeExpiresAtUtc.Value < DateTime.UtcNow)
+        {
+            return Results.Json(new { Success = false, Message = "This clinic join intake has expired." }, statusCode: StatusCodes.Status410Gone);
         }
 
         // 3. Resolve TTL and Issue Cryptographically Signed Claim Token
@@ -167,7 +304,7 @@ public sealed class PublicJoinEndpoints : IEndpoint
             memberType: payload.MemberType,
             expiresAtUtc: expiresAt));
 
-        // 4. Enqueue Interop Envelopes
+        // 4. Enqueue Interop Envelope to target clinic
         publisher.Enqueue(
             InteropTypes.PatientJoinRequested,
             Party.Portal,
@@ -181,7 +318,7 @@ public sealed class PublicJoinEndpoints : IEndpoint
             var baseUrl = frontendUrlProvider.GetBaseUrl()?.TrimEnd('/');
             if (string.IsNullOrWhiteSpace(baseUrl))
             {
-                logger.LogWarning("Account claim email for join request {TrackingId} skipped: frontend address could not be resolved (set FrontendBaseUrl or Facility:BaseDomain).", trackingId);
+                logger.LogWarning("Account claim email for join request {TrackingId} skipped: frontend address could not be resolved.", trackingId);
             }
             else
             {

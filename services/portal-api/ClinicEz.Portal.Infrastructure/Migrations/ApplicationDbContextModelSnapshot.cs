@@ -392,6 +392,149 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.ToTable("Branches", "public");
                 });
 
+            modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.DocumentAttestation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("ClinicAddress")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("ClinicContact")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ClinicName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DispenseStatus")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("DispensedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DispensedPharmacyName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("DispensedReceiptFileName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("DoctorName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("DoctorPrcLicense")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DoctorPtr")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DoctorS2License")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DocumentKind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DocumentNumber")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FacilityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("HasDangerousDrug")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsAlreadyDispensed")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("IssuedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ItemCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SecurityDigest")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("SourceDocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("VALID");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VerificationTokenHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FacilityId");
+
+                    b.HasIndex("DocumentKind", "DocumentNumber")
+                        .HasFilter("\"IsDeleted\" = false");
+
+                    b.HasIndex("DocumentKind", "SecurityDigest")
+                        .HasFilter("\"IsDeleted\" = false");
+
+                    b.HasIndex("DocumentKind", "VerificationTokenHash")
+                        .HasFilter("\"IsDeleted\" = false AND \"VerificationTokenHash\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "FacilityId", "DocumentKind", "SourceDocumentId")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
+
+                    b.ToTable("DocumentAttestations", "public");
+                });
+
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.EdgeHubClient", b =>
                 {
                     b.Property<Guid>("Id")
@@ -627,10 +770,25 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsJoinEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("IsPatientDiscoveryEligible")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<string>("JoinCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("JoinCodeExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("JoinSettingsUpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("LastSeenAt")
                         .HasColumnType("timestamp with time zone");
@@ -705,6 +863,9 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("JoinCode")
+                        .HasFilter("\"IsDeleted\" = false AND \"JoinCode\" IS NOT NULL");
 
                     b.HasIndex("Slug")
                         .IsUnique()
@@ -849,6 +1010,51 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasFilter("\"IsDeleted\" = false");
 
                     b.ToTable("FacilityLinks", "public");
+                });
+
+            modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.FacilityQueueBoard", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FacilityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EmergencyJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("GeneratedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsAcceptingWalkIns")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("NowServingJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("PatientsWaitingCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateOnly>("QueueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("UpNextJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TenantId", "FacilityId");
+
+                    b.HasIndex("FacilityId", "QueueDate");
+
+                    b.ToTable("FacilityQueueBoards", "public");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.FinanceDailySummary", b =>
@@ -2304,6 +2510,25 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.DocumentAttestation", b =>
+                {
+                    b.HasOne("ClinicEz.Portal.Domain.Entities.Facility", "Facility")
+                        .WithMany()
+                        .HasForeignKey("FacilityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ClinicEz.Portal.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Facility");
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.EntitlementOverride", b =>
                 {
                     b.HasOne("ClinicEz.Portal.Domain.Entities.Tenant", "Tenant")
@@ -2361,6 +2586,25 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Navigation("SourceFacility");
 
                     b.Navigation("TargetFacility");
+                });
+
+            modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.FacilityQueueBoard", b =>
+                {
+                    b.HasOne("ClinicEz.Portal.Domain.Entities.Facility", "Facility")
+                        .WithMany()
+                        .HasForeignKey("FacilityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ClinicEz.Portal.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Facility");
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.OwnershipTransfer", b =>

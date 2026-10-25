@@ -24,7 +24,7 @@ export default async function LockedJoinCodePage({ params }: JoinCodePageProps) 
   const { code } = await params;
   const cleanCode = (code || "").trim().toUpperCase();
 
-  // Validate the join code directly against clinic-api
+  // Validate the join code directly against portal-api
   const validation = await joinService.validateJoinCode(cleanCode);
 
   if (
@@ -36,6 +36,8 @@ export default async function LockedJoinCodePage({ params }: JoinCodePageProps) 
       <JoinCodeErrorCard
         initialCode={cleanCode}
         errorMessage={validation.message || "Invalid or expired clinic join code."}
+        errorCode={validation.errorCode}
+        statusCode={validation.statusCode}
       />
     );
   }

@@ -41,6 +41,7 @@ public class StressFailingCommandValidator : AbstractValidator<StressFailingComm
     }
 }
 
+[Collection("NonParallelStressTests")]
 public class AuditPipelineEmpiricalStressTests
 {
     private readonly Guid _clinicId = Guid.NewGuid();

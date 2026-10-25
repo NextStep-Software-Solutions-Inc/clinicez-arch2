@@ -24,6 +24,7 @@ namespace ClinicEz.Clinic.Application.Tests.Challenger;
 /// 4. Extremely long queries and SQL/Regex metacharacters across all domain queries.
 /// 5. Cascading multi-exception fault tolerance with mixed failure modes (null returns, DB exceptions, timeouts).
 /// </summary>
+[Collection("NonParallelStressTests")]
 public class MilestoneM5Tier5AdversarialSearchTests
 {
     private readonly IClinicContext _clinicContext;
