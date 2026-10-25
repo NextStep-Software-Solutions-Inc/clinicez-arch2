@@ -41,9 +41,7 @@ import {
 import { JoinCodeModal } from "@/components/join/JoinCodeModal";
 import { OutsideDocumentDropzone } from "@/components/join/OutsideDocumentDropzone";
 import { DigitalPassCard } from "@/components/join/DigitalPassCard";
-import { apiBaseUrl } from "@/transport/apiClient";
 import { getPatientApiUrl, getPortalApiUrl } from "@/utils/domain";
-import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget";
 
 interface JoinClientProps {
   tenantSlug: string;
@@ -214,8 +212,6 @@ export default function JoinClient({
   // Submission & UX Lifecycle State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const turnstileRef = useRef<TurnstileWidgetHandle>(null);
   const [confirmedPass, setConfirmedPass] = useState<DigitalRegistrationPass | null>(null);
 
   // Clerk Authentication & Autofill State
@@ -491,7 +487,6 @@ export default function JoinClient({
       customFields: sanitizedCustomFields,
       allergies: noKnownAllergies ? [] : allergies,
       attachments,
-      turnstileToken: turnstileToken || undefined,
     };
 
     setIsSubmitting(true);
@@ -510,8 +505,6 @@ export default function JoinClient({
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok && response.status !== 202) {
-        turnstileRef.current?.reset();
-        setTurnstileToken(null);
         throw new Error(result.message || `Submission failed with status ${response.status}`);
       }
 
@@ -1354,17 +1347,6 @@ export default function JoinClient({
             <OutsideDocumentDropzone
               attachments={attachments}
               onChange={setAttachments}
-            />
-          </div>
-
-          {/* Bot Challenge Verification */}
-          <div className="flex flex-col items-center justify-center pt-2 pb-1">
-            <TurnstileWidget
-              ref={turnstileRef}
-              action="patient_join"
-              onSuccess={(token) => setTurnstileToken(token)}
-              onExpire={() => setTurnstileToken(null)}
-              onError={() => setTurnstileToken(null)}
             />
           </div>
 

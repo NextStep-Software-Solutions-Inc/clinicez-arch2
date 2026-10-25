@@ -52,7 +52,7 @@ describe("Issue #74: Design Tokens & Zero Raw Hex Literal Audit", () => {
 
           const matches = line.match(HEX_COLOR_REGEX);
           if (matches) {
-            // Filter out non-color tokens if any (e.g. URL anchors like #section or Turnstile test keys)
+            // Filter out non-color tokens if any (e.g. URL anchors like #section)
             for (const m of matches) {
               violations.push({
                 line: idx + 1,

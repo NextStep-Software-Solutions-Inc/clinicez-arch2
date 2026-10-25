@@ -16,7 +16,6 @@ using ClinicEz.Shared.LocalAuth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using ClinicEz.Shared.Security.Turnstile;
 
 namespace ClinicEz.Clinic.Infrastructure.Auth;
 
@@ -64,8 +63,6 @@ public sealed class ClinicAuthService : IClinicAuthService
     private readonly IFacilityPasswordHasher _hasher;
     private readonly IStaffAccessCache _accessCache;
     private readonly ILogger<ClinicAuthService> _logger;
-    private readonly ITurnstileSettingResolver _turnstileResolver;
-    private readonly ITurnstileValidator? _turnstileValidator;
 
     public ClinicAuthService(
         ApplicationDbContext db,
@@ -74,9 +71,7 @@ public sealed class ClinicAuthService : IClinicAuthService
         IFacilityTokenService tokens,
         IFacilityPasswordHasher hasher,
         IStaffAccessCache accessCache,
-        ILogger<ClinicAuthService> logger,
-        ITurnstileSettingResolver? turnstileResolver = null,
-        ITurnstileValidator? turnstileValidator = null)
+        ILogger<ClinicAuthService> logger)
     {
         _db = db;
         _workspaces = workspaces;
@@ -86,8 +81,6 @@ public sealed class ClinicAuthService : IClinicAuthService
         _accessCache = accessCache;
         _logger = logger;
         _dummyHash = _hasher.Hash("dummy-password-for-timing-only-1");
-        _turnstileResolver = turnstileResolver ?? new TurnstileSettingResolver(new ConfigurationBuilder().Build());
-        _turnstileValidator = turnstileValidator;
     }
 
     private FacilityJwtOptions Options => _tokens.Options;
@@ -106,16 +99,11 @@ public sealed class ClinicAuthService : IClinicAuthService
         var hasCredentials = await _db.StaffMembers.IgnoreQueryFilters()
             .AnyAsync(s => s.ClinicId == resolved.ClinicId && !s.IsDeleted && s.PasswordHash != null, ct);
 
-        var turnstileEnabled = _turnstileResolver.IsEnabled(resolved.Settings.TurnstileEnabled);
-        var turnstileSiteKey = _turnstileResolver.GetSiteKey(resolved.Settings.TurnstileSiteKey);
-
         return new AuthStatusDto(
             true,
             status,
             status != "ActivationRequired" && status != "Tampered" && !hasCredentials,
-            resolved.Settings.ClinicName,
-            turnstileEnabled,
-            turnstileSiteKey);
+            resolved.Settings.ClinicName);
     }
 
     public async Task<AuthOutcome> LoginAsync(LoginRequest request, CancellationToken ct = default)
@@ -130,16 +118,6 @@ public sealed class ClinicAuthService : IClinicAuthService
 
         var gate = CheckLicense(resolved);
         if (gate is not null) return gate;
-
-        if (_turnstileResolver.IsEnabled(resolved.Settings.TurnstileEnabled) && _turnstileValidator != null)
-        {
-            var isTurnstileValid = await _turnstileValidator.ValidateAsync(request.TurnstileToken, ct: ct);
-            if (!isTurnstileValid)
-            {
-                _logger.LogWarning("[Auth] Login rejected: Turnstile verification failed for workspace '{Workspace}'.", request.Workspace);
-                return AuthOutcome.Fail(AuthFailure.BotChallengeFailed, "Security verification failed. Please complete the bot challenge.");
-            }
-        }
 
         var matches = await _db.StaffMembers.IgnoreQueryFilters()
             .Include(s => s.ClinicRole)

@@ -1,4 +1,4 @@
-﻿import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { type AppStateStatus } from 'react-native';
 import * as ReactNative from 'react-native';
 
@@ -47,10 +47,8 @@ export interface AuthContextValue {
   offline: boolean;
   /** Notice shown on the sign-in screen (e.g. the session ended). */
   notice: string | null;
-  turnstileRequired: boolean;
-  turnstileSiteKey: string | null;
   /** Resolves to an error message, or `null` on success. */
-  login: (email: string, password: string, turnstileToken?: string | null) => Promise<string | null>;
+  login: (email: string, password: string) => Promise<string | null>;
   bootstrap: (input: BootstrapInput) => Promise<string | null>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
   /** Called by the unlock screen once the PIN / biometric check passed. */
@@ -71,8 +69,6 @@ const AuthContext = createContext<AuthContextValue>({
   permissions: [],
   offline: false,
   notice: null,
-  turnstileRequired: false,
-  turnstileSiteKey: null,
   login: noop,
   bootstrap: noop,
   changePassword: noop,
@@ -98,8 +94,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [offline, setOffline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [turnstileRequired, setTurnstileRequired] = useState(false);
-  const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
   const [bootNonce, setBootNonce] = useState(0);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -115,8 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setState('unreachable');
       return;
     }
-    setTurnstileRequired(Boolean(status?.turnstileEnabled));
-    setTurnstileSiteKey(status?.turnstileSiteKey ?? null);
     setState(status?.requiresBootstrap ? 'needsBootstrap' : 'signedOut');
   }, []);
 
@@ -225,8 +217,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [offline, state]);
 
   const login = useCallback(
-    async (email: string, password: string, turnstileToken?: string | null) => {
-      const [signedIn, error] = await loginRequest(email, password, turnstileToken);
+    async (email: string, password: string) => {
+      const [signedIn, error] = await loginRequest(email, password);
       if (error || !signedIn) return error?.message ?? 'Sign-in failed.';
       setNotice(null);
       afterSignIn(signedIn);
@@ -291,8 +283,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       permissions,
       offline,
       notice,
-      turnstileRequired,
-      turnstileSiteKey,
       login,
       bootstrap,
       changePassword,

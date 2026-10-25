@@ -16,8 +16,7 @@ public sealed record CreateBookingDraftRequest(
     string? Notes,
     string ShareFieldsJson,
     string AttachedFileIdsJson,
-    IReadOnlyList<string>? ShareSections = null,
-    string? TurnstileToken = null);
+    IReadOnlyList<string>? ShareSections = null);
 
 public sealed class CreateBookingDraftEndpoint : IEndpoint
 {
@@ -42,7 +41,6 @@ public sealed class CreateBookingDraftEndpoint : IEndpoint
                     request.ShareFieldsJson,
                     request.AttachedFileIdsJson ?? "[]",
                     request.ShareSections,
-                    request.TurnstileToken,
                     remoteIp), ct);
 
                 return Results.Created(
