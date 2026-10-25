@@ -249,26 +249,122 @@ public class BranchManagementTests : IDisposable
         Assert.StartsWith("PKA-SIM-H91001234", result.Token);
     }
 
-    [Theory]
-    [InlineData("", "user", "pass", "Accreditation Number")]
-    [InlineData("H91001234", "", "pass", "Username")]
-    [InlineData("H91001234", "user", "", "Password")]
-    public async Task TestPhilHealthSoapTester_WhenMissingMandatoryCredentials_ReturnsDescriptiveFailure(
-        string accreditation, string user, string pass, string expectedErrorSubstr)
+    private sealed class FakeEnvironment(string name) : Microsoft.Extensions.Hosting.IHostEnvironment
     {
-        var httpClient = new System.Net.Http.HttpClient();
+        public string EnvironmentName { get; set; } = name;
+        public string ApplicationName { get; set; } = "ClinicEz.Portal";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = null!;
+    }
+
+    private sealed class CapturingProbeHandler : System.Net.Http.HttpMessageHandler
+    {
+        public System.Net.Http.HttpRequestMessage? LastRequest { get; private set; }
+        public int CallCount { get; private set; }
+
+        protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(
+            System.Net.Http.HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            CallCount++;
+            LastRequest = request;
+            return Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new System.Net.Http.StringContent("<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:phi=\"http://philhealth.gov.ph/\"><soapenv:Body><phi:getTokenResponse><return>PROBE_TOKEN</return></phi:getTokenResponse></soapenv:Body></soapenv:Envelope>", System.Text.Encoding.UTF8, "text/xml")
+            });
+        }
+    }
+
+    [Theory]
+    // Trailing slash production endpoint (Security Bypass Regression Test)
+    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/", "", "valid_pass", "Username is required")]
+    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/", "   ", "valid_pass", "Username is required")]
+    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/", "valid_user", "", "Password is required")]
+    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/", "valid_user", "   ", "Password is required")]
+    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/", "", "", "Username is required")]
+    // Standard production endpoint without trailing slash
+    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP", "", "valid_pass", "Username is required")]
+    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP", "valid_user", "", "Password is required")]
+    // Production subpaths containing /soap/
+    [InlineData("https://claims.philhealth.gov.ph/soap/gateway", "", "valid_pass", "Username is required")]
+    [InlineData("https://claims.philhealth.gov.ph/soap/gateway/", "valid_user", "", "Password is required")]
+    // Production endpoints with untrimmed trailing whitespace and trailing slash
+    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/   ", "", "valid_pass", "Username is required")]
+    [InlineData("https://konsulta.philhealth.gov.ph/KONSULTA/SOAP/   ", "valid_user", "", "Password is required")]
+    public async Task TestPhilHealthSoapTester_WhenMissingMandatoryCredentialsOnProductionEndpoints_ReturnsDescriptiveFailure(
+        string endpoint,
+        string username,
+        string password,
+        string expectedErrorSubstr)
+    {
+        var handler = new CapturingProbeHandler();
+        var httpClient = new System.Net.Http.HttpClient(handler);
         var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester>.Instance;
-        var tester = new ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester(httpClient, logger);
+        var env = new FakeEnvironment("Production");
+        var tester = new ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester(httpClient, logger, env);
 
         var result = await tester.TestConnectionAsync(
-            accreditationNumber: accreditation,
-            username: user,
-            password: pass,
+            accreditationNumber: "H91001234",
+            username: username,
+            password: password,
             softwareCertificateId: "CERT-2026",
-            endpoint: "/soap/konsulta");
+            endpoint: endpoint);
 
         Assert.False(result.Success);
         Assert.Contains(expectedErrorSubstr, result.Message);
+        Assert.Equal(0, handler.CallCount);
+        Assert.Null(handler.LastRequest);
+    }
+
+    [Theory]
+    [InlineData("https://staging.philhealth.gov.ph/KONSULTA/SOAP/")]
+    [InlineData("https://staging.philhealth.gov.ph/KONSULTA/SOAP")]
+    [InlineData("https://staging.philhealth.gov.ph/soap/")]
+    [InlineData("/soap/konsulta/")]
+    [InlineData("/soap/konsulta")]
+    public void IsStagingOrSandbox_TrailingSlashStagingEndpoints_EvaluatesToTrue(string stagingEndpoint)
+    {
+        var result = ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSoapTester.IsStagingOrSandbox(stagingEndpoint);
+        Assert.True(result, $"Expected staging endpoint '{stagingEndpoint}' to evaluate to true.");
+    }
+
+    [Fact]
+    public void ConfigureBranch_PreservesDistinctionBetweenNullAndEmptyStringCredentials()
+    {
+        var protector = new ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSecretProtector(new EphemeralDataProtectionProvider());
+
+        var branch = new Branch
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = "Downtown Branch",
+            PhilHealthEncryptedUsername = protector.Protect("existing_user"),
+            PhilHealthEncryptedPassword = protector.Protect("existing_pass")
+        };
+
+        // When request has null (omitted in JSON), preserve existing
+        string? requestUsernameNull = null;
+        string? requestPasswordNull = null;
+
+        if (requestUsernameNull != null)
+            branch.PhilHealthEncryptedUsername = protector.Protect(requestUsernameNull.Trim());
+        if (requestPasswordNull != null)
+            branch.PhilHealthEncryptedPassword = protector.Protect(requestPasswordNull);
+
+        Assert.Equal("existing_user", protector.Unprotect(branch.PhilHealthEncryptedUsername));
+        Assert.Equal("existing_pass", protector.Unprotect(branch.PhilHealthEncryptedPassword));
+
+        // When request has "" (explicit blank staging credentials), update to blank
+        string? requestUsernameBlank = "";
+        string? requestPasswordBlank = "";
+
+        if (requestUsernameBlank != null)
+            branch.PhilHealthEncryptedUsername = protector.Protect(requestUsernameBlank.Trim());
+        if (requestPasswordBlank != null)
+            branch.PhilHealthEncryptedPassword = protector.Protect(requestPasswordBlank);
+
+        Assert.Equal("", protector.Unprotect(branch.PhilHealthEncryptedUsername));
+        Assert.Equal("", protector.Unprotect(branch.PhilHealthEncryptedPassword));
     }
 }
 

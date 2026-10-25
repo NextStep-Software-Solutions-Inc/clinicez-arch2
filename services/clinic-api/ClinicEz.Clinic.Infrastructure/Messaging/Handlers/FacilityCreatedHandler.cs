@@ -86,6 +86,56 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
             existingSettings.TenantSlug = message.TenantSlug ?? existingSettings.TenantSlug;
             existingSettings.FacilitySlug = message.Slug ?? existingSettings.FacilitySlug;
             existingSettings.IsWorkspaceEligible = message.IsWorkspaceEligible ?? false;
+
+            if (message.BranchId != null)
+            {
+                existingSettings.BranchId = message.BranchId;
+                existingSettings.BranchName = message.BranchName;
+                existingSettings.BranchPhilHealthAccreditationNumber = message.BranchPhilHealthAccreditationNumber;
+                existingSettings.BranchPmccNumber = message.BranchPmccNumber;
+                existingSettings.BranchSoftwareCertificateId = message.BranchSoftwareCertificateId;
+                existingSettings.BranchKonsultaEndpoint = message.BranchKonsultaEndpoint;
+                existingSettings.IsBranchPhilHealthAccredited = message.IsBranchPhilHealthAccredited;
+
+                if (!existingSettings.IsPhilHealthOverridden)
+                {
+                    if (message.IsBranchPhilHealthAccredited && !string.IsNullOrWhiteSpace(message.BranchPhilHealthAccreditationNumber))
+                    {
+                        existingSettings.AccreditationNumber = message.BranchPhilHealthAccreditationNumber;
+                        existingSettings.PmccNumber = message.BranchPmccNumber;
+                        existingSettings.SoftwareCertificateId = message.BranchSoftwareCertificateId;
+                        existingSettings.KonsultaEndpoint = !string.IsNullOrWhiteSpace(message.BranchKonsultaEndpoint) ? message.BranchKonsultaEndpoint : "/soap/konsulta";
+                        existingSettings.IsPhilHealthConfigured = true;
+                    }
+                    else
+                    {
+                        existingSettings.IsPhilHealthConfigured = false;
+                    }
+                }
+            }
+            else if (existingSettings.BranchId != null)
+            {
+                existingSettings.BranchId = null;
+                existingSettings.BranchName = null;
+                existingSettings.BranchPhilHealthAccreditationNumber = null;
+                existingSettings.BranchPmccNumber = null;
+                existingSettings.BranchSoftwareCertificateId = null;
+                existingSettings.BranchKonsultaEndpoint = null;
+                existingSettings.IsBranchPhilHealthAccredited = false;
+
+                if (!existingSettings.IsPhilHealthOverridden)
+                {
+                    existingSettings.AccreditationNumber = null;
+                    existingSettings.PmccNumber = null;
+                    existingSettings.SoftwareCertificateId = null;
+                    existingSettings.IsPhilHealthConfigured = false;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(existingSettings.LetterheadAddress) && !string.IsNullOrWhiteSpace(message.Address))
+                existingSettings.LetterheadAddress = message.Address;
+            if (string.IsNullOrWhiteSpace(existingSettings.LetterheadContact) && !string.IsNullOrWhiteSpace(message.ContactNumber))
+                existingSettings.LetterheadContact = message.ContactNumber;
         }
         else
         {
@@ -103,9 +153,33 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 LicenseExpiresAt = message.LicenseExpiresAt,
                 EntitlementVersion = entitlementVersion,
                 IsWorkspaceEligible = message.IsWorkspaceEligible ?? false,
+                BranchId = message.BranchId,
+                BranchName = message.BranchName,
+                BranchPhilHealthAccreditationNumber = message.BranchPhilHealthAccreditationNumber,
+                BranchPmccNumber = message.BranchPmccNumber,
+                BranchSoftwareCertificateId = message.BranchSoftwareCertificateId,
+                BranchKonsultaEndpoint = message.BranchKonsultaEndpoint,
+                IsBranchPhilHealthAccredited = message.IsBranchPhilHealthAccredited,
+                IsPhilHealthOverridden = false,
+                LetterheadAddress = message.Address,
+                LetterheadContact = message.ContactNumber,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "SystemProvisioning"
             };
+
+            if (message.IsBranchPhilHealthAccredited && !string.IsNullOrWhiteSpace(message.BranchPhilHealthAccreditationNumber))
+            {
+                newSettings.AccreditationNumber = message.BranchPhilHealthAccreditationNumber;
+                newSettings.PmccNumber = message.BranchPmccNumber;
+                newSettings.SoftwareCertificateId = message.BranchSoftwareCertificateId;
+                newSettings.KonsultaEndpoint = !string.IsNullOrWhiteSpace(message.BranchKonsultaEndpoint) ? message.BranchKonsultaEndpoint : "/soap/konsulta";
+                newSettings.IsPhilHealthConfigured = true;
+            }
+            else
+            {
+                newSettings.IsPhilHealthConfigured = false;
+            }
+
             _dbContext.ClinicSettings.Add(newSettings);
         }
 

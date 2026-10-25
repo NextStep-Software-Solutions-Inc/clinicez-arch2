@@ -914,6 +914,14 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.PmccNumber).HasMaxLength(100);
             entity.Property(e => e.SoftwareCertificateId).HasMaxLength(100);
             entity.Property(e => e.KonsultaEndpoint).HasMaxLength(255);
+            entity.Property(e => e.IsPhilHealthOverridden).HasDefaultValue(false);
+            entity.Property(e => e.BranchId);
+            entity.Property(e => e.BranchName).HasMaxLength(200);
+            entity.Property(e => e.BranchPhilHealthAccreditationNumber).HasMaxLength(100);
+            entity.Property(e => e.BranchPmccNumber).HasMaxLength(100);
+            entity.Property(e => e.BranchSoftwareCertificateId).HasMaxLength(100);
+            entity.Property(e => e.BranchKonsultaEndpoint).HasMaxLength(255);
+            entity.Property(e => e.IsBranchPhilHealthAccredited).HasDefaultValue(false);
             entity.Property(e => e.DefaultConsultationFee).HasPrecision(18, 2);
             entity.Property(e => e.VatRate).HasPrecision(5, 4);
             entity.Property(e => e.CashierMode).HasMaxLength(50).HasDefaultValue("ClinicDesk");

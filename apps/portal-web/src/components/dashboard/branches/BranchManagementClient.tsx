@@ -174,6 +174,11 @@ export default function BranchManagementClient() {
   const [savingPh, setSavingPh] = useState(false);
   const [isTestingPh, setIsTestingPh] = useState(false);
   const [testPhResult, setTestPhResult] = useState<TestPhilHealthConnectionResult | null>(null);
+  const [useBlankStagingCredentials, setUseBlankStagingCredentials] = useState(false);
+
+  const isConfiguredBranch = Boolean(
+    philhealthBranch?.isPhilHealthAccredited && philhealthBranch?.philHealthAccreditationNumber
+  );
 
   // Fetch branches and facilities (optionally opening settings for a newly created facility)
   const loadData = async (focusFacilityId?: string, focusFacilityName?: string) => {
@@ -333,6 +338,7 @@ export default function BranchManagementClient() {
     setPhPassword("");
     setPhCipherKey("");
     setPhEndpoint(branch.philHealthKonsultaEndpoint || "https://staging.philhealth.gov.ph/KONSULTA/SOAP");
+    setUseBlankStagingCredentials(false);
     setTestPhResult(null);
     setIsTestingPh(false);
   };
@@ -348,12 +354,20 @@ export default function BranchManagementClient() {
     setIsTestingPh(true);
     setTestPhResult(null);
     try {
+      const resolvedUsername = isConfiguredBranch
+        ? (useBlankStagingCredentials ? "" : (phUsername.trim() || undefined))
+        : (phUsername ? phUsername.trim() : "");
+
+      const resolvedPassword = isConfiguredBranch
+        ? (useBlankStagingCredentials ? "" : (phPassword || undefined))
+        : (phPassword ? phPassword : "");
+
       const payload: TestBranchPhilHealthPayload = {
         accreditationNumber: phAccreditation.trim(),
         pmccNumber: phPmcc.trim() || undefined,
         softwareCertificateId: phCertId.trim() || undefined,
-        username: phUsername.trim() || undefined,
-        password: phPassword || undefined,
+        username: resolvedUsername,
+        password: resolvedPassword,
         cipherKey: phCipherKey.trim() || undefined,
         konsultaEndpoint: phEndpoint.trim() || undefined,
       };
@@ -388,12 +402,20 @@ export default function BranchManagementClient() {
 
     setSavingPh(true);
     try {
+      const resolvedUsername = isConfiguredBranch
+        ? (useBlankStagingCredentials ? "" : (phUsername.trim() || undefined))
+        : (phUsername ? phUsername.trim() : "");
+
+      const resolvedPassword = isConfiguredBranch
+        ? (useBlankStagingCredentials ? "" : (phPassword || undefined))
+        : (phPassword ? phPassword : "");
+
       const payload: ConfigureBranchPhilHealthPayload = {
         accreditationNumber: phAccreditation.trim(),
         pmccNumber: phPmcc.trim() || undefined,
         softwareCertificateId: phCertId.trim() || undefined,
-        username: phUsername.trim() || undefined,
-        password: phPassword || undefined,
+        username: resolvedUsername,
+        password: resolvedPassword,
         cipherKey: phCipherKey.trim() || undefined,
         konsultaEndpoint: phEndpoint.trim() || undefined,
         isPhilHealthAccredited: true
@@ -1239,9 +1261,14 @@ export default function BranchManagementClient() {
               <div className="space-y-1">
                 <Label className="text-xs font-semibold">SOAP Username</Label>
                 <Input
-                  placeholder="Leave blank to keep existing"
+                  placeholder={
+                    isConfiguredBranch
+                      ? (useBlankStagingCredentials ? "Blank credentials for staging" : "Leave blank to keep existing")
+                      : "Blank for staging / Enter username"
+                  }
                   value={phUsername}
                   onChange={(e) => setPhUsername(e.target.value)}
+                  disabled={useBlankStagingCredentials}
                   className="h-9 rounded-xl text-xs"
                 />
               </div>
@@ -1250,13 +1277,38 @@ export default function BranchManagementClient() {
                 <Label className="text-xs font-semibold">SOAP Password</Label>
                 <Input
                   type="password"
-                  placeholder="Leave blank to keep existing"
+                  placeholder={
+                    isConfiguredBranch
+                      ? (useBlankStagingCredentials ? "Blank credentials for staging" : "Leave blank to keep existing")
+                      : "Blank for staging / Enter password"
+                  }
                   value={phPassword}
                   onChange={(e) => setPhPassword(e.target.value)}
+                  disabled={useBlankStagingCredentials}
                   className="h-9 rounded-xl text-xs"
                 />
               </div>
             </div>
+
+            {isConfiguredBranch && (
+              <div className="flex items-center space-x-2 pt-0.5">
+                <Checkbox
+                  id="useBlankStaging"
+                  checked={useBlankStagingCredentials}
+                  onCheckedChange={(checked) => {
+                    const isChecked = Boolean(checked);
+                    setUseBlankStagingCredentials(isChecked);
+                    if (isChecked) {
+                      setPhUsername("");
+                      setPhPassword("");
+                    }
+                  }}
+                />
+                <Label htmlFor="useBlankStaging" className="text-[11px] text-muted-foreground font-medium cursor-pointer">
+                  Switch to blank SOAP credentials (&quot;&quot;) for PhilHealth Staging / Sandbox gateway testing
+                </Label>
+              </div>
+            )}
 
             <div className="space-y-1">
               <Label className="text-xs font-semibold">AES Cipher Key (Data Protection)</Label>

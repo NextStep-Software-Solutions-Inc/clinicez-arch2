@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ClinicEz.Clinic.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261024152515_AddBoundaryModeToCustomFieldDefinitions")]
-    partial class AddBoundaryModeToCustomFieldDefinitions
+    [Migration("20261024154250_AddBranchInheritanceAndPhilHealthOverrideToClinicSettings")]
+    partial class AddBranchInheritanceAndPhilHealthOverrideToClinicSettings
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -291,10 +291,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<string>("BoundaryMode")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("Category")
                         .HasMaxLength(50)
@@ -1320,6 +1316,29 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BranchKonsultaEndpoint")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("BranchName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("BranchPhilHealthAccreditationNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("BranchPmccNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("BranchSoftwareCertificateId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("CashierMode")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1420,6 +1439,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("IsBranchPhilHealthAccredited")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -1440,6 +1464,11 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<bool>("IsPhilHealthConfigured")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPhilHealthOverridden")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsWorkspaceEligible")
                         .ValueGeneratedOnAdd()

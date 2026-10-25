@@ -395,11 +395,19 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
       icon: 'patients',
     });
 
+    const isPhilHealthConfigured = Boolean(settings?.isPhilHealthConfigured);
+    const hasAccreditation = Boolean(accreditationNumber?.trim());
+    const philHealthBadge = !hasAccreditation
+      ? undefined
+      : isPhilHealthConfigured
+      ? 'Linked'
+      : 'Pending';
+
     list.push({
       key: 'philhealth',
       label: 'PhilHealth & Yakap',
       icon: 'yakap',
-      badge: accreditationNumber?.trim() ? 'Linked' : undefined,
+      badge: philHealthBadge,
     });
 
     if (isAdmin) {
@@ -421,6 +429,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
     activeStaffCount,
     services.length,
     accreditationNumber,
+    settings?.isPhilHealthConfigured,
   ]);
 
   const showSkeletons = loading && !refreshing;
@@ -441,6 +450,7 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
             letterheadAddress={letterheadAddress}
             letterheadContact={letterheadContact}
             accreditationNumber={accreditationNumber}
+            isPhilHealthConfigured={settings?.isPhilHealthConfigured}
             operatingHours={operatingHours}
             staff={staff}
             services={services}
@@ -587,6 +597,13 @@ export default function SettingsScreen({ route }: Partial<SettingsScreenProps> =
           <PhilHealthSettingsTab
             accreditationNumber={accreditationNumber}
             clinicName={clinicName}
+            settings={settings}
+            onSettingsUpdated={(updated) => {
+              setSettings(updated);
+              if (updated.accreditationNumber !== undefined) {
+                setAccreditationNumber(updated.accreditationNumber || '');
+              }
+            }}
           />
         )}
 
