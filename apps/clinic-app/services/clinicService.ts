@@ -1767,6 +1767,8 @@ export interface ConditionalOptionsConfig {
   defaultOptions?: string[];
 }
 
+export type BoundaryMode = 'pastOrToday' | 'futureOrToday' | 'futureOnly' | 'any';
+
 export interface ClinicCustomFieldDefinition {
   id: string;
   tenantId: string;
@@ -1784,6 +1786,7 @@ export interface ClinicCustomFieldDefinition {
   createdAt?: string;
   visibilityRuleJson?: string;
   conditionalOptionsJson?: string;
+  boundaryMode?: BoundaryMode | null;
 }
 
 export interface MedicalCertificateRecord {

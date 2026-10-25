@@ -289,6 +289,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BoundaryMode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<string>("Category")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
