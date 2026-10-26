@@ -120,7 +120,7 @@ public class ChallengerM1_2RegulatoryRoutingTests
             SpecialInstructions: "Follow prescribed timing strictly",
             Items: items,
             PublicVerificationToken: "test-rx-token",
-            PublicVerificationUrl: "https://clinicez.ph/verify/test-rx-token",
+            PublicVerificationUrl: "https://clinicez.ph/verify/rx/test-rx-token",
             QrPayload: "CLINICEZ:RX:RX-2026-001:test-rx-token",
             DispenseStatus: "Pending",
             DispensedPharmacyName: null,

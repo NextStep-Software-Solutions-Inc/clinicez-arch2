@@ -53,9 +53,9 @@ describe('sanitizeAnalyticsUrl', () => {
   });
 
   it('redacts sensitive path segments for tokens', () => {
-    const rxVerify = 'https://portal.clinicez.com/rx-verify/abc-secret-uuid-12345';
+    const rxVerify = 'https://portal.clinicez.com/verify/rx/abc-secret-uuid-12345';
     expect(sanitizeAnalyticsUrl(rxVerify)).toBe(
-      'https://portal.clinicez.com/rx-verify/[REDACTED]'
+      'https://portal.clinicez.com/verify/rx/[REDACTED]'
     );
 
     const invite = '/invitations/inv-token-9999?source=email';
@@ -236,15 +236,15 @@ describe('sanitizeAnalyticsUrl - Adversarial Casing & Parameter Redaction', () =
       }
     });
 
-    it('redacts /RX-VERIFY/{token} with uppercase and mixed-case prefixes', () => {
-      expect(sanitizeAnalyticsUrl('/RX-VERIFY/RX-SECRET-01')).toBe(
-        '/RX-VERIFY/[REDACTED]'
+    it('redacts /RESET-PASSWORD/{token} with uppercase and mixed-case prefixes', () => {
+      expect(sanitizeAnalyticsUrl('/RESET-PASSWORD/PW-SECRET-01')).toBe(
+        '/RESET-PASSWORD/[REDACTED]'
       );
-      expect(sanitizeAnalyticsUrl('/Rx-Verify/RX-SECRET-02')).toBe(
-        '/Rx-Verify/[REDACTED]'
+      expect(sanitizeAnalyticsUrl('/Reset-Password/PW-SECRET-02')).toBe(
+        '/Reset-Password/[REDACTED]'
       );
-      expect(sanitizeAnalyticsUrl('/rx-verify/RX-SECRET-03')).toBe(
-        '/rx-verify/[REDACTED]'
+      expect(sanitizeAnalyticsUrl('/reset-password/PW-SECRET-03')).toBe(
+        '/reset-password/[REDACTED]'
       );
     });
 

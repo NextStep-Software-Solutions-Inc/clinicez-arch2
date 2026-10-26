@@ -1387,7 +1387,7 @@ public class HardenedDocumentGenerationTests
             SpecialInstructions: "Follow exact dosing schedule",
             Items: items,
             PublicVerificationToken: "test-rx-token",
-            PublicVerificationUrl: "https://clinicez.ph/verify/test-rx-token",
+            PublicVerificationUrl: "https://clinicez.ph/verify/rx/test-rx-token",
             QrPayload: "CLINICEZ:RX:RX-20261020-0088:test-rx-token",
             DispenseStatus: "Pending",
             DispensedPharmacyName: null,

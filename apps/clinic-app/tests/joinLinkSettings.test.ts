@@ -93,6 +93,7 @@ export {
   generateRandomJoinCode,
   computeJoinCodeExpiration,
   isJoinCodeActive,
+  formatReceptionCodeUrl,
   formatReceptionQrUrl,
   reviewDocument,
 } from '../components/settings/joinLinkUtils';
@@ -101,6 +102,7 @@ import {
   generateRandomJoinCode,
   computeJoinCodeExpiration,
   isJoinCodeActive,
+  formatReceptionCodeUrl,
   formatReceptionQrUrl,
   reviewDocument,
 } from '../components/settings/joinLinkUtils';
@@ -189,7 +191,7 @@ describe('Feature 10: Printable Reception QR Placard', () => {
     const { buildReceptionPlacardPdfBytes } = await import('../components/settings/receptionPlacardPdf');
     const pdfBytes = buildReceptionPlacardPdfBytes({
       facilityName: 'NextStep OPD',
-      qrUrl: 'https://dev.clinicez.net/join/E2FW28KT',
+      qrUrl: 'https://dev.clinicez.net/join?code=E2FW28KT',
       joinCode: 'E2FW28KT',
       expiresAtFormatted: 'Oct 15, 2026, 08:49 AM GMT+8 (in 23h)',
       letterhead: {
@@ -211,7 +213,8 @@ describe('Feature 10: Printable Reception QR Placard', () => {
     expect(pdfText).toContain('WALK-IN PATIENT SELF-ENLISTMENT');
     expect(pdfText).toContain('ACCESS PASSCODE');
     expect(pdfText).toContain('E2FW28KT');
-    expect(pdfText).toContain('https://dev.clinicez.net/join/E2FW28KT');
+    expect(pdfText).toContain('https://dev.clinicez.net/join?code=E2FW28KT');
+    expect(formatReceptionCodeUrl('https://dev.clinicez.net/', 'E2FW28KT')).toBe('https://dev.clinicez.net/join?code=E2FW28KT');
     expect(pdfText.endsWith('%%EOF\n')).toBe(true);
   });
 });

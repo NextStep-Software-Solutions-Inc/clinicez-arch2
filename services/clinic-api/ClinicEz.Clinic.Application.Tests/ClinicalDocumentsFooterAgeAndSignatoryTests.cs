@@ -116,7 +116,7 @@ public class ClinicalDocumentsFooterAgeAndSignatoryTests
                 new(Guid.NewGuid(), "Amoxicillin", null, "500mg", "capsule", "Take 1 cap TID", 21, 7, 0, false, null)
             },
             PublicVerificationToken: "tok-001",
-            PublicVerificationUrl: "https://clinicez.ph/verify/tok-001",
+            PublicVerificationUrl: "https://clinicez.ph/verify/rx/tok-001",
             QrPayload: "CLINICEZ:RX:RX-2026-001",
             DispenseStatus: "Pending",
             DispensedPharmacyName: null,
@@ -207,7 +207,7 @@ public class ClinicalDocumentsFooterAgeAndSignatoryTests
                 new(Guid.NewGuid(), "Amoxicillin", null, "500mg", "capsule", "TID", 21, 7, 0, false, null)
             },
             PublicVerificationToken: "tok-001",
-            PublicVerificationUrl: "https://clinicez.ph/verify/tok-001",
+            PublicVerificationUrl: "https://clinicez.ph/verify/rx/tok-001",
             QrPayload: "CLINICEZ:RX:RX-2026-001",
             DispenseStatus: "Pending",
             DispensedPharmacyName: null,

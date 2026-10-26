@@ -78,9 +78,9 @@ export function sanitizeAnalyticsUrl(rawUrl: string): string {
       '$1[REDACTED]'
     );
 
-    // 2) Redact 1-segment routes: invitations, rx-verify, upload
+    // 2) Redact 1-segment routes: invitations, reset-password, upload
     parsed.pathname = parsed.pathname.replace(
-      /(\/(?:rx-verify|invitations|upload\/(?:lab|rx))\/)[^/]+/gi,
+      /(\/(?:invitations|reset-password|upload\/(?:lab|rx))\/)[^/]+/gi,
       '$1[REDACTED]'
     );
 
