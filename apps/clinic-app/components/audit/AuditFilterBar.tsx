@@ -350,31 +350,20 @@ export function AuditFilterBar({
               );
             })}
 
-            {/* When Custom is selected and a date range is active: show the date range with btn to change the range */}
+            {/* When Custom is selected and a date range is active: show the date range as an interactive badge */}
             {datePreset === 'custom' && Boolean(customRangeLabel) && (
-              <View style={styles.customRangeContainer}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Custom date range: ${customRangeLabel}. Click to change.`}
-                  onPress={onOpenDateRangePicker}
-                  style={styles.customRangeBadge}
-                >
-                  <IconSlot value="calendar" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                  <ThemedText style={styles.customRangeText}>
-                    {customRangeLabel}
-                  </ThemedText>
-                </Pressable>
-                {onOpenDateRangePicker && (
-                  <Button
-                    title="Change"
-                    variant="outline"
-                    size="sm"
-                    icon="calendar"
-                    onPress={onOpenDateRangePicker}
-                    accessibilityLabel="Change date range"
-                  />
-                )}
-              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Selected date range: ${customRangeLabel}. Tap to change.`}
+                onPress={onOpenDateRangePicker}
+                style={styles.customRangeBadge}
+              >
+                <IconSlot value="calendar" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                <ThemedText style={styles.customRangeText}>
+                  {customRangeLabel}
+                </ThemedText>
+                <IconSlot value="chevronDown" size={theme.fontSizes.xs} color={theme.colors.primary} />
+              </Pressable>
             )}
           </View>
 
@@ -629,12 +618,6 @@ const styles = StyleSheet.create({
   },
   presetTextUnselected: {
     color: theme.colors.textSecondary,
-  },
-  customRangeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    marginLeft: theme.spacing.xs,
   },
   customRangeBadge: {
     flexDirection: 'row',

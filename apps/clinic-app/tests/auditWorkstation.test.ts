@@ -639,10 +639,10 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
         })
       );
 
-      // Verify custom date range badge and change button
+      // Verify custom date range badge is interactive and separate Change button is omitted
       expect(markup).toContain('2026-10-01 → 2026-10-26');
-      expect(markup).toContain('Change');
-      expect(markup).toContain('aria-label="Change date range"');
+      expect(markup).toContain('Selected date range: 2026-10-01 → 2026-10-26. Tap to change.');
+      expect(markup).not.toContain('aria-label="Change date range"');
 
       // Verify old center inputs are removed
       expect(markup).not.toContain('audit-start-date');
