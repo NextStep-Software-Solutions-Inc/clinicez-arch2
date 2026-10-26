@@ -4793,7 +4793,14 @@ export function formatClinicTime(
  */
 export function formatClinicDateTime(
   input: string | Date | number | null | undefined,
-  options?: { dateFormat?: string; timeFormat?: string; timeZoneId?: string; separator?: string; fallback?: string }
+  options?: {
+    dateFormat?: string;
+    timeFormat?: string;
+    timeZoneId?: string;
+    separator?: string;
+    fallback?: string;
+    includeSeconds?: boolean;
+  }
 ): string {
   const fallback = options?.fallback ?? '—';
   if (input === null || input === undefined || input === '') return fallback;
@@ -4810,6 +4817,7 @@ export function formatClinicDateTime(
     timeFormat: options?.timeFormat,
     timeZoneId: options?.timeZoneId,
     fallback,
+    includeSeconds: options?.includeSeconds,
   });
 
   if (dStr === fallback || tStr === fallback) return fallback;

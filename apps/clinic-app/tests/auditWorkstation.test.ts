@@ -1264,4 +1264,75 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
       }
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // DIMENSION 10: Clinic Regional Settings Integration & Timestamp Display
+  // ---------------------------------------------------------------------------
+  describe('Dimension 10: Clinic Regional Settings Integration & Timestamp Display', () => {
+    test('10.1 AuditTableRow renders formatted timestamp respecting default clinic settings', () => {
+      const entry = MOCK_AUDIT_ENTRIES[1]; // '2026-10-17T04:15:00Z'
+      const markup = renderToStaticMarkup(
+        React.createElement(AuditTableRow, {
+          entry,
+          onInspect: () => {},
+        })
+      );
+
+      // In Asia/Manila (UTC+8), 04:15:00Z is 12:15 PM
+      expect(markup).toContain('Oct 17, 2026, 12:15 PM');
+    });
+
+    test('10.2 AuditTableRow respects custom date and time format overrides', () => {
+      const entry = MOCK_AUDIT_ENTRIES[1]; // '2026-10-17T04:15:00Z'
+      const markup = renderToStaticMarkup(
+        React.createElement(AuditTableRow, {
+          entry,
+          onInspect: () => {},
+          dateFormat: 'dd/MM/yyyy',
+          timeFormat: '24h',
+        })
+      );
+
+      expect(markup).toContain('17/10/2026, 12:15');
+    });
+
+    test('10.3 AuditTable forwards regional configuration props to all rows', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(AuditTable, {
+          items: [MOCK_AUDIT_ENTRIES[1]],
+          loading: false,
+          totalCount: 1,
+          pageNumber: 1,
+          onInspect: () => {},
+          onResetFilters: () => {},
+          dateFormat: 'yyyy-MM-dd',
+          timeFormat: '24h',
+          timeZoneId: 'UTC',
+        })
+      );
+
+      // In UTC 24h: 04:15
+      expect(markup).toContain('2026-10-17, 04:15');
+    });
+
+    test('10.4 AuditInspectionDrawer renders formatted Clinic Timestamp alongside UTC Timestamp', () => {
+      const entry = MOCK_AUDIT_ENTRIES[1];
+      const markup = renderToStaticMarkup(
+        React.createElement(AuditInspectionDrawer, {
+          entry,
+          detail: null,
+          loadingDetail: false,
+          onClose: () => {},
+          dateFormat: 'd MMM yyyy',
+          timeFormat: '12h',
+          timeZoneId: 'Asia/Manila',
+        })
+      );
+
+      expect(markup).toContain('UTC Timestamp');
+      expect(markup).toContain(entry.timestamp);
+      expect(markup).toContain('Clinic Timestamp');
+      expect(markup).toContain('17 Oct 2026, 12:15 PM');
+    });
+  });
 });

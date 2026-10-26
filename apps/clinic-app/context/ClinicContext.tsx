@@ -9,6 +9,9 @@ import {
   ClinicTimeFormat,
   setClinicTimeZoneId,
   setClinicRegionalConfig,
+  getClinicDateFormat,
+  getClinicTimeFormat,
+  getClinicTimeZoneId,
 } from '../services/clinicService';
 import { useFacilityLicense } from '../components/FacilityActivationGate';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
@@ -111,11 +114,12 @@ export const ClinicContext = createContext<ClinicContextValue>({
   primaryColorHex: DEFAULT_CLINIC_BRAND_COLOR,
   workspaceAccentColorHex: null,
   workspaceProfile: null,
-  timeZoneId: 'Asia/Manila',
-  dateFormat: 'MMM d, yyyy',
-  timeFormat: '12h',
+  get timeZoneId() { return getClinicTimeZoneId(); },
+  get dateFormat() { return getClinicDateFormat(); },
+  get timeFormat() { return getClinicTimeFormat(); },
   workspaceTimeZoneId: 'Asia/Manila',
   workspaceDateFormat: 'MMM d, yyyy',
+  workspaceTimeFormat: '12h',
   isRegionalOverridden: false,
   isColorOverridden: false,
   colorSource: 'default_fallback',
