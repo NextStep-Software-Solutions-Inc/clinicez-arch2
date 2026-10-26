@@ -7,6 +7,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.EntityFrameworkCore;
@@ -24,15 +25,26 @@ public sealed class BillingPaymentConfirmedHandler : IInteropHandler<BillingPaym
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly ClinicRecipientResolver _recipient;
+    private readonly IInteropPublisher? _publisher;
     private readonly ILogger<BillingPaymentConfirmedHandler> _logger;
 
     public BillingPaymentConfirmedHandler(
         ApplicationDbContext dbContext,
         ClinicRecipientResolver recipient,
         ILogger<BillingPaymentConfirmedHandler> logger)
+        : this(dbContext, recipient, null, logger)
+    {
+    }
+
+    public BillingPaymentConfirmedHandler(
+        ApplicationDbContext dbContext,
+        ClinicRecipientResolver recipient,
+        IInteropPublisher? publisher,
+        ILogger<BillingPaymentConfirmedHandler> logger)
     {
         _dbContext = dbContext;
         _recipient = recipient;
+        _publisher = publisher;
         _logger = logger;
     }
 
@@ -103,6 +115,47 @@ public sealed class BillingPaymentConfirmedHandler : IInteropHandler<BillingPaym
         invoice.BalanceDue = Math.Max(0m, invoice.NetAmount - confirmedPaid);
         invoice.Status = message.FullyPaid || invoice.BalanceDue <= 0m ? InvoiceStatus.Paid : InvoiceStatus.PartiallyPaid;
         invoice.UpdatedAt = now;
+
+        // ── Linkage to Teleconsultation Appointment Gate ─────────────────────
+        var isFullySettled = message.FullyPaid || invoice.BalanceDue <= 0m;
+        if (isFullySettled)
+        {
+            var appointment = await _dbContext.Appointments
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(a => !a.IsDeleted && a.ClinicId == clinic.ClinicId &&
+                    (a.Id == invoice.AppointmentId || a.InvoiceId == invoice.Id || a.InvoiceRequestId == invoiceRequestId), ct);
+
+            if (appointment != null && appointment.IsTeleconsult)
+            {
+                appointment.PaymentStatus = TeleconsultPaymentStatus.Paid;
+                appointment.PaidAmount = confirmedPaid;
+                appointment.PaidAt = message.PaidAtUtc;
+                appointment.PaymentReceiptNumber = message.ReceiptNumber;
+                appointment.PaymentMethod = message.PaymentMethod ?? "Cashier";
+
+                if (appointment.CallId.HasValue)
+                {
+                    _publisher?.Enqueue(
+                        InteropTypes.CommsCallPaymentCleared,
+                        Party.ForFacility(clinic.TenantId, clinic.ClinicId.ToString(), FacilityType.Clinic),
+                        Party.ForFacility(clinic.TenantId, clinic.ClinicId.ToString(), FacilityType.Clinic, InteropServices.Comms),
+                        appointment.CallId.Value,
+                        new CommsCallPaymentClearedPayload(
+                            appointment.CallId.Value,
+                            clinic.TenantId,
+                            clinic.ClinicId.ToString(),
+                            invoice.Id,
+                            message.PaymentMethod ?? "Cashier",
+                            message.PaidAtUtc,
+                            IsEmergencyOverride: false,
+                            OverrideReason: null
+                        ));
+                }
+
+                _logger.LogInformation("[ClinicEz.Clinic] Teleconsultation appointment {AppointmentId} payment cleared ({AmountPaid}). Gate opened.",
+                    appointment.Id, confirmedPaid);
+            }
+        }
 
         await _dbContext.SaveChangesAsync(ct);
 

@@ -98,6 +98,13 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext, IDataPr
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 
+    // ── Patient Communications & Unified Inbox ──────────────────────────────
+    public DbSet<PatientConversation> PatientConversations => Set<PatientConversation>();
+    public DbSet<PatientMessage> PatientMessages => Set<PatientMessage>();
+    public DbSet<PatientMessageAttachment> PatientMessageAttachments => Set<PatientMessageAttachment>();
+    public DbSet<PatientEligibilityGrant> PatientEligibilityGrants => Set<PatientEligibilityGrant>();
+    public DbSet<PatientCallSession> PatientCallSessions => Set<PatientCallSession>();
+
     // ── Interop hub outbox / inbox ──────────────────────────────────────────
     public DbSet<InteropOutboxMessage> InteropOutbox => Set<InteropOutboxMessage>();
     public DbSet<InteropInboxMessage> InteropInbox => Set<InteropInboxMessage>();

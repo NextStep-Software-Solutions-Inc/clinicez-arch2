@@ -3052,6 +3052,137 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.ToTable("patient_allergies", (string)null);
                 });
 
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientCallSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CallId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("call_id");
+
+                    b.Property<string>("CallKind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("call_kind");
+
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<DateTime?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at_utc");
+
+                    b.Property<string>("FacilityId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("facility_id");
+
+                    b.Property<string>("FacilityName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("facility_name");
+
+                    b.Property<string>("FacilityType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("facility_type");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("JoinedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("joined_at_utc");
+
+                    b.Property<string>("LiveKitToken")
+                        .HasColumnType("text")
+                        .HasColumnName("live_kit_token");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
+
+                    b.Property<string>("RoomName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("room_name");
+
+                    b.Property<DateTime?>("ScheduledAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scheduled_at_utc");
+
+                    b.Property<int>("StateVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("state_version");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_patient_call_sessions");
+
+                    b.HasIndex("CallId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_patient_call_sessions_call_id");
+
+                    b.HasIndex("ConversationId")
+                        .HasDatabaseName("ix_patient_call_sessions_conversation_id");
+
+                    b.HasIndex("PatientId", "Status")
+                        .HasDatabaseName("ix_patient_call_sessions_patient_id_status");
+
+                    b.ToTable("patient_call_sessions", (string)null);
+                });
+
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientChronicCondition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3217,6 +3348,214 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.ToTable("patient_contraceptive_histories", (string)null);
                 });
 
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientConversation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AssignedStaffDisplayName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("assigned_staff_display_name");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("category");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at_utc");
+
+                    b.Property<string>("ContextId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("context_id");
+
+                    b.Property<string>("ContextType")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("context_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DeclineReasonCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("decline_reason_code");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("FacilityName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("facility_name");
+
+                    b.Property<DateTime?>("GrantWindowEndUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("grant_window_end_utc");
+
+                    b.Property<DateTime?>("HiddenAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("hidden_at_utc");
+
+                    b.Property<string>("HomeFacilityId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("home_facility_id");
+
+                    b.Property<string>("HomeFacilityType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("home_facility_type");
+
+                    b.Property<string>("HomeTenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("home_tenant_id");
+
+                    b.Property<DateTime?>("IdleDeadlineUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("idle_deadline_utc");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsHiddenByPatient")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_hidden_by_patient");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTime>("LastMessageAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_message_at_utc");
+
+                    b.Property<string>("LastMessagePreview")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("last_message_preview");
+
+                    b.Property<DateTime>("OpenedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("opened_at_utc");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
+
+                    b.Property<string>("RelationshipToPatient")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("relationship_to_patient");
+
+                    b.Property<int>("ReopenCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("reopen_count");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("scope");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid?>("SubmittingAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submitting_account_id");
+
+                    b.Property<string>("SubmittingAccountName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("submitting_account_name");
+
+                    b.Property<string>("TriageDisposition")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("triage_disposition");
+
+                    b.Property<int>("UnreadCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("unread_count");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_patient_conversations");
+
+                    b.HasIndex("SubmittingAccountId")
+                        .HasDatabaseName("ix_patient_conversations_submitting_account_id");
+
+                    b.HasIndex("HomeTenantId", "HomeFacilityId")
+                        .HasDatabaseName("ix_patient_conversations_home_tenant_id_home_facility_id");
+
+                    b.HasIndex("PatientId", "IsHiddenByPatient", "LastMessageAtUtc")
+                        .HasDatabaseName("ix_patient_conversations_patient_id_is_hidden_by_patient_last_");
+
+                    b.ToTable("patient_conversations", (string)null);
+                });
+
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientDentalVision", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3377,6 +3716,132 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasDatabaseName("ix_patient_disabilities_patient_id");
 
                     b.ToTable("patient_disabilities", (string)null);
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientEligibilityGrant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContextId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("context_id");
+
+                    b.Property<string>("ContextType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("context_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<DateTime?>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<string>("FacilityId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("facility_id");
+
+                    b.Property<string>("FacilityName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("facility_name");
+
+                    b.Property<string>("FacilityType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("facility_type");
+
+                    b.Property<Guid>("GrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("grant_id");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
+
+                    b.Property<DateTime>("SyncedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("synced_at_utc");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<DateTime?>("WindowEndUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("window_end_utc");
+
+                    b.Property<DateTime?>("WindowStartUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("window_start_utc");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_patient_eligibility_grants");
+
+                    b.HasIndex("GrantId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_patient_eligibility_grants_grant_id");
+
+                    b.HasIndex("PatientId", "IsActive", "ExpiresAtUtc")
+                        .HasDatabaseName("ix_patient_eligibility_grants_patient_id_is_active_expires_at_");
+
+                    b.HasIndex("TenantId", "FacilityId", "ContextType", "ContextId")
+                        .HasDatabaseName("ix_patient_eligibility_grants_tenant_id_facility_id_context_ty");
+
+                    b.ToTable("patient_eligibility_grants", (string)null);
                 });
 
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientFamilyHistory", b =>
@@ -4049,6 +4514,237 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasDatabaseName("ix_patient_mental_health_profiles_patient_id");
 
                     b.ToTable("patient_mental_health_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("AcknowledgedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acknowledged_at_utc");
+
+                    b.Property<Guid?>("AcknowledgedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("acknowledged_by_account_id");
+
+                    b.Property<string>("AcknowledgedByName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("acknowledged_by_name");
+
+                    b.Property<Guid>("ClientMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_message_id");
+
+                    b.Property<string>("ContentText")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("content_text");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("conversation_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("DeliveryState")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("delivery_state");
+
+                    b.Property<bool>("HasExpiredBannerShown")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_expired_banner_shown");
+
+                    b.Property<bool>("IsAcknowledged")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_acknowledged");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at_utc");
+
+                    b.Property<bool>("RequiresAcknowledgement")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_acknowledgement");
+
+                    b.Property<DateTime>("RetentionDeadlineUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retention_deadline_utc");
+
+                    b.Property<Guid?>("SenderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sender_id");
+
+                    b.Property<string>("SenderName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("sender_name");
+
+                    b.Property<string>("SenderType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("sender_type");
+
+                    b.Property<long>("Seq")
+                        .HasColumnType("bigint")
+                        .HasColumnName("seq");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_patient_messages");
+
+                    b.HasIndex("ClientMessageId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_patient_messages_client_message_id");
+
+                    b.HasIndex("ConversationId", "Seq")
+                        .HasDatabaseName("ix_patient_messages_conversation_id_seq");
+
+                    b.HasIndex("DeliveryState", "RetentionDeadlineUtc")
+                        .HasDatabaseName("ix_patient_messages_delivery_state_retention_deadline_utc");
+
+                    b.ToTable("patient_messages", (string)null);
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientMessageAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("file_name");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("file_size_bytes");
+
+                    b.Property<string>("HashSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("hash_sha256");
+
+                    b.Property<bool>("IsClean")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_clean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("message_id");
+
+                    b.Property<string>("ScanStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("scan_status");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("storage_key");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_patient_message_attachments");
+
+                    b.HasIndex("MessageId")
+                        .HasDatabaseName("ix_patient_message_attachments_message_id");
+
+                    b.ToTable("patient_message_attachments", (string)null);
                 });
 
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientNcdQuestionnaire", b =>
@@ -6639,6 +7335,26 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientCallSession", b =>
+                {
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.PatientConversation", "Conversation")
+                        .WithMany("CallSessions")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_patient_call_sessions_patient_conversations_conversation_id");
+
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_patient_call_sessions_patients_patient_id");
+
+                    b.Navigation("Conversation");
+
+                    b.Navigation("Patient");
+                });
+
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientChronicCondition", b =>
                 {
                     b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
@@ -6663,6 +7379,18 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientConversation", b =>
+                {
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_patient_conversations_patients_patient_id");
+
+                    b.Navigation("Patient");
+                });
+
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientDentalVision", b =>
                 {
                     b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
@@ -6683,6 +7411,18 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_patient_disabilities_patients_patient_id");
+
+                    b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientEligibilityGrant", b =>
+                {
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_patient_eligibility_grants_patients_patient_id");
 
                     b.Navigation("Patient");
                 });
@@ -6769,6 +7509,30 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasConstraintName("fk_patient_mental_health_profiles_patients_patient_id");
 
                     b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientMessage", b =>
+                {
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.PatientConversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_patient_messages_patient_conversations_conversation_id");
+
+                    b.Navigation("Conversation");
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientMessageAttachment", b =>
+                {
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.PatientMessage", "Message")
+                        .WithMany("Attachments")
+                        .HasForeignKey("MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_patient_message_attachments_patient_messages_message_id");
+
+                    b.Navigation("Message");
                 });
 
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientNcdQuestionnaire", b =>
@@ -7109,6 +7873,18 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Navigation("VaccinationsAdministered");
 
                     b.Navigation("VitalSigns");
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientConversation", b =>
+                {
+                    b.Navigation("CallSessions");
+
+                    b.Navigation("Messages");
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PatientMessage", b =>
+                {
+                    b.Navigation("Attachments");
                 });
 
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.PrescriptionDocument", b =>

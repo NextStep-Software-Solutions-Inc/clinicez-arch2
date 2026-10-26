@@ -26,6 +26,7 @@ public class CommsDbContext : DbContext, ICommsDbContext, IInteropDbContext
     public DbSet<MessageReaction> MessageReactions => Set<MessageReaction>();
     public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
     public DbSet<EligibilityGrant> EligibilityGrants => Set<EligibilityGrant>();
+    public DbSet<GuestInvite> GuestInvites => Set<GuestInvite>();
 
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; } = null!;
     public DbSet<InteropInboxMessage> InteropInbox { get; set; } = null!;
@@ -53,5 +54,6 @@ public class CommsDbContext : DbContext, ICommsDbContext, IInteropDbContext
         modelBuilder.Entity<Message>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<MessageAttachment>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<EligibilityGrant>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<GuestInvite>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
     }
 }

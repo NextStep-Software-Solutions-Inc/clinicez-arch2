@@ -1,6 +1,7 @@
 using System;
 using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
 
 namespace ClinicEz.Clinic.Domain.Entities;
@@ -53,4 +54,49 @@ public sealed class Appointment : BaseEntity
     public DateTime? Reminder2hSentAt { get; set; }
     public DateTime? LastReminderSentAt { get; set; }
     public string? LastReminderType { get; set; }
+
+    // ── Teleconsultation & Prepayment Gate Extensions (Milestone M4) ────────────
+    public AppointmentType AppointmentType { get; set; } = AppointmentType.InPerson;
+
+    /// <summary>
+    /// Helper property returning true if appointment is a teleconsultation.
+    /// Handles legacy records where ServiceType was set to "Teleconsult".
+    /// </summary>
+    public bool IsTeleconsult =>
+        AppointmentType == AppointmentType.Teleconsult ||
+        string.Equals(ServiceType, "Teleconsult", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Payment policy governing this teleconsultation: Prepaid (default), Postpaid, Exempt.
+    /// </summary>
+    public TeleconsultPaymentPolicy PaymentPolicy { get; set; } = TeleconsultPaymentPolicy.Prepaid;
+
+    /// <summary>
+    /// Current payment state: Pending, Paid, Exempt, Overridden.
+    /// </summary>
+    public TeleconsultPaymentStatus PaymentStatus { get; set; } = TeleconsultPaymentStatus.Pending;
+
+    /// <summary>Linked invoice ID in clinic-api / billing-api.</summary>
+    public Guid? InvoiceId { get; set; }
+
+    /// <summary>Correlation ID for billing invoice requests.</summary>
+    public Guid? InvoiceRequestId { get; set; }
+
+    public decimal? PaidAmount { get; set; }
+    public DateTime? PaidAt { get; set; }
+    public string? PaymentReceiptNumber { get; set; }
+    public string? PaymentMethod { get; set; }
+
+    // ── Emergency Clinical Override Tracking ─────────────────────────────────
+    public bool IsEmergencyOverride { get; set; } = false;
+    public string? EmergencyOverrideReasonCode { get; set; }
+    public string? EmergencyOverrideReasonNote { get; set; }
+    public Guid? EmergencyOverrideDoctorId { get; set; }
+    public string? EmergencyOverrideDoctorName { get; set; }
+    public DateTime? EmergencyOverrideAtUtc { get; set; }
+
+    // ── Teleconsultation Admission & Media Correlation ───────────────────────
+    public Guid? CallId { get; set; }
+    public DateTime? AdmittedAtUtc { get; set; }
+    public Guid? AdmittedByDoctorId { get; set; }
 }

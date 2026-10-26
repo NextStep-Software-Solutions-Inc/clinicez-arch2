@@ -42,6 +42,20 @@ public sealed class ClinicExceptionHandler : IExceptionHandler
             return true;
         }
 
+        if (exception is TeleconsultPaymentRequiredException paymentEx)
+        {
+            httpContext.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            var response = new ApiResponse<object>
+            {
+                Succeeded = false,
+                Message = paymentEx.Message,
+                ErrorCode = TeleconsultPaymentRequiredException.ErrorCode,
+                Errors = [new ApiFieldError(null, TeleconsultPaymentRequiredException.ErrorCode, paymentEx.Message)]
+            };
+            await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+            return true;
+        }
+
         return false;
     }
 }

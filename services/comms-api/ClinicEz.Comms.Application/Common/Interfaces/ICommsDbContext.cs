@@ -14,6 +14,7 @@ public interface ICommsDbContext
     DbSet<MessageReaction> MessageReactions { get; }
     DbSet<MessageAttachment> MessageAttachments { get; }
     DbSet<EligibilityGrant> EligibilityGrants { get; }
+    DbSet<GuestInvite> GuestInvites { get; }
     DbSet<InteropOutboxMessage> InteropOutbox { get; }
     DbSet<InteropInboxMessage> InteropInbox { get; }
 

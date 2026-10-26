@@ -85,6 +85,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<ClinicAuditEntry> ClinicAuditEntries { get; set; } = null!;
     public DbSet<DentalToothRecord> DentalToothRecords { get; set; } = null!;
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
+    public DbSet<TeleconsultRecordingSession> TeleconsultRecordingSessions { get; set; } = null!;
+    public DbSet<TeleconsultRecordingSegment> TeleconsultRecordingSegments { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -159,6 +161,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<ClinicAuditEntry>().HasQueryFilter(e => e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<DentalToothRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PaymentRecord>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<TeleconsultRecordingSession>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<TeleconsultRecordingSegment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         modelBuilder.Entity<ClinicStaffNotification>(b =>
         {
@@ -1103,6 +1107,49 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.ApplyWorkspaceProfileModel();
         modelBuilder.Entity<DataProtectionKey>(entity => { entity.ToTable("DataProtectionKeys"); });
 
+        modelBuilder.Entity<TeleconsultRecordingSession>(entity =>
+        {
+            entity.ToTable("teleconsult_recording_sessions");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.ClinicId, e.CallId }).IsUnique();
+            entity.HasIndex(e => new { e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.ClinicId, e.ConsultationId });
+            entity.HasIndex(e => e.ExpiresAtUtc)
+                  .HasFilter("\"IsPurged\" = false AND \"IsLegalHold\" = false");
+
+            entity.Property(e => e.TenantId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.DoctorName).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.PatientName).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.ConsentStatus).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.RecordingState).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.StoragePolicy).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.ContainerFormat).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.ManifestStorageKey).HasMaxLength(512);
+            entity.Property(e => e.EncryptionAlgorithm).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.EncryptionKeyId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.LegalHoldReason).HasMaxLength(512);
+            entity.Property(e => e.LegalHoldPlacedByStaffName).HasMaxLength(128);
+            entity.Property(e => e.PurgedBy).HasMaxLength(128);
+
+            entity.HasMany(e => e.Segments)
+                  .WithOne(s => s.Session)
+                  .HasForeignKey(s => s.SessionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TeleconsultRecordingSegment>(entity =>
+        {
+            entity.ToTable("teleconsult_recording_segments");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.SessionId, e.SegmentIndex }).IsUnique();
+
+            entity.Property(e => e.TenantId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.StorageKey).HasMaxLength(512).IsRequired();
+            entity.Property(e => e.Sha256Checksum).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.IvBase64).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.TagBase64).HasMaxLength(64).IsRequired();
+        });
+
         base.OnModelCreating(modelBuilder);
     }
 
@@ -1239,6 +1286,60 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                     throw new DbUpdateException(
                         $"23505: duplicate key value violates unique constraint \"IX_PatientCodeSequenceTrackers_TenantId_ClinicId_Year\". Key (tenant_id, clinic_id, year)=({t.TenantId}, {t.ClinicId}, {t.Year}) already exists.",
                         new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_PatientCodeSequenceTrackers_TenantId_ClinicId_Year\""));
+                }
+            }
+        }
+
+        var addedSessions = ChangeTracker.Entries<TeleconsultRecordingSession>()
+            .Where(e => e.State == EntityState.Added)
+            .Select(e => e.Entity)
+            .ToList();
+
+        if (addedSessions.Count > 0)
+        {
+            foreach (var s in addedSessions)
+            {
+                var exists = TeleconsultRecordingSessions.Local.Any(existing =>
+                    existing != s &&
+                    existing.ClinicId == s.ClinicId &&
+                    existing.CallId == s.CallId)
+                    || TeleconsultRecordingSessions.IgnoreQueryFilters().Any(existing =>
+                    existing.Id != s.Id &&
+                    existing.ClinicId == s.ClinicId &&
+                    existing.CallId == s.CallId);
+
+                if (exists)
+                {
+                    throw new DbUpdateException(
+                        $"23505: duplicate key value violates unique constraint \"IX_teleconsult_recording_sessions_ClinicId_CallId\". Key (clinic_id, call_id)=({s.ClinicId}, {s.CallId}) already exists.",
+                        new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_teleconsult_recording_sessions_ClinicId_CallId\""));
+                }
+            }
+        }
+
+        var addedSegments = ChangeTracker.Entries<TeleconsultRecordingSegment>()
+            .Where(e => e.State == EntityState.Added)
+            .Select(e => e.Entity)
+            .ToList();
+
+        if (addedSegments.Count > 0)
+        {
+            foreach (var seg in addedSegments)
+            {
+                var exists = TeleconsultRecordingSegments.Local.Any(existing =>
+                    existing != seg &&
+                    existing.SessionId == seg.SessionId &&
+                    existing.SegmentIndex == seg.SegmentIndex)
+                    || TeleconsultRecordingSegments.IgnoreQueryFilters().Any(existing =>
+                    existing.Id != seg.Id &&
+                    existing.SessionId == seg.SessionId &&
+                    existing.SegmentIndex == seg.SegmentIndex);
+
+                if (exists)
+                {
+                    throw new DbUpdateException(
+                        $"23505: duplicate key value violates unique constraint \"IX_teleconsult_recording_segments_SessionId_SegmentIndex\". Key (session_id, segment_index)=({seg.SessionId}, {seg.SegmentIndex}) already exists.",
+                        new InvalidOperationException($"23505: duplicate key value violates unique constraint \"IX_teleconsult_recording_segments_SessionId_SegmentIndex\""));
                 }
             }
         }
