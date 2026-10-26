@@ -387,4 +387,56 @@ public class ClinicAuthServiceTests
         (await f.Service.LoginAsync(new LoginRequest(null, "owner@clinic.test", StrongPassword, null))).Failure
             .Should().Be(AuthFailure.LicenseTampered);
     }
+
+    [Fact]
+    public async Task LoginRefreshAndGetCurrentUser_IncludeStaffEmailInUserDtoAndJwtClaims()
+    {
+        var f = await CreateAsync();
+        await f.Service.BootstrapAsync(Bootstrap(f));
+
+        var doctorRole = await f.Db.ClinicRoles.IgnoreQueryFilters()
+            .SingleAsync(r => r.ClinicId == f.ClinicId && r.Name == ClinicRoleSeeder.DoctorRoleName);
+
+        var doctor = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = f.TenantId,
+            ClinicId = f.ClinicId,
+            ClinicRoleId = doctorRole.Id,
+            Title = "Dr.",
+            FirstName = "Ely An",
+            LastName = "Real",
+            Email = "lovelyjean.maureal@ustp.edu.ph",
+            PrcLicenseNumber = "010714",
+            Role = StaffRole.Doctor,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "test"
+        };
+        f.Db.StaffMembers.Add(doctor);
+        await f.Db.SaveChangesAsync();
+
+        (await f.Service.SetTemporaryPasswordAsync(doctor.Id, "Temp-Pass-12345")).Ok.Should().BeTrue();
+        var changed = await f.Service.ChangePasswordAsync(doctor.Id, new ChangePasswordRequest("Temp-Pass-12345", "Doctor-Strong-Pass-99!"), null);
+        changed.Ok.Should().BeTrue(changed.Message);
+        changed.Tokens!.User.Email.Should().Be("lovelyjean.maureal@ustp.edu.ph");
+
+        var login = await f.Service.LoginAsync(new LoginRequest(null, "lovelyjean.maureal@ustp.edu.ph", "Doctor-Strong-Pass-99!", "workstation"));
+        login.Ok.Should().BeTrue(login.Message);
+        login.Tokens!.User.Email.Should().Be("lovelyjean.maureal@ustp.edu.ph");
+        login.Tokens.User.Permissions.Should().Contain("staff:read");
+
+        var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+        var jwt = handler.ReadJwtToken(login.Tokens.AccessToken);
+        jwt.Claims.FirstOrDefault(c => c.Type == ClinicEz.Clinic.Infrastructure.Context.ClinicClaimTypes.Email)?.Value
+            .Should().Be("lovelyjean.maureal@ustp.edu.ph");
+
+        var refreshed = await f.Service.RefreshAsync(login.Tokens.RefreshToken);
+        refreshed.Ok.Should().BeTrue(refreshed.Message);
+        refreshed.Tokens!.User.Email.Should().Be("lovelyjean.maureal@ustp.edu.ph");
+
+        var current = await f.Service.GetCurrentUserAsync(doctor.Id);
+        current.Should().NotBeNull();
+        current!.Email.Should().Be("lovelyjean.maureal@ustp.edu.ph");
+    }
 }

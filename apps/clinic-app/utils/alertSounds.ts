@@ -1,4 +1,7 @@
-import { Platform, Vibration } from 'react-native';
+import * as ReactNative from 'react-native';
+import { Platform } from 'react-native';
+
+const Vibration = (ReactNative as any).Vibration ?? (ReactNative as any).default?.Vibration;
 
 /**
  * Synthesizes an attention chime using Web Audio API on web workstations.
@@ -40,7 +43,7 @@ export function playStatAudioChime(): void {
  */
 export function triggerStatVibration(): void {
   try {
-    Vibration.vibrate([0, 250, 100, 250]);
+    Vibration?.vibrate?.([0, 250, 100, 250]);
   } catch {
     // Vibration unsupported or blocked
   }
