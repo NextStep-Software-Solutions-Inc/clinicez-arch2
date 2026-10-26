@@ -13,6 +13,7 @@ import {
   formatTime12,
   getAppointmentLocalDateTime,
 } from './calendarUtils';
+import { useClinicComms } from '../../context/ClinicCommsContext';
 
 export interface AppointmentInspectionModalProps {
   visible: boolean;
@@ -48,6 +49,7 @@ export function AppointmentInspectionModal({
 }: AppointmentInspectionModalProps) {
   const [currentAppointment, setCurrentAppointment] = useState<ExtendedAppointmentItem | null>(appointment);
   const [sendingReminder, setSendingReminder] = useState<boolean>(false);
+  const { openTeleconsultWaitingRoom } = useClinicComms();
 
   useEffect(() => {
     setCurrentAppointment(appointment);
@@ -398,6 +400,42 @@ export function AppointmentInspectionModal({
               </Pressable>
             ) : null}
 
+            {currentAppointment.status !== 'Cancelled' ? (
+              <Pressable
+                data-testid="btn-drawer-teleconsult"
+                testID="btn-drawer-teleconsult"
+                accessibilityRole="button"
+                accessibilityLabel="Enter teleconsultation waiting room"
+                onPress={() => {
+                  onClose();
+                  openTeleconsultWaitingRoom({
+                    callId: currentAppointment.id,
+                    appointmentId: currentAppointment.id,
+                    patientName: currentAppointment.patientName || 'Patient',
+                    clinicianName: currentAppointment.doctorName || 'Attending Physician',
+                    scheduledTime: currentAppointment.scheduledAt,
+                    paymentPolicy: (currentAppointment as any).isYakapEligible ? 'Exempt' : 'Prepaid',
+                    paymentStatus: currentAppointment.status === 'CheckedIn' ? 'Paid' : 'Unpaid',
+                    isYakapExempt: (currentAppointment as any).isYakapEligible ?? false,
+                  });
+                }}
+                style={({ pressed }) => [
+                  styles.btn,
+                  styles.btnTeleconsult,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Icon
+                  name="consultations"
+                  size={theme.sizes.iconSm}
+                  color={theme.colors.primary}
+                />
+                <ThemedText variant="smallBold" color={theme.colors.primary}>
+                  Teleconsult
+                </ThemedText>
+              </Pressable>
+            ) : null}
+
             {onReschedule && currentAppointment.status !== 'Cancelled' ? (
               <Pressable
                 data-testid="btn-drawer-reschedule"
@@ -538,6 +576,11 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.emergencyBg,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.emergencyBorder,
+  },
+  btnTeleconsult: {
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primary,
   },
   pressed: {
     opacity: 0.75,

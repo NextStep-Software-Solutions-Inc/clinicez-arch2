@@ -39,7 +39,7 @@ export default function NavigationProgressBar() {
 
   // Listen to manual start / complete events
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
 
     const handleStart = () => {
       setIsVisible(true);

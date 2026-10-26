@@ -10,6 +10,8 @@ import { theme } from '../../constants/theme';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import { useSafeInsets } from '../../utils/useSafeInsets';
 import { useUiDensity } from '../../context/UiDensityContext';
+import { CommsContext, useConversations } from '@clinicez/comms-sdk/react';
+import { useClinicComms } from '../../context/ClinicCommsContext';
 
 export interface HeaderAction {
   id: string;
@@ -36,6 +38,39 @@ export interface ClinicHeaderBarProps {
   rightAction?: React.ReactNode;
   style?: ViewStyle;
   onOpenSearch?: () => void;
+}
+
+function CommsChatButtonContent() {
+  const { toggleChatDrawer } = useClinicComms();
+  const { unreadCount } = useConversations();
+
+  return (
+    <Pressable
+      onPress={toggleChatDrawer}
+      style={({ pressed }) => [
+        styles.chatButton,
+        pressed && styles.chatButtonPressed,
+      ]}
+      hitSlop={theme.spacing.xs}
+      accessibilityRole="button"
+      accessibilityLabel={`Communications (${unreadCount} unread)`}
+    >
+      <Icon name="message" size={theme.sizes.iconMd} color={theme.colors.text} />
+      {unreadCount > 0 ? (
+        <View style={styles.badgePill}>
+          <ThemedText variant="badge" color={theme.colors.onPrimary}>
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </ThemedText>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function CommsChatButton() {
+  const commsCtx = React.useContext(CommsContext);
+  if (!commsCtx) return null;
+  return <CommsChatButtonContent />;
 }
 
 export default function ClinicHeaderBar({
@@ -234,6 +269,8 @@ export default function ClinicHeaderBar({
             </Pressable>
           ) : null}
 
+          <CommsChatButton />
+
           <Pressable
             onPress={() => setModalVisible(true)}
             style={({ pressed }) => [
@@ -360,6 +397,20 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.full,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+  },
+  chatButton: {
+    position: 'relative',
+    width: theme.sizes.controlSm,
+    height: theme.sizes.controlSm,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatButtonPressed: {
+    opacity: 0.7,
   },
   bellButton: {
     position: 'relative',

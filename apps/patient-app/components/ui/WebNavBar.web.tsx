@@ -9,6 +9,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 const TAB_ICONS: Record<string, IconName> = {
   HomeScreen: 'home',
   AppointmentsScreen: 'appointments',
+  MessagesScreen: 'chat',
   FilesScreen: 'files',
   ProfileScreen: 'profile',
 };

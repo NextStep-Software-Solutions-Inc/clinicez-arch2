@@ -33,6 +33,7 @@ export const WORKSTATION_NAV_ITEMS: NavItem[] = [
   { key: 'Patients', label: 'Patients', icon: 'patients', permission: PERMISSIONS.patientsRead, roles: ['Doctor', 'Nurse', 'Receptionist', 'Admin'] },
   { key: 'Consultations', label: 'Consultations', icon: 'consultations', permission: PERMISSIONS.consultationsRead, roles: ['Doctor', 'Nurse', 'Admin'] },
   { key: 'Appointments', label: 'Appointments', icon: 'appointments', permission: PERMISSIONS.appointmentsRead, roles: ['Doctor', 'Nurse', 'Receptionist', 'Admin'] },
+  { key: 'Triage', label: 'Triage desk', icon: 'activity', permission: PERMISSIONS.triageRead, roles: ['Doctor', 'Nurse', 'Receptionist', 'Admin'] },
   { key: 'Billing', label: 'Billing', icon: 'billing', permission: PERMISSIONS.billingRead, roles: ['Cashier', 'Receptionist', 'Admin'] },
   { key: 'ResultReview', label: 'Result review', icon: 'lab', permission: PERMISSIONS.labOrdersRead, roles: ['Doctor', 'Admin'] },
   { key: 'ShareImport', label: 'Scan patient QR', icon: 'scan', permission: PERMISSIONS.patientsWrite, roles: ['Receptionist', 'Nurse', 'Admin'] },

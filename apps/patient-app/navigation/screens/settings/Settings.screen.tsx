@@ -122,6 +122,14 @@ export default function SettingsScreen() {
           right={{ type: 'chevron' }}
           onPress={handleChangePasswordPress}
         />
+        <SettingsRow
+          title="Privacy & Communications"
+          subtitle="Privacy blur & hidden conversation copies"
+          icon={{ android: 'visibility', ios: 'eye.fill' }}
+          iconColor={colors.primary}
+          right={{ type: 'chevron' }}
+          onPress={() => navigation.navigate('Main', { screen: 'PrivacySettingsScreen' })}
+        />
       </SettingsSection>
 
       {/* Appearance */}

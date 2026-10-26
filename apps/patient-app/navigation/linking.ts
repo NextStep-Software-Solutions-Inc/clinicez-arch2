@@ -117,6 +117,14 @@ export const linking: LinkingOptions<RootParamList> = {
           ExternalDispenseScreen: 'documents/prescriptions/:id/dispense',
           LabResultDetailScreen: 'documents/results/:id',
           MedicalCertificateDetailScreen: 'documents/certificates/:id',
+
+          // Communications & Teleconsultation
+          MessagesInboxScreen: 'messages',
+          ConversationThreadScreen: 'messages/:conversationId',
+          NewMessageInquiryScreen: 'messages/new',
+          TeleconsultWaitingRoomScreen: 'teleconsult/waiting-room/:appointmentId',
+          TeleconsultCallScreen: 'teleconsult/call/:callId',
+          PrivacySettingsScreen: 'settings/privacy',
         },
       },
     },

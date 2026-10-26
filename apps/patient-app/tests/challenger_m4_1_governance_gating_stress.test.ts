@@ -1,4 +1,5 @@
 // token-guard:ignore-file
+import path from 'node:path';
 import { describe, expect, test, mock } from 'bun:test';
 import { parseReceptionQr } from '../utils/receptionQrParser';
 import { GATED_CATALOG_STRINGS } from '../constants/gatedCatalogStrings';
@@ -316,8 +317,9 @@ describe('Empirical Challenger M4.1 — Two-Tier Governance & Gated Access Stres
   // ═══════════════════════════════════════════════════════════════════════════
   describe('Domain 3: Token Discipline & Semantic Urgency Encoding', () => {
     test('Token guard scripts exist and run with strict mode', async () => {
-      const clinicGuardPath = 'apps/clinic-app/scripts/check-tokens.mjs';
-      const patientGuardPath = 'apps/patient-app/scripts/check-tokens.mjs';
+      const repoRoot = path.resolve(import.meta.dir, '../../..');
+      const clinicGuardPath = path.join(repoRoot, 'apps/clinic-app/scripts/check-tokens.mjs');
+      const patientGuardPath = path.join(repoRoot, 'apps/patient-app/scripts/check-tokens.mjs');
 
       const clinicGuardExists = await Bun.file(clinicGuardPath).exists();
       const patientGuardExists = await Bun.file(patientGuardPath).exists();

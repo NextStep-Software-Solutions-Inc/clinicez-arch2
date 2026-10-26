@@ -55,6 +55,7 @@ import {
   Mail,
   Maximize2,
   Menu,
+  MessageSquare,
   Microscope,
   Minimize2,
   Minus,
@@ -219,6 +220,8 @@ export const ICONS = {
   smartphone: Smartphone,
   graduation: GraduationCap,
   briefcase: Briefcase,
+  message: MessageSquare,
+  messageSquare: MessageSquare,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

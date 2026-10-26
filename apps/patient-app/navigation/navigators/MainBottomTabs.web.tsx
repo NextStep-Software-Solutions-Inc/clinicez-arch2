@@ -6,6 +6,7 @@ import HomeStack from './HomeStack';
 import AppointmentsStack from './AppointmentsStack';
 import FilesStack from './FilesStack';
 import ProfileStack from './ProfileStack';
+import MessagesInboxScreen from '../screens/messages/MessagesInbox.screen';
 
 const MainBottomTabsWeb = createBottomTabNavigator({
   tabBar: (props) => <WebNavBar {...props} />,
@@ -23,6 +24,12 @@ const MainBottomTabsWeb = createBottomTabNavigator({
       screen: AppointmentsStack,
       options: {
         title: 'Appointments',
+      },
+    }),
+    MessagesScreen: createBottomTabScreen({
+      screen: MessagesInboxScreen,
+      options: {
+        title: 'Messages',
       },
     }),
     FilesScreen: createBottomTabScreen({

@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigation, navigationRef } from './navigation/Navigation';
 import { linking } from './navigation/linking';
 import WebShell from 'components/ui/WebShell';
@@ -19,7 +19,7 @@ import DialogHost from 'components/ui/DialogHost';
 import { OnboardingProvider } from 'contexts/OnboardingContext';
 import { AppearanceProvider } from 'contexts/AppearanceContext';
 import { NotificationProvider } from 'contexts/NotificationContext';
-import { ClerkProvider } from '@clerk/expo';
+import { ClerkProvider, useUser } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { resourceCache } from '@clerk/expo/resource-cache'
 import DatabaseProvider from 'components/DatabaseProvider';
@@ -34,6 +34,9 @@ import * as TaskManager from 'expo-task-manager';
 import { ErrorBoundary } from 'components/ui/ErrorBoundary';
 import { VercelInsights } from 'components/analytics/VercelInsights';
 import { scheduleLocalNotification } from 'services/notifications/notificationService';
+import { PrivacyProvider } from 'contexts/PrivacyContext';
+import { CommsProvider } from '@clinicez/comms-sdk';
+import { communicationsService } from 'services/comms/communicationsService';
 
 // ─── Background notification task ─────────────────────────────────────────────
 // This task runs when a push notification is received while the app is
@@ -109,11 +112,16 @@ function LockOverlay({ backgroundColor }: { backgroundColor: ColorValue }) {
 
 function AppWithTheme() {
   const theme = useAppTheme();
-  const { showUserNotFoundAlert, setShowUserNotFoundAlert, userId, logout } = useAuth();
+  const { showUserNotFoundAlert, setShowUserNotFoundAlert, userId, logout, getToken, internalPatientId } = useAuth();
+  const { user } = useUser();
 
   useOTAUpdate();
 
   const selectedTheme = useMemo(() => buildNavigationTheme(theme), [theme]);
+
+  const getCommsTicket = useCallback(async () => {
+    return communicationsService.getCommsTicket(getToken);
+  }, [getToken]);
 
   return (
     <>
@@ -124,22 +132,34 @@ function AppWithTheme() {
           <BottomSheetModalProvider>
             <ThemeProvider value={selectedTheme}>
               <OfflineAlertProvider>
-                <WebShell>
-                  <Navigation ref={navigationRef} theme={selectedTheme} linking={linking} />
-                  <LockOverlay backgroundColor={selectedTheme.colors.background} />
-                </WebShell>
-                <DialogHost />
-                <CustomAlertModal
-                  visible={showUserNotFoundAlert}
-                  title="Account Not Found"
-                  message={`The user profile for Clerk ID: "${userId || ''}" was not found in our database. Please contact support or register your account.`}
-                  buttonText="Sign Out"
-                  iconName="alert"
-                  onClose={async () => {
-                    setShowUserNotFoundAlert(false);
-                    await logout();
-                  }}
-                />
+                <PrivacyProvider>
+                  <CommsProvider
+                    baseUrl={process.env.EXPO_PUBLIC_API_URL ?? ''}
+                    getCommsTicket={getCommsTicket}
+                    tenantId="patient-home"
+                    facilityId="patient-portal"
+                    staffId={internalPatientId ?? userId ?? 'patient'}
+                    staffDisplayName={user?.fullName ?? 'Patient'}
+                    options={{ autoConnect: false }}
+                  >
+                    <WebShell>
+                      <Navigation ref={navigationRef} theme={selectedTheme} linking={linking} />
+                      <LockOverlay backgroundColor={selectedTheme.colors.background} />
+                    </WebShell>
+                    <DialogHost />
+                    <CustomAlertModal
+                      visible={showUserNotFoundAlert}
+                      title="Account Not Found"
+                      message={`The user profile for Clerk ID: "${userId || ''}" was not found in our database. Please contact support or register your account.`}
+                      buttonText="Sign Out"
+                      iconName="alert"
+                      onClose={async () => {
+                        setShowUserNotFoundAlert(false);
+                        await logout();
+                      }}
+                    />
+                  </CommsProvider>
+                </PrivacyProvider>
               </OfflineAlertProvider>
             </ThemeProvider>
           </BottomSheetModalProvider>

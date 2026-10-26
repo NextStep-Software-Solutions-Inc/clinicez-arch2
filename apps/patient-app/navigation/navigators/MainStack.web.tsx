@@ -66,6 +66,12 @@ import PrescriptionDetailScreen from '../screens/documents/PrescriptionDetail.sc
 import ExternalDispenseScreen from '../screens/documents/ExternalDispense.screen';
 import LabResultDetailScreen from '../screens/documents/LabResultDetail.screen';
 import MedicalCertificateDetailScreen from '../screens/documents/MedicalCertificateDetail.screen';
+import MessagesInboxScreen from '../screens/messages/MessagesInbox.screen';
+import ConversationThreadScreen from '../screens/messages/ConversationThread.screen';
+import NewMessageInquiryScreen from '../screens/messages/NewMessageInquiry.screen';
+import TeleconsultWaitingRoomScreen from '../screens/teleconsult/TeleconsultWaitingRoom.screen';
+import TeleconsultCallScreen from '../screens/teleconsult/TeleconsultCall.screen';
+import PrivacySettingsScreen from '../screens/settings/PrivacySettings.screen';
 
 /**
  * Web Main stack.
@@ -138,6 +144,12 @@ const SCREENS: [name: string, component: ComponentType<any>, title: string][] = 
   ['ExternalDispenseScreen', ExternalDispenseScreen, 'Dispensed elsewhere'],
   ['LabResultDetailScreen', LabResultDetailScreen, 'Lab result'],
   ['MedicalCertificateDetailScreen', MedicalCertificateDetailScreen, 'Medical certificate'],
+  ['MessagesInboxScreen', MessagesInboxScreen, 'Messages'],
+  ['ConversationThreadScreen', ConversationThreadScreen, 'Conversation'],
+  ['NewMessageInquiryScreen', NewMessageInquiryScreen, 'New Message'],
+  ['TeleconsultWaitingRoomScreen', TeleconsultWaitingRoomScreen, 'Waiting Room'],
+  ['TeleconsultCallScreen', TeleconsultCallScreen, 'Teleconsultation'],
+  ['PrivacySettingsScreen', PrivacySettingsScreen, 'Privacy & Communications'],
 ];
 
 const screens: Record<string, any> = {

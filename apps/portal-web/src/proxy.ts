@@ -13,7 +13,9 @@ const isProtectedRoute = createRouteMatcher([
 const isPublicRoute = createRouteMatcher([
     '/upload(.*)',
     '/join(.*)',
+    '/teleconsult(.*)',
     '/api/v1/public(.*)',
+    '/api/v1/guest(.*)',
     '/admin/invitations(.*)',
     '/invitations(.*)',
     '/reset-password(.*)'

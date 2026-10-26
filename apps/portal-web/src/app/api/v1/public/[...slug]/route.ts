@@ -48,7 +48,7 @@ export async function POST(
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
-      body = formData;
+      body = formData as unknown as BodyInit;
     } else {
       const json = await request.text();
       body = json;

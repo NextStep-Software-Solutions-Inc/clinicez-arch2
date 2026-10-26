@@ -661,6 +661,40 @@ export default function AppointmentDetailScreen({ route }: Props) {
         />
       </Card>
 
+      {/* Teleconsultation Waiting Room Entry */}
+      {!isFinalStatus && (
+        <Card padding="md" style={{ gap: spacing.sm, borderColor: colors.primary, borderWidth: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <AppIcon name="camera" size={20} color="primary" />
+            <ThemedText variant="bodyBold">Virtual Teleconsultation</ThemedText>
+          </View>
+          <ThemedText variant="small" color="textSecondary">
+            Join the virtual waiting room for camera self-preview, payment verification, and physician admission.
+          </ThemedText>
+          <Button
+            label="Enter Teleconsult Waiting Room"
+            variant="primary"
+            size="lg"
+            icon="camera"
+            fullWidth
+            onPress={() =>
+              navigation.navigate('Main', {
+                screen: 'TeleconsultWaitingRoomScreen',
+                params: {
+                  appointmentId: item.id,
+                  patientName: 'Me',
+                  clinicianName: item.provider.name,
+                  scheduledTime: `${dateLabel} ${timeLabel}`,
+                  paymentPolicy: item.invoiceAmount === 0 ? 'Exempt' : 'Prepaid',
+                  paymentStatus: effectivePaid ? 'Paid' : (item.invoiceAmount === 0 ? 'Exempt' : 'Unpaid'),
+                  isYakapExempt: false,
+                },
+              })
+            }
+          />
+        </Card>
+      )}
+
       {/* Sticky Bottom Actions */}
       {!isFinalStatus && (
         <View style={[styles.actionBar, { gap: spacing.md, paddingVertical: spacing.md }]}>

@@ -7,6 +7,7 @@ import ClaimSlipScreen from './screens/ClaimSlip.screen';
 import ResultsScreen from './screens/Results.screen';
 import QualityControlScreen from './screens/QualityControl.screen';
 import SettingsScreen from './screens/Settings.screen';
+import TriageScreen from './screens/Triage.screen';
 
 const Tab = createBottomTabNavigator({
   screens: {
@@ -43,6 +44,13 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Results',
         headerTitle: 'Result Validation',
+      },
+    },
+    Triage: {
+      screen: TriageScreen,
+      options: {
+        title: 'Triage',
+        headerTitle: 'Specimen Inquiries & Triage',
       },
     },
     QualityControl: {

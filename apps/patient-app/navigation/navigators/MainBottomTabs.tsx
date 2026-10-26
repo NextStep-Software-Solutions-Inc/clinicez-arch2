@@ -7,6 +7,7 @@ import HomeStack from './HomeStack';
 import AppointmentsStack from './AppointmentsStack';
 import FilesStack from './FilesStack';
 import ProfileStack from './ProfileStack';
+import MessagesInboxScreen from '../screens/messages/MessagesInbox.screen';
 
 const getTabIcon = (androidName: string, iosName: string, webName: string) => {
   if (Platform.OS === 'web') {
@@ -43,6 +44,13 @@ const MainBottomTabs = createBottomTabNavigator({
       options: {
         title: 'My Appointments',
         tabBarIcon: getTabIcon('heart_check', 'heart.fill', 'heart_check'),
+      },
+    }),
+    MessagesScreen: createBottomTabScreen({
+      screen: MessagesInboxScreen,
+      options: {
+        title: 'Messages',
+        tabBarIcon: getTabIcon('chat', 'bubble.left.and.bubble.right.fill', 'chat'),
       },
     }),
     FilesScreen: createBottomTabScreen({
