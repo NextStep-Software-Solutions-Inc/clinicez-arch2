@@ -69,7 +69,7 @@ describe("Milestone 4 Remediation: Core Logic & Semantic Standards", () => {
     });
 
     test("VerifyClient.tsx contains zero amber-* and emerald-* utility classes", () => {
-      const filePath = path.join(SRC_DIR, "app/verify/[token]/VerifyClient.tsx");
+      const filePath = path.join(SRC_DIR, "app/verify/[...ref]/VerifyClient.tsx");
       const content = fs.readFileSync(filePath, "utf-8");
 
       const emeraldMatches = content.match(/\bemerald-[a-z0-9/-]+/g);
@@ -110,15 +110,11 @@ describe("Milestone 4 Remediation: Core Logic & Semantic Standards", () => {
       expect(parseSig({})).toBeUndefined();
     });
 
-    test("page.tsx files incorporate rawSig fallback", () => {
-      const page1Path = path.join(SRC_DIR, "app/verify/[token]/page.tsx");
-      const page2Path = path.join(SRC_DIR, "app/verify/[kind]/[token]/page.tsx");
+    test("verify page.tsx incorporates rawSig fallback", () => {
+      const pagePath = path.join(SRC_DIR, "app/verify/[...ref]/page.tsx");
+      const pageContent = fs.readFileSync(pagePath, "utf-8");
 
-      const page1Content = fs.readFileSync(page1Path, "utf-8");
-      const page2Content = fs.readFileSync(page2Path, "utf-8");
-
-      expect(page1Content).toContain("const rawSig = sp.sig || (sp as Record<string, string | undefined>).SIG;");
-      expect(page2Content).toContain("const rawSig = sp.sig || (sp as Record<string, string | undefined>).SIG;");
+      expect(pageContent).toContain("const rawSig = sp.sig || (sp as Record<string, string | undefined>).SIG;");
     });
   });
 });

@@ -5,13 +5,15 @@ import JoinClient, { INSTITUTIONAL_CUSTOM_FIELDS } from "@/components/join/JoinC
 import JoinCodeErrorCard from "@/components/join/JoinCodeErrorCard";
 
 interface JoinCodePageProps {
-  params: Promise<{ code: string }>;
+  // Next.js allows one slug name per dynamic level. `[joinKey]` is shared with
+  // `join/[joinKey]/[facilitySlug]`, where it is the tenant slug; here it is the join code.
+  params: Promise<{ joinKey: string }>;
 }
 
 export async function generateMetadata({
   params,
 }: JoinCodePageProps): Promise<Metadata> {
-  const { code } = await params;
+  const { joinKey: code } = await params;
   return {
     title: `Clinic Intake (${code.toUpperCase()}) | Clinic EZ`,
     description: `Secured patient self-registration and intake workstation.`,
@@ -21,7 +23,7 @@ export async function generateMetadata({
 export { INSTITUTIONAL_CUSTOM_FIELDS };
 
 export default async function LockedJoinCodePage({ params }: JoinCodePageProps) {
-  const { code } = await params;
+  const { joinKey: code } = await params;
   const cleanCode = (code || "").trim().toUpperCase();
 
   // Validate the join code directly against portal-api

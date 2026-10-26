@@ -108,7 +108,7 @@ describe('Feature 13: Deprecation & Removal Contract for Legacy /student-intake 
 });
 
 describe('Feature 14 & 15: Public Facility Selector and Secured Join Link Routing', () => {
-  test('T1.1: Resolves multi-facility branch selector route (/join/[tenantSlug])', () => {
+  test('T1.1: Resolves multi-facility branch selector route (/join/{tenantSlug})', () => {
     const route = resolveJoinRoute('/join/ustp', new URLSearchParams(''));
     expect(route.isJoinRoute).toBe(true);
     expect(route.routeType).toBe('tenant-picker');
@@ -117,7 +117,7 @@ describe('Feature 14 & 15: Public Facility Selector and Secured Join Link Routin
     expect(route.joinCode).toBeUndefined();
   });
 
-  test('T1.2: Resolves locked facility intake route (/join/[tenantSlug]/[facilitySlug]) with join code', () => {
+  test('T1.2: Resolves locked facility intake route (/join/{tenantSlug}/{facilitySlug}) with join code', () => {
     const route = resolveJoinRoute('/join/ustp/cdo-campus', new URLSearchParams('code=USTP2026'));
     expect(route.isJoinRoute).toBe(true);
     expect(route.routeType).toBe('locked-facility');
