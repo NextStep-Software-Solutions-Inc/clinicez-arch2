@@ -47,11 +47,11 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="flex flex-col items-center justify-center pt-32 pb-24 px-6 lg:px-8 text-center relative z-10">
         <h1 className="max-w-4xl text-5xl font-extrabold tracking-tight sm:text-7xl mb-6 bg-clip-text text-transparent bg-gradient-to-r from-primary to-emerald-400">
-          The unified operating platform for <br className="hidden sm:block" /> clinics, labs, and pharmacies.
+          Healthcare Management, <br className="hidden sm:block" /> Elevated.
         </h1>
         
         <p className="max-w-2xl text-lg text-muted-foreground mb-10 leading-relaxed">
-          Connect patient encounters, diagnostic worklists, and pharmacy dispensing in one synchronized system—with native PhilHealth YAKAP compliance and offline-resilient edge support.
+          The all-in-one unified portal for clinics, laboratories, and pharmacies. Experience seamless administration with enterprise-grade security and blazing-fast performance.
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
