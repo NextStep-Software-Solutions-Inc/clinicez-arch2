@@ -68,7 +68,23 @@ describe("Next.js app route tree validity", () => {
   });
 
   test("join/ and verify/ expose exactly one dynamic chain each", () => {
-    expect(dynamicChildren("join")).toEqual(["[joinKey]"]);
-    expect(dynamicChildren("verify")).toEqual(["[...ref]"]);
+    expect(dynamicChildren("join")).toEqual(["[tenantSlug]"]);
+    expect(dynamicChildren("verify")).toEqual(["[kind]"]);
+  });
+
+  test("all canonical public routes exist and retired routes are absent", () => {
+    const discovered = discoverRoutes(APP_DIR);
+
+    expect(discovered).toContain("/join");
+    expect(discovered).toContain("/join/[tenantSlug]/[facilitySlug]");
+    expect(discovered).toContain("/claim");
+    expect(discovered).toContain("/verify");
+    expect(discovered).toContain("/verify/[kind]/[token]");
+
+    // Retired route absence verification
+    expect(discovered).not.toContain("/join/[joinKey]");
+    expect(discovered).not.toContain("/rx-verify");
+    expect(discovered).not.toContain("/rx-verify/[token]");
+    expect(discovered).not.toContain("/verify/[...ref]");
   });
 });

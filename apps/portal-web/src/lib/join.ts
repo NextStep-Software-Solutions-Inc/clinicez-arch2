@@ -4,66 +4,6 @@
 
 import { validatePhilHealthPinMod11 } from "./philhealth";
 
-export interface JoinRouteConfig {
-  tenantSlug: string;
-  facilitySlug?: string;
-  codeQueryParam?: string;
-}
-
-export function resolveJoinRoute(
-  pathname: string,
-  searchParams: URLSearchParams
-): {
-  isJoinRoute: boolean;
-  routeType: "code-join" | "tenant-picker" | "locked-facility" | "unknown";
-  tenantSlug?: string;
-  facilitySlug?: string;
-  joinCode?: string;
-} {
-  const matchFacility = pathname.match(/^\/join\/([^\/]+)\/([^\/]+)$/);
-  if (matchFacility) {
-    return {
-      isJoinRoute: true,
-      routeType: "locked-facility",
-      tenantSlug: matchFacility[1],
-      facilitySlug: matchFacility[2],
-      joinCode: searchParams.get("code") || undefined,
-    };
-  }
-
-  const matchTenant = pathname.match(/^\/join\/([^\/]+)$/);
-  if (matchTenant) {
-    return {
-      isJoinRoute: true,
-      routeType: "tenant-picker",
-      tenantSlug: matchTenant[1],
-      joinCode: searchParams.get("code") || undefined,
-    };
-  }
-
-  if (pathname === "/join" || pathname === "/join/") {
-    return {
-      isJoinRoute: true,
-      routeType: "code-join",
-      joinCode: searchParams.get("code") || undefined,
-    };
-  }
-
-  return {
-    isJoinRoute: false,
-    routeType: "unknown",
-  };
-}
-
-export function isProxyPublicRoute(pathname: string): boolean {
-  // Routes whitelisted from Clerk auth middleware
-  const publicPatterns = [
-    /^\/join(\/.*)?$/,
-    /^\/favicon\.ico$/,
-  ];
-  return publicPatterns.some((pattern) => pattern.test(pathname));
-}
-
 export interface CustomFieldDefinition {
   fieldKey: string;
   label: string;
@@ -78,6 +18,96 @@ export interface CustomFieldDefinition {
   };
   cascadingOptions?: Record<string, string[]>;
 }
+
+export const INSTITUTIONAL_CUSTOM_FIELDS: CustomFieldDefinition[] = [
+  {
+    fieldKey: "affiliation",
+    label: "Institutional Affiliation",
+    isRequired: true,
+    dataType: "Select",
+    options: ["Student", "Faculty", "Employee", "Dependent", "Guest"],
+  },
+  {
+    fieldKey: "student_id",
+    label: "Student ID Number",
+    isRequired: true,
+    dataType: "Text",
+    placeholder: "e.g. 2026-100234",
+    visibilityCondition: {
+      parentKey: "affiliation",
+      operator: "equals",
+      value: "Student",
+    },
+  },
+  {
+    fieldKey: "college",
+    label: "College / Faculty Department",
+    isRequired: true,
+    dataType: "Select",
+    visibilityCondition: {
+      parentKey: "affiliation",
+      operator: "equals",
+      value: "Student",
+    },
+    options: [
+      "College of Engineering",
+      "College of Computer Studies",
+      "College of Nursing & Allied Health",
+      "College of Science & Mathematics",
+      "College of Business Administration",
+    ],
+  },
+  {
+    fieldKey: "program",
+    label: "Academic Degree Program",
+    isRequired: true,
+    dataType: "Select",
+    visibilityCondition: {
+      parentKey: "college",
+      operator: "not_empty",
+      value: "",
+    },
+    cascadingOptions: {
+      "College of Engineering": [
+        "BS Civil Engineering",
+        "BS Electrical Engineering",
+        "BS Mechanical Engineering",
+        "BS Computer Engineering",
+      ],
+      "College of Computer Studies": [
+        "BS Computer Science",
+        "BS Information Technology",
+        "BS Information Systems",
+      ],
+      "College of Nursing & Allied Health": [
+        "BS Nursing",
+        "BS Medical Technology",
+        "BS Physical Therapy",
+      ],
+      "College of Science & Mathematics": [
+        "BS Applied Physics",
+        "BS Chemistry",
+        "BS Mathematics",
+      ],
+      "College of Business Administration": [
+        "BS Accountancy",
+        "BS Business Administration",
+      ],
+    },
+  },
+  {
+    fieldKey: "year_level",
+    label: "Year Level",
+    isRequired: false,
+    dataType: "Select",
+    options: ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year", "Postgraduate"],
+    visibilityCondition: {
+      parentKey: "affiliation",
+      operator: "equals",
+      value: "Student",
+    },
+  },
+];
 
 export function evaluateFieldVisibility(
   field: CustomFieldDefinition,
