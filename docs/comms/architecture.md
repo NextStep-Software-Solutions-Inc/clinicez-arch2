@@ -45,7 +45,7 @@ The platform executes identically in both **Cloud Multi-Tenant Shared Cells** an
 
 ## 2. Zero-Broker Interop Routing Architecture
 
-A core architectural tenet of ClinicEZ is **Zero External Message Brokers**. The platform strictly prohibits third-party messaging middleware such as Apache Kafka, RabbitMQ, Redis Pub/Sub, AWS SQS, or Azure Service Bus.
+A core architectural tenet of ClinicEZ is **Zero External Message Brokers**. The platform strictly prohibits third-party messaging middleware such as Apache Kafka, traditional AMQP message queues, Redis Pub/Sub, AWS SQS, or Azure Service Bus.
 
 ### 2.1 The Interop Hub Outbox Pattern
 All inter-service events and asynchronous transactions travel exclusively through the **ClinicEZ Interop Hub** using an immutable, transactional outbox pattern:
