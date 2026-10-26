@@ -6,8 +6,8 @@ import { theme } from '../../constants/theme';
 export interface SegmentedOption<T extends string> {
   value: T;
   label: string;
-  /** Optional count shown after the label (e.g. queue filter totals). */
-  count?: number;
+  /** Optional count shown after the label (e.g. queue filter totals or loaded/total like "50/5000"). */
+  count?: number | string;
 }
 
 export interface SegmentedControlProps<T extends string> {

@@ -1627,6 +1627,14 @@ export interface BatchSaveDentalChartPayload {
   }[];
 }
 
+export interface PatientDirectoryCounts {
+  all: number;
+  students: number;
+  employees: number;
+  alerts: number;
+  seniorPwd: number;
+}
+
 export interface ClinicPatient {
   id: string;
   tenantId: string;
@@ -3109,6 +3117,13 @@ export const clinicService = {
     params.append('pageSize', String(pageSize));
     const qs = params.toString();
     return clinicApiClient.get<ClinicPatient[]>(`/patients?${qs}`);
+  },
+
+  async getPatientCounts(search?: string) {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    const qs = params.toString();
+    return clinicApiClient.get<PatientDirectoryCounts>(`/patients/counts${qs ? `?${qs}` : ''}`);
   },
 
   async getPatientById(id: string) {

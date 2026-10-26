@@ -729,9 +729,13 @@ public static class DevPatientSeeder
                 var emergencyRel = civilStatus == "Married" ? "Spouse" : (ageYears < 25 ? "Mother" : "Sibling");
                 var emergencyName = $"{emergencyLastName}, {emergencyFirstName}";
 
+                var classification = ageYears < 22 ? "Student" : (ageYears >= 60 ? "Retiree" : "Employee");
                 var customFields = new Dictionary<string, object?>
                 {
-                    { "category", ageYears < 22 ? "Student" : (ageYears >= 60 ? "Retiree" : "Employee") },
+                    { "classification", classification },
+                    { "category", classification },
+                    { "student_id", classification == "Student" ? $"STU-{now.Year}-{rng.Next(1000, 9999)}" : null },
+                    { "employee_id", classification == "Employee" ? $"EMP-{rng.Next(1000, 9999)}" : null },
                     { "workplace", loc.City },
                     { "seeded_batch", "scale_test_1000" },
                     { "primary_address_line", loc.Street },
