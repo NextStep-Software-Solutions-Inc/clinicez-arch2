@@ -238,6 +238,7 @@ export function AuditWorkstationView({
           onApply={(start, end) => {
             setStartDate(start);
             setEndDate(end);
+            applyDatePreset('custom');
           }}
           boundaryMode="pastOrToday"
         />
@@ -379,6 +380,7 @@ export function AuditWorkstationView({
         onApply={(start, end) => {
           setStartDate(start);
           setEndDate(end);
+          applyDatePreset('custom');
         }}
         boundaryMode="pastOrToday"
       />

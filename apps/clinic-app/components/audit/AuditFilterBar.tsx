@@ -5,7 +5,6 @@ import ThemedText from '../ui/ThemedText';
 import { TextInput } from '../ui/Text';
 import { IconSlot, type IconName } from '../ui/Icon';
 import Button from '../ui/Button';
-import ValidatedDateInput from '../ui/ValidatedDateInput';
 import { useBreakpoint } from '../../utils/useBreakpoint';
 import type { AuditDatePreset } from '../../services/clinicService';
 
@@ -38,6 +37,7 @@ export const DATE_PRESETS: Array<{ key: AuditDatePreset; label: string }> = [
   { key: '7d', label: 'Last 7 Days' },
   { key: '30d', label: 'This Month' },
   { key: 'all', label: 'All Time' },
+  { key: 'custom', label: 'Custom' },
 ];
 
 export const SEVERITY_OPTIONS = [
@@ -118,6 +118,15 @@ export function AuditFilterBar({
     const preset = DATE_PRESETS.find((p) => p.key === datePreset);
     return preset ? preset.label : 'Date Range';
   }, [startDate, endDate, datePreset]);
+
+  const customRangeLabel = useMemo(() => {
+    if (startDate && endDate) {
+      return startDate === endDate ? startDate : `${startDate} → ${endDate}`;
+    }
+    if (startDate) return `From ${startDate}`;
+    if (endDate) return `Until ${endDate}`;
+    return '';
+  }, [startDate, endDate]);
 
   return (
     <View style={styles.container}>
@@ -305,7 +314,7 @@ export function AuditFilterBar({
         )}
       </ScrollView>
 
-      {/* Desktop Controls Row: Date Presets, Range Picker Trigger, Inputs & Action Buttons */}
+      {/* Desktop Controls Row: Date Presets & Action Buttons */}
       {!isCompact && (
         <View style={styles.controlsRow}>
           <View style={styles.datePresetsGroup}>
@@ -316,7 +325,14 @@ export function AuditFilterBar({
                   key={preset.key}
                   accessibilityRole="button"
                   accessibilityLabel={`Date preset ${preset.label}`}
-                  onPress={() => onDatePresetChange && onDatePresetChange(preset.key)}
+                  onPress={() => {
+                    if (preset.key === 'custom') {
+                      onDatePresetChange?.('custom');
+                      onOpenDateRangePicker?.();
+                    } else {
+                      onDatePresetChange?.(preset.key);
+                    }
+                  }}
                   style={[
                     styles.presetButton,
                     isSelected ? styles.presetButtonSelected : styles.presetButtonUnselected,
@@ -333,49 +349,33 @@ export function AuditFilterBar({
                 </Pressable>
               );
             })}
-          </View>
 
-          <View style={styles.dateInputsContainer}>
-            {onOpenDateRangePicker && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Open date range calendar: ${dateLabel}`}
-                onPress={onOpenDateRangePicker}
-                style={styles.calendarTriggerBtn}
-              >
-                <IconSlot value="calendar" size={theme.sizes.iconSm} color={theme.colors.primary} />
-                <ThemedText style={styles.calendarTriggerText}>
-                  {dateLabel}
-                </ThemedText>
-                <IconSlot value="chevronDown" size={theme.fontSizes.xs} color={theme.colors.textMuted} />
-              </Pressable>
+            {/* When Custom is selected and a date range is active: show the date range with btn to change the range */}
+            {datePreset === 'custom' && Boolean(customRangeLabel) && (
+              <View style={styles.customRangeContainer}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Custom date range: ${customRangeLabel}. Click to change.`}
+                  onPress={onOpenDateRangePicker}
+                  style={styles.customRangeBadge}
+                >
+                  <IconSlot value="calendar" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                  <ThemedText style={styles.customRangeText}>
+                    {customRangeLabel}
+                  </ThemedText>
+                </Pressable>
+                {onOpenDateRangePicker && (
+                  <Button
+                    title="Change"
+                    variant="outline"
+                    size="sm"
+                    icon="calendar"
+                    onPress={onOpenDateRangePicker}
+                    accessibilityLabel="Change date range"
+                  />
+                )}
+              </View>
             )}
-
-            <View style={styles.dateField}>
-              <ValidatedDateInput
-                value={startDate}
-                onChangeText={onStartDateChange}
-                boundaryMode="pastOrToday"
-                placeholder="Start (YYYY-MM-DD)"
-                testID="audit-start-date"
-                containerStyle={styles.dateInputStyle}
-                hideValidFeedback={true}
-                onCalendarPress={onOpenDateRangePicker}
-              />
-            </View>
-            <ThemedText style={styles.dateRangeSeparator}>to</ThemedText>
-            <View style={styles.dateField}>
-              <ValidatedDateInput
-                value={endDate}
-                onChangeText={onEndDateChange}
-                boundaryMode="pastOrToday"
-                placeholder="End (YYYY-MM-DD)"
-                testID="audit-end-date"
-                containerStyle={styles.dateInputStyle}
-                hideValidFeedback={true}
-                onCalendarPress={onOpenDateRangePicker}
-              />
-            </View>
           </View>
 
           <View style={styles.actionsGroup}>
@@ -603,6 +603,8 @@ const styles = StyleSheet.create({
   },
   datePresetsGroup: {
     flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: theme.spacing.xs,
   },
   presetButton: {
@@ -628,36 +630,26 @@ const styles = StyleSheet.create({
   presetTextUnselected: {
     color: theme.colors.textSecondary,
   },
-  dateInputsContainer: {
+  customRangeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    flexWrap: 'wrap',
+    marginLeft: theme.spacing.xs,
   },
-  calendarTriggerBtn: {
+  customRangeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderWidth: theme.sizes.borderWidth,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radii.md,
+    paddingVertical: theme.spacing.xs,
     paddingHorizontal: theme.spacing.sm,
-    height: theme.sizes.controlMd,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    backgroundColor: theme.colors.primaryLight,
   },
-  calendarTriggerText: {
+  customRangeText: {
     ...theme.typography.captionBold,
-    color: theme.colors.text,
-  },
-  dateField: {
-    width: 140,
-  },
-  dateInputStyle: {
-    marginBottom: 0,
-  },
-  dateRangeSeparator: {
-    color: theme.colors.textMuted,
-    ...theme.typography.caption,
+    color: theme.colors.primary,
   },
   actionsGroup: {
     flexDirection: 'row',

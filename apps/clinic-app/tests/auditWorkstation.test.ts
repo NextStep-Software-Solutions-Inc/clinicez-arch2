@@ -595,7 +595,7 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
       expect(markup).toContain('aria-label="Clear search"');
     });
 
-    test('3.3 AuditFilterBar renders date presets group (today, 7d, 30d, all)', () => {
+    test('3.3 AuditFilterBar renders date presets group (today, 7d, 30d, all, custom)', () => {
       const markup = renderToStaticMarkup(
         React.createElement(AuditFilterBar, {
           selectedCategory: 'All',
@@ -613,11 +613,40 @@ describe('Milestone M3 Remediation: High-Density Clinic Admin Audit Workstation 
         })
       );
 
-      expect(DATE_PRESETS.length).toBe(4);
+      expect(DATE_PRESETS.length).toBe(5);
       for (const preset of DATE_PRESETS) {
         expect(markup).toContain(preset.label);
         expect(markup).toContain(`aria-label="Date preset ${preset.label}"`);
       }
+    });
+
+    test('3.3b Custom date filter displays active range with Change button and omits center inputs', () => {
+      const markup = renderToStaticMarkup(
+        React.createElement(AuditFilterBar, {
+          selectedCategory: 'All',
+          onSelectCategory: () => {},
+          search: '',
+          onSearchChange: () => {},
+          startDate: '2026-10-01',
+          onStartDateChange: () => {},
+          endDate: '2026-10-26',
+          onEndDateChange: () => {},
+          severityFilter: 'All',
+          onSeverityFilterChange: () => {},
+          datePreset: 'custom',
+          onResetFilters: () => {},
+          onOpenDateRangePicker: () => {},
+        })
+      );
+
+      // Verify custom date range badge and change button
+      expect(markup).toContain('2026-10-01 → 2026-10-26');
+      expect(markup).toContain('Change');
+      expect(markup).toContain('aria-label="Change date range"');
+
+      // Verify old center inputs are removed
+      expect(markup).not.toContain('audit-start-date');
+      expect(markup).not.toContain('audit-end-date');
     });
 
     test('3.4 AuditFilterBar renders severity pills including Emergency (STAT), Urgent, Routine', () => {
