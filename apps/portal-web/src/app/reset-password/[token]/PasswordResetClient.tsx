@@ -134,9 +134,9 @@ export default function PasswordResetClient({ token }: { token: string }) {
             </Card>
           ) : details.isExpired ? (
             <Card className="border-border/80 shadow-xl rounded-2xl overflow-hidden">
-              <div className="h-1.5 bg-amber-500 w-full" />
+              <div className="h-1.5 bg-warning w-full" />
               <CardContent className="pt-8 pb-6 px-8 text-center space-y-4">
-                <div className="mx-auto w-14 h-14 bg-amber-500/10 text-amber-600 rounded-2xl flex items-center justify-center">
+                <div className="mx-auto w-14 h-14 bg-warning/10 text-warning rounded-2xl flex items-center justify-center">
                   <Clock className="w-7 h-7" />
                 </div>
                 <div className="space-y-1.5">
@@ -154,9 +154,9 @@ export default function PasswordResetClient({ token }: { token: string }) {
             </Card>
           ) : completed ? (
             <Card className="border-border/80 shadow-xl rounded-2xl overflow-hidden">
-              <div className="h-1.5 bg-emerald-500 w-full" />
+              <div className="h-1.5 bg-success w-full" />
               <CardContent className="pt-8 pb-6 px-8 text-center space-y-4">
-                <div className="mx-auto w-14 h-14 bg-emerald-500/10 text-emerald-600 rounded-2xl flex items-center justify-center">
+                <div className="mx-auto w-14 h-14 bg-success/10 text-success rounded-2xl flex items-center justify-center">
                   <CheckCircle2 className="w-7 h-7" />
                 </div>
                 <div className="space-y-1.5">

@@ -9,7 +9,7 @@ import {
 import { ThemedText, TextInput, Input, Icon, Button, Badge, PhilHealthPinInput, ValidatedDateInput, validateDateString, BloodTypeSelect, Modal, SegmentedControl } from '../ui';
 import { theme } from '../../constants/theme';
 import { clinicService, type ClinicPatient, type RegisterPatientPayload, type ClinicCustomFieldDefinition } from '../../services/clinicService';
-import { DynamicCustomFieldsRenderer, validateCustomFields, sanitizeCustomFieldsPayload, mergeCustomFieldsForUpdate } from '../custom-fields';
+import { DynamicCustomFieldsRenderer, validateCustomFields } from '../custom-fields';
 import { notify, Alert } from '../../utils/feedback';
 import {
   type MemberType,
@@ -18,6 +18,7 @@ import {
   buildPhilHealthProfileData,
   extractPhilHealthProfileData,
 } from './memberType';
+import { mergePatientCustomFields } from './patientCustomFieldsMerger';
 import StructuredAllergyIntakeModal, {
   AllergyPillList,
   CreateAllergyRequest,
@@ -499,85 +500,13 @@ export function EditPatientModal({
       const { isValid, errors } = validateCustomFields(effectiveCustomFields, customFieldValues, staticValues);
       if (!isValid) {
         setCustomFieldErrors(errors);
-        Alert.alert('Invalid Custom Fields', Object.values(errors).join('\n'));
+        const errorMessages = Object.values(errors);
+        const hasFormatOrBoundaryError = errorMessages.some((msg) => !msg.endsWith('is required.'));
+        Alert.alert(
+          hasFormatOrBoundaryError ? 'Invalid Custom Fields' : 'Missing Required Custom Fields',
+          errorMessages.join('\n')
+        );
         return;
-      }
-    }
-
-    const mergedCustomFields: Record<string, any> = effectiveCustomFields.length > 0
-      ? mergeCustomFieldsForUpdate(
-          patient.customFields,
-          effectiveCustomFields,
-          customFieldValues,
-          staticValues,
-          { emitNullTombstones: true }
-        )
-      : { ...(patient.customFields || {}) };
-
-    // Explicit handling for the 7 address & emergency contact keys
-    const addressAndContactKeys = [
-      'primary_address_line',
-      'primary_barangay',
-      'primary_city',
-      'primary_province',
-      'emergency_contact_name',
-      'emergency_contact_phone',
-      'emergency_contact_relationship',
-    ];
-
-    for (const key of addressAndContactKeys) {
-      const val = customFieldValues[key];
-      if (typeof val === 'string') {
-        const trimmed = val.trim();
-        if (trimmed) {
-          mergedCustomFields[key] = trimmed;
-        } else if (patient.customFields?.[key] || (patient as any)[key]) {
-          mergedCustomFields[key] = null;
-        } else {
-          delete mergedCustomFields[key];
-        }
-      } else if (val !== undefined && val !== null) {
-        mergedCustomFields[key] = val;
-      } else if (patient.customFields?.[key] || (patient as any)[key]) {
-        mergedCustomFields[key] = null;
-      } else {
-        delete mergedCustomFields[key];
-      }
-    }
-
-    if (customFieldValues['yakap_enlistments']) {
-      mergedCustomFields['yakap_enlistments'] = customFieldValues['yakap_enlistments'];
-    }
-
-    if (tenantCustomFields.length === 0) {
-      mergedCustomFields['classification'] = classification;
-      if (classification === 'Student') {
-        if (studentId.trim()) mergedCustomFields['student_id'] = studentId.trim();
-        else delete mergedCustomFields['student_id'];
-        if (college.trim()) mergedCustomFields['college'] = college.trim();
-        else delete mergedCustomFields['college'];
-        if (program.trim()) mergedCustomFields['program'] = program.trim();
-        else delete mergedCustomFields['program'];
-        if (yearLevel.trim()) mergedCustomFields['year_level'] = yearLevel.trim();
-        else delete mergedCustomFields['year_level'];
-        delete mergedCustomFields['employee_id'];
-        delete mergedCustomFields['department'];
-      } else if (classification === 'Employee') {
-        if (employeeId.trim()) mergedCustomFields['employee_id'] = employeeId.trim();
-        else delete mergedCustomFields['employee_id'];
-        if (department.trim()) mergedCustomFields['department'] = department.trim();
-        else delete mergedCustomFields['department'];
-        delete mergedCustomFields['student_id'];
-        delete mergedCustomFields['college'];
-        delete mergedCustomFields['program'];
-        delete mergedCustomFields['year_level'];
-      } else {
-        delete mergedCustomFields['student_id'];
-        delete mergedCustomFields['college'];
-        delete mergedCustomFields['program'];
-        delete mergedCustomFields['year_level'];
-        delete mergedCustomFields['employee_id'];
-        delete mergedCustomFields['department'];
       }
     }
 
@@ -603,30 +532,29 @@ export function EditPatientModal({
       }
     }
 
-    mergedCustomFields['member_type'] = memberType;
-    if (memberType === 'DD') {
-      mergedCustomFields['principal_member_pin'] = principalMemberPin.trim();
-      mergedCustomFields['principal_full_name'] = principalFullName.trim();
-      mergedCustomFields['principal_relationship'] = principalRelationship;
-      if (principalDob.trim()) mergedCustomFields['principal_dob'] = principalDob.trim();
-    } else {
-      delete mergedCustomFields['principal_member_pin'];
-      delete mergedCustomFields['principal_full_name'];
-      delete mergedCustomFields['principal_relationship'];
-      delete mergedCustomFields['principal_dob'];
-    }
-
-    mergedCustomFields['philhealth_profile'] = buildPhilHealthProfileData({
+    const mergedCustomFields = mergePatientCustomFields({
+      patient,
+      effectiveCustomFields,
+      customFieldValues,
+      staticValues,
+      tenantCustomFieldsCount: tenantCustomFields.length,
+      classification,
+      studentId,
+      college,
+      program,
+      yearLevel,
+      employeeId,
+      department,
       memberType,
-      patientPin: philHealthNumber,
-      patientFirstName: firstName,
-      patientLastName: lastName,
-      patientMiddleName: middleName,
-      patientDob: dateOfBirth,
-      principalPin: principalMemberPin,
+      principalMemberPin,
       principalFullName,
       principalRelationship,
       principalDob,
+      philHealthNumber,
+      firstName,
+      lastName,
+      middleName,
+      dateOfBirth,
     });
 
     const allergiesSummary = structuredAllergies.length > 0

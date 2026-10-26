@@ -21,6 +21,10 @@ namespace ClinicEz.Clinic.Application.Tests.Features.Search;
 /// Tests concurrency benchmarks (7 parallel providers < 150ms), 500ms timeout budget cancellation,
 /// multi-exception fault tolerance, and whitespace zero-dispatch guardrails.
 /// </summary>
+[CollectionDefinition("NonParallelStressTests", DisableParallelization = true)]
+public sealed class NonParallelStressTestsCollection;
+
+[Collection("NonParallelStressTests")]
 public class GlobalClinicSearchQueryHandlerStressTests
 {
     private readonly IClinicContext _clinicContext;

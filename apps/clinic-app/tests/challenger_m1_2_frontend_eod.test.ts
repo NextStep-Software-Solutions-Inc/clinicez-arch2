@@ -183,10 +183,20 @@ mock.module('../components/ui/TimeInput', () => {
     ...actualTimeInput,
     default: (props: any) => {
       lastRenderedTimeInputProps = props;
+      const inputTestId = props.inputTestID || (props.testID ? `${props.testID}-input` : 'time-input');
       return React.createElement(
         'div',
-        { 'data-component': 'TimeInput', 'data-label': props.label },
+        {
+          'data-component': 'TimeInput',
+          'data-label': props.label,
+          ...(props.testID ? { 'data-testid': props.testID } : {}),
+        },
         props.label,
+        React.createElement('div', {
+          'data-component': 'TextInput',
+          'data-testid': inputTestId,
+          'data-value': props.value,
+        }, props.value),
         props.value
       );
     },

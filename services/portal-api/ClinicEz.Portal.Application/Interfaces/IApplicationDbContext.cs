@@ -37,6 +37,8 @@ public interface IApplicationDbContext
     DbSet<SystemSetting> SystemSettings { get; }
     DbSet<PortalNotification> PortalNotifications { get; }
     DbSet<NewsletterSubscriber> NewsletterSubscribers { get; }
+    DbSet<DocumentAttestation> DocumentAttestations { get; }
+    DbSet<FacilityQueueBoard> FacilityQueueBoards { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

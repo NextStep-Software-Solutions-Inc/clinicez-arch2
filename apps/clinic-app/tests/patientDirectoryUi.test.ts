@@ -684,4 +684,55 @@ describe('PatientDirectoryCard & Directory UI Improvements', () => {
       } as any)
     ).toBe('');
   });
+
+  test('14. SegmentedControl renders string count (e.g. 50/5000) for loaded over total display', async () => {
+    const { default: SegmentedControl } = await import('../components/ui/SegmentedControl');
+
+    const markup = renderToStaticMarkup(
+      React.createElement(SegmentedControl, {
+        value: 'ALL',
+        onChange: () => {},
+        options: [
+          { value: 'ALL', label: 'All patients', count: '50/5000' },
+          { value: 'STUDENTS', label: 'Students', count: '0/120' },
+          { value: 'EMPLOYEES', label: 'Employees', count: '0/80' },
+          { value: 'ALERTS', label: 'Alerts & allergies', count: '24/240' },
+          { value: 'SENIOR_PWD', label: 'Senior & PWD', count: '11/110' },
+        ],
+      })
+    );
+
+    expect(markup).toContain('All patients');
+    expect(markup).toContain('50/5000');
+    expect(markup).toContain('Students');
+    expect(markup).toContain('0/120');
+    expect(markup).toContain('Alerts &amp; allergies');
+    expect(markup).toContain('24/240');
+    expect(markup).toContain('Senior &amp; PWD');
+    expect(markup).toContain('11/110');
+  });
+
+  test('15. Patients.screen.tsx tab filters display loaded over total and removes redundant toolbar label', async () => {
+    const { readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const screenCode = readFileSync(join(__dirname, '../navigation/screens/Patients.screen.tsx'), 'utf-8');
+
+    // Toolbar text "Scroll for more" is completely removed from the header toolbar
+    expect(screenCode).not.toContain('{filteredPatients.length} loaded{hasMore ? \' • Scroll for more\' : \'\'}');
+    expect(screenCode).not.toContain('Scroll for more');
+
+    // formatTabCount helper is present and formats loaded/total
+    expect(screenCode).toContain('const formatTabCount = useCallback(');
+    expect(screenCode).toContain('`${loaded}/${total}`');
+
+    // Tab options consume formatTabCount
+    expect(screenCode).toContain("formatTabCount(filterCounts?.all, totalCounts?.all)");
+    expect(screenCode).toContain("formatTabCount(filterCounts?.students, totalCounts?.students)");
+    expect(screenCode).toContain("formatTabCount(filterCounts?.employees, totalCounts?.employees)");
+    expect(screenCode).toContain("formatTabCount(filterCounts?.alerts, totalCounts?.alerts)");
+    expect(screenCode).toContain("formatTabCount(filterCounts?.seniorPwd, totalCounts?.seniorPwd)");
+
+    // getPatientCounts is called to fetch database totals
+    expect(screenCode).toContain('clinicService.getPatientCounts');
+  });
 });

@@ -289,6 +289,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BoundaryMode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<string>("Category")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -1586,15 +1590,6 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("TimeZoneId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<bool>("TurnstileEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("TurnstileSiteKey")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
 
                     b.Property<bool>("TvDisplayMaskPatientNames")
                         .ValueGeneratedOnAdd()

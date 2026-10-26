@@ -12,6 +12,7 @@ import ThemedText from '../ui/ThemedText';
 import ErrorState from '../ui/ErrorState';
 import Button from '../ui/Button';
 import { useAuth, usePermission } from '../../context/AuthContext';
+import { useClinic } from '../../context/ClinicContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import { useAuditLogs } from '../../hooks/useAuditLogs';
 import AuditFilterBar from './AuditFilterBar';
@@ -30,6 +31,7 @@ export function AuditWorkstationView({
   embeddedInSettings = false,
 }: AuditWorkstationViewProps) {
   const { user } = useAuth();
+  const { dateFormat, timeFormat, timeZoneId } = useClinic();
   const canRead = usePermission(PERMISSIONS.auditRead) || user?.role === 'Admin';
   const canExport = usePermission(PERMISSIONS.auditExport) || user?.role === 'Admin';
 
@@ -195,6 +197,9 @@ export function AuditWorkstationView({
             scrollY={scrollY}
             viewportHeight={viewportHeight}
             listTopOffset={listTopOffset}
+            dateFormat={dateFormat}
+            timeFormat={timeFormat}
+            timeZoneId={timeZoneId}
           />
         </View>
 
@@ -204,6 +209,9 @@ export function AuditWorkstationView({
           detail={selectedDetail}
           loadingDetail={loadingDetail}
           onClose={handleCloseDrawer}
+          dateFormat={dateFormat}
+          timeFormat={timeFormat}
+          timeZoneId={timeZoneId}
         />
 
         {/* Export Dialog Modal */}
@@ -230,6 +238,7 @@ export function AuditWorkstationView({
           onApply={(start, end) => {
             setStartDate(start);
             setEndDate(end);
+            applyDatePreset('custom');
           }}
           boundaryMode="pastOrToday"
         />
@@ -329,6 +338,9 @@ export function AuditWorkstationView({
             scrollY={scrollY}
             viewportHeight={viewportHeight}
             listTopOffset={listTopOffset}
+            dateFormat={dateFormat}
+            timeFormat={timeFormat}
+            timeZoneId={timeZoneId}
           />
         </View>
       </ScrollView>
@@ -339,6 +351,9 @@ export function AuditWorkstationView({
         detail={selectedDetail}
         loadingDetail={loadingDetail}
         onClose={handleCloseDrawer}
+        dateFormat={dateFormat}
+        timeFormat={timeFormat}
+        timeZoneId={timeZoneId}
       />
 
       {/* Export Dialog Modal */}
@@ -365,6 +380,7 @@ export function AuditWorkstationView({
         onApply={(start, end) => {
           setStartDate(start);
           setEndDate(end);
+          applyDatePreset('custom');
         }}
         boundaryMode="pastOrToday"
       />

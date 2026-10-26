@@ -83,4 +83,10 @@ public class Facility : BaseEntity
 
     // Notification Preferences
     public string? NotificationPreferencesJson { get; set; }
+
+    // Public Join Link Settings
+    public bool IsJoinEnabled { get; set; } = true;
+    public string? JoinCode { get; set; }
+    public DateTime? JoinCodeExpiresAtUtc { get; set; }
+    public DateTime? JoinSettingsUpdatedAtUtc { get; set; }
 }

@@ -9,6 +9,9 @@ import {
   ClinicTimeFormat,
   setClinicTimeZoneId,
   setClinicRegionalConfig,
+  getClinicDateFormat,
+  getClinicTimeFormat,
+  getClinicTimeZoneId,
 } from '../services/clinicService';
 import { useFacilityLicense } from '../components/FacilityActivationGate';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
@@ -72,6 +75,8 @@ export interface ClinicContextValue {
   workspaceTimeZoneId: string;
   /** Date format inherited from portal tenant workspace (defaults to 'MMM d, yyyy'). */
   workspaceDateFormat: string;
+  /** Time format inherited from portal tenant workspace (defaults to '12h'). */
+  workspaceTimeFormat: ClinicTimeFormat;
   /** True if the clinic facility has overridden any regional setting (timezone, date format, or time format). */
   isRegionalOverridden: boolean;
   /** True if the clinic facility has an active custom color override. */
@@ -111,11 +116,12 @@ export const ClinicContext = createContext<ClinicContextValue>({
   primaryColorHex: DEFAULT_CLINIC_BRAND_COLOR,
   workspaceAccentColorHex: null,
   workspaceProfile: null,
-  timeZoneId: 'Asia/Manila',
-  dateFormat: 'MMM d, yyyy',
-  timeFormat: '12h',
+  get timeZoneId() { return getClinicTimeZoneId(); },
+  get dateFormat() { return getClinicDateFormat(); },
+  get timeFormat() { return getClinicTimeFormat(); },
   workspaceTimeZoneId: 'Asia/Manila',
   workspaceDateFormat: 'MMM d, yyyy',
+  workspaceTimeFormat: '12h',
   isRegionalOverridden: false,
   isColorOverridden: false,
   colorSource: 'default_fallback',
@@ -355,6 +361,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
   const activeWorkspaceAccent = workspaceProfile?.accentColorHex || cachedWorkspaceAccent || null;
   const workspaceTimeZoneId = workspaceProfile?.timeZoneId || cachedWorkspaceTimeZone || 'Asia/Manila';
   const workspaceDateFormat = workspaceProfile?.dateFormat || cachedWorkspaceDateFormat || 'MMM d, yyyy';
+  const workspaceTimeFormat: ClinicTimeFormat = '12h';
 
   const effectiveTimeZoneId =
     localTimeZoneOverride || settings?.timeZoneId || workspaceTimeZoneId || 'Asia/Manila';
@@ -429,6 +436,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       timeFormat: effectiveTimeFormat,
       workspaceTimeZoneId,
       workspaceDateFormat,
+      workspaceTimeFormat,
       isRegionalOverridden,
       isColorOverridden: resolvedBrand.isOverridden,
       colorSource: resolvedBrand.source,
@@ -453,6 +461,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       effectiveTimeFormat,
       workspaceTimeZoneId,
       workspaceDateFormat,
+      workspaceTimeFormat,
       isRegionalOverridden,
       setPrimaryColorHex,
       setRegionalSettings,

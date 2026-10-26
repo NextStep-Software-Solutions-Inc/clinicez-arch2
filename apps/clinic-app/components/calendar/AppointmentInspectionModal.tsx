@@ -3,6 +3,8 @@ import { View, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
 import { theme } from '../../constants/theme';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
+import Button from '../ui/Button';
+import CustomModal from '../ui/Modal';
 import { notify } from '../../utils/feedback';
 import { clinicService } from '../../services/clinicService';
 import type { ExtendedAppointmentItem } from './types';
@@ -48,10 +50,12 @@ export function AppointmentInspectionModal({
 }: AppointmentInspectionModalProps) {
   const [currentAppointment, setCurrentAppointment] = useState<ExtendedAppointmentItem | null>(appointment);
   const [sendingReminder, setSendingReminder] = useState<boolean>(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
 
   useEffect(() => {
     setCurrentAppointment(appointment);
-  }, [appointment]);
+    setShowCancelConfirm(false);
+  }, [appointment, visible]);
 
   if (!visible || !currentAppointment) {
     return null;
@@ -375,72 +379,132 @@ export function AppointmentInspectionModal({
             testID="drawer-actions"
             style={styles.footer}
           >
-            {canCheckIn ? (
-              <Pressable
-                data-testid="btn-drawer-checkin"
-                testID="btn-drawer-checkin"
-                accessibilityRole="button"
-                onPress={() => onCheckIn(currentAppointment)}
-                style={({ pressed }) => [
-                  styles.btn,
-                  styles.btnPrimary,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Icon
-                  name="check"
-                  size={theme.sizes.iconSm}
-                  color={theme.colors.onPrimary}
-                />
-                <ThemedText variant="smallBold" color={theme.colors.onPrimary}>
-                  Check In
-                </ThemedText>
-              </Pressable>
-            ) : null}
+            <Pressable
+              data-testid="btn-drawer-close-footer"
+              testID="btn-drawer-close-footer"
+              accessibilityRole="button"
+              accessibilityLabel="Close details"
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.btn,
+                styles.btnSecondary,
+                pressed && styles.pressed,
+              ]}
+            >
+              <ThemedText variant="smallBold" color={theme.colors.text}>
+                Close
+              </ThemedText>
+            </Pressable>
 
-            {onReschedule && currentAppointment.status !== 'Cancelled' ? (
-              <Pressable
-                data-testid="btn-drawer-reschedule"
-                testID="btn-drawer-reschedule"
-                accessibilityRole="button"
-                onPress={() => onReschedule(currentAppointment)}
-                style={({ pressed }) => [
-                  styles.btn,
-                  styles.btnSecondary,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Icon
-                  name="calendar"
-                  size={theme.sizes.iconSm}
-                  color={theme.colors.text}
-                />
-                <ThemedText variant="smallBold" color={theme.colors.text}>
-                  Reschedule
-                </ThemedText>
-              </Pressable>
-            ) : null}
+            <View style={styles.rightActionsRow}>
+              {canCheckIn ? (
+                <Pressable
+                  data-testid="btn-drawer-checkin"
+                  testID="btn-drawer-checkin"
+                  accessibilityRole="button"
+                  onPress={() => onCheckIn(currentAppointment)}
+                  style={({ pressed }) => [
+                    styles.btn,
+                    styles.btnPrimary,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Icon
+                    name="check"
+                    size={theme.sizes.iconSm}
+                    color={theme.colors.onPrimary}
+                  />
+                  <ThemedText variant="smallBold" color={theme.colors.onPrimary}>
+                    Check In
+                  </ThemedText>
+                </Pressable>
+              ) : null}
 
-            {onCancel && currentAppointment.status !== 'Cancelled' ? (
-              <Pressable
-                data-testid="btn-drawer-cancel"
-                testID="btn-drawer-cancel"
-                accessibilityRole="button"
-                onPress={() => onCancel(currentAppointment)}
-                style={({ pressed }) => [
-                  styles.btn,
-                  styles.btnDanger,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <ThemedText variant="smallBold" color={theme.colors.emergencyText}>
-                  Cancel
-                </ThemedText>
-              </Pressable>
-            ) : null}
+              {onReschedule && currentAppointment.status !== 'Cancelled' ? (
+                <Pressable
+                  data-testid="btn-drawer-reschedule"
+                  testID="btn-drawer-reschedule"
+                  accessibilityRole="button"
+                  onPress={() => onReschedule(currentAppointment)}
+                  style={({ pressed }) => [
+                    styles.btn,
+                    styles.btnSecondary,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Icon
+                    name="calendar"
+                    size={theme.sizes.iconSm}
+                    color={theme.colors.text}
+                  />
+                  <ThemedText variant="smallBold" color={theme.colors.text}>
+                    Reschedule
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+
+              {onCancel && currentAppointment.status !== 'Cancelled' ? (
+                <Pressable
+                  data-testid="btn-drawer-cancel"
+                  testID="btn-drawer-cancel"
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel appointment"
+                  onPress={() => setShowCancelConfirm(true)}
+                  style={({ pressed }) => [
+                    styles.btn,
+                    styles.btnDanger,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <ThemedText variant="smallBold" color={theme.colors.emergencyText}>
+                    Cancel
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         </View>
       </View>
+
+      {/* Cancel Confirmation Alert Dialog */}
+      {showCancelConfirm ? (
+        <CustomModal
+          visible={showCancelConfirm}
+          onClose={() => setShowCancelConfirm(false)}
+          title="Cancel Appointment?"
+          maxWidth={440}
+          testID="cancel-appointment-confirm-modal"
+          footer={
+            <>
+              <Button
+                title="Keep Appointment"
+                variant="ghost"
+                testID="btn-abort-cancel-appointment"
+                onPress={() => setShowCancelConfirm(false)}
+              />
+              <Button
+                title="Yes, Cancel Appointment"
+                variant="danger"
+                testID="btn-confirm-cancel-appointment"
+                onPress={() => {
+                  setShowCancelConfirm(false);
+                  onCancel?.(currentAppointment);
+                }}
+              />
+            </>
+          }
+        >
+          <View style={{ gap: theme.spacing.sm }}>
+            <ThemedText variant="body" color={theme.colors.text}>
+              Are you sure you want to cancel the appointment for{' '}
+              <ThemedText variant="bodyBold">{currentAppointment.patientName}</ThemedText>?
+            </ThemedText>
+            <ThemedText variant="small" color={theme.colors.textMuted}>
+              This action cannot be undone. The appointment will be marked as Cancelled.
+            </ThemedText>
+          </View>
+        </CustomModal>
+      ) : null}
     </Modal>
   );
 }
@@ -509,7 +573,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
     gap: theme.spacing.sm,
     padding: theme.spacing.md,
@@ -517,6 +581,18 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceSubtle,
     flexWrap: 'wrap',
+  },
+  rightActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  confirmFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   btn: {
     flexDirection: 'row',

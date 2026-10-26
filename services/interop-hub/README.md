@@ -89,7 +89,7 @@ Standard ASP.NET Core configuration: `appsettings*.json`, environment variables 
 | `Hub:Mode` | `Cloud` | `Cloud` or `Local`. |
 | `Hub:CloudCellId` | `cloud` | Id of the cloud cell. |
 | `Hub:LocalCellId` | empty | Local mode: the edge cell this hub serves. Required in Local mode. |
-| `Hub:MaxEnvelopeBytes` | 1048576 | Largest accepted envelope. |
+| `Hub:MaxEnvelopeBytes` | 8388608 | Largest accepted envelope (8 MiB). |
 | `Hub:MaxSendBatch` | 100 | Envelopes per `POST /v1/messages`. |
 | `Hub:MessageTtlDays` | 7 | How long an undelivered message lives. |
 | `Hub:MaxDeliveryAttempts` | 10 | Deliveries before a message is dead-lettered. |

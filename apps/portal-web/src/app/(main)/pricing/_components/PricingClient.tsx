@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
-import { usePlans, usePaymentConfig } from "@/hooks/useBilling";
+import { usePlans, usePublicConfig } from "@/hooks/useBilling";
 import { salesContactHref } from "@/config/site";
 import { BillingPlan } from "@/services/billing.service";
 
@@ -86,7 +86,7 @@ export function PricingClient({
   loadingTier?: string | null;
 } = {}) {
   const router = useRouter();
-  const { paymentConfig } = usePaymentConfig();
+  const { publicConfig } = usePublicConfig();
   const [isAnnual, setIsAnnual] = useState(false);
   const [userToggled, setUserToggled] = useState(false);
   const { isSignedIn } = useUser();
@@ -94,10 +94,10 @@ export function PricingClient({
 
   // Hydrate initial billing cadence from platform settings if not manually toggled by user
   useEffect(() => {
-    if (!userToggled && paymentConfig?.defaultBillingCadence) {
-      setIsAnnual(paymentConfig.defaultBillingCadence.toLowerCase() === "annually");
+    if (!userToggled && publicConfig?.defaultBillingCadence) {
+      setIsAnnual(publicConfig.defaultBillingCadence.toLowerCase() === "annually");
     }
-  }, [paymentConfig?.defaultBillingCadence, userToggled]);
+  }, [publicConfig?.defaultBillingCadence, userToggled]);
 
   // Compute highest discount dynamically across all available tiers
   const maxDiscount = useMemo(() => {

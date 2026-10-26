@@ -19,7 +19,6 @@ Set each value as a repository / environment **secret or variable** (Settings â†
 | `CORS_ALLOWED_ORIGINS` | no | same as above | Extra exact origins (`*` wildcards allowed), comma separated (`Cors__AllowedOrigins`). Outside Development these APIs no longer allow every origin: only `https://<BASE_DOMAIN>` (and subdomains), the CORS domains and these origins pass, so `BASE_DOMAIN` (required) or this list must be set. patient-api still allows any origin in its code (not configurable here). |
 | `CLERK_AUTHORIZED_PARTIES` | no | portal-api | Extra Clerk `azp` origins. `https://<BASE_DOMAIN>`, `https://*.<BASE_DOMAIN>` and the CORS domains are added automatically. |
 | `PORTAL_API_BASE_URL` | yes | philhealth-proxy | Portal API base URL the PhilHealth proxy reads tenant credentials from (`PortalApi__BaseUrl`). Required, no localhost fallback. Variable or secret. |
-| `SERVICES_CLINIC_API_URL` | no | patient-api | Clinic API base URL. |
 | `HUB_URL` | yes | all APIs | Base URL of the Interop Hub (`Messaging__HubUrl`). Variable or secret. |
 | `CLINIC_` / `LABORATORY_` / `PHARMACY_` / `ORGANIZATION_` / `PATIENT_` / `PORTAL_` / `BILLING_` + `HUB_CLIENT_ID` / `HUB_CLIENT_SECRET` | yes | matching API | Per-service hub credentials (`Messaging__ClientId` / `Messaging__ClientSecret`), e.g. `CLINIC_HUB_CLIENT_SECRET`. Must match a client in the hub bootstrap. |
 | `DATA_NETWORK` / `NPM_NETWORK` | no | all APIs | Names of the external Docker networks (defaults `data-network` / `npm-default`). |
@@ -35,7 +34,7 @@ Set each value as a repository / environment **secret or variable** (Settings â†
 | `CLERK_AUTHORITY` | yes | portal-api | Clerk issuer URL tokens are validated against (`Clerk__Authority`). Variable or secret `PORTAL_CLERK_AUTHORITY`; the dev workflow falls back to the Clerk development instance. |
 | `PATIENT_CLERK_AUTHORITY` / `PATIENT_CLERK_AUDIENCE` | authority: yes | patient-api | Clerk issuer and audience patient tokens are validated against (`Clerk__Authority` / `Clerk__Audience`). The authority has no built-in default: the compose file and the deploy fail without it. Secret or variable. |
 | `HUB_CLOUD_CELL_ID` | no | portal-api | Cell hosting every shared-cloud facility (`Hub__CloudCellId`, default `cloud`). Must equal the cloud hub's `Hub__CloudCellId`. Variable. |
-| `SERVICES_CLINIC_API_URL` | no | portal-api | Clinic API the portal calls with the internal key (`Services__ClinicApiUrl`, default `http://clinic-api:8080`). Variable. |
+| `SERVICES_PATIENT_API_URL` | no | portal-api | Patient API the portal calls with the internal key (`Services__PatientApiUrl`, default `http://patient-api:8080`). Variable. |
 | `WORKSPACE_MAX_OWNED_PER_USER` | no | portal-api | Workspaces one user may own (`Workspace__MaxOwnedPerUser`, default `1`). Variable. |
 | `LAB_UPLOAD_MAX_FILE_BYTES` / `LAB_UPLOAD_RATE_LIMIT_PERMITS` / `LAB_UPLOAD_RATE_LIMIT_WINDOW_MINUTES` | no | portal-api | Limits of the public lab-result upload relay (`LabUploads__MaxFileBytes` / `__RateLimitPermits` / `__RateLimitWindowMinutes`; defaults `5242880` / `20` / `10`). The allowed content types stay at the code default (PDF, JPEG, PNG). Variables. |
 | `LICENSING_TTL_DAYS` / `LICENSING_GRACE_DAYS` / `LICENSING_RENEW_BEFORE_DAYS` | no | portal-api | Facility license lifetime (clamped to 30-90), read-only grace after expiry, renewal lead time (`Licensing__*`; defaults `30` / `14` / `10`). Variables. |
@@ -151,11 +150,11 @@ Without `EXPO_PUBLIC_CLINIC_API_URL`/`EXPO_PUBLIC_BASE_DOMAIN`, the API URL is i
 
 ### `apps/portal-web`
 
-`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CLINIC_API_URL`, `NEXT_PUBLIC_BASE_DOMAIN`, `NEXT_PUBLIC_SITE_URL`,
+`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_PORTAL_API_URL`, `PORTAL_API_URL`, `NEXT_PUBLIC_BASE_DOMAIN`, `NEXT_PUBLIC_SITE_URL`,
 `NEXT_PUBLIC_SERVICE_SUBDOMAINS`, `NEXT_PUBLIC_SUBDOMAIN_{CLINIC,LABORATORY,PHARMACY,ORGANIZATION}`,
 `NEXT_PUBLIC_{CONTACT,SALES,BILLING,SUPPORT}_EMAIL`, `NEXT_PUBLIC_STORAGE_PUBLIC_URL`. See `apps/portal-web/.env.example`.
 
 ### `apps/patient-app`
 
-`EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_CLINIC_API_URL`, `EXPO_PUBLIC_PORTAL_URL`, `EXPO_PUBLIC_SUPPORT_EMAIL`.
+`EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_PORTAL_URL`, `EXPO_PUBLIC_SUPPORT_EMAIL`.
 See `apps/patient-app/.env.example`.

@@ -18,6 +18,8 @@ using ClinicEz.Shared.Interop.Contracts;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using ClinicEz.Shared.Documents.Security;
 using Interop = ClinicEz.Shared.Interoperability;
 
 namespace ClinicEz.Clinic.Application.Features.Consultations.Commands;
@@ -55,6 +57,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
     private readonly IClaimSlipService _claims;
     private readonly IPatientDocumentPublisher _documents;
     private readonly IInteropPublisher? _publisher;
+    private readonly IConfiguration? _configuration;
 
     public SignConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
@@ -69,7 +72,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         IPrescriptionPublisher prescriptionPublisher,
         IClaimSlipService claims,
         IPatientDocumentPublisher documents,
-        IInteropPublisher? publisher = null)
+        IInteropPublisher? publisher = null,
+        IConfiguration? configuration = null)
     {
         _consultationRepository = consultationRepository;
         _staffRepository = staffRepository;
@@ -84,6 +88,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         _claims = claims;
         _documents = documents;
         _publisher = publisher;
+        _configuration = configuration;
     }
 
     public async Task<ConsultationEncounterDto> Handle(SignConsultationCommand request, CancellationToken cancellationToken)
@@ -132,7 +137,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         if (encounter.Prescriptions.Any())
         {
             encounter.PrescriptionNumber ??= $"RX-{encounter.EncounterDate:yyyyMMdd}-{encounter.Id.ToString("N")[..6].ToUpper()}";
-            encounter.RxPublicVerificationToken ??= Guid.NewGuid().ToString("N");
+            encounter.RxPublicVerificationToken ??= $"{encounter.ClinicId:N}.{Guid.NewGuid():N}";
             encounter.RxDispenseStatus = PrescriptionDispenseStatus.Issued;
         }
 
@@ -238,8 +243,9 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             var rxSummary = encounter.Prescriptions.Any()
                 ? string.Join("; ", encounter.Prescriptions.Select(p => $"{p.GenericName} {p.Dosage} {p.Form} ({p.Sig}) - Qty: {p.Quantity}".Trim()))
                 : null;
+            var portalBase = VerificationUrlResolver.Resolve(_configuration);
             var rxUrl = !string.IsNullOrWhiteSpace(encounter.RxPublicVerificationToken)
-                ? $"/api/v1/public/rx-verify/{encounter.RxPublicVerificationToken}"
+                ? PublicRoutes.VerifyRx(encounter.RxPublicVerificationToken, portalBase)
                 : null;
 
             var pushPayload = new ClinicPushAppointmentsPayload(
@@ -357,6 +363,9 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
                 : null;
         }
 
+        var portalBase = VerificationUrlResolver.Resolve(_configuration);
+        var rxVerifyUrl = PublicRoutes.VerifyRx(encounter.RxPublicVerificationToken!, portalBase);
+
         return new Interop.PrescriptionIssuedEvent
         {
             PrescriptionId = encounter.Id,
@@ -392,8 +401,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             ClinicalDiagnosis = encounter.Assessment,
             SpecialInstructions = encounter.Plan,
             PublicVerificationToken = encounter.RxPublicVerificationToken!,
-            PublicVerificationUrl = $"/api/v1/public/rx-verify/{encounter.RxPublicVerificationToken}",
-            QrPayload = $"CLINICEZ:RX:{encounter.PrescriptionNumber}:{encounter.RxPublicVerificationToken}",
+            PublicVerificationUrl = rxVerifyUrl,
+            QrPayload = rxVerifyUrl,
             IssuedAt = encounter.SignedAt ?? DateTime.UtcNow,
             Items = encounter.Prescriptions.Select(p => new Interop.PrescriptionItemDto
             {

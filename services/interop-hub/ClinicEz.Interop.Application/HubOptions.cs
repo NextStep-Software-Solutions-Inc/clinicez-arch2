@@ -24,7 +24,7 @@ public sealed class HubOptions
     /// <summary>Local mode: the id of the edge cell this hub serves (registered in the cloud directory).</summary>
     public string? LocalCellId { get; set; }
 
-    public int MaxEnvelopeBytes { get; set; } = 1_048_576;
+    public int MaxEnvelopeBytes { get; set; } = 8_388_608;
     public int MaxSendBatch { get; set; } = 100;
     public int MessageTtlDays { get; set; } = 7;
     public int MaxDeliveryAttempts { get; set; } = 10;

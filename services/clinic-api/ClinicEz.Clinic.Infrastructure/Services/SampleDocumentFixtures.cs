@@ -72,7 +72,7 @@ public static class SampleDocumentFixtures
             new(Guid.NewGuid(), "Paracetamol", "Biogesic", "500 mg", "Tablet", "Take 1 tablet every 4 to 6 hours as needed for fever", 10, 3, 0, false, "Maximum 4 grams per day")
         },
         PublicVerificationToken: "sample-rx-verify-tok",
-        PublicVerificationUrl: "https://clinicez.ph/verify/sample-rx-verify-tok",
+        PublicVerificationUrl: "https://clinicez.ph/verify/rx/sample-rx-verify-tok",
         QrPayload: "CLINICEZ:RX:RX-SAMPLE-0001:sample-rx-verify-tok",
         DispenseStatus: "Pending",
         DispensedPharmacyName: null,

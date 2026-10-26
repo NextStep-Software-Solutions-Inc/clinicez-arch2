@@ -539,9 +539,11 @@ describe('Challenger M3 Retry 1: Empirical Verification & Stress Test Suite', ()
       await flushPromises();
       capturedCalls = [];
 
-      // Invert dates
-      h.result.setStartDate('2026-10-25');
-      h.result.setEndDate('2026-10-15');
+      // Invert dates relative to current clock so unbatched intermediate render is already inverted
+      const futureStart = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+      const pastEnd = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+      h.result.setStartDate(futureStart);
+      h.result.setEndDate(pastEnd);
       await flushPromises();
 
       // Verify that API query was NOT dispatched

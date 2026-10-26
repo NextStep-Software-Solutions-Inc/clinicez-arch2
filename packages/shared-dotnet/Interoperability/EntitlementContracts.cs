@@ -51,4 +51,12 @@ public record FacilityHeartbeatPayload
     public DateTime? LicenseExpiresAt { get; init; }
     public DateTime ClockUtc { get; init; } = DateTime.UtcNow;
     public bool? IsWorkspaceEligible { get; init; }
+
+    // Startup self-healing extensions (Milestone 1)
+    public bool? IsJoinEnabled { get; init; }
+    public string? JoinCode { get; init; }
+    public DateTime? JoinCodeExpiresAtUtc { get; init; }
+    public string? FacilityAddress { get; init; }
+    public string? OperatingHours { get; init; }
+    public DateTime? UpdatedAtUtc { get; init; }
 }

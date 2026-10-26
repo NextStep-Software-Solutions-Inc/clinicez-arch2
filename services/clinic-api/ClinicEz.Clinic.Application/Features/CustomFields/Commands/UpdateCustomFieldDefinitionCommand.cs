@@ -28,10 +28,19 @@ public sealed record UpdateCustomFieldDefinitionCommand(
     bool IsActive = true,
     string? VisibilityRuleJson = null,
     string? ConditionalOptionsJson = null,
-    string? FieldKey = null) : IRequest<ClinicCustomFieldDefinitionDto>;
+    string? FieldKey = null,
+    string? BoundaryMode = null) : IRequest<ClinicCustomFieldDefinitionDto>;
 
 public sealed class UpdateCustomFieldDefinitionCommandValidator : AbstractValidator<UpdateCustomFieldDefinitionCommand>
 {
+    private static readonly System.Collections.Generic.HashSet<string> AllowedBoundaryModes = new(StringComparer.Ordinal)
+    {
+        "pastOrToday",
+        "futureOrToday",
+        "futureOnly",
+        "any"
+    };
+
     public UpdateCustomFieldDefinitionCommandValidator()
     {
         RuleFor(x => x.Id)
@@ -63,6 +72,11 @@ public sealed class UpdateCustomFieldDefinitionCommandValidator : AbstractValida
 
         RuleFor(x => x.ConditionalOptionsJson)
             .Must(BeValidJsonOrNull).WithMessage("ConditionalOptionsJson must be a valid JSON string or null.");
+
+        RuleFor(x => x.BoundaryMode)
+            .MaximumLength(50).WithMessage("BoundaryMode cannot exceed 50 characters.")
+            .Must(mode => string.IsNullOrWhiteSpace(mode) || AllowedBoundaryModes.Contains(mode.Trim()))
+            .WithMessage("BoundaryMode must be one of: pastOrToday, futureOrToday, futureOnly, any.");
     }
 
     private static bool BeValidJsonOrNull(string? json)
@@ -146,6 +160,7 @@ public sealed class UpdateCustomFieldDefinitionCommandHandler : IRequestHandler<
         field.IsActive = request.IsActive;
         field.VisibilityRuleJson = normalizedVisibilityRule;
         field.ConditionalOptionsJson = request.ConditionalOptionsJson;
+        field.BoundaryMode = string.IsNullOrWhiteSpace(request.BoundaryMode) ? null : request.BoundaryMode.Trim();
         field.UpdatedAt = DateTime.UtcNow;
         field.UpdatedBy = "ClinicAdmin";
 
@@ -174,6 +189,7 @@ public sealed class UpdateCustomFieldDefinitionCommandHandler : IRequestHandler<
             field.IsActive,
             field.CreatedAt,
             field.VisibilityRuleJson,
-            field.ConditionalOptionsJson);
+            field.ConditionalOptionsJson,
+            field.BoundaryMode);
     }
 }

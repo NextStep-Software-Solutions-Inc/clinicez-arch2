@@ -17,19 +17,8 @@ public sealed class ContactEndpoints : IEndpoint
         app.MapPost("/contact", async (
             SendContactMessageCommand command,
             ISender sender,
-            ITurnstileValidator turnstileValidator,
-            HttpContext httpContext,
             CancellationToken ct) =>
         {
-            var remoteIp = httpContext.Connection.RemoteIpAddress?.ToString();
-            var isTurnstileValid = await turnstileValidator.ValidateAsync(command.TurnstileToken, remoteIp, ct);
-            if (!isTurnstileValid)
-            {
-                return Results.Json(
-                    new { Success = false, Message = "Bot verification failed. Please complete the security challenge." },
-                    statusCode: StatusCodes.Status403Forbidden);
-            }
-
             var accepted = await sender.Send(command, ct);
             return accepted
                 ? Results.Ok(new { Success = true })
@@ -38,7 +27,7 @@ public sealed class ContactEndpoints : IEndpoint
         .AllowAnonymous()
         .RequireRateLimiting(RateLimitPolicy)
         .WithName("SendContactMessage")
-        .WithDescription("Emails a message from the public contact form to the configured inbox. Anonymous, bot verified, and rate limited.")
+        .WithDescription("Emails a message from the public contact form to the configured inbox. Anonymous and rate limited.")
         .WithTags("Contact");
 
         app.MapGet("/contact/info", async (ISystemSettingsService settingsService, CancellationToken ct) =>

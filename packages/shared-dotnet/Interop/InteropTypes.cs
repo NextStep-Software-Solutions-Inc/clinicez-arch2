@@ -20,6 +20,14 @@ public static class InteropTypes
     /// <summary>Facility -> portal. Payload: <c>FacilityHeartbeatPayload</c> (liveness, app version, license expiry). Only accepted from the facility it describes.</summary>
     public const string FacilityHeartbeat = "facility.heartbeat";
 
+    // Portal projections (clinic/lab -> portal-api)
+    /// <summary>Clinic -> portal. Payload: <c>FacilityJoinSettingsUpdatedPayload</c> (join link settings, operating hours, address).</summary>
+    public const string FacilityJoinSettingsUpdated = "facility.join-settings.updated";
+    /// <summary>Clinic or Laboratory -> portal. Payload: <c>DocumentAttestationPublishedPayload</c> (zero-PHI cryptographic attestation for public verification).</summary>
+    public const string DocumentAttestationPublished = "document.attestation.published";
+    /// <summary>Clinic -> portal. Payload: <c>QueueBoardUpdatedPayload</c> (zero-PHI public waiting-area TV queue snapshot).</summary>
+    public const string QueueBoardUpdated = "facility.queue-board.updated";
+
     // Hub directory feed (portal -> hub). Handled by the hub itself.
     public const string DirectoryCellUpserted = "directory.cell.upserted";
     public const string DirectoryFacilityUpserted = "directory.facility.upserted";
@@ -60,6 +68,7 @@ public static class InteropTypes
     public const string RxIssued = "rx.issued";
     public const string RxStatusChanged = "rx.status.changed";
     public const string RxDispensed = "rx.dispensed";
+    /// <summary>Patient or Portal -> clinic. Payload: <c>ExternalPrescriptionDispensedEvent</c> (community pharmacy external dispensation with optional receipt).</summary>
     public const string RxExternalDispensed = "rx.external.dispensed";
     /// <summary>Clinic -> pharmacy. Payload: <c>PharmacyOtcDispensedPayload</c>. Decrements retail/OTC medication and supply lots via FEFO.</summary>
     public const string PharmacyOtcDispensed = "pharmacy.otc.dispensed";

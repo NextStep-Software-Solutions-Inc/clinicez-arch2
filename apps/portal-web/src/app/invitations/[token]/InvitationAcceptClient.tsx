@@ -201,8 +201,8 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
 
     if (invite.isExpired) {
         return renderShell(
-            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-amber-200 dark:border-amber-900 shadow-sm bg-amber-50/30 dark:bg-amber-950/20">
-                <div className="size-12 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-3">
+            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-warning/30 shadow-sm bg-warning/5">
+                <div className="size-12 rounded-full bg-warning/15 text-warning flex items-center justify-center mx-auto mb-3">
                     <IconClock className="h-6 w-6" />
                 </div>
                 <h2 className="text-lg font-bold text-foreground">Invitation Expired</h2>
@@ -220,8 +220,8 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
 
     if (invite.isAlreadyAccepted) {
         return renderShell(
-            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-emerald-200 dark:border-emerald-900 shadow-sm bg-emerald-50/30 dark:bg-emerald-950/20">
-                <div className="size-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-3">
+            <Card className="w-full max-w-md p-6 sm:p-8 text-center rounded-2xl border-success/30 shadow-sm bg-success/5">
+                <div className="size-12 rounded-full bg-success/15 text-success flex items-center justify-center mx-auto mb-3">
                     <IconCheck className="h-6 w-6" />
                 </div>
                 <h2 className="text-lg font-bold text-foreground">Already Accepted</h2>
@@ -340,7 +340,7 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
                                     </div>
                                 </div>
                             </div>
-                            <span className="text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full shrink-0">
+                            <span className="text-[10px] font-semibold bg-success/10 text-success border border-success/20 px-2 py-0.5 rounded-full shrink-0">
                                 Signed In
                             </span>
                         </div>

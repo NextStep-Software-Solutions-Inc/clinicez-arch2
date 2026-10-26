@@ -138,6 +138,7 @@ services:
       DbSchema: public
       Hub__Mode: Local
       Hub__Database__AutoMigrate: "true"
+      Hub__MaxEnvelopeBytes: ${HUB_MAX_ENVELOPE_BYTES:-8388608}
       Hub__LocalCellId: ${EDGE_CELL_ID:?EDGE_CELL_ID must be set}
       # The hub's ONE upstream client (Service 'cell', issued by the portal = HubEdgeCredentials). UPSTREAM_ENABLED=false
       # (air-gapped): no upstream settings are needed; same-cell traffic only, cross-cell/portal/patient messages are rejected

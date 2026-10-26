@@ -21,7 +21,7 @@ import {
   UserCheck,
   Smartphone,
 } from "lucide-react";
-import { useUser, SignInButton } from "@clerk/nextjs";
+import { useUser, SignInButton, useAuth } from "@clerk/nextjs";
 import {
   type PatientJoinRequestedPayload,
   type PatientJoinAllergyItem,
@@ -33,7 +33,10 @@ import {
   evaluateFieldVisibility,
   getCascadingChoices,
   sanitizeCustomFields,
+  INSTITUTIONAL_CUSTOM_FIELDS,
 } from "@/lib/join";
+
+export { INSTITUTIONAL_CUSTOM_FIELDS };
 import {
   formatPhilHealthPin,
   validatePhilHealthPinMod11,
@@ -41,8 +44,7 @@ import {
 import { JoinCodeModal } from "@/components/join/JoinCodeModal";
 import { OutsideDocumentDropzone } from "@/components/join/OutsideDocumentDropzone";
 import { DigitalPassCard } from "@/components/join/DigitalPassCard";
-import { apiBaseUrl } from "@/transport/apiClient";
-import { TurnstileWidget, TurnstileWidgetHandle } from "@/components/turnstile/TurnstileWidget";
+import { getPatientApiUrl, getPortalApiUrl } from "@/utils/domain";
 
 interface JoinClientProps {
   tenantSlug: string;
@@ -52,96 +54,6 @@ interface JoinClientProps {
   facilityAddress?: string;
   initialJoinCode?: string;
 }
-
-export const INSTITUTIONAL_CUSTOM_FIELDS: CustomFieldDefinition[] = [
-  {
-    fieldKey: "affiliation",
-    label: "Institutional Affiliation",
-    isRequired: true,
-    dataType: "Select",
-    options: ["Student", "Faculty", "Employee", "Dependent", "Guest"],
-  },
-  {
-    fieldKey: "student_id",
-    label: "Student ID Number",
-    isRequired: true,
-    dataType: "Text",
-    placeholder: "e.g. 2026-100234",
-    visibilityCondition: {
-      parentKey: "affiliation",
-      operator: "equals",
-      value: "Student",
-    },
-  },
-  {
-    fieldKey: "college",
-    label: "College / Faculty Department",
-    isRequired: true,
-    dataType: "Select",
-    visibilityCondition: {
-      parentKey: "affiliation",
-      operator: "equals",
-      value: "Student",
-    },
-    options: [
-      "College of Engineering",
-      "College of Computer Studies",
-      "College of Nursing & Allied Health",
-      "College of Science & Mathematics",
-      "College of Business Administration",
-    ],
-  },
-  {
-    fieldKey: "program",
-    label: "Academic Degree Program",
-    isRequired: true,
-    dataType: "Select",
-    visibilityCondition: {
-      parentKey: "college",
-      operator: "not_empty",
-      value: "",
-    },
-    cascadingOptions: {
-      "College of Engineering": [
-        "BS Civil Engineering",
-        "BS Electrical Engineering",
-        "BS Mechanical Engineering",
-        "BS Computer Engineering",
-      ],
-      "College of Computer Studies": [
-        "BS Computer Science",
-        "BS Information Technology",
-        "BS Information Systems",
-      ],
-      "College of Nursing & Allied Health": [
-        "BS Nursing",
-        "BS Medical Technology",
-        "BS Physical Therapy",
-      ],
-      "College of Science & Mathematics": [
-        "BS Applied Physics",
-        "BS Chemistry",
-        "BS Mathematics",
-      ],
-      "College of Business Administration": [
-        "BS Accountancy",
-        "BS Business Administration",
-      ],
-    },
-  },
-  {
-    fieldKey: "year_level",
-    label: "Year Level",
-    isRequired: false,
-    dataType: "Select",
-    options: ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year", "Postgraduate"],
-    visibilityCondition: {
-      parentKey: "affiliation",
-      operator: "equals",
-      value: "Student",
-    },
-  },
-];
 
 const ALLERGY_QUICK_PICKS: Record<PatientJoinAllergyItem["category"], string[]> = {
   Medication: ["Penicillin", "Amoxicillin", "Aspirin", "Ibuprofen", "Co-amoxiclav", "Sulfonamides"],
@@ -213,18 +125,19 @@ export default function JoinClient({
   // Submission & UX Lifecycle State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const turnstileRef = useRef<TurnstileWidgetHandle>(null);
   const [confirmedPass, setConfirmedPass] = useState<DigitalRegistrationPass | null>(null);
 
   // Clerk Authentication & Autofill State
   let clerkUser: ReturnType<typeof useUser>["user"] = null;
   let isSignedIn = false;
   let isInsideClerk = false;
+  let getToken: (() => Promise<string | null>) | null = null;
   try {
     const userHook = useUser();
+    const authHook = useAuth();
     clerkUser = userHook.user;
     isSignedIn = Boolean(userHook.isSignedIn);
+    getToken = authHook.getToken;
     isInsideClerk = true;
   } catch {
     // Graceful fallback outside ClerkProvider (e.g. testing)
@@ -241,8 +154,12 @@ export default function JoinClient({
     setIsHydratingProfile(true);
 
     try {
-      const response = await fetch("/api/v1/patients/me", {
-        headers: { Accept: "application/json" },
+      const token = getToken ? await getToken() : null;
+      const response = await fetch(`${getPatientApiUrl()}/patients/me`, {
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
 
       if (response.ok) {
@@ -483,13 +400,12 @@ export default function JoinClient({
       customFields: sanitizedCustomFields,
       allergies: noKnownAllergies ? [] : allergies,
       attachments,
-      turnstileToken: turnstileToken || undefined,
     };
 
     setIsSubmitting(true);
 
     try {
-      const joinUrl = typeof window !== "undefined" ? "/api/v1/public/join" : `${apiBaseUrl}/public/join`;
+      const joinUrl = `${getPortalApiUrl()}/public/join`;
       const response = await fetch(joinUrl, {
         method: "POST",
         headers: {
@@ -502,8 +418,6 @@ export default function JoinClient({
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok && response.status !== 202) {
-        turnstileRef.current?.reset();
-        setTurnstileToken(null);
         throw new Error(result.message || `Submission failed with status ${response.status}`);
       }
 
@@ -686,11 +600,11 @@ export default function JoinClient({
           </div>
         ) : (
           <div
-            className="p-4 sm:p-5 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-sm"
+            className="p-4 sm:p-5 bg-primary/10 border border-primary/20 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-sm"
             data-testid="autofill-banner-authenticated"
           >
             <div className="flex items-start gap-3">
-              <span className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 shrink-0 mt-0.5">
+              <span className="p-2.5 rounded-xl bg-primary/20 text-primary shrink-0 mt-0.5">
                 <UserCheck className="w-5 h-5" />
               </span>
               <div className="space-y-0.5">
@@ -953,8 +867,8 @@ export default function JoinClient({
                   Patient PhilHealth PIN (Optional)
                 </label>
                 {patientPinValidation?.isComplete && patientPinValidation.isValid && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                    <ShieldCheck className="w-3 h-3 text-emerald-600" /> Mod-11 Verified
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                    <ShieldCheck className="w-3 h-3 text-primary" /> Mod-11 Verified
                   </span>
                 )}
               </div>
@@ -1030,8 +944,8 @@ export default function JoinClient({
                         Principal PhilHealth PIN *
                       </label>
                       {principalPinValidation?.isComplete && principalPinValidation.isValid && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                          <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                          <ShieldCheck className="w-3 h-3 text-primary" /> Verified
                         </span>
                       )}
                     </div>
@@ -1308,7 +1222,7 @@ export default function JoinClient({
                         item.severity === "LifeThreatening"
                           ? "bg-destructive/10 text-destructive border-destructive/30"
                           : item.severity === "Severe"
-                          ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                          ? "bg-warning/10 text-warning border-warning/30"
                           : "bg-muted text-foreground border-border"
                       }`}
                     >
@@ -1346,17 +1260,6 @@ export default function JoinClient({
             <OutsideDocumentDropzone
               attachments={attachments}
               onChange={setAttachments}
-            />
-          </div>
-
-          {/* Bot Challenge Verification */}
-          <div className="flex flex-col items-center justify-center pt-2 pb-1">
-            <TurnstileWidget
-              ref={turnstileRef}
-              action="patient_join"
-              onSuccess={(token) => setTurnstileToken(token)}
-              onExpire={() => setTurnstileToken(null)}
-              onError={() => setTurnstileToken(null)}
             />
           </div>
 

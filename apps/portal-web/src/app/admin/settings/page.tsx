@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { mutate } from "swr";
 import { adminService, AdminSystemSettingDto } from "@/services/admin.service";
 import { PlatformBankAccount } from "@/services/billing.service";
 import { ADMIN_PERMISSIONS } from "@/constants/permissions";
@@ -218,6 +219,13 @@ export default function PlatformSettingsPage() {
       });
       setFormData(formMap);
       setBankAccounts(parseBankAccountsJson(formMap["Billing:BankAccountsJson"]));
+
+      // Invalidate SWR cache across public and tenant config consumers
+      await Promise.all([
+        mutate("/billing/public-config"),
+        mutate("/billing/payment-config"),
+      ]);
+
       setFeedback({ type: "success", message: "Platform settings updated successfully. Changes take effect immediately." });
     } catch (err: any) {
       setFeedback({ type: "error", message: err.message || "Failed to save platform settings." });
