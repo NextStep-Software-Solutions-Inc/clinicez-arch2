@@ -128,6 +128,57 @@ mock.module('@react-navigation/native', () => ({
   useRoute: () => ({ params: {} }),
 }));
 
+const defaultAuthMock = {
+  state: 'signedOut' as const,
+  user: null,
+  permissions: [] as string[],
+  offline: false,
+  notice: null,
+  login: async () => null,
+  bootstrap: async () => null,
+  changePassword: async () => null,
+  completeUnlock: () => {},
+  useDifferentAccount: async () => {},
+  logout: async () => {},
+  retry: () => {},
+  can: () => false,
+};
+
+const authContextMockFactory = () => ({
+  useAuth: () => (globalThis as any).__mockAuthContext ?? defaultAuthMock,
+  usePermission: (perm: string) => {
+    const ctx = (globalThis as any).__mockAuthContext;
+    return ctx?.can ? Boolean(ctx.can(perm)) : true;
+  },
+  AuthProvider: ({ children }: any) => children,
+});
+
+const staffContextMockFactory = () => ({
+  useStaff: () =>
+    (globalThis as any).__mockStaffContext ?? {
+      staff: [],
+      current: null,
+      currentName: '',
+      loading: false,
+      error: null,
+      reload: async () => {},
+    },
+  formatStaffName: (s?: any) => {
+    if (!s) return '';
+    return [s.title, s.firstName, s.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  },
+  staffInitials: (s?: any) => {
+    if (!s) return '?';
+    return `${s.firstName?.[0] ?? ''}${s.lastName?.[0] ?? ''}`.toUpperCase() || '?';
+  },
+  StaffProvider: ({ children }: any) => children,
+});
+
+mock.module('../context/AuthContext', authContextMockFactory);
+mock.module('@context/AuthContext', authContextMockFactory);
+mock.module('../context/StaffContext', staffContextMockFactory);
+mock.module('@context/StaffContext', staffContextMockFactory);
+
 const {
   normalizeStaffLoadError,
   resolveCurrentStaffMember,
@@ -201,6 +252,10 @@ describe('Issue 106: Doctor & Staff Account Email and Credentials in My Profile'
       retry: () => {},
       can: () => true,
     };
+    mock.module('../context/AuthContext', authContextMockFactory);
+    mock.module('@context/AuthContext', authContextMockFactory);
+    mock.module('../context/StaffContext', staffContextMockFactory);
+    mock.module('@context/StaffContext', staffContextMockFactory);
   });
 
   afterEach(() => {
